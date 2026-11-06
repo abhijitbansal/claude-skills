@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { sanitizeSvg, roundTrip, MAX_SVG_BYTES } from './svg-safe.mjs';
-import { forgetImported, isCloudName } from './icons.mjs';
+import { forgetImported, isCloudName, trustedEntries, CLOUD_NAME_MAX, MAX_CATALOG_BYTES } from './icons.mjs';
 
 const MAX_FILES = 20000;
 const MAX_DEPTH = 8;
@@ -146,11 +146,14 @@ function writeAtomically(file, text) {
   }
 }
 
+// What an earlier import left in `file`, through the guard a load applies (a hostile or damaged entry is dropped,
+// not carried over). A file that is missing, unreadable, not JSON or over the size limit holds none: this import replaces it.
 function readStored(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8')).icons ?? {};
+    if (fs.statSync(file).size > MAX_CATALOG_BYTES) return {};
+    return trustedEntries(JSON.parse(fs.readFileSync(file, 'utf8')));
   } catch {
-    return {}; // none yet, or a damaged one that this import replaces
+    return {};
   }
 }
 
@@ -184,7 +187,7 @@ export function importIcons(provider, folder, dir, { maxBytes = MAX_IMPORT_BYTES
   for (const file of files) {
     const mapped = spec.nameOf(path.basename(file.full));
     if (mapped.reason) skipped.push({ file: file.rel, reason: mapped.reason });
-    else if (!isCloudName(mapped.name)) skipped.push({ file: file.rel, reason: 'the icon name would be longer than 60 characters or hold a character other than a-z, 0-9 and "-"' });
+    else if (!isCloudName(mapped.name)) skipped.push({ file: file.rel, reason: `the icon name would be longer than ${CLOUD_NAME_MAX} characters or hold a character other than a-z, 0-9 and "-"` });
     else candidates.push({ ...file, ...mapped });
   }
   if (candidates.length === 0) {

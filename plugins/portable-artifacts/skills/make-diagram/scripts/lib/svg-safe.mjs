@@ -18,6 +18,8 @@ const MAX_DRAWN = 20000; // elements drawn once <use> and the other references a
 const MAX_REFERENCE_DEPTH = 100; // a chain of <use>, mask, clip-path and href references
 const MAX_ID_LENGTH = 64;
 const MAX_VIEWBOX = 100000;
+const MIN_VIEWBOX_SIZE = 0.01;
+const MAX_SCALAR = 64; // characters in one number, colour or length
 const MAX_REASON = 120;
 
 // A stored icon is the sanitized content of an <svg>, so wrapping it back adds one root attribute and may add one <g>
@@ -132,18 +134,25 @@ const ENUMS = {
 
 const trimmed = (value) => value.replace(/\s+/g, ' ').trim();
 
-function number(value, name) {
+// A number, colour or other single value is short. Anything longer is refused before a pattern sees it, so no
+// pattern can be made to run long on hostile text.
+const scalar = (value, name) => {
   const v = trimmed(value);
+  return v.length <= MAX_SCALAR ? v : refuse(`${name} is over ${MAX_SCALAR} characters`);
+};
+
+function number(value, name) {
+  const v = scalar(value, name);
   return IS_NUMBER.test(v) ? v : refuse(`${name} is not a number: ${JSON.stringify(v.slice(0, 40))}`);
 }
 
 function matched(value, pattern, name) {
-  const v = trimmed(value);
+  const v = scalar(value, name);
   return pattern.test(v) ? v : refuse(`${name} has an unsupported value: ${JSON.stringify(v.slice(0, 40))}`);
 }
 
 function colour(value, name) {
-  const v = trimmed(value);
+  const v = scalar(value, name);
   if (/^currentcolor$/i.test(v)) return 'currentColor';
   if (IS_HEX.test(v) || IS_COLOUR_FUNCTION.test(v) || NAMED_COLOURS.has(v.toLowerCase())) return v;
   return refuse(`${name} is not a plain colour: ${JSON.stringify(v.slice(0, 40))}`);
@@ -187,7 +196,7 @@ function transform(value, name) {
 
 function numberList(value, name, { min = 1, max = 4000 } = {}) {
   const items = trimmed(value).split(/[\s,]+/).filter(Boolean);
-  if (items.length < min || items.length > max || !items.every((item) => IS_NUMBER.test(item))) refuse(`${name} is not a list of numbers`);
+  if (items.length < min || items.length > max || !items.every((item) => item.length <= MAX_SCALAR && IS_NUMBER.test(item))) refuse(`${name} is not a list of numbers`);
   return items.join(' ');
 }
 
@@ -201,10 +210,13 @@ function localHref(value, name, ctx) {
 }
 
 function viewBoxValue(value) {
-  const parts = trimmed(value).split(/[\s,]+/);
-  if (parts.length !== 4 || !parts.every((p) => IS_NUMBER.test(p))) refuse('viewBox is not four numbers');
+  const parts = value.length <= 4 * MAX_SCALAR ? trimmed(value).split(/[\s,]+/) : [];
+  if (parts.length !== 4 || !parts.every((p) => p.length <= MAX_SCALAR && IS_NUMBER.test(p))) refuse('viewBox is not four numbers');
   const [x, y, w, h] = parts.map(Number);
-  if (!(w > 0 && h > 0) || [x, y, w, h].some((n) => Math.abs(n) > MAX_VIEWBOX)) refuse('viewBox has no usable size');
+  const sane = (n) => n >= MIN_VIEWBOX_SIZE && n <= MAX_VIEWBOX;
+  if (!sane(w) || !sane(h) || Math.abs(x) > MAX_VIEWBOX || Math.abs(y) > MAX_VIEWBOX) {
+    refuse(`viewBox width and height must be between ${MIN_VIEWBOX_SIZE} and ${MAX_VIEWBOX}, and its origin within ${MAX_VIEWBOX}`);
+  }
   return [x, y, w, h].join(' ');
 }
 
@@ -413,8 +425,9 @@ function clean(node, ctx) {
 // in fill, stroke, mask or clip-path). Every reference resolved already, so each id is in ctx.ids.
 function dependencies(node, ctx) {
   const found = [...node.children];
-  for (const value of node.attrs.values()) {
-    const ids = value.startsWith('#') ? [value.slice(1)] : [...value.matchAll(/url\(#([^)]+)\)/g)].map((m) => m[1]);
+  for (const [name, value] of node.attrs) {
+    // Only href (a #id) and url(#id) are references: a colour such as fill="#abc" is not one.
+    const ids = name === 'href' ? [value.slice(1)] : [...value.matchAll(/url\(#([^)]+)\)/g)].map((m) => m[1]);
     for (const id of ids) if (ctx.ids.has(id)) found.push(ctx.ids.get(id));
   }
   return found;
@@ -463,7 +476,8 @@ function serialize(node) {
 function rootViewBox(attrs) {
   if (attrs.has('viewBox')) return viewBoxValue(attrs.get('viewBox'));
   const size = (name) => {
-    const m = /^\s*(\+?(?:\d+\.?\d*|\.\d+))(?:px)?\s*$/.exec(attrs.get(name) ?? '');
+    const v = trimmed(attrs.get(name) ?? '');
+    const m = v.length <= MAX_SCALAR ? /^\+?(\d+(?:\.\d*)?|\.\d+)(?:px)?$/.exec(v) : null;
     return m ? Number(m[1]) : null;
   };
   const [w, h] = [size('width'), size('height')];

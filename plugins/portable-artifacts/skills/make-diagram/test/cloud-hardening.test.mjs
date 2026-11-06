@@ -15,7 +15,7 @@ after(() => {
 });
 const LOCKED = [];
 
-const { iconSvg, hasIcon, searchIcons, listIcons, importedIcons, iconDir, IconError } = await import('../scripts/lib/icons.mjs');
+const { iconSvg, hasIcon, searchIcons, listIcons, importedIcons, iconDir, IconError, forgetImported, isCloudName } = await import('../scripts/lib/icons.mjs');
 const { sanitizeSvg } = await import('../scripts/lib/svg-safe.mjs');
 const { importIcons, ImportError } = await import('../scripts/lib/icon-import.mjs');
 const { buildDiagram } = await import('../scripts/lib/api.mjs');
@@ -413,4 +413,97 @@ test('an import stops reading at a total size cap, and names it in what it skipp
   assert.equal(added.length, 3);
   assert.equal(skipped.length, 3);
   assert.ok(skipped.every((s) => /import size limit \(\d+ KiB\)/.test(s.reason)), JSON.stringify(skipped));
+});
+
+// ---- round 2 ---------------------------------------------------------------------------------------
+
+test('a 200,000-digit number in any numeric spot returns in under 2 s', () => {
+  const digits = '1'.repeat(200000);
+  const inputs = [
+    `<svg width="${digits}x" height="1"><path d="M0 0"/></svg>`,
+    `<svg width="1" height="${digits}px"><path d="M0 0"/></svg>`,
+    `<svg viewBox="0 0 ${digits}x 1"><path d="M0 0"/></svg>`,
+    wrap(`<rect width="${digits}x" height="1"/>`),
+    wrap(`<rect width="1" height="1" opacity="${digits}x"/>`),
+    wrap(`<rect width="1" height="1" stroke-width="${digits}x"/>`),
+    wrap(`<linearGradient id="g"><stop offset="${digits}x" stop-color="#fff"/></linearGradient><rect width="1" height="1" fill="url(#g)"/>`),
+    wrap(`<rect width="1" height="1" fill="rgb(${digits}x)"/>`),
+    wrap(`<rect width="1" height="1" transform="translate(${digits}x)"/>`),
+    wrap(`<rect width="1" height="1" stroke-dasharray="${digits}x"/>`),
+    wrap(`<polygon points="${digits}x"/>`),
+  ];
+  const started = Date.now();
+  for (const input of inputs) assert.equal(typeof sanitizeSvg(input).skipped, 'string');
+  assert.ok(Date.now() - started < 2000, `${Date.now() - started} ms`);
+});
+
+test('a # value is not a reference unless it is an href or inside url()', () => {
+  const result = sanitizeSvg(wrap('<mask id="abc"><rect width="1" height="1" fill="#abc"/></mask><rect width="24" height="24" mask="url(#abc)" fill="#fff"/>'));
+  assert.equal(result.skipped, undefined, result.skipped);
+  assert.match(result.markup, /fill="#abc"/);
+  assert.equal(typeof sanitizeSvg(wrap('<mask id="abc"><use href="#abc"/></mask><rect width="24" height="24" mask="url(#abc)"/>')).skipped, 'string', 'a real href cycle is still refused');
+});
+
+test('a viewBox or size outside a sane range is refused', () => {
+  for (const viewBox of ['0 0 1e-300 1e-300', '0 0 0.001 1', '0 0 1 0.001', '0 0 100001 1', '0 0 1e999 1', '0 0 0 1', '0 0 -1 1']) {
+    assert.match(sanitizeSvg(`<svg viewBox="${viewBox}"><path d="M0 0h1v1z"/></svg>`).skipped ?? '', /viewBox/, viewBox);
+  }
+  assert.equal(typeof sanitizeSvg('<svg width="0.000001" height="1"><path d="M0 0h1v1z"/></svg>').skipped, 'string');
+  assert.equal(sanitizeSvg('<svg viewBox="0 0 0.5 100000"><path d="M0 0h1v1z"/></svg>').viewBox, '0 0 0.5 100000');
+});
+
+const catalogOf = (dir) => JSON.parse(fs.readFileSync(path.join(dir, 'imported-aws.json'), 'utf8'));
+
+test('an import over a damaged catalog replaces it: icons as a string or array add no keys 0 and 1', () => {
+  for (const icons of ['"abc"', '[1,2]', '42', 'null']) {
+    const out = tempDir('stored');
+    fs.writeFileSync(path.join(out, 'imported-aws.json'), `{"provider":"aws","icons":${icons}}`);
+    importIcons('aws', AWS_FIXTURE, out);
+    assert.deepEqual(Object.keys(catalogOf(out).icons), ['aws-lambda', 'aws-simple-storage-service'], icons);
+  }
+});
+
+test('an import keeps only the stored entries that pass the guard, and ignores a catalog over the size limit', () => {
+  const out = tempDir('stored-hostile');
+  fs.writeFileSync(path.join(out, 'imported-aws.json'), hostileCatalog());
+  importIcons('aws', AWS_FIXTURE, out);
+  assert.deepEqual(Object.keys(catalogOf(out).icons), ['aws-good', 'aws-lambda', 'aws-simple-storage-service']);
+  const huge = tempDir('stored-huge');
+  const file = path.join(huge, 'imported-aws.json');
+  fs.writeFileSync(file, `{"icons":{"aws-old":${entryText(GOOD_ENTRY)}}}`);
+  fs.truncateSync(file, 70 * 1024 * 1024);
+  importIcons('aws', AWS_FIXTURE, huge);
+  assert.ok(fs.statSync(file).size < 100000, 'the oversize catalog was replaced, not read');
+  assert.deepEqual(Object.keys(catalogOf(huge).icons), ['aws-lambda', 'aws-simple-storage-service']);
+});
+
+test('the name limit the importer reports is the one isCloudName applies', () => {
+  const limit = 64;
+  const name = (n) => `aws-${'a'.repeat(n - 4)}`;
+  assert.equal(isCloudName(name(limit)), true);
+  assert.equal(isCloudName(name(limit + 1)), false);
+  assert.equal(isCloudName(`google-${'a'.repeat(limit - 7)}`), true);
+  const folder = tempDir('names-limit');
+  write(path.join(folder, `Arch_A/64/Arch_Amazon-${'a'.repeat(limit - 4)}_64.svg`), wrap(SHAPE));
+  write(path.join(folder, `Arch_A/64/Arch_Amazon-${'b'.repeat(limit - 3)}_64.svg`), wrap(SHAPE));
+  const out = tempDir('out');
+  const { added, skipped } = importIcons('aws', folder, out);
+  assert.deepEqual(added, [name(limit)]);
+  assert.equal(skipped.length, 1);
+  assert.match(skipped[0].reason, /longer than 64 characters/);
+});
+
+test('a damaged catalog is parsed once, not on every lookup, and its warning has one semicolon', async () => {
+  const dir = corruptDir();
+  await withIconDir(dir, () => {
+    assert.equal(hasIcon('cloud:aws-s3-nope'), false);
+    fs.writeFileSync(path.join(dir, 'imported-aws.json'), `{"icons":{"aws-good":${entryText(GOOD_ENTRY)}}}`);
+    assert.equal(hasIcon('cloud:aws-good'), false, 'the failure is remembered');
+    forgetImported(dir);
+    assert.equal(hasIcon('cloud:aws-good'), true, 'forgetting it reads the folder again');
+  });
+  const r = run(['search', 'lambda'], { MAKE_DIAGRAM_ICON_DIR: corruptDir() });
+  const warning = r.stderr.split('\n').find((l) => l.startsWith('warning:'));
+  assert.ok(warning, r.stderr);
+  assert.ok((warning.match(/;/g) ?? []).length <= 1, warning);
 });

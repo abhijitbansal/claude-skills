@@ -13,12 +13,13 @@ export { scopeIds } from './svg-safe.mjs';
 const VIEW_BOX = '0 0 24 24';
 const PREFIXES = ['lucide', 'brand', 'cloud'];
 const DEFAULT_SEARCH_LIMIT = 12;
-// What the importer can write: a provider prefix and a lower-case slug.
-const CLOUD_NAME = /^(?:aws|google)-[a-z0-9][a-z0-9-]{0,56}$/;
-const MAX_CATALOG_BYTES = 64 * 1024 * 1024;
+// What the importer can write: a provider prefix and a lower-case slug, in all at most CLOUD_NAME_MAX characters.
+const CLOUD_NAME = /^(?:aws|google)-[a-z0-9][a-z0-9-]*$/;
+export const CLOUD_NAME_MAX = 64;
+export const MAX_CATALOG_BYTES = 64 * 1024 * 1024;
 
 /** Whether `name` is one a stored (imported) cloud icon may have. */
-export const isCloudName = (name) => typeof name === 'string' && CLOUD_NAME.test(name);
+export const isCloudName = (name) => typeof name === 'string' && name.length <= CLOUD_NAME_MAX && CLOUD_NAME.test(name);
 const IMPORTED_FILE = /^imported-[a-z]+\.json$/;
 // Where a bare name like "lambda" might live in the cloud catalog.
 const CLOUD_GUESSES = ['aws-', 'google-cloud-', 'google-'];
@@ -106,17 +107,13 @@ export function forgetImported(dir = iconDir()) {
 
 // One stored entry passes only if its name is one the importer writes and the allow-list returns it unchanged
 // (svg-safe.mjs roundTrip): the folder is outside the repo, so every load checks it again.
-const trustedEntry = (name, entry) => (CLOUD_NAME.test(name) ? roundTrip(entry) : null);
+const trustedEntry = (name, entry) => (isCloudName(name) ? roundTrip(entry) : null);
 
-function readImportedFile(file) {
-  const damaged = (why) => new IconError(`cannot read imported cloud icons from ${file} (${why}); delete the file and import again with: ${IMPORT_COMMAND}`);
-  let parsed;
-  try {
-    if (fs.statSync(file).size > MAX_CATALOG_BYTES) throw new Error('the file is over 64 MiB, far more than an import writes');
-    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (e) {
-    throw damaged(String(e.message).slice(0, 80));
-  }
+/**
+ * The `icons` object of a parsed catalog file, reduced to the entries that pass the guard. Anything that is not a
+ * plain object (a string, an array, null) holds none, so it can never contribute keys such as "0" and "1".
+ */
+export function trustedEntries(parsed) {
   const stored = parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed.icons : undefined;
   const out = {};
   if (stored === null || typeof stored !== 'object' || Array.isArray(stored)) return out;
@@ -127,9 +124,19 @@ function readImportedFile(file) {
   return out;
 }
 
-/** Every imported cloud icon in `dir` as { name: { viewBox, markup } }. A missing folder holds none. */
-export function importedIcons(dir = iconDir()) {
-  if (importedCache.has(dir)) return importedCache.get(dir);
+function readImportedFile(file) {
+  const damaged = (why) => new IconError(`cannot read imported cloud icons from ${file} (${why}); delete the file and import again with: ${IMPORT_COMMAND}`);
+  let parsed;
+  try {
+    if (fs.statSync(file).size > MAX_CATALOG_BYTES) throw new Error('the file is over 64 MiB, far more than an import writes');
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch (e) {
+    throw damaged(String(e.message).slice(0, 80));
+  }
+  return trustedEntries(parsed);
+}
+
+function readImportedFolder(dir) {
   let files = [];
   try {
     files = fs.readdirSync(dir).filter((f) => IMPORTED_FILE.test(f)).sort();
@@ -138,8 +145,25 @@ export function importedIcons(dir = iconDir()) {
   }
   const merged = {};
   for (const file of files) Object.assign(merged, readImportedFile(path.join(dir, file)));
-  importedCache.set(dir, merged);
   return merged;
+}
+
+/**
+ * Every imported cloud icon in `dir` as { name: { viewBox, markup } }. A missing folder holds none. The result of a
+ * folder, or the error from a damaged one, is remembered (until forgetImported), so a damaged file is parsed once.
+ */
+export function importedIcons(dir = iconDir()) {
+  if (!importedCache.has(dir)) {
+    try {
+      importedCache.set(dir, { icons: readImportedFolder(dir) });
+    } catch (e) {
+      if (!(e instanceof IconError)) throw e;
+      importedCache.set(dir, { error: e });
+    }
+  }
+  const cached = importedCache.get(dir);
+  if (cached.error) throw cached.error;
+  return cached.icons;
 }
 
 /** Names of the icons shipped in icons/cloud.json. */
@@ -155,7 +179,7 @@ function importedOrWarn() {
     if (!(e instanceof IconError)) throw e;
     if (!warned.has(e.message)) {
       warned.add(e.message);
-      process.stderr.write(`warning: ${e.message}; carrying on with the bundled icons\n`);
+      process.stderr.write(`warning: ${e.message} (carrying on with the bundled icons)\n`);
     }
     return {};
   }
