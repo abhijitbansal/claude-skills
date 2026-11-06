@@ -17,7 +17,7 @@
       "points": [
         "The deck opens in normal text.",
         "Slide count, order and links stay the same.",
-        "Code and numbers never change."
+        "Code blocks never change."
       ],
       "tone": "good",
       "simple": {
@@ -26,7 +26,7 @@
         "points": [
           "The deck starts in normal text.",
           "The slides stay in the same order.",
-          "Code and numbers stay the same."
+          "Code blocks stay the same."
         ]
       }
     },
@@ -81,9 +81,9 @@
       "type": "text",
       "title": "What the toggle never touches",
       "label": "Left alone",
-      "text": "- Code and commands\n- Numbers and tables of data\n- Diagrams, charts and videos\n- A plan's answers",
+      "text": "- Code blocks and commands in them\n- Diagrams, charts and videos\n- A plan's answers\n- Numbers: the writer keeps them exact by hand",
       "simple": {
-        "text": "- Code and commands stay.\n- Numbers and data stay.\n- Diagrams, charts and videos stay.\n- A plan's answers stay."
+        "text": "- Code blocks stay.\n- Diagrams, charts and videos stay.\n- A plan's answers stay.\n- Numbers: the writer keeps them exact."
       }
     }
   ]

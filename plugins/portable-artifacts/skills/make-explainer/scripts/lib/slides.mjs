@@ -11,7 +11,7 @@ import { collectStrings } from './walk.mjs';
 import { words } from './budget.mjs';
 import { toggleIcons } from '../../shared/theme-toggle.mjs';
 import { esc, inline, plain } from './render/ui.mjs';
-import { withSimple } from './simple.mjs';
+import { withSimple, hasSimpleText } from './simple.mjs';
 import { dualText, titleHtml, simpleToggle } from './simple-view.mjs';
 
 const listLines = (text) => (text ?? '').split('\n').filter((l) => l.trimStart().startsWith('- ')).length;
@@ -66,6 +66,23 @@ export function slideBudget(spec) {
   return errors;
 }
 
+/**
+ * Warnings for a deck's simple text: a slide shows one version of its text, so `simple` is exempt from the word
+ * error above, but a simple view that overruns the budget overruns the slide just the same.
+ */
+export function slideSimpleWarnings(spec) {
+  const out = [];
+  spec.sections.forEach((s, i) => {
+    if (!hasSimpleText(s)) return;
+    const at = pathJoin('sections', i);
+    const w = wordCount(withSimple(s), at);
+    if (w > SLIDE_LIMITS.words) {
+      out.push({ path: pathJoin(at, 'simple'), message: `the simple view of this slide has ${w} words; the slide limit is ${SLIDE_LIMITS.words} — cut the simple text or split the slide` });
+    }
+  });
+  return out;
+}
+
 /** True when the spec renders as a deck. */
 export const isSlides = (spec) => spec.mode === 'slides' || spec.preset === 'slides';
 
@@ -100,13 +117,14 @@ function cover(spec, total, metaHtml, art) {
   return slide(1, total, plain(spec.title), 'slide-cover', `<h1>${inline(spec.title)}</h1>${subtitle}${metaHtml ? `\n${metaHtml}` : ''}`, undefined, '', art);
 }
 
-// `simpleBody` is the body of the section's simple view (withSimple), present only for a section with simple text.
-function sectionSlide({ section, body, simpleBody, ownHeading }, n, total, footer = '', art = '') {
-  const view = simpleBody === undefined ? null : withSimple(section);
+// `simple` = { view, body } is the section as the simple view shows it (withSimple) and its rendered body; present
+// only for a section with simple text.
+function sectionSlide({ section, body, simple, ownHeading }, n, total, footer = '', art = '') {
+  const view = simple === undefined ? null : simple.view;
   const hasHeading = section.title !== undefined && !ownHeading;
   const eyebrow = hasHeading && section.label !== undefined ? `<p class="slide-eyebrow pa-label">${plain(section.label)}</p>\n` : '';
   const heading = hasHeading ? `${eyebrow}<h2 class="slide-title" id="slide-${n}-title">${titleHtml(section, view)}</h2>\n` : '';
-  const text = view === null ? body : dualText(body, simpleBody);
+  const text = view === null ? body : dualText(body, simple.body);
   const simpleTitle = hasHeading && view !== null && view.title !== undefined && view.title !== section.title ? slideTitle(view) : undefined;
   return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${text}`, section.id, footer, art, simpleTitle);
 }
@@ -135,7 +153,7 @@ function chrome(total, withToggle) {
 
 /**
  * The deck markup for the template's DECK marker.
- * `rendered` = [{ section, body, ownHeading }] in order (bodies already rendered),
+ * `rendered` = [{ section, body, ownHeading, simple? }] in order (bodies already rendered; `simple` = { view, body } for a section with simple text),
  * `metaHtml` = the title slide's meta list ('' when none), `slug` keys the saved position.
  * `artFor(n)` = the decorative drawing for slide n (only asked for the first and the last slide); omit it for no art.
  */
@@ -151,6 +169,6 @@ export function renderDeck({ spec, rendered, metaHtml, slug, footerHtml = '', ar
   return `<main id="content" class="deck" data-deck data-slug="${esc(slug)}" data-total="${total}" data-current="1">
 ${slides.join('\n')}
 </main>
-${chrome(total, rendered.some((r) => r.simpleBody !== undefined))}
+${chrome(total, rendered.some((r) => r.simple !== undefined))}
 ${outline(titles, sids)}`;
 }

@@ -18,7 +18,7 @@
       "text": "A section can hold a second version of its prose. A toggle named Simple English shows that version in place of the normal one, and the page remembers the choice.",
       "points": [
         "The page opens in normal text. Print and a page with no script show normal text too.",
-        "Code, commands, numbers and answers never change when the toggle flips.",
+        "Code blocks and plan answers never change when the toggle flips.",
         "A validate step warns when the plain version breaks a writing rule."
       ],
       "tone": "good",
@@ -27,7 +27,7 @@
         "text": "A section can hold a second, plainer version of its text. The Simple English button shows it. The page keeps your choice.",
         "points": [
           "The page starts in normal text. Print shows normal text too.",
-          "Code, commands, numbers and answers stay the same.",
+          "Code blocks and plan answers stay the same.",
           "A check warns you when the plain text breaks a writing rule."
         ]
       }

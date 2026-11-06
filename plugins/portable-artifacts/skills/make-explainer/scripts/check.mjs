@@ -4,7 +4,8 @@
 // sideways, elements wider than the page (outside a scrolling region), content clipped sideways inside a
 // slide (a slide hides what overflows it, so the page-level checks cannot see that), a deck that cannot
 // reach its last slide with the arrow keys or whose counter disagrees, a number-plus-unit token that wraps
-// across two lines, a KPI value wider than its tile, a diagram whose viewer did not mount,
+// across two lines, a KPI value wider than its tile (a page with a Simple English toggle is measured a second
+// time at each width with the toggle pressed; those problems say "(simple)"), a diagram whose viewer did not mount,
 // and a Present overlay that cannot be clicked, will not open or will not close on Esc. One probe that
 // crashes is reported as such and the rest of the viewport still runs.
 // exit 0 ok or skipped (no browser), 1 problems, 2 usage/IO
@@ -181,11 +182,24 @@ async function probe(page, label, problems, name, run) {
   return !page.isClosed();
 }
 
-async function checkViewport(browser, url, viewport) {
-  const label = `${viewport.width}px`;
+// The second pass over a page with a Simple English toggle: press it, so every probe below sees the simple text.
+async function showSimple(page, label, problems) {
+  await page.click('[data-simple-toggle]', { timeout: CLICK_MS });
+  try {
+    await page.waitForFunction(() => document.querySelector('[data-simple-toggle]').getAttribute('aria-pressed') === 'true', null, { timeout: SETTLE_MS });
+  } catch {
+    problems.push(`${label}: the Simple English toggle did not switch the page to simple text`);
+    return false;
+  }
+  return true;
+}
+
+// `simple`: the Simple English pass (only run for a page that has the toggle); its problems are labelled "(simple)".
+async function checkViewport(browser, url, viewport, simple = false) {
+  const label = simple ? `${viewport.width}px (simple)` : `${viewport.width}px`;
   const problems = [];
-  const tally = { slides: 0, presented: 0 };
-  const result = () => ({ problems, slides: tally.slides, presented: tally.presented });
+  const tally = { slides: 0, presented: 0, hasSimple: false };
+  const result = () => ({ problems, slides: tally.slides, presented: tally.presented, hasSimple: tally.hasSimple });
   const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
   try {
     const page = await context.newPage();
@@ -203,6 +217,8 @@ async function checkViewport(browser, url, viewport) {
       problems.push(`${label}: the page never became ready (window.paReady)`);
       return result();
     }
+    tally.hasSimple = await page.locator('[data-simple-toggle]').count() > 0;
+    if (simple && !(tally.hasSimple && await showSimple(page, label, problems))) return result();
     let ok = await probe(page, label, problems, 'layout', async () => {
       const fit = await page.evaluate(pageFits);
       if (fit.scrollW > fit.innerW + OVERFLOW_TOLERANCE_PX) {
@@ -214,7 +230,8 @@ async function checkViewport(browser, url, viewport) {
     });
     if (ok) ok = await probe(page, label, problems, 'one-line numbers', () => checkNumbers(page, label, problems));
     if (ok && await page.evaluate(deckState).catch(() => null)) ok = await probe(page, label, problems, 'deck', () => checkDeck(page, label, problems, tally));
-    if (ok) await probe(page, label, problems, 'diagram overlay', () => checkOverlays(page, label, problems, tally));
+    // Diagrams do not change with the toggle: the simple pass leaves their overlays to the normal pass.
+    if (ok && !simple) await probe(page, label, problems, 'diagram overlay', () => checkOverlays(page, label, problems, tally));
     return result();
   } catch (e) {
     problems.push(`${label}: check crashed: ${firstLine(e)}`);
@@ -243,7 +260,9 @@ export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_
       const results = [];
       for (const viewport of VIEWPORTS) {
         if (expired) break;
-        results.push(await checkViewport(browser, url, viewport));
+        const normal = await checkViewport(browser, url, viewport);
+        results.push(normal);
+        if (normal.hasSimple && !expired) results.push(await checkViewport(browser, url, viewport, true));
       }
       const problems = results.flatMap((r) => r.problems);
       return {

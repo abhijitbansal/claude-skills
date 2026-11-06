@@ -3,6 +3,7 @@
 // simple text.
 import fs from 'node:fs';
 import { headingInline } from './render/ui.mjs';
+import { inlineCode } from './inline-code.mjs';
 
 const CSS = new URL('../../template/simple.css', import.meta.url);
 const JS = new URL('../../template/simple.js', import.meta.url);
@@ -25,9 +26,6 @@ export function titleHtml(section, view) {
 
 /** The toggle button. It wears the theme toggle's classes so it takes the same surface, line and flavor treatment. */
 export const simpleToggle = () => `<button type="button" class="theme-toggle simple-toggle" data-simple-toggle aria-pressed="false"><span class="simple-dot" aria-hidden="true"></span>${SIMPLE_LABEL}</button>`;
-
-// Inline script text must not close its tag or open an HTML comment.
-const inlineCode = (code) => code.replace(/<\/(script)/gi, '<\\/$1').replaceAll('<!--', '<\\!--');
 
 /** The head part of a page with simple text: its stylesheet, then the script that applies the saved choice before first paint. */
 export function simpleHead() {

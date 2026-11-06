@@ -26,6 +26,7 @@ import { planHash, planKey } from './plan-hash.mjs';
 import { saveBlock } from './render/plan-ui.mjs';
 import { hasSimple, hasSimpleText, withSimple } from './simple.mjs';
 import { dualText, titleHtml, simpleToggle, simpleHead } from './simple-view.mjs';
+import { inlineCode } from './inline-code.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -52,9 +53,6 @@ export function contentSecurityPolicy(spec) {
   const base = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:";
   return spec.sections.some((s) => s.type === 'motion') ? `${base}; media-src 'self' file: blob:` : base;
 }
-
-// Inline script text must not close its tag or open an HTML comment.
-const inlineCode = (code) => code.replace(/<\/(script)/gi, '<\\/$1').replaceAll('<!--', '<\\!--');
 
 const slugOf = (title) => slugify(rawText(title), '').slice(0, MAX_ID).replace(/-+$/, '');
 
@@ -283,7 +281,7 @@ function deckParts(spec, ctx, flavored) {
   const rendered = spec.sections.map((section, i) => {
     const def = SECTIONS[section.type];
     const view = simpleView(section);
-    return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx), simpleBody: view === null ? undefined : renderBody(view, i, def, ctx) };
+    return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx), simple: view === null ? undefined : { view, body: renderBody(view, i, def, ctx) } };
   });
   const artFor = flavored ? (n) => artPair(ctx.theme, `${spec.title}${n}`, SLIDE_ART) : undefined;
   return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.footer, artFor }) };

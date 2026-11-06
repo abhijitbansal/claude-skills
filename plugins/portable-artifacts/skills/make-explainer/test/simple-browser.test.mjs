@@ -3,6 +3,9 @@
 // assertion names the text it expects.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { buildSpec, haveBrowser, openPage as openFile, openServed as openPage, closeSharedBrowser } from './helpers/browser.mjs';
 import { checkPage } from '../scripts/check.mjs';
 
@@ -33,7 +36,7 @@ const SECTIONS = [
   },
   {
     type: 'cards', id: 'parts', title: 'Normal parts heading',
-    items: [{ title: 'Card one', text: 'Normal card one text.' }, { title: 'Card two', text: 'Normal card two text.' }],
+    items: [{ title: 'Card one', text: 'Normal card one text.', icon: 'lucide:database' }, { title: 'Card two', text: 'Normal card two text.' }],
     simple: { items: [{ text: 'Simple card one text.' }] },
   },
   {
@@ -41,8 +44,50 @@ const SECTIONS = [
     items: [{ title: 'Run the build', text: 'Normal step text.' }],
     simple: { items: [{ title: 'Start the build', text: 'Simple step text.' }] },
   },
+  {
+    type: 'risks', id: 'risks', title: 'Normal risks heading',
+    items: [{ risk: 'Normal risk text.', severity: 'low', mitigation: 'Normal risk fix.' }],
+    simple: { items: [{ risk: 'Simple risk text.', mitigation: 'Simple risk fix.' }] },
+  },
+  {
+    type: 'timeline', id: 'when', title: 'Normal timeline heading',
+    items: [{ date: '2026-11-06', title: 'Normal timeline text', text: 'Normal timeline note.' }],
+    simple: { items: [{ title: 'Simple timeline text', text: 'Simple timeline note.' }] },
+  },
+  {
+    type: 'compare', id: 'options', title: 'Normal compare heading',
+    columns: [{ title: 'Left', points: ['Normal compare text.'] }, { title: 'Right', points: ['Right point.'] }],
+    verdict: 'Normal compare verdict.',
+    simple: { columns: [{ points: ['Simple compare text.'] }], verdict: 'Simple compare verdict.' },
+  },
+  {
+    type: 'callout', id: 'note', tone: 'info', title: 'Normal callout heading', text: 'Normal callout text.',
+    simple: { title: 'Simple callout heading', text: 'Simple callout text.' },
+  },
+  {
+    type: 'details', id: 'more', title: 'Normal details heading', summary: 'Normal details summary', text: 'Normal details text.',
+    simple: { summary: 'Simple details summary', text: 'Simple details text.' },
+  },
+  {
+    type: 'table', id: 'grid', title: 'Normal table heading', columns: ['Name', 'Time'], rows: [['Normal table text', 12]],
+    simple: { columns: ['Name', 'Time taken'], rows: [['Simple table text', 12]] },
+  },
   { type: 'code', id: 'cmd', title: 'Commands stay exact', code: 'npm run build' },
 ];
+const ELIGIBLE_TYPES = ['tldr', 'text', 'cards', 'risks', 'steps', 'timeline', 'compare', 'callout', 'details', 'table'];
+// One sentence of body text that each eligible section shows in the normal view, and the one it shows in the simple view.
+const MARKERS = {
+  tldr: ['Normal lead sentence.', 'Simple lead sentence.'],
+  text: ['Normal why body.', 'Simple why body.'],
+  cards: ['Normal card one text.', 'Simple card one text.'],
+  risks: ['Normal risk text.', 'Simple risk text.'],
+  steps: ['Normal step text.', 'Simple step text.'],
+  timeline: ['Normal timeline text', 'Simple timeline text'],
+  compare: ['Normal compare text.', 'Simple compare text.'],
+  callout: ['Normal callout text.', 'Simple callout text.'],
+  details: ['Normal details summary', 'Simple details summary'], // a closed block shows only its summary
+  table: ['Normal table text', 'Simple table text'],
+};
 const recap = (extra = {}) => ({ title: 'Simple English recap', subtitle: 'A page with two versions of its text', preset: 'recap', sections: SECTIONS, ...extra });
 
 const withoutSimple = (sections) => sections.map(({ simple, ...rest }) => rest);
@@ -58,8 +103,10 @@ test('a spec with no simple text ships no toggle, no second copy and no simple s
 
 test('a section with simple holds its body twice, and every id on the page is unique', () => {
   const { html } = buildSpec(recap());
-  assert.equal(html.match(/<div data-text="normal">/g).length, 4, 'one pair for each of the four sections with simple text');
-  assert.equal(html.match(/<div data-text="simple" hidden>/g).length, 4);
+  assert.equal(SECTIONS.filter((s) => s.simple).length, ELIGIBLE_TYPES.length, 'the fixture covers all ten eligible types');
+  assert.equal(html.match(/<div data-text="normal">/g).length, ELIGIBLE_TYPES.length, 'one pair for each section with simple text');
+  assert.equal(html.match(/<div data-text="simple" hidden>/g).length, ELIGIBLE_TYPES.length);
+  assert.ok(html.includes('<svg'), 'the card icon is drawn');
   const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
   assert.deepEqual(ids.filter((id, i) => ids.indexOf(id) !== i), []);
 });
@@ -97,6 +144,46 @@ test('clicking shows simple text and hides normal text; clicking again restores 
   assert.equal(await page.locator(TOGGLE).getAttribute('aria-pressed'), 'false');
   assert.equal(await seen(page), before);
   assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('all ten eligible types switch: each shows its normal sentence first, its simple one after, and no id repeats in the DOM', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(buildSpec(recap()).url);
+  const ids = () => page.evaluate(() => [...document.querySelectorAll('[id]')].map((e) => e.id));
+  const repeated = (list) => list.filter((id, i) => list.indexOf(id) !== i);
+  const normal = await seen(page);
+  for (const type of ELIGIBLE_TYPES) {
+    assert.ok(normal.includes(MARKERS[type][0]) && !normal.includes(MARKERS[type][1]), `${type} opens on normal text`);
+  }
+  assert.deepEqual(repeated(await ids()), []);
+  await toggled(page);
+  const simple = await seen(page);
+  for (const type of ELIGIBLE_TYPES) {
+    assert.ok(simple.includes(MARKERS[type][1]) && !simple.includes(MARKERS[type][0]), `${type} shows simple text`);
+  }
+  assert.deepEqual(repeated(await ids()), []);
+  assert.ok(simple.includes('npm run build'), 'code stays');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('a details block keeps its open state across the toggle, in both directions', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, context } = await openPage(buildSpec(recap()).url);
+  const state = () => page.evaluate(() => ({
+    normal: document.querySelector('#more [data-text="normal"] details').open,
+    simple: document.querySelector('#more [data-text="simple"] details').open,
+  }));
+  assert.deepEqual(await state(), { normal: false, simple: false });
+  await page.click('#more [data-text="normal"] summary');
+  assert.deepEqual(await state(), { normal: true, simple: false });
+  await toggled(page);
+  assert.equal((await state()).simple, true, 'opened in the normal view, open in the simple view');
+  assert.ok((await seen(page)).includes('Simple details text.'), 'and its text is showing');
+  await page.click('#more [data-text="simple"] summary');
+  await toggled(page);
+  assert.equal((await state()).normal, false, 'closed in the simple view, closed again in the normal view');
   await context.close();
 });
 
@@ -275,6 +362,28 @@ test('a deck switches text on the current slide, and the slide count is unchange
   await context.close();
 });
 
+test('at 320 px the deck bar holds its controls inside the screen, without overlap, in both views', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  for (const on of [false, true]) {
+    const { page, problems, context } = await openPage(buildSpec(DECK, { name: 'deck320' }).url, { width: 320, height: 640, seed: { [STORE]: on ? 'on' : 'off' } });
+    const boxes = await page.evaluate(() => [...document.querySelectorAll('.deck-controls > *')].map((el) => {
+      const r = el.getBoundingClientRect();
+      return { what: el.className || el.tagName, left: r.left, right: r.right, top: r.top, bottom: r.bottom, visible: r.width > 0 };
+    }));
+    assert.ok(boxes.length >= 4, 'Outline, theme, Simple English and the counter');
+    for (const b of boxes) assert.ok(b.right <= 320 + 0.5 && b.left >= -0.5, `${b.what} inside 320 px (${b.left}..${b.right}) simple=${on}`);
+    for (let i = 1; i < boxes.length; i++) {
+      const a = boxes[i - 1];
+      const b = boxes[i];
+      const sameRow = b.top < a.bottom - 1 && a.top < b.bottom - 1;
+      assert.ok(!sameRow || b.left >= a.right - 0.5, `${a.what} and ${b.what} do not overlap simple=${on}`);
+    }
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+    assert.deepEqual(problems, []);
+    await context.close();
+  }
+});
+
 // ---- a plan page ----------------------------------------------------------
 
 const PLAN = {
@@ -306,6 +415,28 @@ test('a plan page: an answer given before toggling is still there after, and the
   await context.close();
 });
 
+test('a plan page saved while Simple English is on does not keep that view: the copy opens on normal text, even with JavaScript off', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const built = buildSpec(PLAN, { name: 'plan-save' });
+  const { page, context } = await openPage(built.url);
+  await toggled(page);
+  assert.ok((await seen(page)).includes('Simple plan lead.'));
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('[data-plan-save-html]').click()]);
+  const html = fs.readFileSync(await download.path(), 'utf8');
+  assert.equal(/<html[^>]*data-simple/.test(html), false, 'no root state in the saved copy');
+  assert.equal(/<(div|span) data-text="normal"[^>]*hidden/.test(html), false, 'the normal copy is not hidden');
+  assert.match(html, /<div data-text="simple" hidden(="")?>/, 'the simple copy is hidden');
+  assert.match(html, /data-simple-toggle[^>]*aria-pressed="false"/, 'the toggle starts unpressed');
+  assert.equal(await seen(page).then((s) => s.includes('Simple plan lead.')), true, 'the live page is still on simple text');
+  const saved = path.join(path.dirname(built.file), 'saved.html');
+  fs.writeFileSync(saved, html);
+  const off = await openFile(pathToFileURL(saved).href, { javaScript: false });
+  const text = await seen(off.page);
+  assert.ok(text.includes('Normal plan lead.') && !text.includes('Simple plan lead.'));
+  await off.context.close();
+  await context.close();
+});
+
 // ---- whole-page checks ----------------------------------------------------
 
 test('a built recap and deck with simple text pass scripts/check.mjs', async (t) => {
@@ -315,6 +446,31 @@ test('a built recap and deck with simple text pass scripts/check.mjs', async (t)
     assert.deepEqual(result.problems, []);
     assert.equal(result.status, 'ok');
   }
+});
+
+// A number-plus-unit token is kept on one line, so one this long cannot wrap and spills out of its slide.
+const OVERSIZED = 'It took 12345678901234567890123456789012345678901234567890123456789012345678901234567890 ms in total.';
+const wideDeck = ({ normal = 'Short normal text.', simple = 'Short simple text.', withSimple = true } = {}) => ({
+  title: 'Wide text deck', preset: 'slides',
+  sections: [{ type: 'text', title: 'One claim', text: normal, ...(withSimple ? { simple: { text: simple } } : {}) }],
+});
+
+test('guardrail: check.mjs fails a deck whose oversized text is only in the simple view, and says so', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const result = await checkPage(buildSpec(wideDeck({ simple: OVERSIZED }), { name: 'wide-simple' }).file);
+  assert.equal(result.status, 'failed');
+  assert.ok(result.problems.length > 0);
+  assert.ok(result.problems.every((p) => p.includes('(simple)')), result.problems.join('\n'));
+  assert.ok(result.problems.some((p) => /clipped by the slide/.test(p)));
+});
+
+test('guardrail: the same text only in the normal view fails once, in the normal pass, and the simple pass adds nothing', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const result = await checkPage(buildSpec(wideDeck({ normal: OVERSIZED }), { name: 'wide-normal' }).file);
+  assert.equal(result.status, 'failed');
+  assert.ok(result.problems.every((p) => !p.includes('(simple)')), result.problems.join('\n'));
+  const alone = await checkPage(buildSpec(wideDeck({ normal: OVERSIZED, withSimple: false }), { name: 'wide-none' }).file);
+  assert.deepEqual(result.problems, alone.problems, 'a page with no simple text reports the same problems, from one pass');
 });
 
 test('in the simple view nothing scrolls sideways on a phone or a desktop', async (t) => {

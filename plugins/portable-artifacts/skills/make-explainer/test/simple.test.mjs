@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
 import { SIMPLE_SECTIONS, lintSimple, withSimple, hasSimple } from '../scripts/lib/simple.mjs';
+import { inlineCode } from '../scripts/lib/inline-code.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const EXAMPLES = fileURLToPath(new URL('../references/examples/', import.meta.url));
@@ -282,13 +283,41 @@ test('simple text does not count toward page word budgets', async () => {
   // Six 24-word sentences: over the normal paragraph (60 words, 3 sentences) and text-section (120 words) caps, inside the simple rules.
   const long = Array(6).fill(sentence(24)).join(' ');
   assert.deepEqual(await validate(doc([textSection(long)])), { ok: true, errors: [], warnings: [] });
+  // On a slide it is no error, only the simple-view warning (see the slide-budget test below).
   const slides = await validate(doc([textSection(long)], { mode: 'slides' }));
-  assert.deepEqual(slides, { ok: true, errors: [], warnings: [] });
+  assert.equal(slides.ok, true);
+  assert.deepEqual(slides.errors, []);
+  assert.deepEqual(slides.warnings.map((w) => w.path), ['sections[0].simple']);
 });
 
 test('a long simple title is exempt from the title word cap', async () => {
   const section = { type: 'callout', tone: 'info', title: 'Note', text: 'Careful.', simple: { title: 'Please read this note before you go on today', text: 'Be careful.' } };
   assert.deepEqual(await validate(doc([section])), { ok: true, errors: [], warnings: [] });
+});
+
+test('a slide whose simple text is over the 80-word slide budget warns (it is not an error), and one inside the budget does not', async () => {
+  const slide = (simpleText) => ({ type: 'text', title: 'One claim', text: 'Short normal text.', simple: { text: simpleText } });
+  const prose = (n) => Array.from({ length: n / 5 }, () => 'It runs the build now.').join(' ');
+  const over = await validate(doc([slide(prose(90))], { preset: 'slides' }));
+  assert.equal(over.ok, true, 'simple text is exempt from the slide budget error');
+  const budget = over.warnings.filter((w) => /slide/.test(w.message));
+  assert.equal(budget.length, 1);
+  assert.equal(budget[0].path, 'sections[0].simple');
+  assert.match(budget[0].message, /90 words.*80/);
+  const within = await validate(doc([slide(prose(80))], { preset: 'slides' }));
+  assert.deepEqual(within.warnings.filter((w) => /slide/.test(w.message)), []);
+  const page = await validate(doc([slide(prose(90))]));
+  assert.deepEqual(page.warnings.filter((w) => /slide/.test(w.message)), [], 'a page has no slide budget');
+});
+
+test('the shared inline-script escape cannot let script text close its tag or open a comment, and both page parts use it', () => {
+  assert.equal(inlineCode('a</script>b</SCRIPT>c<!--d'), 'a<\\/script>b<\\/SCRIPT>c<\\!--d');
+  const view = fs.readFileSync(new URL('../scripts/lib/simple-view.mjs', import.meta.url), 'utf8');
+  const page = fs.readFileSync(new URL('../scripts/lib/page.mjs', import.meta.url), 'utf8');
+  for (const [name, src] of [['simple-view.mjs', view], ['page.mjs', page]]) {
+    assert.match(src, /from '\.\/inline-code\.mjs'/, `${name} imports the shared escape`);
+    assert.doesNotMatch(src, /const inlineCode =/, `${name} has no private copy`);
+  }
 });
 
 // ---- existing specs ---------------------------------------------------
