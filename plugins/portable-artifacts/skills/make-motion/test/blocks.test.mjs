@@ -69,7 +69,9 @@ const needsSeconds = (name, params) => BLOCKS[name].minDuration?.(params) ?? 0;
 // Blocks whose parts do not all enter over 0.6 s from the scene start: story-beats fades over 0.3 s beat by beat and
 // listicle holds its title from frame 0 and brings its rows in later (test/viral-blocks.test.mjs checks their timing).
 // 'all' skips the entrance rule; 'first' only the "first part enters at the scene start" one (listicle's rows keep theirs).
-const OWN_SCHEDULE = new Map([['story-beats', 'all'], ['listicle', 'first'], ['race', 'all']]); // race: one keyframe per period, not entrances
+// race: one keyframe per period, not entrances. form-fields: its typed example hands each value to a static copy in one frame
+// (test/ui-blocks.test.mjs checks the fill order and the single caret).
+const OWN_SCHEDULE = new Map([['story-beats', 'all'], ['listicle', 'first'], ['race', 'all'], ['form-fields', 'all']]);
 
 // ---- the table: every block -------------------------------------------------------------------------------------------
 

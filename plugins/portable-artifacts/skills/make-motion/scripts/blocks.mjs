@@ -37,11 +37,13 @@ function placeLine(def, side) {
   return [...FORMAT_NAMES.map((format) => `${format} ${at(def.place(FORMATS[format].size, format, side))}`), `viral ${VIRAL_FORMAT} ${viral}`].join('; ');
 }
 
-// A block that has a content area other blocks sit in (browser-window): that area at the block's place on each format,
-// centre x y then its size, so a form-fields or side-panel can be placed inside it.
+// A block that has a content area other blocks sit in (browser-window): that area at the block's place on each format and
+// in viral mode, centre x y then its size, so a form-fields or side-panel can be placed inside it.
 function contentLine(def) {
   const at = ({ x, y, width, height }) => `x ${Math.round(x)} y ${Math.round(y)} width ${Math.round(width)} height ${Math.round(height)}`;
-  return `content rectangle (centre x y, then size; the block at its place): ${FORMAT_NAMES.map((format) => `${format} ${at(def.contentRect(FORMATS[format].size, format))}`).join('; ')}`;
+  const viralSize = FORMATS[VIRAL_FORMAT].size;
+  const viral = at(def.contentRect(viralSize, VIRAL_FORMAT, safeInsets(viralSize, VIRAL_SAFE_ZONE)));
+  return `content rectangle (centre x y, then size; the block at its place): ${[...FORMAT_NAMES.map((format) => `${format} ${at(def.contentRect(FORMATS[format].size, format))}`), `viral ${VIRAL_FORMAT} ${viral}`].join('; ')}`;
 }
 
 function table(rows) {

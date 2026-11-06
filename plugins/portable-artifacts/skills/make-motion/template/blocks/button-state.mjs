@@ -1,7 +1,8 @@
 // button-state: one button that changes its label and/or colour once, at `at`: the old face fades out completely, then the
 // new one comes in over it, in the same place and at the same size, so the two labels are never drawn over each other.
-import { unit, contentWidth, fitText, textWidth, squeeze, textPart, rectPart, enter, blockGroup, abovePlace, LINE_HEIGHT, ENTER_SECONDS, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, fitText, textWidth, fitSchedule, textPart, rectPart, enter, blockGroup, abovePlace, LINE_HEIGHT, ENTER_SECONDS, MIN_TEXT } from './layout.mjs';
 import { fadeOut } from './exit.mjs';
+import { scheduleErrors } from './schedule-check.mjs';
 
 const face = {
   type: 'object',
@@ -19,7 +20,7 @@ const params = {
   properties: {
     from: face,
     to: face,
-    at: { type: 'number', minimum: 1, maximum: 58, default: 2 },
+    at: { type: 'number', minimum: 1, maximum: 50, default: 2 },
   },
 };
 
@@ -29,6 +30,12 @@ const PAD_Y = 20;
 const MIN_WIDTH = 260; // px at 1080
 const OUT_SECONDS = 0.2; // the old face is gone this long after `at`; the new one takes ENTER_SECONDS
 const POP = 0.94; // the new face grows from this scale
+const HOLD_SECONDS = 1; // the new face stays on screen at least this long, so its label can be read
+
+const changeOf = (p) => p.at ?? params.properties.at.default;
+const lastMotion = (p) => changeOf(p) + OUT_SECONDS + ENTER_SECONDS;
+const minDuration = (p) => lastMotion(p) + HOLD_SECONDS;
+const validate = (p, ctx) => scheduleErrors(ctx, { path: 'at', what: `a change at ${changeOf(p)}s (the new face is in ${OUT_SECONDS + ENTER_SECONDS}s later)`, end: lastMotion(p), minimum: minDuration(p) });
 
 // How each tone draws: the button's fill (and stroke), and the label colour on it. Theme tokens only.
 const TONES = {
@@ -42,14 +49,14 @@ function expand(el, ctx) {
   const { size, sceneDuration } = ctx;
   const u = unit(size);
   const { from, to } = el.params;
-  const changeAt = el.params.at ?? params.properties.at.default;
+  const changeAt = changeOf(el.params);
   const id = (part) => `${el.id}/${part}`;
   const cap = contentWidth(size, 800 * u, 40 * u, ctx.insets);
   const inner = cap - 2 * PAD_X * u;
   const fontSize = Math.min(...[from, to].map((f) => fitText(f.label, { size: LABEL_SIZES[0] * u, min: MIN_TEXT * u, maxWidth: inner, maxLines: 1 }).fontSize));
   const width = Math.min(cap, Math.max(MIN_WIDTH * u, ...[from, to].map((f) => textWidth(f.label, fontSize) + 2 * PAD_X * u)));
   const height = fontSize * LINE_HEIGHT.sans + 2 * PAD_Y * u;
-  const at = squeeze(sceneDuration, changeAt + OUT_SECONDS + ENTER_SECONDS);
+  const at = fitSchedule(sceneDuration, lastMotion(el.params), minDuration(el.params));
   const stroke = Math.max(1, Math.round(2 * u));
   const parts = [];
   const faceParts = (name, f, [start, end], extra) => {
@@ -70,10 +77,12 @@ export default Object.freeze({
   describe: {
     from: 'the button at the start: { label up to 16 characters, tone? accent | good | neutral (default accent) }',
     to: 'the button after the change, the same way; it keeps the first one\'s place and size',
-    at: 'scene seconds at which the change starts, 1 to 58 (default 2); the old face is gone 0.2 s later and the new one is in 0.8 s after `at`',
+    at: 'scene seconds at which the change starts, 1 to 50 (default 2); the old face is gone 0.2 s later and the new one is in 0.8 s after `at`; the scene must last 1 s past that',
   },
   example: { from: { label: 'Save changes' }, to: { label: 'Saved', tone: 'good' } },
   place: (size, format, _side, insets) => abovePlace(size, format, insets),
+  minDuration,
+  validate,
   paramOf: (part) => (Object.hasOwn(PART_PARAMS, part) ? PART_PARAMS[part] : null),
   expand,
 });

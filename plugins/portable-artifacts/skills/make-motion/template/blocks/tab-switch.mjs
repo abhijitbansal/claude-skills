@@ -1,7 +1,8 @@
 // tab-switch: a row of 2 to 4 tabs over a panel. The first tab is active; every `switchAfter` seconds the underline slides
 // to the next tab, the old panel text fades out completely, and only then the new one fades in, in the same place.
-import { unit, contentWidth, fitText, squeeze, slot, textPart, rectPart, linePart, enter, blockGroup, stack, abovePlace, LINE_HEIGHT, ENTER_SECONDS, MIN_TEXT } from './layout.mjs';
+import { unit, contentWidth, fitText, fitSchedule, slot, textPart, rectPart, linePart, enter, blockGroup, stack, abovePlace, LINE_HEIGHT, ENTER_SECONDS, MIN_TEXT } from './layout.mjs';
 import { fadeOut } from './exit.mjs';
+import { scheduleErrors } from './schedule-check.mjs';
 
 const params = {
   type: 'object',
@@ -19,7 +20,7 @@ const params = {
         properties: { label: { type: 'string', minLength: 1, maxLength: 8 }, body: { type: 'string', minLength: 1, maxLength: 48 } },
       },
     },
-    switchAfter: { type: 'number', minimum: 1.5, maximum: 20, default: 2 },
+    switchAfter: { type: 'number', minimum: 1.5, maximum: 15, default: 2 },
   },
 };
 
@@ -28,12 +29,18 @@ const PAD = 28; // px at 1080 inside the panel
 const UNDERLINE = 6; // px at 1080
 const OUT_SECONDS = 0.2; // the old panel text fades out over this long
 const SLIDE_SECONDS = 0.4; // the underline's move
+const HOLD_SECONDS = 2; // the last panel text stays on screen at least this long, so it can be read
+
+const everyOf = (p) => p.switchAfter ?? params.properties.switchAfter.default;
+const lastMotion = (p) => Math.max(slot(2)[1], everyOf(p) * (p.tabs.length - 1) + OUT_SECONDS + ENTER_SECONDS);
+const minDuration = (p) => lastMotion(p) + HOLD_SECONDS;
+const validate = (p, ctx) => scheduleErrors(ctx, { path: 'switchAfter', what: `${p.tabs.length} tabs switching every ${everyOf(p)}s`, end: lastMotion(p), minimum: minDuration(p) });
 
 function expand(el, ctx) {
   const { size, sceneDuration } = ctx;
   const u = unit(size);
   const { tabs } = el.params;
-  const every = el.params.switchAfter ?? params.properties.switchAfter.default;
+  const every = everyOf(el.params);
   const id = (part) => `${el.id}/${part}`;
   const width = contentWidth(size, 1100 * u, 40 * u, ctx.insets);
   const slotW = width / tabs.length;
@@ -48,8 +55,7 @@ function expand(el, ctx) {
   const tabX = (i) => (i - (tabs.length - 1) / 2) * slotW;
   // Switch k (1-based) starts at `k * every`: the underline moves, the old text is gone OUT_SECONDS later, then the new one enters.
   const switchAt = (k) => k * every;
-  const lastEnd = switchAt(tabs.length - 1) + OUT_SECONDS + ENTER_SECONDS;
-  const at = squeeze(sceneDuration, Math.max(slot(2)[1], lastEnd));
+  const at = fitSchedule(sceneDuration, lastMotion(el.params), minDuration(el.params));
   const parts = [enter(rectPart(id('card'), 0, cardY, width, cardH, { fill: 'surface', stroke: 'line', strokeWidth: Math.max(1, Math.round(2 * u)), radius: Math.round(16 * u), elevated: true }), slot(0).map(at))];
   tabs.forEach((t, i) => parts.push(enter(textPart(id(`tab-${i + 1}`), t.label, tabX(i), rowY - 12 * u, { fontSize: labelFs, maxWidth: slotW - 8 * u, fontWeight: 600, color: 'text' }), slot(1).map(at))));
   const underlineY = rowY - 12 * u + (labelFs * LINE_HEIGHT.sans) / 2 + 14 * u;
@@ -70,10 +76,12 @@ export default Object.freeze({
   params,
   describe: {
     tabs: '2 to 4 tabs; each { label up to 8 characters, body up to 48 }; the first is active at the start',
-    switchAfter: 'seconds between one switch and the next, 1.5 to 20 (default 2): the first tab stays active that long, then each following tab does',
+    switchAfter: 'seconds between one switch and the next, 1.5 to 15 (default 2): the first tab stays active that long, then each following tab does; the scene must last 2 s past the last switch',
   },
   example: { tabs: [{ label: 'Profile', body: 'Name, photo and a short bio' }, { label: 'Billing', body: 'Plan, invoices and cards' }, { label: 'Team', body: 'Invite people and set roles' }] },
   place: (size, format, _side, insets) => abovePlace(size, format, insets),
+  minDuration,
+  validate,
   paramOf: (part) => (/^(tab|body)-(\d+)$/.test(part) ? `tabs[${Number(part.split('-')[1]) - 1}].${part.startsWith('tab') ? 'label' : 'body'}` : null),
   expand,
 });

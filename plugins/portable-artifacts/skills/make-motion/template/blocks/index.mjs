@@ -8,8 +8,8 @@
 //   example   example params
 //   place     (size, format[, side[, insets]]) -> { x, y }: where the block belongs on that canvas; `insets` are a viral
 //             spec's (viral.mjs viralInsets), which move it inside the platform safe zone and above the lifted captions
-//   contentRect (optional) (size, format) -> { x, y, width, height }: the area, at the block's place, that other blocks are placed
-//             inside (browser-window); x, y its centre; blocks.mjs show prints it
+//   contentRect (optional) (size, format[, insets]) -> { x, y, width, height }: the area, at the block's place, that other blocks are
+//             placed inside (browser-window); x, y its centre; `insets` as for place (a viral spec's); blocks.mjs show prints it
 //   assets    (optional) params that name a file next to the spec (checked like an image src, served like one): each a
 //             key of `params`, or a dotted path to a nested one (`before.src`); see blockAssetFiles
 //   validate  (optional) (params, { sceneDuration, fps, durations?, index? }) -> [{ path, message }]: what the schema cannot say, run on
