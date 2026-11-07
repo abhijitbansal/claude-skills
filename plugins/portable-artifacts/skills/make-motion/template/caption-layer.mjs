@@ -36,6 +36,12 @@ export function loadCaptionTracks(spec, assetUrl) {
 /** Every caption text of `tracks`, for the font loader. */
 export const captionSample = (tracks) => tracks.flatMap((t) => t.groups.map((g) => groupText(g.words))).join(' ');
 
+/** Gives a captions layer's node, of caption style `style`, the text colour and any backdrop of `look`. */
+export function paintCaption(node, style, look) {
+  node.style.color = look.text;
+  if (BACKDROPS.has(style)) node.style.background = `color-mix(in srgb, ${look.colors.surface} ${BACKDROP_ALPHA}%, transparent)`;
+}
+
 /** The layer of one track (from loadCaptionTracks), hidden until applyCaption shows a group. A viral spec's captions sit
  * in the lifted zone between its platform bands (captionZone with its insets). */
 export function captionLayer(track, spec, look) {
@@ -49,10 +55,9 @@ export function captionLayer(track, spec, look) {
     maxWidth: `${zone.right - zone.left}px`,
     fontSize: `${captionFontSize(spec.size)}px`,
     fontWeight: String(look.weight('sans', CAPTION_WEIGHT)),
-    color: look.text,
     display: 'none',
   });
-  if (BACKDROPS.has(track.style)) node.style.background = `color-mix(in srgb, ${look.colors.surface} ${BACKDROP_ALPHA}%, transparent)`;
+  paintCaption(node, track.style, look);
   return { node, zone, size: spec.size, index: track.index, style: track.style, groups: track.groups, shown: null, fitted: false, words: [], popCaps: [], typing: null };
 }
 

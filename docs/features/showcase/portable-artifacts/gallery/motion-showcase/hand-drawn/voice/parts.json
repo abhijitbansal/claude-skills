@@ -1,0 +1,18 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "Here is what the hand draws.",
+      "start": 0,
+      "end": 2.225,
+      "phonemes": "hˈɪɹ ɪz wʌt ðə hˈænd dɹˈɔːz."
+    },
+    {
+      "text": "Handwritten text, boxes, lines and arrows, line icons, and scribble fills.",
+      "start": 2.225,
+      "end": 7.7,
+      "phonemes": "hˈændɹɪʔˌn̩ tˈɛkst, bˈɑːksᵻz, lˈaɪnz ænd ˈæɹoʊz, lˈaɪn ˈaɪkɑːnz, ænd skɹˈɪbəl fˈɪlz."
+    }
+  ]
+}

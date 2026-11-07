@@ -24,6 +24,9 @@ import { artSvg } from '../../shared/art.mjs';
 import { dataUri } from './image.mjs';
 import { planHash, planKey } from './plan-hash.mjs';
 import { saveBlock } from './render/plan-ui.mjs';
+import { hasSimple, hasSimpleText, withSimple } from './simple.mjs';
+import { dualText, titleHtml, simpleToggle, simpleHead } from './simple-view.mjs';
+import { inlineCode } from './inline-code.mjs';
 
 const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), slides: new URL('../../template/slides.html', import.meta.url) };
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
@@ -50,9 +53,6 @@ export function contentSecurityPolicy(spec) {
   const base = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:";
   return spec.sections.some((s) => s.type === 'motion') ? `${base}; media-src 'self' file: blob:` : base;
 }
-
-// Inline script text must not close its tag or open an HTML comment.
-const inlineCode = (code) => code.replace(/<\/(script)/gi, '<\\/$1').replaceAll('<!--', '<\\!--');
 
 const slugOf = (title) => slugify(rawText(title), '').slice(0, MAX_ID).replace(/-+$/, '');
 
@@ -133,12 +133,21 @@ function sectionPageParts(spec, ctx) {
 // The small label above a heading; only a section that shows its own title gets one.
 const eyebrow = (section) => (section.label === undefined ? '' : `<p class="sec-eyebrow pa-label">${plain(section.label)}</p>\n`);
 
+// A section with simple text (simple.mjs) renders its body twice, normal then simple; one without renders as before.
+// `view` is the section as the simple view shows it, or null.
+function renderBodies(section, view, i, def, ctx) {
+  const body = renderBody(section, i, def, ctx);
+  return view === null ? body : dualText(body, renderBody(view, i, def, ctx));
+}
+const simpleView = (section) => (hasSimpleText(section) ? withSimple(section) : null);
+
 // `alt`: the section sits on the alternating surface band (every second visual section).
 function renderSection(section, i, id, titleId, def, ctx, alt = false) {
-  const body = renderBody(section, i, def, ctx);
+  const view = simpleView(section);
+  const body = renderBodies(section, view, i, def, ctx);
   const hasHeading = section.title !== undefined && !def.ownHeading;
   const heading = hasHeading
-    ? `${eyebrow(section)}<h2 class="sec-title" id="${esc(titleId)}">${headingInline(section.title)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
+    ? `${eyebrow(section)}<h2 class="sec-title" id="${esc(titleId)}">${titleHtml(section, view)}<a class="anchor" href="#${esc(id)}" aria-label="Link to this section: ${plain(section.title)}">#</a></h2>\n`
     : '';
   const labelled = hasHeading ? ` aria-labelledby="${esc(titleId)}"` : '';
   return `<section class="sec sec-${section.type}${alt ? ' sec-alt' : ''}" id="${esc(id)}"${labelled}>\n${heading}${body}\n</section>`;
@@ -148,9 +157,10 @@ function renderSection(section, i, id, titleId, def, ctx, alt = false) {
 // The label is the card's visible heading; with a label the title stays for screen readers only (it names
 // the region), because the lead sentence already states the verdict. Without a label the title shows.
 function renderHeroTldr(section, id, titleId, ctx) {
-  const body = renderBody(section, 0, SECTIONS.tldr, ctx);
+  const view = simpleView(section);
+  const body = renderBodies(section, view, 0, SECTIONS.tldr, ctx);
   const hidden = section.label === undefined ? '' : ' sr-only';
-  const title = section.title === undefined ? '' : `<h2 class="hero-tldr-title${hidden}" id="${esc(titleId)}">${headingInline(section.title)}</h2>\n`;
+  const title = section.title === undefined ? '' : `<h2 class="hero-tldr-title${hidden}" id="${esc(titleId)}">${titleHtml(section, view)}</h2>\n`;
   const name = section.label === undefined ? 'Summary' : plain(section.label);
   const labelled = section.title === undefined ? ` aria-label="${name}"` : ` aria-labelledby="${esc(titleId)}"`;
   const tone = section.tone === undefined ? '' : ` ${toneClass(section.tone)}`;
@@ -270,7 +280,8 @@ function pageParts(spec, ctx, ids) {
 function deckParts(spec, ctx, flavored) {
   const rendered = spec.sections.map((section, i) => {
     const def = SECTIONS[section.type];
-    return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx) };
+    const view = simpleView(section);
+    return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx), simple: view === null ? undefined : { view, body: renderBody(view, i, def, ctx) } };
   });
   const artFor = flavored ? (n) => artPair(ctx.theme, `${spec.title}${n}`, SLIDE_ART) : undefined;
   return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.footer, artFor }) };
@@ -344,6 +355,8 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     PRESETATTR: spec.preset === undefined ? '' : ` data-preset="${esc(spec.preset)}"`,
     PLANATTRS: planAttrs(spec, slides),
     FLAVORCSS: flavorSheets(flavor, slides),
+    SIMPLEHEAD: hasSimple(spec) ? simpleHead() : '',
+    SIMPLETOGGLE: hasSimple(spec) ? simpleToggle() : '',
     HEROART: flavored && !slides ? heroArt(spec, themeData, typeof heroImage === 'function' ? undefined : heroImage) : '',
     ...layout,
     ...sectionPageParts(spec, ctx),

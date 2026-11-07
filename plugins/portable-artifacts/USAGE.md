@@ -497,12 +497,12 @@ it is an error.
 listing each option with its default: format (`16:9`), length (about 10 s), assets
 (none), voiceover (off), sound (none), theme (the one the prompt suggests: `press` for
 dense docs and recaps, `poster` for launches and pitches, otherwise `dusk`), CTA (none) and
-captions (off). Answer
-all of it in one reply, or say "defaults". An option your prompt already settles
+captions (off), and the style (`standard`, or `hand-drawn` and `mixed`, see below).
+Answer all of it in one reply, or say "defaults". An option your prompt already settles
 ("a 9:16 clip", "with a voiceover") is not asked again. A run that cannot pause for
 an answer (`claude -p`, `codex exec`, an eval) skips the round and builds with the
 defaults, and its final report carries one line naming what it used:
-`intake: skipped (<reason>); values used: format 16:9, length 10 s, assets none, voiceover off, sound none, theme dusk, CTA none, captions off, platform none`
+`intake: skipped (<reason>); values used: format 16:9, length 10 s, assets none, voiceover off, sound none, theme dusk, CTA none, captions off, platform none, style standard, hand n/a`
 (the values shown are the defaults; a value your prompt settled appears instead).
 
 **The storyboard.** For a clip over 20 s, after the intake round, the agent writes a short
@@ -527,7 +527,10 @@ numbered list), `before-after-swipe`, `code-typing`, `code-diff`, `terminal-run`
 `before-after` (two numbers), `notification-stack`, `chat-thread`, `timeline`,
 `testimonial`, `lower-third-tag`, `lower-third-social`, `lower-third-ticker` and
 `text-behind-subject` (big text behind a person: needs a cutout of the photo or clip, which
-`cutout.mjs` makes locally after a one-time install the agent asks about): 28 in all.
+`cutout.mjs` makes locally after a one-time install the agent asks about), five that mock a
+product screen (`browser-window`, `form-fields`, `tab-switch`, `button-state` and `side-panel`)
+and five that a hand draws (`sketch-diagram`, `sketch-steps`, `sketch-list`,
+`sketch-compare` and `sketch-callout`, see below): 38 in all.
 A block lays itself out for
 16:9 and 9:16, takes its colours from the theme and keeps clear of the caption zone.
 `node <skill-dir>/scripts/blocks.mjs list` lists them and `show <name>` prints a block's
@@ -544,6 +547,35 @@ never failures: a hook outside 3 to 7 words, text under a platform band, 3 s wit
 change, audio without captions. The safe-zone numbers are tunable defaults taken from
 the platforms' ad specs, and -14 LUFS is a common default that no platform publishes; none
 of this is a guarantee of reach. Start from `references/examples/viral-hook.json`.
+
+**Hand-drawn style.** A scene with `"style": "sketch"` is drawn on a white board by an
+illustrated hand, one stroke at a time: writing in a handwriting font (Caveat, OFL-1.1),
+boxes, lines and arrows, Lucide icons and scribble fills, or the five sketch blocks. Put
+`style` at the root to draw the whole film, or on single scenes to mix drawn and standard
+ones (a title, a drawn middle, a closing ask). The agent offers it in the intake round, off
+by default, and switches it on by itself when the prompt says whiteboard, hand-drawn or a
+sketch look; it also asks for the hand's skin tone (`light`, `medium`, `tan`, `brown` or
+`dark`). `erase` is a transition in which the hand clears one board for the next. With a
+voiceover, the elements are drawn in the narration's sentences, one element for each
+sentence, and `"drawAt": "sentence:<n>"` pins one to a sentence. A drawn scene refuses what a
+pencil cannot draw (charts, images, video, Lottie, code, counters, keyframes, camera), a
+viral spec takes no drawn scene, and a drawn film has no default length: the drawing decides
+how long a scene lasts, and `validate.mjs` names the length it needs. `check.mjs` is the only
+place that reports a drawing that is too long for its narration sentence. Four starter films
+are in `references/examples/` (`sketch-architecture.json`, `sketch-concept.json`,
+`sketch-steps.json`, `sketch-mixed.json`) and the rules are in `references/sketch.md`.
+There is no drawing sound in this release.
+
+**Screens, speech, posters and length.** The five product-screen blocks stand alone and are
+placed by coordinates (`blocks.mjs show browser-window` prints the content rectangle the
+others go inside); `references/examples/ui-form-fill.json` fills a form inside a window beside
+a panel. A text takes `"anchor": "left"` so stacked lines share one left edge. For a voiceover,
+`voice.mjs ... --phonemes` prints how Kokoro read each sentence, so a word with two readings
+(résumé, lead, read) can be checked and respelled without listening. `render.mjs motion.json
+--poster 4.5` writes one frame (`out/poster.jpg`) without rendering the MP4, with the captions
+hidden; `--no-provenance` leaves the authoring tags out of the MP4. The 120 s limit on a film's
+total length is gone: up to 50 scenes of up to 60 s each, and render time grows with the length
+(use `--workers` and `--quality draft`).
 
 **Transitions and camera.** A scene's `transition` is a name or `{ "type", "direction",
 "duration" }`: `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` or `iris`

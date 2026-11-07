@@ -46,6 +46,16 @@ Give the viewer time to read before anything else moves:
 - **One accent colour.** The theme's accent marks the one thing that matters in a scene (the number, the highlighted bar). Everything else uses the text colours.
 - **One hero moment per clip.** Pick the beat the clip is about and give it the biggest type, the accent, and the `land` ease if any (on its position or scale, never on a counter's `value`). Other beats stay quieter.
 
+## Standard or hand-drawn
+
+A film picks a style per scene. Standard scenes take the rules on this page. Hand-drawn scenes (`"style": "sketch"`, see `references/sketch.md`) do not: a hand draws them one stroke at a time, so the entrance, stagger, hold and exit numbers above do not apply, and the drawing decides how long a scene lasts.
+
+- **Choose hand-drawn for an idea that builds**: a concept in steps, an architecture, a list whose items should arrive one at a time, a comparison. The pencil makes the order of the explanation visible, and narration can pace it (each element is drawn in its own sentence).
+- **Choose standard for what the pencil cannot draw**: charts, photos, video, Lottie, code, counters, camera moves and anything that needs exact numbers on screen. A drawn scene refuses all of them.
+- **Mix when the film needs both**: a standard title and closing ask around a drawn middle. Use `push` or `crossfade` between a standard scene and a drawn one (`fade` or `push` into a standard scene when the texts of both would overlap), and `erase` (the hand wipes the board) only between two drawn scenes.
+- **Do not hold a finished board for long.** A silent board that sits still for more than 3 s is a dead stretch, as on any other scene; end the scene about 2 s after the last stroke, so the board can be read.
+- **No fixed length.** Work the length out from the content; "stay under 15 s" is guidance for the standard scenes of a film only.
+
 ## Scene changes
 
 - **A hard cut is the default.** Between related scenes (the same chart, the next step of a list) a hard cut reads as continuous; a `"transition": "crossfade"` (0.4 s, the new scene fading in over the previous one, which stays fully visible beneath) suits a change of subject. Set root `"transition": "crossfade"` to make it the default and put `"transition": "none"` on the scenes that should cut.

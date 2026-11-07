@@ -1,0 +1,90 @@
+{
+  "title": "Simple English: one deck, two ways to read it",
+  "subtitle": "A deck whose slides switch to plainer words with one button",
+  "preset": "slides",
+  "theme": "paper",
+  "meta": {
+    "date": "2026-11-06",
+    "repo": "claude-skills",
+    "branch": "feat/make-motion-sketch-mode"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "title": "One button swaps a slide to plainer words",
+      "label": "In short",
+      "text": "Each slide can hold a second version of its text. The Simple English button in the bar shows it, and the deck keeps your choice.",
+      "points": [
+        "The deck opens in normal text.",
+        "Slide count, order and links stay the same.",
+        "Code blocks never change."
+      ],
+      "tone": "good",
+      "simple": {
+        "title": "One button gives a slide plainer words",
+        "text": "A slide can hold a plainer version of its text. Press Simple English in the bar to read it. The deck keeps your choice.",
+        "points": [
+          "The deck starts in normal text.",
+          "The slides stay in the same order.",
+          "Code blocks stay the same."
+        ]
+      }
+    },
+    {
+      "type": "steps",
+      "title": "Switching takes two key presses",
+      "label": "How to switch",
+      "items": [
+        { "title": "Tab to the bar", "text": "The Simple English button sits next to the theme button." },
+        { "title": "Press Enter or Space", "text": "The current slide changes at once, and the deck stays on it." }
+      ],
+      "simple": {
+        "items": [
+          { "text": "The Simple English button is next to the theme button." },
+          { "text": "The slide changes at once. You stay on the same slide." }
+        ]
+      }
+    },
+    {
+      "type": "compare",
+      "title": "The two views differ only in wording",
+      "label": "Two views",
+      "columns": [
+        {
+          "title": "Normal text",
+          "tone": "neutral",
+          "points": ["The author's own wording.", "Opens by default.", "Prints on paper."]
+        },
+        {
+          "title": "Simple English",
+          "tone": "good",
+          "points": ["Short sentences and common words.", "Opens when you ask for it.", "Never prints."]
+        }
+      ],
+      "simple": {
+        "columns": [
+          { "points": ["The writer's own words.", "The deck starts here.", "Paper shows this one."] },
+          { "points": ["Short sentences. Common words.", "You press the button to see it.", "Paper does not show it."] }
+        ]
+      }
+    },
+    {
+      "type": "callout",
+      "tone": "info",
+      "title": "Slides keep their length",
+      "text": "The plain version has the same shape as the normal one. A slide never splits in two because of it.",
+      "simple": {
+        "text": "Both versions have the same shape. No slide splits in two."
+      }
+    },
+    {
+      "type": "text",
+      "title": "What the toggle never touches",
+      "label": "Left alone",
+      "text": "- Code blocks and commands in them\n- Diagrams, charts and videos\n- A plan's answers\n- Numbers: the writer keeps them exact by hand",
+      "simple": {
+        "text": "- Code blocks stay.\n- Diagrams, charts and videos stay.\n- A plan's answers stay.\n- Numbers: the writer keeps them exact."
+      }
+    }
+  ]
+}

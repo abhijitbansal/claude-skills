@@ -1,0 +1,1 @@
+There are four steps. First, write the spec. Then validate it, preview it, and render it.

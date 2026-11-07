@@ -1,0 +1,170 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "style": "sketch",
+  "sketch": {
+    "hand": {
+      "tone": "medium",
+      "scale": 1
+    },
+    "seed": 3
+  },
+  "scenes": [
+    {
+      "id": "hand",
+      "duration": 7,
+      "elements": [
+        {
+          "id": "title-hand",
+          "type": "text",
+          "text": "Drawn by a hand",
+          "x": 960,
+          "y": 220,
+          "fontSize": 130
+        },
+        {
+          "id": "callout-hand",
+          "type": "block",
+          "x": 960,
+          "y": 620,
+          "block": "sketch-callout",
+          "params": {
+            "text": "One stroke at a time",
+            "icon": "pencil-line",
+            "mark": "underline"
+          }
+        }
+      ]
+    },
+    {
+      "id": "parts",
+      "duration": 9.8,
+      "transition": "push",
+      "elements": [
+        {
+          "id": "title-parts",
+          "type": "text",
+          "text": "What the hand draws",
+          "x": 960,
+          "y": 160,
+          "fontSize": 110
+        },
+        {
+          "id": "list-parts",
+          "type": "block",
+          "x": 960,
+          "y": 560,
+          "block": "sketch-list",
+          "params": {
+            "items": [
+              { "text": "Handwritten text", "icon": "pen-line" },
+              { "text": "Boxes, lines and arrows", "icon": "square" },
+              { "text": "Line icons", "icon": "star" },
+              { "text": "Scribble fills", "icon": "brush" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "pipeline",
+      "duration": 11.1,
+      "transition": "erase",
+      "elements": [
+        {
+          "id": "title-pipeline",
+          "type": "text",
+          "text": "From a file to a video",
+          "x": 960,
+          "y": 160,
+          "fontSize": 110
+        },
+        {
+          "id": "diagram-pipeline",
+          "type": "block",
+          "drawAt": "sentence:1",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-diagram",
+          "params": {
+            "nodes": [
+              { "id": "spec", "label": "motion.json", "icon": "file-code" },
+              { "id": "page", "label": "Browser", "icon": "globe", "fill": true },
+              { "id": "mp4", "label": "MP4", "icon": "film" }
+            ],
+            "edges": [
+              { "from": "spec", "to": "page", "label": "loaded" },
+              { "from": "page", "to": "mp4", "label": "encoded" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "steps",
+      "duration": 8.8,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "title-steps",
+          "type": "text",
+          "text": "Four steps",
+          "x": 960,
+          "y": 160,
+          "fontSize": 110
+        },
+        {
+          "id": "steps-steps",
+          "type": "block",
+          "drawAt": "sentence:1",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-steps",
+          "params": {
+            "steps": ["Write the spec", "Validate", "Preview", "Render"]
+          }
+        }
+      ]
+    },
+    {
+      "id": "compare",
+      "duration": 15.5,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "title-compare",
+          "type": "text",
+          "text": "Two kinds of scene",
+          "x": 960,
+          "y": 150,
+          "fontSize": 100
+        },
+        {
+          "id": "compare-compare",
+          "type": "block",
+          "drawAt": "sentence:1",
+          "x": 960,
+          "y": 560,
+          "block": "sketch-compare",
+          "params": {
+            "left": {
+              "title": "Standard",
+              "points": ["Charts and photos", "Keyframed motion", "Ready-made blocks"]
+            },
+            "right": {
+              "title": "Drawn",
+              "points": ["Text, shapes, icons", "Drawn in order", "No keyframes"]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "audio": [
+    { "src": "voice/hand.wav", "scene": "hand", "at": 0.4 },
+    { "src": "voice/parts.wav", "scene": "parts", "at": 0.6 },
+    { "src": "voice/pipeline.wav", "scene": "pipeline", "at": 1.0 },
+    { "src": "voice/steps.wav", "scene": "steps", "at": 0.6 },
+    { "src": "voice/compare.wav", "scene": "compare", "at": 0.6 }
+  ]
+}

@@ -15,6 +15,12 @@ test('chromeChanged: generatedBy or theme edits force a full reload', () => {
   assert.equal(chromeChanged(base, { ...base, theme: 'ink' }), true);
 });
 
+test('chromeChanged: switching provenance off or on forces a full reload (the footer is server-built)', () => {
+  assert.equal(chromeChanged(base, { ...base, provenance: false }), true);
+  assert.equal(chromeChanged({ ...base, provenance: false }, base), true);
+  assert.equal(chromeChanged({ ...base, provenance: false }, { ...base, provenance: false, scenes: [1] }), false);
+});
+
 test('chromeChanged: a page opened on an unreadable spec reloads once the spec carries chrome', () => {
   assert.equal(chromeChanged(null, { ...base, generatedBy: { model: 'A' } }), true);
   assert.equal(chromeChanged(null, base), false);

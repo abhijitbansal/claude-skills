@@ -183,6 +183,13 @@ test('voice sidecar and whisper JSON both parse to the same word list for the sa
   assert.throws(() => parseCaptions('{nope', 'json'), (e) => e instanceof CaptionError && /^not valid JSON: /.test(e.message));
 });
 
+test('a sidecar with phonemes parses to the same groups as one without', () => {
+  const plain = { sampleRate: 24000, voice: 'af_heart', sentences: [{ text: 'Send your résumé.', start: 0, end: 2 }, { text: 'I will resume later.', start: 2, end: 4 }] };
+  const withPhonemes = { ...plain, sentences: plain.sentences.map((s, i) => ({ ...s, phonemes: ['sˈɛnd jʊɹ ɹˈɛzuːmˌeɪ.', 'ˈI wɪl ɹᵻzˈuːm lˈATəɹ.'][i] })) };
+  const groupsOf = (sidecar) => groupWords(parseCaptions(JSON.stringify(sidecar), 'json'));
+  assert.deepEqual(groupsOf(withPhonemes), groupsOf(plain));
+});
+
 test('captionState: karaoke word index at t, kinetic popScale 1.15 at word start and 1 after 0.15 s, typewriter chars at 0.035 s each', () => {
   const groups = groupWords([...run('one two three', 1, 0.5), ...run('four five', 3, 0.5)]);
   assert.deepEqual(captionState(groups, 'karaoke', 0.5), { group: null, wordIndex: -1, chars: 0, popScale: 1 });

@@ -18,6 +18,8 @@ import { doctorCommand } from './doctor-hint.mjs';
 import { BLOCKS, BLOCK_NAMES, isBlock, blockDef, blockAssetFiles, paramOfPart } from '../../template/blocks/index.mjs';
 import { VIRAL_MODE, applyViral } from '../../template/viral.mjs';
 import { VAR_NAME, MAX_VARS, VAR_TYPES, declaresVars, findVarRefs, varValues, substituteVars } from '../../template/vars.mjs';
+import { STYLES, HAND_TONES, SCRIBBLE_FILL, isSketchScene } from '../../template/sketch/style.mjs';
+import { checkSketch, checkSketchBlocks, checkSketchDuration, inMisplacedBlock } from './sketch-check.mjs';
 import { checkCode } from './code-check.mjs';
 import { checkLottie } from './lottie-check.mjs';
 import { isAtlasName } from '../../template/maps.mjs';
@@ -28,7 +30,7 @@ import { gridOf, frameCutoff } from '../../template/frames.mjs';
 import { CAMERA_PROPS, CAMERA_REST, MIN_ZOOM, MAX_ZOOM, MAX_SHAKE_AMOUNT, MAX_SHAKE_HZ, MAX_SHAKE_SEED } from '../../template/camera.mjs';
 import { GRADE_ELEMENT_TYPES, GRADE_PRESETS, EXPOSURE_RANGE, CONTRAST_RANGE, SATURATION_RANGE, isIdleGrade } from '../../template/grade.mjs';
 import { GL_TRANSITIONS } from '../../template/gl-transitions.mjs';
-import { TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
+import { TRANSITIONS, SKETCH_TRANSITIONS, MIN_TRANSITION_SECONDS, MAX_TRANSITION_SECONDS, directionsOf, comesInOver, normalizeTransition } from '../../template/transitions.mjs';
 
 // Browser-safe pieces live in template/ so the renderer can import them too.
 export { withDefaults } from '../../template/defaults.mjs';
@@ -37,7 +39,6 @@ import { expandSpec, EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_H
 
 export class UsageError extends Error {}
 
-const MAX_TOTAL_SECONDS = 120;
 // A code element's `code`: room for the largest code-diff expansion (about 8,000 characters with its markers and line
 // breaks), and still far more than a canvas shows above the text floor.
 const MAX_CODE_CHARACTERS = 10000;
@@ -62,7 +63,7 @@ export const ANIMATABLE = {
 const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes', 'hold'];
 const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
 const FIELDS = {
-  text: [...COMMON, 'text', 'role', 'exit', 'typing', ...TEXT_STYLE],
+  text: [...COMMON, 'text', 'role', 'exit', 'typing', 'anchor', ...TEXT_STYLE],
   counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
   shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth', 'elevated', 'cap', 'arrow'],
   image: [...COMMON, 'src', 'width', 'height', 'fit', 'grade'],
@@ -72,7 +73,13 @@ const FIELDS = {
   block: [...COMMON, 'block', 'params'],
   code: [...COMMON, 'code', 'lang', 'width', 'height', 'fontSize', 'highlight', 'diff', 'typing'],
   lottie: [...COMMON, 'src', 'width', 'height', 'offset', 'speed'],
+  // A Lucide line icon, in sketch scenes only (checkSketch). It has no pose of its own beyond opacity: the hand draws it where
+  // it stands, so it takes no scale, rotate or keyframes (checkFields says so, and checkKeyframes leaves it at that).
+  icon: ['id', 'type', 'x', 'y', 'opacity', 'hold', 'drawAt', 'name', 'size', 'color'],
 };
+// `drawAt` is a sketch scene's start time for any element; `to` and `bow` aim and bend a line in a sketch scene. None is in a
+// type's list (that would reach every "allowed:" message), and checkSketch reports each where it does not belong.
+const SKETCH_FIELDS = ['drawAt', 'to', 'bow'];
 const REQUIRED = {
   text: ['text'],
   counter: ['to'],
@@ -84,6 +91,7 @@ const REQUIRED = {
   block: ['block', 'params'],
   code: ['code', 'lang', 'width'],
   lottie: ['src', 'width', 'height'],
+  icon: ['name', 'size'],
 };
 
 const num = { type: 'number' };
@@ -129,9 +137,10 @@ const element = {
     fontWeight: { enum: [400, 500, 600, 700, 800] },
     color,
     align: { enum: ['left', 'center', 'right'] },
+    anchor: { enum: ['left', 'center', 'right'] }, // a text only (checkFields): the edge of its box that sits on x
     maxWidth: { type: 'number', minimum: 1 },
     font: { enum: ['sans', 'mono'] },
-    from: num, to: num,
+    from: num,
     decimals: { type: 'integer', minimum: 0, maximum: 6 },
     prefix: { type: 'string' }, suffix: { type: 'string' },
     shape: { enum: ['rect', 'ellipse', 'line'] },
@@ -156,6 +165,13 @@ const element = {
     lang: { type: 'string', minLength: 1 }, // one of CODE_LANGS (checkCode names the closest)
     highlight: { type: 'array', items: { type: 'integer', minimum: 1 } }, // 1-based line numbers, checked against the code by checkCode
     diff: { type: 'boolean' },
+    name: { type: 'string', minLength: 1 }, // an icon's Lucide name: checkSketch looks it up
+    size: { type: 'number', minimum: 1 }, // an icon's box, in px
+    drawAt: {}, // seconds, or "sentence:<n>": a sketch scene only; checkSketch checks the form (a union type would not format)
+    // A counter's end value (a number, checked by checkCounterTo with the schema's old message) or a sketch line's far end { x, y }
+    // (checkSketch). Open here because an anyOf of the two would report a counter's bad value twice ("must be number", "must be object").
+    to: {},
+    bow: num, // how far a line's middle bends to its left, in px at 1080 (sketch only)
     // A group's children are elements again (groups nest; checkElement caps the depth with a message that names the limit).
     children: { type: 'array', minItems: 1, maxItems: MAX_GROUP_CHILDREN, items: { $ref: '#/definitions/element' } },
   },
@@ -168,12 +184,12 @@ const transitionObject = {
   additionalProperties: false,
   required: ['type'],
   properties: {
-    type: { enum: [...TRANSITIONS, ...GL_TRANSITIONS] },
+    type: { enum: [...TRANSITIONS, ...GL_TRANSITIONS, ...SKETCH_TRANSITIONS] },
     direction: { type: 'string' },
     duration: { type: 'number', minimum: MIN_TRANSITION_SECONDS, maximum: MAX_TRANSITION_SECONDS },
   },
 };
-const transition = { if: { type: 'object' }, then: transitionObject, else: { enum: [...TRANSITIONS, ...GL_TRANSITIONS] } };
+const transition = { if: { type: 'object' }, then: transitionObject, else: { enum: [...TRANSITIONS, ...GL_TRANSITIONS, ...SKETCH_TRANSITIONS] } };
 // A scene camera: keyframes of zoom (0.5 to 3), pan x and y (px) and roll (deg), and a seeded shake. The order of the
 // keyframes and their times against the scene are checked by checkCamera.
 const cameraKeyframe = {
@@ -259,6 +275,24 @@ const viral = {
     loop: { type: 'boolean' },
   },
 };
+// The hand-drawn style's film-wide settings (template/sketch/style.mjs): the hand, the wobble seed and the drawing pace.
+// `scale` and `pace` are ranges (HAND_SCALE_RANGE, PACE_RANGE) that checkSketch enforces, so its message names both ends.
+const sketchSettings = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    hand: {
+      type: 'object',
+      additionalProperties: false,
+      properties: {
+        tone: { enum: [...HAND_TONES] },
+        scale: { type: 'number' },
+      },
+    },
+    seed: { type: 'integer' },
+    pace: { type: 'number' },
+  },
+};
 // A loudness target for the mix: render.mjs reports the measured level against it.
 const loudness = {
   type: 'object',
@@ -285,7 +319,10 @@ export const SCHEMA = {
     theme: { type: 'string', minLength: 1 },
     transition,
     texture,
+    style: { enum: [...STYLES] }, // the default for every scene; a scene's own wins (template/sketch/style.mjs)
+    sketch: sketchSettings,
     generatedBy: GENERATED_BY_SCHEMA,
+    provenance: { type: 'boolean' }, // false: no comment/artist tags in the MP4, no footer in the preview
     mode: { enum: [VIRAL_MODE] },
     viral,
     loudness,
@@ -301,6 +338,7 @@ export const SCHEMA = {
           id: { type: 'string', minLength: 1 },
           duration: { type: 'number', minimum: 0.2, maximum: 60 },
           background: color,
+          style: { enum: [...STYLES] },
           transition,
           camera,
           elements: { type: 'array', items: { $ref: '#/definitions/element' } },
@@ -367,6 +405,7 @@ function checkKeyframeTime(keyframes, i, at, sceneDuration, errors) {
 }
 
 function checkKeyframes(el, base, sceneDuration, errors) {
+  if (!FIELDS[el.type].includes('keyframes')) return; // a type with none (icon): checkFields has refused the field
   const typed = el.type === 'text' || el.type === 'code';
   const allowed = typed && el.typing ? [...ANIMATABLE[el.type], 'value'] : ANIMATABLE[el.type]; // a typing text's or code's `value` is its character count
   const typingHint = typed && !el.typing ? ' (value needs "typing": true)' : '';
@@ -425,8 +464,9 @@ const COLOUR_MESSAGE = 'must be a CSS colour (hex, rgb(), rgba(), hsl(), hsla() 
 function checkColor(obj, key, base, errors, { tokens = false } = {}) {
   if (obj[key] === undefined || isCssColor(obj[key]) || (tokens && COLOR_TOKENS.includes(obj[key]))) return;
   const art = obj[key] === ART_BACKGROUND ? `; "${ART_BACKGROUND}" is only valid as a scene background` : '';
+  const scribble = obj[key] === SCRIBBLE_FILL ? `; "${SCRIBBLE_FILL}" is only valid as the fill of a shape in a sketch scene` : '';
   const token = tokens ? ` or a theme token: ${COLOR_TOKENS.join(', ')}` : '';
-  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + token + art });
+  errors.push({ path: pathJoin(base, key), message: COLOUR_MESSAGE + token + art + scribble });
 }
 
 // A scene background is a colour or "art": the theme's seeded art, drawn full-bleed behind the elements.
@@ -598,7 +638,7 @@ function checkShapeStyle(el, base, errors) {
   for (const [key, shape] of Object.entries(SHAPE_ONLY)) {
     if (el[key] !== undefined && el[key] !== false && el.shape !== shape) errors.push({ path: pathJoin(base, key), message: `only valid on a ${shape} shape` });
   }
-  if (el.shape === 'line') checkLineLength(el, base, errors);
+  if (el.shape === 'line' && el.to === undefined) checkLineLength(el, base, errors); // a line aimed with `to` has no width
 }
 
 // An arrow head takes ARROW_HEAD_LENGTH stroke widths off the line and a round cap half a stroke width at each end: the
@@ -669,10 +709,11 @@ function checkTyping(el, at, scene, fps, errors) {
   errors.push({ path: at, message: `typing ${chars} characters takes ${takes.toFixed(2)}s but scene "${scene.id}" lasts ${scene.duration}s (it must finish a frame before the scene ends at ${fps} fps); shorten the ${el.type} or lengthen the scene to at least ${fix}s` });
 }
 
-// The scenes of `spec`, each with every scene's length and its own place (what the frame-grid checks need).
+// The scenes of `spec`, each with every scene's length and its own place (what the frame-grid checks need), and whether it
+// is hand-drawn (`sketch`: its own `style` or the root's).
 const withGrid = (spec) => {
   const durations = spec.scenes.map((s) => s.duration);
-  return spec.scenes.map((scene, index) => ({ ...scene, durations, index }));
+  return spec.scenes.map((scene, index) => ({ ...scene, durations, index, sketch: isSketchScene(spec, scene) }));
 };
 
 const TOP_ELEMENT = /^scenes\[\d+\]\.elements\[(\d+)\]/; // the scene-level element a path is in (a block's group, for a part)
@@ -730,13 +771,18 @@ function checkGroup(el, base, scene, dir, errors, fps, depth) {
 function checkFields(el, base, errors) {
   const fields = FIELDS[el.type];
   for (const key of Object.keys(el)) {
-    if (fields.includes(key)) continue;
+    if (fields.includes(key) || SKETCH_FIELDS.includes(key)) continue;
     const message = key === 'grade' ? `only valid on ${GRADE_ELEMENT_TYPES.join(' or ')} elements` : `not valid on ${el.type}; allowed: ${fields.join(', ')}`;
     errors.push({ path: pathJoin(base, key), message });
   }
   for (const key of REQUIRED[el.type]) {
     if (el[key] === undefined) errors.push({ path: pathJoin(base, key), message: `required for type ${el.type}` });
   }
+}
+
+// A counter's `to` is a number, as when the schema said so itself (`to` is open in the schema, for a sketch line's point).
+function checkCounterTo(el, base, errors) {
+  if (el.type === 'counter' && el.to !== undefined && !Number.isFinite(el.to)) errors.push({ path: pathJoin(base, 'to'), message: 'must be number' });
 }
 
 // A grade must change something: a preset, or a number away from its default.
@@ -748,12 +794,16 @@ function checkGrade(el, base, errors) {
 // `depth`: how many groups enclose `el` (0 at the top level of a scene).
 function checkElement(el, base, scene, dir, errors, fps = TYPING_FALLBACK_FPS, depth = 0) {
   checkFields(el, base, errors);
+  checkCounterTo(el, base, errors);
   checkKeyframes(el, base, scene.duration, errors);
   if (el.type === 'text') checkRole(el, base, errors);
   checkTyping(el, typingPath(el, base, null), scene, fps, errors);
   if (el.type === 'code') checkCode(el, base, errors);
   checkGrade(el, base, errors);
-  for (const key of ['color', 'fill', 'stroke']) checkColor(el, key, base, errors, { tokens: true });
+  for (const key of ['color', 'fill', 'stroke']) {
+    if (key === 'fill' && scene.sketch && el.type === 'shape' && el.fill === SCRIBBLE_FILL) continue; // a hatch, not a colour
+    checkColor(el, key, base, errors, { tokens: true });
+  }
   if (el.type === 'shape') checkShapeStyle(el, base, errors);
   if (el.type === 'image' && typeof el.src === 'string') checkAssetPath(el.src, pathJoin(base, 'src'), dir, errors);
   if (el.type === 'chart' && el.vegaLite) checkChart(el, base, errors);
@@ -986,6 +1036,12 @@ export function checkVars(written, values = {}) {
   return errors;
 }
 
+// `spec` without the `narration` the voice step put on its scenes (the same object when none has one).
+function withoutNarration(spec) {
+  if (!Array.isArray(spec.scenes) || !spec.scenes.some((scene) => isPlainObject(scene) && Object.hasOwn(scene, 'narration'))) return spec;
+  return { ...spec, scenes: spec.scenes.map((scene) => (isPlainObject(scene) ? Object.fromEntries(Object.entries(scene).filter(([key]) => key !== 'narration')) : scene)) };
+}
+
 // `values`: one batch row's var values (render --batch); without it each var takes its default. The spec is checked as
 // it renders: after its vars are substituted (step 1), its beats resolved (step 1b) and viral mode applied (step 2), so a
 // value that names a file outside the spec folder, or is no colour, fails at the field it lands in, exactly as if it had
@@ -997,13 +1053,18 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   const beats = resolveSpecBeats(substituted, dir); // step 1b: "beat:<n>" becomes seconds; same structure again
   if (beats.errors) return { ok: false, errors: beats.errors };
   const written = beats.spec;
-  if (!schemaCheck(written)) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
+  // A scene's `narration` is internal (the voice step set it, or refused a written one): the schema does not list it as a field.
+  if (!schemaCheck(withoutNarration(written))) return { ok: false, errors: formatAjvErrors(schemaCheck.errors) };
+  const sketchErrors = [];
+  checkSketch(written, sketchErrors, { allowedOn: (type) => FIELDS[type] }); // before the block params, so a standard block in a sketch scene is told first it does not belong
   const blockErrors = [];
   checkBlocks(applyViral(written), dir, blockErrors); // step 2, then the block params step 3 expands
-  if (blockErrors.length) return { ok: false, errors: blockErrors };
+  if (blockErrors.length) return { ok: false, errors: [...sketchErrors, ...blockErrors] };
   const spec = expandSpec(written); // pipeline steps 1-3 (template/defaults.mjs); the checks below see plain elements
   const errors = [];
   checkViral(written, errors);
+  errors.push(...sketchErrors);
+  checkSketchBlocks(written, spec, errors); // the texts and icons a sketch block's params draw: the block params have passed, so it has expanded
   checkIds(spec, errors);
   checkFormat(spec, errors);
   checkTheme(spec, errors);
@@ -1015,13 +1076,13 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
     checkCamera(scene, `scenes[${si}]`, errors);
     scene.elements.forEach((el, ei) => checkElement(el, `scenes[${si}].elements[${ei}]`, scene, dir, errors, spec.fps));
   });
-  const total = spec.scenes.reduce((a, s) => a + s.duration, 0);
-  if (total > MAX_TOTAL_SECONDS) {
-    errors.push({ path: 'scenes', message: `total duration ${total}s exceeds the ${MAX_TOTAL_SECONDS}s limit` });
-  }
   checkVideos(spec, dir, errors);
   checkAudio(spec, dir, errors);
   checkCues(spec, errors);
   checkCaptions(spec, dir, errors);
-  return { ok: errors.length === 0, errors: atBlocks(written, errors) };
+  // The stroke plan's length (the page draws the same plan). Last, and only for a spec that is otherwise valid: the plan
+  // reads sizes, icons and times that the checks above have not yet vouched for.
+  if (errors.length === 0) checkSketchDuration(written, spec, errors);
+  const misplaced = inMisplacedBlock(written);
+  return { ok: errors.length === 0, errors: atBlocks(written, errors.filter((e) => !misplaced(e.path))) };
 }

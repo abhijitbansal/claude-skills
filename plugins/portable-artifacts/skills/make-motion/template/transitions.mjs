@@ -5,11 +5,17 @@
 // gl-ripple and gl-cube (template/gl-transitions.mjs) are drawn by a shader in a render. TRANSITIONS stays the nine CSS
 // names; the GL ones are accepted wherever a transition is (normalizeTransition, directionsOf, comesInOver), and
 // layerStyles gives the preview and check.mjs the CSS look that stands in for them.
+// `erase` is the hand-drawn style's own (SKETCH_TRANSITIONS, between two hand-drawn scenes): the next board is wiped in from
+// the left as the hand sweeps across, and what a scene draws waits for the sweep (template/sketch/plan-context.mjs).
 
 import { GL_TRANSITIONS, glDirections, glFallback, isGlTransition } from './gl-transitions.mjs';
 
 export const TRANSITIONS = Object.freeze(['none', 'fade', 'crossfade', 'push', 'slide', 'wipe', 'zoom', 'blur', 'iris']);
+export const ERASE = 'erase';
+export const SKETCH_TRANSITIONS = Object.freeze([ERASE]);
 export const TRANSITION_SECONDS = 0.4;
+export const ERASE_SECONDS = 0.8;
+export const ERASE_EDGE = 'left'; // the edge the sweep starts from, and where the hand's pencil is: at the wipe's front
 export const MIN_TRANSITION_SECONDS = 0.1;
 export const MAX_TRANSITION_SECONDS = 2;
 
@@ -17,7 +23,7 @@ const EDGES = Object.freeze(['left', 'right', 'up', 'down']);
 const SCALES = Object.freeze(['in', 'out']);
 const DIRECTIONS = new Map([['push', EDGES], ['slide', EDGES], ['wipe', EDGES], ['zoom', SCALES], ['iris', SCALES]]);
 const FROM_EDGE = new Map([['left', [-1, 0]], ['right', [1, 0]], ['up', [0, -1]], ['down', [0, 1]]]); // where the incoming scene starts, in canvas sizes
-const OVERLAPPING = new Set(['crossfade', 'push', 'slide', 'wipe', 'zoom', 'blur', 'iris', ...GL_TRANSITIONS]); // the incoming scene comes in over the outgoing one
+const OVERLAPPING = new Set(['crossfade', 'push', 'slide', 'wipe', 'zoom', 'blur', 'iris', ...SKETCH_TRANSITIONS, ...GL_TRANSITIONS]); // the incoming scene comes in over the outgoing one
 
 const ZOOM_FROM = new Map([['in', 1.2], ['out', 0.8]]);
 const BLUR_PX = 24;
@@ -32,10 +38,10 @@ export const comesInOver = (type) => OVERLAPPING.has(type);
 /** { type, direction, duration } of a name or object; `direction` is null where the type takes none. Unknown input is "none". */
 export function normalizeTransition(value) {
   const written = typeof value === 'string' ? { type: value } : (typeof value === 'object' && value !== null ? value : {});
-  const type = TRANSITIONS.includes(written.type) || isGlTransition(written.type) ? written.type : 'none';
+  const type = TRANSITIONS.includes(written.type) || SKETCH_TRANSITIONS.includes(written.type) || isGlTransition(written.type) ? written.type : 'none';
   const directions = directionsOf(type);
   const direction = directions ? (directions.includes(written.direction) ? written.direction : directions[0]) : null;
-  const wanted = Number.isFinite(written.duration) ? written.duration : TRANSITION_SECONDS;
+  const wanted = Number.isFinite(written.duration) ? written.duration : (type === ERASE ? ERASE_SECONDS : TRANSITION_SECONDS);
   return { type, direction, duration: Math.min(MAX_TRANSITION_SECONDS, Math.max(MIN_TRANSITION_SECONDS, wanted)) };
 }
 
@@ -83,6 +89,8 @@ export function layerStyles(transition, p, size) {
     if (type === 'push') outgoing.transform = translate([-dx * p * width, -dy * p * height]);
   } else if (type === 'wipe') {
     incoming.clipPath = wipeClip(direction, p);
+  } else if (type === ERASE) {
+    incoming.clipPath = wipeClip(ERASE_EDGE, p);
   } else if (type === 'zoom') {
     incoming.transform = `scale(${num(ZOOM_FROM.get(direction) * (1 - p) + p)})`;
     incoming.opacity = p;

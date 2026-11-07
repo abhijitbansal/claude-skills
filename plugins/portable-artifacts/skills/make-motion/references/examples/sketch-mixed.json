@@ -1,0 +1,91 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "sketch": {
+    "hand": {
+      "tone": "brown",
+      "scale": 1
+    },
+    "seed": 2
+  },
+  "scenes": [
+    {
+      "id": "open",
+      "duration": 4,
+      "background": "art",
+      "elements": [
+        {
+          "id": "open-title",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "title-card",
+          "params": {
+            "kicker": "Explainer",
+            "title": "Slides or a whiteboard?",
+            "subtitle": "Two ways to show an idea"
+          }
+        }
+      ]
+    },
+    {
+      "id": "board",
+      "style": "sketch",
+      "duration": 13.5,
+      "transition": "crossfade",
+      "elements": [
+        {
+          "id": "board-title",
+          "type": "text",
+          "text": "Which one sticks?",
+          "x": 960,
+          "y": 150,
+          "fontSize": 100
+        },
+        {
+          "id": "board-compare",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-compare",
+          "params": {
+            "left": {
+              "title": "On a slide",
+              "points": [
+                "Shown all at once",
+                "The eye wanders",
+                "Easy to skim"
+              ]
+            },
+            "right": {
+              "title": "Drawn by hand",
+              "points": [
+                "Built a step at a time",
+                "The eye follows the pencil",
+                "Hard to forget"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "close",
+      "duration": 4,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "close-cta",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "cta-close",
+          "params": {
+            "headline": "Draw your next idea",
+            "action": "Start with a sketch"
+          }
+        }
+      ]
+    }
+  ]
+}

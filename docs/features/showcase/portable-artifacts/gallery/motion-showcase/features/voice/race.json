@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "A bar chart race re-ranks four names over four quarters.",
+      "start": 0,
+      "end": 3.9,
+      "phonemes": "ɐ bˈɑːɹ tʃˈɑːɹt ɹˈeɪs ɹˌiːɹˈæŋks fˈoːɹ nˈeɪmz ˌoʊvɚ fˈoːɹ kwˈɔːɹɾɚz."
+    }
+  ]
+}

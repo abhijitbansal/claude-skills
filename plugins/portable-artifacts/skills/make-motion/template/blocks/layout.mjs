@@ -156,10 +156,10 @@ export function enter(part, [start, end], { dx = 0, dy = 0, scale } = {}) {
 // `part` (a line) drawn in from `[start, end]` with the `enter` ease.
 export const drawIn = (part, [start, end]) => ({ ...part, keyframes: [{ t: start, draw: 0 }, { t: end, draw: 1, ease: 'enter' }] });
 
-// The group a block becomes: its id, place and pose, holding `children`.
+// The group a block becomes: its id, place and pose, holding `children`. `drawAt` (a sketch scene's start time) goes with it.
 export function blockGroup(el, children) {
   const group = { id: el.id, type: 'group', x: el.x, y: el.y, children };
-  for (const key of ['opacity', 'scale', 'rotate', 'keyframes', 'hold']) if (el[key] !== undefined) group[key] = el[key];
+  for (const key of ['opacity', 'scale', 'rotate', 'keyframes', 'hold', 'drawAt']) if (el[key] !== undefined) group[key] = el[key];
   return group;
 }
 

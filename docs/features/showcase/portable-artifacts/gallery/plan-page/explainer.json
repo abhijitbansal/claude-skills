@@ -19,7 +19,16 @@
         "Copilot CLI ran the agent file's model in 19 of 19 logged runs.",
         "Codex is untested; Claude Code was not measured."
       ],
-      "tone": "warn"
+      "tone": "warn",
+      "simple": {
+        "title": "We built it. Three calls and two approvals remain.",
+        "text": "We built all three workstreams. We have not tested Codex. Plan mode is in review. The calls below decide what the PR promises.",
+        "points": [
+          "A browser check fails when a number splits from its unit.",
+          "Copilot CLI ran the agent file's model in 19 of 19 logged runs.",
+          "We have not tested Codex. We did not measure Claude Code."
+        ]
+      }
     },
     {
       "type": "kpis",
@@ -144,7 +153,11 @@
       "type": "text",
       "title": "Three goals, and what the PR leaves alone",
       "label": "Scope",
-      "text": "Goals:\n\n- No number, percentage or number-plus-unit token splits across two lines.\n- Render skills can run on a cheap model in Copilot and Codex, not only Claude Code.\n- A plan page a reviewer answers in place, with answers the agent can check.\n\nNon-goals:\n\n- Reflowing ordinary prose or changing stored spec text.\n- Guaranteeing the hand-off: no host lets a skill force another agent.\n- A save server or any new npm dependency."
+      "text": "Goals:\n\n- No number, percentage or number-plus-unit token splits across two lines.\n- Render skills can run on a cheap model in Copilot and Codex, not only Claude Code.\n- A plan page a reviewer answers in place, with answers the agent can check.\n\nNon-goals:\n\n- Reflowing ordinary prose or changing stored spec text.\n- Guaranteeing the hand-off: no host lets a skill force another agent.\n- A save server or any new npm dependency.",
+      "simple": {
+        "title": "Three goals, and what the PR does not touch",
+        "text": "Goals:\n\n- No number, percentage or number-plus-unit token splits across two lines.\n- Render skills can run on a cheap model in Copilot and Codex, not only in Claude Code.\n- A plan page that a reviewer answers in place. The agent can check the answers.\n\nNon-goals:\n\n- Reflowing ordinary prose or changing stored spec text.\n- Guaranteeing the hand-off. No host lets a skill force another agent.\n- A save server or any new npm dependency."
+      }
     },
     {
       "type": "diagram",
@@ -178,14 +191,32 @@
         { "title": "Numbers stay on one line", "text": "CSS and a build step bind tokens; check.mjs fails on a split token or a spilled KPI.", "status": "done" },
         { "title": "Cheap model outside Claude Code", "text": "Agent files for Copilot and Codex, installer, doctor check and the hand-off line. Codex is untested.", "status": "done" },
         { "title": "Plan mode", "text": "Five section types, two themes, the answer runtime, answers.mjs and this example.", "status": "doing" }
-      ]
+      ],
+      "simple": {
+        "title": "We finished two phases. Plan mode is in review.",
+        "items": [
+          {
+            "text": "CSS and a build step keep each number token together. check.mjs fails on a split token or a spilled KPI."
+          },
+          {
+            "text": "This phase adds agent files for Copilot and Codex, an installer, a doctor check and the hand-off line. We have not tested Codex."
+          },
+          {
+            "text": "This phase adds five section types, two themes, the answer runtime, answers.mjs and this example."
+          }
+        ]
+      }
     },
     {
       "type": "details",
       "title": "Four risks, each with a guard",
       "label": "Risks",
       "summary": "What could still go wrong",
-      "text": "- **The hand-off agent fails.** One Copilot trial was refused file access; the main agent finished the work itself.\n- **Codex rejects the agent file.** It ships untested and the docs say so.\n- **Stale answers.** A plan edited after export changes its hash, and answers.mjs refuses the file.\n- **Hostile reviewer text.** The summary quotes it as data under its own heading and escapes hidden characters."
+      "text": "- **The hand-off agent fails.** One Copilot trial was refused file access; the main agent finished the work itself.\n- **Codex rejects the agent file.** It ships untested and the docs say so.\n- **Stale answers.** A plan edited after export changes its hash, and answers.mjs refuses the file.\n- **Hostile reviewer text.** The summary quotes it as data under its own heading and escapes hidden characters.",
+      "simple": {
+        "title": "Four risks, and a guard for each",
+        "text": "- **The hand-off agent fails.** One Copilot trial gave the agent no file access. The main agent finished the work itself.\n- **Codex rejects the agent file.** The file ships untested, and the docs say so.\n- **Stale answers.** If you edit a plan after you export it, its hash changes. Then answers.mjs refuses the file.\n- **Hostile reviewer text.** The summary quotes it as data under its own heading. It also escapes hidden characters."
+      }
     },
     {
       "type": "verdict",

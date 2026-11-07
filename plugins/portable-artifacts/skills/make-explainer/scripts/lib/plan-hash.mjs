@@ -18,9 +18,18 @@ function canonical(value) {
   return JSON.stringify(value);
 }
 
-/** First 12 hex characters of SHA-256 over the plan's title and sections (not generatedBy, theme, preset or key). */
+// A section without its `simple` text: the Simple English toggle never affects answers, so editing only that text must
+// not mark them stale. A section with none is returned as it is, so such a page hashes as it always did.
+const withoutSimple = (section) => {
+  if (section === null || typeof section !== 'object' || Array.isArray(section) || !('simple' in section)) return section;
+  const { simple, ...rest } = section;
+  return rest;
+};
+
+/** First 12 hex characters of SHA-256 over the plan's title and sections, less their `simple` text (not generatedBy, theme, preset or key). */
 export function planHash(spec) {
-  return createHash('sha256').update(canonical({ title: spec.title, sections: spec.sections })).digest('hex').slice(0, HASH_CHARS);
+  const sections = Array.isArray(spec.sections) ? spec.sections.map(withoutSimple) : spec.sections;
+  return createHash('sha256').update(canonical({ title: spec.title, sections })).digest('hex').slice(0, HASH_CHARS);
 }
 
 /** `plan-<slug of the title>`: lowercase letters, digits and dashes, cut to the key limit; empty slugs use the hash. */

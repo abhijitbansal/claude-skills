@@ -1,0 +1,11 @@
+1
+00:00:00,000 --> 00:00:03,150
+This text is read from an SRT file.
+
+2
+00:00:03,350 --> 00:00:06,100
+The file sets when each line shows.
+
+3
+00:00:06,300 --> 00:00:09,350
+Karaoke style marks the current word.

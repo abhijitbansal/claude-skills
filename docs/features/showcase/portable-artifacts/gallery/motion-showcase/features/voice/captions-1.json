@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "This text is read from an SRT file.",
+      "start": 0,
+      "end": 2.975,
+      "phonemes": "ðɪs tˈɛkst ɪz ɹˈɛd fɹʌm ɐn ˌɛsˌɑːɹtˈiː fˈaɪl."
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 // Plan mode: the plan hash and key, and checkAnswers (the plan-answers/1 validator behind scripts/answers.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { validateSpec } from '../scripts/lib/spec.mjs';
 import { planHash, planKey } from '../scripts/lib/plan-hash.mjs';
@@ -56,6 +57,22 @@ test('planHash ignores generatedBy, theme, preset and key', () => {
   const hash = planHash(plan());
   assert.equal(planHash(plan({ generatedBy: { model: 'm', effort: 'high' } })), hash);
   assert.equal(planHash(plan({ theme: 'brief', preset: 'none', key: 'other' })), hash);
+});
+
+test('planHash ignores a section\'s simple text: the toggle never affects answers', () => {
+  const hash = planHash(plan());
+  const sections = plan().sections;
+  const simple = sections.map((s, i) => (i === 3 ? { ...s, simple: { text: 'Who runs the rollout?' } } : s));
+  assert.equal(planHash(plan({ sections: simple })), hash, 'adding simple text');
+  const edited = sections.map((s, i) => (i === 3 ? { ...s, simple: { text: 'A different plain version.' } } : s));
+  assert.equal(planHash(plan({ sections: edited })), planHash(plan({ sections: simple })), 'editing only simple text');
+  assert.notEqual(planHash(plan({ sections: sections.map((s, i) => (i === 3 ? { ...s, text: 'Who owns the launch?' } : s)) })), hash, 'the normal text still counts');
+});
+
+test('a page with no simple text hashes exactly as before: the plan example\'s hash is pinned', () => {
+  // 2b4ae5297680 is the hash of references/examples/plan.explainer.json taken before simple was left out of the hash.
+  const example = JSON.parse(readFileSync(new URL('../references/examples/plan.explainer.json', import.meta.url), 'utf8'));
+  assert.equal(planHash(example), '2b4ae5297680');
 });
 
 test('planHash changes with an option label, a section title or the plan title', () => {

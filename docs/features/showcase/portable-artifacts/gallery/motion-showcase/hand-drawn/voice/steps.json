@@ -1,0 +1,24 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "There are four steps.",
+      "start": 0,
+      "end": 1.725,
+      "phonemes": "ðɛɹˌɑːɹ fˈoːɹ stˈɛps."
+    },
+    {
+      "text": "First, write the spec.",
+      "start": 1.725,
+      "end": 3.6,
+      "phonemes": "fˈɜːst, ɹˈaɪt ðə spˈɛk."
+    },
+    {
+      "text": "Then validate it, preview it, and render it.",
+      "start": 3.6,
+      "end": 6.675,
+      "phonemes": "ðˈɛn vˈælᵻdˌeɪt ɪt, pɹˈiːvjuː ɪt, ænd ɹˈɛndɚɹ ɪt."
+    }
+  ]
+}

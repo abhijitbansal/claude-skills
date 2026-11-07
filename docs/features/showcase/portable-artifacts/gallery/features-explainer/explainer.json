@@ -14,7 +14,16 @@
         "Copilot CLI ran Haiku 5.5 in 19 of 19 measured runs.",
         "Codex and VS Code Copilot Chat are untested."
       ],
-      "tone": "good"
+      "tone": "good",
+      "simple": {
+        "title": "Numbers stay put, builds cost less, plans get answers",
+        "text": "This release adds three things: numbers that stay on one line, routing to a cheap model and a plan mode. It also adds docs for all three.",
+        "points": [
+          "Every test suite passed before the release.",
+          "Copilot CLI ran Haiku 5.5 in 19 of 19 measured runs.",
+          "We have not tested Codex or VS Code Copilot Chat."
+        ]
+      }
     },
     {
       "type": "kpis",
@@ -39,13 +48,33 @@
         { "title": "B. Cheap-model routing", "text": "Skills hand the build to an artifact-builder agent that runs a cheaper model on Copilot and Codex." },
         { "title": "C. Plan mode", "text": "A plan preset in make-explainer where reviewers answer decisions in the page and return a JSON file to the agent." },
         { "title": "D. Docs and release", "text": "READMEs, feature pages and counts updated; plugin version raised from 0.8.1 to 1.0.0 for the CI guard." }
-      ]
+      ],
+      "simple": {
+        "title": "This branch holds four features",
+        "items": [
+          {
+            "text": "A number and its unit, such as 42% or 1,204 ms, now stay on one line. This works in explainers, decks, dashboards and motion."
+          },
+          {
+            "text": "A skill hands the build to an artifact-builder agent. On Copilot and Codex, that agent runs a cheaper model."
+          },
+          {
+            "text": "make-explainer has a plan preset. Reviewers answer decisions in the page. They return a JSON file to the agent."
+          },
+          {
+            "text": "We updated the READMEs, feature pages and counts. We raised the plugin version from 0.8.1 to 1.0.0 for the CI guard."
+          }
+        ]
+      }
     },
     {
       "type": "text",
       "title": "A: one token finder, many renderers",
       "label": "A: how",
-      "text": "`shared/nowrap.mjs` finds number-plus-unit tokens and skips `code`, `pre`, `kbd` and `samp`. The explainer wraps each hit in a `nowrap` span; motion binds the gap with a non-breaking space through an exact-match server route.\n\nKPI tiles size their font by value length with container-query units. Long values wrap inside the tile instead of spilling. `check.mjs` measures a real browser and fails on a split or an overflow."
+      "text": "`shared/nowrap.mjs` finds number-plus-unit tokens and skips `code`, `pre`, `kbd` and `samp`. The explainer wraps each hit in a `nowrap` span; motion binds the gap with a non-breaking space through an exact-match server route.\n\nKPI tiles size their font by value length with container-query units. Long values wrap inside the tile instead of spilling. `check.mjs` measures a real browser and fails on a split or an overflow.",
+      "simple": {
+        "text": "`shared/nowrap.mjs` finds number-plus-unit tokens. It skips `code`, `pre`, `kbd` and `samp`. The explainer wraps each hit in a `nowrap` span. Motion joins the gap with a non-breaking space. It does this through an exact-match server route.\n\nKPI tiles set their font size from the length of the value. They use container-query units. Long values wrap inside the tile instead of spilling out. `check.mjs` measures a real browser. It fails on a split or an overflow."
+      }
     },
     {
       "type": "steps",
@@ -56,7 +85,22 @@
         { "title": "Install them", "text": "`bin/install.mjs` writes the files to the user-level agent folders; `--project` and `--agents-only` narrow it. After `npx skills add`, `doctor.mjs --fix builder_agent` writes the same files." },
         { "title": "Tell the skill to hand off", "text": "All five SKILL.md files carry a Cheaper model block with a loop guard so the sub-agent does not delegate again." },
         { "title": "Measure it", "text": "`eval/run-eval.mjs --agent` ran 9 smoke runs and the 10-prompt motion gate. Copilot logs confirmed Haiku in every run." }
-      ]
+      ],
+      "simple": {
+        "title": "B: how we pick the cheap model",
+        "items": [
+          {
+            "text": "`bin/agents.mjs` writes an artifact-builder agent. On Copilot it uses Haiku 5.5, with GPT-5.4 nano as fallback. On Codex it uses `gpt-6-luna`. Effort is low for both."
+          },
+          {
+            "text": "`bin/install.mjs` writes the files to the user-level agent folders. `--project` and `--agents-only` narrow that. After `npx skills add`, `doctor.mjs --fix builder_agent` writes the same files."
+          },
+          {
+            "text": "All five SKILL.md files have a Cheaper model block. The block has a loop guard. The guard stops the sub-agent from delegating again."
+          },
+          {}
+        ]
+      }
     },
     {
       "type": "cards",
@@ -68,13 +112,33 @@
         { "title": "Two themes", "text": "`mono` is techie with a cyan accent. `brief` is executive. The explainer now has 9 themes." },
         { "title": "Page runtime", "text": "`plan.js` keeps answers in the browser and offers Copy, Download (`plan-answers.json`) and Save as HTML, a sticky button that saves the page with the answers inside." },
         { "title": "Answer checker", "text": "`answers.mjs` validates the answers file, or a saved page, against a closed schema and quotes reviewer text only as data, never as instructions." }
-      ]
+      ],
+      "simple": {
+        "items": [
+          {
+            "text": "There are five new section types: decision, approval, question, verdict and review. The page puts decisions first and the verdict last."
+          },
+          {
+            "text": "`mono` has a technical look and a cyan accent. `brief` has an executive look. The explainer now has 9 themes."
+          },
+          {
+            "text": "`plan.js` keeps answers in the browser. It offers Copy and Download (`plan-answers.json`). It also offers Save as HTML, a sticky button that saves the page with the answers inside."
+          },
+          {
+            "text": "`answers.mjs` checks the answers file, or a saved page, against a closed schema. It quotes reviewer text only as data. It never treats that text as instructions."
+          }
+        ]
+      }
     },
     {
       "type": "callout",
       "tone": "warn",
       "title": "What is still unproven",
-      "text": "Codex has no account here, so its agent file was written from docs only. The one hand-off trial reached Haiku, but the sub-agent was denied file access and the main model finished the work. Smoke and motion run costs were not measured."
+      "text": "Codex has no account here, so its agent file was written from docs only. The one hand-off trial reached Haiku, but the sub-agent was denied file access and the main model finished the work. Smoke and motion run costs were not measured.",
+      "simple": {
+        "title": "What we have not proven yet",
+        "text": "We have no Codex account here. So we wrote its agent file from the docs only. We ran one hand-off trial. It reached Haiku, but the sub-agent got no file access. The main model finished the work. We did not measure the cost of the smoke and motion runs."
+      }
     },
     {
       "type": "risks",
@@ -85,7 +149,27 @@
         { "risk": "Stale-answers notice stays visible after the first new answer", "severity": "low", "mitigation": "Parked for a follow-up." },
         { "risk": "`--force` in inline code breaks after the hyphen on every explainer page", "severity": "low", "mitigation": "Parked for a follow-up." },
         { "risk": "docs/catalog.html search terms miss the new features", "severity": "low", "mitigation": "Parked for a follow-up." }
-      ]
+      ],
+      "simple": {
+        "title": "Gaps we have not closed",
+        "items": [
+          {
+            "risk": "A KPI value under 16 characters can still spill its tile if it has wide glyphs (W, M, CJK)."
+          },
+          {
+            "risk": "The stale-answers notice stays visible after the first new answer.",
+            "mitigation": "We parked this for a follow-up."
+          },
+          {
+            "risk": "On every explainer page, `--force` in inline code breaks after the hyphen.",
+            "mitigation": "We parked this for a follow-up."
+          },
+          {
+            "risk": "The search terms in docs/catalog.html miss the new features.",
+            "mitigation": "We parked this for a follow-up."
+          }
+        ]
+      }
     },
     {
       "type": "steps",
@@ -95,7 +179,21 @@
         { "title": "Spec and plan", "text": "A design spec and a 16-task plan were written and committed under `docs/superpowers/`." },
         { "title": "One agent per task", "text": "Each task went to a fresh implementer, then a spec and quality review, then fix rounds. The controller made every commit." },
         { "title": "Whole-change review", "text": "The strongest model reviewed the whole change, one fix wave followed, and a scoped re-review came back clean." }
-      ]
+      ],
+      "simple": {
+        "title": "How we built the release",
+        "items": [
+          {
+            "text": "We wrote a design spec and a 16-task plan. We committed both under `docs/superpowers/`."
+          },
+          {
+            "text": "Each task went to a fresh implementer. A spec review and a quality review followed. Then came fix rounds. The controller made every commit."
+          },
+          {
+            "text": "The strongest model reviewed the whole change. One fix wave followed. A scoped re-review then came back clean."
+          }
+        ]
+      }
     }
   ]
 }

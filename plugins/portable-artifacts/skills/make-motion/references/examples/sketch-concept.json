@@ -1,0 +1,96 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "style": "sketch",
+  "sketch": {
+    "hand": {
+      "tone": "tan",
+      "scale": 1
+    },
+    "seed": 3
+  },
+  "scenes": [
+    {
+      "id": "why",
+      "duration": 11,
+      "elements": [
+        {
+          "id": "why-list",
+          "type": "block",
+          "x": 960,
+          "y": 480,
+          "block": "sketch-list",
+          "params": {
+            "title": "Why keep a cache",
+            "items": [
+              {
+                "text": "A database lookup takes about 50 ms",
+                "icon": "clock"
+              },
+              {
+                "text": "A cache lookup takes about 1 ms",
+                "icon": "zap"
+              },
+              {
+                "text": "Most requests ask for the same pages",
+                "icon": "repeat"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "idea",
+      "duration": 7.5,
+      "transition": {
+        "type": "push",
+        "direction": "left"
+      },
+      "elements": [
+        {
+          "id": "idea-title",
+          "type": "text",
+          "text": "The idea",
+          "x": 960,
+          "y": 200,
+          "fontSize": 110
+        },
+        {
+          "id": "idea-call",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-callout",
+          "params": {
+            "text": "Save each answer the first time",
+            "icon": "save",
+            "mark": "circle"
+          }
+        }
+      ]
+    },
+    {
+      "id": "close",
+      "duration": 7,
+      "transition": {
+        "type": "push",
+        "direction": "left"
+      },
+      "elements": [
+        {
+          "id": "close-call",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-callout",
+          "params": {
+            "text": "A 90% hit rate skips 9 of 10 queries",
+            "icon": "database-zap",
+            "mark": "underline"
+          }
+        }
+      ]
+    }
+  ]
+}

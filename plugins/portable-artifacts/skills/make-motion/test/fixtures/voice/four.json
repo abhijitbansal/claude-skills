@@ -1,0 +1,10 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    { "text": "First, a title.", "start": 0, "end": 2.5, "phonemes": "" },
+    { "text": "Then a box.", "start": 2.5, "end": 5, "phonemes": "" },
+    { "text": "Then an arrow.", "start": 5, "end": 7.5, "phonemes": "" },
+    { "text": "Then the answer.", "start": 7.5, "end": 10, "phonemes": "" }
+  ]
+}

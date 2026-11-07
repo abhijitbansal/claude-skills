@@ -1,0 +1,430 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "captions": [
+    { "src": "showcase-features.srt", "style": "karaoke", "scene": "captions", "at": 0.5 }
+  ],
+  "audio": [
+    { "src": "voice/open.wav", "scene": "open", "at": 0.3 },
+    { "src": "voice/block-kpi.wav", "scene": "block-kpi", "at": 0.5 },
+    { "src": "voice/block-flow.wav", "scene": "block-flow", "at": 0.5 },
+    { "src": "voice/block-list.wav", "scene": "block-list", "at": 0.5 },
+    { "src": "voice/chart.wav", "scene": "chart", "at": 0.5 },
+    { "src": "voice/race.wav", "scene": "race", "at": 0.5 },
+    { "src": "voice/map.wav", "scene": "map", "at": 0.5 },
+    { "src": "voice/code.wav", "scene": "code", "at": 0.5 },
+    { "src": "voice/ui-form.wav", "scene": "ui-form", "at": 0.5 },
+    { "src": "voice/ui-tabs.wav", "scene": "ui-tabs", "at": 0.5 },
+    { "src": "voice/grade.wav", "scene": "grade", "at": 0.5 },
+    { "src": "voice/lottie.wav", "scene": "lottie", "at": 0.5 },
+    { "src": "voice/camera-pan.wav", "scene": "camera-pan", "at": 0.5 },
+    { "src": "voice/camera-shake.wav", "scene": "camera-shake", "at": 0.5 },
+    { "src": "voice/transitions.wav", "scene": "tr-push", "at": 0.7 },
+    { "src": "voice/drawn.wav", "scene": "drawn", "at": 0.5 },
+    { "src": "voice/captions-1.wav", "scene": "captions", "at": 0.5 },
+    { "src": "voice/captions-2.wav", "scene": "captions", "at": 3.85 },
+    { "src": "voice/captions-3.wav", "scene": "captions", "at": 6.8 },
+    { "src": "voice/close.wav", "scene": "close", "at": 0.5 }
+  ],
+  "scenes": [
+    {
+      "id": "open",
+      "duration": 4,
+      "background": "art",
+      "elements": [
+        {
+          "id": "open-title",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "title-card",
+          "params": {
+            "kicker": "Feature tour",
+            "title": "make-motion",
+            "subtitle": "A tour, scene by scene"
+          }
+        }
+      ]
+    },
+    {
+      "id": "block-kpi",
+      "duration": 4.3,
+      "transition": "fade",
+      "elements": [
+        { "id": "block-kpi-label", "type": "text", "text": "Block: kpi-counter", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
+        {
+          "id": "block-kpi-card",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "kpi-counter",
+          "params": { "label": "Sample figure", "to": 4800, "delta": "sample data" }
+        }
+      ]
+    },
+    {
+      "id": "block-flow",
+      "duration": 4.5,
+      "transition": "fade",
+      "elements": [
+        { "id": "block-flow-label", "type": "text", "text": "Block: step-flow", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
+        {
+          "id": "block-flow-steps",
+          "type": "block",
+          "x": 960,
+          "y": 560,
+          "block": "step-flow",
+          "params": { "steps": ["Write", "Validate", "Preview", "Render"] }
+        }
+      ]
+    },
+    {
+      "id": "block-list",
+      "duration": 4.5,
+      "transition": "fade",
+      "elements": [
+        { "id": "block-list-label", "type": "text", "text": "Block: checklist", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
+        {
+          "id": "block-list-items",
+          "type": "block",
+          "x": 960,
+          "y": 560,
+          "block": "checklist",
+          "params": { "items": ["Spec written", "Spec validated", "Frames checked", "MP4 rendered"], "tickAfter": 0.7 }
+        }
+      ]
+    },
+    {
+      "id": "chart",
+      "duration": 5.5,
+      "transition": "fade",
+      "elements": [
+        { "id": "chart-label", "type": "text", "text": "Chart: revealed left to right", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
+        {
+          "id": "chart-line",
+          "type": "chart",
+          "x": 960,
+          "y": 560,
+          "width": 1500,
+          "height": 640,
+          "vegaLite": {
+            "config": { "axis": { "labelFontSize": 28, "titleFontSize": 30 } },
+            "mark": { "type": "line", "point": { "size": 220 }, "strokeWidth": 7, "interpolate": "monotone" },
+            "data": {
+              "values": [
+                { "month": "Jan", "users": 12 },
+                { "month": "Feb", "users": 15 },
+                { "month": "Mar", "users": 22 },
+                { "month": "Apr", "users": 31 },
+                { "month": "May", "users": 38 },
+                { "month": "Jun", "users": 46 }
+              ]
+            },
+            "encoding": {
+              "x": { "field": "month", "type": "ordinal", "sort": null, "title": null },
+              "y": { "field": "users", "type": "quantitative", "title": "Sample data" }
+            }
+          },
+          "keyframes": [
+            { "t": 0.5, "reveal": 0, "opacity": 0 },
+            { "t": 0.8, "opacity": 1 },
+            { "t": 3.4, "reveal": 1, "ease": "inOutCubic" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "race",
+      "duration": 6.5,
+      "transition": "fade",
+      "elements": [
+        { "id": "race-label", "type": "text", "text": "Block: race", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
+        {
+          "id": "race-ranking",
+          "type": "block",
+          "x": 960,
+          "y": 500,
+          "block": "race",
+          "params": {
+            "title": "Sample data",
+            "top": 4,
+            "periodSeconds": 1.2,
+            "rows": [
+              { "period": "Q1", "name": "Alpha", "value": 40 },
+              { "period": "Q1", "name": "Beta", "value": 32 },
+              { "period": "Q1", "name": "Gamma", "value": 21 },
+              { "period": "Q1", "name": "Delta", "value": 12 },
+              { "period": "Q2", "name": "Alpha", "value": 44 },
+              { "period": "Q2", "name": "Beta", "value": 47 },
+              { "period": "Q2", "name": "Gamma", "value": 30 },
+              { "period": "Q2", "name": "Delta", "value": 18 },
+              { "period": "Q3", "name": "Alpha", "value": 46 },
+              { "period": "Q3", "name": "Beta", "value": 55 },
+              { "period": "Q3", "name": "Gamma", "value": 52 },
+              { "period": "Q3", "name": "Delta", "value": 27 },
+              { "period": "Q4", "name": "Alpha", "value": 49 },
+              { "period": "Q4", "name": "Beta", "value": 58 },
+              { "period": "Q4", "name": "Gamma", "value": 66 },
+              { "period": "Q4", "name": "Delta", "value": 41 }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "map",
+      "duration": 5,
+      "transition": "fade",
+      "elements": [
+        { "id": "map-label", "type": "text", "text": "Map: five countries lit by name", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
+        {
+          "id": "map-world",
+          "type": "block",
+          "x": 960,
+          "y": 500,
+          "block": "map-highlight",
+          "params": { "map": "world", "highlight": ["Brazil", "India", "Japan", "Kenya", "Germany"] }
+        }
+      ]
+    },
+    {
+      "id": "code",
+      "duration": 5.5,
+      "transition": "fade",
+      "elements": [
+        { "id": "code-label", "type": "text", "text": "Code: typed in, highlighted offline", "x": 960, "y": 120, "fontSize": 48, "color": "text2", "hold": true },
+        {
+          "id": "code-snippet",
+          "type": "code",
+          "x": 960,
+          "y": 540,
+          "width": 900,
+          "fontSize": 52,
+          "lang": "json",
+          "typing": true,
+          "hold": true,
+          "code": "{\n  \"block\": \"kpi-counter\",\n  \"params\": { \"to\": 4800 }\n}"
+        }
+      ]
+    },
+    {
+      "id": "ui-form",
+      "duration": 8,
+      "transition": "fade",
+      "elements": [
+        { "id": "ui-form-label", "type": "text", "text": "UI blocks: form-fields, button-state, side-panel", "x": 960, "y": 940, "fontSize": 40, "color": "text2", "hold": true },
+        {
+          "id": "ui-form-browser",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "browser-window",
+          "params": { "url": "app.example.com/sign-up", "title": "Create account" }
+        },
+        {
+          "id": "ui-form-fields",
+          "type": "block",
+          "x": 680,
+          "y": 470,
+          "block": "form-fields",
+          "params": {
+            "fields": [
+              { "label": "Name", "value": "Grace Hopper" },
+              { "label": "Email", "value": "grace@example.com" },
+              { "label": "Plan", "value": "Team" }
+            ],
+            "typing": true
+          }
+        },
+        {
+          "id": "ui-form-button",
+          "type": "block",
+          "x": 680,
+          "y": 765,
+          "block": "button-state",
+          "params": { "from": { "label": "Create account" }, "to": { "label": "Account created", "tone": "good" }, "at": 5 }
+        },
+        {
+          "id": "ui-form-panel",
+          "type": "block",
+          "x": 1460,
+          "y": 531,
+          "block": "side-panel",
+          "params": { "title": "Progress", "rows": ["Name added", "Email checked", "Plan chosen"] }
+        }
+      ]
+    },
+    {
+      "id": "ui-tabs",
+      "duration": 7.5,
+      "transition": "fade",
+      "elements": [
+        { "id": "ui-tabs-label", "type": "text", "text": "UI blocks: browser-window and tab-switch", "x": 960, "y": 940, "fontSize": 40, "color": "text2", "hold": true },
+        {
+          "id": "ui-tabs-browser",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "browser-window",
+          "params": { "url": "app.example.com/settings", "title": "Settings" }
+        },
+        {
+          "id": "ui-tabs-switch",
+          "type": "block",
+          "x": 960,
+          "y": 531,
+          "block": "tab-switch",
+          "params": {
+            "tabs": [
+              { "label": "Profile", "body": "Name, photo and a short bio" },
+              { "label": "Billing", "body": "Plan, invoices and cards" },
+              { "label": "Team", "body": "Invite people and set roles" }
+            ],
+            "switchAfter": 2.2
+          }
+        }
+      ]
+    },
+    {
+      "id": "grade",
+      "duration": 5.8,
+      "transition": "fade",
+      "elements": [
+        { "id": "grade-label", "type": "text", "text": "Grade: four presets on one photo", "x": 960, "y": 170, "fontSize": 64, "fontWeight": 700, "hold": true },
+        { "id": "grade-warm", "type": "image", "src": "photo.png", "x": 276, "y": 540, "width": 420, "height": 236, "fit": "cover", "grade": { "preset": "warm" }, "hold": true,
+          "keyframes": [{ "t": 0, "opacity": 0, "y": 580 }, { "t": 0.6, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "grade-cool", "type": "image", "src": "photo.png", "x": 732, "y": 540, "width": 420, "height": 236, "fit": "cover", "grade": { "preset": "cool" }, "hold": true,
+          "keyframes": [{ "t": 0.15, "opacity": 0, "y": 580 }, { "t": 0.75, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "grade-mono", "type": "image", "src": "photo.png", "x": 1188, "y": 540, "width": 420, "height": 236, "fit": "cover", "grade": { "preset": "mono" }, "hold": true,
+          "keyframes": [{ "t": 0.3, "opacity": 0, "y": 580 }, { "t": 0.9, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "grade-film", "type": "image", "src": "photo.png", "x": 1644, "y": 540, "width": 420, "height": 236, "fit": "cover", "grade": { "preset": "film" }, "hold": true,
+          "keyframes": [{ "t": 0.45, "opacity": 0, "y": 580 }, { "t": 1.05, "opacity": 1, "y": 540, "ease": "enter" }] },
+        { "id": "grade-name-warm", "type": "text", "text": "warm", "x": 276, "y": 720, "fontSize": 44, "fontWeight": 600, "hold": true },
+        { "id": "grade-name-cool", "type": "text", "text": "cool", "x": 732, "y": 720, "fontSize": 44, "fontWeight": 600, "hold": true },
+        { "id": "grade-name-mono", "type": "text", "text": "mono", "x": 1188, "y": 720, "fontSize": 44, "fontWeight": 600, "hold": true },
+        { "id": "grade-name-film", "type": "text", "text": "film", "x": 1644, "y": 720, "fontSize": 44, "fontWeight": 600, "hold": true }
+      ]
+    },
+    {
+      "id": "lottie",
+      "duration": 4.7,
+      "transition": "fade",
+      "elements": [
+        { "id": "lottie-label", "type": "text", "text": "Lottie: a bundled animation file", "x": 960, "y": 130, "fontSize": 64, "fontWeight": 700, "hold": true },
+        { "id": "lottie-badge", "type": "lottie", "src": "data/badge.lottie.json", "x": 960, "y": 560, "width": 480, "height": 480, "offset": 0.2, "hold": true }
+      ]
+    },
+    {
+      "id": "camera-pan",
+      "duration": 4,
+      "transition": "fade",
+      "camera": {
+        "keyframes": [
+          { "t": 0, "zoom": 1.1, "x": -250 },
+          { "t": 2.5, "zoom": 1, "x": 0, "ease": "outCubic" }
+        ]
+      },
+      "elements": [
+        { "id": "camera-pan-label", "type": "text", "text": "Camera: a pan that settles", "x": 960, "y": 220, "fontSize": 72, "fontWeight": 700, "hold": true },
+        { "id": "camera-card-1", "type": "shape", "shape": "rect", "x": 480, "y": 600, "width": 360, "height": 200, "radius": 24, "fill": "surface", "hold": true },
+        { "id": "camera-card-1-text", "type": "text", "text": "Plan", "x": 480, "y": 600, "fontSize": 56, "fontWeight": 600, "hold": true },
+        { "id": "camera-card-2", "type": "shape", "shape": "rect", "x": 960, "y": 600, "width": 360, "height": 200, "radius": 24, "fill": "surface", "hold": true },
+        { "id": "camera-card-2-text", "type": "text", "text": "Build", "x": 960, "y": 600, "fontSize": 56, "fontWeight": 600, "hold": true },
+        { "id": "camera-card-3", "type": "shape", "shape": "rect", "x": 1440, "y": 600, "width": 360, "height": 200, "radius": 24, "fill": "surface", "hold": true },
+        { "id": "camera-card-3-text", "type": "text", "text": "Ship", "x": 1440, "y": 600, "fontSize": 56, "fontWeight": 600, "hold": true }
+      ]
+    },
+    {
+      "id": "camera-shake",
+      "duration": 2.9,
+      "transition": "fade",
+      "camera": {
+        "keyframes": [
+          { "t": 0, "zoom": 1.12 },
+          { "t": 0.6, "zoom": 1, "ease": "outCubic" }
+        ],
+        "shake": { "amount": 14, "hz": 12, "seed": 7 }
+      },
+      "elements": [
+        { "id": "camera-shake-label", "type": "text", "text": "Camera: shake", "x": 960, "y": 540, "fontSize": 140, "fontWeight": 800, "hold": true }
+      ]
+    },
+    {
+      "id": "tr-push",
+      "duration": 2.6,
+      "background": "#3d1f4a",
+      "transition": { "type": "push", "direction": "left", "duration": 0.6 },
+      "elements": [
+        { "id": "tr-push-label", "type": "text", "text": "Transition: push", "x": 960, "y": 380, "fontSize": 100, "fontWeight": 700 }
+      ]
+    },
+    {
+      "id": "tr-wipe",
+      "duration": 2.6,
+      "background": "#4a1f2a",
+      "transition": { "type": "wipe", "direction": "right", "duration": 0.6 },
+      "elements": [
+        { "id": "tr-wipe-label", "type": "text", "text": "Transition: wipe", "x": 960, "y": 680, "fontSize": 100, "fontWeight": 700 }
+      ]
+    },
+    {
+      "id": "tr-zoom",
+      "duration": 2.6,
+      "background": "#1f3d1f",
+      "transition": { "type": "zoom", "direction": "in", "duration": 0.6 },
+      "elements": [
+        { "id": "tr-zoom-label", "type": "text", "text": "Transition: zoom", "x": 960, "y": 380, "fontSize": 100, "fontWeight": 700 }
+      ]
+    },
+    {
+      "id": "tr-blur",
+      "duration": 2.6,
+      "background": "#2a2a5c",
+      "transition": { "type": "blur", "duration": 0.6 },
+      "elements": [
+        { "id": "tr-blur-label", "type": "text", "text": "Transition: blur", "x": 960, "y": 680, "fontSize": 100, "fontWeight": 700 }
+      ]
+    },
+    {
+      "id": "drawn",
+      "style": "sketch",
+      "duration": 7,
+      "transition": { "type": "push", "direction": "up" },
+      "elements": [
+        { "id": "drawn-title", "type": "text", "text": "A drawn scene", "x": 960, "y": 200, "fontSize": 120 },
+        {
+          "id": "drawn-callout",
+          "type": "block",
+          "x": 960,
+          "y": 600,
+          "block": "sketch-callout",
+          "params": { "text": "A hand draws this board", "icon": "pencil-line", "mark": "circle" }
+        }
+      ]
+    },
+    {
+      "id": "captions",
+      "duration": 10.6,
+      "transition": "fade",
+      "elements": [
+        { "id": "captions-label", "type": "text", "text": "Captions: from a local .srt file", "x": 960, "y": 200, "fontSize": 72, "fontWeight": 700, "hold": true },
+        { "id": "captions-style", "type": "text", "text": "Style: karaoke", "x": 960, "y": 480, "fontSize": 120, "fontWeight": 700, "color": "text2", "hold": true }
+      ]
+    },
+    {
+      "id": "close",
+      "duration": 6.2,
+      "transition": "fade",
+      "elements": [
+        {
+          "id": "close-cta",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "cta-close",
+          "params": { "headline": "Each scene is written in motion.json", "action": "Validate, then render" }
+        }
+      ]
+    }
+  ]
+}

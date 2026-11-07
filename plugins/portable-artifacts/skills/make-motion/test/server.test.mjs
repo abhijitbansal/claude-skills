@@ -396,7 +396,17 @@ test('GET / falls back to "not reported" provenance when the spec is unreadable'
   assert.match(r.body, /<meta name="generator" content="portable-artifacts make-motion; model=not reported; effort=not reported; agent=not reported">/);
 }));
 
-test('GET / never injects hostile generatedBy values', () => withServer(async (srv, f) => {
+test('GET / leaves the provenance footer empty when the spec says "provenance": false, and shows it again when it is removed', () => withServer(async (srv, f) => {
+  const gen = { model: 'Claude Opus 5', agent: 'Claude Code' };
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), provenance: false, generatedBy: gen }));
+  const hidden = await get(srv.url, '/');
+  assert.ok(!hidden.body.includes('pa-provenance'), 'no provenance line');
+  assert.match(hidden.body, /<footer class="pa-footer"><\/footer>/);
+  writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), generatedBy: gen }));
+  assert.match((await get(srv.url, '/')).body, /<p class="pa-provenance"/);
+}));
+
+test('GET / never injects hostile generatedBy values',() => withServer(async (srv, f) => {
   writeFileSync(f.specPath, JSON.stringify({ ...spec('one'), generatedBy: { model: '<script>x</script>' } }));
   const r = await get(srv.url, '/');
   assert.ok(!r.body.includes('<script>x'));

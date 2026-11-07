@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "This is a tour of make-motion, one scene at a time.",
+      "start": 0,
+      "end": 3.475,
+      "phonemes": "ðɪs ɪz ɐ tˈʊɹ ʌv mˌeɪkmˈoʊʃən, wˈʌn sˈiːn æɾə tˈaɪm."
+    }
+  ]
+}

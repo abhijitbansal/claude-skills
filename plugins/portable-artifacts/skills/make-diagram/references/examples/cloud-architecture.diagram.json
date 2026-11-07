@@ -1,0 +1,42 @@
+{
+  "title": "Orders across two clouds",
+  "subtitle": "An order lands on AWS and is invoiced on Google Cloud",
+  "type": "architecture",
+  "direction": "down",
+  "groups": [
+    { "id": "aws", "label": "AWS" },
+    { "id": "gcp", "label": "Google Cloud" }
+  ],
+  "nodes": [
+    { "id": "web", "label": "Web app", "kind": "client" },
+    { "id": "edge", "label": "CloudFront", "group": "aws", "icon": "cloud:aws-cloudfront" },
+    { "id": "gateway", "label": "API Gateway", "group": "aws", "icon": "cloud:aws-api-gateway" },
+    { "id": "orders", "label": "Orders function", "group": "aws", "icon": "cloud:aws-lambda", "note": "validates and saves" },
+    { "id": "table", "label": "Orders table", "kind": "database", "group": "aws", "icon": "cloud:aws-dynamodb" },
+    { "id": "queue", "label": "Invoice queue", "kind": "queue", "group": "aws", "icon": "cloud:aws-sqs" },
+    { "id": "invoice", "label": "Invoice service", "group": "gcp", "icon": "cloud:google-cloud-run", "tone": "accent", "detail": "Reads each queued order, builds the invoice and sends it." },
+    { "id": "ledger", "label": "Ledger function", "kind": "function", "group": "gcp", "icon": "cloud:google-cloud-functions" }
+  ],
+  "edges": [
+    { "from": "web", "to": "edge", "label": "requests" },
+    { "from": "edge", "to": "gateway", "label": "forwards" },
+    { "from": "gateway", "to": "orders", "label": "invokes" },
+    { "from": "orders", "to": "table", "label": "saves order" },
+    { "from": "orders", "to": "queue", "label": "queues invoice", "style": "async" },
+    { "from": "queue", "to": "invoice", "label": "delivers", "style": "async" },
+    { "from": "invoice", "to": "ledger", "label": "posts entry" }
+  ],
+  "stories": [
+    {
+      "id": "order",
+      "title": "Place an order",
+      "beats": [
+        { "title": "The app asks the edge", "from": "web", "to": "edge", "caption": "One HTTPS request, answered from the nearest edge." },
+        { "title": "The gateway invokes the function", "from": "gateway", "to": "orders", "caption": "Authorised, then handed to Lambda." },
+        { "title": "The order is saved", "from": "orders", "to": "table", "caption": "Written before anything else happens." },
+        { "title": "An invoice is queued", "from": "orders", "to": "queue", "caption": "The customer does not wait for it." },
+        { "title": "Google Cloud invoices it", "from": "queue", "to": "invoice", "caption": "Cloud Run reads the queue and posts to the ledger." }
+      ]
+    }
+  ]
+}

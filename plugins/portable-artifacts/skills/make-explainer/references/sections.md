@@ -8,6 +8,8 @@ On a page, a `tldr` that comes first (and is not the only section) is drawn insi
 
 In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not.
 
+`tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`, `callout`, `details` and `table` also take an optional `simple` object: the same prose fields in plainer words, shown by the page's Simple English toggle (see "Simple English" in schema.md). The toggle itself never touches `code`, `files`, `kpis`, diagrams, charts, images, scenes, motion or any plan section. Inside the ten types, the author keeps numbers, names and commands exact in `simple` (a table's `simple.rows` can replace any cell); nothing checks that.
+
 ## Text and numbers
 
 | Type | Fields | Notes |

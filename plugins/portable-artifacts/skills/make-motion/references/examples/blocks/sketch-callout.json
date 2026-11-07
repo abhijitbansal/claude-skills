@@ -1,0 +1,25 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "sketch-callout",
+      "style": "sketch",
+      "duration": 5,
+      "elements": [
+        {
+          "id": "callout",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "sketch-callout",
+          "params": {
+            "text": "Only the API talks to the database",
+            "icon": "lock",
+            "mark": "underline"
+          }
+        }
+      ]
+    }
+  ]
+}

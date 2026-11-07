@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "The file sets when each line shows.",
+      "start": 0,
+      "end": 2.575,
+      "phonemes": "ðə fˈaɪl sˈɛts wɛn ˈiːtʃ lˈaɪn ʃˈoʊz."
+    }
+  ]
+}

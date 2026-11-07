@@ -15,8 +15,10 @@ import { contrastRatio } from '../shared/contrast.mjs';
 import { loadTheme } from '../shared/theme.mjs';
 import {
   AUDIT_STEP, auditTimes, contrastNeed, nearestToken, contrastFindings, readingSeconds, readingFloorFindings, textFloorFindings,
-  stillStretches, deadStretchProblems,
+  stillStretches, deadStretchProblems, unfinishedWriting,
 } from '../scripts/lib/audits.mjs';
+import { planScene } from '../template/sketch/plan.mjs';
+import icons from '../template/sketch/lucide.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CHECK = path.join(root, 'scripts/check.mjs');
@@ -580,4 +582,65 @@ test('a placement or size finding inside a block in a scene with a camera also n
   assert.equal(hint('text "lt/name" leaves the safe area (right) at 3.97s'), 'text "lt/name" leaves the safe area (right) at 3.97s (block "lower-third", part "name"); shorten params.name or move the block, or ease the scene camera');
   assert.equal(hint('text "lt/name" is 20px (below 28px at 1080); shown 1.00s'), 'text "lt/name" is 20px (below 28px at 1080); shown 1.00s (block "lower-third", part "name"); raise the block\'s "scale" or use a larger format, or ease the scene camera');
   assert.equal(hint('text "lt/name" (2 words) shows for 0.50s; needs 1.05s'), 'text "lt/name" (2 words) shows for 0.50s; needs 1.05s (block "lower-third", part "name"); lengthen the scene or shorten params.name', 'timing is not the camera\'s');
+});
+
+// ---- hand-drawn scenes (make-motion sketch mode, Task 11) --------------------------------------------------------------------
+
+test('readingFloorFindings: a text still being written is not read yet: its span counts from the end of the writing', async () => {
+  const items = [[item('text', 'sub', { text: 'one two three four five six seven' })]]; // 7 words: 1.95 s, less one 0.25 s step of slack
+  const els = (t) => [measured({ shown: t >= 1, writing: t >= 1 && t < 3 })];
+  const probe = async (_scene, j, local) => els(local)[j].shown && !els(local)[j].writing;
+  const judged = (duration) => readingFloorFindings({ scenes: [{ id: 's', duration }] }, items, grid(duration, els), probe);
+  const tight = await judged(4.2); // written 1 s to 3 s, then on screen 1.2 s: 3.2 s from when it first shows, 1.2 s from when it is done
+  assert.deepEqual(tight.problems.map((p) => p.message), ['text "sub" (7 words) shows for 1.20s; needs 1.95s']);
+  assert.deepEqual((await judged(5.5)).problems, [], '2.5 s once written is enough');
+  const unflagged = (t) => [measured({ shown: t >= 1 })];
+  assert.deepEqual((await readingFloorFindings({ scenes: [{ id: 's', duration: 4.2 }] }, items, grid(4.2, unflagged), probe)).problems, [], 'a step without `writing` counts from when the text first shows, as every standard scene does');
+});
+
+const narrated = (narration, style = 'sketch') => ({ ...(style ? { style } : {}), scenes: [{ id: 's', duration: 12, ...(narration ? { narration } : {}) }] });
+const stillFrom4 = () => stills(12, (t) => (t < 4 ? `a${t}` : 'b')); // drawing until 4 s, then nothing changes: still to 9 s (the last 3 s are exempt)
+
+test('stillStretches: a finished board held while narration plays is exempt; only a silent stretch of more than 3 s counts', () => {
+  assert.deepEqual(stillStretches(narrated(), stillFrom4()), [{ from: 4, to: 9 }], 'silent: the whole stretch');
+  assert.deepEqual(stillStretches(narrated([{ start: 0, end: 12 }]), stillFrom4()), [], 'narrated all through');
+  assert.deepEqual(stillStretches(narrated([{ start: 0, end: 7 }]), stillFrom4()), [], 'what is silent, 7 s to 9 s, is 2 s');
+  assert.deepEqual(stillStretches(narrated([{ start: 0, end: 5.5 }]), stillFrom4()), [{ from: 5.5, to: 9 }], 'narration that stops early leaves 3.5 s of silence, and that is what is reported');
+  assert.deepEqual(stillStretches(narrated([{ start: 4.5, end: 5 }]), stillFrom4()), [{ from: 5, to: 9 }], 'a pause of 0.5 s then 4 s of silence');
+  assert.deepEqual(stillStretches(narrated([{ start: 0, end: 5 }, { start: 6, end: 8 }]), stillFrom4()), [], '1 s and 1 s: neither gap is longer than 3 s');
+  assert.deepEqual(deadStretchProblems(narrated([{ start: 0, end: 5.5 }]), stillFrom4(), [[item('text', 'a')]]).map((p) => p.message), [
+    'nothing changes from 5.50s to 9.00s (3.5s); add motion, or set "hold": true on text "a" if it is meant to sit still',
+  ]);
+});
+
+test('stillStretches: narration exempts only a hand-drawn scene, and only unless asked not to', () => {
+  assert.deepEqual(stillStretches(narrated([{ start: 0, end: 12 }], null), stillFrom4()), [{ from: 4, to: 9 }], 'a standard scene is judged as it always was');
+  assert.deepEqual(stillStretches(narrated([{ start: 0, end: 12 }]), stillFrom4(), { ignoreNarration: false }), [{ from: 4, to: 9 }]);
+  assert.deepEqual(stillStretches(narrated([{ start: 0, end: 12 }], null), stillFrom4(), { tailExempt: 0 }), [{ from: 4, to: 12 }], 'existing options still work');
+});
+
+test('stillStretches: narration is in scene seconds, so it is placed from where its scene starts in the video', () => {
+  const spec = { style: 'sketch', scenes: [{ id: 'a', duration: 4 }, { id: 'b', duration: 8, narration: [{ start: 0, end: 4 }] }] };
+  const steps = [...grid(4, (t) => [measured({ sig: `a${t}` })]), ...grid(8, (t) => [measured({ sig: t < 1 ? `b${t}` : 'b' })], 1, 4)]; // still in b from 5 s (1 s in) to 9 s: 4 s
+  assert.deepEqual(stillStretches({ ...spec, scenes: [spec.scenes[0], { id: 'b', duration: 8 }] }, steps), [{ from: 5, to: 9 }], 'without narration');
+  assert.deepEqual(stillStretches(spec, steps), [], '4 s to 8 s of the video is spoken; 8 s to 9 s is silent');
+});
+
+test('unfinishedWriting: a hand-drawn scene that ends while the pencil is still drawing warns once, naming what is unfinished', () => {
+  const elements = [
+    { id: 'a', type: 'text', text: 'Done early', x: 960, y: 300, fontSize: 96 },
+    { id: 'b', type: 'text', text: 'Written when the scene is over', x: 960, y: 600, fontSize: 96 },
+  ];
+  const planned = (duration) => {
+    const scene = { id: 'short', duration, elements };
+    const plan = planScene(scene, { size: [1920, 1080], icons, sceneIndex: 0 });
+    return unfinishedWriting(scene, 0, plan, checkModule.sceneItems(scene, 0));
+  };
+  const [late] = planned(2);
+  assert.equal(late.path, 'scenes[0]');
+  assert.match(late.message, /^scene "short" ends at 2\.00s while text "b" is still being drawn; the drawing needs \d+\.\ds: lengthen the scene$/);
+  assert.deepEqual(planned(2).length, 1);
+  assert.deepEqual(planned(30), [], 'a scene long enough for its drawing is silent');
+  const enough = Number(/needs (\d+\.\d)s/.exec(late.message)[1]);
+  assert.deepEqual(planned(enough), [], `the scene length the message asks for (${enough} s) clears it`);
 });

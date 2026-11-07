@@ -15,6 +15,16 @@
 // A `group` is not judged itself; each of its children is, at its nested path (scenes[0].elements[2].children[1]), and a
 // child counts as moving while any group around it moves.
 // A warning (never a failure; exit stays 0) when the first scene shows nothing at t = 0: stderr, or `warnings` in --json.
+// Also a warning: two texts of a scene that say `"anchor": "left"` or `"align": "left"`, on screen and not moving, whose left
+// edges differ by more than 0.5 and up to 12 px (at 1080 on the short side, scaled with it): `text "b" nearly lines up with "a": left edges differ
+// by 5 px` (nearEdgeWarnings). Parts of a block are not compared.
+// A hand-drawn (sketch) scene is judged from the stroke plan the page draws from (sketchPlans, planScene): a drawn element is
+// moving while the pencil is on it, so the rules judge it from the end of its writing (the sheet samples just after each text
+// ends), the reading floor counts from there, and drawing in progress is change for the dead-stretch audit. The pencil hand
+// (#sketch-hand) and the ink of the text being judged are left out of the contrast backdrop. Its first frame is always an
+// empty board: that warning names it and suggests --poster. A drawing still going at the scene's end is a warning. A scene
+// with a voice track (its elements draw during the narration's sentences, see sketch-voice.mjs) is also a problem when an
+// element cannot be drawn in its sentences even at twice the pace (the plan's `overruns`: validation leaves that to this check).
 // A scene is judged on its own layer, where it settles, so the outgoing scene of a transition (crossfade, push, slide,
 // wipe, zoom, blur or iris) is not part of the incoming scene's own checks, nor is the styling that carries it in (it is
 // lifted for every sample, so the samples inside the window, 0.1 to 2 s long, judge the scene where it settles). Instead
@@ -58,7 +68,7 @@ import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { doctorCommand } from './lib/doctor-hint.mjs';
 import { isViral } from '../template/viral.mjs';
 import { substituteVars } from '../template/vars.mjs';
-import { TRANSITIONS, comesInOver, normalizeTransition, windowSeconds } from '../template/transitions.mjs';
+import { TRANSITIONS, SKETCH_TRANSITIONS, comesInOver, normalizeTransition, windowSeconds } from '../template/transitions.mjs';
 import { GL_TRANSITIONS } from '../template/gl-transitions.mjs';
 import { cameraTweens } from '../template/camera.mjs';
 import { specWarnings, hookWarnings, stillWarnings, gapWarnings, loopWarnings, frameDifference } from './lib/viral-checks.mjs';
@@ -66,8 +76,11 @@ import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { readyBudget, waitReady, boundPage, frameLimit } from './lib/ready.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
 import { themeData } from './lib/theme.mjs';
+import { isSketchScene, specHasSketch } from '../template/sketch/style.mjs';
+import { planScene, colourOf, THEME_TOKENS } from '../template/sketch/plan.mjs';
+import { planContext } from '../template/sketch/plan-context.mjs';
 import {
-  CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, unjudgedContrast, textFloorFindings, readingFloorFindings, deadStretchProblems,
+  CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, unjudgedContrast, textFloorFindings, readingFloorFindings, deadStretchProblems, unfinishedWriting, neverDrawn, handStillLeaving,
 } from './lib/audits.mjs';
 
 const USAGE = 'node scripts/check.mjs <motion.json> [--json] [--theme <name>]';
@@ -113,8 +126,34 @@ export function sceneItems(scene, index) {
   });
 }
 
-// The tween spans of `props` that move an item: { own: its own and its groups', camera: the scene camera's }.
-const spansOf = ({ chain, camera }, props) => ({ own: tweenSpans(chain, props), camera: cameraTweens(camera, props) });
+// The tween spans of `props` that move an item: { own: its own and its groups', camera: the scene camera's }. A drawn item in a
+// hand-drawn scene (`writes`, see drawnItems) is also moving while the pencil draws it, so it is judged after it is finished.
+const spansOf = ({ chain, camera, writes }, props) => ({
+  own: [...tweenSpans(chain, props), ...(writes ? [[writes.t0, writes.t1]] : [])],
+  camera: cameraTweens(camera, props),
+});
+
+// The stroke plan of each scene drawn by hand (null for the others), made as the page makes it: the same planScene, planContext
+// (seed, pace, the transition's startAfter) and icons (template/renderer.mjs loadSketch), so the spans below are the page's.
+// The icons are a megabyte, so a spec with no hand-drawn scene never loads them. `spec`: after withDefaults.
+export async function sketchPlans(spec) {
+  if (!specHasSketch(spec)) return spec.scenes.map(() => null);
+  const { default: icons } = await import('../template/sketch/lucide.mjs');
+  return spec.scenes.map((scene, sceneIndex) => (isSketchScene(spec, scene) ? planScene(scene, planContext(spec, scene, sceneIndex, { size: spec.size, icons })) : null));
+}
+
+// `items` with `writes: { t0, t1 }` (scene seconds) on each one the plan draws. The paths are the plan's: sceneItems and the plan
+// both name an element scenes[i].elements[k] (.children[m]), which is also the page's data-path.
+const drawnItems = (items, plan) => (plan ? items.map((item) => {
+  const drawn = plan.elements.get(item.path);
+  return drawn ? { ...item, writes: { t0: drawn.t0, t1: drawn.t1 } } : item;
+}) : items);
+
+// Is the pencil still on `item` at scene second `local`? It is on screen but not finished: not yet read, and still moving.
+const isWriting = (item, local) => Boolean(item.writes) && local < item.writes.t1 - EPSILON;
+
+// The scene-local seconds a hand-drawn scene's texts finish at, for the sheet to sample just after (the sheet knows keyframes only).
+const finishTimes = (items) => items.flatMap(({ el, writes }) => (writes && CHECKED.has(el.type) ? [writes.t1] : []));
 
 // Runs in the page: seek to `sec`, then each element of scene layer `index` (a group's children included, the groups
 // themselves not) as {id, opacity, ownOpacity, box, undrawn, sig, inks, fontSize, weight, color, alpha} in canvas pixels.
@@ -311,6 +350,35 @@ function overlapProblems(items, samples, size) {
   return problems;
 }
 
+// Two held texts whose left edges differ by more than NEAR_EDGE_MIN_PX and at most NEAR_EDGE_MAX_PX (at 1080 on the short side,
+// scaled with it) look misaligned rather than placed: a warning, once per pair, at the first moment both are held and on
+// screen. Half a pixel or less is aligned and anything wider reads as a different column. The gap is rounded to 0.1 px, as the message shows it. Only
+// texts that state a left intent are compared, `"anchor": "left"` or `"align": "left"`: a centred text's left edge follows
+// its width, so two centred lines land a few px apart by chance. Parts of a block are left out (`blocks`: the ids of the
+// scene's blocks): a block's layout is not the author's to fix.
+const NEAR_EDGE_MIN_PX = 0.5;
+const NEAR_EDGE_MAX_PX = 12;
+const NEAR_EDGE_REFERENCE_SHORT_SIDE = 1080;
+const statesLeftIntent = (el) => el.anchor === 'left' || el.align === 'left';
+function nearEdgeWarnings(items, samples, size, blocks) {
+  const scale = Math.min(...size) / NEAR_EDGE_REFERENCE_SHORT_SIDE;
+  const texts = items.map((item, j) => ({ ...item, j, spans: spansOf(item, GEOMETRY) }))
+    .filter(({ el, chain }) => el.type === 'text' && statesLeftIntent(el) && !blocks.has(chain[0].id));
+  const warnings = [];
+  for (const [b, second] of texts.entries()) {
+    for (const first of texts.slice(0, b)) {
+      for (const [n, { t, els }] of samples.entries()) {
+        if (!isHeld(first.spans, t, n, samples) || !isHeld(second.spans, t, n, samples) || !isShown(els[first.j], size) || !isShown(els[second.j], size)) continue;
+        const gap = Math.round(Math.abs(els[first.j].box.left - els[second.j].box.left) * 10) / 10;
+        if (gap <= NEAR_EDGE_MIN_PX * scale || gap > NEAR_EDGE_MAX_PX * scale) continue;
+        warnings.push({ path: second.path, message: `text "${second.el.id}" nearly lines up with "${first.el.id}": left edges differ by ${gap} px` });
+        break;
+      }
+    }
+  }
+  return warnings;
+}
+
 // What an element looks like before its first keyframe: the first opacity keyframe's value (the preset a title gets is
 // one), else its own opacity; and whether a drawing or reveal property starts at 0.
 const startsInvisible = (el) => (el.keyframes.find((kf) => kf.opacity !== undefined)?.opacity ?? el.opacity) <= VISIBLE_OPACITY;
@@ -320,10 +388,21 @@ const quoted = (els) => els.map((el) => `"${el.id}"`).join(', ');
 // What the typing elements `els` are, for the blank-frame cause: text, code, or both.
 const typingKind = (els) => (els.every((el) => el.type === 'code') ? 'a typing code element' : els.some((el) => el.type === 'code') ? 'a typing text or code element' : 'a typing text');
 
+// A hand-drawn scene starts as an empty board: nothing the author wrote is "off the canvas" or "at opacity 0"; it is simply not drawn
+// yet, so the cause is named as that and the way out is a poster frame, not a different first keyframe.
+function sketchFrameZeroWarning(scene) {
+  const fade = normalizeTransition(scene.transition).type === 'fade' ? 'the scene fades in from the background ("fade" on scene 1); ' : '';
+  return {
+    path: 'scenes[0]',
+    message: `scene "${scene.id}" shows nothing at ${at(0)}: the first frame, the video's thumbnail, is blank; ${fade}a hand-drawn scene starts as an empty board and is drawn on. Take the thumbnail from a drawn moment with render.mjs --poster <seconds>, or accept a blank thumbnail`,
+  };
+}
+
 // Frame 0 is the video's first frame and so its thumbnail: a warning when the first scene shows nothing there. An art
 // background is on screen at t = 0, so it counts. The message names what keeps the frame blank.
-function frameZeroWarnings(scene, items, els, size) {
+function frameZeroWarnings(scene, items, els, size, sketch = false) {
   if (scene.background === ART_BACKGROUND || !items.length || els.some((m) => isShown(m, size))) return [];
+  if (sketch) return [sketchFrameZeroWarning(scene)];
   const involved = [...new Set(items.flatMap(({ chain }) => chain))]; // a group that starts invisible hides its children
   const invisible = involved.filter(startsInvisible);
   const undrawn = involved.filter(startsUndrawn);
@@ -414,7 +493,7 @@ export async function sampleSteps(page, items, index, scene, start, withCaptions
   const steps = [];
   for (const local of auditTimes(scene.duration)) {
     const measured = await measureAt(page, start + local, index);
-    const els = measured.map((m, j) => ({ ...m, shown: isShown(m, size), hold: items[j].hold, held: !inTween(sizeSpans[j], local) }));
+    const els = measured.map((m, j) => ({ ...m, shown: isShown(m, size), hold: items[j].hold, held: !inTween(sizeSpans[j], local), writing: isWriting(items[j], local) }));
     const layers = withCaptions ? await page.evaluate(measureCaptions, null) : [];
     const moving = windowAt(windows, start + local) ? String(local) : undefined; // a transition window is change
     // What the camera node is drawn with, so a pan or a shake is change even over a scene that shows no element (an art plate
@@ -452,21 +531,23 @@ async function inspect(browser, spec, server, prepare, written) {
   const overlapsAll = await page.evaluate(() => window.__motion.overlaps); // every transition window
   const insets = safeInsets(spec.size);
   const problems = [];
-  const itemsOf = spec.scenes.map(sceneItems); // the non-group elements of each scene, indexed as the page measures them
+  const plans = await sketchPlans(spec);
+  const itemsOf = spec.scenes.map((scene, i) => drawnItems(sceneItems(scene, i), plans[i])); // the non-group elements of each scene, indexed as the page measures them
   const blocksOf = written.scenes.map((scene) => new Set((scene.elements ?? []).filter(isBlock).map((el) => el.id))); // `hold` goes on these, not on their parts
   const frame0 = await measureAt(page, 0, 0);
-  const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], frame0, spec.size);
+  const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], frame0, spec.size, plans[0] !== null);
   const platform = isViral(spec) ? safeInsets(spec.size, spec.viral.safeZone) : null; // viral: the platform bands
   const band = [];
   const zone = spec.captions.length ? captionZone(spec.size, spec.format, platform) : null; // the caption rules need captions
   const captionTimes = zone ? await page.evaluate(() => window.__motion.captionMoments.map((m) => m.t)) : [];
   const colors = themeData(spec.theme)?.dark ?? {};
+  const boardColors = { ...colors, ...Object.fromEntries(THEME_TOKENS.map((token) => [token, colourOf(token)])) }; // a hand-drawn scene reads its own palette (sketchLook), so advice names its colours
   const steps = [];
   const unjudged = []; // info: a text no contrast sample could judge because of a window
   let moments = 0;
   for (const [i, scene] of spec.scenes.entries()) {
     const items = itemsOf[i];
-    const times = sheetTimes(scene, spec.fps);
+    const times = sheetTimes(scene, spec.fps, finishTimes(items));
     const windows = windowsInto(scene, i, starts[i], overlapsAll);
     const samples = await sampleScene(page, scene, items, i, starts[i], times, zone !== null, spec.size, true, windows);
     const extraTimes = captionMomentsIn(captionTimes, starts[i], scene.duration, times);
@@ -474,15 +555,22 @@ async function inspect(browser, spec, server, prepare, written) {
     const own = await sampleSteps(page, items, i, scene, starts[i], zone !== null, spec.size, windows);
     steps.push(...own);
     moments += samples.length + extra.length;
-    const contrast = contrastFindings(items, samples, colors, spec.size);
+    const contrast = contrastFindings(items, samples, plans[i] ? boardColors : colors, spec.size);
     const floor = textFloorFindings(items, own, scene.duration, spec.size);
     unjudged.push(...unjudgedContrast(items, samples));
     problems.push(...safeAreaProblems(items, samples, insets, spec.size), ...overlapProblems(items, samples, spec.size), ...emptyEndProblems(scene, i, items, samples, spec.size), ...wrapProblems(scene, i, samples), ...contrast.problems, ...floor.problems);
-    warnings.push(...contrast.warnings, ...floor.warnings);
+    warnings.push(...contrast.warnings, ...floor.warnings, ...nearEdgeWarnings(items, samples, spec.size, blocksOf[i]));
+    if (plans[i]) {
+      const unfinished = unfinishedWriting(scene, i, plans[i], items);
+      const never = neverDrawn(scene, i, plans[i], items); // starts at or after the scene's end: a problem, not "still being drawn"
+      warnings.push(...unfinished);
+      problems.push(...never, ...plans[i].overruns); // overruns: a voiced scene's drawing that cannot fit its sentences even at twice pace
+      if (!unfinished.length && !never.length) warnings.push(...handStillLeaving(scene, i, plans[i]));
+    }
     if (zone) problems.push(...captionZoneProblems(items, samples, extra, zone, spec.size));
     if (platform) band.push(...bandWarnings(items, samples, platform, spec.viral.safeZone, spec.size));
   }
-  const probe = async (i, j, local) => isShown((await measureAt(page, starts[i] + local, i))[j], spec.size); // the reading floor places a span's edges with these
+  const probe = async (i, j, local) => isShown((await measureAt(page, starts[i] + local, i))[j], spec.size) && !isWriting(itemsOf[i][j], local); // the reading floor places a span's edges with these
   const reading = await readingFloorFindings(spec, itemsOf, steps, probe);
   problems.push(...reading.problems, ...deadStretchProblems(spec, steps, itemsOf, blocksOf));
   if (zone) problems.push(...await captionLayerProblems(page, zone));
@@ -535,7 +623,7 @@ export function atBlockParts(written, spec, findings) {
 
 const NO_PASSING_IN_BLOCK = 'no theme colour passes over this background; change "theme" or the scene background';
 
-const TRANSITION_WINDOW = new RegExp(` during the (${[...TRANSITIONS, ...GL_TRANSITIONS].filter(comesInOver).join('|')}) at `);
+const TRANSITION_WINDOW = new RegExp(` during the (${[...TRANSITIONS, ...SKETCH_TRANSITIONS, ...GL_TRANSITIONS].filter(comesInOver).join('|')}) at `);
 
 // A finding about where a part sits or how large it is drawn: in a scene with a camera, its zoom or pan may be the cause.
 const PLACED = / leaves the safe area | overlaps | sits under the platform UI | is \d+px \(below /;

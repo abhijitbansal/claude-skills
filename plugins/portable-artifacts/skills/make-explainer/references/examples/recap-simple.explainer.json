@@ -1,0 +1,112 @@
+{
+  "title": "Simple English: every explainer can carry a second, plainer version",
+  "subtitle": "What the toggle changes on a page, what it leaves alone, and how the writing is checked",
+  "preset": "recap",
+  "mode": "page",
+  "theme": "paper",
+  "meta": {
+    "date": "2026-11-06",
+    "repo": "claude-skills",
+    "status": "Ready for review"
+  },
+  "sections": [
+    {
+      "type": "tldr",
+      "id": "verdict",
+      "title": "Readers can switch any explainer to plainer words",
+      "label": "The verdict",
+      "text": "A section can hold a second version of its prose. A toggle named Simple English shows that version in place of the normal one, and the page remembers the choice.",
+      "points": [
+        "The page opens in normal text. Print and a page with no script show normal text too.",
+        "Code blocks and plan answers never change when the toggle flips.",
+        "A validate step warns when the plain version breaks a writing rule."
+      ],
+      "tone": "good",
+      "simple": {
+        "title": "Readers can switch an explainer to plain words",
+        "text": "A section can hold a second, plainer version of its text. The Simple English button shows it. The page keeps your choice.",
+        "points": [
+          "The page starts in normal text. Print shows normal text too.",
+          "Code blocks and plan answers stay the same.",
+          "A check warns you when the plain text breaks a writing rule."
+        ]
+      }
+    },
+    {
+      "type": "text",
+      "id": "what-changes",
+      "title": "The toggle swaps prose and nothing else",
+      "label": "What changes",
+      "text": "Ten section types can carry a `simple` field: the summary, text, cards, risks, steps, timeline, comparison, note, details and table sections. A field left out of `simple` keeps its normal text, so a writer only rewrites what needs it.\n\nContents labels and section ids stay the same in both views, so every link keeps working.",
+      "simple": {
+        "title": "The button changes the words and nothing else",
+        "text": "Ten kinds of section can hold a `simple` version. If you leave a field out, the normal words stay. You only rewrite what needs it.\n\nThe contents list and the links stay the same in both views."
+      }
+    },
+    {
+      "type": "cards",
+      "id": "rules",
+      "title": "Four writing rules keep the plain version plain",
+      "label": "The rules",
+      "columns": 2,
+      "items": [
+        { "title": "Short sentences", "text": "Twenty-five words at most, and twenty in a step." },
+        { "title": "One idea at a time", "text": "A paragraph holds six sentences at most." },
+        { "title": "Common words", "text": "Write `use` and `before`, not their wordy forms." },
+        { "title": "Say who acts", "text": "Prefer \"the build ran\" over \"the build was run\"." }
+      ],
+      "simple": {
+        "items": [
+          { "text": "Use 25 words or fewer. In a step, use 20 or fewer." },
+          { "text": "Put six sentences or fewer in a paragraph." },
+          { "text": "Pick the short word, such as `use` or `before`." },
+          { "text": "Name who does the action." }
+        ]
+      }
+    },
+    {
+      "type": "steps",
+      "id": "how",
+      "title": "Adding the plain version takes four steps",
+      "label": "How to add it",
+      "items": [
+        { "title": "Write the normal text first", "text": "Finish each section the usual way, with its title and prose." },
+        { "title": "Add a simple field", "text": "Copy the prose fields into `simple` and rewrite them with the four rules." },
+        { "title": "Run validate", "text": "It prints warnings for sentences that run long or use a wordy phrase." },
+        { "title": "Open the page", "text": "Press the Simple English button and read both versions." }
+      ],
+      "simple": {
+        "items": [
+          { "title": "Write the normal text", "text": "Finish each section first." },
+          { "title": "Add a simple field", "text": "Copy the text fields into `simple`. Then rewrite them." },
+          { "title": "Run validate", "text": "It warns you about long sentences and wordy phrases." },
+          { "title": "Open the page", "text": "Press Simple English. Read both versions." }
+        ]
+      }
+    },
+    {
+      "type": "code",
+      "id": "example",
+      "title": "A simple field sits beside the text",
+      "label": "Example",
+      "language": "json",
+      "code": "{\n  \"type\": \"text\",\n  \"text\": \"The build is skipped when nothing changed.\",\n  \"simple\": { \"text\": \"The build does not run when nothing changed.\" }\n}"
+    },
+    {
+      "type": "risks",
+      "id": "risks",
+      "title": "Two things can still go wrong",
+      "label": "Risks",
+      "items": [
+        { "risk": "The two versions drift apart when only one is edited.", "severity": "medium", "mitigation": "Validate warns when a section has no simple text on a page that has some." },
+        { "risk": "The checks cannot judge meaning.", "severity": "low", "mitigation": "They catch long sentences and wordy phrases. A person still reads the result." }
+      ],
+      "simple": {
+        "items": [
+          { "risk": "One version gets edited and the other does not.", "mitigation": "Validate warns when a section has no simple text." },
+          { "risk": "The checks cannot judge meaning.", "mitigation": "They catch long sentences and wordy phrases. A person still reads the page." }
+        ]
+      }
+    }
+  ]
+}

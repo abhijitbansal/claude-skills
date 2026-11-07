@@ -2,6 +2,7 @@
 // number formatting, text, icons and arrow markers. Everything that reaches the
 // output as text or as an attribute value goes through esc().
 import { iconSvg } from './icons.mjs';
+import { scopeIds } from './svg-safe.mjs';
 
 export const ICON_DRAW = 18; // px an icon is drawn at (the 24-unit icon scaled down)
 const ICON_VIEW = 24;
@@ -26,10 +27,33 @@ export function textLines(cls, lines, { x, top, lh, size, anchor = 'middle' }) {
   return `<text class="${cls}" text-anchor="${anchor}">${spans.join('')}</text>`;
 }
 
-/** The icon `ref` drawn ICON_DRAW px wide with its top-left corner at (x, y). */
+// A cloud icon keeps its own colours. The kind and tone rules set `color` on .pa-icon, which only
+// reaches an icon that paints in currentColor; the nested <svg> pins that colour for such an icon.
+const CLOUD_CURRENT_COLOUR = '#6b7280';
+
+/**
+ * The icon `ref` drawn ICON_DRAW px wide with its top-left corner at (x, y). A cloud icon sits
+ * in a nested <svg> of its own viewBox, which fits it into the same 24-unit square without
+ * cropping or stretching it (the default preserveAspectRatio centres it).
+ */
 export function iconGroup(ref, x, y) {
-  const { kind, markup } = iconSvg(ref);
-  return `<g class="pa-icon pa-icon-${kind}" transform="translate(${num(x)} ${num(y)}) scale(${num(ICON_DRAW / ICON_VIEW)})">${markup}</g>`;
+  const { kind, markup, viewBox } = iconSvg(ref);
+  const at = `translate(${num(x)} ${num(y)}) scale(${num(ICON_DRAW / ICON_VIEW)})`;
+  const pin = markup.includes('currentColor') ? ` color="${CLOUD_CURRENT_COLOUR}"` : '';
+  const inner = kind === 'cloud' ? `<svg viewBox="${esc(viewBox)}" width="${ICON_VIEW}" height="${ICON_VIEW}"${pin}>${markup}</svg>` : markup;
+  return `<g class="pa-icon pa-icon-${kind}" transform="${at}">${inner}</g>`;
+}
+
+const CLOUD_ICON = /(<g class="pa-icon pa-icon-cloud"[^>]*><svg [^>]*>)([\s\S]*?)(<\/svg><\/g>)/g;
+
+/**
+ * Give every drawn cloud icon ids of its own: the pack's gradients and masks keep short
+ * ids, so two icons (or two diagrams) on a page would otherwise answer to the same one.
+ * The ids start with `prefix` and a per-icon number, so a body drawn twice gets different ids.
+ */
+export function scopeCloudIcons(body, prefix) {
+  let n = 0;
+  return body.replace(CLOUD_ICON, (_, open, inner, close) => `${open}${scopeIds(inner, `${esc(prefix)}-ic${++n}`)}${close}`);
 }
 
 const BRAND_ICON = /(<g class="pa-icon pa-icon-brand"[^>]*>)<path d="([^"]*)"\/>(<\/g>)/g;

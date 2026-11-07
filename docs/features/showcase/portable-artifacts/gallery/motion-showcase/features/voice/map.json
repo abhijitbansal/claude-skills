@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "A map lights up five countries, picked by name.",
+      "start": 0,
+      "end": 3.325,
+      "phonemes": "ɐ mˈæp lˈaɪts ˌʌp fˈaɪv kˈʌntɹiz, pˈɪkt baɪ nˈeɪm."
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec, withDefaults, EASES, ANIMATABLE } from '../scripts/lib/spec.mjs';
 import { specHasVideo } from '../scripts/lib/video.mjs';
 import { findFfprobe } from '../scripts/lib/ffmpeg.mjs';
+import { isSketchScene } from '../template/sketch/style.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const exDir = path.join(root, 'references/examples');
@@ -18,6 +19,9 @@ const good = () => ({
   ] }],
 });
 const errs = (spec, dir = root) => validateSpec(spec, { dir }).errors.map((e) => `${e.path}: ${e.message}`);
+
+// The one example the 15 s guide does not cap: a tour of every feature cannot fit 15 s. Do not add another name.
+const FEATURE_TOUR = 'showcase-features.json';
 
 test('every example is valid, <= 15 s', (t) => {
   const files = readdirSync(exDir).filter((f) => f.endsWith('.json'));
@@ -33,8 +37,10 @@ test('every example is valid, <= 15 s', (t) => {
     const r = validateSpec(spec, { dir });
     assert.deepEqual(r.errors, [], f);
     assert.ok(r.ok);
-    const total = withDefaults(spec).scenes.reduce((a, s) => a + s.duration, 0);
-    assert.ok(total <= 15, `${f} is ${total}s`);
+    // The 15 s guide is for standard scenes: a hand-drawn scene lasts as long as its drawing needs (SKILL.md, Style defaults).
+    const total = withDefaults(spec).scenes.filter((s) => !isSketchScene(spec, s)).reduce((a, s) => a + s.duration, 0);
+    if (f === FEATURE_TOUR) continue;
+    assert.ok(total <= 15, `${f}: its standard scenes are ${total}s`);
   }
 });
 
@@ -101,9 +107,9 @@ test('field not valid for type / missing required for type', () => {
   assert.ok(errs(s2).includes('scenes[0].elements[0].text: required for type text'));
 });
 
-test('total duration over 120 s rejected', () => {
-  const s = { scenes: [60, 60, 1].map((d, i) => ({ id: `s${i}`, duration: d, elements: [] })) };
-  assert.ok(errs(s).includes('scenes: total duration 121s exceeds the 120s limit'));
+test('total duration over 120 s is valid', () => {
+  const s = { scenes: [50, 50, 50].map((d, i) => ({ id: `s${i}`, duration: d, elements: [] })) };
+  assert.deepEqual(errs(s), []);
 });
 
 test('image src must exist relative to spec dir', () => {
@@ -282,6 +288,12 @@ test('generatedBy: model/effort/agent strings pass; hostile, long or unknown val
   assert.notDeepEqual(errs({ ...good(), generatedBy: { model: 'a'.repeat(61) } }), []);
   assert.notDeepEqual(errs({ ...good(), generatedBy: { modle: 'x' } }), []);
   assert.notDeepEqual(errs({ ...good(), generatedBy: 'x' }), []);
+});
+
+test('provenance: a boolean passes; anything else fails', () => {
+  assert.deepEqual(errs({ ...good(), provenance: false }), []);
+  assert.deepEqual(errs({ ...good(), provenance: true }), []);
+  assert.notDeepEqual(errs({ ...good(), provenance: 'no' }), []);
 });
 
 test('named eases enter, exit, move and land validate; a near miss gets a did-you-mean', () => {

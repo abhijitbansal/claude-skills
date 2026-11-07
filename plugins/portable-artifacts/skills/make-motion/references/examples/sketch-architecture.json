@@ -1,0 +1,158 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "style": "sketch",
+  "sketch": {
+    "hand": {
+      "tone": "medium",
+      "scale": 1
+    },
+    "seed": 1
+  },
+  "scenes": [
+    {
+      "id": "flow",
+      "duration": 11,
+      "elements": [
+        {
+          "id": "title-flow",
+          "type": "text",
+          "text": "How a request flows",
+          "x": 960,
+          "y": 170,
+          "fontSize": 110
+        },
+        {
+          "id": "diagram-flow",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-diagram",
+          "params": {
+            "nodes": [
+              {
+                "id": "web",
+                "label": "Browser",
+                "icon": "monitor"
+              },
+              {
+                "id": "api",
+                "label": "API",
+                "icon": "server",
+                "fill": true
+              },
+              {
+                "id": "db",
+                "label": "Database",
+                "icon": "database"
+              }
+            ],
+            "edges": [
+              {
+                "from": "web",
+                "to": "api",
+                "label": "https"
+              },
+              {
+                "from": "api",
+                "to": "db",
+                "label": "SQL"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "cache",
+      "duration": 11.5,
+      "transition": "erase",
+      "elements": [
+        {
+          "id": "title-cache",
+          "type": "text",
+          "text": "Add a cache",
+          "x": 960,
+          "y": 170,
+          "fontSize": 110
+        },
+        {
+          "id": "diagram-cache",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-diagram",
+          "params": {
+            "nodes": [
+              {
+                "id": "web",
+                "label": "Browser",
+                "icon": "monitor"
+              },
+              {
+                "id": "api",
+                "label": "API",
+                "icon": "server",
+                "fill": true
+              },
+              {
+                "id": "cache",
+                "label": "Cache",
+                "icon": "zap"
+              },
+              {
+                "id": "db",
+                "label": "Database",
+                "icon": "database"
+              }
+            ],
+            "edges": [
+              {
+                "from": "web",
+                "to": "api",
+                "label": "https"
+              },
+              {
+                "from": "api",
+                "to": "cache",
+                "label": "hit?"
+              },
+              {
+                "from": "cache",
+                "to": "db",
+                "label": "miss"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "rule",
+      "duration": 7,
+      "transition": "erase",
+      "elements": [
+        {
+          "id": "title-rule",
+          "type": "text",
+          "text": "One rule",
+          "x": 960,
+          "y": 170,
+          "fontSize": 110
+        },
+        {
+          "id": "callout",
+          "type": "block",
+          "x": 960,
+          "y": 540,
+          "block": "sketch-callout",
+          "params": {
+            "text": "Only the API talks to the database",
+            "icon": "lock",
+            "mark": "underline"
+          }
+        }
+      ]
+    }
+  ]
+}

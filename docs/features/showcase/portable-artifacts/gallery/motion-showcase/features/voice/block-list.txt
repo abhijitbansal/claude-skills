@@ -1,0 +1,1 @@
+A checklist block ticks items off one by one.

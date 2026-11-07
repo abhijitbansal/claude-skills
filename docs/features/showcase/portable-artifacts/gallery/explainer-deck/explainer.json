@@ -19,7 +19,16 @@
         "Validation runs before the render and names the JSON path and the fix.",
         "Claude Haiku passes the eval gates for all three skills."
       ],
-      "tone": "good"
+      "tone": "good",
+      "simple": {
+        "title": "A script builds the page from the model's JSON",
+        "text": "Diagrams, dashboards, videos and explainers use the same themes. Each page opens offline in any browser.",
+        "points": [
+          "No page makes a network request when you view it.",
+          "Validation runs before the render. It names the JSON path and the fix.",
+          "Claude Haiku passes the eval gates for all three skills."
+        ]
+      }
     },
     {
       "type": "cards",
@@ -47,7 +56,22 @@
           "text": "Recaps, checklists, concept pages and slide decks like this one.",
           "icon": "lucide:book-open"
         }
-      ]
+      ],
+      "simple": {
+        "title": "Each skill makes one kind of artifact",
+        "items": [
+          {
+            "text": "Diagrams of architecture, flow, sequence and state. They have zoom and hover tracing."
+          },
+          {
+            "text": "Charts and KPI pages. It builds them from local CSV, Parquet, JSON, DuckDB or SQLite files."
+          },
+          {
+            "text": "Short animated MP4 videos. It renders them from a JSON scene list."
+          },
+          {}
+        ]
+      }
     },
     {
       "type": "motion",
@@ -78,7 +102,18 @@
           "title": "Check it",
           "text": "An optional headless check opens the page at two widths."
         }
-      ]
+      ],
+      "simple": {
+        "title": "Every skill uses the same four steps",
+        "items": [
+          {},
+          {},
+          {},
+          {
+            "text": "An optional check opens the page in a hidden browser at two widths."
+          }
+        ]
+      }
     },
     {
       "type": "code",
@@ -163,7 +198,11 @@
           34
         ]
       ],
-      "caption": "Measured with node eval/run-eval.mjs. A local gemma4 model passed fewer builds and is kept for reference only."
+      "caption": "Measured with node eval/run-eval.mjs. A local gemma4 model passed fewer builds and is kept for reference only.",
+      "simple": {
+        "title": "Both Haiku and Sonnet pass every build",
+        "caption": "We measured this with node eval/run-eval.mjs. A local gemma4 model passed fewer builds. We keep it for reference only."
+      }
     },
     {
       "type": "risks",
@@ -190,13 +229,30 @@
           "severity": "low",
           "mitigation": "Keep long pages to a few charts."
         }
-      ]
+      ],
+      "simple": {
+        "title": "Four limits to plan for before you ship",
+        "items": [
+          {},
+          {
+            "risk": "We did not run the evals for make-motion again on this branch"
+          },
+          {},
+          {
+            "risk": "Each static chart ships four drawings. This adds page weight."
+          }
+        ]
+      }
     },
     {
       "type": "text",
       "title": "Install all three skills before asking for decks",
       "label": "Before you start",
-      "text": "The explainer embeds diagrams and charts from its sibling skills. Each page works offline; keep a page and its assets folder together when you share it."
+      "text": "The explainer embeds diagrams and charts from its sibling skills. Each page works offline; keep a page and its assets folder together when you share it.",
+      "simple": {
+        "title": "Install all three skills before you ask for decks",
+        "text": "The explainer embeds diagrams and charts from its sibling skills. Each page works offline. Keep a page and its assets folder together when you share it."
+      }
     }
   ]
 }

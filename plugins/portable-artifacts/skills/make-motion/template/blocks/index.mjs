@@ -5,9 +5,13 @@
 //   params    a JSON schema for `params` (additionalProperties false, strings and arrays capped; `default`s documented)
 //   describe  one line per param, for blocks.mjs show
 //   summary   one line on what the block is for
+//   sketchOnly (optional) true for a block that draws only in a hand-drawn scene (the sketch-* blocks): a standard scene refuses it
+//             and a sketch scene takes no other (scripts/lib/sketch-check.mjs); its parts are plain text, shape and icon elements
 //   example   example params
 //   place     (size, format[, side[, insets]]) -> { x, y }: where the block belongs on that canvas; `insets` are a viral
 //             spec's (viral.mjs viralInsets), which move it inside the platform safe zone and above the lifted captions
+//   contentRect (optional) (size, format[, insets]) -> { x, y, width, height }: the area, at the block's place, that other blocks are
+//             placed inside (browser-window); x, y its centre; `insets` as for place (a viral spec's); blocks.mjs show prints it
 //   assets    (optional) params that name a file next to the spec (checked like an image src, served like one): each a
 //             key of `params`, or a dotted path to a nested one (`before.src`); see blockAssetFiles
 //   validate  (optional) (params, { sceneDuration, fps, durations?, index? }) -> [{ path, message }]: what the schema cannot say, run on
@@ -15,8 +19,9 @@
 //             of some length also exports `minDuration(params)` in seconds (at the default fps), which validate reads
 //   hook      (optional) the parts (names without `<blockId>/`) that are on screen from frame 0, with viral.mjs's hook
 //             entrance, when the block opens a viral spec (scene 0): the words a viewer should read first
-//   paramOf   (optional) part -> the param that sets that part's text (`label-2` -> `steps[1]`), for check.mjs hints;
-//             without it a part named like a param (`name`, `title`) points at that param (see paramOfPart)
+//   paramOf   (optional) part -> the param that sets that part's text or icon (`label-2` -> `steps[1]`, `icon-1` ->
+//             `nodes[0].icon`), for check.mjs hints and for where a sketch block's glyph and icon errors are reported
+//             (scripts/lib/sketch-check.mjs checkSketchBlocks); without it a part named like a param (`name`, `title`) points at that param (see paramOfPart)
 //   expand    (el, ctx: { theme, sceneDuration, fps, size, format, captions, insets, durations, index }) -> group; never
 //             throws on params its schema accepts. `captions` is whether the spec has a captions track (blocks that stack
 //             keep above it); `insets` the viral safe zone, null for a spec that is not viral (layout.mjs freeBand and
@@ -57,6 +62,16 @@ import lowerThirdTag from './lower-third-tag.mjs';
 import lowerThirdSocial from './lower-third-social.mjs';
 import lowerThirdTicker from './lower-third-ticker.mjs';
 import textBehindSubject from './text-behind-subject.mjs';
+import browserWindow from './browser-window.mjs';
+import formFields from './form-fields.mjs';
+import tabSwitch from './tab-switch.mjs';
+import buttonState from './button-state.mjs';
+import sidePanel from './side-panel.mjs';
+import sketchDiagram from './sketch-diagram.mjs';
+import sketchSteps from './sketch-steps.mjs';
+import sketchList from './sketch-list.mjs';
+import sketchCompare from './sketch-compare.mjs';
+import sketchCallout from './sketch-callout.mjs';
 
 export const BLOCKS = Object.freeze({
   'title-card': titleCard,
@@ -87,6 +102,16 @@ export const BLOCKS = Object.freeze({
   'lower-third-social': lowerThirdSocial,
   'lower-third-ticker': lowerThirdTicker,
   'text-behind-subject': textBehindSubject,
+  'browser-window': browserWindow,
+  'form-fields': formFields,
+  'tab-switch': tabSwitch,
+  'button-state': buttonState,
+  'side-panel': sidePanel,
+  'sketch-diagram': sketchDiagram,
+  'sketch-steps': sketchSteps,
+  'sketch-list': sketchList,
+  'sketch-compare': sketchCompare,
+  'sketch-callout': sketchCallout,
 });
 export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));
 

@@ -1,0 +1,18 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "Each scene is written in motion.json.",
+      "start": 0,
+      "end": 2.975,
+      "phonemes": "ˈiːtʃ sˈiːn ɪz ɹˈɪʔn̩ ɪn mˈoʊʃəndʒˈeɪsˈɑːn."
+    },
+    {
+      "text": "Validate, then render.",
+      "start": 2.975,
+      "end": 5.05,
+      "phonemes": "vˈælᵻdˌeɪt, ðˈɛn ɹˈɛndɚ."
+    }
+  ]
+}

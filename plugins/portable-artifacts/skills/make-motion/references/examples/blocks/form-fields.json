@@ -1,0 +1,27 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "form-fields",
+      "duration": 6,
+      "elements": [
+        {
+          "id": "form",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "form-fields",
+          "params": {
+            "fields": [
+              { "label": "Name", "value": "Ada Lovelace" },
+              { "label": "Email", "value": "ada@example.com" },
+              { "label": "Role", "value": "Engineer" }
+            ],
+            "typing": true
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -11,6 +11,7 @@ import { startServer } from '../scripts/lib/server.mjs';
 import { bindWithNbsp, findTokens } from '../shared/nowrap.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { substituteVars } from '../template/vars.mjs';
+import { canvasSize } from '../template/formats.mjs';
 import { main as checkMain, wrapProblems } from '../scripts/check.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -125,7 +126,8 @@ test('rendered text element textContent: unchanged without a token; only the tok
       if (!texts.length) continue;
       const server = await startServer({ specPath: file, mode: 'render' });
       try {
-        const page = await browser.newPage({ viewport: { width: spec.size[0], height: spec.size[1] } });
+        const [width, height] = canvasSize(spec); // a spec may set `format` and no `size`
+        const page = await browser.newPage({ viewport: { width, height } });
         await page.goto(server.url);
         await page.waitForFunction(() => window.__motion, null, { timeout: 0 });
         await page.evaluate(() => window.__motion.ready);

@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "Blur.",
+      "start": 0,
+      "end": 1.375,
+      "phonemes": "blˈɜː."
+    }
+  ]
+}

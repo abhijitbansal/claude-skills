@@ -1,0 +1,30 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "sketch-compare",
+      "style": "sketch",
+      "duration": 12,
+      "elements": [
+        {
+          "id": "compare",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "sketch-compare",
+          "params": {
+            "left": {
+              "title": "On a slide",
+              "points": ["Shown all at once", "The eye wanders", "Easy to skim"]
+            },
+            "right": {
+              "title": "Drawn by hand",
+              "points": ["Built a step at a time", "The eye follows the pencil", "Hard to forget"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

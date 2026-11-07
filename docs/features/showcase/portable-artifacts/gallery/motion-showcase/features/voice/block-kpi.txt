@@ -1,0 +1,1 @@
+A counter block counts up to a sample figure.

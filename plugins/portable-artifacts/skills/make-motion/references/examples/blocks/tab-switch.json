@@ -1,0 +1,26 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "tab-switch",
+      "duration": 7,
+      "elements": [
+        {
+          "id": "tabs",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "tab-switch",
+          "params": {
+            "tabs": [
+              { "label": "Profile", "body": "Name, photo and a short bio" },
+              { "label": "Billing", "body": "Plan, invoices and cards" },
+              { "label": "Team", "body": "Invite people and set roles" }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

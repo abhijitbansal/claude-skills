@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -8,9 +8,15 @@ import { fileURLToPath } from 'node:url';
 import { iconSvg, hasIcon, searchIcons, listIcons, DEFAULT_ICON, IconError } from '../scripts/lib/icons.mjs';
 import { sanitizeNodes, resolveCurated, brandEntry, licenseOf } from '../scripts/dev/build-icons.mjs';
 
+// Imported cloud icons are read from a folder; point it at an empty temp one so counts never depend on the machine's home folder.
+const ICON_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'md-icons-dir-'));
+process.env.MAKE_DIAGRAM_ICON_DIR = ICON_DIR;
+after(() => fs.rmSync(ICON_DIR, { recursive: true, force: true }));
+
 const read = (rel) => JSON.parse(fs.readFileSync(new URL(rel, import.meta.url), 'utf8'));
 const lucide = read('../icons/lucide.json');
 const brands = read('../icons/brands.json');
+const cloud = read('../icons/cloud.json');
 const CLI = fileURLToPath(new URL('../scripts/icons.mjs', import.meta.url));
 const run = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
 
@@ -33,6 +39,14 @@ test('catalogs record their upstream version and are non-trivial', () => {
   assert.equal(brands.version, '16.35.0');
   assert.ok(Object.keys(lucide.icons).length >= 240, 'lucide catalog too small');
   assert.ok(Object.keys(brands.icons).length >= 120, 'brand catalog too small');
+  assert.equal(cloud.version, '1.2.19');
+  assert.ok(Object.keys(cloud.icons).length >= 60, 'cloud catalog too small');
+});
+
+test('the Google Cloud marks added to the brand catalog are there', () => {
+  for (const slug of ['googlebigtable', 'googlecloudcomposer', 'googlecloudspanner', 'googlecontaineroptimizedos', 'googledataflow', 'googledataproc', 'googlepubsub']) {
+    assert.ok(Object.hasOwn(brands.icons, slug), slug);
+  }
 });
 
 test('DEFAULT_ICON covers every kind of every type', () => {
@@ -62,6 +76,10 @@ test('iconSvg returns kind, markup and viewBox', () => {
   assert.equal(b.kind, 'brand');
   assert.equal(b.viewBox, '0 0 24 24');
   assert.match(b.markup, /^<path d="[^"]+"\/>$/);
+  const c = iconSvg('cloud:aws-lambda');
+  assert.equal(c.kind, 'cloud');
+  assert.equal(c.viewBox, '0 0 256 256');
+  assert.match(c.markup, /fill="url\(#/);
 });
 
 test('iconSvg typo in a lucide name throws with the closest ref', () => {
@@ -118,7 +136,8 @@ test('searchIcons matches brand titles and respects limit', () => {
 test('listIcons returns every ref for a catalog', () => {
   assert.equal(listIcons('lucide').length, Object.keys(lucide.icons).length);
   assert.equal(listIcons('brand').length, Object.keys(brands.icons).length);
-  assert.equal(listIcons().length, listIcons('lucide').length + listIcons('brand').length);
+  assert.equal(listIcons('cloud').length, Object.keys(cloud.icons).length);
+  assert.equal(listIcons().length, listIcons('lucide').length + listIcons('brand').length + listIcons('cloud').length);
 });
 
 const ALLOWED_TAG = /^(path|circle|line|polyline|polygon|rect|ellipse)$/;
@@ -195,7 +214,7 @@ test('CLI search prints matching refs one per line', () => {
   assert.equal(r.status, 0);
   const lines = r.stdout.trim().split('\n');
   assert.ok(lines.includes('lucide:database'));
-  assert.ok(lines.every((l) => /^(lucide|brand):/.test(l)));
+  assert.ok(lines.every((l) => /^(lucide|brand|cloud):/.test(l)));
 });
 
 test('CLI list prints a whole catalog or both', () => {
@@ -205,7 +224,7 @@ test('CLI list prints a whole catalog or both', () => {
   const b = run('list', 'brand');
   assert.equal(b.stdout.trim().split('\n').length, Object.keys(brands.icons).length);
   const all = run('list');
-  assert.equal(all.stdout.trim().split('\n').length, Object.keys(lucide.icons).length + Object.keys(brands.icons).length);
+  assert.equal(all.stdout.trim().split('\n').length, Object.keys(lucide.icons).length + Object.keys(brands.icons).length + Object.keys(cloud.icons).length);
 });
 
 test('CLI exits 2 with the accepted subcommands on bad usage', () => {
@@ -216,7 +235,7 @@ test('CLI exits 2 with the accepted subcommands on bad usage', () => {
   assert.equal(none.status, 2);
   assert.equal(run('search').status, 2);
   assert.equal(run('list', 'emoji').status, 2);
-  assert.match(run('list', 'emoji').stderr, /lucide.*brand/);
+  assert.match(run('list', 'emoji').stderr, /lucide.*brand.*cloud/);
   assert.equal(run('search', 'a', 'b').status, 2);
   assert.equal(run('search', 'x', '--bogus').status, 2);
 });

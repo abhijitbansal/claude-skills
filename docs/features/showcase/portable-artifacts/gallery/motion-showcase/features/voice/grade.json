@@ -1,0 +1,12 @@
+{
+  "sampleRate": 24000,
+  "voice": "af_heart",
+  "sentences": [
+    {
+      "text": "One photo, four colour grades: warm, cool, mono and film.",
+      "start": 0,
+      "end": 4.675,
+      "phonemes": "wˈʌn fˈoʊɾoʊ, fˈoːɹ kˈʌlɚ ɡɹˈeɪdz: wˈɔːɹm, kˈuːl, mˈɑːnoʊ ænd fˈɪlm."
+    }
+  ]
+}

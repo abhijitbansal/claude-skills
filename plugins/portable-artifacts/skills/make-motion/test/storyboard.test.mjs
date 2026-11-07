@@ -164,6 +164,11 @@ test('storyboardPlan does not change the brief it is given', () => {
 
 test('checkBrief accepts a good brief', () => assert.deepEqual(checkBrief(LONG), []));
 
+test('a storyboard brief of 150 s is accepted', () => {
+  const brief = { title: 'Long walkthrough', seconds: 150, scenes: [scene('a', 'Open', 50), scene('b', 'Middle', 50), scene('c', 'Close', 50)] };
+  assert.deepEqual(checkBrief(brief), []);
+});
+
 test('checkBrief names the field and the fix for each problem', () => {
   const bad = (brief) => checkBrief(brief).join('\n');
   assert.match(bad(null), /brief: must be a JSON object/);

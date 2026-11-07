@@ -1,0 +1,1 @@
+This is a drawn scene. A hand draws this board, one stroke at a time.

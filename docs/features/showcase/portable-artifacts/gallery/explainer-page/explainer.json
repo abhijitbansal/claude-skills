@@ -16,7 +16,16 @@
         "make-dashboard v2 builds live, offline dashboards from local data files.",
         "make-diagram, make-explainer and make-motion add diagrams, pages and videos from JSON.",
         "Every page makes no network requests and carries a strict Content Security Policy."
-      ]
+      ],
+      "simple": {
+        "title": "One JSON file turns into a page or a video",
+        "text": "This branch adds four agent skills. They build offline dashboards, diagrams, explainer pages and short videos. The model writes only a small JSON file. Scripts check it, lay it out and render it.",
+        "points": [
+          "make-dashboard v2 builds live, offline dashboards from local data files.",
+          "make-diagram, make-explainer and make-motion build diagrams, pages and videos from JSON.",
+          "No page makes a network request. Every page has a strict Content Security Policy."
+        ]
+      }
     },
     {
       "type": "kpis",
@@ -71,7 +80,24 @@
           "text": "Renders a short MP4 video from a JSON list of scenes. Text, shapes, counters and transitions are all set in the file.",
           "icon": "lucide:film"
         }
-      ]
+      ],
+      "simple": {
+        "title": "Four skills use one loop from JSON to page",
+        "items": [
+          {
+            "text": "Builds one offline dashboard from CSV, Parquet, JSON, DuckDB or SQLite files. Its charts sort, compare and export. The page reloads when the spec changes."
+          },
+          {
+            "text": "Draws architecture, flow, sequence and state diagrams from a small JSON topology. The build works out the layout, so the model never writes coordinates."
+          },
+          {
+            "text": "Builds one themed page or slide deck from typed sections. It can embed diagrams, charts and videos that the other skills make."
+          },
+          {
+            "text": "Renders a short MP4 video from a JSON list of scenes. The file sets the text, shapes, counters and transitions."
+          }
+        ]
+      }
     },
     {
       "type": "diagram",
@@ -202,7 +228,25 @@
           "title": "Check the page (optional)",
           "text": "Run check.mjs on the page. It looks for console errors and sideways scrolling at desktop and phone width."
         }
-      ]
+      ],
+      "simple": {
+        "title": "Install once. Then ask in plain words.",
+        "items": [
+          {
+            "text": "Run one of the install commands in the next section. This adds the skills to your agent."
+          },
+          {
+            "text": "Say what you want to explain in plain words. Or call the skill with a slash command."
+          },
+          {},
+          {
+            "text": "The skill runs build.mjs. It writes one offline HTML page and prints its path. Open that file in any browser."
+          },
+          {
+            "text": "Run check.mjs on the page. It looks for console errors and sideways scrolling. It tests desktop width and phone width."
+          }
+        ]
+      }
     },
     {
       "type": "code",
@@ -238,7 +282,11 @@
           "One short MP4 video with a title card that counts up to 18."
         ]
       ],
-      "caption": "Each request is one sentence. The skill fills in its own JSON file and builds the output."
+      "caption": "Each request is one sentence. The skill fills in its own JSON file and builds the output.",
+      "simple": {
+        "title": "Each of four slash commands makes a different page",
+        "caption": "Each request is one sentence. The skill writes its own JSON file and builds the output."
+      }
     },
     {
       "type": "chart",
@@ -327,7 +375,27 @@
           "tone": "good"
         }
       ],
-      "verdict": "A spec keeps the cost low and the output the same from run to run."
+      "verdict": "A spec keeps the cost low and the output the same from run to run.",
+      "simple": {
+        "title": "Pages built from a spec cost less and stay the same",
+        "verdict": "A spec keeps the cost low. The output stays the same from run to run.",
+        "columns": [
+          {
+            "points": [
+              "The model writes the HTML, CSS and script for every page. This costs more output.",
+              "Each run can give a different look. The look is often the generic look of an AI page.",
+              "A small change can harm the rest of the page."
+            ]
+          },
+          {
+            "points": [
+              "The model writes only JSON. So the cheapest model passes the eval gates.",
+              "The same spec always gives the same page. A change means editing one field.",
+              "Validation names the JSON path and the fix. So the agent fixes most errors in one or two runs."
+            ]
+          }
+        ]
+      }
     },
     {
       "type": "risks",
@@ -359,13 +427,33 @@
           "severity": "medium",
           "mitigation": "Check each video by hand before sharing it."
         }
-      ]
+      ],
+      "simple": {
+        "title": "Five known limits each have a workaround",
+        "items": [
+          {},
+          {
+            "risk": "Explainer charts refuse Postgres and MySQL sources. This way, builds never reach the network."
+          },
+          {},
+          {
+            "risk": "Each static chart ships four drawings. This adds weight to long pages."
+          },
+          {
+            "risk": "We did not run the evals for make-motion again on this branch. So make-motion has no pinned model."
+          }
+        ]
+      }
     },
     {
       "type": "callout",
       "tone": "good",
       "title": "CI is green; eval-gated skills pass with Haiku",
-      "text": "CI on PR #38 passes 5 of 5 checks. make-dashboard v2, make-diagram and make-explainer each passed their Haiku eval gate. make-motion has no eval gate yet."
+      "text": "CI on PR #38 passes 5 of 5 checks. make-dashboard v2, make-diagram and make-explainer each passed their Haiku eval gate. make-motion has no eval gate yet.",
+      "simple": {
+        "title": "CI is green, and the eval-gated skills pass with Haiku",
+        "text": "CI on PR #38 passes 5 of 5 checks. Each of make-dashboard v2, make-diagram and make-explainer passed its Haiku eval gate. make-motion has no eval gate yet."
+      }
     }
   ]
 }

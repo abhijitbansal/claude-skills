@@ -1,0 +1,28 @@
+{
+  "format": "16:9",
+  "fps": 30,
+  "scenes": [
+    {
+      "id": "sketch-steps",
+      "style": "sketch",
+      "duration": 9.5,
+      "elements": [
+        {
+          "id": "steps",
+          "type": "block",
+          "x": 960,
+          "y": 451,
+          "block": "sketch-steps",
+          "params": {
+            "steps": [
+              "Write the spec",
+              "Validate",
+              "Preview",
+              "Render"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

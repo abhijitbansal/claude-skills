@@ -188,6 +188,15 @@ test('render: --workers 1 and --workers 4 give the same MP4 for a spec with a sl
   assert.equal(four.sha256, one.sha256);
 });
 
+test('render: --workers 1 and --workers 4 give the same MP4 for a sketch spec (a hand, masks and strokes)', async (t) => {
+  if (!await requireRender(t, NEED_ALL)) return;
+  const sketch = path.join(root, 'test/fixtures/sketch-board.json');
+  const args = ['--fps', '10', '--size', '480x270'];
+  const one = await renderHash(sketch, [...args, '--workers', '1']);
+  const four = await renderHash(sketch, [...args, '--workers', '4']);
+  assert.equal(four.sha256, one.sha256);
+});
+
 test('render: --workers 4 renders byte-identical twice (the pages interleave differently each time)', async (t) => {
   if (!await requireRender(t)) return;
   await assertRendersIdentically(t, EXAMPLE, [...SMALL, '--workers', '4']);

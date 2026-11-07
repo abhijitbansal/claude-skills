@@ -1,10 +1,13 @@
 // The beats file a spec names in its root `beats`, and the one entry point that turns a spec's "beat:<n>" references into
-// seconds (pipeline step 1b: after vars, before viral mode, blocks, presets and auto cues). Every consumer of a spec
-// calls resolveSpecBeats: validateSpec, render (single, --batch and --contact-sheet), check, and the preview server.
+// seconds and gives its hand-drawn scenes their narration (pipeline step 1b: after vars, before viral mode, blocks, presets
+// and auto cues). Every consumer of a spec calls resolveSpecBeats: validateSpec, render (single, --batch and
+// --contact-sheet), check, and the preview server.
 import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { resolveSpecPath } from './paths.mjs';
 import { resolveBeats, BeatRefError } from './beat-refs.mjs';
+import { resolveSketchVoice } from './sketch-voice.mjs';
+import { specHasSketch } from '../../template/sketch/style.mjs';
 
 export const MAX_BEATS = 10000; // about 50 minutes at 200 BPM; beats.mjs analyses five
 export const MAX_BEATS_FILE_BYTES = 1024 * 1024;
@@ -57,11 +60,20 @@ export function readBeatsFile(src, dir) {
 }
 
 /**
- * `{ spec }` with every "beat:<n>" of `spec` (its vars already substituted) replaced by seconds, or `{ errors }`
- * ([{ path, message }], the validator's shape): the beats file's own problems at `beats`, each bad reference at its field.
+ * Whether serving or rendering `spec` means resolving it first (resolveSpecBeats changes it): it names a beats file, or it has
+ * a hand-drawn scene, whose voice file (beside its audio track, with no root `beats` needed) gives it `narration`. Read
+ * from the spec after its vars are substituted (a style or a beats name may be a var), so callers pass substituteVars(spec);
+ * any other spec is served as the file, byte for byte.
+ */
+export const needsResolving = (spec) => declaresBeats(spec) || specHasSketch(spec);
+
+/**
+ * `{ spec }` with every "beat:<n>" of `spec` (its vars already substituted) replaced by seconds, and each hand-drawn scene
+ * that has a voice track given its `narration` (sketch-voice.mjs), or `{ errors }` ([{ path, message }], the validator's
+ * shape): the beats file's own problems at `beats`, each bad reference at its field, a voice file that cannot be used.
  * The root `beats` stays on the resolved spec (the preview server watches the file and render guards it); the page
- * ignores it. A spec with no `beats` and no reference is returned as the same object; resolving a resolved spec changes
- * nothing.
+ * ignores it. A spec with no `beats`, no reference and no voice track is returned as the same object; resolving a resolved
+ * spec changes nothing.
  */
 export function resolveSpecBeats(spec, dir) {
   if (!isPlain(spec)) return { spec };
@@ -71,10 +83,12 @@ export function resolveSpecBeats(spec, dir) {
     if (loaded.error) return { errors: [{ path: 'beats', message: loaded.error }] };
     beats = loaded.beats;
   }
+  let timed;
   try {
-    return { spec: resolveBeats(spec, beats) };
+    timed = resolveBeats(spec, beats);
   } catch (e) {
     if (e instanceof BeatRefError) return { errors: e.errors };
     throw e;
   }
+  return resolveSketchVoice(timed, dir);
 }

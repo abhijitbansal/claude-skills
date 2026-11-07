@@ -1,14 +1,16 @@
 #!/usr/bin/env node
-// node scripts/voice.mjs "<text>" --out <file.wav> [--voice af_heart] [--speed 1]
-// node scripts/voice.mjs --text-file narration.txt --out <file.wav>   (no shell expansion of $ or backticks)
+// node scripts/voice.mjs "<text>" --out <file.wav> [--voice af_heart] [--speed 1] [--phonemes]
+// node scripts/voice.mjs --text-file narration.txt --out <file.wav> [--phonemes]   (no shell expansion of $ or backticks)
 // node scripts/voice.mjs --list-voices
 // Synthesises a voiceover clip locally with Kokoro; reference the wav from motion.json `audio[].src`.
-// Also writes <file>.json beside it with every sentence's start and end second (a captions `src`).
+// Also writes <file>.json beside it with every sentence's start and end second (a captions `src`)
+// and the phonemes Kokoro spoke for it.
 // Prints three lines: the wav path, "<seconds> s, <voice>", and the sidecar path.
+// With --phonemes, a "<sentence><TAB><phonemes>" line per sentence follows, to check how a word is read.
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from './lib/spec.mjs';
-import { parseVoiceArgs, loadKokoro, loadModel, synthesize, sidecarPath, USAGE, INSTALL_HINT } from './lib/voice.mjs';
+import { parseVoiceArgs, loadKokoro, loadModel, synthesize, sidecarPath, phonemeLines, USAGE, INSTALL_HINT } from './lib/voice.mjs';
 
 const EXIT_USAGE = 2;
 const EXIT_FAILURE = 1;
@@ -24,8 +26,9 @@ async function run(opts, tts, kokoro) {
   if (!Object.hasOwn(tts.voices ?? {}, opts.voice)) throw new UsageError(`unknown voice "${opts.voice}"; run --list-voices`);
   const out = path.resolve(opts.out);
   mkdirSync(path.dirname(out), { recursive: true });
-  const { seconds } = await synthesize(tts, kokoro, { ...opts, out });
+  const { seconds, sentences } = await synthesize(tts, kokoro, { ...opts, out });
   process.stdout.write(`${out}\n${seconds.toFixed(2)} s, ${opts.voice}\n${sidecarPath(out)}\n`);
+  if (opts.phonemes) process.stdout.write(phonemeLines(sentences));
 }
 
 // The model session is always disposed before the process ends, on success and on failure:

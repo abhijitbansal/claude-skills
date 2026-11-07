@@ -9,14 +9,20 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { BLOCKS, BLOCK_NAMES, expandBlocks, paramOfPart } from '../template/blocks/index.mjs';
 import { ENTER_SECONDS, STAGGER_SECONDS, LAST_MOTION_SHARE } from '../template/blocks/layout.mjs';
+import { expandSpec } from '../template/defaults.mjs';
 import { canvasSize, safeMargin, captionZone, FORMATS, FORMAT_NAMES } from '../template/formats.mjs';
 import { flattenElements } from '../template/groups.mjs';
+import { SCRIBBLE_FILL } from '../template/sketch/style.mjs';
+import lucide from '../template/sketch/lucide.mjs';
+import { planScene } from '../template/sketch/plan.mjs';
+import { planContext } from '../template/sketch/plan-context.mjs';
 import { validateSpec, withDefaults, loadSpec } from '../scripts/lib/spec.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 import { waitReady } from '../scripts/check.mjs';
 import { probed } from './render-probe.mjs';
 import { requireRender, BROWSER_ONLY, assertRendersIdentically } from './helpers/render.mjs';
+import { sketchExtremes } from './helpers/sketch-block-params.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CHECK = path.join(root, 'scripts/check.mjs');
@@ -29,6 +35,8 @@ const EPSILON = 1e-9;
 
 const block = (name, params, extra = {}) => ({ id: 'b', type: 'block', x: 960, y: 540, block: name, params, ...extra });
 const oneScene = (elements, extra = {}, duration = 6) => ({ ...extra, scenes: [{ id: 's', duration, elements }] });
+// A sketch block draws only in a hand-drawn scene: its film says so at the root, every other block's says nothing.
+const styled = (name, extra = {}) => ({ ...(BLOCKS[name].sketchOnly ? { style: 'sketch' } : {}), ...extra });
 // Validated in the examples folder, so logo-outro's `src` (logo.svg) resolves.
 const errs = (motion) => validateSpec(motion, { dir: EXAMPLES }).errors.map((e) => `${e.path}: ${e.message}`);
 const partsOf = (spec) => flattenElements(spec.scenes[0].elements).map(({ el }) => el).filter((el) => el.type !== 'group');
@@ -59,17 +67,27 @@ const fill = (schema, pick, keep, at) => Object.fromEntries(Object.entries(schem
 // `assets` params (logo-outro's src, before-after-swipe's before.src) keep the example's file, which exists in the examples folder.
 const exampleAt = (example, dotted) => dotted.split('.').reduce((v, k) => v[k], example);
 function extremes(name) {
+  if (BLOCKS[name].sketchOnly) return sketchExtremes(name); // ids, node names and icons must be real: test/helpers/sketch-block-params.mjs
   const { params, example, assets = [] } = BLOCKS[name];
   const keep = Object.fromEntries(assets.map((dotted) => [dotted, exampleAt(example, dotted)]));
   const make = (pick) => fill(params, pick, keep, '');
   return { example, first: make('first'), last: make('last'), small: make('small') };
 }
-// The seconds a scene must last for `params` (a block whose schedule needs a long scene says so), else 0.
-const needsSeconds = (name, params) => BLOCKS[name].minDuration?.(params) ?? 0;
+// The seconds a scene must last for `params` (a block whose schedule needs a long scene says so), else 0. A sketch block's drawing
+// takes as long as the stroke plan says on `canvas` (rounded up to a tenth, as the validator reports it).
+function needsSeconds(name, params, canvas = {}) {
+  if (!BLOCKS[name].sketchOnly) return BLOCKS[name].minDuration?.(params) ?? 0;
+  const expanded = expandSpec(oneScene([block(name, params)], styled(name, canvas), 60));
+  const size = canvasSize(expanded);
+  const scene = expanded.scenes[0];
+  return Math.ceil((planScene(scene, planContext(expanded, scene, 0, { size, icons: lucide })).needs - EPSILON) * 10) / 10;
+}
 // Blocks whose parts do not all enter over 0.6 s from the scene start: story-beats fades over 0.3 s beat by beat and
 // listicle holds its title from frame 0 and brings its rows in later (test/viral-blocks.test.mjs checks their timing).
 // 'all' skips the entrance rule; 'first' only the "first part enters at the scene start" one (listicle's rows keep theirs).
-const OWN_SCHEDULE = new Map([['story-beats', 'all'], ['listicle', 'first'], ['race', 'all']]); // race: one keyframe per period, not entrances
+// race: one keyframe per period, not entrances. form-fields: its typed example hands each value to a static copy in one frame
+// (test/ui-blocks.test.mjs checks the fill order and the single caret).
+const OWN_SCHEDULE = new Map([['story-beats', 'all'], ['listicle', 'first'], ['race', 'all'], ['form-fields', 'all']]);
 
 // ---- the table: every block -------------------------------------------------------------------------------------------
 
@@ -77,7 +95,7 @@ for (const name of names) {
   const example = path.join(EXAMPLES, `${name}.json`);
 
   test(`${name}: example params validate, expand, and the expanded spec is valid`, () => {
-    const motion = oneScene([block(name, BLOCKS[name].example)], {}, Math.max(6, needsSeconds(name, BLOCKS[name].example)));
+    const motion = oneScene([block(name, BLOCKS[name].example)], styled(name), Math.max(6, needsSeconds(name, BLOCKS[name].example)));
     assert.deepEqual(errs(motion), []);
     const expanded = expandBlocks(motion);
     const [group] = expanded.scenes[0].elements;
@@ -115,16 +133,17 @@ for (const name of names) {
     for (const [variant, params] of Object.entries(extremes(name))) {
       for (const canvas of canvases) {
         // A block with its own schedule is also run at the shortest scene its validator accepts (its minimum).
-        const need = needsSeconds(name, params);
+        const need = needsSeconds(name, params, canvas);
         for (const duration of [...new Set([0.2, 1, 6, ...(need > 0 ? [need] : [])])]) {
-          const motion = oneScene([block(name, params)], canvas, duration);
+          const motion = oneScene([block(name, params)], styled(name, canvas), duration);
           const where = `${variant} params, ${JSON.stringify(canvas)}, ${duration} s`;
           // A scene shorter than the block's schedule is one error at the param its validator names (exact texts: viral-blocks.test.mjs).
+          // A sketch block's schedule is its drawing: the stroke plan's length, reported at its first required param.
           const found = errs(motion);
           if (duration >= need) assert.deepEqual(found, [], where);
           else {
-            const [expected] = BLOCKS[name].validate(params, { sceneDuration: duration });
-            assert.deepEqual(found.map((line) => line.split(':')[0]), [`scenes[0].elements[0].params.${expected.path}`], `${where}: ${found.join(' | ')}`);
+            const at = BLOCKS[name].sketchOnly ? BLOCKS[name].params.required[0] : BLOCKS[name].validate(params, { sceneDuration: duration })[0].path;
+            assert.deepEqual(found.map((line) => line.split(':')[0]), [`scenes[0].elements[0].params.${at}`], `${where}: ${found.join(' | ')}`);
           }
           // Squeezed to 85 % of the scene, except in a scene that meets the block's own minimum: it keeps its own times, all inside the scene.
           const last = need > 0 && duration >= need ? duration : LAST_MOTION_SHARE * duration;
@@ -137,13 +156,16 @@ for (const name of names) {
   });
 
   test(`${name}: colours are theme tokens; entrances use enter over 0.6 s, staggered at least 0.2 s`, () => {
-    const parts = partsOf(expandBlocks(oneScene([block(name, BLOCKS[name].example)], {}, Math.max(6, needsSeconds(name, BLOCKS[name].example)))));
+    const parts = partsOf(expandBlocks(oneScene([block(name, BLOCKS[name].example)], styled(name), Math.max(6, needsSeconds(name, BLOCKS[name].example)))));
     for (const el of parts) {
       for (const key of ['color', 'fill', 'stroke']) {
-        if (el[key] !== undefined) assert.ok(TOKENS.includes(el[key]), `${el.id}.${key} is ${el[key]}, not a theme token`);
+        if (el[key] === undefined) continue;
+        const hatch = key === 'fill' && el[key] === SCRIBBLE_FILL && BLOCKS[name].sketchOnly; // only a sketch block hatches a box
+        assert.ok(TOKENS.includes(el[key]) || hatch, `${el.id}.${key} is ${el[key]}, not a theme token`);
       }
     }
-    if (OWN_SCHEDULE.get(name) === 'all') return;
+    // A sketch block has no entrances: the hand draws each part (a sketch scene refuses keyframes; test/sketch-blocks.test.mjs).
+    if (OWN_SCHEDULE.get(name) === 'all' || BLOCKS[name].sketchOnly) return;
     const starts = [];
     for (const el of parts) {
       const kfs = el.keyframes ?? [];
@@ -164,8 +186,8 @@ for (const name of names) {
 
 // ---- expansion ---------------------------------------------------------------------------------------------------------
 
-test('BLOCKS has 28 entries after Phase 4', () => {
-  assert.equal(BLOCK_NAMES.length, 28, BLOCK_NAMES.join(' '));
+test('BLOCKS has 38 entries after the UI mockup blocks and the sketch blocks', () => {
+  assert.equal(BLOCK_NAMES.length, 38, BLOCK_NAMES.join(' '));
 });
 
 test('expandBlocks leaves a spec without blocks deepEqual, and never mutates its input', () => {
@@ -388,7 +410,7 @@ test('every block text is at least 40 px at 1080 on the short side, for the exam
       for (const format of ['16:9', '9:16', '1:1']) {
         const size = FORMATS[format].size;
         const floor = Math.round((40 * Math.min(...size)) / 1080);
-        for (const el of partsOf(expandBlocks(oneScene([block(name, params)], { format })))) {
+        for (const el of partsOf(expandBlocks(oneScene([block(name, params)], styled(name, { format }))))) {
           if (el.type === 'text' || el.type === 'counter') assert.ok(el.fontSize >= floor, `${name} ${variant} ${format}: ${el.id} is ${el.fontSize} px`);
         }
       }
@@ -471,8 +493,8 @@ test('with captions, every block at its place() with the largest params keeps it
         for (const format of FORMAT_NAMES) {
           const size = FORMATS[format].size;
           const { x, y } = BLOCKS[name].place(size, format, params.side);
-          const seconds = Math.max(CAPTION_SECONDS, needsSeconds(name, params));
-          const motion = { format, captions: [{ src: 'c.srt' }], scenes: [{ id: 's', duration: seconds, elements: [block(name, params, { x, y })] }] };
+          const seconds = Math.max(CAPTION_SECONDS, needsSeconds(name, params, { format }));
+          const motion = { ...styled(name), format, captions: [{ src: 'c.srt' }], scenes: [{ id: 's', duration: seconds, elements: [block(name, params, { x, y })] }] };
           const file = captionedSpec(motion);
           if (name === 'checklist' && format === '1:1') {
             const r = spawnSync(process.execPath, [CHECK, file], { encoding: 'utf8' });

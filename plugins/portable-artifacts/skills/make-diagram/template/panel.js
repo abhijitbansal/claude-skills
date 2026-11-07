@@ -81,6 +81,9 @@
           s.setAttribute('aria-hidden', 'true');
           var copy = icon.cloneNode(true);
           copy.removeAttribute('transform');
+          // A cloud icon carries gradient and mask ids; the copy drops them (its url(#id) still finds the originals) so the page keeps one of each.
+          var withId = copy.querySelectorAll('[id]');
+          for (var i = 0; i < withId.length; i++) withId[i].removeAttribute('id');
           s.appendChild(copy);
           glyph.appendChild(s);
         }
