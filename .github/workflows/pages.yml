@@ -11,6 +11,9 @@ on:
     paths:
       - 'site/**'
       - 'docs/**'
+      - 'scripts/build_dashboard_gallery.py'
+      - 'plugins/portable-artifacts/eval/fixtures/data/**'
+      - 'LICENSE'
   release:
     types: [published]
   workflow_dispatch:
@@ -64,6 +67,9 @@ jobs:
             -e 's#\.\./site/assets/#assets/#g' \
             -e 's#\.\./site/favicon\.ico#favicon.ico#g' \
             -e 's#\.\./site/apple-touch-icon\.png#apple-touch-icon.png#g'
+
+      - name: Build dashboard gallery downloads
+        run: python3 scripts/build_dashboard_gallery.py --out _site/features/showcase/portable-artifacts/gallery
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

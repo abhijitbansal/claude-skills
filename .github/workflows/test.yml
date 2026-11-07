@@ -127,6 +127,9 @@ jobs:
       # into a failure instead of a skip
       - name: install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Rebuild downloaded dashboard sources and compare gallery data
+        if: matrix.name == 'make-dashboard'
+        run: python3 scripts/build_dashboard_gallery.py --out "$RUNNER_TEMP/dashboard-gallery" --validate
       - name: package.json test script is still the glob run below
         working-directory: plugins/portable-artifacts/${{ matrix.dir }}
         run: |
