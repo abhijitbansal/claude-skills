@@ -11,6 +11,9 @@ on:
     paths:
       - 'site/**'
       - 'docs/**'
+      - 'scripts/build_motion_gallery.py'
+      - 'plugins/portable-artifacts/skills/make-motion/references/examples/**'
+      - 'LICENSE'
   release:
     types: [published]
   workflow_dispatch:
@@ -64,6 +67,9 @@ jobs:
             -e 's#\.\./site/assets/#assets/#g' \
             -e 's#\.\./site/favicon\.ico#favicon.ico#g' \
             -e 's#\.\./site/apple-touch-icon\.png#apple-touch-icon.png#g'
+
+      - name: Build runnable motion gallery downloads
+        run: python3 scripts/build_motion_gallery.py --out _site/features/showcase/portable-artifacts/gallery/motion-1-4
 
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
