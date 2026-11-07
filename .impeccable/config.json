@@ -1,0 +1,56 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-08-01T18:13:01.790Z",
+        "reason": "User confirmed Inter is intentional (pre-existing site font, not introduced this session)"
+      },
+      {
+        "rule": "overused-font",
+        "value": "space grotesk",
+        "createdAt": "2026-08-01T18:13:01.823Z",
+        "reason": "User confirmed Space Grotesk is intentional (pre-existing site font, not introduced this session)"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "site/assets/site.css"
+        ],
+        "createdAt": "2026-08-01T18:13:10.574Z",
+        "reason": "Pre-existing .callout border-left accent, not introduced this session, user confirmed leave as-is"
+      },
+      {
+        "rule": "border-accent-on-rounded",
+        "value": "*",
+        "files": [
+          "site/assets/site.css"
+        ],
+        "createdAt": "2026-08-01T18:13:10.607Z",
+        "reason": "Pre-existing .pnode border-top accent, not introduced this session, user confirmed leave as-is"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "site/assets/site.css"
+        ],
+        "createdAt": "2026-08-01T18:13:10.637Z",
+        "reason": "Pre-existing headline gradient, not introduced this session, user confirmed leave as-is"
+      },
+      {
+        "rule": "gradient-text",
+        "value": "*",
+        "files": [
+          "site/og.html"
+        ],
+        "createdAt": "2026-08-01T18:13:10.666Z",
+        "reason": "Pre-existing headline gradient, not introduced this session, user confirmed leave as-is"
+      }
+    ]
+  }
+}
