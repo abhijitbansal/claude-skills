@@ -126,7 +126,7 @@ Per-skill quality items are in Phase 4 of the register. Examples: `make-dashboar
 
 ## Execution plan
 
-Each phase is one PR or a small set. Effort is stated as surface and risk. Full item text and proof steps are in the [register](skill-improvement-plan-2026-11-register.md). Dependencies are marked with "after".
+Each phase is one PR or a small set. Effort is stated as surface and risk. Each item's narrowed change and full proof step are in the [register](skill-improvement-plan-2026-11-register.md). The owner's gitignored private register holds the full proposals and evidence. Dependencies are marked with "after".
 
 ### Phase 0: Safety and repo hygiene (small; low risk; verified by bats and grep)
 
