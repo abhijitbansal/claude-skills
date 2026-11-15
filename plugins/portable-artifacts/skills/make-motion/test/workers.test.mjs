@@ -40,9 +40,11 @@ test('parseFailAt: a strict non-negative integer, anything else is ignored', () 
   for (const bad of [undefined, '', 'abc', '5x', ' 5', '5 ', '-1', '5.0', '0x5', '1e1', '+5', 'null']) assert.equal(parseFailAt(bad), null, JSON.stringify(bad));
 });
 
-test('parseKeepFrames: an absolute folder, anything else is ignored', () => {
-  assert.equal(parseKeepFrames('/tmp/frames'), '/tmp/frames');
-  for (const bad of [undefined, '', 'frames', './frames', '1']) assert.equal(parseKeepFrames(bad), null, JSON.stringify(bad));
+test('parseKeepFrames: an absolute folder under the test runner, anything else is ignored', () => {
+  const runner = { NODE_TEST_CONTEXT: 'child-v8' };
+  assert.equal(parseKeepFrames({ ...runner, PA_KEEP_FRAMES: '/tmp/frames' }), '/tmp/frames');
+  for (const bad of [undefined, '', 'frames', './frames', '1']) assert.equal(parseKeepFrames({ ...runner, PA_KEEP_FRAMES: bad }), null, JSON.stringify(bad));
+  assert.equal(parseKeepFrames({ PA_KEEP_FRAMES: '/tmp/frames' }), null, 'a user render with a stale PA_KEEP_FRAMES writes no PNGs');
 });
 
 // Fake pages: a page seeks (a frame index) and screenshots it. Later pages are faster, so frames are ready out of order.

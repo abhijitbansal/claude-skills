@@ -45,9 +45,11 @@ export function parseFailAt(text) {
 // Test-only diagnostics (PA-42): PA_KEEP_FRAMES=<absolute dir> makes render write every captured PNG there as <frame>.png,
 // before the encode, so a byte-identical test that fails can name the frames that differed in the browser's own output
 // (an MP4's decoded frames cannot: x264's lookahead carries one changed frame into the frames around it). Inert unless the
-// value is an absolute path; anything else is ignored.
-export function parseKeepFrames(text) {
-  return typeof text === 'string' && path.isAbsolute(text) ? text : null;
+// value is an absolute path and the render runs under `node --test` (NODE_TEST_CONTEXT, as autoCpus), so a stale export in
+// a user's shell never makes a real render write every frame to disk.
+export function parseKeepFrames(env = process.env) {
+  const text = env.PA_KEEP_FRAMES;
+  return env.NODE_TEST_CONTEXT && typeof text === 'string' && path.isAbsolute(text) ? text : null;
 }
 
 function deferred() {

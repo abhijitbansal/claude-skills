@@ -47,6 +47,8 @@ const MAX_PNG_COPIES = 12; // frames whose two PNGs are copied for the CI artifa
 
 // The captured-PNG half of the report: which frames differ, exactly, and where both copies of the first few went.
 function pngReport(first, second, name, dir) {
+  const missing = [first.frames, second.frames].filter((folder) => !existsSync(folder));
+  if (missing.length) return `no kept PNGs to compare (missing: ${missing.join(' ')})`;
   const frames = differingPngFrames(first.frames, second.frames);
   if (!frames.length) return 'every captured PNG matches, so the difference is in the encode';
   const copies = [];

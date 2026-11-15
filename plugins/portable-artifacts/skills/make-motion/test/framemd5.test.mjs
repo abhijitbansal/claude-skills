@@ -85,6 +85,16 @@ test('assertSameRender with kept PNGs names the captured frames that differ and 
   assert.equal(existsSync(path.join(out, 'blur-first-1.png')), false, 'a frame that matches is not copied');
 });
 
+test('assertSameRender with a kept-PNG folder that was never written still names the mismatch', NEEDS_FFMPEG, () => {
+  const plain = { ...clip('plain-m.mp4', 'null'), frames: pngFolder('m-first', ['f0', 'f1', 'f2', 'f3']) };
+  const altered = { ...clip('altered-m.mp4', "geq=lum='if(gte(N,2),255,lum(X,Y))':cb='cb(X,Y)':cr='cr(X,Y)'"), frames: path.join(dir, 'm-never-written') };
+  assert.throws(() => assertSameRender(plain, altered, { ffmpeg, label: 'missing', dir: path.join(dir, 'dumps-m') }), (e) => {
+    assert.match(e.message, /two renders of missing are not byte-identical/);
+    assert.match(e.message, /no kept PNGs to compare \(missing: .*m-never-written\)/);
+    return true;
+  });
+});
+
 test('assertSameRender with kept PNGs that all match says the difference is in the encode', NEEDS_FFMPEG, () => {
   const frames = ['f0', 'f1', 'f2', 'f3'];
   const plain = { ...clip('plain-e.mp4', 'null'), frames: pngFolder('e-first', frames) };

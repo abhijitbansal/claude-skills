@@ -416,7 +416,7 @@ async function renderVideo(pages, p, state) {
   state.encoder = startEncoder(p.ffmpeg, encodeArgs({ fps: p.fps, out: state.partial, audio: p.audio, duration: p.total, metadata: p.metadata, quality: p.quality }));
   let written = 0;
   let nextMark = 1;
-  const keep = parseKeepFrames(process.env.PA_KEEP_FRAMES); // test-only: every PNG as the encoder gets it (workers.mjs)
+  const keep = parseKeepFrames(process.env); // test-only: every PNG as the encoder gets it (workers.mjs)
   if (keep) mkdirSync(keep, { recursive: true });
   const onFrame = async (png) => {
     if (keep) writeFileSync(path.join(keep, `${written}.png`), png);
