@@ -207,20 +207,17 @@ test('four sizes of which one is an affix are three sizes; four non-affix sizes 
   assert.equal(auditFrame(four, ctx()).filter((f) => f.rule === 'sizes').length, 1);
 });
 
-test('hidden words: the safe-area and overlap checks use the words that are not hidden, and only once those have landed', () => {
-  // Alpha Bravo Omega, 96 px: hidden = Alpha and Bravo (steps of a count), Omega is the value that stays
+test('hidden words: the safe-area and overlap checks use the words on screen on the frame, and only once those have landed', () => {
+  // Alpha Bravo Omega, 96 px: Alpha and Bravo (steps of a count) are at opacity 0 on this frame, Omega is shown
   const count = (x, { last = 1, id = 'count' } = {}) => {
     const node = textNode({ id, size: 96, x, y: 400, words: 3, word: 'Omega' });
     return { ...node, words: [{ ...node.words[0], opacity: 0 }, { ...node.words[1], opacity: 0 }, { ...node.words[2], opacity: last }] };
   };
-  const hidden = new Map([['count', new Set([0, 1])]]);
-  const run = (node, extra = {}) => auditFrame([node], ctx({ hiddenWords: hidden, ...extra }));
+  const run = (node) => auditFrame([node], ctx());
   assert.deepEqual(run(count(10)).filter((f) => f.rule === 'safe-area'), [], 'the shown word is inside although the hidden ones start outside');
   assert.deepEqual(run(count(1400)).map((f) => f.rule), ['safe-area'], 'the shown word is outside');
   assert.deepEqual(run(count(1400, { last: 0.5 })).filter((f) => f.rule === 'safe-area'), [], 'an intermediate value (not landed) is not audited');
-  assert.deepEqual(auditFrame([count(1400)], ctx()).filter((f) => f.rule === 'safe-area'), [], 'without the hidden list nothing has landed');
-  const near = { ...count(1400, { id: 'other' }), id: 'other' };
-  assert.deepEqual(run(near, { hiddenWords: new Map([['other', new Set([0, 1])]]) }).map((f) => f.rule), ['safe-area']);
+  assert.deepEqual(run({ ...count(1400, { id: 'other' }), id: 'other' }).map((f) => f.rule), ['safe-area'], 'no list of hidden words is needed: the frame says');
 });
 
 test('a text is judged only once it has settled: not mid-spring, mid-pulse or while still fading in', () => {
@@ -236,10 +233,10 @@ test('a text is judged only once it has settled: not mid-spring, mid-pulse or wh
   assert.equal(auditFrame([group], ctx()).filter((f) => f.rule === 'safe-area').length, 0, 'inside a group still fading in');
 });
 
-test('a text whose every word is hidden is judged by all of them', () => {
+test('a text with every word at opacity 0 is not on screen and is not judged; with its words shown it is judged by all of them', () => {
   const node = textNode({ id: 'count', size: 96, x: 10, y: 400, words: 2, word: 'Omega' });
-  const f = auditFrame([node], ctx({ hiddenWords: new Map([['count', new Set([0, 1])]]) }));
-  assert.deepEqual(f.map((x) => x.rule), ['safe-area']);
+  assert.deepEqual(auditFrame([{ ...node, words: node.words.map((w) => ({ ...w, opacity: 0 })) }], ctx()), []);
+  assert.deepEqual(auditFrame([node], ctx()).map((x) => x.rule), ['safe-area']);
 });
 
 test('a lone text, or texts of one size, have no hero to compare', () => {
@@ -638,7 +635,7 @@ test('a text whose last frame catches the tail of a move is still judged at rest
   const snapshots = [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree(frame === 29 ? 1.01 : 1) }));
   const resting = restingByShot(timeline, snapshots).get('hero');
   assert.ok(Math.abs(resting.restScales.get('t') - 1) < 1e-9, `the scale held on most sampled frames: ${resting.restScales.get('t')}`);
-  const found = auditFrame(tree(1), ctx({ restScales: resting.restScales, hiddenWords: resting.hiddenWords }));
+  const found = auditFrame(tree(1), ctx({ restScales: resting.restScales }));
   assert.ok(found.some((f) => f.rule === 'safe-area'), 'the at-rest layout is judged and the defect reported');
 });
 
@@ -667,7 +664,7 @@ test('a text whose words rest a hair off scale 1 (a move sampled before its end)
   };
   const snapshots = [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree() }));
   const resting = restingByShot(timeline, snapshots).get('hero');
-  const found = auditFrame(tree(), ctx({ restScales: resting.restScales, hiddenWords: resting.hiddenWords, restWords: resting.restWords }));
+  const found = auditFrame(tree(), ctx({ restScales: resting.restScales, restWords: resting.restWords }));
   assert.ok(found.some((f) => f.rule === 'safe-area'), `the at-rest layout is judged: ${JSON.stringify(found.map((f) => f.rule))}`);
   // a word still mid-pulse is not at rest
   const pulsing = tree().map((n) => ({ ...n, words: n.words.map((w, i) => (i === 0 ? { ...w, scale: 1.08 } : w)) }));
@@ -718,7 +715,7 @@ test('a text that lands late in its shot is judged at the scale it lands at, not
   const snapshots = [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree(frame) }));
   const resting = restingByShot(timeline, snapshots).get('hero');
   assert.ok(Math.abs(resting.restScales.get('t') - 1) < 1e-9, `the scale held while on screen: ${resting.restScales.get('t')}`);
-  const found = auditFrame(tree(29), ctx({ restScales: resting.restScales, hiddenWords: resting.hiddenWords, restWords: resting.restWords }));
+  const found = auditFrame(tree(29), ctx({ restScales: resting.restScales, restWords: resting.restWords }));
   assert.ok(found.some((f) => f.rule === 'safe-area'), `the landed layout is judged: ${JSON.stringify(found.map((f) => f.rule))}`);
 });
 
@@ -732,7 +729,7 @@ test('a word that lands late is judged at the scale it lands at, not the scale i
   const snapshots = [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree(frame) }));
   const resting = restingByShot(timeline, snapshots).get('hero');
   assert.deepEqual(resting.restWords.get('t'), [1, 1, 1], 'each word rests at the scale it holds once shown');
-  const found = auditFrame(tree(29), ctx({ restScales: resting.restScales, hiddenWords: resting.hiddenWords, restWords: resting.restWords }));
+  const found = auditFrame(tree(29), ctx({ restScales: resting.restScales, restWords: resting.restWords }));
   assert.ok(found.some((f) => f.rule === 'safe-area'), `the landed words are judged: ${JSON.stringify(found.map((f) => f.rule))}`);
   // a text never fully shown on a sampled frame falls back to its last frame
   const never = restingByShot(timeline, [0, 29].map((frame) => ({ frame, tree: [textNode({ id: 't', scale: 0.9, opacity: 0.5 })] }))).get('hero');

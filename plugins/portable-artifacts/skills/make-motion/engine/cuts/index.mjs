@@ -21,6 +21,7 @@ const SMEAR = Object.freeze({ samples: 12, span: 0.5 }); // samples over this sh
 const CROSS_FROM = 0.25;
 const CROSS_TO = 0.75;
 const SAME_PLACE = 1e-9;
+const FRAME_EPSILON = 1e-9; // keeps 0.4 s x 30 fps = 12.000000000000002 on frame 12
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
 const lerp = (a, b, e) => a + (b - a) * e;
@@ -270,4 +271,9 @@ export function aloneFromFrame(name) {
   const cut = registries.cuts.get(name ?? 'cut');
   if (cut.dur === 0) return 0;
   return cut.incomingOnly === true ? 1 : null;
+}
+
+/** As aloneFromFrame, and for a slide or a match the first frame after its window at `fps`: where the shot is alone. */
+export function aloneAfterFrame(name, fps) {
+  return aloneFromFrame(name) ?? Math.ceil(registries.cuts.get(name).dur * fps - FRAME_EPSILON);
 }

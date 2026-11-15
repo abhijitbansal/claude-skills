@@ -6,15 +6,15 @@ import { realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
+import '../../engine/modes/index.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { resolveAnchor, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
+import { resolveAnchor, anchorSeconds, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { REGION_PREFIX } from '../../engine/kinds/shared.mjs';
 
 export const FILM_VERSION = 2;
-export const MODES = Object.freeze(['pro', 'viral']);
 export const FORMATS = Object.freeze(['16:9', '9:16', '1:1', '4:5']);
 export const FPS_CHOICES = Object.freeze([24, 25, 30, 60]);
 export const DEFAULT_MODE = 'pro';
@@ -23,15 +23,10 @@ export const DEFAULT_SEED = 1;
 const SEED_MAX = 7918;
 const SHOTS_MAX = 60;
 const SAY_MAX = 400;
-const HOLD_MIN = 0.5;
+const HOLD_MIN = 1; // every shot lasts at least 1 s (engine/script/timing.mjs MIN_SHOT_SECONDS)
 const HOLD_MAX = 30;
 const ON_MAX = 8;
-
-// Used when the modes registry has no entry for the film's mode.
-const MODE_DEFAULTS = Object.freeze({
-  pro: Object.freeze({ defaultLook: 'desk', defaultFormat: '16:9' }),
-  viral: Object.freeze({ defaultLook: 'pop', defaultFormat: '9:16' }),
-});
+const SPAN_DECIMALS = 2;
 
 const V1_MESSAGE = 'this is a version 1 spec; make-motion 2 reads version 2 only. See references/migrating.md';
 const NOT_OBJECT_MESSAGE = 'a film must be a JSON object such as { "version": 2, "shots": [ ... ] }';
@@ -66,7 +61,7 @@ const ROOT_SCHEMA = {
   required: ['shots'],
   properties: {
     version: {}, // checked by checkVersion, which says what to write
-    mode: { enum: [...MODES] },
+    mode: { type: 'string' }, // checkMode: one of the registered modes, with a did-you-mean
     look: { type: 'string', minLength: 1 },
     format: { enum: [...FORMATS] },
     fps: { enum: [...FPS_CHOICES] },
@@ -145,9 +140,17 @@ function lookup(registry, name) {
   return { error: `unknown name ${quote(name)}` };
 }
 
-function modeDefinition(mode, regs) {
-  const registered = regs.modes.has(mode) ? regs.modes.get(mode) : {};
-  return { ...MODE_DEFAULTS[mode], ...registered };
+// The film's mode name as written (else the default), or null when no such mode is registered.
+function modeName(spec, regs) {
+  const name = spec.mode ?? DEFAULT_MODE;
+  return typeof name === 'string' && regs.modes.has(name) ? name : null;
+}
+
+// A mode that is not registered gets the registry's own did-you-mean; one that is not a string has its schema error.
+function checkMode(spec, regs) {
+  const name = spec.mode ?? DEFAULT_MODE;
+  if (typeof name !== 'string' || regs.modes.has(name)) return [];
+  return [{ path: 'mode', message: lookup(regs.modes, name).error }];
 }
 
 // --- the film's own settings: version, mode, look, fps ---
@@ -168,7 +171,7 @@ function checkAccent(spec) {
 function resolveLook(spec, mode, regs) {
   const explicit = typeof spec.look === 'string' && spec.look !== '';
   if (!explicit && (spec.look !== undefined || mode === null)) return { look: null, errors: [] };
-  const name = explicit ? spec.look : modeDefinition(mode, regs).defaultLook;
+  const name = explicit ? spec.look : regs.modes.get(mode).defaultLook;
   const found = lookup(regs.looks, name);
   if (found.error && explicit) return { look: null, errors: [{ path: 'look', message: found.error }] };
   if (found.error) {
@@ -182,7 +185,7 @@ function resolveLook(spec, mode, regs) {
 }
 
 function resolveContext(spec, specDir, regs) {
-  const mode = spec.mode === undefined ? DEFAULT_MODE : MODES.find((m) => m === spec.mode) ?? null;
+  const mode = modeName(spec, regs);
   const fps = spec.fps === undefined ? DEFAULT_FPS : FPS_CHOICES.find((f) => f === spec.fps) ?? null;
   const { look, errors } = resolveLook(spec, mode, regs);
   return { ctx: { mode, fps, look, regs, specDir }, errors };
@@ -258,18 +261,24 @@ function checkCut(shot, index, base, ctx) {
 function timelineShot(shot, ctx) {
   if (ctx.mode === null || ctx.fps === null) return null;
   const film = { mode: ctx.mode, shots: [{ id: shot.id, say: shot.say, hold: shot.hold }] };
-  return buildTimeline(film, { fps: ctx.fps }).shots[0];
+  return buildTimeline(film, { fps: ctx.fps, modes: ctx.regs.modes }).shots[0];
 }
 
-function checkAnchor(item, at, entry) {
+// An anchor must parse and land inside its shot. Up to one frame outside is rounding and is clamped
+// (engine/script/anchors.mjs resolveAnchor); further out, the device would fire on the shot's edge, unseen.
+function checkAnchor(item, at, entry, fps) {
   if (entry === null || item.at === undefined) return [];
+  let seconds;
   try {
-    resolveAnchor(item.at, entry);
+    seconds = anchorSeconds(item.at, entry);
   } catch (err) {
     if (!(err instanceof AnchorError)) throw err;
     return [{ path: pathJoin(at, 'at'), message: err.message }];
   }
-  return [];
+  const slack = 1 / fps;
+  if (seconds >= -slack && seconds <= entry.duration + slack) return [];
+  const span = `0 to ${Number(entry.duration.toFixed(SPAN_DECIMALS))} s`;
+  return [{ path: pathJoin(at, 'at'), message: `${quote(item.at)} resolves to ${seconds} s, outside the shot, which runs from ${span}; anchor it inside the shot, or lengthen the shot` }];
 }
 
 const supportsLook = (device, look) => typeof device.supports !== 'function' || Boolean(device.supports(look));
@@ -334,7 +343,7 @@ function checkOn(shot, base, ctx, { entry, targets, kindName, kind }) {
   return shot.on.slice(0, ON_MAX).flatMap((item, j) => {
     if (!isPlainObject(item)) return [];
     const at = pathJoin(pathJoin(base, 'on'), j);
-    return [...checkAnchor(item, at, entry), ...checkDevice(item, at, ctx, kind), ...checkTarget(item, at, targets, kindName)];
+    return [...checkAnchor(item, at, entry, ctx.fps), ...checkDevice(item, at, ctx, kind), ...checkTarget(item, at, targets, kindName)];
   });
 }
 
@@ -466,6 +475,7 @@ function collectErrors(spec, specDir, regs) {
   return [
     ...checkVersion(spec),
     ...schemaErrors(checkRootSchema, spec, ''),
+    ...checkMode(spec, regs),
     ...checkAccent(spec),
     ...settings,
     ...checkShots(spec, ctx),
@@ -485,7 +495,7 @@ export function validateFilm(spec, { specDir, registries = defaultRegistries } =
 // on a film that validated.
 export function withFilmDefaults(spec, regs = defaultRegistries) {
   const mode = spec.mode ?? DEFAULT_MODE;
-  const defaults = modeDefinition(mode, regs);
+  const defaults = regs.modes.get(mode);
   return {
     ...structuredClone(spec),
     mode,

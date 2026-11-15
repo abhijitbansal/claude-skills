@@ -19,7 +19,7 @@ function resolve(names, tracks, statics, defaults, t, step) {
 }
 
 function sampleWords(n, t) {
-  const names = [...Object.keys(WORD_DEFAULTS), 'fill'];
+  const names = [...Object.keys(WORD_DEFAULTS), 'fill', 'ghost'];
   const statics = { fill: n.props.fill };
   return Object.freeze(n.wordTracks.map((entry) => Object.freeze(resolve(names, entry, statics, WORD_DEFAULTS, t, n.step))));
 }

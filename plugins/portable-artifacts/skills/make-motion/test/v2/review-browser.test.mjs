@@ -9,7 +9,7 @@ import { deflateSync, crc32 } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { listEntries } from '../../scripts/v2/list.mjs';
-import { reviewFilm, hiddenWordsIn } from '../../scripts/v2/review.mjs';
+import { reviewFilm } from '../../scripts/v2/review.mjs';
 import { sessionOrNull } from './helpers/session.mjs';
 
 const FPS = 30;
@@ -81,16 +81,51 @@ const countText = (x) => ({
 });
 const countFilm = (x) => ({ version: 2, fps: FPS, shots: [{ id: 'count', show: 'free', hold: 2, background: '#101820', nodes: [countText(x)] }] });
 
-test('the words at opacity 0 on a shot last frame are the hidden ones', async (t) => {
-  const session = await open(t, countFilm(200)); if (!session) return;
-  const last = await session.page.evaluate((i) => window.__snapshot(i), session.timeline.frameCount - 1);
-  assert.deepEqual([...hiddenWordsIn(last).get('count')], [0, 1]);
+// node id -> the indices of its words at opacity 0 in a snapshot
+function hiddenWordsIn(tree) {
+  const hidden = new Map();
+  const walk = (n) => {
+    if (n.type === 'text' && Array.isArray(n.words)) hidden.set(n.id, new Set(n.words.flatMap((w, i) => (w.opacity === 0 ? [i] : []))));
+    (n.children ?? []).forEach(walk);
+  };
+  tree.forEach(walk);
+  return hidden;
+}
+
+// ---- final wave I1 and I2: the reviewer's free shots ----
+
+const freeText = (props, wordTracks) => ({ type: 'text', id: 'edge', props: { y: 400, font: { family: 'Geist', weight: 600, size: 96 }, maxWidth: 3000, fill: '#ffffff', ...props }, ...(wordTracks ? { wordTracks } : {}) });
+const freeFilm = (node) => ({ version: 2, fps: FPS, shots: [{ id: 'f', show: 'free', hold: 3, background: '#101820', nodes: [node] }] });
+
+test('I2: a word shown for two seconds and gone at the end of its shot is judged while it shows: off the safe area, a finding', async (t) => {
+  // "Inside Outside": the second word runs past the right safe edge, at opacity 1 at 0 s and 0 at 2 s of a 3 s shot
+  const node = freeText({ x: 1500, text: 'Inside Outside' }, [{}, { opacity: keys([0, 1], [2, 0]) }]);
+  const session = await open(t, freeFilm(node)); if (!session) return;
+  const found = (await reviewFilm({ session })).filter((f) => f.kind === 'mechanical');
+  assert.deepEqual(found.map((f) => [f.rule, f.node]), [['safe-area', 'edge']]);
 });
 
-test('a stacked count is audited at its final value: hidden words outside the safe area are not a finding', async (t) => {
-  // x = 10: "Alpha" starts outside the safe area but is a hidden step; the shown word "Omega" is inside it
+test('I3: a text in the colour of its shot background is a contrast finding naming both colours; the page reports the background', async (t) => {
+  const session = await open(t, freeFilm(freeText({ x: 300, text: 'Hidden', fill: '#152030' }))); if (!session) return;
+  assert.deepEqual(session.info.backgrounds, ['#101820']);
+  const found = (await reviewFilm({ session })).filter((f) => f.kind === 'mechanical');
+  assert.deepEqual(found.map((f) => [f.rule, f.node]), [['contrast', 'edge']]);
+  assert.match(found[0].message, /#152030 on #101820/);
+});
+
+test('I1: a text that never reaches full opacity, off the safe area, is reported as never settling', async (t) => {
+  const session = await open(t, freeFilm(freeText({ x: -400, text: 'Faded', opacity: 0.9 }))); if (!session) return;
+  const found = (await reviewFilm({ session })).filter((f) => f.kind === 'mechanical');
+  assert.deepEqual(found.map((f) => [f.rule, f.node]), [['unsettled', 'edge']]);
+  assert.match(found[0].message, /never settles within the shot/);
+});
+
+test('a stacked count is judged by the steps on screen: early steps off the safe area are a finding while they show, not after', async (t) => {
+  // x = 10: "Alpha Bravo" are on screen, fully, until 0.5 s with "Alpha" outside the safe area (final wave I2: a word
+  // visible on a sampled frame is judged there); from 0.51 s only "Omega", inside it, is shown
   const session = await open(t, countFilm(10)); if (!session) return;
-  assert.deepEqual((await reviewFilm({ session })).filter((f) => f.kind === 'mechanical'), []);
+  const found = (await reviewFilm({ session })).filter((f) => f.kind === 'mechanical');
+  assert.deepEqual(found.map((f) => [f.rule, f.node, f.t]), [['safe-area', 'count', 0]], 'once, at the first frame the early steps show');
 });
 
 test('a stacked count whose final value is outside the safe area is a mechanical finding', async (t) => {

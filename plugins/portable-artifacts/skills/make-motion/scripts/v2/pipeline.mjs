@@ -45,6 +45,6 @@ export function loadFilm(specPath, { registries = defaultRegistries } = {}) {
   const { ok, errors } = validateFilm(spec, { specDir, registries });
   if (!ok) throw new SpecError(errors);
   const film = withFilmDefaults(spec, registries);
-  const timeline = buildTimeline(film, { fps: film.fps });
+  const timeline = buildTimeline(film, { fps: film.fps, modes: registries.modes });
   return { film, timeline, specDir };
 }

@@ -9,8 +9,13 @@ import { validateFilm, withFilmDefaults, SpecError } from '../../scripts/v2/spec
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 
 // The registries are module singletons, so these tests pass their own stubs
-// instead of registering into the shared ones.
-function stubRegistries({ modes = [] } = {}) {
+// instead of registering into the shared ones. The modes are data the validator
+// and the timeline read (mode choice, default look and format, pace).
+const STUB_MODES = [
+  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6 },
+  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3 },
+];
+function stubRegistries({ modes = STUB_MODES } = {}) {
   const r = {
     kinds: createRegistry('kind'),
     looks: createRegistry('look'),
@@ -213,8 +218,8 @@ test('hold together with say is an error at hold', () => {
 });
 test('hold alone is fine and has a range', () => {
   assert.equal(check(film({}, [{ id: 'a', show: 'statement', hold: 30 }])).ok, true);
-  assert.equal(check(film({}, [{ id: 'a', show: 'statement', hold: 0.5 }])).ok, true);
-  assert.equal(check(film({}, [{ id: 'a', show: 'statement', hold: 0.1 }])).errors[0].path, 'shots[0].hold');
+  assert.equal(check(film({}, [{ id: 'a', show: 'statement', hold: 1 }])).ok, true);
+  assert.equal(check(film({}, [{ id: 'a', show: 'statement', hold: 0.5 }])).errors[0].path, 'shots[0].hold', 'every shot lasts at least 1 s');
   assert.equal(check(film({}, [{ id: 'a', show: 'statement', hold: 31 }])).errors[0].path, 'shots[0].hold');
 });
 test('a say that does not parse is an error at say with the parser message', () => {

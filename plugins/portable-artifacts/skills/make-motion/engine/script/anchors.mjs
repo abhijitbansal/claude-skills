@@ -14,7 +14,9 @@
 //   sentence:<n>     the start of sentence n, counting from 0
 //   beat:<n>         refused until the engine has music
 // A numeric string such as "1.5" is seconds. The result is in shot-local
-// seconds, rounded to 1e-6 and clamped to [0, shot.duration].
+// seconds, rounded to 1e-6 and clamped to [0, shot.duration]; the validator
+// refuses an anchor that lands outside the shot by more than one frame
+// (anchorSeconds gives the second before the clamp).
 
 export class AnchorError extends Error {
   constructor(message) {
@@ -155,8 +157,11 @@ function secondsOf(ref, shot) {
   return baseSeconds(base, shot, ref) + (offset === undefined ? 0 : Number(offset));
 }
 
+/** The shot-local second `ref` names, rounded to 1e-6 and not clamped: the validator compares it with the shot's span. */
+export function anchorSeconds(ref, shot) {
+  return Math.round(secondsOf(ref, shot) * ROUNDING) / ROUNDING;
+}
+
 export function resolveAnchor(ref, shot) {
-  const seconds = secondsOf(ref, shot);
-  const rounded = Math.round(seconds * ROUNDING) / ROUNDING;
-  return Math.min(shot.duration, Math.max(0, rounded));
+  return Math.min(shot.duration, Math.max(0, anchorSeconds(ref, shot)));
 }

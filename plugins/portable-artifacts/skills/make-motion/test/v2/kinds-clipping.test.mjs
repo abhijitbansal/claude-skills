@@ -389,6 +389,14 @@ test('an event that was moved is reported at shots[i].on[j] with how early the w
   assert.deepEqual(establishingFindings({ ...clip, on: [{ at: 0.1, do: 'highlight', target: 'image' }] }, { look: registries.looks.get('desk'), timing, at: (ref) => resolveAnchor(ref, timing) }), [], 'an event on the whole picture needs no establishing view');
 });
 
+test('in a shot shorter than the establishing floor the message says where the event really went: the shot end', () => {
+  const clip = { ...CLIP({ cut: 'slide' }), say: undefined, hold: 1.5, on: [{ at: 0.2, do: 'circle', target: 'region:r' }] };
+  const timeline = buildTimeline(filmOf([FILLER, clip]), { fps: FPS });
+  const timing = timeline.shots[1];
+  const [found] = establishingFindings(clip, { look: registries.looks.get('desk'), timing, at: (ref) => resolveAnchor(ref, timing) });
+  assert.match(found.message, /the event was moved to 1\.50 s/, 'the floor (1.9 s) is past the 1.5 s shot');
+});
+
 // ---- revision 2: slug, caption, crop, dim (E3) ----
 
 const DESK_CLIP = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', kicker: 'The proof', caption: 'Every chart shows its query',

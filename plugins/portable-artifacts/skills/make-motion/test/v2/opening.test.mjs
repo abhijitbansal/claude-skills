@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
 import { auditFrame, openingFindings } from '../../engine/review/frame.mjs';
-import { safeRectFor, opensShotAt, auditPlan } from '../../scripts/v2/review.mjs';
+import { safeRectFor, opensShotAt, openingFrameOf, auditPlan } from '../../scripts/v2/review.mjs';
+import { registries } from '../../engine/registry.mjs';
 import { auditMoments } from '../../scripts/v2/plan.mjs';
 import { FPS, measure, canvasOf, viralOf, filmOf, IMAGES } from './helpers/kinds.mjs';
 
@@ -85,6 +86,23 @@ for (const look of ['desk', 'pop']) {
   }
 }
 
+// Final wave M1: the same kinds arriving on each of the look's slide and match cuts, judged on the first frame after the
+// cut's window (openingFrameOf), where the shot stands alone. A shared hero id lets the match carry it.
+for (const look of ['desk', 'pop']) {
+  for (const cut of ['slide', 'match'].filter((name) => registries.looks.get(look).cuts.includes(name))) {
+    for (const shot of KINDS) {
+      test(`${look} ${shot.show}: something is on screen on the first frame after a ${cut}`, () => {
+        const format = look === 'pop' ? '9:16' : '16:9';
+        const film = filmOf([{ id: 'a', show: 'statement', say: 'Hello there.', hero: 'h' }, { ...shot, cut, hero: 'h' }], look, format);
+        const { timeline, canvas, movie } = built(film);
+        const frame = openingFrameOf(film, timeline, 1);
+        assert.ok(frame !== null, 'the shot outlasts its window');
+        assert.deepEqual(openingFindings(movie.sampleAt(frame / FPS), reviewCtx(film, canvas, { opensShot: true })), []);
+      });
+    }
+  }
+}
+
 test('the review judges the opening of a shot that comes in on a hard cut, and not the film\'s own first frame in a mode that does not read from frame 0 (a film may open on its field: the director\'s ruling)', () => {
   const film = filmOf([freeShot('a', [FADING]), freeShot('b', [FADING], { cut: 'cut' }), freeShot('c', [FADING], { cut: 'slide' })]);
   const { timeline } = built(film);
@@ -93,6 +111,16 @@ test('the review judges the opening of a shot that comes in on a hard cut, and n
   assert.equal(opensShotAt(film, timeline, first(1), true), true, 'a hard cut must not land on the field alone');
   assert.equal(opensShotAt(film, timeline, first(1) + 1, true), false, 'only its first frame');
   assert.equal(opensShotAt(film, timeline, first(2), false), false, 'a slide shows the outgoing shot on that frame');
+});
+
+test('a shot that comes in on a slide or a match is judged on the first frame after the cut window, where it stands alone', () => {
+  const film = filmOf([freeShot('a', [FADING]), freeShot('b', [FADING], { cut: 'slide' }), freeShot('c', [FADING], { cut: 'match' })]);
+  const { timeline } = built(film);
+  const first = (i) => Math.round(timeline.shots[i].start * FPS);
+  assert.equal(opensShotAt(film, timeline, first(1) + 12, true), true, 'the slide (0.4 s) has ended on its 12th frame');
+  assert.equal(opensShotAt(film, timeline, first(1) + 11, true), false);
+  assert.equal(opensShotAt(film, timeline, first(2) + 15, true), true, 'the match (0.5 s) has ended on its 15th frame');
+  assert.ok(auditMoments(film, timeline).includes(first(1) + 12) && auditMoments(film, timeline).includes(first(2) + 15), 'the audit samples those frames');
 });
 
 // ---- look gate fix pass, review-rev2 I2 (the director's ruling) ----

@@ -1,7 +1,8 @@
 // The stages behind scripts/make.mjs, in order: validate, timeline, review (the sheets and the audit), render. One
 // browser session serves review and render. runMake always returns a report (report.mjs) and an exit code: 0 ok, 1 not
-// ok (the film does not validate, or a mechanical finding exists, or the page cannot draw it), 2 for trouble with the
-// machine (a missing film file, no browser, no ffmpeg, ffmpeg failing: `report.error` says which and how to fix it),
+// ok (the film does not validate, or a mechanical finding exists, or the page raised an error about it), 2 for trouble
+// with the machine (a missing film file, no browser, no ffmpeg, ffmpeg failing, a crashed or closed browser page, a
+// timeout, a lost WebGL context, a picture the browser cannot decode: `report.error` says which and how to fix it),
 // 130 when stopped through `signal`. What was done before a stop stays in the report. It always closes what it opened,
 // never prints to stdout and never waits for input.
 import path from 'node:path';
@@ -10,7 +11,7 @@ import { findFfmpeg } from '../lib/ffmpeg.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { SpecError } from './spec.mjs';
-import { openSession, pageErrorMessage } from './session.mjs';
+import { openSession, pageErrorMessage, machineMessage } from './session.mjs';
 import { writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
 import { sessionFindings } from './review.mjs';
@@ -23,6 +24,7 @@ const EXIT_OK = 0;
 const EXIT_NOT_OK = 1;
 const EXIT_MACHINE = 2;
 const EXIT_INTERRUPTED = 130;
+const PAGE_PREFIX = 'page: '; // a finding about the page itself (sessionFindings, failureOutcome)
 
 const seconds = (started) => Math.round(((performance.now() - started) / MS_PER_SECOND) * MILLIS_DECIMALS) / MILLIS_DECIMALS;
 
@@ -118,20 +120,33 @@ async function execute(options, state, io) {
   await reviewAndRender({ options, loaded: { film, timeline, specDir }, state, io });
 }
 
-// What to do with an error that stopped the run: a stop is an interrupt, the page failing is the film's fault (a
-// finding), anything else is the machine's.
-function settle(state, err, signal) {
-  if (signal?.aborted) {
-    state.error = { message: 'interrupted', hint: '' };
-    return EXIT_INTERRUPTED;
-  }
+/**
+ * What an error that stopped the run means: { exitCode, error } or { exitCode, finding }. A stop is an interrupt; the
+ * page failing is the film's fault (a finding); anything else is the machine's.
+ */
+export function failureOutcome(err, signal) {
+  if (signal?.aborted) return { exitCode: EXIT_INTERRUPTED, error: { message: 'interrupted', hint: '' } };
   const pageMessage = pageErrorMessage(err);
-  if (pageMessage !== null) {
-    state.findings = [...state.findings, pageFinding('mechanical', `page: ${pageMessage}`)];
-    return EXIT_NOT_OK;
-  }
-  state.error = describeError(err);
-  return EXIT_MACHINE;
+  if (pageMessage !== null) return { exitCode: EXIT_NOT_OK, finding: pageFinding('mechanical', `page: ${pageMessage}`) };
+  return { exitCode: EXIT_MACHINE, error: describeError(machineMessage(err)) };
+}
+
+/**
+ * The findings a report carries: each once (kind, message, path), and after trouble with the machine (exit 2) none of
+ * the page's own errors (`page: ...`): a crashed or closed page, a lost context, logs those too, and they are not the
+ * film's to fix.
+ */
+export function reportFindings(findings, exitCode) {
+  const kept = exitCode === EXIT_MACHINE ? findings.filter((f) => !f.message.startsWith(PAGE_PREFIX)) : findings;
+  return kept.filter((f, i, all) => all.findIndex((g) => g.kind === f.kind && g.message === f.message && g.path === f.path) === i);
+}
+
+// Records what failureOutcome says in the run's state and returns the exit code.
+function settle(state, err, signal) {
+  const { exitCode, error, finding } = failureOutcome(err, signal);
+  if (error) state.error = error;
+  if (finding) state.findings = [...state.findings, finding];
+  return exitCode;
 }
 
 /**
@@ -147,7 +162,7 @@ export async function runMake(options, { signal, log = () => {} } = {}) {
   } catch (err) {
     exitCode = settle(state, err, signal);
   }
-  state.findings = state.findings.filter((f, i, all) => all.findIndex((g) => g.kind === f.kind && g.message === f.message && g.path === f.path) === i);
+  state.findings = reportFindings(state.findings, exitCode);
   const report = reportOf(state);
   return { report, exitCode: exitCode ?? (report.ok ? EXIT_OK : EXIT_NOT_OK), sheetsDir: state.sheetsDir, outline: state.outline };
 }

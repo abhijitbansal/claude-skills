@@ -6,13 +6,27 @@ import { launchBrowser, guardNetwork } from '../lib/browser.mjs';
 import { canvasSize } from '../../template/formats.mjs';
 import { startV2Server } from './server.mjs';
 
-const PAGE_ERROR = /^page\.evaluate: (?:Error: )?([^\n]*)/;
+// Playwright 1.64 (recorded by .scratch/gate/probe-errors.mjs) reports an Error the page threw as
+// "page.evaluate: Error: <message>\n    at ...", and its own trouble as "page.evaluate: Target crashed ",
+// "page.evaluate: Target page, context or browser has been closed" or "<call>: Timeout <n>ms exceeded." (named
+// "TimeoutError"; the others "Error"). Only the first form, a plain Error the engine raised on purpose, is the film's.
+const PAGE_THROWN = /^page\.evaluate: Error: ([^\n]*)/;
+// Thrown on purpose by the page but not the film's fault: a WebGL context lost or broken (engine/page/post.mjs), and a
+// picture the browser cannot decode (engine/page/stage.mjs), a file problem like a missing picture.
+const NOT_THE_FILM = /^(?:post pass: |image ".*" could not be loaded)/;
+// Playwright's call prefix ("page.evaluate: ") and an error class name before the message.
+const CALL_PREFIX = /^(?:(?:page|frame|browser|browserContext|locator)\.\w+: )?(?:[A-Za-z]*Error: )?/;
 
-/** The message of an error the page threw inside `page.evaluate` (a film the page cannot draw, a lost WebGL context), or
- *  null for any other error: those are the machine's trouble, these are the film's or the browser's. */
+/** The message of an Error the page raised on purpose about the film (one it cannot draw: an unknown font, a node it
+ *  cannot place), or null for anything else: a crashed or closed page, a timeout, a lost WebGL context, an undecodable
+ *  picture, an error the page did not mean to raise, or an error from outside the page. Those are the machine's. */
 export function pageErrorMessage(err) {
-  return PAGE_ERROR.exec(String(err?.message ?? ''))?.[1] ?? null;
+  const message = PAGE_THROWN.exec(String(err?.message ?? ''))?.[1] ?? null;
+  return message === null || NOT_THE_FILM.test(message) ? null : message;
 }
+
+/** The first line of an error with Playwright's call prefix and the error class taken off, as a report states it. */
+export const machineMessage = (err) => String(err?.message ?? err).split('\n')[0].replace(CALL_PREFIX, '');
 
 /**
  * @param {{ film: object, timeline: object, specDir: string }} loaded what loadFilm returns

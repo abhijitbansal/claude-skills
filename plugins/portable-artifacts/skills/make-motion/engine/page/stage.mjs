@@ -8,7 +8,7 @@
 // __seek draws frames 0 .. frameCount - 1.
 import { registries } from '../registry.mjs';
 import '../fields/index.mjs';
-import { buildFilm, resolveLook } from '../graph/film.mjs';
+import { buildFilm, resolveLook, shotTime } from '../graph/film.mjs';
 import { stateKey } from '../graph/sample.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '/v1/formats.mjs';
 import { drawFrame, resetContext } from './draw.mjs';
@@ -148,11 +148,11 @@ async function init() {
   // Shot `index` alone at frame i: only its own nodes, as they stand inside a cut window where both shots are drawn.
   const snapshotShot = (index, i) => {
     frameState(i);
-    return snapshotOf(built.sampleShot(index, Math.max(0, i / fps - timeline.shots[index].start)));
+    return snapshotOf(built.sampleShot(index, Math.max(0, shotTime(i / fps, timeline.shots[index].start))));
   };
   installApi({ fps, draw, post, source, measure, frameState, keys, snapshotOf, snapshotShot, setGrain: (value) => { grain = value; } });
   const notice = post.unavailable ? { postNotice: { ...post.unavailable, dropped: post.dropped } } : {};
-  return { frameCount, fps, size: [w, h], post: post.kind, ...notice };
+  return { frameCount, fps, size: [w, h], post: post.kind, backgrounds: [...built.backgrounds], ...notice };
 }
 
 window.__ready = init();

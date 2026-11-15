@@ -4,8 +4,9 @@
 // The report has the same keys on every path, so a reader never has to guess which exist:
 //   ok, output, sheets, timed, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings
 // and `error: { message, hint }` when a problem with the machine stopped the run (a missing film file, no browser, no
-// ffmpeg, ffmpeg failing, an interrupt). What had been done by then stays in it: the stages that ran, the findings
-// already found. A film's own fault (it does not validate, the page cannot draw it) is a finding, not an error.
+// ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, an interrupt). What had been done by then
+// stays in it: the stages that ran, the findings already found. A film's own fault (it does not validate, the page
+// raises an error about it) is a finding, not an error.
 import { parseSay } from '../../engine/script/say.mjs';
 
 const SECOND_DECIMALS = 2;
@@ -18,15 +19,21 @@ const HINTS = Object.freeze([
   [/^.* is not a regular file/, 'give the path of a film .json file, not a folder or a device'],
   [/^ffmpeg failed/, 'ffmpeg refused the frames; the lines above are its own words. Retry with --exact, or check the disk space'],
   [/^post pass:/, 'the browser lost or broke its WebGL context; run again, and use --exact if it keeps happening'],
+  [/^Target crashed/, 'the browser page crashed while drawing the film (it may have run out of memory); run again, and close other heavy programs if it keeps happening'],
+  [/has been closed/, 'the browser closed while drawing the film; run again'],
+  [/^Timeout \d+ms exceeded/, 'the browser did not answer in time; run again, and check that the machine is not overloaded'],
+  [/^image ".*" could not be loaded/, 'the file is not a picture the browser can decode; replace it with a PNG, JPEG or WebP image'],
 ]);
 
-/** { message, hint } for an error: its first line split at the first ". " (the version 1 helpers write "what. how to fix"). */
+/** { message, hint } for an error's first line: whole with its hint when HINTS knows it (a path in it may hold ". "),
+ *  else split at the first ". " (the version 1 helpers write "what. how to fix"). */
 export function describeError(err) {
   const first = String(err?.message ?? err).split('\n')[0];
+  const known = HINTS.find(([pattern]) => pattern.test(first));
+  if (known) return { message: first, hint: known[1] };
   const cut = first.indexOf('. ');
   if (cut > 0) return { message: first.slice(0, cut), hint: first.slice(cut + 2) };
-  const hint = HINTS.find(([pattern]) => pattern.test(first))?.[1] ?? '';
-  return { message: first, hint };
+  return { message: first, hint: '' };
 }
 
 /** A validation error { path, message } as a finding. Validation errors are always mechanical: the film cannot be built. */

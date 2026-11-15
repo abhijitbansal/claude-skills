@@ -21,6 +21,10 @@ const DEFAULT_BACKGROUND = '#000000';
 const TIME_DECIMALS = 1e9; // shot-local time is rounded to 1e-9 s, so float noise cannot change a sample
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
+/** Film second `t` as a time inside a shot that starts at `start`, rounded to 1e-9 s so float noise cannot change a
+ *  sample: the drawn frame (frameAt) and the audited one (the page's __snapshotShot) read a shot at the same time. */
+export const shotTime = (t, start) => Math.round((t - start) * TIME_DECIMALS) / TIME_DECIMALS + 0; // + 0 turns -0 into 0
+
 /** The film's look: its `look`, else its mode's default, with the film's `accent` applied. */
 export function resolveLook(film) {
   const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
@@ -131,7 +135,7 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
  *   (buildTimeline), the text measure, the pictures by src, the canvas size of the film's format and the platform safe
  *   zone (see shotContext)
  * @returns {{ duration: number, frameCount: number, look: object, frameAt(t): { background: string, sampled: object[] },
- *   sampleAt(t): object[], sampleShot(index, t): object[] }}
+ *   sampleAt(t): object[], sampleShot(index, t): object[], backgrounds: string[] }}
  */
 export function buildFilm({ film, timeline, measure, assets = new Map(), canvas, viralInsets = null }) {
   if (!film || !Array.isArray(film.shots)) throw new Error('buildFilm: film must have a shots array');
@@ -158,7 +162,7 @@ export function buildFilm({ film, timeline, measure, assets = new Map(), canvas,
   const frameAt = (t) => {
     const index = shotIndexAt(t);
     const shot = shots[index];
-    const local = Math.round((t - shot.start) * TIME_DECIMALS) / TIME_DECIMALS + 0; // + 0 turns -0 into 0
+    const local = shotTime(t, shot.start);
     if (!shot.cut || local >= shot.cutDur) return { background: shot.background, sampled: sampleShot(index, local) };
     const from = sampleShot(index - 1, shots[index - 1].duration);
     // `frame`: how far p moves in one frame, for the cuts that smear what they move, given only in a look that asks for the
@@ -175,5 +179,6 @@ export function buildFilm({ film, timeline, measure, assets = new Map(), canvas,
     frameAt,
     sampleAt: (t) => frameAt(t).sampled,
     sampleShot,
+    backgrounds: Object.freeze(shots.map((s) => s.background)), // per shot, the colour painted under it
   };
 }

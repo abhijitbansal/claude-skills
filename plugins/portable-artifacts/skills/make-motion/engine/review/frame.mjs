@@ -19,12 +19,13 @@
 // Stacks. A stack (props.stack: the id of the statement it belongs to) sets each line of one text at its own size; for the
 // sizes and hero rules its lines are one size class (the largest), and the viral hook rule counts all of its words.
 //
-// Landed. A word at opacity 0 on its shot's last frame is permanently hidden (the number kind stacks every step of its
-// count as a word and shows one at a time). A text has landed when every word that is not permanently hidden is at
-// opacity 1 and scale 1 (not mid-pulse), the text itself (with the groups it sits in) is at opacity 1 (a text still
-// fading in is still arriving) and it is settled: at the scale it has on its shot's last frame (not mid-spring,
-// mid-pulse or mid-push). Size, safe-area and overlap checks apply to a landed text, using only its words that are not
-// hidden. The caller passes the hidden words in ctx.hiddenWords (node id -> Set of word indices).
+// Landed. A word at opacity 0 on a frame is not on screen on that frame (the number kind stacks every step of its
+// count as a word and shows one at a time; a word may also leave before its shot ends); every word shown on a frame is
+// judged on it. A text has landed on a frame when every word on screen is at opacity 1 and at its rest scale (not
+// mid-pulse), the text itself (with the groups it sits in) is at opacity 1 (a text still fading in is still arriving)
+// and it is settled: at the scale it rests at in its shot (not mid-spring, mid-pulse or mid-push). Size, safe-area and
+// overlap checks apply to a landed text, using only its words on screen. A text that lands on no sampled frame of its
+// shot is reported by the film review (scripts/v2/review.mjs settleFindings).
 //
 // Roles. A text node's props.role (set by the kinds: hero, affix, label, kicker, caption, tag, body; none means body)
 // says what the text is for. An `affix` (prefix, suffix, unit) and a `tag` are small by design: the scale-contrast rule
@@ -33,17 +34,19 @@
 //
 // What escapes. The audit looks at sampled frames (scripts/v2/review.mjs), and an unlanded text is not judged, so a defect
 // that is on screen for less than the sampling step (0.25 s: 7 frames at 30 fps) and falls between two samples can
-// escape, and so can one that exists only while a text is still arriving, pulsing or being pushed by the camera.
+// escape, and so can one that exists only while a text is still arriving, pulsing or being pushed by the camera when
+// the same text lands on another sampled frame.
 import { unitOf } from '../units.mjs';
 import { CAP_HEIGHT, WORD_DESCENT } from '../kinds/shared.mjs';
+import { contrastFindings } from './contrast.mjs';
+import { registries } from '../registry.mjs';
+import '../modes/index.mjs';
 
 export const MIN_TEXT_UNITS = 28;
 export const MAX_TEXT_SIZES = 3;
 export const MIN_HERO_RATIO = 3;
 export const OVERLAP_UNITS = 4;
 const WORD_OVERLAP_UNITS = 1; // neighbouring words of a line may not meet by more than this
-export const PRO_MAX_LINE_WORDS = 12;
-export const VIRAL_MAX_FIRST_WORDS = 7;
 // Two sizes within this ratio of each other (a camera drift scales every text a little) count as one size.
 const SAME_SIZE_RATIO = 1.1;
 // A text stands settled within 0.2% of its resting scale. A camera punch (8% in pop) takes a frame or two to come home,
@@ -124,10 +127,11 @@ function inkBox(n, hidden) {
   return [bbox[0] + (part[0] - whole[0]) * sx, bbox[1] + (part[1] - whole[1]) * sy, part[2] * sx, part[3] * sy];
 }
 
-// Words that count for a text: those not permanently hidden. A text whose every word is hidden is judged by all of them.
-function hiddenOf(n, hiddenWords) {
-  const hidden = hiddenWords?.get(n.id) ?? NO_WORDS;
-  return hidden.size >= wordsOf(n.layout).length ? NO_WORDS : hidden;
+// The words of a text at opacity 0 on this frame: not on screen, so neither in its ink nor waited for. A word shown on
+// any other frame is judged there. (A text with every word at 0 is not on screen at all: visibleTexts skips it.)
+function hiddenNow(n) {
+  const hidden = (Array.isArray(n.words) ? n.words : []).flatMap((w, i) => ((w?.opacity ?? 1) <= 0 ? [i] : []));
+  return hidden.length === 0 ? NO_WORDS : new Set(hidden);
 }
 
 const hasVisibleWord = (n) => !Array.isArray(n.words) || n.words.length === 0 || n.words.some((w) => w.opacity > 0);
@@ -158,13 +162,15 @@ const isSettled = (id, scale, resting) => !resting?.has(id) || Math.abs(scale / 
 
 // One visible text as the rules see it, or null when its box cannot be measured.
 function measured(n, o, s, unit, ctx) {
-  const hidden = hiddenOf(n, ctx.hiddenWords);
+  const hidden = hiddenNow(n);
   const rests = ctx.restWords?.get(n.id);
   const wordsIn = !Array.isArray(n.words) || wordsOf(n.layout).every((w) => hidden.has(w.index) || isWordAtRest(n.words[w.index], rests?.[w.index]));
   const landed = wordsIn && o >= 1 && isSettled(n.id, s, ctx.restScales);
   try {
     const size = (n.layout.size * s) / unit, ink = inkBox(n, hidden);
-    return Number.isFinite(size) && isBox(ink) && isBox(n.bbox) ? { node: n, size, role: roleOf(n), ink, landed } : null;
+    // the smallest a word on screen stands: a word resting at its own smaller scale reads at that size (the size floor)
+    const smallest = size * Math.min(1, ...wordsOf(n.layout).filter((w) => !hidden.has(w.index)).map((w) => Math.abs(n.words?.[w.index]?.scale ?? 1)));
+    return Number.isFinite(size) && isBox(ink) && isBox(n.bbox) ? { node: n, size, smallest, role: roleOf(n), ink, landed, opacity: o } : null;
   } catch {
     return null;
   }
@@ -188,6 +194,15 @@ function visibleTexts(sampled, unit, ctx) {
   return { texts, unmeasured };
 }
 
+/**
+ * Every text on screen in the frame that can be measured, as { id, landed, role }: whether it is at rest on this frame
+ * (see Landed above). The film review counts, per shot, the texts that are at rest on no sampled frame.
+ * @param {object[]} sampled @param {object} ctx as for auditFrame
+ */
+export function textLandings(sampled, ctx) {
+  return visibleTexts(sampled, unitOf(ctx.canvas), ctx).texts.map((t) => ({ id: t.node.id, landed: t.landed, role: t.role }));
+}
+
 const pathOf = (ctx) => `shots[${ctx.shotIndex ?? ctx.shotId}]`;
 const finding = (ctx, kind, rule, node, message, role) => ({ kind, path: pathOf(ctx), message, rule, node, ...(role ? { role } : {}) });
 const units = (n) => Number(n.toFixed(1));
@@ -209,11 +224,11 @@ function overflowMessage(node, size) {
 }
 
 function textRules(texts, ctx) {
-  return texts.flatMap(({ node, size, role, ink, landed }) => {
+  return texts.flatMap(({ node, size, smallest, role, ink, landed }) => {
     const out = [];
     const id = node.id;
     if (node.layout.overflow) out.push(finding(ctx, CREATIVE, 'overflow', id, overflowMessage(node, size), role));
-    if (landed && size < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(size)} units tall; the floor is ${MIN_TEXT_UNITS}`, role));
+    if (landed && smallest < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(smallest)} units tall; the floor is ${MIN_TEXT_UNITS}`, role));
     if (landed && outsideSafe(ink, ctx.safe, SAFE_TOLERANCE_UNITS * unitOf(ctx.canvas))) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
     return out;
   });
@@ -370,22 +385,31 @@ function coverRules(texts, sampled, ctx, unit) {
   }));
 }
 
+// The mode's data: the registered mode named by ctx.mode (a name, or a mode object), else the object given, else none.
+function modeData(mode) {
+  const name = typeof mode === 'string' ? mode : mode?.name;
+  if (registries.modes.has(name)) return registries.modes.get(name);
+  return typeof mode === 'object' && mode !== null ? mode : {};
+}
+
+// Word counts the mode limits (mode data): a line of more than maxLineWords words; on the film's first shot, an opening
+// statement of more than maxHookWords. A mode without a limit has no such rule.
 function wordRules(texts, ctx) {
-  const modeName = typeof ctx.mode === 'string' ? ctx.mode : ctx.mode?.name;
+  const { name, maxLineWords, maxHookWords } = modeData(ctx.mode);
   const out = [];
-  if (modeName === 'pro') {
+  if (Number.isFinite(maxLineWords)) {
     for (const { node, role } of texts) {
-      if (node.layout.lines.some((line) => shownWords(node, line.words).length > PRO_MAX_LINE_WORDS)) {
-        out.push(finding(ctx, CREATIVE, 'line-words', node.id, `text "${node.id}" has a line of more than ${PRO_MAX_LINE_WORDS} words; shorten it`, role));
+      if (node.layout.lines.some((line) => shownWords(node, line.words).length > maxLineWords)) {
+        out.push(finding(ctx, CREATIVE, 'line-words', node.id, `text "${node.id}" has a line of more than ${maxLineWords} words; shorten it`, role));
       }
     }
   }
-  if (modeName === 'viral' && ctx.isFirstShot && texts.length > 0) {
+  if (Number.isFinite(maxHookWords) && ctx.isFirstShot && texts.length > 0) {
     const hero = texts.reduce((best, t) => (t.size > best.size ? t : best));
     const stack = hero.node.props?.stack;
     const parts = stack === undefined ? [hero] : texts.filter((t) => t.node.props?.stack === stack);
     const count = parts.reduce((sum, t) => sum + shownWords(t.node, wordsOf(t.node.layout)).length, 0);
-    if (count > VIRAL_MAX_FIRST_WORDS) out.push(finding(ctx, CREATIVE, 'hook-words', hero.node.id, `the opening statement has ${count} words; a viral hook takes at most ${VIRAL_MAX_FIRST_WORDS}`, hero.role));
+    if (count > maxHookWords) out.push(finding(ctx, CREATIVE, 'hook-words', hero.node.id, `the opening statement has ${count} words; a ${name} hook takes at most ${maxHookWords}`, hero.role));
   }
   return out;
 }
@@ -423,11 +447,13 @@ export function openingFindings(sampled, ctx) {
  * @param {object[]} sampled the tree the page's __snapshot(i) returns for one frame
  * @param {{ look: object, canvas: { w: number, h: number }, mode: string | { name: string }, shotId: string, t: number,
  *   safe: { left: number, top: number, right: number, bottom: number }, shotIndex?: number, isFirstShot?: boolean,
- *   hiddenWords?: Map<string, Set<number>>, restScales?: Map<string, number>, restWords?: Map<string, number[]>, opensShot?: boolean }} ctx
+ *   restScales?: Map<string, number>, restWords?: Map<string, number[]>, opensShot?: boolean, background?: string }} ctx
+ *   background: the shot's background colour (#rrggbb), the ground of a text with no field or shape under it
+ *   (engine/review/contrast.mjs).
  *   safe: the rectangle text must stay inside (scripts/v2/review.mjs safeRectFor). shotIndex: the shot's place in the
  *   film, for the finding's path (`shots[<index>]`; the id when absent). isFirstShot: the frame belongs to the first shot
- *   of the film (the viral hook rule). hiddenWords: node id -> indices of the words permanently hidden in this shot.
- *   restScales: node id -> accumulated scale on the shot's last frame (textScalesIn); a text is judged only while it
+ *   of the film (the viral hook rule).
+ *   restScales: node id -> the accumulated scale it rests at in its shot (textScalesIn); a text is judged only while it
  *   stands within 0.2% of it (SETTLE_TOLERANCE). restWords: node id -> per word index the scale it rests at; a word
  *   is at rest within 0.2% of it (1 when absent). opensShot: the frame is the one its shot opens on (the opening rule,
  *   openingFindings).
@@ -439,5 +465,6 @@ export function auditFrame(sampled, ctx) {
   const { texts, unmeasured } = visibleTexts(sampled, unit, ctx);
   const lost = unmeasured.map((id) => finding(ctx, MECHANICAL, 'measure', id, `${id}: could not be measured`));
   const opening = ctx.opensShot === true ? openingFindings(sampled, ctx) : [];
-  return [...lost, ...opening, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit)];
+  const contrast = contrastFindings(texts, sampled, ctx, (kind, rule, node, message, role) => finding(ctx, kind, rule, node, message, role));
+  return [...lost, ...opening, ...contrast, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit)];
 }

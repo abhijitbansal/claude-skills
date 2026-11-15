@@ -1,7 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseSay, mergeOrphans, SayError } from '../../engine/script/say.mjs';
-import { estimateWords, buildTimeline, MODE_PACE } from '../../engine/script/timing.mjs';
+import { estimateWords, buildTimeline } from '../../engine/script/timing.mjs';
+import { registries } from '../../engine/registry.mjs';
+
+// The paces live on the registered modes (engine/modes); buildTimeline reads them there.
+const PRO_TAIL = registries.modes.get('pro').tail;
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
 const WPM = 150;
@@ -490,8 +494,9 @@ test('estimateWords rejects a bad wpm', () => {
 
 // --- buildTimeline ---
 
-test('MODE_PACE has the two paces', () => {
-  assert.deepEqual(MODE_PACE, { pro: { wpm: 150, tail: 0.6 }, viral: { wpm: 175, tail: 0.3 } });
+test('the registered modes carry the two paces', () => {
+  const pace = (name) => ({ wpm: registries.modes.get(name).wpm, tail: registries.modes.get(name).tail });
+  assert.deepEqual({ pro: pace('pro'), viral: pace('viral') }, { pro: { wpm: 150, tail: 0.6 }, viral: { wpm: 175, tail: 0.3 } });
 });
 
 test('a spoken shot lasts its last word end plus the tail, rounded up to a frame', () => {
@@ -500,8 +505,8 @@ test('a spoken shot lasts its last word end plus the tail, rounded up to a frame
   const [shot] = buildTimeline(film, { fps }).shots;
   const lastEnd = shot.words.at(-1).end;
   const frames = Math.round(shot.duration * fps);
-  assert.ok(shot.duration >= lastEnd + MODE_PACE.pro.tail - 1e-9);
-  assert.ok(shot.duration < lastEnd + MODE_PACE.pro.tail + 1 / fps);
+  assert.ok(shot.duration >= lastEnd + PRO_TAIL - 1e-9);
+  assert.ok(shot.duration < lastEnd + PRO_TAIL + 1 / fps);
   near(shot.duration, frames / fps);
 });
 
@@ -528,7 +533,7 @@ test('a trailing pause is added to the shot before the tail', () => {
   const paused = buildTimeline({ shots: [{ id: 'a', say: 'This line is long enough to pass a second. (1.0)' }] }, { fps }).shots[0];
   assert.deepEqual(paused.words, base.words);
   near(paused.duration - base.duration, 1, 1 / fps + 1e-9);
-  assert.ok(paused.duration >= paused.words.at(-1).end + 1 + MODE_PACE.pro.tail - 1e-9);
+  assert.ok(paused.duration >= paused.words.at(-1).end + 1 + PRO_TAIL - 1e-9);
 });
 
 test('a hold below the minimum is lifted to 1 s', () => {

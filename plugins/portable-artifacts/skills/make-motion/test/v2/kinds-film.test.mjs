@@ -10,7 +10,7 @@ import { sampleGraph, stateKey } from '../../engine/graph/sample.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { ease } from '../../engine/time/ease.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { buildFilm, resolveLook } from '../../engine/graph/film.mjs';
+import { buildFilm, resolveLook, shotTime } from '../../engine/graph/film.mjs';
 import { annotate } from '../../engine/page/bounds.mjs';
 import { safeInsets } from '../../template/formats.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
@@ -432,4 +432,22 @@ test('a match between unlike heroes does not scale them: the outgoing one drifts
   const twin = { ...heroText, bbox: [1000, 500, 400, 100], x: 1000 };
   const morphed = cut.apply({ from: [heroText], to: [twin], p: 0.5, canvas }).find((n) => n.id === 'h');
   assert.equal(morphed.props.match, true, 'a like pair morphs into one group of two copies');
+});
+
+// ---- final wave M9: a statement with nothing to show is a validation error at its path ----
+
+test('a statement with hold and neither text nor say is a validation error at shots[i].text, not a page error', () => {
+  const r = validateFilm({ version: 2, shots: [{ id: 'a', show: 'statement', hold: 2 }] }, { specDir });
+  assert.deepEqual(r.errors.map((e) => e.path), ['shots[0].text']);
+  assert.match(r.errors[0].message, /"text" or "say"/);
+  assert.deepEqual(validateFilm({ version: 2, shots: [{ id: 'a', show: 'statement', hold: 2, text: 'Hi' }] }, { specDir }).errors, []);
+  assert.deepEqual(validateFilm({ version: 2, shots: [{ id: 'a', show: 'statement', hold: 2, text: ' | ' }] }, { specDir }).errors.map((e) => e.path), ['shots[0].text'], 'a text with no words');
+});
+
+// ---- final wave M3: the drawn and the audited frame read a shot at the same local time ----
+
+test('shotTime rounds a shot-local time to 1e-9 s, as frameAt does, so a key that sits on a frame is reached in both', () => {
+  assert.equal(0.1 + 0.2 - 0.1, 0.20000000000000004, 'float noise without the rounding');
+  assert.equal(shotTime(0.1 + 0.2, 0.1), 0.2);
+  assert.ok(Object.is(shotTime(0.5, 0.5), 0), 'never -0');
 });

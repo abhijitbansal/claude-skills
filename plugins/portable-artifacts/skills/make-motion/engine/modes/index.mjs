@@ -1,7 +1,8 @@
 // Modes for the v2 engine. Importing this file registers `pro` and `viral` in registries.modes (once: a second
 // evaluation leaves the registry as it is). A mode is behaviour; the look it names is appearance.
 //
-// Mode = { name, defaultLook, defaultFormat, wpm, tail, maxStillSeconds, captions: boolean }
+// Mode = { name, defaultLook, defaultFormat, wpm, tail, maxStillSeconds, hookFromFrameZero, maxLineWords?, maxHookWords?,
+//          platformSafeZone?, captions: boolean }
 import { registries } from '../registry.mjs';
 import { pro } from './pro.mjs';
 import { viral } from './viral.mjs';

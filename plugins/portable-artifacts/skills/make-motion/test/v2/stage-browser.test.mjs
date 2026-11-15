@@ -147,10 +147,11 @@ test('a request with a foreign Host header is refused', async (t) => {
 
 // ---- the page ----
 
-test('the page reports its size, frame count and which post pass it runs', async (t) => {
+test('the page reports its size, frame count, which post pass it runs and each shot background', async (t) => {
   const a = await stageFor(t, FILM); if (!a) return;
   assert.match(a.info.post, /^(webgl2|2d)$/);
-  assert.deepEqual(a.info, { frameCount: LAST_FRAME, fps: FPS, size: [1920, 1080], post: a.info.post });
+  // backgrounds: the colour painted under each shot, the contrast rule's last ground (final wave I3)
+  assert.deepEqual(a.info, { frameCount: LAST_FRAME, fps: FPS, size: [1920, 1080], post: a.info.post, backgrounds: ['#101820'] });
 });
 
 test('frames differ over time and the frame is not blank', async (t) => {
@@ -478,7 +479,9 @@ const rawRequest = (s, text) => new Promise((resolve, reject) => {
   socket.on('error', reject);
 });
 const portOf = (s) => new URL(s.url).port;
-const CSP = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+// img-src 'self' only: pictures are fetched and decoded as bitmaps, never shown from a blob: or data: URL. The page's own
+// inline <style> needs style-src 'unsafe-inline'.
+const CSP = "default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
 test('the server serves the page, engine modules, the v1 formats module and film.json under a CSP', async (t) => {
   const s = await serve(t, FILM);

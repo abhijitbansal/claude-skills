@@ -194,6 +194,25 @@ test('F3 the picture enters as one layer: a clean opacity fade with the enter mo
   assert.ok(desk.nodes.find((n) => n.id === 'c.image').tracks.y, 'desk still rises in with its enter move');
 });
 
+test('M15: a pushing look with no drift value still pushes to finite pans (no NaN from an unread drift)', async () => {
+  const { registries } = await import('../../engine/registry.mjs');
+  const desk = registries.looks.get('desk');
+  if (!registries.looks.has('desk-no-drift-test')) registries.looks.add('desk-no-drift-test', Object.freeze({ ...desk, name: 'desk-no-drift-test', camera: Object.freeze({ style: desk.camera.style }) }));
+  const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 4, regions: { r: [0.1, 0.1, 0.3, 0.3] }, on: [{ at: 3, do: 'circle', target: 'region:r' }] };
+  const { camera } = expandIn(filmOf([shot], 'desk-no-drift-test', '16:9'), 0);
+  const keys = camera.flat();
+  assert.ok(keys.length > 0 && keys.every((k) => ['x', 'y', 'zoom'].every((name) => k[name] === undefined || Number.isFinite(k[name]))), JSON.stringify(keys));
+});
+
+test('F3 with a close-up switch (pop, a region event) the fade keeps its plain ease up to the switch: never past 1, never stepping back', () => {
+  const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, cut: 'cut', regions: { r: [0.1, 0.1, 0.3, 0.3] }, on: [{ at: 2, do: 'highlight', target: 'region:r' }] };
+  const pic = expandIn(filmOf([FILLER, shot], 'pop', '9:16'), 1).nodes.find((n) => n.id === 'c.image');
+  const hideAt = pic.tracks.opacity.points.at(-1).t;
+  assert.ok(hideAt > 0 && hideAt < 3, `the picture goes at the switch: ${hideAt}`);
+  const values = Array.from({ length: 121 }, (_, i) => sample(pic.tracks.opacity, (i / 120) * (hideAt - 1e-3)));
+  assert.ok(values.every((v, i) => v <= 1 + EPS && (i === 0 || v >= values[i - 1] - EPS)), `a plain fade before the switch: ${values.map((v) => v.toFixed(3))}`);
+});
+
 // ---- F5: a stack look's establishing picture ----
 
 // Moments sampled through the entrance (and as long again after it), finely enough to catch the spring's overshoot.

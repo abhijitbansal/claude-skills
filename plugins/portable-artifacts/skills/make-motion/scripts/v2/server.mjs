@@ -33,7 +33,9 @@ const MIME = Object.freeze({
 });
 const ASSET_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 
-const CSP = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+// img-src 'self': pictures are fetched and decoded as bitmaps, never shown from a blob: or data: URL; the page's own
+// inline <style> needs style-src 'unsafe-inline'.
+const CSP = "default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 // "/" or "/seg/seg": each segment starts with a letter or digit and holds only letters, digits, ".", "_" and "-".
 const SAFE_PATH = /^\/(?:[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*)?$/;
 const ASSET_ROUTE = /^\/asset\/(0|[1-9]\d*)$/; // a canonical index: not 00, 1.0 or 1e1

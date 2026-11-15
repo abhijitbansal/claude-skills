@@ -2,6 +2,7 @@
 // field every shot draws first, composition and look checks, entrances, the default camera, the camera push,
 // and the devices a shot's `on` events place. Pure and DOM-free; layout runs on ctx.measure.
 import { registries } from '../registry.mjs';
+import '../modes/index.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { fitText } from '../text/layout.mjs';
@@ -51,15 +52,18 @@ export const isWide = (canvas) => canvas.w > canvas.h;
 const PORTRAIT_916 = 16 / 9;
 const RATIO_EPSILON = 0.01;
 const isPortrait916 = (canvas) => Math.abs(canvas.h / canvas.w - PORTRAIT_916) < RATIO_EPSILON;
+// Does the look serve a mode whose data says to compose inside the platform safe zone (mode.platformSafeZone)?
+const servesPlatformMode = (look) => look.modes.some((name) => registries.modes.has(name) && registries.modes.get(name).platformSafeZone === true);
 
 /**
- * The rectangle a shot composes in: on 9:16 a viral look (pop) keeps inside the platform safe zone ctx.viralInsets
+ * The rectangle a shot composes in: on 9:16 a look serving a mode with `platformSafeZone` (pop, for viral) keeps inside
+ * the platform safe zone ctx.viralInsets
  * (template/formats.mjs safeInsets with VIRAL_SAFE_ZONE, passed in by the caller); every other case uses the canvas.
  * { left, top, w, h, cx, cy, safe } where `safe` says the rectangle is the safe zone.
  */
 export function compositionRect(ctx) {
   const { canvas, look, viralInsets } = ctx;
-  if (!viralInsets || !look.modes.includes('viral') || !isPortrait916(canvas)) {
+  if (!viralInsets || !servesPlatformMode(look) || !isPortrait916(canvas)) {
     return { left: 0, top: 0, w: canvas.w, h: canvas.h, cx: canvas.w / HALF, cy: canvas.h / HALF, safe: false };
   }
   const w = canvas.w - viralInsets.left - viralInsets.right, h = canvas.h - viralInsets.top - viralInsets.bottom;
@@ -262,11 +266,15 @@ export function ghostInk(palette) {
 }
 
 /** A ghost word's tracks: opaque, in the ghost colour from frame 0, turning to `lit` (ink or the accent) over the look's
- *  emphasize move from `at`, when it is spoken. */
+ *  emphasize move from `at`, when it is spoken. `ghost` (never drawn) is 1 until the word is lit and 0 from then on: it
+ *  marks the word unspoken for the contrast rule (engine/review/contrast.mjs), which never reads the colour for that. */
 export function ghostTracks(look, at, lit) {
   const { dur } = look.moves.emphasize;
   const ghost = ghostInk(look.palette);
-  return { fill: track([{ t: 0, v: ghost }, { t: at, v: ghost }, { t: at + dur, v: lit, ease: LIGHT_EASE }]) };
+  return {
+    fill: track([{ t: 0, v: ghost }, { t: at, v: ghost }, { t: at + dur, v: lit, ease: LIGHT_EASE }]),
+    ghost: track([{ t: 0, v: 1 }, { t: at + dur, v: 1 }, { t: at + dur, v: 0 }]),
+  };
 }
 
 /** A 0..1 wipe for a hairline: the look's draw move landing on `at`. */
@@ -321,7 +329,7 @@ export function pushLayer(ctx, box, at) {
   const { look, canvas, unit, timing } = ctx;
   const rect = compositionRect(ctx);
   const zoom = clampTo((PUSH.share * rect.w) / box[2], PUSH.min, PUSH.max);
-  const drift = (look.camera.drift * unit) / HALF;
+  const drift = driftReach(look, unit);
   const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
   const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx) - driftAt(look, timing, unit, at);
   const y = pan(canvas.h / HALF, box[1] + box[3] / HALF, rect.cy);

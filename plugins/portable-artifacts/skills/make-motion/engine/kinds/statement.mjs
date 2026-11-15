@@ -47,6 +47,15 @@ function sourceText(shot, look) {
   return setCase(look, 'display', text);
 }
 
+// The statement's validate hook: a reserved hero id, and a statement with no words to show (sourceText would throw in
+// the page with no path; a `say` that does not parse already has its own error).
+function statementProblems(shot) {
+  const missing = shot.text === undefined && shot.say === undefined;
+  const empty = typeof shot.text === 'string' && wordsOf(shot.text).length === 0;
+  const words = missing || empty ? [{ path: 'text', message: 'a statement needs words to show: write "text" or "say"' }] : [];
+  return [...heroProblems(shot), ...words];
+}
+
 // The kicker's height above the text's cap line, so the text is fitted with room for it.
 const kickerRoom = (look, unit) => (KICKER.gap + look.scale[KICKER.step - 1] * CAP_HEIGHT + KICKER.ruleGap + KICKER.rule) * unit;
 
@@ -389,8 +398,9 @@ registries.kinds.add('statement', {
   heroTarget: 'text',
   targets: statementTargets,
   ids: (shot) => [heroId(shot, 'text')],
-  validate: heroProblems,
+  validate: statementProblems,
   expand: expandStatement,
   review: emphasisFindings,
   numbered: true, // a slug shows its place among the film's numbered shots
+  hookText: true, // as a viral film's first shot, all of its hero's words are on screen on frame 0 (review hookFindings)
 });

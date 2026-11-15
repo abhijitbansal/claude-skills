@@ -1,11 +1,9 @@
 // Estimated word timing and the shot timeline, used when no voice has been
-// synthesised. Pure: no DOM, no clock, no randomness.
+// synthesised. Pure: no DOM, no clock, no randomness. The pace (wpm, tail)
+// is the film's mode's own, read from the modes registry.
 import { parseSay, SayError } from './say.mjs';
-
-export const MODE_PACE = Object.freeze({
-  pro: Object.freeze({ wpm: 150, tail: 0.6 }),
-  viral: Object.freeze({ wpm: 175, tail: 0.3 }),
-});
+import { registries } from '../registry.mjs';
+import '../modes/index.mjs';
 
 const LETTERS_PER_WORD = 5;
 const LENGTH_FACTOR_MIN = 0.6;
@@ -83,12 +81,22 @@ function secondsForShot(shot, pace) {
 
 const toFrames = (seconds, fps) => Math.ceil(Math.max(MIN_SHOT_SECONDS, seconds) * fps - FRAME_EPSILON);
 
-export function buildTimeline(film, { fps } = {}) {
+// { wpm, tail } of the registered mode `name`; the registry's own error for an unknown one.
+function paceOf(name, modes) {
+  const { wpm, tail } = modes.get(name);
+  if (!Number.isFinite(wpm) || wpm <= 0) throw new RangeError(`mode "${name}": wpm must be a positive number, got ${wpm}`);
+  if (!Number.isFinite(tail) || tail < 0) throw new RangeError(`mode "${name}": tail must be a number of seconds, 0 or more, got ${tail}`);
+  return { wpm, tail };
+}
+
+/**
+ * The shot timeline of `film` at `fps`, each spoken shot paced by its mode (the registered mode's wpm and tail).
+ * `modes` is the modes registry (default: the shared one; the validator passes the registries it checked with).
+ */
+export function buildTimeline(film, { fps, modes = registries.modes } = {}) {
   if (!Number.isFinite(fps) || fps <= 0) throw new RangeError(`fps must be a positive number, got ${fps}`);
-  const mode = film.mode ?? DEFAULT_MODE;
-  if (!Object.hasOwn(MODE_PACE, mode)) throw new Error(`unknown mode "${mode}"`);
   if (!Array.isArray(film.shots)) throw new TypeError('film.shots must be an array');
-  const pace = MODE_PACE[mode];
+  const pace = paceOf(film.mode ?? DEFAULT_MODE, modes);
 
   let startFrame = 0;
   const shots = film.shots.map((shot, index) => {

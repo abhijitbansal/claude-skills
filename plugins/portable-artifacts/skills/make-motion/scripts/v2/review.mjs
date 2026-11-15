@@ -7,17 +7,21 @@
 // overlapping text is expected; there the incoming shot is audited alone, through the page's __snapshotShot, so its own
 // nodes are still judged. A shot shorter than its cut window is audited at its last frame the same way.
 //
+// A text that is on screen in a shot but at rest on none of its sampled frames is a mechanical finding of its own
+// (settleFindings): no layout rule could judge it.
+//
 // What escapes: a defect that is on screen for less than the sampling step (0.25 s, 7 frames at 30 fps) and falls
 // between two sampled frames, one that exists only while a text is still arriving, pulsing or pushed by the camera
-// (engine/review/frame.mjs judges landed, settled texts), and anything the audit has no rule for.
+// (engine/review/frame.mjs judges landed, settled texts) when the text also rests on another sampled frame, and
+// anything the audit has no rule for.
 import { registries } from '../../engine/registry.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
-import { auditFrame, textStatesIn } from '../../engine/review/frame.mjs';
+import { auditFrame, textStatesIn, textLandings } from '../../engine/review/frame.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
-import { aloneFromFrame } from '../../engine/cuts/index.mjs';
+import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { auditMoments } from './plan.mjs';
 import { pageFinding } from './report.mjs';
 
@@ -40,20 +44,6 @@ export function safeRectFor(canvas, look) {
   if (rect.safe) return { left: rect.left, top: rect.top, right: rect.left + rect.w, bottom: rect.top + rect.h };
   const margin = safeInsets(size);
   return { left: margin.left, top: margin.top, right: canvas.w - margin.right, bottom: canvas.h - margin.bottom };
-}
-
-// node id -> Set of word indices at opacity 0 on this frame, for every text in the tree that has word tracks.
-export function hiddenWordsIn(tree) {
-  const hidden = new Map();
-  const walk = (n) => {
-    if (n.type === 'text' && Array.isArray(n.words)) {
-      const none = n.words.flatMap((w, i) => (w.opacity === 0 ? [i] : []));
-      if (none.length > 0) hidden.set(n.id, new Set(none));
-    }
-    (n.children ?? []).forEach(walk);
-  };
-  (tree ?? []).forEach(walk);
-  return hidden;
 }
 
 // The spec field a text finding is about, so its path points at what to edit (shots[2].kicker rather than shots[2]).
@@ -159,9 +149,8 @@ function modalWordScales(trees, lastTree) {
 }
 
 /**
- * shot id -> what its sampled frames say about its texts (see engine/review/frame.mjs): the words at opacity 0 on its
- * last frame are permanently hidden, and the scale each text (restScales) and each of its words (restWords) holds on
- * most of its frames is the scale it rests at.
+ * shot id -> what its sampled frames say about its texts (see engine/review/frame.mjs): the scale each text
+ * (restScales) and each of its words (restWords) holds on most of its frames is the scale it rests at.
  * @param {{ fps: number, shots: { id: string, start: number, end: number }[] }} timeline
  * @param {{ frame: number, tree: object[] }[]} snapshots
  */
@@ -171,14 +160,14 @@ export function restingByShot(timeline, snapshots) {
     const first = Math.round(shot.start * timeline.fps), last = Math.round(shot.end * timeline.fps) - 1;
     const tree = byFrame.get(last);
     const trees = snapshots.filter((snap) => snap.frame >= first && snap.frame <= last).map((snap) => snap.tree);
-    return [shot.id, tree ? { hiddenWords: hiddenWordsIn(tree), restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree) } : {}];
+    return [shot.id, tree ? { restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree) } : {}];
   }));
 }
 
 /**
  * The frame on which shot `index` opens for the opening rule (engine/review/frame.mjs openingFindings), or null: the
- * first frame that shows the shot alone after its cut (a hard cut's first frame, the frame after a punch's p 0:
- * cuts/index.mjs aloneFromFrame); none after a slide or a match, which show the outgoing shot. The film's own first
+ * first frame that shows the shot alone after its cut (a hard cut's first frame, the frame after a punch's p 0, the
+ * first frame after a slide's or a match's window: cuts/index.mjs aloneAfterFrame). The film's own first
  * frame only in a mode that reads from frame 0 (its data sets hookFromFrameZero); elsewhere a film may open on its
  * field (the director's ruling).
  */
@@ -186,8 +175,8 @@ export function openingFrameOf(film, timeline, index) {
   const shot = timeline.shots[index];
   const first = Math.round(shot.start * timeline.fps);
   if (index === 0) return registries.modes.get(film.mode ?? DEFAULT_MODE).hookFromFrameZero === true ? first : null;
-  const offset = aloneFromFrame(film.shots[index].cut);
-  return offset === null || first + offset > Math.round(shot.end * timeline.fps) - 1 ? null : first + offset;
+  const offset = aloneAfterFrame(film.shots[index].cut, timeline.fps);
+  return first + offset > Math.round(shot.end * timeline.fps) - 1 ? null : first + offset;
 }
 
 /** Is `frame`, audited whole, the frame a shot opens on (openingFrameOf)? */
@@ -196,17 +185,46 @@ export function opensShotAt(film, timeline, frame, whole) {
   return whole === true && frame === openingFrameOf(film, timeline, shot.index);
 }
 
-function frameFindings(film, timeline, restingOf, { frame, tree, whole }) {
+// The ctx auditFrame takes for one snapshot: the shot it belongs to, the look and canvas, what the shot's frames say,
+// and the colour painted under the shot (`backgrounds`, per shot, from the page: session.info.backgrounds).
+function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds = []) {
   const shot = shotAtFrame(timeline, frame);
-  const t = frame / timeline.fps;
   const [width, height] = canvasSize(film);
   const look = resolveLook(film), canvas = { w: width, h: height };
-  const ctx = {
-    look, canvas, safe: safeRectFor(canvas, look), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, shotIndex: shot.index, t,
+  return {
+    look, canvas, safe: safeRectFor(canvas, look), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, shotIndex: shot.index, t: frame / timeline.fps,
     isFirstShot: shot.index === 0, ...restingOf.get(shot.id),
     opensShot: opensShotAt(film, timeline, frame, whole),
+    background: backgrounds[shot.index],
   };
-  return auditFrame(tree, ctx).map((finding) => ({ shot: shot.id, t, finding }));
+}
+
+function frameFindings(film, timeline, restingOf, snap, backgrounds) {
+  const ctx = frameContext(film, timeline, restingOf, snap, backgrounds);
+  return auditFrame(snap.tree, ctx).map((finding) => ({ shot: ctx.shotId, t: ctx.t, finding }));
+}
+
+/**
+ * A text on screen in a shot that is at rest on none of the shot's sampled frames (still arriving, fading or moving on
+ * each) escapes every layout rule, so it is a mechanical finding of its own, at the first frame it shows. Items as
+ * dedupeFindings takes them: { shot, t, finding }.
+ */
+export function settleFindings(film, timeline, restingOf, snapshots) {
+  const seen = new Map(); // JSON [shot, text id] -> { shot, t, ctx, role, landed }
+  for (const snap of snapshots) {
+    const ctx = frameContext(film, timeline, restingOf, snap);
+    for (const { id, landed, role } of textLandings(snap.tree, ctx)) {
+      const key = JSON.stringify([ctx.shotId, id]);
+      const before = seen.get(key);
+      seen.set(key, { shot: ctx.shotId, t: before?.t ?? ctx.t, path: `shots[${ctx.shotIndex}]`, id, role, landed: landed || before?.landed === true });
+    }
+  }
+  return [...seen.values()].filter((s) => !s.landed).map(({ shot, t, path, id, role }) => ({
+    shot, t, finding: {
+      kind: 'mechanical', path, rule: 'unsettled', node: id, ...(role ? { role } : {}),
+      message: `text "${id}" never settles within the shot: on every sampled frame it is still arriving, fading or moving, so it cannot be checked; let it land well before the shot ends (lengthen the shot or bring it in sooner)`,
+    },
+  }));
 }
 
 function pacingFindings(film, timeline, held) {
@@ -236,13 +254,14 @@ function kindFindings(film, timeline) {
   });
 }
 
-// The first shot of a mode that reads from frame 0 must show all of its text on frame 0: every word of a statement
-// is on screen (opacity above 0) in the first frame. Mechanical when not.
+// The first shot of a mode that reads from frame 0 must show all of its text on frame 0: in a kind that says its hero
+// reads so (kind.hookText: the statement), every word of the hero is on screen (opacity above 0) in the first frame.
+// Mechanical when not.
 export function hookFindings(film, timeline, snapshots) {
   const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
   const first = film.shots[0];
   const zero = snapshots.find((snap) => snap.frame === 0);
-  if (!mode.hookFromFrameZero || first.show !== 'statement' || !zero) return [];
+  if (!mode.hookFromFrameZero || registries.kinds.get(first.show).hookText !== true || !zero) return [];
   const texts = [];
   const walk = (n) => { if (n.type === 'text' && n.props?.role === 'hero') texts.push(n); (n.children ?? []).forEach(walk); };
   zero.tree.forEach(walk);
@@ -262,8 +281,9 @@ export async function reviewFilm({ session, signal }) {
   const { film, timeline } = session;
   const snapshots = await snapshotsOf(session, auditPlan(film, timeline), signal);
   const restingOf = restingByShot(timeline, snapshots);
-  const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap));
-  const deduped = dedupeFindings(audited, film.shots);
+  const backgrounds = session.info?.backgrounds ?? [];
+  const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
+  const deduped = dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots);
   const still = pacingFindings(film, timeline, await heldFlags(session, signal));
   return [...deduped, ...still, ...kindFindings(film, timeline), ...hookFindings(film, timeline, snapshots)].sort((a, b) => a.t - b.t);
 }

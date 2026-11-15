@@ -1,13 +1,17 @@
 // The `pro` mode: professional explainers. Behaviour only; the look decides appearance.
 // wpm: speaking pace; tail: seconds of room after the last word; maxStillSeconds: longest a frame may sit still.
+const WPM = 150;
+const MAX_STILL_SECONDS = 6;
+
 export const pro = {
   name: 'pro',
-  summary: 'Professional explainers: 16:9, a calm pace of 150 words a minute, a picture may sit still for 6 s.',
+  summary: `Professional explainers: 16:9, a calm pace of ${WPM} words a minute, a picture may sit still for ${MAX_STILL_SECONDS} s.`,
   defaultLook: 'desk',
   defaultFormat: '16:9',
-  wpm: 150,
+  wpm: WPM,
   tail: 0.6,
-  maxStillSeconds: 6,
-  hookFromFrameZero: false, // the first shot reads from frame 0: all its words on screen, each taking its colour when spoken
+  maxStillSeconds: MAX_STILL_SECONDS,
+  hookFromFrameZero: false, // the first shot may open on its field and bring its words in as they are spoken
+  maxLineWords: 12, // the review: a line of more words is a creative finding (absent: no limit)
   captions: false,
 };

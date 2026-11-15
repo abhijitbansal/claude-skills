@@ -101,7 +101,7 @@ function pictureGroup(shot, ctx, { hero, centre, children, hideAt }) {
   // the fade keeps the move's time but never its overshoot: a spring would carry the opacity past 1 and back below it
   const fadeMove = easePeak(move.ease) > 1 ? { ...move, ease: FADE_EASE } : move;
   const fade = enters ? openingLanding(shot, ctx, end, fadeMove, 0, 1, OPENING_OPACITY) : track([{ t: 0, v: 1 }]);
-  const tracks = { opacity: hiddenFrom(fade, hideAt, move.ease) };
+  const tracks = { opacity: hiddenFrom(fade, hideAt, fadeMove.ease) };
   if (enters && editorial) tracks.y = landing(end, move, centre[1] + RISE * unit, centre[1]);
   if (enters && move.scale !== undefined) tracks.scale = landing(end, move, move.scale, 1);
   const props = { x: centre[0], y: centre[1], layer: true, ...(editorial ? { rotate: EDITORIAL_TURN } : {}) };

@@ -79,6 +79,9 @@ function parseColour(hex) {
   return Array.from({ length: CHANNEL_COUNT }, (_, i) => parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), HEX_RADIX));
 }
 
+/** The [r, g, b] channels (0 to 255) of a #rrggbb colour, or null for any other value. */
+export const colourChannels = (v) => (typeof v === 'string' && COLOUR_PATTERN.test(v) ? parseColour(v) : null);
+
 function formatColour(channels) {
   const hex = channels.map((c) => Math.min(CHANNEL_MAX, Math.max(0, Math.round(c))).toString(HEX_RADIX).padStart(2, '0'));
   return `#${hex.join('')}`;

@@ -5,7 +5,7 @@
 // its first frame) plus two frames each side. auditMoments adds a frame every quarter second and each shot's first and
 // last frame so the audit sees more than the sheets do.
 import { registries } from '../../engine/registry.mjs';
-import { aloneFromFrame } from '../../engine/cuts/index.mjs';
+import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { shotAtFrame } from '../../engine/review/pacing.mjs';
 
@@ -110,8 +110,9 @@ export function auditMoments(film, timeline) {
   timeline.shots.forEach((shot, index) => {
     frames.add(firstFrameOf(timeline, shot));
     frames.add(lastFrameOf(timeline, shot));
-    // the first frame that shows the shot alone after its cut (a punch's frame after p 0), for the opening rule
-    const alone = index === 0 ? null : aloneFromFrame(film.shots[index].cut);
+    // the first frame that shows the shot alone after its cut (a punch's frame after p 0, the frame after a slide's
+    // window), for the opening rule
+    const alone = index === 0 ? null : aloneAfterFrame(film.shots[index].cut, timeline.fps);
     if (alone !== null) frames.add(Math.min(lastFrameOf(timeline, shot), firstFrameOf(timeline, shot) + alone));
   });
   for (let t = 0; t < timeline.duration; t += AUDIT_STEP) frames.add(Math.min(timeline.frameCount - 1, Math.round(t * timeline.fps)));

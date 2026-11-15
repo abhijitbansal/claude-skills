@@ -83,7 +83,7 @@ export function establishingFindings(shot, { look, timing, at }) {
     return [{
       path: `on[${j}]`,
       at: t,
-      message: `on[${j}] (${JSON.stringify(item.at)}) comes ${secondsText(by)} s too early to show the whole picture first: the incoming cut ends at ${secondsText(cutEnd(shot, timing))} s and the picture needs 0.6 s more before the camera may ${view}, so the event was moved to ${secondsText(floor)} s; move the word later in the narration by ${secondsText(by)} s or more`,
+      message: `on[${j}] (${JSON.stringify(item.at)}) comes ${secondsText(by)} s too early to show the whole picture first: the incoming cut ends at ${secondsText(cutEnd(shot, timing))} s and the picture needs 0.6 s more before the camera may ${view}, so the event was moved to ${secondsText(Math.min(floor, timing.duration))} s; move the word later in the narration by ${secondsText(by)} s or more`,
     }];
   });
 }
