@@ -169,3 +169,37 @@ YML
   APP_CONFIG_HELPERS_ONLY=1 source "${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh"
   type _yaml_get_list >/dev/null
 }
+
+# --- CAT-52: no silent death under set -e ---------------------------------------------
+
+drop_key() {  # $1 = dir, $2 = key line to remove
+  grep -v "$2" "$1/.claude/app.yml" > "$1/app.yml.new"
+  cp "$1/app.yml.new" "$1/.claude/app.yml"
+  rm -f "$1/app.yml.new"
+}
+
+@test "set -e caller: missing optional url_scheme proceeds with an empty value" {
+  drop_key "${TMP}/proj" url_scheme
+  cd "${TMP}/proj"
+  run bash -c "set -euo pipefail; source '${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh'; echo \"scheme=[\${APP_URL_SCHEME}] name=\${APP_NAME}\""
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"scheme=[] name=MyApp"* ]] || false
+}
+
+@test "set -e caller: missing required key names the key and exits non-zero" {
+  drop_key "${TMP}/proj" "scheme: MyApp"
+  cd "${TMP}/proj"
+  run bash -c "set -euo pipefail; source '${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh'; echo reached"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"app.scheme"* ]] || false
+  [[ "$output" != *"reached"* ]] || false
+}
+
+@test "non-errexit caller: missing required key is reported but sourcing continues" {
+  drop_key "${TMP}/proj" "scheme: MyApp"
+  cd "${TMP}/proj"
+  run bash -c "set -uo pipefail; source '${REPO_ROOT}/plugins/ios-dev/skills/_lib/load_app_config.sh'; echo \"reached name=\${APP_NAME} scheme=[\${APP_SCHEME}]\""
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"app.scheme"* ]] || false
+  [[ "$output" == *"reached name=MyApp scheme=[]"* ]] || false
+}

@@ -1,21 +1,43 @@
 #!/usr/bin/env bash
 #
-# app-preview: build for the booted simulator, install, and launch.
+# app-preview: build for a simulator, install, and launch.
 #
 # Usage:
-#   launch.sh                     # build, install, launch
+#   launch.sh                     # build, install, launch on the target simulator
 #   launch.sh --no-build          # skip build script, just reinstall last build
-#   launch.sh --sim "iPhone 16 Pro"  # forwarded to build script -s
+#   launch.sh --sim "iPhone 17"   # target one simulator by name or UDID
+#
+# Target simulator: --sim <name|UDID> if given; else the only booted
+# simulator; else (none booted) the first iPhone of the newest iOS runtime,
+# which is booted. With more than one booted and no --sim, launch.sh refuses
+# rather than letting simctl pick. Every simctl call uses the resolved UDID.
+# Any other argument exits 2.
 #
 # Exits non-zero on build/install/launch failure with the underlying error
 # surfaced so the caller can react.
 
 set -euo pipefail
 
+ACCEPTED="--no-build, --sim <name|UDID>, -h|--help"
+DO_BUILD=true
+SIM_NAME=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-build) DO_BUILD=false; shift ;;
+    --sim)
+      [[ $# -ge 2 ]] || { echo "launch: --sim needs a simulator name or UDID (accepted: ${ACCEPTED})" >&2; exit 2; }
+      SIM_NAME="$2"; shift 2 ;;
+    -h|--help)  sed -n '2,15p' "$0"; exit 0 ;;
+    *)          echo "launch: unknown argument '$1' (accepted: ${ACCEPTED})" >&2; exit 2 ;;
+  esac
+done
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../_lib/load_app_config.sh
 source "${SCRIPT_DIR}/../../_lib/load_app_config.sh"
-APP_NAME_LC="$(echo "${APP_NAME}" | tr '[:upper:]' '[:lower:]')"
+# shellcheck source=sim-resolve.sh
+source "${SCRIPT_DIR}/sim-resolve.sh"
 
 # Derive repo root from the app.yml location so this works wherever the skill
 # is installed (the skill lives in a separate skills repo, not inside the app
@@ -23,54 +45,37 @@ APP_NAME_LC="$(echo "${APP_NAME}" | tr '[:upper:]' '[:lower:]')"
 # the repo root is two directories up from that (app-root/.claude/app.yml).
 REPO_ROOT="$(dirname "$(dirname "${APP_YML}")")"
 BUNDLE_ID="${APP_BUNDLE_ID}"
-DO_BUILD=true
-SIM_NAME=""
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --no-build) DO_BUILD=false; shift ;;
-    --sim)      SIM_NAME="$2"; shift 2 ;;
-    *)          echo "Unknown arg: $1" >&2; exit 2 ;;
-  esac
-done
 
 cd "$REPO_ROOT"
 
-# 1. Ensure Simulator.app is visible. `simctl boot` alone leaves it headless,
+# 1. Resolve the target to one concrete UDID (refuses on an ambiguous booted set).
+SIM_UDID="$(sim_resolve "${SIM_NAME}")" || exit 1
+
+# 2. Ensure Simulator.app is visible. `simctl boot` alone leaves it headless,
 #    which is fine for screenshots but unhelpful when the user later wants to
 #    look at the window directly.
 open -a Simulator
 
-# 2. Boot a simulator if none is booted. Prefer the build script default
-#    (iPhone 17 Pro) so the build path matches.
-if ! xcrun simctl list devices booted 2>/dev/null | grep -q "(Booted)"; then
-  TARGET="${SIM_NAME:-iPhone 17 Pro}"
-  # Note: BSD awk on macOS does not support the 3-arg match(...,m) form, so
-  # extract the UDID with grep -oE instead — portable, no jq/awk dependency.
-  UDID="$(xcrun simctl list devices "$TARGET" 2>/dev/null \
-    | grep -F "$TARGET (" \
-    | head -1 \
-    | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' \
-    | head -1)"
-  if [[ -z "$UDID" ]]; then
-    echo "No simulator named '$TARGET' available. List with: xcrun simctl list devices" >&2
-    exit 1
-  fi
-  echo "==> Booting $TARGET ($UDID)"
-  xcrun simctl boot "$UDID"
+# 3. Boot the target if it is not already booted.
+if ! sim_is_booted "${SIM_UDID}"; then
+  echo "==> Booting ${SIM_NAME:-simulator} (${SIM_UDID})"
+  xcrun simctl boot "${SIM_UDID}"
 fi
 
-# 3. Build for simulator (unless --no-build). APP_BUILD_SCRIPT is the single
+# 4. Build for simulator (unless --no-build). APP_BUILD_SCRIPT is the single
 #    source of truth for project regeneration + xcodebuild flags; don't reinvent.
+#    A build script that advertises --no-launch (the ios-scaffold template does)
+#    is told to only build, because this script installs and launches itself.
 if $DO_BUILD; then
-  if [[ -n "$SIM_NAME" ]]; then
-    ./"${APP_BUILD_SCRIPT}" -s "$SIM_NAME"
-  else
-    ./"${APP_BUILD_SCRIPT}"
+  BUILD_ARGS=()
+  [[ -n "$SIM_NAME" ]] && BUILD_ARGS+=(-s "$SIM_NAME")
+  if grep -q -e '--no-launch' "./${APP_BUILD_SCRIPT}" 2>/dev/null; then
+    BUILD_ARGS+=(--no-launch)
   fi
+  ./"${APP_BUILD_SCRIPT}" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"}
 fi
 
-# 4. Find the freshest .app under DerivedData. The build script prints the path
+# 5. Find the freshest .app under DerivedData. The build script prints the path
 #    in its last line, but parsing it is brittle — DerivedData lookup is more
 #    robust and works for --no-build too.
 APP_PATH="$(find ~/Library/Developer/Xcode/DerivedData \
@@ -86,10 +91,10 @@ if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
 fi
 
 echo "==> Installing $APP_PATH"
-xcrun simctl install booted "$APP_PATH"
+xcrun simctl install "${SIM_UDID}" "$APP_PATH"
 
-# 5. Terminate any prior instance so launch shows a clean cold-start state.
-xcrun simctl terminate booted "$BUNDLE_ID" 2>/dev/null || true
+# 6. Terminate any prior instance so launch shows a clean cold-start state.
+xcrun simctl terminate "${SIM_UDID}" "$BUNDLE_ID" 2>/dev/null || true
 
 echo "==> Launching $BUNDLE_ID"
-xcrun simctl launch booted "$BUNDLE_ID"
+xcrun simctl launch "${SIM_UDID}" "$BUNDLE_ID"

@@ -107,3 +107,19 @@ YML
   [ "$status" -eq 3 ]
   [[ "$output" == *"--force"* ]]
 }
+
+@test "--help documents every flag, including --migrate" {
+  run bash "${INIT}" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--force"* ]] || false
+  [[ "$output" == *"--migrate"* ]] || false
+  [[ "$output" == *"--dir"* ]] || false
+}
+
+@test "unknown flag exits 2 and lists the accepted ones" {
+  cd "${TMP}"
+  run bash "${INIT}" --migrte
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--migrate"* ]] || false
+  [ ! -e .claude/app.yml ]
+}

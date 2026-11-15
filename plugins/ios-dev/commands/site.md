@@ -7,11 +7,14 @@ Run the `site-pages-deploy-kit` skill, routing on `$ARGUMENTS`:
 
 - **create** — copy + render the skeleton into the app.yml `site.dir`, install
   the standalone `scripts/deploy-site.sh` and `.github/workflows/deploy-site.yml`
-  from the kit templates, then walk me through `templates/RUNBOOK.md`
-  (public repo, deploy key, Pages, DNS) step by step. Finish with `verify`.
+  from the kit templates (fill `{{SITE_REPO}}` and `{{SITE_DIR}}`; keep the
+  rendered `CNAME` and `.nojekyll` committed), then walk me through
+  `templates/RUNBOOK.md` (public repo, deploy key, Pages, DNS) step by step.
+  Finish with `verify`.
 - **deploy** — run `verify-site.sh` first; on pass, show me the split target
   and confirm before running `deploy-site.sh` (append `--dry-run` if I passed
-  it). Force-push to the public repo is expected — it's a derivative.
+  it; `deploy-site.sh` accepts only `--dry-run`, anything else exits 2).
+  Force-push to the public repo is expected — it's a derivative.
 - **verify** — run `verify-site.sh` and explain each FAIL with its fix (the
   rules live in skill `site-og-favicon-verify`).
 

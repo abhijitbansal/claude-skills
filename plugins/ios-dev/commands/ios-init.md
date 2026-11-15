@@ -26,6 +26,6 @@ Run the scaffolder, then verify and finish the config with me:
    - If the repo uses Linear, also offer `linear.team_key`.
    Apply my answers by editing the file directly.
 
-4. **Validate + confirm.** Run `bash "${CLAUDE_PLUGIN_ROOT}/skills/_lib/validate_app_config.sh"` and report the result. Once it prints `ok:` with no ERROR lines, tell me the plugin is ready and that I can now run `/preview`, `/fix`, or `/release`.
+4. **Validate + confirm.** Run `bash "${CLAUDE_PLUGIN_ROOT}/skills/_lib/validate_app_config.sh"` and report the result. A `WARN: build script ...` line means the repo has no `build.sh`: offer to run `/ios-scaffold` to generate one. Once it prints `ok:` with no ERROR lines, tell me the plugin is ready and that I can now run `/preview`, `/fix`, or `/release`.
 
 If the scaffolder reports it found no `project.yml` and no Xcode project, tell me — this repo may not be an iOS app, or I may need to run from a different directory.
