@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseSay, SayError } from '../../engine/script/say.mjs';
+import { parseSay, mergeOrphans, SayError } from '../../engine/script/say.mjs';
 import { estimateWords, buildTimeline, MODE_PACE } from '../../engine/script/timing.mjs';
 
 const near = (a, b, eps = 1e-9) => assert.ok(Math.abs(a - b) < eps, `${a} !~ ${b}`);
@@ -141,7 +141,7 @@ test('an opener of an already-open type is nested wherever it appears', () => {
 });
 
 test('marks inside brackets and quotes open and close at word boundaries', () => {
-  const p = parseSay('say (*hi*), "_x_" and *"quoted"* done');
+  const p = parseSay('say (*hi*), "_x_" and "*quoted*" done');
   assert.equal(p.plain, 'say (hi), "x" and "quoted" done');
   assert.deepEqual(p.tokens.map((t) => t.emphasis), [false, true, false, false, true, false]);
   assert.deepEqual(p.tokens.map((t) => t.aside), [false, false, true, false, false, false]);
@@ -197,6 +197,185 @@ test('an orphan punctuation token with no previous token stays as it is', () => 
   assert.deepEqual(parseSay('?').tokens.map((t) => t.text), ['?']);
   assert.deepEqual(parseSay(', hello').tokens.map((t) => t.text), [',', 'hello']);
   assert.deepEqual(parseSay('"hi" there').tokens.map((t) => t.text), ['"hi"', 'there']);
+});
+
+const texts = (say) => parseSay(say).tokens.map((t) => t.text);
+const plainTok = (text, extra = {}) => ({ text, emphasis: false, aside: false, pauseBefore: 0, sentenceEnd: false, ...extra });
+
+test('(A) a lone mark between brackets or quotes opens and is unclosed, with a hint to escape it', () => {
+  for (const say of ['(*)', 'the "*" key']) {
+    assert.throws(
+      () => parseSay(say),
+      (e) => e instanceof SayError && e.message === `unclosed * in "${say}"; close it, or write \\* for a literal asterisk`,
+      say,
+    );
+  }
+  assert.throws(
+    () => parseSay('"_"'),
+    (e) => e instanceof SayError && e.message === 'unclosed _ in ""_""; close it, or write \\_ for a literal underscore',
+  );
+});
+
+test('escapes: \\* and \\_ are literal marks and \\\\ is a backslash, none of them shown as a backslash', () => {
+  assert.deepEqual(texts('(\\*)'), ['(*)']);
+  assert.deepEqual(texts('the "\\*" key'), ['the', '"*"', 'key']);
+  assert.deepEqual(texts('use \\_name\\_ here'), ['use', '_name_', 'here']);
+  assert.deepEqual(texts('a \\\\ b'), ['a', '\\', 'b']);
+  assert.deepEqual(texts('path C:\\temp'), ['path', 'C:\\temp']);
+  const open = parseSay('\\*not emphasis\\*');
+  assert.deepEqual(open.tokens.map((t) => [t.text, t.emphasis]), [['*not', false], ['emphasis*', false]]);
+  const inside = parseSay('*a \\* b*');
+  assert.deepEqual(inside.tokens.map((t) => [t.text, t.emphasis]), [['a', true], ['*', true], ['b', true]]);
+  assert.equal(parseSay('(\\*)').plain, '(*)');
+});
+
+test('a mark that can both open and close closes when its kind is open, otherwise opens', () => {
+  const quoted = parseSay('say *"quoted"* ok').tokens;
+  assert.deepEqual(quoted.map((t) => [t.text, t.emphasis]), [['say', false], ['"quoted"', true], ['ok', false]]);
+  const comma = parseSay('say *"quoted"*, ok').tokens;
+  assert.deepEqual(comma.map((t) => [t.text, t.emphasis]), [['say', false], ['"quoted",', true], ['ok', false]]);
+});
+
+test('emphasis can end in a symbol, a percent sign or an emoji and can start with one', () => {
+  assert.deepEqual(parseSay('up *41%* today').tokens.map((t) => [t.text, t.emphasis]), [['up', false], ['41%', true], ['today', false]]);
+  assert.deepEqual(parseSay('go *\u{1F680}* now').tokens.map((t) => [t.text, t.emphasis]), [['go', false], ['\u{1F680}', true], ['now', false]]);
+  assert.deepEqual(parseSay('pay *$5* now').tokens.map((t) => [t.text, t.emphasis]), [['pay', false], ['$5', true], ['now', false]]);
+});
+
+test('a closer with nothing open stays literal text', () => {
+  assert.deepEqual(parseSay('foo* bar').tokens, [plainTok('foo*'), plainTok('bar')]);
+  assert.deepEqual(parseSay('foo_ bar').tokens, [plainTok('foo_'), plainTok('bar')]);
+});
+
+test('error messages teach the fix', () => {
+  assert.throws(
+    () => parseSay('this is *broken'),
+    (e) => e.message === 'unclosed * in "this is *broken"; close it, or write \\* for a literal asterisk',
+  );
+  assert.throws(
+    () => parseSay('this is _broken'),
+    (e) => e.message === 'unclosed _ in "this is _broken"; close it, or write \\_ for a literal underscore',
+  );
+  assert.throws(
+    () => parseSay('*a *b* c*'),
+    (e) => e.message === 'nested * in "*a *b* c*"; emphasis cannot contain emphasis',
+  );
+  assert.throws(
+    () => parseSay('_a _b_ c_'),
+    (e) => e.message === 'nested _ in "_a _b_ c_"; an aside cannot contain an aside',
+  );
+});
+
+test('(B) a mark run of both kinds opens and closes together', () => {
+  const [a, b] = parseSay('*a _b_*').tokens;
+  assert.deepEqual([a.text, a.emphasis, a.aside], ['a', true, false]);
+  assert.deepEqual([b.text, b.emphasis, b.aside], ['b', true, true]);
+  const [only] = parseSay('*_a_*').tokens;
+  assert.deepEqual([only.text, only.emphasis, only.aside], ['a', true, true]);
+});
+
+test('(C) a mark opens after a pause mark, a hyphen, a dash or a slash', () => {
+  const afterPause = parseSay('go (0.4)*now* ok').tokens;
+  assert.deepEqual(afterPause.map((t) => [t.text, t.emphasis]), [['go', false], ['now', true], ['ok', false]]);
+  assert.equal(afterPause[1].pauseBefore, 0.4);
+  const afterDots = parseSay('wait...*now* ok').tokens;
+  assert.deepEqual(afterDots.map((t) => [t.text, t.emphasis]), [['wait', false], ['now', true], ['ok', false]]);
+  assert.equal(afterDots[1].pauseBefore, 0.35);
+  assert.deepEqual(parseSay('well-*known* x').tokens.map((t) => [t.text, t.emphasis]), [['well-known', true], ['x', false]]);
+  assert.deepEqual(parseSay('—*x* y').tokens.map((t) => [t.text, t.emphasis]), [['—x', true], ['y', false]]);
+  assert.deepEqual(parseSay('and/*or* y').tokens.map((t) => [t.text, t.emphasis]), [['and/or', true], ['y', false]]);
+});
+
+test('(D) a mark closes before a dash or a slash', () => {
+  const dash = parseSay('*word*—next and more').tokens;
+  assert.deepEqual(dash.map((t) => [t.text, t.emphasis]), [['word—next', true], ['and', false], ['more', false]]);
+  const slash = parseSay('*a*/b and more').tokens;
+  assert.deepEqual(slash.map((t) => [t.text, t.emphasis]), [['a/b', true], ['and', false], ['more', false]]);
+});
+
+test('(E) doubled marks are literal text', () => {
+  assert.deepEqual(parseSay('**').tokens, [plainTok('**')]);
+  assert.deepEqual(parseSay('**bold**').tokens, [plainTok('**bold**')]);
+  assert.equal(parseSay('**bold**').trailingPause, 0);
+  assert.deepEqual(parseSay('__init__').tokens, [plainTok('__init__')]);
+});
+
+test('(F) an opener-shaped mark inside an open emphasis is a nesting error, not a silent mis-parse', () => {
+  assert.throws(
+    () => parseSay('*a (*"b"*) c*'),
+    (e) => e instanceof SayError && /nested \* in "\*a \(\*"b"\*\) c\*"/.test(e.message),
+  );
+});
+
+test('(G) after a pause only what really closes the word is glued to it', () => {
+  const single = parseSay("x(0.4)'y'").tokens;
+  assert.deepEqual(single.map((t) => t.text), ['x', "'y'"]);
+  assert.equal(single[1].pauseBefore, 0.4);
+  const double = parseSay('x(0.4)"y"').tokens;
+  assert.deepEqual(double.map((t) => t.text), ['x', '"y"']);
+  assert.equal(double[1].pauseBefore, 0.4);
+  const dot = parseSay('Wait(0.4).Next').tokens;
+  assert.deepEqual(dot.map((t) => t.text), ['Wait.', 'Next']);
+  assert.equal(dot[0].sentenceEnd, true);
+  assert.equal(dot[1].pauseBefore, 0.4);
+  assert.deepEqual(texts('say "hi"(0.4)" now'), ['say', '"hi""', 'now']);
+});
+
+test('(H) merging an orphan ORs its flags into the previous token and keeps the ipa', () => {
+  const prev = plainTok('a', { ipa: 'ei' });
+  const orphan = plainTok(',', { emphasis: true, aside: true, pauseBefore: 0.2 });
+  const merged = mergeOrphans({ tokens: [prev, orphan], trailingPause: 0 });
+  assert.deepEqual(merged.tokens, [plainTok('a,', { emphasis: true, aside: true, ipa: 'ei' })]);
+  assert.equal(merged.trailingPause, 0.2);
+  const viaParse = parseSay('[kubectl](/ku:b/) (0.4), go').tokens;
+  assert.equal(viaParse[0].text, 'kubectl,');
+  assert.equal(viaParse[0].ipa, 'ku:b');
+});
+
+// Parsing must be linear: each adversarial line returns or throws well inside the budget.
+const LINEAR_N = 200000;
+const LINEAR_BUDGET_MS = 500;
+const ADVERSARIAL = {
+  'closing punctuation then a letter': () => ')'.repeat(LINEAR_N) + 'a',
+  'only marks': () => '*'.repeat(LINEAR_N),
+  'alternating marks': () => '*_'.repeat(LINEAR_N),
+  'open brackets': () => '['.repeat(LINEAR_N),
+  'open parens': () => '('.repeat(LINEAR_N),
+  'long digit run after a paren': () => `(${'1'.repeat(LINEAR_N)}`,
+  'dots then a letter': () => `${'.'.repeat(LINEAR_N)}a`,
+  'repeated ipa starts': () => '[a](/'.repeat(LINEAR_N),
+  'repeated pauses': () => '(0.4)'.repeat(LINEAR_N),
+  'repeated orphans': () => 'a ,'.repeat(LINEAR_N),
+  'pause then quote, repeated': () => 'x(0.4)"'.repeat(LINEAR_N),
+};
+
+for (const [name, make] of Object.entries(ADVERSARIAL)) {
+  test(`parseSay is linear on ${name}`, () => {
+    const say = make();
+    const start = process.hrtime.bigint();
+    try {
+      parseSay(say);
+    } catch (e) {
+      assert.ok(e instanceof SayError, `unexpected ${e}`);
+    }
+    const ms = Number(process.hrtime.bigint() - start) / 1e6;
+    assert.ok(ms < LINEAR_BUDGET_MS, `${name}: ${ms.toFixed(0)} ms for ${say.length} chars`);
+  });
+}
+
+test('a long run of closing punctuation before a letter is not a sentence end', () => {
+  const [token] = parseSay(`${')'.repeat(50)}a`).tokens;
+  assert.equal(token.sentenceEnd, false);
+  assert.equal(parseSay(`${')'.repeat(50)}.`).tokens[0].sentenceEnd, true);
+  assert.equal(parseSay('done.")').tokens[0].sentenceEnd, true);
+});
+
+test('earlier mark shapes still hold', () => {
+  assert.deepEqual(parseSay("don't *users'* data").tokens.map((t) => [t.text, t.emphasis]), [["don't", false], ["users'", true], ['data', false]]);
+  assert.deepEqual(parseSay('"*really*" ok').tokens.map((t) => [t.text, t.emphasis]), [['"really"', true], ['ok', false]]);
+  assert.deepEqual(parseSay('*lying*, ok').tokens.map((t) => [t.text, t.emphasis]), [['lying,', true], ['ok', false]]);
+  assert.deepEqual(parseSay('_by the way_ ok').tokens.map((t) => [t.text, t.aside]), [['by', true], ['the', true], ['way', true], ['ok', false]]);
+  assert.equal(parseSay('2 * 3').plain, '2 * 3');
 });
 
 test('the Unicode ellipsis is a pause exactly like ...', () => {
@@ -387,7 +566,8 @@ test('the rethrown shot SayError keeps the original as its cause', () => {
   } catch (e) {
     assert.ok(e instanceof SayError);
     assert.ok(e.cause instanceof SayError);
-    assert.equal(e.cause.message, 'unclosed * in "so *bad"');
+    assert.match(e.cause.message, /^unclosed \* in "so \*bad"/);
+    assert.ok(!e.cause.message.startsWith('shot '));
   }
 });
 

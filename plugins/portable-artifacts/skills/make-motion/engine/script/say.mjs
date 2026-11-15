@@ -3,26 +3,39 @@
 // Marks inside a `say` line:
 //   *word*          emphasis on each enclosed word
 //   _word_          aside on each enclosed word
-//   ...  or  the ellipsis character
+//   ...  or the ellipsis character (U+2026)
 //                   pause of ELLIPSIS_PAUSE before the next word
 //   (0.4)           pause of that many seconds before the next word; only a
 //                   number with a decimal point is a pause, so (2024) is text
 //   [word](/ipa/)   spoken pronunciation hint, kept on the token as `ipa`
 //
-// Word-boundary rule for * and _ (anything else is literal text, so
-// snake_case, __init__ and a*b are plain):
-//   - A mark OPENS when the character before it is the start of the line,
-//     whitespace or an opening bracket or quote, and the character after it
-//     is not whitespace.
-//   - A mark CLOSES when the character before it is not whitespace and the
-//     character after it is the end of the line, whitespace, or closing
-//     punctuation (including the start of an ellipsis).
-//   - A mark next to the same mark character is literal (runs like __).
-//   - An opener of a type that is already open is a SayError ("nested").
+// Rule for * and _. A run is one or two adjacent marks of different kinds
+// (*_ or _*); each mark in it is decided on its own from the same context.
+//   - A mark OPENS when the character before it is the line start, whitespace,
+//     an opening bracket or quote ( [ { " ' (curly quotes too), a hyphen, en
+//     dash, em dash, a slash, or the end of a pause mark; AND the character
+//     after it is not whitespace (and not the end of the line).
+//   - A mark CLOSES when the character before it is not whitespace and not an
+//     opening bracket or curly opening quote; AND the character after it is
+//     the line end, whitespace, closing punctuation . , ; : ! ? ) ] } " '
+//     (curly quotes too), a hyphen, en dash, em dash, a slash, or the start of
+//     a pause mark.
+//   - When a mark can do both, it closes if its kind is open, otherwise it
+//     opens. A mark that can do neither (mid-word: snake_case, a*b, 2 * 3) is
+//     literal, and so is a closer with nothing open (foo*).
+//   - A run with the same mark twice (**bold**, __init__) is literal.
+//   - An opener of a kind that is already open is a SayError ("nested"). The
+//     "not an opening bracket" clause on closers is what makes *a (*"b"*) c*
+//     nested: otherwise the mark after ( would close the outer emphasis.
+//   - A backslash escapes: \* and \_ are a literal * or _, and \\ is a literal
+//     backslash. Any other backslash is plain text.
+//   - Errors say how to fix the line (escape the mark, or close it).
 //
-// Pauses: punctuation glued right after a pause stays on the word before it
-// (Really...? is one token). A pause moves to the next word's `pauseBefore`;
-// with no word after it, it is returned as `trailingPause`.
+// Pauses: closing punctuation right after a pause mark joins the word before
+// it when it is followed by the end, whitespace, or consists only of . , ; : !
+// ? (Really...? is one token); quotes and brackets followed by more text are
+// not glued (x(0.4)"y" is two tokens). A pause moves to the next word's
+// `pauseBefore`; with no word after it, it is returned as `trailingPause`.
 // A token of only closing punctuation (a spaced "ok (0.4), then") is merged
 // into the previous token as a final pass, handing its pause on the same way.
 
@@ -37,17 +50,43 @@ const ELLIPSIS_PAUSE = 0.35;
 const PAUSE_MIN = 0.05;
 const PAUSE_MAX = 3;
 
-const ELLIPSIS = '…';
-const ELLIPSIS_RE = /(?:\.{3,}|…)+/y;
+// Non-ASCII characters are built from code points so the source stays ASCII.
+const fromCode = (code) => String.fromCharCode(code);
+const ELLIPSIS = fromCode(0x2026);
+const EN_DASH = fromCode(0x2013);
+const EM_DASH = fromCode(0x2014);
+const LEFT_DOUBLE = fromCode(0x201c);
+const LEFT_SINGLE = fromCode(0x2018);
+const RIGHT_DOUBLE = fromCode(0x201d);
+const RIGHT_SINGLE = fromCode(0x2019);
+
+// Body of a regex character class: closing punctuation.
+const CLOSE_CLASS = `.,;:!?)\\]}"'${RIGHT_DOUBLE}${RIGHT_SINGLE}`;
+
+const ELLIPSIS_RE = new RegExp(`(?:\\.{3,}|${ELLIPSIS})+`, 'y');
 const PAUSE_RE = /\((\d+\.\d+|\.\d+)\)/y;
-const IPA_RE = /\[([^\]\s]+)\]\(\/([^/)]+)\/\)/y;
+// The word excludes `[`, so a failed attempt never rescans past the next `[`.
+const IPA_RE = /\[([^\][\s]+)\]\(\/([^/)]+)\/\)/y;
+const CLOSE_RUN_RE = new RegExp(`[${CLOSE_CLASS}]+`, 'y');
+const ORPHAN_RE = new RegExp(`^[${CLOSE_CLASS}]+$`);
+const SENTENCE_PUNCT_RE = /^[.,;:!?]+$/;
 const WHITESPACE_RE = /\s/;
-const SENTENCE_END_RE = /[.!?]$/;
-const CLOSERS_RE = /["')\]”’]+$/;
-const ORPHAN_RE = /^[,.;:!?)\]}"'”’]+$/;
-const OPEN_BEFORE = new Set(['(', '[', '{', '"', "'", '“', '‘']);
-const CLOSE_AFTER = new Set(['.', ',', ';', ':', '!', '?', ')', ']', '}', '"', "'", '”', '’', ELLIPSIS]);
+
+const DASHES_AND_SLASH = new Set(['-', EN_DASH, EM_DASH, '/']);
+const OPENING_CONTEXT = new Set(['(', '[', '{', '"', "'", LEFT_DOUBLE, LEFT_SINGLE, ...DASHES_AND_SLASH]);
+const CLOSING_PUNCT = new Set([...CLOSE_CLASS.replace('\\]', ']')]);
+// Characters that can only open something, so a mark right after one cannot close.
+const UNAMBIGUOUS_OPENERS = new Set(['(', '[', '{', LEFT_DOUBLE, LEFT_SINGLE]);
 const MARK_CHARS = new Set(['*', '_']);
+const ESCAPABLE = new Set(['*', '_', '\\']);
+const MAX_RUN = 2;
+const MARK_HELP = {
+  '*': { noun: 'asterisk', nested: 'emphasis cannot contain emphasis' },
+  _: { noun: 'underscore', nested: 'an aside cannot contain an aside' },
+};
+// Quotes and brackets that may trail a sentence end: done."), and the ends.
+const TRAILING_CLOSERS = new Set(['"', "'", ')', ']', RIGHT_DOUBLE, RIGHT_SINGLE]);
+const SENTENCE_END_CHARS = new Set(['.', '!', '?']);
 
 function matchAt(re, text, index) {
   re.lastIndex = index;
@@ -56,31 +95,26 @@ function matchAt(re, text, index) {
 
 const isSpaceOrEdge = (ch) => ch === undefined || WHITESPACE_RE.test(ch);
 
-// What a `*` or `_` at `i` does: 'open', 'close', 'nested' (an opener while
-// this type is already open) or 'literal'. See the file header for the rule.
-function markAction(say, i, isOpen) {
-  const ch = say[i];
-  const prev = say[i - 1];
-  const next = say[i + 1];
-  if (prev === ch || next === ch) return 'literal';
-  const opens = (isSpaceOrEdge(prev) || OPEN_BEFORE.has(prev)) && !isSpaceOrEdge(next);
-  const closes = !isSpaceOrEdge(prev) && (isSpaceOrEdge(next) || CLOSE_AFTER.has(next));
-  if (isOpen) {
-    if (closes) return 'close';
-    return opens ? 'nested' : 'literal';
-  }
-  return opens ? 'open' : 'literal';
+const NO_CONTEXT = { opens: false, closes: false };
+
+// Whether the run say[s, e) of `marks` can open and/or close. See the header.
+function runContext(say, s, e, st, marks) {
+  const prev = say[s - 1];
+  const next = say[e];
+  const beforeOpens = isSpaceOrEdge(prev) || OPENING_CONTEXT.has(prev) || st.pauseEnd === s;
+  const beforeCloses = s > 0 && !WHITESPACE_RE.test(prev) && !UNAMBIGUOUS_OPENERS.has(prev) && !marks.includes(prev);
+  const afterCloses = isSpaceOrEdge(next) || CLOSING_PUNCT.has(next) || DASHES_AND_SLASH.has(next)
+    || next === ELLIPSIS || matchAt(PAUSE_RE, say, e) !== null;
+  return {
+    opens: beforeOpens && !isSpaceOrEdge(next) && !marks.includes(next),
+    closes: beforeCloses && afterCloses,
+  };
 }
 
-// Applies a `*` or `_` mark. Returns false when it is literal text.
-function toggleMark(say, i, st) {
-  const ch = say[i];
-  const action = markAction(say, i, st.open[ch]);
-  if (action === 'nested') throw new SayError(`nested ${ch} in "${say}"`);
-  if (action === 'literal') return false;
-  st.open[ch] = !st.open[ch];
-  return true;
-}
+const unclosedError = (mark, say) => new SayError(
+  `unclosed ${mark} in "${say}"; close it, or write \\${mark} for a literal ${MARK_HELP[mark].noun}`,
+);
+const nestedError = (mark, say) => new SayError(`nested ${mark} in "${say}"; ${MARK_HELP[mark].nested}`);
 
 function parsePause(raw, say) {
   const seconds = Number(raw);
@@ -101,7 +135,38 @@ function addText(st, text, ipa) {
   if (ipa !== undefined) st.word.ipa = ipa;
 }
 
-const endsSentence = (text) => SENTENCE_END_RE.test(text.replace(CLOSERS_RE, ''));
+// Closes, opens or (when it can do neither) writes out one mark.
+function applyMark(mark, ctx, st, say) {
+  const isOpen = st.open[mark];
+  if (ctx.closes && isOpen) {
+    st.open[mark] = false;
+  } else if (ctx.opens) {
+    if (isOpen) throw nestedError(mark, say);
+    st.open[mark] = true;
+  } else {
+    addText(st, mark);
+  }
+}
+
+// Handles a maximal run of mark characters starting at `s`. Returns the index
+// after it.
+function readMarkRun(say, s, st) {
+  let e = s;
+  while (MARK_CHARS.has(say[e])) e++;
+  const marks = [...say.slice(s, e)];
+  const wellFormed = marks.length <= MAX_RUN && new Set(marks).size === marks.length;
+  const ctx = wellFormed ? runContext(say, s, e, st, marks) : NO_CONTEXT;
+  for (const mark of marks) applyMark(mark, ctx, st, say);
+  return e;
+}
+
+// Scans back from the end (no end-anchored regex: those are quadratic on a
+// long run of closers followed by one other character).
+function endsSentence(text) {
+  let j = text.length - 1;
+  while (j >= 0 && TRAILING_CLOSERS.has(text[j])) j--;
+  return j >= 0 && SENTENCE_END_CHARS.has(text[j]);
+}
 
 function finishToken(word) {
   const { text, emphasis, aside, pauseBefore, ipa } = word;
@@ -115,12 +180,22 @@ function flush(st) {
   st.word = null;
 }
 
-// Records a pause that ends at index `end`. Closing punctuation glued right
-// after it stays on the current word; otherwise the word ends here.
+// Records a pause whose mark ends at index `end`. Closing punctuation right
+// after it joins the current word only when it truly closes it (see header).
+// Returns the index to continue from.
 function addPause(st, say, end, seconds) {
-  if (!CLOSE_AFTER.has(say[end])) flush(st);
   st.pause += seconds;
-  return end;
+  st.pauseEnd = end;
+  const run = matchAt(CLOSE_RUN_RE, say, end);
+  const stop = run ? end + run[0].length : end;
+  const atBoundary = isSpaceOrEdge(say[stop]);
+  if (!run || !(atBoundary || SENTENCE_PUNCT_RE.test(run[0]))) {
+    flush(st);
+    return end;
+  }
+  addText(st, run[0]);
+  if (!atBoundary) flush(st);
+  return stop;
 }
 
 // Pauses and ipa marks. Returns the index after the mark, or 0 when the
@@ -150,7 +225,11 @@ function readAt(say, i, st) {
     flush(st);
     return i + 1;
   }
-  if (MARK_CHARS.has(ch) && toggleMark(say, i, st)) return i + 1;
+  if (ch === '\\' && ESCAPABLE.has(say[i + 1])) {
+    addText(st, say[i + 1]);
+    return i + 2;
+  }
+  if (MARK_CHARS.has(ch)) return readMarkRun(say, i, st);
   const end = readSpecial(say, i, st);
   if (end) return end;
   addText(st, ch);
@@ -158,27 +237,33 @@ function readAt(say, i, st) {
 }
 
 function scan(say) {
-  const st = { tokens: [], word: null, pause: 0, open: { '*': false, _: false } };
+  const st = { tokens: [], word: null, pause: 0, pauseEnd: -1, open: { '*': false, _: false } };
   let i = 0;
   while (i < say.length) i = readAt(say, i, st);
   flush(st);
   for (const mark of MARK_CHARS) {
-    if (st.open[mark]) throw new SayError(`unclosed ${mark} in "${say}"`);
+    if (st.open[mark]) throw unclosedError(mark, say);
   }
   return { tokens: st.tokens, trailingPause: st.pause };
 }
 
 // A token of only closing punctuation never stands alone: it joins the
-// previous token and its pause moves on to the next token (or trailingPause).
-// With no previous token it is left as it is.
-function mergeOrphans({ tokens, trailingPause }) {
+// previous token (text, emphasis, aside and sentenceEnd are merged, the
+// previous ipa is kept) and its pause moves on to the next token, or to
+// trailingPause. With no previous token it is left as it is.
+export function mergeOrphans({ tokens, trailingPause }) {
   const out = [];
   let carry = 0;
   for (const token of tokens) {
     const prev = out.at(-1);
     if (prev && ORPHAN_RE.test(token.text)) {
-      const sentenceEnd = prev.sentenceEnd || endsSentence(token.text);
-      out[out.length - 1] = { ...prev, text: prev.text + token.text, sentenceEnd };
+      out[out.length - 1] = {
+        ...prev,
+        text: prev.text + token.text,
+        emphasis: prev.emphasis || token.emphasis,
+        aside: prev.aside || token.aside,
+        sentenceEnd: prev.sentenceEnd || endsSentence(token.text),
+      };
       carry += token.pauseBefore;
     } else {
       out.push(carry ? { ...token, pauseBefore: token.pauseBefore + carry } : token);
