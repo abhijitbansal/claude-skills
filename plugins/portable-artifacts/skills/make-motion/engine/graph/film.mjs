@@ -63,6 +63,8 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
     fps: timeline.fps,
     viralInsets,
     asset: shotAsset(shot, kind, assets),
+    // the shot's 1-based place among the film's numbered shots (kinds with `numbered: true`): what a slug shows
+    ordinal: film.shots.slice(0, index + 1).filter((s) => registries.kinds.has(s.show) && registries.kinds.get(s.show).numbered === true).length,
   };
 }
 
@@ -184,7 +186,8 @@ export function buildFilm({ film, timeline, measure, assets = new Map(), canvas,
     const local = Math.round((t - shot.start) * TIME_DECIMALS) / TIME_DECIMALS + 0; // + 0 turns -0 into 0
     if (!shot.cut || local >= shot.cutDur) return { background: shot.background, sampled: sampleShot(index, local) };
     const from = sampleShot(index - 1, shots[index - 1].duration);
-    const sampled = shot.cut.apply({ from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look });
+    // `frame`: how far p moves in one frame, for the cuts that smear what they move
+    const sampled = shot.cut.apply({ from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, frame: 1 / (timeline.fps * shot.cutDur) });
     return { background: shot.background, sampled };
   };
 

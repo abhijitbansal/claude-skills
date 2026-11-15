@@ -1,7 +1,7 @@
 // v2 text layout: line breaks by sense, balance, fit to a box, optical alignment, numeral advance.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { breakBySense } from '../../engine/text/breaks.mjs';
+import { breakBySense, stackLines } from '../../engine/text/breaks.mjs';
 import { layoutText, fitText, numeralAdvance, NUMBER_TOKEN, UNIT_WORDS } from '../../engine/text/layout.mjs';
 
 const measure = (text, font) => ({ width: text.length * font.size * 0.5, ascent: font.size * 0.8, descent: font.size * 0.2 });
@@ -261,4 +261,56 @@ test('numeralAdvance is the widest digit advance', () => {
   const uneven = (text, f) => ({ width: text === '7' ? 70 : 50, ascent: f.size, descent: 0 });
   assert.equal(numeralAdvance(uneven, font), 70);
   assert.equal(numeralAdvance(measure, font), 50);
+});
+
+// ---- revision 1: word spacing and the stack ----
+
+test('a font with wordSpace sets that many em between words instead of the measured space', () => {
+  // the fake measure gives a space 0.5 em wide; wordSpace 0.26 em replaces it
+  const spaced = layoutText({ text: 'Your charts', font: { ...font, wordSpace: 0.26 }, maxWidth: 5000, measure });
+  const [your, charts] = spaced.lines[0].words;
+  assert.equal(charts.x - (your.x + your.width), 26, '0.26 em of a 100 px font');
+  assert.equal(spaced.lines[0].width, 200 + 26 + 300);
+  const plain = layoutText({ text: 'Your charts', font, maxWidth: 5000, measure });
+  assert.equal(plain.lines[0].words[1].x - plain.lines[0].words[0].width, 50, 'without it, the measured space');
+});
+
+test('stackLines: at most 3 words a line, 2 when a line would pass 12 letters, | honoured, breaks by sense', () => {
+  const rows = (text) => stackLines(text.split(/\s+/)).map((r) => r.map((i) => text.split(/\s+/)[i]).join(' '));
+  assert.deepEqual(rows('NO CLOUD.| NO ACCOUNT.| NO UPLOAD.'), ['NO CLOUD.|', 'NO ACCOUNT.|', 'NO UPLOAD.']);
+  assert.deepEqual(rows('YOUR CHARTS ARE HIDING SOMETHING.'), ['YOUR CHARTS', 'ARE HIDING', 'SOMETHING.']);
+  assert.deepEqual(rows('ONE FILE. NO SERVER.'), ['ONE FILE.', 'NO SERVER.']);
+  for (const text of ['A B C D E F G', 'THE QUICK BROWN FOX JUMPS OVER THE LAZY DOG', 'SAVE THIS.| BUILD YOURS.']) {
+    const words = text.split(/\s+/);
+    for (const row of stackLines(words)) {
+      assert.ok(row.length <= 3, `${text}: ${row.length} words on a line`);
+      const letters = row.map((i) => words[i].replace(/[^\p{L}\p{N}]/gu, '')).join('').length;
+      assert.ok(row.length <= 2 || letters <= 12, `${text}: 3 words and ${letters} letters`);
+    }
+  }
+  assert.deepEqual(stackLines([]), []);
+});
+
+test('a sentence that ends mid-line costs a break: the line ends with the sentence when the width allows', () => {
+  // proportional widths, roughly a serif's: narrow i l t f r, wide m w; this fit used to set "file. Scripts" on one line
+  const W = { m: 0.85, w: 0.75, M: 0.9, W: 0.95, i: 0.28, l: 0.28, t: 0.32, f: 0.3, r: 0.36, j: 0.28, ' ': 0.24, '.': 0.24, s: 0.4, c: 0.42, e: 0.45 };
+  const serif = (text, f) => ({ width: [...text].reduce((sum, ch) => sum + (W[ch] ?? 0.52), 0) * f.size, ascent: f.size * 0.8, descent: f.size * 0.2 });
+  const l = fitText({ text: 'The model writes one small file. Scripts do the rest.', font: { family: 'x', size: 300, lineHeight: 1.1 }, maxWidth: 1100, measure: serif },
+    { min: 72, max: 300, maxHeight: 691, maxLines: 4 });
+  const lines = lineTexts(l);
+  assert.ok(lines.every((line) => !/[.!?] \S/.test(line)), `no sentence ends mid-line: ${JSON.stringify(lines)}`);
+  assert.deepEqual(lineTexts(layoutText({ text: 'One file. No server.', font, maxWidth: 5000, measure })), ['One file. No server.'], 'a line with room for both sentences keeps them');
+});
+
+test('words marked together stay on one line when a slightly smaller size allows: a highlight run is not broken', () => {
+  const W = { m: 0.85, w: 0.75, M: 0.9, W: 0.95, i: 0.28, l: 0.28, t: 0.32, f: 0.3, r: 0.36, j: 0.28, ' ': 0.24, '.': 0.24, s: 0.4, c: 0.42, e: 0.45 };
+  const serif = (text, f) => ({ width: [...text].reduce((sum, ch) => sum + (W[ch] ?? 0.52), 0) * f.size, ascent: f.size * 0.8, descent: f.size * 0.2 });
+  const text = 'Built on your machine. Nothing leaves it.';
+  // together[i]: keep word i with word i + 1 (Nothing, leaves, it. are the emphasised run)
+  const together = [false, false, false, false, true, true, false];
+  const fit = (extra) => fitText({ text, font: { family: 'x', size: 300, lineHeight: 1.1 }, maxWidth: 1000, measure: serif, ...extra }, { min: 72, max: 300, maxHeight: 691, maxLines: 4 });
+  assert.deepEqual(lineTexts(fit({})), ['Built on your', 'machine.', 'Nothing', 'leaves it.'], 'without the mark the run breaks');
+  const kept = fit({ together });
+  assert.ok(lineTexts(kept).includes('Nothing leaves it.'), `the run on one line: ${JSON.stringify(lineTexts(kept))}`);
+  assert.ok(kept.size >= 0.85 * 160, `at most 15% smaller: ${kept.size}`);
 });

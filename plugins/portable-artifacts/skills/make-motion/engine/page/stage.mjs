@@ -71,8 +71,9 @@ const heldFlags = (key) => (from, to) => {
   });
 };
 
-// The measured ink of each line of a text node, [{ ascent, descent }] in the text's own pixels: how far its glyphs
-// really reach above and below the baseline (accents, ascenders, descenders). Undefined for a text without a font.
+// The measured ink of each line of a text node, [{ ascent, descent, words: [{ left, right }] }] in the text's own pixels:
+// how far its glyphs really reach above and below the baseline (accents, ascenders, descenders), and where each word's
+// ink starts and ends from that word's origin. Undefined for a text without a font.
 function lineInkOf(ctx) {
   return (n) => {
     const font = n.props.font;
@@ -80,7 +81,11 @@ function lineInkOf(ctx) {
     applyFont(ctx, font, { tracked: true });
     return n.props.layout.lines.map((line) => {
       const m = ctx.measureText(line.words.map((word) => word.text).join(' '));
-      return { ascent: m.actualBoundingBoxAscent, descent: m.actualBoundingBoxDescent };
+      const words = line.words.map((word) => {
+        const w = ctx.measureText(word.text);
+        return { left: -w.actualBoundingBoxLeft, right: w.actualBoundingBoxRight };
+      });
+      return { ascent: m.actualBoundingBoxAscent, descent: m.actualBoundingBoxDescent, words };
     });
   };
 }

@@ -2,7 +2,9 @@
 // registries.cuts (once: a second evaluation leaves the registry as it is). A cut is { dur, apply } where
 // apply({ from, to, p, canvas, look }) blends two sampled, camera-applied frames: `from` is the outgoing shot frozen
 // at its end, `to` the incoming shot sampled live, p runs 0..1 over the first `dur` seconds of the incoming shot.
-// Every cut returns `from` unchanged at p <= 0 and `to` unchanged at p >= 1. Pure and DOM-free.
+// Every cut returns `from` unchanged at p <= 0 and `to` unchanged at p >= 1. `frame`, when given, is how much p moves
+// in one frame: `slide` and `punch` then draw what they move as SMEAR.samples copies spread across one frame of travel,
+// a motion smear that exists only while the cut runs. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { ease } from '../time/ease.mjs';
 import { stateKey } from '../graph/sample.mjs';
@@ -11,6 +13,7 @@ const HALF = 2;
 const SLIDE = Object.freeze({ dur: 0.4, ease: 'inOutCubic' });
 const PUNCH = Object.freeze({ dur: 0.2, ease: 'outExpo', zoom: 1.15 });
 const MATCH = Object.freeze({ dur: 0.5, ease: 'inOutCubic', outgoingShare: 0.4 });
+const SMEAR = Object.freeze({ samples: 5 });
 // A shared node's incoming copy fades in over its outgoing one between these points of the eased p; the outgoing copy
 // stays at full strength until the incoming one is fully in, then leaves, so the pair never reads thinner than either.
 const CROSS_FROM = 0.25;
@@ -30,12 +33,13 @@ function defineCut(dur, blend, summary) {
   return Object.freeze({
     dur,
     summary,
-    apply({ from, to, p, canvas, look }) {
+    apply({ from, to, p, canvas, look, frame }) {
       if (!Array.isArray(from) || !Array.isArray(to)) throw new Error('cut.apply needs from and to sampled frames');
       if (!Number.isFinite(p)) throw new Error(`cut.apply: p must be a finite number, got ${p}`);
+      if (frame !== undefined && !(Number.isFinite(frame) && frame > 0)) throw new Error(`cut.apply: frame must be a number > 0, got ${frame}`);
       if (p <= 0) return from;
       if (p >= 1) return to;
-      return blend({ from, to, p, canvas, look });
+      return blend({ from, to, p, canvas, look, frame });
     },
   });
 }
@@ -56,23 +60,43 @@ const backgroundIds = (from, to) => {
   return new Set(to.filter((n) => n.depth > 0 && outgoing.has(n.id)).map((n) => n.id));
 };
 
+// `place(q)` gives the moving nodes where the cut has them at progress q. With `frame` they are drawn SMEAR.samples
+// times, at the progress of evenly spread moments across one frame centred on p: the outer samples first, each at
+// 1 / samples of its opacity, then the centre one (p itself) whole on top; without it, once at p. Drawing every copy at
+// 1 / samples (the first build) left a still picture at about 67% (five fifths composite to 1 - 0.8^5) and let each
+// copy's hard shadow tint the picture of the copy under it; the whole centre copy keeps the frame's own layering and
+// the trail shows only where the content has moved from or to.
+function smeared(place, p, frame) {
+  if (frame === undefined) return place(p);
+  const n = SMEAR.samples, centre = (n - 1) / HALF;
+  const at = (k) => place(clamp01(p + frame * (k / (n - 1) - 1 / HALF)));
+  const trail = Array.from({ length: n }, (_, k) => k).filter((k) => k !== centre)
+    .flatMap((k) => at(k).map((node) => Object.freeze({ ...node, opacity: node.opacity / n, visible: node.opacity > 0 })));
+  return [...trail, ...at(centre)];
+}
+
 // Only the shot slides: the shared background stays (see backgroundNode()), so the cut happens over one surface.
-function slide({ from, to, p, canvas }) {
+function slide({ from, to, p, canvas, frame }) {
   const e = ease(SLIDE.ease)(p);
   const outgoing = new Map(from.map((n) => [n.id, n]));
   const background = backgroundIds(from, to);
+  const leaving = from.filter((n) => !background.has(n.id)), arriving = to.filter((n) => !background.has(n.id));
   return [
     ...to.filter((n) => background.has(n.id)).map((n) => backgroundNode(outgoing.get(n.id), n, e)),
-    ...shifted(from.filter((n) => !background.has(n.id)), -e * canvas.w),
-    ...shifted(to.filter((n) => !background.has(n.id)), (1 - e) * canvas.w),
+    ...smeared((q) => shifted(leaving, -ease(SLIDE.ease)(q) * canvas.w), p, frame),
+    ...smeared((q) => shifted(arriving, (1 - ease(SLIDE.ease)(q)) * canvas.w), p, frame),
   ];
 }
 
-function punch({ to, p, canvas }) {
-  const zoom = lerp(PUNCH.zoom, 1, ease(PUNCH.ease)(p));
+function punch({ to, p, canvas, frame }) {
   const cx = canvas.w / HALF, cy = canvas.h / HALF;
-  // a fixed node (a locked look's field) stays put, as it does under the camera
-  return to.map((n) => (n.props.fixed === true ? n : Object.freeze({ ...n, x: cx + (n.x - cx) * zoom, y: cy + (n.y - cy) * zoom, scale: n.scale * zoom })));
+  // a fixed node (a locked look's field) stays put, as it does under the camera, and is not smeared
+  const fixed = to.filter((n) => n.props.fixed === true), moving = to.filter((n) => n.props.fixed !== true);
+  const zoomed = (q) => {
+    const zoom = lerp(PUNCH.zoom, 1, ease(PUNCH.ease)(q));
+    return moving.map((n) => Object.freeze({ ...n, x: cx + (n.x - cx) * zoom, y: cy + (n.y - cy) * zoom, scale: n.scale * zoom }));
+  };
+  return [...fixed, ...smeared(zoomed, p, frame)];
 }
 
 // ---- match ----

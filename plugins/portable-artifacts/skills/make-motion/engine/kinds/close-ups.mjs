@@ -2,7 +2,9 @@
 // vertical canvas ends up cropped, its background blown up) but a cut: on the event's frame the whole picture goes
 // and the region itself becomes the picture, an image of the same src clipped to the region, built as a cutout and
 // fitted to the composition, landing with the look's punch. A later event on a different region cuts to that one.
-// Devices on a region are drawn against its close-up, starting on the cut. Pure and DOM-free.
+// Devices on a region are drawn against its close-up, starting on the cut. A highlight on a close-up is the look's
+// cutout emphasis where the look styles one (pop: the hard shadow turns accent and grows; nothing is drawn), else a
+// ruled frame. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { REGION_PREFIX, regionOf, shownFrom, buildDevice } from './shared.mjs';
@@ -12,6 +14,9 @@ const WIDTH_SHARE = 0.92; // of the available width
 const HEIGHT_SHARE = 0.7; // of the available height, at most
 const CLEARANCE = 16; // units between the cut-out's shadow and a device placed against it
 const HALF = 2;
+
+// The look marks a highlighted close-up through its cut-out (devices.cutout.emphasis) rather than a frame.
+const emphasisStyled = (look) => look.devices?.cutout?.emphasis !== undefined;
 
 /**
  * The close-ups a shot cuts to, in time order: one per region event whose region differs from the one on screen.
@@ -42,6 +47,7 @@ function fitted(clip, area) {
 // underline or a frame never runs into the shadow.
 function closeUpDevice(shot, ctx, e, box, reach) {
   const around = [box[0] - reach, box[1] - reach, box[2] + HALF * reach, box[3] + HALF * reach];
+  if (e.item.do === 'highlight' && emphasisStyled(ctx.look)) return { nodes: [], camera: [] }; // the cutout's shadow carries it
   if (e.item.do === 'highlight') {
     const at = e.at + markDuration(ctx.look);
     return { nodes: regionMark({ id: `${shot.id}.on${e.j}`, region: around, picture: around, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, dim: false }), camera: [] };
@@ -69,8 +75,9 @@ export function closeUps(shot, ctx, { picture, area, centre, plan }) {
     boxes[`${REGION_PREFIX}${cut.region}`] ??= box;
     const id = `${shot.id}.close${k}`;
     const image = node('image', `${id}.photo`, { src: shot.src, w, h, clip });
-    const cutout = registries.devices.get('cutout').build({ id: `${id}.cutout`, box, at: 0, look, unit, seed, image }).nodes;
     const mine = plan.events.filter((e) => e.region === cut.region && e.at >= cut.at && (cut.until === undefined || e.at < cut.until));
+    const lift = emphasisStyled(look) ? mine.find((e) => e.item.do === 'highlight')?.at : undefined;
+    const cutout = registries.devices.get('cutout').build({ id: `${id}.cutout`, box, at: 0, look, unit, seed, image, ...(lift === undefined ? {} : { emphasisAt: lift }) }).nodes;
     const devices = mine.map((e) => closeUpDevice(shot, ctx, e, box, reach));
     camera.push(registries.devices.get('punch').build({ id: `${id}.punch`, box, at: cut.at, look, unit, seed }).camera);
     camera.push(...devices.map((d) => d.camera).filter((keys) => keys.length > 0));

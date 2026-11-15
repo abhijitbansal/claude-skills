@@ -124,7 +124,8 @@ test('inside a cut window __snapshot has both shots and __snapshotShot only the 
   const ids = (nodes) => nodes.map((n) => n.id).sort();
   const mixed = await session.page.evaluate((i) => window.__snapshot(i), 66); // 0.2 s into the 0.4 s slide
   const alone = await session.page.evaluate((i) => window.__snapshotShot(1, i), 66);
-  assert.deepEqual(ids(mixed), ['from', 'into']);
+  // a slide smears what it moves: each shot is drawn as 5 copies across one frame of travel
+  assert.deepEqual(ids(mixed), [...Array(5).fill('from'), ...Array(5).fill('into')]);
   assert.deepEqual(ids(alone), ['into']);
   assert.deepEqual(alone[0].bbox, [100, 100, 100, 100], 'where the shot puts it, not slid across the frame');
 });

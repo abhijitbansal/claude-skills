@@ -3,7 +3,7 @@
 // degrees and raises it in from below; a centred one (pop) shows the cutout alone, upright, popping in (inside the
 // platform safe zone on 9:16). A device aimed at `region:<name>` lands on that part of the drawn picture (through every
 // rotation on the way; circle, underline and arrow use the axis-aligned box of the turned region). Where the camera
-// moves (desk) a region event pushes in until the region fills 62% of the width, and a `highlight` there is a marker
+// moves (desk) a region event pushes in until the region fills 50% of the width, and a `highlight` there is a marker
 // frame with the rest of the picture dimmed (region-mark.mjs); where it is locked (pop) the shot cuts to a close-up of
 // the region instead (close-ups.mjs). Pure and DOM-free.
 import { registries } from '../registry.mjs';
@@ -26,6 +26,8 @@ const REGIONS_MAX = 8;
 const SHARE = 0.62; // on 16:9: the picture's longer side, of the canvas short side
 const TALL_WIDTH = 0.92; // on other formats: the picture's width, of the available width
 const TALL_HEIGHT = 0.6; // ...and its height at most this share of the available height
+const CROP_ASPECT = 4 / 5; // a locked look's establishing crop on a vertical format, width over height...
+const CROP_WIDTH = 0.92; // ...drawn at this share of the available width (never taller than the available height)
 const CARD_PAD = 48; // units the card reaches past the picture on every side
 const RISE = 80; // units the editorial picture rises in from
 const EDITORIAL_TURN = -2; // degrees
@@ -51,10 +53,10 @@ function turnedBox(centre, turn, [x, y, w, h]) {
 }
 
 // The card (when the look has one) and the cutout, built settled (at 0) about the picture's centre.
-function pictureParts(shot, ctx, { w, h, hero }) {
+function pictureParts(shot, ctx, { w, h, hero, crop }) {
   const { look, unit, seed } = ctx;
   requireDevice(look, 'cutout', 'clipping');
-  const image = node('image', `${hero}.photo`, { src: shot.src, w, h });
+  const image = node('image', `${hero}.photo`, { src: shot.src, w, h, ...(crop ? { clip: crop } : {}) });
   const devices = registries.devices;
   const base = { at: 0, look, unit, seed };
   const pad = CARD_PAD * unit;
@@ -145,10 +147,34 @@ function availableArea(ctx) {
   return { w: gridSpan(look, canvas, 1, look.grid.columns).w, h: canvas.h - 2 * look.grid.margin * unit };
 }
 
+// A locked camera (pop) on a vertical format cannot push in, so its establishing picture is a crop of the source: a
+// window of CROP_ASPECT, as tall as the image allows, centred horizontally on the first region an event targets
+// (clamped inside the image), or on the image's centre. Null elsewhere: the whole picture is shown.
+export function establishingCrop(shot, ctx, picture) {
+  if (!cutsToCloseUp(ctx.look) || isWide(ctx.canvas)) return null;
+  let h = picture.height, w = h * CROP_ASPECT;
+  if (w > picture.width) [w, h] = [picture.width, picture.width / CROP_ASPECT];
+  const target = (shot.on ?? []).map((item) => shot.regions?.[regionOf(item.target)]).find(Boolean);
+  const cx = target ? (target[0] + target[2] / HALF) * picture.width : picture.width / HALF;
+  const x = Math.min(picture.width - w, Math.max(0, cx - w / HALF));
+  return [x, (picture.height - h) / HALF, w, h];
+}
+
+// The establishing crop's drawn size: CROP_WIDTH of the available width, and no taller than the available height less
+// room for a caption under it on each side (the picture stays centred, so the room is kept above as well).
+function cropSize(ctx, crop, caption) {
+  const { look, unit } = ctx;
+  const available = availableArea(ctx);
+  const room = caption === undefined ? 0 : look.keyline * unit + CAPTION.gap * unit + sizeAt(look, CAPTION.step, unit) * look.lineHeight.text;
+  const fit = Math.min((CROP_WIDTH * available.w) / crop[2], (available.h - HALF * room) / crop[3]);
+  return { w: crop[2] * fit, h: crop[3] * fit };
+}
+
 // The picture's drawn size: on 16:9 its longer side is SHARE of the canvas short side; elsewhere its width is
 // TALL_WIDTH of the available width, its height at most TALL_HEIGHT of the available height.
-function pictureSize(ctx, picture) {
+function pictureSize(ctx, picture, crop, caption) {
   const { canvas } = ctx;
+  if (crop) return cropSize(ctx, crop, caption);
   if (isWide(canvas)) {
     const fit = (SHARE * Math.min(canvas.w, canvas.h)) / Math.max(picture.width, picture.height);
     return { w: picture.width * fit, h: picture.height * fit };
@@ -180,22 +206,33 @@ function expandClipping(given, ctx) {
   if (problems.length > 0) throw new Error(`clipping: shot "${shot.id}": ${problems.map((e) => `${e.path}: ${e.message}`).join('; ')}`);
   const closeUp = cutsToCloseUp(look);
   const picture = ctx.asset(shot.src);
-  const { w, h } = pictureSize(ctx, picture);
+  const crop = establishingCrop(shot, ctx, picture);
+  const { w, h } = pictureSize(ctx, picture, crop, shot.caption);
   const hero = heroId(shot, 'image');
   const centre = centreOf(ctx);
-  const parts = pictureParts(shot, ctx, { w, h, hero });
+  const parts = pictureParts(shot, ctx, { w, h, hero, crop });
   const tilt = parts.find((n) => n.id === `${hero}.cutout`)?.props.rotate ?? 0;
   const turn = (isEditorial(look) ? EDITORIAL_TURN : 0) + tilt;
-  const local = ([fx, fy, fw, fh]) => [fx * w - w / HALF, fy * h - h / HALF, fw * w, fh * h];
+  // a region (fractions of the whole image) in the drawn picture's own space, through the crop when there is one
+  const [cx0, cy0, cw, ch] = crop ?? [0, 0, picture.width, picture.height];
+  const local = ([fx, fy, fw, fh]) => {
+    const sx = w / cw, sy = h / ch;
+    return [(fx * picture.width - cx0) * sx - w / HALF, (fy * picture.height - cy0) * sy - h / HALF, fw * picture.width * sx, fh * picture.height * sy];
+  };
   // A moving camera pushes in on a region; a locked one cuts to a close-up of it instead (close-ups.mjs).
   const plan = closeUp ? closeUpPlan(shot, ctx) : null;
   if (plan && plan.cuts.length > 0) requireDevice(look, 'punch', 'clipping');
   const hideAt = plan?.cuts[0]?.at;
   const marks = closeUp ? [] : regionMarks(shot, ctx, { w, h, tilt, local });
   const group = pictureGroup(shot, ctx, { hero, centre, children: [...parts, ...marks], hideAt });
-  const inPicture = Object.fromEntries(Object.entries(shot.regions ?? {}).map(([name, region]) => [`${REGION_PREFIX}${name}`, turnedBox(centre, turn, local(region))]));
+  // a region's box is the part of it the drawn picture shows (an establishing crop may cut it)
+  const shown = (r) => {
+    const left = Math.max(r[0], -w / HALF), top = Math.max(r[1], -h / HALF);
+    return [left, top, Math.max(0, Math.min(r[0] + r[2], w / HALF) - left), Math.max(0, Math.min(r[1] + r[3], h / HALF) - top)];
+  };
+  const inPicture = Object.fromEntries(Object.entries(shot.regions ?? {}).map(([name, region]) => [`${REGION_PREFIX}${name}`, turnedBox(centre, turn, shown(local(region)))]));
   const close = plan ? closeUps(shot, ctx, { picture, area: availableArea(ctx), centre, plan }) : { nodes: [], camera: [], boxes: {} };
-  const pictureBoxes = { image: turnedBox(centre, turn, local([0, 0, 1, 1])), ...inPicture, ...close.boxes };
+  const pictureBoxes = { image: turnedBox(centre, turn, [-w / HALF, -h / HALF, w, h]), ...inPicture, ...close.boxes };
   // The camera pushes in on the first event aimed at a region, landing as the event does (moving cameras only).
   const pushed = closeUp ? undefined : (shot.on ?? []).find(isRegionEvent);
   const push = pushed && pictureBoxes[pushed.target] ? pushLayer(ctx, pictureBoxes[pushed.target], ctx.at(pushed.at)) : null;
@@ -251,4 +288,5 @@ registries.kinds.add('clipping', {
   validate: clippingProblems,
   expand: expandClipping,
   review: (shot, ctx) => establishingFindings(shot, ctx),
+  numbered: true, // counts toward the slug numbers of a film
 });

@@ -25,11 +25,17 @@ export function applyFont(ctx, font, { tracked }) {
   ctx.letterSpacing = tracked ? `${(font.tracking ?? 0) * font.size}px` : '0px';
 }
 
-// The `measure(text, font) -> { width, ascent, descent }` layoutText and `free` take, backed by a canvas context.
+// The `measure(text, font) -> { width, ascent, descent, inkAscent, inkDescent, inkLeft, inkRight }` layoutText and
+// `free` take, backed by a canvas context. ascent and descent are the font's box; the ink fields are where the glyphs
+// really reach, from the origin on the baseline: up, down, the left edge (positive when the ink starts right of the
+// origin) and the right edge. Untracked, like the width.
 export function createMeasure(ctx) {
   return (text, font) => {
     applyFont(ctx, font, { tracked: false });
     const m = ctx.measureText(text);
-    return { width: m.width, ascent: m.fontBoundingBoxAscent, descent: m.fontBoundingBoxDescent };
+    return {
+      width: m.width, ascent: m.fontBoundingBoxAscent, descent: m.fontBoundingBoxDescent,
+      inkAscent: m.actualBoundingBoxAscent, inkDescent: m.actualBoundingBoxDescent, inkLeft: -m.actualBoundingBoxLeft, inkRight: m.actualBoundingBoxRight,
+    };
   };
 }

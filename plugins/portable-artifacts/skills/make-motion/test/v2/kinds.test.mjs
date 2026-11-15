@@ -31,7 +31,16 @@ import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 
 const FPS = 30;
 const EPS = 1e-6;
-const measure = (text, font) => ({ width: [...text].length * font.size * 0.55, ascent: font.size * 0.8, descent: font.size * 0.2 });
+// A fake measure with ink, as the page's canvas reports it: capitals and b d f h k l t reach 0.74 em, other letters
+// 0.5 em; g j p q y descend 0.22 em; the ink starts 0.02 em in and ends 0.02 em before the advance.
+const inkUp = (text) => (/[A-Z0-9bdfhklt]/.test(text) ? 0.74 : 0.5);
+const measure = (text, font) => {
+  const width = [...text].length * font.size * 0.55;
+  return {
+    width, ascent: font.size * 0.8, descent: font.size * 0.2,
+    inkAscent: inkUp(text) * font.size, inkDescent: (/[gjpqy]/.test(text) ? 0.22 : 0) * font.size, inkLeft: 0.02 * font.size, inkRight: width - 0.02 * font.size,
+  };
+};
 const IMAGES = new Map([['shot.png', { width: 1600, height: 1000 }]]);
 const canvasOf = (format) => ({ w: FORMATS[format].size[0], h: FORMATS[format].size[1] });
 // The platform safe zone as the stage passes it (template/formats.mjs safeInsets with the viral zone).
@@ -91,13 +100,22 @@ after(() => rmSync(specDir, { recursive: true, force: true }));
 
 // ---- the brief's binding tests (adapted to the real API; see the report) ----
 
+// Every word track of a statement's hero: its text node's, or each line's of a stack, in word order.
+const heroWords = (nodes, hero) => {
+  const n = nodes.find((x) => x.id === hero);
+  return n.type === 'group' ? n.children.flatMap((line) => line.wordTracks) : n.wordTracks;
+};
+
 test('statement words land on their spoken words', () => {
-  for (const look of ['desk', 'pop']) {
-    const { nodes, timing } = expandSecond({ id: 'a', show: 'statement', say: 'One file. No server.' }, look);
-    const text = textNode(nodes), spoken = timing.words;
-    assert.equal(text.wordTracks.length, spoken.length);
-    text.wordTracks.forEach((w, i) => near(lastKey(w.opacity).t, spoken[i].start, `${look} word ${i}`));
-  }
+  const { nodes, timing } = expandSecond({ id: 'a', show: 'statement', say: 'One file. No server.' }, 'desk');
+  const words = heroWords(nodes, 'a.text'), spoken = timing.words;
+  assert.equal(words.length, spoken.length);
+  words.forEach((w, i) => near(lastKey(w.opacity).t, spoken[i].start, `desk word ${i}`));
+  // pop (viral) shows every word from the first frame and lights each on its spoken word
+  const pop = expandSecond({ id: 'a', show: 'statement', say: 'One file. No server.' }, 'pop');
+  const lit = heroWords(pop.nodes, 'a.text');
+  assert.equal(lit.length, spoken.length);
+  lit.forEach((w, i) => near(w.fill.points[1].t, pop.timing.words[i].start, `pop word ${i}`));
 });
 
 test("an emphasised word gets the look's emphasis and nothing else", () => {
@@ -106,9 +124,11 @@ test("an emphasised word gets the look's emphasis and nothing else", () => {
   assert.ok(!textNode(desk).wordTracks.some((w) => w.fill), 'desk recolours nothing');
   const pop = expandSecond({ id: 'a', show: 'statement', say: 'It is *lying* to you.' }, 'pop').nodes;
   assert.equal(pop.filter((n) => n.props.under).length, 0);
-  const words = textNode(pop).wordTracks;
-  assert.ok(words[2].fill);
-  assert.equal(words.filter((w) => w.fill).length, 1);
+  const look = registries.looks.get('pop');
+  const words = heroWords(pop, 'a.text');
+  assert.equal(lastKey(words[2].fill).v, look.palette.accent, 'the emphasised word lights in the accent');
+  assert.deepEqual(words.filter((w) => lastKey(w.fill).v === look.palette.accent).length, 1, 'and only it');
+  assert.ok(words.every((w) => w.scale === undefined), 'pop no longer scales an emphasised word');
 });
 
 test('a number lands its count on the spoken figure', () => {
@@ -190,20 +210,30 @@ test('a slide moves everything but the field', () => {
 
 // ---- statement ----
 
-test('desk statement sits flush left on column 2 with its ink centred at 44% of the height', () => {
+test('desk statement carries the frame: fitted up to 300 units in 64% of the height and columns 2 to 9, its ink centred at 50%', () => {
+  // hand-computed: "Dashboards." is one word of 11 glyphs of 0.55 em, tracked -0.01 em at this size: 5.94 em; columns
+  // 2 to 9 on 1920 x 1080 run from 242 to 1386 (1144 px), so the width binds at floor(1144 / 5.94) = 192 px, under 300
+  const short = expandShot({ id: 'a', show: 'statement', say: 'Dashboards.' });
+  const one = textNode(short.nodes);
+  assert.equal(one.props.font.size, 192);
+  assert.equal(one.props.x, 242);
+  near(one.props.y + one.props.layout.lines[0].y - 0.7 * 192 / 2, 540, 'cap line to baseline centred on 50%');
+  // a long sentence: at most 4 lines, its block within 64% of the height, inside the span, ink centred on 50%
   const { nodes, ctx, canvas } = expandShot({ id: 'a', show: 'statement', say: 'Most dashboards cannot tell you where a number came from.' });
   const text = textNode(nodes);
   const look = ctx.look;
-  assert.equal(text.props.x, gridX(look, canvas, 2));
   const { layout, font } = text.props;
+  assert.equal(text.props.x, gridX(look, canvas, 2));
   assert.ok(layout.width <= gridX(look, canvas, 10) - look.grid.gutter - gridX(look, canvas, 2) + EPS, 'stays inside columns 2 to 9');
-  assert.ok(font.size >= look.scale[2] && font.size <= look.scale[4]);
+  assert.ok(layout.height <= 0.64 * canvas.h + EPS, `block ${layout.height} within 64% of the height`);
+  assert.ok(font.size >= look.scale[2] && font.size <= 300, `size ${font.size}`);
   assert.ok(layout.lines.length <= look.maxLines.display);
-  assert.equal(font.family, look.fonts.display.family);
+  assert.equal(font.lineHeight, 1.1);
   assert.equal(text.props.fill, look.palette.ink);
   const inkTop = text.props.y + layout.lines[0].y - 0.7 * font.size;
-  const inkBottom = text.props.y + layout.lines.at(-1).y;
-  near((inkTop + inkBottom) / 2, 0.44 * canvas.h, 'ink centre');
+  near((inkTop + text.props.y + layout.lines.at(-1).y) / 2, 0.5 * canvas.h, 'ink centre');
+  const capped = expandShot({ id: 'a', show: 'statement', say: 'Hi.' }, 'desk', '9:16');
+  assert.equal(textNode(capped.nodes).props.font.size, 300, 'a short word stops at 300 units');
 });
 
 test('desk statement runs to column 11 on vertical formats', () => {
@@ -216,23 +246,163 @@ test('desk statement runs to column 11 on vertical formats', () => {
   }
 });
 
-test('desk kicker: label caps at step 1 in ink2, 28 units over the cap line, with a hairline 12 units above it', () => {
-  const { nodes, ctx } = expandShot({ id: 'a', show: 'statement', say: 'One file.', kicker: 'Chapter one' });
-  const look = ctx.look;
-  const text = textNode(nodes, 'a.text');
-  const kicker = textNode(nodes, 'a.kicker');
-  assert.equal(kicker.props.layout.lines[0].words.map((w) => w.text).join(' '), 'CHAPTER ONE');
-  assert.equal(kicker.props.font.family, look.fonts.label.family);
-  assert.equal(kicker.props.font.size, look.scale[0]);
-  assert.equal(kicker.props.fill, look.palette.ink2);
-  assert.equal(kicker.props.x, text.props.x);
-  const capLine = text.props.y + text.props.layout.lines[0].y - 0.7 * text.props.font.size;
-  near(kicker.props.y + kicker.props.layout.lines[0].y, capLine - 28, 'kicker baseline');
-  const rule = nodes.find((n) => n.id === 'a.rule');
-  assert.equal(rule.props.fill, look.palette.rule);
-  const kickerCap = kicker.props.y + kicker.props.layout.lines[0].y - 0.7 * kicker.props.font.size;
-  near(rule.props.y + 2, kickerCap - 12, 'hairline bottom');
-  near(rule.props.x, text.props.x);
+// The slug's card as built: its group (the card's entrance) and the box it would have unturned, in canvas pixels.
+function slugOf(nodes, id) {
+  const group = all(nodes).find((n) => n.id === `${id}.slug`);
+  if (!group) return null;
+  const paper = group.children.find((n) => n.id === `${id}.slug.paper`);
+  const xs = paper.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 0);
+  const ys = paper.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  const w = Math.max(...xs) - Math.min(...xs), h = Math.max(...ys) - Math.min(...ys);
+  return { group, w, h, right: group.props.x + Math.max(...xs), top: group.props.y + Math.min(...ys) };
+}
+
+test('desk slug: a taped card turned +3 degrees, right on column 12, top at 14%, holding the shot number and the kicker, in the same place every shot', () => {
+  const film = filmOf([
+    { id: 'a', show: 'statement', say: 'One file.', kicker: 'The problem' },
+    { id: 'n', show: 'number', value: 3, label: 'skills', hold: 2 },
+    { id: 'b', show: 'statement', say: 'Scripts do the rest of it.', kicker: 'portable-artifacts' },
+    { id: 'c', show: 'statement', say: 'No kicker here.' },
+  ]);
+  const look = registries.looks.get('desk');
+  const canvas = canvasOf('16:9');
+  const right = gridX(look, canvas, 13), top = 0.14 * canvas.h;
+  const slugs = [['a', 0, '01'], ['b', 2, '03']].map(([id, index, number]) => {
+    const { nodes, timing } = expandIn(film, index);
+    const slug = slugOf(nodes, id);
+    assert.ok(slug, `${id} has a slug`);
+    assert.equal(slug.group.props.rotate, 3, `${id}: turned exactly +3 degrees`);
+    assert.ok(Math.abs(slug.right - right) < 2, `${id}: right edge ${slug.right} on column 12 (${right}), within the paper's hand jitter`);
+    assert.ok(Math.abs(slug.top - top) < 2, `${id}: top ${slug.top} at 14% (${top})`);
+    assert.ok(slug.group.children.some((n) => n.id === `${id}.slug.tape1`), 'taped');
+    const numeral = slug.group.children.find((n) => n.id === `${id}.slug.number`);
+    assert.equal(numeral.props.layout.lines[0].words[0].text, number);
+    assert.equal(numeral.props.font.family, look.fonts.display.family);
+    const kicker = slug.group.children.find((n) => n.id === `${id}.kicker`);
+    assert.equal(kicker.props.font.family, look.fonts.label.family);
+    assert.equal(kicker.props.font.size, look.scale[1], 'kicker at scale step 2');
+    assert.equal(kicker.props.role, 'kicker');
+    assert.ok(kicker.props.layout.lines[0].words.every((w) => w.text === w.text.toUpperCase()), 'caps');
+    near(sample(slug.group.tracks.opacity, look.moves.enter.dur), 1, 'enters with the look at the shot start');
+    near(sample(slug.group.tracks.opacity, 0), 0);
+    // never over the text block: the turned card's box and the text's ink box do not meet
+    const text = textNode(nodes, `${id}.text`);
+    const ink = [text.props.x + text.props.layout.lines[0].x, text.props.y + text.props.layout.lines[0].y - 0.74 * text.props.font.size,
+      text.props.layout.width, text.props.layout.lines.at(-1).y - text.props.layout.lines[0].y + 0.96 * text.props.font.size];
+    const a = 3 * Math.PI / 180, cw = slug.w * Math.cos(a) + slug.h * Math.sin(a), ch = slug.w * Math.sin(a) + slug.h * Math.cos(a);
+    const turned = [slug.group.props.x - cw / 2, slug.group.props.y - ch / 2, cw, ch];
+    assert.ok(!overlaps(turned, ink), `${id}: slug ${JSON.stringify(turned.map(Math.round))} clear of text ${JSON.stringify(ink.map(Math.round))}`);
+    void timing;
+    return slug;
+  });
+  assert.equal(slugOf(expandIn(film, 3).nodes, 'c'), null, 'no kicker, no slug');
+  // a kicker wider than three columns wraps on the card, after its hyphen: a slug, not a banner
+  const long = slugs[1].group.children.find((n) => n.id === 'b.kicker').props.layout;
+  assert.deepEqual(long.lines.map((l) => l.words.map((w) => w.text).join(' ')), ['PORTABLE-', 'ARTIFACTS']);
+  const three = gridX(look, canvas, 4) - look.grid.gutter - gridX(look, canvas, 1);
+  assert.ok(long.width <= three + EPS, `kicker ${long.width} within three columns (${three})`);
+  // when the text would run under the card the span stops a column earlier: a tall card from a wrapped kicker over a
+  // sentence that fills columns 2 to 9
+  const tall = filmOf([{ id: 't', show: 'statement', say: 'Every chart on this page shows the query behind it.', kicker: 'one two three four five six seven' }]);
+  const tallText = textNode(expandIn(tall, 0).nodes, 't.text');
+  const tallSlug = slugOf(expandIn(tall, 0).nodes, 't');
+  const textRight = tallText.props.x + tallText.props.layout.width;
+  assert.ok(textRight <= tallSlug.right - tallSlug.w, `text ends at ${textRight}, before the card starts at ${tallSlug.right - tallSlug.w}`);
+  assert.ok(tallText.props.layout.width <= gridX(look, canvas, 10) - look.grid.gutter - gridX(look, canvas, 2) + EPS);
+});
+
+test('a slug never squeezes a desk statement into overflow: narrowing stops first and the block drops below the card', () => {
+  const long = expandShot({ id: 'b', show: 'statement', say: 'Most dashboards cannot tell you where a number came from.', kicker: 'The problem' }, 'desk', '1:1');
+  const text = textNode(long.nodes, 'b.text');
+  assert.equal(text.props.layout.overflow, false, 'a sentence that cannot fit at the floor is set smaller rather than overflow');
+  // and still clear of the card: narrowing stopped before overflow, so the block dropped below it
+  const slug = slugOf(long.nodes, 'b');
+  const a3 = 3 * Math.PI / 180, cw = slug.w * Math.cos(a3) + slug.h * Math.sin(a3), ch = slug.w * Math.sin(a3) + slug.h * Math.cos(a3);
+  const turned = [slug.group.props.x - cw / 2, slug.group.props.y - ch / 2, cw, ch];
+  const ink = [text.props.x, text.props.y + text.props.layout.lines[0].y - 0.74 * text.props.font.size, text.props.layout.width, text.props.layout.lines.at(-1).y - text.props.layout.lines[0].y + 0.96 * text.props.font.size];
+  assert.ok(!overlaps(turned, ink), 'clear of the card');
+});
+
+test('desk highlight band holds its words\' ink, descenders included, and touches neither neighbouring line', () => {
+  const { nodes } = expandShot({ id: 'c', show: 'statement', say: 'On your machine. *Nothing* is sent.', text: 'On your | machine. | Nothing | is sent.' });
+  const text = textNode(nodes, 'c.text');
+  const { layout, font } = text.props;
+  const band = nodes.find((n) => n.props.under);
+  const lineIndex = layout.lines.findIndex((l) => l.words.some((w) => w.text === 'Nothing'));
+  assert.equal(lineIndex, 2, 'precondition: Nothing sits between two lines');
+  const baseline = (k) => text.props.y + layout.lines[k].y;
+  const em = font.size;
+  const inkTop = baseline(2) - 0.74 * em, inkBottom = baseline(2) + 0.22 * em; // N rises 0.74 em, g descends 0.22 em
+  const points = band.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
+  const ys = points.filter((_, i) => i % 2 === 1);
+  const topEdge = ys.slice(0, 5), bottomEdge = ys.slice(5);
+  assert.ok(Math.max(...topEdge) <= inkTop + EPS, `top edge ${Math.max(...topEdge)} above the ink top ${inkTop}`);
+  assert.ok(Math.min(...bottomEdge) >= inkBottom - EPS, `bottom edge ${Math.min(...bottomEdge)} below the descender ${inkBottom}`);
+  // the line above ends at its own baseline plus its descender ("your": y), the line below starts at its ascenders
+  const aboveBottom = baseline(1) + 0.22 * em, belowTop = baseline(3) - 0.74 * em;
+  assert.ok(Math.min(...ys) > aboveBottom, `band top ${Math.min(...ys)} clear of the line above (${aboveBottom})`);
+  assert.ok(Math.max(...ys) < belowTop, `band bottom ${Math.max(...ys)} clear of the line below (${belowTop})`);
+  // the band is designed 0.06 em past the ink: its middle rows are there (the hand jitter moves the corners only)
+  const mid = (edge) => edge[2]; // the point where the two quadratic segments of an edge meet
+  assert.ok(Math.abs(mid(topEdge) - (inkTop - 0.06 * em)) <= 3 + 3 * 0.6 + EPS, 'top edge middle at 0.06 em above the ink, within the corner jitter and its bow');
+});
+
+test('a highlight look gets a creative finding when the emphasis covers half or more of a statement\'s words', () => {
+  const kind = registries.kinds.get('statement');
+  const look = registries.looks.get('desk');
+  const review = (say, l = look) => kind.review({ id: 's', show: 'statement', say }, { look: l, timing: { words: [], duration: 3 }, at: () => 0 });
+  assert.deepEqual(review('Built on your machine. *Nothing leaves it*.'), [], 'close: 3 of 7 is under half');
+  const [found] = review('Most dashboards can\'t tell you *where a number came from*.');
+  assert.equal(found.path, 'say');
+  assert.equal(found.message, 'emphasis covers 5 of 10 words; mark fewer');
+  assert.equal(review('One *two* three four.').length, 0, '1 of 4');
+  assert.deepEqual(review('Save this. *Build yours*.', registries.looks.get('pop')), [], 'a recolour look points with colour, not paint: no rule');
+});
+
+test('a highlight run that spans more than one laid-out line is marked on the text, for the review', () => {
+  // the old problem script: five emphasised words that break across two lines
+  const old = expandShot({ id: 'p', show: 'statement', say: 'Most dashboards can\'t tell you *where a number came from*.' });
+  const lines = textNode(old.nodes, 'p.text').props.layout.lines.map((l) => l.words.map((w) => w.text));
+  const spanned = lines.filter((l) => l.some((w) => ['where', 'a', 'number', 'came', 'from.'].includes(w))).length;
+  assert.ok(spanned > 1, `precondition: the run is laid out over ${spanned} lines: ${JSON.stringify(lines)}`);
+  assert.equal(textNode(old.nodes, 'p.text').props.highlightLines, spanned);
+  // four forced lines leave no room to break the run (maxLines 4): it spans one line
+  const close = expandShot({ id: 'c', show: 'statement', say: 'Your data never moves. *It stays*.', text: 'Your | data | never moves. | It stays.' });
+  const closeLines = textNode(close.nodes, 'c.text').props.layout.lines.map((l) => l.words.map((w) => w.text).join(' '));
+  assert.ok(closeLines.includes('It stays.'), `precondition: ${JSON.stringify(closeLines)}`);
+  assert.equal(textNode(close.nodes, 'c.text').props.highlightLines, 1, 'one line');
+  const plain = expandShot({ id: 'q', show: 'statement', say: 'No emphasis here.' });
+  assert.equal(textNode(plain.nodes, 'q.text').props.highlightLines, undefined, 'no run, no mark');
+  const pop = expandSecond({ id: 'r', show: 'statement', say: 'Your charts are *hiding something today*.' }, 'pop', '9:16');
+  assert.ok(all(pop.nodes).every((n) => n.props.highlightLines === undefined), 'a recolour look is exempt');
+});
+
+test('the stack is one hero: the group carries the hero id and box for a match, text means the whole stack, word:n reads across lines', () => {
+  const shots = [{ id: 'a', show: 'statement', say: 'Your charts are hiding something.', hero: 'h' }, { id: 'b', show: 'statement', say: 'Your charts are hiding something.', hero: 'h', cut: 'match' }];
+  const first = expandIn(filmOf(shots, 'pop', '9:16'), 0);
+  assert.equal(first.hero, 'h');
+  const group = first.nodes.find((n) => n.id === 'h');
+  assert.equal(group.type, 'group', 'the hero id is the group');
+  const lines = stackLinesOf(first.nodes, 'h');
+  const wordBoxes = Object.entries(first.boxes).filter(([k]) => k.startsWith('word:')).map(([, b]) => b);
+  const union = [Math.min(...wordBoxes.map((b) => b[0])), Math.min(...wordBoxes.map((b) => b[1])), Math.max(...wordBoxes.map((b) => b[0] + b[2])), Math.max(...wordBoxes.map((b) => b[1] + b[3]))];
+  first.boxes.text.forEach((v, i) => near(v, [union[0], union[1], union[2] - union[0], union[3] - union[1]][i], 'text is the union of every word of the stack'));
+  assert.ok(first.boxes.text[1] < lines[0].bottom && first.boxes.text[1] + first.boxes.text[3] >= lines.at(-1).bottom, 'from the first line to the last');
+  const words = lines.flatMap((l) => l.node.props.layout.lines[0].words.map((w) => ({ w, x: l.node.props.x, y: l.node.props.y + l.node.props.layout.lines[0].y })));
+  words.forEach(({ w, x, y }, i) => {
+    const box = first.boxes[`word:${i}`];
+    assert.ok(box[0] >= x + w.x - 1e-6 && box[0] <= x + w.x + w.width && box[1] < y && box[1] + box[3] > y, `word:${i} is "${w.text}" in reading order`);
+  });
+  // a match between the two stacks morphs the shared hero group, carrying its box
+  const film = filmFor(shots, 'pop', '9:16');
+  const at = buildTimeline(filmOf(shots, 'pop', '9:16'), { fps: FPS }).shots[1].start + 0.25;
+  const matched = film.sampleAt(at).find((n) => n.id === 'h');
+  assert.equal(matched.props.match, true, 'the like heroes morph as one group');
+  assert.equal(matched.bbox.length, 4);
+  const on = expandSecond({ id: 's', show: 'statement', say: 'No cloud. No upload.', on: [{ at: 'word:upload', do: 'underline', target: 'word:3' }] }, 'pop', '9:16');
+  const underline = on.nodes.find((n) => n.id === 's.on0');
+  const ys = underline.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  assert.ok(Math.min(...ys) > on.boxes['word:3'][1] + on.boxes['word:3'][3] - 1, 'word:3 (UPLOAD., on the second line) carries the underline');
 });
 
 test('desk highlights one run of adjacent emphasised words per line', () => {
@@ -249,8 +419,15 @@ test('desk highlights one run of adjacent emphasised words per line', () => {
   assert.equal(split.nodes.filter((n) => n.props.under).length, 2, 'emphasised words on two lines give two highlights');
 });
 
-test('pop statement is centred caps; an emphasised word turns accent and pulses to the emphasize scale', () => {
-  const { nodes, ctx, canvas, timing } = expandSecond({ id: 'a', show: 'statement', say: 'It is *lying* to you.' }, 'pop', '9:16');
+// A centred look with the pulse emphasis (pop before revision 1), kept to cover the centred composition and recolor-scale.
+function centredPop() {
+  const pop = registries.looks.get('pop');
+  if (!registries.looks.has('pop-centred-test')) registries.looks.add('pop-centred-test', Object.freeze({ ...pop, name: 'pop-centred-test', composition: 'centred', emphasis: 'recolor-scale' }));
+  return 'pop-centred-test';
+}
+
+test('a centred look centres caps; with recolor-scale an emphasised word turns accent and pulses to the emphasize scale', () => {
+  const { nodes, ctx, canvas, timing } = expandSecond({ id: 'a', show: 'statement', say: 'It is *lying* to you.' }, centredPop(), '9:16');
   const look = ctx.look;
   const text = textNode(nodes);
   const words = text.props.layout.lines.flatMap((l) => l.words.map((w) => w.text));
@@ -271,6 +448,117 @@ test('pop statement is centred caps; an emphasised word turns accent and pulses 
   near(sample(scale, start + 5), 1, 'back to 1');
   const later = timing.words[3].start;
   near(sample(text.wordTracks[3].scale, later - look.moves.enter.dur), look.moves.enter.scale, 'words pop from the enter scale');
+});
+
+// ---- pop: the stack ----
+
+// The lines of a stack: the text nodes inside the hero group, in order, each with its ink in canvas pixels (the fake
+// measure's ink: 0.02 em in from each end, capitals 0.74 em tall, no descenders in caps).
+function stackLinesOf(nodes, hero) {
+  const group = nodes.find((n) => n.id === hero);
+  return group.children.map((n) => {
+    const { layout, font } = n.props;
+    const line = layout.lines[0];
+    const first = line.words[0], last = line.words.at(-1);
+    const track = font.tracking * font.size;
+    const left = n.props.x + line.x + first.x + 0.02 * font.size;
+    const right = n.props.x + line.x + last.x + [...last.text].length * 0.55 * font.size - 0.02 * font.size + track * ([...last.text].length - 1);
+    const baseline = n.props.y + line.y;
+    return { node: n, size: font.size, left, right, top: baseline - 0.74 * font.size, bottom: baseline, text: line.words.map((w) => w.text).join(' ') };
+  });
+}
+
+test('pop stack: lines by sense, each filling the safe width or capped at 400 units, flush left, 0.08 apart, centred in the safe zone', () => {
+  const { nodes, canvas, ctx } = expandSecond({ id: 'a', show: 'statement', say: 'Your charts are *hiding* something.' }, 'pop', '9:16');
+  const safe = viralOf(canvas);
+  const left = safe.left, width = canvas.w - safe.left - safe.right; // 120 and 765 on 1080 x 1920
+  const lines = stackLinesOf(nodes, 'a.text');
+  assert.deepEqual(lines.map((l) => l.text), ['YOUR CHARTS', 'ARE HIDING', 'SOMETHING.']);
+  // hand-computed: "SOMETHING." is 10 glyphs of 0.55 em tracked -0.02 em; its ink runs from 0.02 em to
+  // 5.5 - 0.02 - 9 x 0.02 = 5.3 em, so 5.28 em wide; fitted 0.5 px inside the 765 px width: 764.5 / 5.28 = 144.792 px
+  near(lines[2].size, 764.5 / 5.28, 'SOMETHING. hand-computed size');
+  for (const l of lines) {
+    assert.ok(Math.abs(l.right - l.left - width) <= 1 || Math.abs(l.size - 400) < EPS, `${l.text}: ink ${l.right - l.left} fills ${width}, or 400 units`);
+    near(l.left, left, `${l.text}: flush left on the safe edge`);
+    assert.equal(l.node.props.font.wordSpace, 0.26);
+    assert.equal(l.node.props.stack, 'a.text', 'every line names its stack');
+    assert.equal(l.node.props.role, 'hero');
+  }
+  lines.slice(1).forEach((l, k) => near(l.top - lines[k].bottom, 0.08 * Math.max(l.size, lines[k].size), `gap over ${l.text}`));
+  near((lines[0].top + lines.at(-1).bottom) / 2, safe.top + (canvas.h - safe.top - safe.bottom) / 2, 'block centred in the safe zone');
+  assert.ok(lines.every((l) => l.size >= ctx.look.scale[2] - EPS), 'never below scale step 3');
+  // a short line would need more than 400 units to fill the width: it stops at 400, flush left
+  const short = stackLinesOf(expandSecond({ id: 'b', show: 'statement', say: 'No. Never.', text: 'No. | Never.' }, 'pop', '9:16').nodes, 'b.text');
+  assert.equal(short[0].size, 400);
+  near(short[0].left, left);
+  assert.ok(short[0].right - short[0].left < width);
+  // on 16:9 the stack fills columns 1 to 12
+  const wide = stackLinesOf(expandSecond({ id: 'c', show: 'statement', say: 'Your charts are hiding something.' }, 'pop', '16:9').nodes, 'c.text');
+  const look = registries.looks.get('pop'), wideCanvas = canvasOf('16:9');
+  for (const l of wide) {
+    near(l.left, gridX(look, wideCanvas, 1), 'columns 1 to 12: left');
+    assert.ok(Math.abs(l.right - gridX(look, wideCanvas, 13)) <= 1 || Math.abs(l.size - 400) < EPS, `${l.text} fills columns 1 to 12 or is capped`);
+  }
+});
+
+test('pop stack: an emphasised word takes the accent with a flash of its fill, never a scale', () => {
+  const { nodes, timing, ctx } = expandSecond({ id: 'a', show: 'statement', say: 'Your charts are *hiding* something.' }, 'pop', '9:16');
+  const look = ctx.look;
+  const lines = stackLinesOf(nodes, 'a.text');
+  const hiding = lines[1].node.wordTracks[1]; // ARE HIDING: HIDING is word 1 of the line
+  const at = timing.words[3].start;
+  assert.equal(sample(hiding.fill, at), look.palette.ink2, 'ink2 until it is spoken');
+  assert.equal(sample(hiding.fill, at + look.moves.emphasize.dur), look.palette.accent, 'accent one emphasize move later');
+  assert.ok(sample(hiding.fill, at + look.moves.emphasize.dur / 2) !== look.palette.ink2, 'changing on the way');
+  for (const l of lines) for (const w of l.node.wordTracks) assert.equal(w.scale, undefined, 'no word scales in a stack');
+});
+
+test('viral ghost words on every statement: all words on screen in ink2 from the first frame, each lighting as spoken; with no say, in order 0.09 s apart from 0.2 s', () => {
+  const shots = [{ id: 'one', show: 'statement', say: 'Your charts are *hiding* something.' }, { id: 'two', show: 'statement', say: 'No cloud. No *upload*.', cut: 'cut' },
+    { id: 'three', show: 'statement', hold: 2, text: 'Three quiet words' }];
+  const film = filmFor(shots, 'pop', '9:16');
+  const look = registries.looks.get('pop');
+  const timeline = buildTimeline(filmOf(shots, 'pop', '9:16'), { fps: FPS });
+  for (const [index, id] of [[0, 'one'], [1, 'two'], [2, 'three']]) {
+    const texts = (t) => film.sampleShot(index, t).find((n) => n.id === `${id}.text`).children;
+    const first = texts(0).flatMap((n) => n.words);
+    assert.ok(first.every((w) => w.opacity === 1 && w.fill === look.palette.ink2), `${id}: every word on screen in ink2 on frame 0`);
+    const end = texts(timeline.shots[index].duration).flatMap((n) => n.words);
+    assert.ok(end.every((w) => w.fill === look.palette.ink || w.fill === look.palette.accent), `${id}: every word lit by the end`);
+  }
+  const upload = film.sampleShot(1, timeline.shots[1].duration).find((n) => n.id === 'two.text').children.flatMap((n) => n.words).at(-1);
+  assert.equal(upload.fill, look.palette.accent, 'the emphasised word lights in the accent');
+  const quiet = expandIn(filmOf(shots, 'pop', '9:16'), 2).nodes.find((n) => n.id === 'three.text').children.flatMap((n) => n.wordTracks);
+  quiet.forEach((w, i) => assert.equal(w.fill.points.find((p) => p.v !== look.palette.ink2).t, 0.2 + 0.09 * i + look.moves.emphasize.dur, `word ${i} lights 0.09 s after the one before, from 0.2 s`));
+});
+
+// A tag group's plate as a canvas box (the plate path is about the group's centre).
+function plateBox(tag) {
+  const plate = tag.children.find((n) => n.type === 'path');
+  const nums = plate.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
+  const xs = nums.filter((_, i) => i % 2 === 0), ys = nums.filter((_, i) => i % 2 === 1);
+  return [tag.props.x + Math.min(...xs), tag.props.y + Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+}
+
+test('pop kicker: an accent tag at scale step 2, flush left, 28 units over the first line, inside the safe zone; a tall stack shrinks to keep it there', () => {
+  const { nodes, canvas, ctx } = expandSecond({ id: 'a', show: 'statement', say: 'Save this. Build yours.', text: 'Save this. | Build yours.', kicker: 'portable-artifacts' }, 'pop', '9:16');
+  const safe = viralOf(canvas);
+  const tag = nodes.find((n) => n.id === 'a.kicker');
+  const plate = tag.children.find((n) => n.type === 'path');
+  assert.equal(plate.props.fill, ctx.look.palette.accent);
+  const label = tag.children.find((n) => n.type === 'text');
+  assert.equal(label.props.font.size, ctx.look.scale[1], 'scale step 2');
+  const box = plateBox(tag);
+  near(box[0], safe.left, 'flush left');
+  const lines = stackLinesOf(nodes, 'a.text');
+  near(lines[0].top - (box[1] + box[3]), 28, '28 units over the first line');
+  assert.ok(box[1] >= safe.top - EPS, 'inside the safe zone');
+  const tall = expandSecond({ id: 'b', show: 'statement', say: 'A b c d e f g h.', text: 'A | B | C | D | E | F | G | H.', kicker: 'tall' }, 'pop', '9:16');
+  const tallTag = tall.nodes.find((n) => n.id === 'b.kicker');
+  const tallLines = stackLinesOf(tall.nodes, 'b.text');
+  assert.ok(plateBox(tallTag)[1] >= safe.top - EPS, 'the tag stays inside the safe zone');
+  assert.ok(tallLines.at(-1).bottom <= canvas.h - safe.bottom + EPS, 'and so does the stack, fitted smaller');
+  assert.ok(tallLines.every((l) => l.size < 400), 'smaller than the cap');
 });
 
 test('with no say, words stagger 0.09 s apart from 0.2 s', () => {
@@ -355,41 +643,57 @@ test('number formats decimals and thousands, and puts the suffix on the cap line
   assert.ok(prefix.props.x < digits.props.x && suffix.props.x > digits.props.x);
 });
 
-test('desk number: a hero numeral fitted to columns 2 to 9, baseline at 60%, hairline the figure width, label at step 3, delta on its baseline', () => {
+test('desk number: a one-digit figure up to 820 units, baseline at 72%, flush left on column 2 by its ink, no hairline; label caps at step 3 beside it on its baseline 48 units on; delta tag 12 units above the label', () => {
+  const { nodes, ctx, canvas, boxes } = expandShot({ id: 'n', show: 'number', hold: 3, value: 5, label: 'skills', delta: 'one JSON spec each' }, 'desk', '16:9');
+  const look = ctx.look;
+  const fig = nodes.find((n) => n.id === 'n.value');
+  const digits = textNode(fig.children, 'n.value.digits');
+  // hand-computed: a "5" is 0.55 em wide, its ink 0.02 em in from each side, so 0.51 em: columns 2 to 9 (1144 px)
+  // would take it to 2243 px, so the 820 cap binds; its ink is 0.51 x 820 = 418.2 px, under half the span (572)
+  assert.equal(digits.props.font.size, 820);
+  const baseline = fig.props.y + digits.props.y + digits.props.layout.lines[0].y;
+  near(baseline, 0.72 * 1080, 'baseline at 72%');
+  near(boxes.value[0], 242, 'ink flush on column 2');
+  near(boxes.value[2], 0.51 * 820, 'the figure box is its ink');
+  assert.equal(nodes.find((n) => n.id === 'n.rule'), undefined, 'no hairline');
+  const label = textNode(nodes, 'n.label');
+  assert.equal(label.props.font.family, look.fonts.label.family);
+  assert.equal(label.props.font.size, look.scale[2], 'scale step 3');
+  near(label.props.font.tracking, look.tracking(look.scale[2], 'label'), 'the label tracking');
+  assert.deepEqual(label.props.layout.lines[0].words.map((w) => w.text), ['SKILLS']);
+  near(label.props.x + 0.02 * 72, 242 + 418.2 + 48, 'label ink 48 units after the figure ink');
+  near(label.props.y + label.props.layout.lines.at(-1).y, baseline, 'label on the figure baseline');
+  const labelInkTop = baseline - 0.74 * 72;
+  near(boxes.delta[1] + boxes.delta[3], labelInkTop - 12, 'delta 12 units above the label');
+  near(boxes.delta[0], label.props.x + 0.02 * 72, 'delta flush with the label');
+  assert.ok(boxes.delta[0] + boxes.delta[2] <= gridX(look, canvas, 13) + EPS, 'inside the right margin');
+});
+
+test('desk number: a figure wider than half the span takes the label under it, 40 units below its baseline, the delta to its right; three digits stop at 560', () => {
   for (const [format, toColumn] of [['16:9', 9], ['9:16', 11]]) {
     const { nodes, ctx, canvas, boxes } = expandShot({ id: 'n', show: 'number', hold: 3, value: 1459, suffix: 'K', label: 'rows in one file', delta: '+12%' }, 'desk', format);
     const look = ctx.look;
     const fig = nodes.find((n) => n.id === 'n.value');
     const digits = textNode(fig.children, 'n.value.digits');
-    const baseline = fig.props.y + digits.props.y + digits.props.layout.lines[0].y;
-    near(baseline, 0.6 * canvas.h, `${format} baseline`);
     const size = digits.props.font.size;
     assert.ok(size >= look.scale[4] && size <= 560, `${format} size ${size}`);
     const span = gridX(look, canvas, toColumn + 1) - look.grid.gutter - gridX(look, canvas, 2);
-    assert.ok(boxes.value[2] <= span + EPS, `${format} inside the span`);
-    assert.ok(size === 560 || boxes.value[2] > 0.97 * span, `${format} fills the span unless capped: ${boxes.value[2]} of ${span}`);
+    assert.ok(boxes.value[2] <= span + EPS && (size === 560 || boxes.value[2] > 0.97 * span), `${format} fills the span unless capped`);
     near(boxes.value[0], gridX(look, canvas, 2), `${format} flush left by its ink`);
-    const rule = nodes.find((n) => n.id === 'n.rule');
-    near(rule.props.y, baseline + 28, 'hairline 28 under');
-    near(rule.props.x, boxes.value[0]);
-    near(ruleWidth(rule), boxes.value[2], 'the hairline spans exactly the figure');
+    const baseline = fig.props.y + digits.props.y + digits.props.layout.lines[0].y;
     const label = textNode(nodes, 'n.label');
-    assert.equal(label.props.font.size, look.scale[2]);
-    assert.equal(label.props.fill, look.palette.ink2);
-    near(label.props.y + label.props.layout.lines[0].y - 0.7 * label.props.font.size, baseline + 28 + 2 + 24, 'label cap top');
+    near(label.props.y + label.props.layout.lines[0].y - 0.74 * label.props.font.size, baseline + 40, `${format} label ink 40 units under the baseline`);
+    near(label.props.x + 0.02 * label.props.font.size, gridX(look, canvas, 2), `${format} label flush left`);
     const last = label.props.layout.lines.at(-1);
-    const tag = nodes.find((n) => n.id === 'n.delta');
-    const tagText = tag.children.find((n) => n.type === 'text');
-    const labelBottom = boxes.label[1] + boxes.label[3];
-    if (boxes.delta[1] < labelBottom) {
-      near(tag.props.y + tagText.props.y + tagText.props.layout.lines[0].y, label.props.y + last.y, `${format} delta on the label baseline`);
-      near(boxes.delta[0], label.props.x + last.x + last.width + 32, `${format} delta 32 units after the label`);
+    if (boxes.delta[1] < boxes.label[1] + boxes.label[3]) {
+      near(boxes.delta[0], label.props.x + last.x + last.width + 32, `${format} delta 32 units to the right of the label`);
     } else {
-      assert.equal(format, '9:16', 'only a narrow format drops the delta under the label');
-      near(boxes.delta[0], label.props.x, 'under the label, flush left');
+      near(boxes.delta[0], label.props.x + 0.02 * label.props.font.size, `${format} too wide beside it: under the label, flush left`);
     }
-    assert.ok(!overlaps(boxes.delta, [rule.props.x, rule.props.y, ruleWidth(rule), 2]), 'delta clear of the hairline');
+    assert.ok(!overlaps(boxes.delta, boxes.value) && !overlaps(boxes.delta, boxes.label), `${format} delta clear`);
   }
+  const three = expandShot({ id: 'n', show: 'number', hold: 3, value: 459, label: 'rows' }, 'desk', '16:9');
+  assert.equal(textNode(three.nodes, 'n.value.digits').props.font.size, 560, 'three digits are capped at 560');
 });
 
 test('a figure too long for the span stops at scale step 5 and says it overflows', () => {
@@ -399,37 +703,42 @@ test('a figure too long for the span stops at scale step 5 and says it overflows
   assert.equal(digits.props.layout.overflow, true);
 });
 
-test('pop number: fitted inside the 9:16 safe zone and centred on it; label tag at step 3, delta at step 2', () => {
-  const { nodes, ctx, boxes, timing, canvas } = expandShot({ id: 'n', show: 'number', say: 'We are forty one percent faster.', value: 41, suffix: '%', label: 'faster', delta: 'vs last year' }, 'pop', '9:16');
-  const look = ctx.look;
-  const safe = viralOf(canvas);
-  const safeW = canvas.w - safe.left - safe.right;
-  const cx = safe.left + safeW / 2, cy = (safe.top + canvas.h - safe.bottom) / 2;
-  const fig = nodes.find((n) => n.id === 'n.value');
-  near(boxes.value[0] + boxes.value[2] / 2, cx, 'figure centred on the safe zone');
-  assert.ok(boxes.value[2] <= safeW + EPS && boxes.value[2] > 0.97 * safeW, `fills the safe width: ${boxes.value[2]} of ${safeW}`);
-  assert.ok(textNode(fig.children, 'n.value.digits').props.font.size <= 760);
-  const top = boxes.value[1], bottom = boxes.delta[1] + boxes.delta[3];
-  near((top + bottom) / 2, cy, 'the block centred on the safe zone');
-  const land = timing.words[2].start;
-  near(sample(fig.tracks.scale, land + look.moves.emphasize.dur), look.moves.emphasize.scale, 'pulse on landing');
-  assert.equal(sample(fig.tracks.scale, Math.max(0, land - look.moves.count.dur)), look.moves.enter.scale);
-  assert.ok(boxes.label[1] >= boxes.value[1] + boxes.value[3], 'label under the figure');
-  near(boxes.label[0] + boxes.label[2] / 2, cx, 'label tag centred');
-  assert.equal(textNode(nodes, 'n.label.text').props.font.size, look.scale[2]);
-  assert.equal(nodes.find((n) => n.id === 'n.label').children.find((n) => n.type === 'path').props.fill, look.palette.accent);
-  assert.ok(boxes.delta[1] >= boxes.label[1] + boxes.label[3]);
-  const delta = textNode(nodes, 'n.delta');
-  assert.equal(delta.props.fill, look.palette.ink2);
-  assert.equal(delta.props.font.size, look.scale[1]);
+test('a number with a kicker gets the slug; without one, none', () => {
+  const film = filmOf([{ id: 'n', show: 'number', hold: 3, value: 5, label: 'skills', kicker: 'The count' }, { id: 'm', show: 'number', hold: 3, value: 6, label: 'x' }]);
+  const slug = slugOf(expandIn(film, 0).nodes, 'n');
+  assert.ok(slug, 'a slug');
+  assert.equal(slug.group.children.find((n) => n.id === 'n.slug.number').props.layout.lines[0].words[0].text, '01');
+  assert.equal(slugOf(expandIn(film, 1).nodes, 'm'), null);
 });
 
-test('pop number on 16:9 fits columns 1 to 12 up to 760 units, centred on the canvas', () => {
-  const { nodes, ctx, canvas, boxes } = expandShot({ id: 'n', show: 'number', hold: 2, value: 7, label: 'x' }, 'pop', '16:9');
-  const size = textNode(nodes, 'n.value.digits').props.font.size;
-  assert.equal(size, 760, 'a short figure is capped at 760');
-  near(boxes.value[0] + boxes.value[2] / 2, canvas.w / 2);
-  assert.ok(boxes.value[2] <= gridX(ctx.look, canvas, 13) - gridX(ctx.look, canvas, 1) + EPS);
+test('pop number: the figure fills the safe width up to 900 units, flush left; label tag at step 3 40 units under the baseline; delta a rule tag 16 under that; the block centred', () => {
+  const { nodes, ctx, boxes, timing, canvas } = expandShot({ id: 'n', show: 'number', say: 'Five skills. One file each.', value: 5, label: 'skills', delta: 'one JSON file each' }, 'pop', '9:16');
+  const look = ctx.look;
+  const safe = viralOf(canvas);
+  const fig = nodes.find((n) => n.id === 'n.value');
+  const digits = textNode(fig.children, 'n.value.digits');
+  // hand-computed: a "5" is 0.51 em of ink; 765 px of safe width would take it to 1500 px, so the 900 cap binds
+  assert.equal(digits.props.font.size, 900);
+  near(boxes.value[0], safe.left, 'figure ink flush left on the safe edge');
+  const baseline = fig.props.y + digits.props.y + digits.props.layout.lines[0].y;
+  const label = nodes.find((n) => n.id === 'n.label');
+  const labelBox = plateBox(label);
+  near(labelBox[0], safe.left, 'label tag flush left');
+  near(labelBox[1], baseline + 40, 'label tag 40 units under the baseline');
+  assert.equal(label.children.find((n) => n.type === 'path').props.fill, look.palette.accent);
+  assert.equal(label.children.find((n) => n.type === 'text').props.font.size, look.scale[2], 'scale step 3');
+  const delta = nodes.find((n) => n.id === 'n.delta');
+  const deltaBox = plateBox(delta);
+  near(deltaBox[0], safe.left, 'delta tag flush left');
+  near(deltaBox[1], labelBox[1] + labelBox[3] + 16, 'delta 16 units under the label tag');
+  assert.equal(delta.children.find((n) => n.type === 'path').props.fill, look.palette.rule);
+  assert.equal(delta.children.find((n) => n.type === 'text').props.fill, look.palette.ink);
+  near((boxes.value[1] + deltaBox[1] + deltaBox[3]) / 2, safe.top + (canvas.h - safe.top - safe.bottom) / 2, 'the block centred in the safe zone');
+  const land = timing.words[0].start;
+  assert.ok(sample(fig.tracks.scale, land + look.moves.emphasize.dur) > 1, 'the figure still pulses as it lands');
+  const three = expandShot({ id: 'n', show: 'number', hold: 2, value: 459, label: 'x' }, 'pop', '16:9');
+  assert.equal(textNode(three.nodes, 'n.value.digits').props.font.size, 760, 'three digits up to 760');
+  near(three.boxes.value[0], gridX(look, canvasOf('16:9'), 1), 'flush left on column 1 on 16:9');
 });
 
 // ---- clipping ----
@@ -466,6 +775,25 @@ test('pop clipping: cutout only, upright, centred on the safe zone at 92% of its
   near(sample(pic.tracks.scale, 0), ctx.look.moves.enter.scale);
 });
 
+test('pop establishing picture on a vertical format: a 4:5 crop of the source, as tall as the image allows, centred on the first targeted region', () => {
+  const imageOf = (shot, format = '9:16') => {
+    const r = expandShot(shot, 'pop', format);
+    return { image: all([r.nodes.find((n) => n.id === 'c.image')]).find((n) => n.type === 'image'), canvas: r.canvas };
+  };
+  // hand-computed: 1600 x 1000 at 4:5 is 800 x 1000; the query region's centre is at 0.75 x 1600 = 1200, so the
+  // window would start at 800, which is also the furthest right it can go (1600 - 800)
+  const targeted = imageOf({ ...POP_SHOT, on: [{ at: 'word:query', do: 'underline', target: 'region:query' }] });
+  assert.deepEqual(targeted.image.props.clip, [800, 0, 800, 1000]);
+  const safe = viralOf(targeted.canvas), safeW = targeted.canvas.w - safe.left - safe.right;
+  near(targeted.image.props.w, 0.92 * safeW, 'a cutout 92% of the safe width');
+  near(targeted.image.props.w / targeted.image.props.h, 4 / 5, '4:5');
+  const centred = imageOf({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { mid: [0.3, 0.3, 0.2, 0.2] } });
+  assert.deepEqual(centred.image.props.clip, [400, 0, 800, 1000], 'no region target: the crop is centred');
+  const left = imageOf({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { l: [0.05, 0.3, 0.2, 0.2] }, on: [{ at: 1, do: 'underline', target: 'region:l' }] });
+  assert.deepEqual(left.image.props.clip, [0, 0, 800, 1000], 'clamped inside the image');
+  assert.equal(imageOf({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3 }, '16:9').image.props.clip, undefined, 'a wide format shows the whole picture');
+});
+
 test('desk clipping on vertical formats is 92% of the width inside the margins', () => {
   for (const format of ['9:16', '4:5', '1:1']) {
     const { nodes, ctx, canvas, hero } = expandShot({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3 }, 'desk', format);
@@ -495,7 +823,7 @@ test('a region box is the region inside the drawn picture, through its rotation'
   desk.boxes['region:query'].forEach((v, i) => near(v, want[i], `desk ${i}`));
 });
 
-test('a mark on a region goes over the picture, and the desk camera pushes until the region fills 62% of the width', () => {
+test('a mark on a region goes over the picture, and the desk camera pushes until the region fills 50% of the width', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
     on: [{ at: 'word:query', do: 'circle', target: 'region:query' }] };
   for (const format of ['16:9', '9:16']) {
@@ -504,7 +832,7 @@ test('a mark on a region goes over the picture, and the desk camera pushes until
     assert.ok(ids.indexOf('c.on0') > ids.indexOf('c.image'), 'mark drawn over the picture');
     const push = camera.find((layer) => layer.some((k) => k.zoom !== undefined));
     const at = Math.max(timing.words[4].start, 0.6 + 0.9); // the first shot shows the whole picture for 0.6 s before a push of 0.9 s
-    const want = Math.min(3.2, Math.max(1.2, (0.62 * canvas.w) / boxes['region:query'][2]));
+    const want = Math.min(2.6, Math.max(1.2, (0.5 * canvas.w) / boxes['region:query'][2]));
     near(push.at(-1).t, at, `${format} lands on the event`);
     near(push.at(-1).zoom, want, `${format} zoom`);
     assert.equal(push.at(-1).ease, ctx.look.moves.enter.ease);
@@ -536,21 +864,48 @@ test('a highlight on a region is a hand-drawn marker frame with the rest of the 
   const pic = nodes.find((n) => n.id === 'c.image');
   assert.ok(!all(nodes).some((n) => n.props.under), 'no filled band');
   const sides = all([pic]).filter((n) => /^c\.on0\.side\d$/.test(n.id));
+  const passes = all([pic]).filter((n) => /^c\.on0\.side\d\.pass2$/.test(n.id));
   assert.equal(sides.length, 4, 'four strokes inside the picture');
-  for (const s of sides) {
+  assert.equal(passes.length, 4, 'each drawn twice: a second pass of the same stroke');
+  for (const s of [...sides, ...passes]) {
     assert.equal(s.props.stroke, ctx.look.palette.accent);
-    assert.equal(s.props.strokeWidth, 12);
+    assert.equal(s.props.strokeWidth, 7, '7 units wide');
     assert.equal(s.props.lineCap, 'round');
     assert.equal(s.props.blend, undefined);
   }
+  sides.forEach((s, i) => {
+    const second = passes[i];
+    assert.notEqual(second.props.d, s.props.d, 'the second pass is offset');
+    const shift = (d) => d.match(/-?\d+(?:\.\d+)?/g).map(Number);
+    const [a, b] = [shift(s.props.d), shift(second.props.d)];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    a.forEach((v, k) => near(b[k] - v, k % 2 === 0 ? dx : dy, `side ${i}: the same geometry, moved`));
+    assert.ok(Math.hypot(dx, dy) > 0 && Math.hypot(dx, dy) <= 3, `a small offset: ${Math.hypot(dx, dy)}`);
+  });
   const lands = sides.map((s) => lastKey(s.tracks.draw).t);
   assert.deepEqual([...lands].sort((a, b) => a - b), lands, 'drawn on in order');
   landsOn(sides[3], 'draw', at, 'the frame closes on the event');
+  // geometry in the picture's own space: the region [0.6, 0.2, 0.3, 0.2] of the drawn picture
+  const W = 0.62 * 1080, H = W * 1000 / 1600;
+  const region = [0.6 * W - W / 2, 0.2 * H - H / 2, 0.3 * W, 0.2 * H];
+  const pts = (s) => s.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
+  const ys = [...sides, ...passes].flatMap((s) => pts(s).filter((_, i) => i % 2 === 1));
+  const xs = [...sides, ...passes].flatMap((s) => pts(s).filter((_, i) => i % 2 === 0));
+  const half = 3.5;
+  // the bottom stroke is the lowest ink: the side strokes do not overshoot downward into the picture below the region,
+  // so the frame reaches the gap plus its own width, plus at most 2 units of hand wobble
+  assert.ok(Math.max(...ys) + half <= region[1] + region[3] + 6 + 7 + 2 + EPS, `the frame reaches ${(Math.max(...ys) + half - region[1] - region[3]).toFixed(1)} below the region: at most the gap, one width and the wobble`);
+  // the frame overshoots each corner by at most 10 units past the gap and stroke
+  assert.ok(Math.min(...xs) >= region[0] - 6 - half - 10 - EPS && Math.max(...xs) <= region[0] + region[2] + 6 + half + 10 + EPS, 'overshoot at most 10 units');
+  // it hugs the region: the top stroke's points sit 6 units plus half the stroke above it, within the hand wobble
+  const top = pts(sides[0]).filter((_, i) => i % 2 === 1);
+  const mean = top.reduce((a, b) => a + b, 0) / top.length;
+  assert.ok(Math.abs(mean - (region[1] - 6 - half)) <= 1.5 + EPS, `top stroke centre ${mean} at the 6-unit gap (${region[1] - 6 - half})`);
   const dim = all([pic]).find((n) => n.id === 'c.on0.dim');
   assert.equal(dim.props.fill, ctx.look.palette.ink);
   assert.equal(dim.props.d.match(/M/g).length, 2, 'the region is cut out of the overlay');
   near(sample(dim.tracks.opacity, 0), 0);
-  near(sample(dim.tracks.opacity, at), 0.32, 'dims with the frame');
+  near(sample(dim.tracks.opacity, at), 0.2, 'dims to 0.20 with the frame');
 });
 
 // ---- pop clipping: a region event is a cut to a close-up ----
@@ -599,14 +954,31 @@ test('pop: a second, different region event switches to that close-up; devices s
   const ys = underline.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
   assert.ok(Math.min(...ys) > by + bh, 'under the close-up');
   near(lastKey(underline.tracks.draw).t, first + registries.looks.get('pop').moves.draw.dur, 'starts drawing on the cut');
-  const sides = all([b]).filter((n) => /^c\.on1\.side\d$/.test(n.id));
-  assert.equal(sides.length, 4, 'a ruled frame around the second close-up');
-  for (const s of sides) { assert.equal(s.props.strokeWidth, 10); assert.equal(s.props.lineCap, 'square'); }
+  assert.ok(!all([b]).some((n) => /^c\.on1\.side/.test(n.id)), 'a highlight on a pop close-up draws no frame');
   assert.ok(!all([b]).some((n) => n.id === 'c.on1.dim'), 'no overlay on a close-up');
-  const [cx, cy, cw, ch] = boxes['region:chart'];
-  const xs = sides.flatMap((s) => s.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 0));
-  assert.ok(Math.min(...xs) < cx && Math.max(...xs) > cx + cw, 'the frame goes around the close-up');
-  assert.ok(ch > 0);
+  assert.ok(boxes['region:chart'][3] > 0);
+});
+
+test('pop region highlight: the close-up\'s hard shadow turns from accent2 to accent and grows from 10 to 18 units on the event, with the emphasize ease; nothing else is drawn', () => {
+  const { nodes, timing, ctx } = expandShot(POP_SHOT, 'pop', '9:16');
+  const look = ctx.look;
+  const at = timing.words[8].start; // chart: the highlight
+  const close = nodes.find((n) => n.id === 'c.close1');
+  const shadows = all([close]).filter((n) => /\.shadow(\.emphasis)?$/.test(n.id));
+  const base = shadows.find((n) => n.id.endsWith('.shadow')), lifted = shadows.find((n) => n.id.endsWith('.shadow.emphasis'));
+  assert.equal(base.props.fill, look.palette.accent2);
+  assert.equal(lifted.props.fill, look.palette.accent);
+  near(opacityAt(base, at - 1 / FPS), 1); near(opacityAt(lifted, at - 1 / FPS), 0);
+  const on = at + 1e-6; // anchors round to 1e-6 s
+  near(opacityAt(base, on), 0, 'a step change on the event'); near(opacityAt(lifted, on), 1);
+  near(sample(lifted.tracks.x, on), 10, 'from 10'); near(sample(lifted.tracks.y, on), 10);
+  near(sample(lifted.tracks.x, at + look.moves.emphasize.dur), 18, 'grown to 18 one emphasize move later');
+  near(sample(lifted.tracks.y, at + 5), 18);
+  const halfway = sample(lifted.tracks.x, at + look.moves.emphasize.dur / 2);
+  assert.ok(Math.abs(halfway - (10 + 8 * ease(look.moves.emphasize.ease)(0.5))) < 1e-3, `with the emphasize ease: ${halfway}`);
+  assert.equal(all(nodes).filter((n) => n.id.startsWith('c.on1')).length, 0, 'no device nodes for the highlight');
+  // the underline on the first close-up stays as it is
+  assert.ok(all([nodes.find((n) => n.id === 'c.close0')]).some((n) => n.id === 'c.on0'));
 });
 
 test('pop clippings never push the camera, and the pop field ignores the camera', () => {
@@ -685,6 +1057,43 @@ test('punch starts the incoming frame at zoom 1.15 and settles', () => {
   assert.deepEqual(out.map((n) => n.id), ['b']);
   near(out[0].scale, z);
   near(out[0].x, 960 + (500 - 960) * z);
+});
+
+test('slide and punch smear their moving content: 5 samples across one frame of travel, the outer four at a fifth of the opacity behind the centre one at full; a slide shows both shots at p 0.5', () => {
+  const canvas = { w: 1920, h: 1080 };
+  const frame = 1 / (30 * 0.4); // the p of one frame of a 0.4 s slide at 30 fps
+  const field = Object.freeze({ ...fakeSampled('field', -20), depth: 1 });
+  const out = registries.cuts.get('slide').apply({ from: [field, fakeSampled('a', 1500)], to: [field, fakeSampled('b', 200)], p: 0.5, canvas, frame });
+  assert.equal(out.filter((n) => n.id === 'field').length, 1, 'the shared field is not smeared');
+  const a = out.filter((n) => n.id === 'a'), b = out.filter((n) => n.id === 'b');
+  assert.equal(a.length, 5); assert.equal(b.length, 5);
+  // drawn back to front: the outer samples (0, 1, 3, 4 across the frame) at a fifth, then the centre one (p itself) at full
+  const order = [0, 1, 3, 4, 2];
+  [...a, ...b].forEach((n, i) => near(n.opacity, i % 5 === 4 ? 1 : 0.2, `copy ${i}: the centre sample last at full opacity, the others at a fifth`));
+  const e = (q) => ease('inOutCubic')(q);
+  a.forEach((n, i) => near(n.x, 1500 - e(0.5 + frame * (order[i] / 4 - 0.5)) * 1920, `outgoing sample ${order[i]}`));
+  b.forEach((n, i) => near(n.x, 200 + (1 - e(0.5 + frame * (order[i] / 4 - 0.5))) * 1920, `incoming sample ${order[i]}`));
+  const onScreen = (n) => n.x + 10 > 0 && n.x < canvas.w; // the fake node is a 10 px square at its x
+  assert.ok(a.some(onScreen) && b.some(onScreen), 'both shots on screen mid-cut');
+  const punch = registries.cuts.get('punch').apply({ from: [], to: [fakeSampled('b', 500)], p: 0.5, canvas, frame: 1 / 6 });
+  assert.equal(punch.length, 5);
+  punch.forEach((n, i) => near(n.scale, 1.15 + (1 - 1.15) * ease('outExpo')(0.5 + (1 / 6) * (order[i] / 4 - 0.5)), `punch sample ${order[i]}`));
+  near(punch.at(-1).opacity, 1, 'the punch draws its centre sample whole, so a picture is never tinted by the shadows of the copies under it');
+  // a real film: a slide in pop shows smeared copies of both shots' text mid-cut, and none once it has run
+  const shots = [{ id: 'one', show: 'statement', say: 'Your charts lie.' }, { id: 'two', show: 'statement', say: 'No cloud.', cut: 'slide' }];
+  const f = filmFor(shots, 'pop', '9:16');
+  const second = buildTimeline(filmOf(shots, 'pop', '9:16'), { fps: FPS }).shots[1];
+  const mid = f.sampleAt(second.start + 0.2);
+  assert.equal(mid.filter((n) => n.id === 'one.text').length, 5, 'the outgoing statement smeared');
+  assert.equal(mid.filter((n) => n.id === 'two.text').length, 5, 'the incoming statement smeared');
+  assert.equal(f.sampleAt(second.start + 0.5).filter((n) => n.id === 'two.text').length, 1, 'crisp once the cut has run');
+  // a desk slide between two statements: at p 0.5 the outgoing text still reaches onto the canvas and the incoming one has arrived on it
+  const desk = [{ id: 'one', show: 'statement', say: 'Most dashboards cannot tell you where a number came from.' }, { id: 'two', show: 'statement', say: 'This one is different.', cut: 'slide' }];
+  const g = filmFor(desk, 'desk', '16:9');
+  const at = buildTimeline(filmOf(desk, 'desk', '16:9'), { fps: FPS }).shots[1].start + 0.2;
+  const texts = (id) => g.sampleAt(at).filter((n) => n.id === id);
+  assert.ok(texts('one.text').some((n) => n.x + n.props.layout.width > 0), 'the outgoing text is on screen at p 0.5');
+  assert.ok(texts('two.text').some((n) => n.x < canvas.w), 'the incoming text is on screen at p 0.5');
 });
 
 test('match interpolates a shared node at p 0.5 and fades the others', () => {
@@ -787,7 +1196,9 @@ test('every kind stays inside the safe area on every format once its entrances h
         for (const [target, box] of Object.entries(boxes)) inside(box, insets, canvas, `${look} ${format} ${shot.show} ${target}`);
         // Every all-text node as drawn once landed (kicker, label, caption, the figure group). Nodes with paths (the
         // card, tags, hairlines) need the page to measure and are covered by their target boxes above.
-        const drawn = annotate(sampleGraph(nodes, timing.duration).filter(isTextOnly));
+        // A stack sets its lines flush left by their ink, so a line's advance box starts a side bearing before the
+        // edge; its ink is checked through the `text` and word boxes above (the review measures ink the same way).
+        const drawn = annotate(sampleGraph(nodes, timing.duration).filter(isTextOnly).filter((n) => !n.children.some((c) => c.props.stack)));
         for (const n of drawn) inside(n.bbox, insets, canvas, `${look} ${format} ${shot.show} node ${n.id}`);
       }
     }
@@ -962,12 +1373,16 @@ test('the validator checks clipping regions, close-up timing, image targets afte
 test('the count shows at most 24 values, a centred count centres every value, -$5 reads right, and huge values are refused', () => {
   const steps = countSteps({ value: 9999, decimals: 0, start: 0, land: 1, rate: 60, curve: ease('outCubic') });
   assert.ok(steps.length <= 24, `${steps.length} values`);
-  const { nodes } = expandShot({ id: 'n', show: 'number', say: 'Four hundred fifty nine rows.', value: 1459, label: 'rows' }, 'pop', '9:16');
+  const { nodes } = expandShot({ id: 'n', show: 'number', say: 'Four hundred fifty nine rows.', value: 1459, label: 'rows' }, centredPop(), '9:16');
   const digits = textNode(nodes, 'n.value.digits');
   const words = digits.props.layout.lines[0].words;
   const centreOf = (step) => { const first = words[step.words[0]], last = words[step.words.at(-1)]; return (first.x + last.x + last.width) / 2; };
   const final = centreOf(digits.props.steps.at(-1));
   for (const step of digits.props.steps) near(centreOf(step), final, `step ${step.text} centred`);
+  // a stack counts flush left: every value starts in the same first cell
+  const flush = textNode(expandShot({ id: 'n', show: 'number', say: 'Four hundred fifty nine rows.', value: 1459, label: 'rows' }, 'pop', '9:16').nodes, 'n.value.digits');
+  const flushWords = flush.props.layout.lines[0].words;
+  for (const step of flush.props.steps) near(flushWords[step.words[0]].x, flushWords[flush.props.steps.at(-1).words[0]].x, `pop step ${step.text} starts flush`);
   const negative = expandShot({ id: 'n', show: 'number', hold: 2, value: -5, prefix: '$', label: 'x' });
   assert.equal(textNode(negative.nodes, 'n.value.prefix').props.layout.lines[0].words.map((w) => w.text).join(''), '-$');
   assert.equal(textNode(negative.nodes, 'n.value.digits').props.steps.at(-1).text, '5');
@@ -1036,34 +1451,13 @@ test('a desk highlight over a run of words grows with them: never ahead of the l
   assert.ok(sample(band.tracks.reveal, built.timing.words[2].start, band.step) < 1, 'not full when the first of them lands');
 });
 
-test('in viral mode the first shot reads from frame 0: every word on screen in ink2, each taking its colour when spoken; later shots arrive word by word', () => {
-  const hook = { id: 'hook', show: 'statement', say: 'Your charts are *hiding* something.' };
-  const film = filmFor([hook, { id: 'two', show: 'statement', say: 'Look closer.' }], 'pop', '9:16');
-  const look = registries.looks.get('pop');
-  const first = film.sampleShot(0, 0).find((n) => n.type === 'text');
-  assert.ok(first.words.every((w) => w.opacity === 1 && w.scale === 1), 'all words visible at full size on frame 0');
-  assert.deepEqual(first.words.map((w) => w.fill), Array(5).fill(look.palette.ink2));
-  const spoken = buildTimeline(filmOf([hook, { id: 'two', show: 'statement', say: 'Look closer.' }], 'pop', '9:16'), { fps: FPS }).shots[0].words;
-  const after = film.sampleShot(0, spoken[3].start + 5).find((n) => n.type === 'text');
-  assert.equal(after.words[3].fill, look.palette.accent, 'the emphasised word has turned to its treatment');
-  assert.equal(after.words[0].fill, look.palette.ink, 'a plain word has turned to ink');
-  const early = film.sampleShot(0, 0).find((n) => n.type === 'text');
-  assert.equal(early.words[4].fill, look.palette.ink2, 'a word not yet spoken is still quiet');
-  const pulse = film.sampleShot(0, spoken[1].start + look.moves.emphasize.dur).find((n) => n.type === 'text');
-  assert.ok(pulse.words[1].scale > 1, 'a word pulses when it is spoken');
-  const second = film.sampleShot(1, 0).find((n) => n.type === 'text');
-  assert.ok(second.words.some((w) => w.opacity === 0), 'the second shot still arrives word by word');
-  const desk = filmFor([hook, hook].map((s, i) => ({ ...s, id: `s${i}` })), 'desk');
-  assert.ok(desk.sampleShot(0, 0).find((n) => n.type === 'text').words.some((w) => w.opacity === 0), 'pro mode keeps word-by-word arrival in its first shot');
-});
-
 test('no frame of an emphasis pulse has a word overlapping its neighbour on the line, and the peak is capped to the gaps and never above the look', () => {
   const look = registries.looks.get('pop');
   for (const [text, format] of [['Your charts are *hiding* something.', '16:9'], ['A *superfragilistic* B', '16:9'], ['No cloud. No account. *No upload*.', '9:16'], ['Your charts are *hiding* something.', '9:16']]) {
     const shot = { id: 'p', show: 'statement', say: text };
-    const film = filmFor([FILLER, shot], 'pop', format);
+    const film = filmFor([FILLER, shot], centredPop(), format); // the pulse lives on in recolor-scale looks
     const frames = Math.round(film.duration * FPS);
-    const spokenWords = buildTimeline(filmOf([FILLER, shot], 'pop', format), { fps: FPS }).shots[1].words;
+    const spokenWords = buildTimeline(filmOf([FILLER, shot], centredPop(), format), { fps: FPS }).shots[1].words;
     const emphasised = spokenWords.findIndex((w) => w.emphasis), emphasisAt = spokenWords[emphasised].start;
     let peak = 1;
     for (let i = 0; i < frames; i++) {

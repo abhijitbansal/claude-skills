@@ -12,6 +12,11 @@ const EDGE_NON_LETTERS = /^[^\p{L}]+|[^\p{L}]+$/gu;
 const FIT_EPSILON = 1e-6;
 // Divides maxWidth^2 to give the cost of breaking away from a preferred point.
 const OFF_POINT_DIVISOR = 4;
+// A sentence end: fitText (layout.mjs) keeps it at a line end when a slightly smaller size allows.
+const SENTENCE_END = /[.!?]["'”’)\]]*$/;
+
+/** Does a word end a sentence (. ! or ? with any closing quote or bracket)? */
+export const endsSentence = (word) => SENTENCE_END.test(word);
 // A last line of one word is penalised when the line above has at least this many words.
 const LONG_LINE_WORDS = 3;
 
@@ -55,6 +60,51 @@ function lineEnds(ctx, i) {
     if (ctx.forced[k - 1]) break;
   }
   return ends;
+}
+
+// ---- the stack: short lines, each set at its own size ----
+
+const STACK_MAX_WORDS = 3;
+const STACK_LONG_LETTERS = 12; // a line of more letters than this holds at most 2 words...
+const STACK_LONG_COST = 100; // ...which is all but a rule: this outweighs any other choice
+const STACK_LINE_COST = 1; // fewer lines are preferred
+const STACK_OFF_POINT_COST = 0.75; // a break away from a preferred point
+const STACK_SHORT_LETTERS = 4; // a line of one word this short or shorter is a short word left alone...
+const STACK_ALONE_COST = 0.5; // ...which costs this much
+const LETTERS = /[\p{L}\p{N}]/gu;
+
+const letterCount = (word) => (bare(word).match(LETTERS) ?? []).length;
+
+/**
+ * Break words into the lines of a stack, where each line is then set at its own size: at most STACK_MAX_WORDS words a
+ * line, two when the line would have more than STACK_LONG_LETTERS letters, a `|` forcing a break, and otherwise as few
+ * lines as possible, broken at preferred points (punctuation, before a preposition). Widths play no part.
+ * @param {string[]} words words; one ending in `|` forces a break after it
+ * @returns {number[][]} word indexes per line
+ */
+export function stackLines(words) {
+  const n = words.length;
+  if (n === 0) return [];
+  const ctx = buildContext(words, words.map(() => 0), 0, Infinity, []);
+  const cost = (i, k) => {
+    const letters = words.slice(i, k).reduce((sum, w) => sum + letterCount(w), 0);
+    const long = k - i > 2 && letters > STACK_LONG_LETTERS ? STACK_LONG_COST : 0;
+    const alone = k - i === 1 && letters <= STACK_SHORT_LETTERS ? STACK_ALONE_COST : 0;
+    return STACK_LINE_COST + long + alone + (ctx.preferred(k) ? 0 : STACK_OFF_POINT_COST);
+  };
+  const best = new Array(n + 1).fill(Infinity);
+  const choice = new Array(n + 1).fill(n);
+  best[n] = 0;
+  for (let i = n - 1; i >= 0; i--) {
+    for (let k = i + 1; k <= Math.min(n, i + STACK_MAX_WORDS); k++) {
+      const total = cost(i, k) + best[k];
+      if (total < best[i]) { best[i] = total; choice[i] = k; }
+      if (ctx.forced[k - 1]) break;
+    }
+  }
+  const rows = [];
+  for (let i = 0; i < n; i = choice[i]) rows.push(Array.from({ length: choice[i] - i }, (_, j) => i + j));
+  return rows;
 }
 
 /**

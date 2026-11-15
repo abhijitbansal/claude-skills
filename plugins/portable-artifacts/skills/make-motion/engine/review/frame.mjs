@@ -11,7 +11,13 @@
 // actualBoundingBox) the ink runs from the highest glyph to the lowest of every line, accents and descenders included.
 // Without it: from the cap line (CAP_HEIGHT) to the baseline of every line, plus WORD_DESCENT below a line with a descender
 // glyph and up to the font's ascent over a line with an accented capital. A label set a designed distance under a
-// figure, or a kicker over a headline, would otherwise overlap it.
+// figure, or a kicker over a headline, would otherwise overlap it. Across, each word runs from its measured ink start to
+// its ink end (lineInk[k].words[j] = { left, right } from the word's origin) when the snapshot has them, else over its
+// advance, so a line or a figure set flush left by its ink (a stack, a count) is judged by its ink, not by the side
+// bearing before it.
+//
+// Stacks. A stack (props.stack: the id of the statement it belongs to) sets each line of one text at its own size; for the
+// sizes and hero rules its lines are one size class (the largest), and the viral hook rule counts all of its words.
 //
 // Landed. A word at opacity 0 on its shot's last frame is permanently hidden (the number kind stacks every step of its
 // count as a word and shows one at a time). A text has landed when every word that is not permanently hidden is at
@@ -39,7 +45,12 @@ export const PRO_MAX_LINE_WORDS = 12;
 export const VIRAL_MAX_FIRST_WORDS = 7;
 // Two sizes within this ratio of each other (a camera drift scales every text a little) count as one size.
 const SAME_SIZE_RATIO = 1.1;
-const SETTLE_TOLERANCE = 0.02;
+// A text stands settled within 0.2% of its resting scale. A camera punch (8% in pop) takes a frame or two to come home,
+// and at 1% it still carries a line set flush on the safe edge several pixels past it: that is a move, not a layout.
+const SETTLE_TOLERANCE = 0.002;
+// Text may reach this far past the safe area (units) before it is outside: a line set flush on the edge by its measured
+// ink stays within it through the last 0.2% of a punch.
+const SAFE_TOLERANCE_UNITS = 1;
 const EPSILON = 1e-6;
 const MECHANICAL = 'mechanical';
 const CREATIVE = 'creative';
@@ -71,11 +82,13 @@ function union(boxes) {
 // for this line, else from the cap line and the line's descender and accent glyphs.
 function lineReach(n, line, k, metrics) {
   const measured = n.lineInk?.[k];
-  if (measured && Number.isFinite(measured.ascent) && Number.isFinite(measured.descent)) return { up: measured.ascent, down: measured.descent };
+  const across = Array.isArray(measured?.words) ? measured.words : [];
+  if (measured && Number.isFinite(measured.ascent) && Number.isFinite(measured.descent)) return { up: measured.ascent, down: measured.descent, across };
   const text = line.words.map((word) => word.text).join(' ');
   return {
     up: ACCENT_RE.test(text) ? metrics.ascent : CAP_HEIGHT * n.layout.size,
     down: DESCENDER_RE.test(text) ? WORD_DESCENT * n.layout.size : 0,
+    across,
   };
 }
 
@@ -85,10 +98,15 @@ function wordBoxes(n, line, k, word, metrics) {
   const t = { ...WORD_IDENTITY, ...n.words?.[word.index] };
   const scale = Math.abs(t.scale), half = (word.width / HALF) * scale;
   const left = line.x + word.x + word.width / HALF + t.x - half;
-  const { up, down } = lineReach(n, line, k, metrics);
+  const reach = lineReach(n, line, k, metrics);
+  // a word's ink may start after its origin and end before (or past) its advance: measured, when known
+  const own = reach.across[line.words.indexOf(word)];
+  const measuredAcross = Number.isFinite(own?.left) && Number.isFinite(own?.right);
+  const inkLeft = measuredAcross ? left + own.left * scale : left;
+  const inkRight = measuredAcross ? left + own.right * scale : left + HALF * half;
   return {
     whole: [left, line.y + t.y - metrics.ascent * scale, HALF * half, (metrics.ascent + metrics.descent) * scale],
-    ink: [left, line.y + t.y - up * scale, HALF * half, (up + down) * scale],
+    ink: [inkLeft, line.y + t.y - reach.up * scale, Math.max(0, inkRight - inkLeft), (reach.up + reach.down) * scale],
   };
 }
 
@@ -167,8 +185,8 @@ const pathOf = (ctx) => `shots[${ctx.shotIndex ?? ctx.shotId}]`;
 const finding = (ctx, kind, rule, node, message, role) => ({ kind, path: pathOf(ctx), message, rule, node, ...(role ? { role } : {}) });
 const units = (n) => Number(n.toFixed(1));
 
-function outsideSafe([x, y, w, h], safe) {
-  return x < safe.left - EPSILON || y < safe.top - EPSILON || x + w > safe.right + EPSILON || y + h > safe.bottom + EPSILON;
+function outsideSafe([x, y, w, h], safe, slack) {
+  return x < safe.left - slack || y < safe.top - slack || x + w > safe.right + slack || y + h > safe.bottom + slack;
 }
 
 // The widest word of a text, as { text, units }: what keeps it from fitting when it will not shrink any further.
@@ -189,7 +207,7 @@ function textRules(texts, ctx) {
     const id = node.id;
     if (node.layout.overflow) out.push(finding(ctx, CREATIVE, 'overflow', id, overflowMessage(node, size), role));
     if (landed && size < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(size)} units tall; the floor is ${MIN_TEXT_UNITS}`, role));
-    if (landed && outsideSafe(ink, ctx.safe)) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
+    if (landed && outsideSafe(ink, ctx.safe, SAFE_TOLERANCE_UNITS * unitOf(ctx.canvas))) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
     return out;
   });
 }
@@ -247,8 +265,21 @@ function sizeClusters(texts) {
   }, []);
 }
 
-function hierarchyRules(texts, ctx) {
+// The texts as size classes: the lines of one stack count once, at the size of its largest line.
+function sizeClasses(texts) {
+  const stacks = new Map();
+  const loose = [];
+  for (const t of texts) {
+    const stack = t.node.props?.stack;
+    if (stack === undefined) loose.push(t);
+    else if (!stacks.has(stack) || stacks.get(stack).size < t.size) stacks.set(stack, t);
+  }
+  return [...loose, ...stacks.values()];
+}
+
+function hierarchyRules(all, ctx) {
   const out = [];
+  const texts = sizeClasses(all);
   const sized = sizeClusters(texts.filter((t) => t.role !== 'affix'));
   if (sized.length > MAX_TEXT_SIZES) {
     const sizes = sized.map((c) => Math.round(c[0])).join(', ');
@@ -265,6 +296,13 @@ function hierarchyRules(texts, ctx) {
 // The words of a line a viewer can see: a word at opacity 0 is not there.
 const shownWords = (node, words) => words.filter((word) => (node.words?.[word.index]?.opacity ?? 1) > 0);
 
+// A highlight is a pointer: one run of emphasised words laid out over more than one line (props.highlightLines, set by
+// the statement kind in a highlight look) is a creative finding.
+function highlightRules(texts, ctx) {
+  return texts.filter(({ node }) => node.props?.highlightLines > 1).map(({ node, role }) => finding(ctx, CREATIVE, 'highlight-lines', node.id,
+    `one highlight runs across ${node.props.highlightLines} lines; mark fewer words`, role));
+}
+
 function wordRules(texts, ctx) {
   const modeName = typeof ctx.mode === 'string' ? ctx.mode : ctx.mode?.name;
   const out = [];
@@ -277,7 +315,9 @@ function wordRules(texts, ctx) {
   }
   if (modeName === 'viral' && ctx.isFirstShot && texts.length > 0) {
     const hero = texts.reduce((best, t) => (t.size > best.size ? t : best));
-    const count = shownWords(hero.node, wordsOf(hero.node.layout)).length;
+    const stack = hero.node.props?.stack;
+    const parts = stack === undefined ? [hero] : texts.filter((t) => t.node.props?.stack === stack);
+    const count = parts.reduce((sum, t) => sum + shownWords(t.node, wordsOf(t.node.layout)).length, 0);
     if (count > VIRAL_MAX_FIRST_WORDS) out.push(finding(ctx, CREATIVE, 'hook-words', hero.node.id, `the opening statement has ${count} words; a viral hook takes at most ${VIRAL_MAX_FIRST_WORDS}`, hero.role));
   }
   return out;
@@ -292,7 +332,7 @@ function wordRules(texts, ctx) {
  *   film, for the finding's path (`shots[<index>]`; the id when absent). isFirstShot: the frame belongs to the first shot
  *   of the film (the viral hook rule). hiddenWords: node id -> indices of the words permanently hidden in this shot.
  *   restScales: node id -> accumulated scale on the shot's last frame (textScalesIn); a text is judged only while it
- *   stands within 2% of it.
+ *   stands within 0.2% of it (SETTLE_TOLERANCE).
  * @returns {{ kind: 'mechanical' | 'creative', path: string, message: string, rule: string, node: string, role?: string }[]}
  */
 export function auditFrame(sampled, ctx) {
@@ -300,5 +340,5 @@ export function auditFrame(sampled, ctx) {
   const unit = unitOf(ctx.canvas);
   const { texts, unmeasured } = visibleTexts(sampled, unit, ctx);
   const lost = unmeasured.map((id) => finding(ctx, MECHANICAL, 'measure', id, `${id}: could not be measured`));
-  return [...lost, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx)];
+  return [...lost, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx)];
 }

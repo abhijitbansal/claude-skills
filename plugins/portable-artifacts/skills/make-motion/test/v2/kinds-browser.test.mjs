@@ -125,3 +125,22 @@ test('an image node with clip draws only that part of the picture', async (t) =>
   assert.ok(blue[2] > 150 && blue[0] < 80, `the blue stripe fills its whole box: ${blue}`);
   assert.deepEqual(a.errors, []);
 });
+
+// ---- revision 1: word spacing with the real face ----
+
+test('pop display caps are set with a 0.26 em word space in the page, wider than the face\'s own space', async (t) => {
+  const film = { version: 2, mode: 'viral', look: 'pop', format: '9:16', fps: FPS, seed: 1, shots: [{ id: 's', show: 'statement', say: 'Your charts are hiding something.' }] };
+  const stage = await openStage(film, { specDir });
+  if (!stage) { t.skip('no browser'); return; }
+  t.after(() => stage.close());
+  const lines = await stage.page.evaluate(() => window.__snapshot(0).find((n) => n.id === 's.text').children.map((n) => ({ layout: n.props.layout, font: n.props.font })));
+  const look = registries.looks.get('pop');
+  const pair = lines.find((l) => l.layout.lines[0].words.length > 1);
+  assert.ok(pair, 'a line of two words');
+  const [a, b] = pair.layout.lines[0].words;
+  const gap = b.x - (a.x + a.width);
+  assert.ok(Math.abs(gap - 0.26 * pair.font.size) < 1e-6, `the gap is 0.26 em: ${gap} at ${pair.font.size}px`);
+  const own = await stage.page.evaluate((font) => window.__measure(' ', font).width, pair.font);
+  assert.ok(own < gap, `the face's own space (${own.toFixed(1)} px) is narrower than the set one`);
+  assert.equal(pair.font.wordSpace, look.fonts.display.wordSpace);
+});

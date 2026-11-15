@@ -9,7 +9,7 @@ import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { checkParams, isHand, styleOf, colourOf, deviceRng, spread, landing, polyline, at2, styledBy } from './shared.mjs';
 
-const BAND_HEIGHT = 1.18; // of the box height
+export const BAND_HEIGHT = 1.18; // of the box height: the band is this much taller than the box it is given
 const DEFAULT_WOBBLE = 3; // units: the corner jitter when the look gives none
 const SWIPE_OVERSHOOT = 5; // units: a hand swipe runs a little past the text at each end
 const EDGE_BOW = 0.6; // of the wobble: how far the middle of a long edge sits off the straight line

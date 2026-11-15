@@ -14,7 +14,8 @@ import { pop } from './pop.mjs';
  *
  * A typeface without a size. `width` is always a CSS font-stretch keyword (canvas reaches Archivo's width axis in
  * keyword steps only), `weight` a CSS weight. Fraunces carries no optical size: canvas picks it from the pixel size.
- * @typedef {{ family: string, weight: number, width: string }} Font
+ * `wordSpace` (em), when given, is the space between words in place of the face's measured space.
+ * @typedef {{ family: string, weight: number, width: string, wordSpace?: number }} Font
  *
  * @typedef {'display' | 'text' | 'label'} TrackingRole
  *
@@ -32,8 +33,10 @@ import { pop } from './pop.mjs';
  * @property {{ display: number, text: number }} maxLines
  * @property {{ text: number }} wordsPerLine
  * @property {{ field: string, params: object }} field  a name in registries.fields and its params
- * @property {'editorial' | 'centred'} composition  how shots lay out: flush left on grid columns, or centred
- * @property {'highlight' | 'recolor-scale'} emphasis
+ * @property {'editorial' | 'centred' | 'stack'} composition  how shots lay out: flush left on grid columns, centred, or
+ *   a stack of short lines each set at its own size to fill the width, flush left
+ * @property {'highlight' | 'recolor-scale' | 'recolor'} emphasis  a highlighter band, a recolour with a pulse, or a
+ *   recolour alone
  * @property {{ enter: Move, exit: Move, emphasize: Move, draw: Move, count: Move }} moves
  * @property {number} wordStagger  seconds between words that have no spoken time; 0 means words follow their spoken times
  * @property {{ drift: number, style: 'desk' | 'locked' }} camera  drift is a travel in units

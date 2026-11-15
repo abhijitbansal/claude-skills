@@ -21,7 +21,7 @@ export const RESERVED_IDS = Object.freeze([FIELD_ID]);
 /** The prefix of a target that names one of a clipping's regions. */
 export const REGION_PREFIX = 'region:';
 const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
-const PUSH = Object.freeze({ share: 0.62, min: 1.2, max: 3.2, dur: 0.9 }); // the region fills `share` of the width
+const PUSH = Object.freeze({ share: 0.5, min: 1.2, max: 2.6, dur: 0.9 }); // the region fills `share` of the width
 const PUSH_OVERSHOOT = 1.2; // a spring ease can carry the push this far past its target; the pan limit allows for it
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
 const FORCE_MARK = '|';
@@ -35,9 +35,9 @@ export const sizeAt = (look, step, unit) => look.scale[step - 1] * unit;
 
 /** A layout font for `role` at `size` px: the look's face, its tracking for that size and its line height. */
 export function fontFor(look, role, size, unit) {
-  const { family, weight, width } = look.fonts[role];
+  const { family, weight, width, wordSpace } = look.fonts[role];
   const lineHeight = role === 'display' ? look.lineHeight.display : look.lineHeight.text;
-  return { family, weight, width, size, tracking: look.tracking(size / unit, role), lineHeight };
+  return { family, weight, width, size, tracking: look.tracking(size / unit, role), lineHeight, ...(wordSpace === undefined ? {} : { wordSpace }) };
 }
 
 /** The id of a kind's main node: the shot's `hero` when given, else `<shot id>.<role>`. */
@@ -121,6 +121,46 @@ export const capBox = (x, baseline, width, size) => [x, baseline - CAP_HEIGHT * 
 /** The canvas box of a laid-out text at (x, y): each line from its cap line to just under its baseline. */
 export function inkBox(x, y, layout) {
   return unionBox(layout.lines.map((l) => capBox(x + l.x, y + l.y, l.width, layout.size)));
+}
+
+// Where glyphs reach when the measure reports no ink (the fake measure of the Node tests), as shares of the size.
+const ASCENDER = 0.76;
+const DESCENDER = 0.22;
+const ASCENDER_RE = /[bdfhklt]/;
+const DESCENDER_GLYPH_RE = /[gjpqyQ,;()[\]{}|@Ç]/;
+
+/**
+ * Where the glyphs of `text` really reach in `font`, in px from the origin on the baseline: `up` and `down` from the
+ * baseline, `left` where the ink starts (positive when it starts right of the origin) and `right` where it ends, the
+ * font's tracking included. Measured when the measure reports ink (the page's canvas does), else estimated: from the cap
+ * line (an ascender's height over b d f h k l t) to the baseline (a descender's depth under a descending glyph), and
+ * the advance width edge to edge.
+ */
+export function inkExtent(text, font, measure) {
+  const m = measure(text, font);
+  const trackingPx = (font.tracking ?? 0) * font.size;
+  const glyphs = [...text].length;
+  if ([m.inkAscent, m.inkDescent, m.inkLeft, m.inkRight].every(Number.isFinite)) {
+    return { up: m.inkAscent, down: m.inkDescent, left: m.inkLeft, right: m.inkRight + trackingPx * Math.max(0, glyphs - 1) };
+  }
+  return {
+    up: (ASCENDER_RE.test(text) ? ASCENDER : CAP_HEIGHT) * font.size,
+    down: DESCENDER_GLYPH_RE.test(text) ? DESCENDER * font.size : 0,
+    left: 0,
+    right: m.width + trackingPx * glyphs,
+  };
+}
+
+/** The ink of words `first`..`last` (word indexes) of a laid-out line, in the line's own space: { up, down, left, right }. */
+export function runInk(line, font, measure, first = line.words[0].index, last = line.words.at(-1).index) {
+  const words = line.words.filter((w) => w.index >= first && w.index <= last);
+  const inks = words.map((w) => ({ w, ink: inkExtent(w.text, font, measure) }));
+  return {
+    up: Math.max(...inks.map(({ ink }) => ink.up)),
+    down: Math.max(...inks.map(({ ink }) => ink.down)),
+    left: line.x + inks[0].w.x + inks[0].ink.left,
+    right: line.x + inks.at(-1).w.x + inks.at(-1).ink.right,
+  };
 }
 
 /** The ink block of a layout in its own space: first cap line to last baseline. */

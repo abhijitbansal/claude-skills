@@ -226,7 +226,8 @@ test('a text is judged only once it has settled: not mid-spring, mid-pulse or wh
   const rule = (node, extra = {}) => auditFrame([node], ctx(extra)).filter((f) => f.rule === 'safe-area').length;
   assert.equal(rule(out, { restScales: new Map([['out', 1]]) }), 1, 'at its resting scale it is judged');
   assert.equal(rule({ ...out, scale: 1.1 }, { restScales: new Map([['out', 1]]) }), 0, 'a spring or a push passing through another scale is not');
-  assert.equal(rule({ ...out, scale: 1.01 }, { restScales: new Map([['out', 1]]) }), 1, 'within 2 percent counts as settled');
+  assert.equal(rule({ ...out, scale: 1.001 }, { restScales: new Map([['out', 1]]) }), 1, 'within 0.2 percent counts as settled');
+  assert.equal(rule({ ...out, scale: 1.01 }, { restScales: new Map([['out', 1]]) }), 0, 'a camera punch 1 percent from home is still returning: not judged');
   const pulsing = { ...out, words: [{ opacity: 1, x: 0, y: 0, scale: 1.12 }] };
   assert.equal(rule(pulsing), 0, 'a word in the middle of an emphasis pulse');
   const group = { type: 'group', id: 'g', opacity: 0.9, visible: true, scale: 1, scaleX: 1, scaleY: 1, children: [out], bbox: out.bbox };
@@ -521,4 +522,66 @@ test('the first shot of a viral film must show all its text on frame 0; a pro fi
   assert.match(found.message, /2 of its 3 words are not on screen yet/);
   assert.deepEqual(hookFindings(film('pro'), {}, at([1, 0, 0])), []);
   assert.deepEqual(hookFindings(film('viral', 'number'), {}, at([1, 0, 0])), [], 'only a statement is a line of text to read');
+});
+
+// ---- revision 1: the emphasis span ----
+
+test('a highlight run that spans more than one line is a creative finding at the text', () => {
+  const spread = { ...textNode({ id: 'p.text', size: 132, words: 4, perLine: 2, role: 'hero' }) };
+  const marked = { ...spread, props: { ...spread.props, highlightLines: 2 } };
+  const found = auditFrame([marked], ctx()).filter((f) => f.rule === 'highlight-lines');
+  assert.equal(found.length, 1);
+  assert.equal(found[0].kind, 'creative');
+  assert.equal(found[0].message, 'one highlight runs across 2 lines; mark fewer words');
+  assert.deepEqual(auditFrame([{ ...spread, props: { ...spread.props, highlightLines: 1 } }], ctx()).filter((f) => f.rule === 'highlight-lines'), []);
+});
+
+// ---- revision 1: the stack, measured horizontal ink ----
+
+// Lines of one stack: text nodes inside a group, each at its own size, tagged with the stack's id.
+const stackLine = (k, size, y, words = 2) => {
+  const n = textNode({ id: `s.line${k}`, size, x: 200, y, words, role: 'hero' });
+  return { ...n, props: { ...n.props, stack: 's' } };
+};
+
+test('in a stack, the lines of one text count as one size class for the sizes and hero rules', () => {
+  const lines = [stackLine(0, 300, 100), stackLine(1, 200, 450), stackLine(2, 150, 720, 1)];
+  const group = { type: 'group', id: 's', depth: 0, props: {}, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: lines, bbox: [0, 0, 0, 0] };
+  const tag = textNode({ id: 'k', size: 56, x: 200, y: 20, words: 1, role: 'tag' });
+  const findings = auditFrame([group, tag], ctx({ look: registries.looks.get('pop'), mode: 'viral', canvas: CANVAS }));
+  assert.deepEqual(findings.filter((f) => f.rule === 'sizes' || f.rule === 'hero'), [], 'three line sizes plus a tag is two classes, and the stack is the hero');
+  // the same three sizes as separate texts are still judged as three
+  const loose = lines.map((n) => ({ ...n, props: { role: 'hero' } }));
+  const spread = auditFrame([...loose, textNode({ id: 'x', size: 60, x: 200, y: 980, words: 1 })], ctx({ look: registries.looks.get('pop'), mode: 'viral' }));
+  assert.ok(spread.some((f) => f.rule === 'sizes'), 'four separate sizes are still a finding');
+});
+
+test('the viral hook rule counts every word of a stack, not only its largest line', () => {
+  const lines = [stackLine(0, 300, 100, 3), stackLine(1, 200, 450, 3), stackLine(2, 150, 720, 2)];
+  const group = { type: 'group', id: 's', depth: 0, props: {}, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: lines, bbox: [0, 0, 0, 0] };
+  const findings = auditFrame([group], ctx({ look: registries.looks.get('pop'), mode: 'viral', isFirstShot: true }));
+  const hook = findings.find((f) => f.rule === 'hook-words');
+  assert.ok(hook, 'eight words in the opening stack');
+  assert.match(hook.message, /has 8 words/);
+});
+
+test('a line set flush by its ink is inside the safe area when its measured ink is: lineInk left and right', () => {
+  const safe = safeRectFor(CANVAS, registries.looks.get('desk'));
+  const n = textNode({ id: 't', size: 132, x: safe.left - 6, y: 300, words: 2 });
+  assert.ok(auditFrame([n], ctx()).some((f) => f.rule === 'safe-area'), 'by its advance box the line starts 6 px outside');
+  const width = n.layout.lines[0].words[0].width;
+  const measured = { ...n, lineInk: [{ ascent: 0.7 * 132, descent: 0, words: [{ left: 8, right: width - 8 }, { left: 8, right: width - 8 }] }] };
+  assert.deepEqual(auditFrame([measured], ctx()).filter((f) => f.rule === 'safe-area'), [], 'its ink starts 8 px in: inside');
+});
+
+test('a text flush on the safe edge is inside: the safe-area rule allows 1 unit, and a punch on its way home is not judged', () => {
+  const safe = safeRectFor(CANVAS, registries.looks.get('desk'));
+  const at = (dx, scale = 1) => {
+    const n = textNode({ id: 'edge', size: 132, x: safe.left + dx, y: 300, words: 1 });
+    return auditFrame([{ ...n, scale, bbox: [n.bbox[0], n.bbox[1], n.bbox[2] * scale, n.bbox[3] * scale] }], ctx({ restScales: new Map([['edge', 1]]) })).filter((f) => f.rule === 'safe-area').length;
+  };
+  assert.equal(at(0), 0, 'flush on the edge');
+  assert.equal(at(-0.8), 0, 'within a unit of it (a punch at 0.2 percent moves a flush line this far)');
+  assert.equal(at(-2), 1, 'two units out is outside');
+  assert.equal(at(-20, 1.015), 0, 'a camera punch at 1.5 percent is a move in progress');
 });

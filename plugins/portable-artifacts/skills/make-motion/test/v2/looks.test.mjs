@@ -100,7 +100,7 @@ test('desk display is the base Fraunces at 600 and lets canvas pick the optical 
 
 test('pop type is Archivo with width as a keyword', () => {
   const { fonts } = registries.looks.get('pop');
-  assert.deepEqual({ ...fonts.display }, { family: 'Archivo', weight: 900, width: 'extra-condensed' });
+  assert.deepEqual({ ...fonts.display }, { family: 'Archivo', weight: 900, width: 'extra-condensed', wordSpace: 0.26 });
   assert.deepEqual({ ...fonts.text }, { family: 'Archivo', weight: 700, width: 'condensed' });
   assert.deepEqual({ ...fonts.label }, { family: 'Archivo', weight: 700, width: 'normal' });
 });
@@ -144,7 +144,7 @@ test('desk values are the brief values', () => {
   assert.deepEqual([...l.cuts], ['cut', 'match', 'slide']);
   assert.equal(l.post.grain, 0.02);
   assert.deepEqual({ ...l.caps }, { display: false, label: true });
-  assert.deepEqual({ ...l.lineHeight }, { display: 1.02, text: 1.3 });
+  assert.deepEqual({ ...l.lineHeight }, { display: 1.1, text: 1.3 });
   assert.deepEqual({ ...l.maxLines }, { display: 4, text: 3 });
   assert.deepEqual({ ...l.wordsPerLine }, { text: 12 });
   assert.equal(l.keyline, 8);
@@ -158,7 +158,7 @@ test('pop values are the brief values', () => {
   assert.deepEqual([...l.scale], [36, 56, 96, 180, 320]);
   assert.deepEqual({ ...l.grid }, { columns: 12, margin: 72, gutter: 20 });
   assert.equal(l.field.field, 'halftone');
-  assert.equal(l.emphasis, 'recolor-scale');
+  assert.equal(l.emphasis, 'recolor');
   assert.deepEqual({ ...l.moves.enter }, { ease: 'spring(260,16)', dur: 0.28, scale: 0.6 });
   assert.deepEqual({ ...l.moves.emphasize }, { ease: 'spring(300,12)', dur: 0.2, scale: 1.12 });
   assert.deepEqual({ ...l.moves.draw }, { ease: 'outExpo', dur: 0.2 });
@@ -356,8 +356,18 @@ test('an unknown look still lists the real ones', () => {
   assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop)' }]);
 });
 
-test('every look names its composition: desk is editorial, pop is centred', () => {
+test('every look names its composition: desk is editorial, pop is a stack', () => {
   assert.equal(registries.looks.get('desk').composition, 'editorial');
-  assert.equal(registries.looks.get('pop').composition, 'centred');
-  for (const name of registries.looks.names()) assert.ok(['editorial', 'centred'].includes(registries.looks.get(name).composition), name);
+  assert.equal(registries.looks.get('pop').composition, 'stack');
+  for (const name of registries.looks.names()) assert.ok(['editorial', 'centred', 'stack'].includes(registries.looks.get(name).composition), name);
+});
+
+test('revision 1 look data: desk display line height 1.1; pop word space, recolour emphasis, quieter halftone, region emphasis on the cut-out', () => {
+  const desk = registries.looks.get('desk'), pop = registries.looks.get('pop');
+  assert.equal(desk.lineHeight.display, 1.1);
+  assert.equal(pop.fonts.display.wordSpace, 0.26);
+  assert.equal(pop.emphasis, 'recolor');
+  assert.equal(pop.field.params.strength, 0.5);
+  assert.deepEqual({ ...pop.devices.cutout }, { keylineColor: '#ffffff', emphasis: { shadow: 'accent', offset: 18 } });
+  assert.equal(Object.hasOwn(pop.devices, 'highlight'), false, 'pop still does not style the highlight device');
 });

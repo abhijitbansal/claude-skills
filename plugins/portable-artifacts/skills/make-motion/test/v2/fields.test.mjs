@@ -111,9 +111,15 @@ test('unit defaults to short side / 1080 when omitted', () => {
   }
 });
 
-test('paper plans 8 to 14 blotches, 2000 to 4000 fibres of 4 to 14 units, and a 256 px grain tile seed', () => {
+test('paper plans 14 to 20 low-contrast blotches of 30% to 60% of the short side, 2000 to 4000 fibres of 4 to 14 units, and a 256 px grain tile seed', () => {
   const p = get('paper').plan({ w: 1920, h: 1080, unit: 1, seed: 5, palette });
-  assert.ok(p.blotches.length >= 8 && p.blotches.length <= 14);
+  assert.ok(p.blotches.length >= 14 && p.blotches.length <= 20, `${p.blotches.length} blotches`);
+  assert.ok(p.blotches.every((bl) => bl.r >= 0.3 * 1080 && bl.r <= 0.6 * 1080), 'radii 30% to 60% of the short side');
+  assert.equal(p.blotchAlpha, 0.035);
+  for (const seed of [1, 2, 3, 4, 6, 7]) {
+    const n = get('paper').plan({ w: 1080, h: 1920, unit: 1, seed, palette }).blotches.length;
+    assert.ok(n >= 14 && n <= 20, `seed ${seed}: ${n}`);
+  }
   assert.ok(p.fibres.length >= 2000 && p.fibres.length <= 4000);
   assert.ok(p.fibres.every(([, , len]) => len >= 4 && len <= 14));
   assert.equal(p.tint, palette.paper);

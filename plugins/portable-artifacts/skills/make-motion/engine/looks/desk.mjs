@@ -31,7 +31,8 @@ export const desk = {
   grid: { columns: 12, margin: 96, gutter: 24 },
   tracking,
   caps: { display: false, label: true },
-  lineHeight: { display: 1.02, text: 1.3 },
+  // 1.1: room for a highlighter band that holds a line's ascenders and descenders without touching its neighbours
+  lineHeight: { display: 1.1, text: 1.3 },
   maxLines: { display: 4, text: 3 },
   wordsPerLine: { text: 12 },
   field: { field: 'paper', params: {} },

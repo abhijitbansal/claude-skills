@@ -11,10 +11,12 @@ import {
 } from './shared.mjs';
 
 // Counts and sizes below are in units (1 unit = short side / 1080); lengths are scaled by `unit` in plan().
-// Alphas are above the first-draft 3% / 5% / 4%: at 1:1 those left fibres and blotches invisible.
-const BLOTCH_COUNT = [8, 14];
-const BLOTCH_RADIUS = [150, 450];
-const BLOTCH_ALPHA = 0.07;
+// Alphas are above the first-draft 3% / 5% / 4%: at 1:1 those left fibres invisible. Blotches are many, large and faint
+// (revision 1): a few strong ones read as a smudge in the same corner of every shot, these as evenly mottled stock.
+const BLOTCH_COUNT = [14, 20];
+const BLOTCH_RADIUS = [0.3, 0.6]; // of the canvas short side (SHORT_SIDE units)
+const BLOTCH_ALPHA = 0.035;
+const SHORT_SIDE = 1080; // units: the canvas short side, whatever the field's own (bled) size
 const BLOTCH_LIGHT_SHARE = 0.5; // share of blotches that are lighter than the paper rather than darker
 const FIBRE_COUNT = [2000, 4000];
 const FIBRE_LENGTH = [4, 14];
@@ -56,7 +58,7 @@ const RULES = Object.freeze({
 function planBlotches(rng, { w, h, unit }, tones, override) {
   const drawn = randInt(rng, BLOTCH_COUNT);
   return Array.from({ length: override ?? drawn }, () => {
-    const x = rng() * w, y = rng() * h, r = randRange(rng, BLOTCH_RADIUS) * unit;
+    const x = rng() * w, y = rng() * h, r = randRange(rng, BLOTCH_RADIUS) * SHORT_SIDE * unit;
     return { x, y, r, color: tones[rng() < BLOTCH_LIGHT_SHARE ? LIGHT : DARK] };
   });
 }

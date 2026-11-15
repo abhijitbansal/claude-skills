@@ -19,7 +19,8 @@ export const pop = {
   summary: 'Short-form caption collage: a near-black field, one heavy condensed grotesque in capitals, an acid accent and springy pops. The look of mode viral.',
   modes: ['viral'],
   fonts: {
-    display: { family: 'Archivo', weight: 900, width: 'extra-condensed' },
+    // wordSpace 0.26 em: the face's own space is about 7% of the cap height and runs caps words together
+    display: { family: 'Archivo', weight: 900, width: 'extra-condensed', wordSpace: 0.26 },
     text: { family: 'Archivo', weight: 700, width: 'condensed' },
     label: { family: 'Archivo', weight: 700, width: 'normal' },
   },
@@ -32,10 +33,11 @@ export const pop = {
   maxLines: { display: 3, text: 3 },
   wordsPerLine: { text: 12 },
   // Halftone dots in the palette's `rule` grey over the flat paper: texture without touching ink contrast.
-  field: { field: 'halftone', params: { color: 'rule', strength: 1 } },
-  // how shots lay out: flush left on grid columns (editorial) or on the centre of the composition (centred)
-  composition: 'centred',
-  emphasis: 'recolor-scale',
+  field: { field: 'halftone', params: { color: 'rule', strength: 0.5 } },
+  // how shots lay out: a stack of short lines, each set at its own size to fill the width, flush left
+  composition: 'stack',
+  // emphasis recolours a word; the stack's size contrast is the hierarchy, so nothing scales
+  emphasis: 'recolor',
   moves: {
     enter: { ease: 'spring(260,16)', dur: 0.28, scale: 0.6 },
     exit: { ease: 'inCubic', dur: 0.15 },
@@ -57,7 +59,8 @@ export const pop = {
     underline: { color: 'accent2', width: 10 },
     card: { fill: 'ink', edge: 'plain' },
     tag: { fill: 'accent', text: 'paper' },
-    cutout: { keylineColor: '#ffffff' },
+    // emphasis: a highlight on a close-up turns its hard shadow to `shadow` and grows it to `offset` units; no frame
+    cutout: { keylineColor: '#ffffff', emphasis: { shadow: 'accent', offset: 18 } },
   },
   // halftone 0: pop's own field is already a halftone, and the post pass would dot the pictures too (see the Look typedef)
   post: { grain: 0.02, halftone: 0, bloom: 0 },

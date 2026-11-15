@@ -1,6 +1,6 @@
 // Browser-safe (no Node imports): lay text out as lines of positioned words, fit it to a box, and give counters
 // a fixed numeral advance. Pure: the caller supplies `measure` (canvas in the page, a fake in tests).
-import { breakBySense, FORCE_MARK } from './breaks.mjs';
+import { breakBySense, FORCE_MARK, endsSentence } from './breaks.mjs';
 
 // Digits with $ EUR GBP % , . and a unit suffix of up to 3 letters. Words are split on whitespace and never
 // broken inside, so such a token always stays on one line.
@@ -14,6 +14,15 @@ const ALIGNMENTS = new Set(['left', 'center', 'right']);
 const HANGING_GLYPHS = new Set(['"', "'", '“', '‘', '(', '[']);
 const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const FIT_EPSILON = 1e-6;
+// fitText sets a text up to this much smaller than the largest size that fits, for a clean layout (below).
+const CLEAN_BREAK_SHARE = 0.85;
+
+// A layout is not clean when a sentence ends inside a line ("file. Scripts") or a line ends between two words marked
+// `together` (together[i]: keep word i with word i + 1; a statement marks its highlight runs this way).
+function unclean(layout, together = []) {
+  const midSentence = layout.lines.some((line) => line.words.slice(0, -1).some((w) => endsSentence(w.text)));
+  return midSentence || layout.lines.slice(0, -1).some((line) => together[line.words.at(-1).index] === true);
+}
 
 function assertOptions({ font, maxWidth, align, measure }) {
   if (typeof measure !== 'function') throw new Error('layoutText: measure must be a function');
@@ -75,7 +84,9 @@ const emptyLayout = (font) => ({ size: font.size, width: 0, height: 0, lines: []
 
 /**
  * Lay text out in a box of `maxWidth`.
- * @param {{ text: string, font: object, maxWidth: number, align?: 'left'|'center'|'right', measure: Function, optical?: boolean }} opts
+ * @param {{ text: string, font: object, maxWidth: number, align?: 'left'|'center'|'right', measure: Function, optical?: boolean, together?: boolean[] }} opts
+ *   together (read by fitText only): together[i] asks to keep word i with word i + 1; fitText looks for a slightly
+ *   smaller size whose layout keeps every such pair (see unclean)
  * @returns {{ size: number, width: number, height: number, lines: object[], overflow: boolean }}
  */
 export function layoutText({ text, font, maxWidth, align = 'left', measure, optical = false }) {
@@ -84,7 +95,8 @@ export function layoutText({ text, font, maxWidth, align = 'left', measure, opti
   if (tokens.length === 0) return emptyLayout(font);
   const metrics = tokens.map((t) => advanceOf(measure, font, t.text));
   const widths = metrics.map((m) => m.width);
-  const spaceWidth = advanceOf(measure, font, ' ').width;
+  // A font may set its own word space in em (a condensed caps face whose measured space runs words together).
+  const spaceWidth = font.wordSpace === undefined ? advanceOf(measure, font, ' ').width : font.wordSpace * font.size;
   const marked = tokens.map((t) => (t.forced ? t.text + FORCE_MARK : t.text));
   const rows = breakBySense(marked, widths, spaceWidth, maxWidth, numberUnitPairs(tokens));
   const ascent = Math.max(...metrics.map((m) => m.ascent));
@@ -103,7 +115,9 @@ export function layoutText({ text, font, maxWidth, align = 'left', measure, opti
 
 /**
  * The largest whole-number font size in [min, max] whose layout fits the box (height, optional line count, and
- * no word wider than maxWidth). If none fits, the layout at min, with overflow: true.
+ * no word wider than maxWidth); when that layout is not clean (a sentence ending mid-line, or a break between words
+ * marked opts.together), the largest size down to CLEAN_BREAK_SHARE of it whose layout fits and is clean, if there is
+ * one. If none fits, the layout at min, with overflow: true.
  * @param {object} opts layoutText options; font.size is replaced by the search
  * @param {{ min: number, max: number, maxHeight: number, maxLines?: number }} limits
  */
@@ -117,10 +131,20 @@ export function fitText(opts, { min, max, maxHeight, maxLines = Infinity }) {
   const fits = (l) => l.height <= maxHeight + FIT_EPSILON && l.lines.length <= maxLines && l.width <= opts.maxWidth + FIT_EPSILON;
   for (let size = high; size > low; size--) {
     const layout = at(size);
-    if (fits(layout)) return layout;
+    if (fits(layout)) return unclean(layout, opts.together) ? cleaner(at, fits, size, low, opts.together) ?? layout : layout;
   }
   const floor = at(low);
   return fits(floor) ? floor : { ...floor, overflow: true };
+}
+
+// The largest size below `size` (down to CLEAN_BREAK_SHARE of it, not below `low`) whose layout fits and is clean, or
+// null.
+function cleaner(at, fits, size, low, together) {
+  for (let s = size - 1; s >= Math.max(low, Math.ceil(size * CLEAN_BREAK_SHARE)); s--) {
+    const layout = at(s);
+    if (fits(layout) && !unclean(layout, together)) return layout;
+  }
+  return null;
 }
 
 /** The widest of the digits 0-9: a fixed advance so a counter does not jitter as its digits change. */
