@@ -2,10 +2,10 @@
 // deep freezing and the offscreen cache. Pure and DOM-free; OffscreenCanvas is only looked up at paint time.
 import { mulberry32 } from '../../template/seeded.mjs';
 import { isHexColour } from './color.mjs';
+import { unitOf, REFERENCE_SIDE } from '../units.mjs';
 
 export const TAU = Math.PI * 2;
 export const PALETTE_KEYS = Object.freeze(['paper', 'ink', 'ink2', 'accent', 'accent2', 'rule']);
-const REFERENCE_SIDE = 1080; // 1 unit = short side / 1080
 const LAYER_STRIDE = 0x9e3779b9; // golden-ratio odd constant: spreads layer seeds far apart
 
 const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
@@ -21,7 +21,7 @@ export function checkInput(input) {
   if (!isPlainObject(input)) throw new Error(`plan input must be an object with w, h, seed and palette, got ${input === null ? 'null' : typeof input}`);
   const { w, h, unit, seed, palette } = input;
   if (!isPositiveInteger(w) || !isPositiveInteger(h)) throw new Error(`w and h must be positive integers (pixels), got ${w} x ${h}`);
-  const resolved = unit ?? Math.min(w, h) / REFERENCE_SIDE;
+  const resolved = unit ?? unitOf({ w, h });
   if (!isFiniteNumber(resolved) || resolved < MIN_UNIT) {
     throw new Error(`unit must be at least ${MIN_UNIT} (1 unit = short side / ${REFERENCE_SIDE}; a short side under ${MIN_UNIT * REFERENCE_SIDE} px is too small), got ${resolved}`);
   }

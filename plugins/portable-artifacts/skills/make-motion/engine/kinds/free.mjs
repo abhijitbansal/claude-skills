@@ -32,12 +32,25 @@ function withLayout(props, measure) {
   return { ...props, layout };
 }
 
+// An image description names one of the shot's `srcs` by the string written there (props.src). ctx.asset throws
+// when the shot does not declare it; the node keeps the string and, unless given, takes the picture's own size.
+function withAsset(props, asset) {
+  if (typeof props.src !== 'string' || props.src === '') throw new Error('an image node needs props.src, one of the strings in the shot\'s srcs');
+  const loaded = asset(props.src);
+  return { ...props, w: props.w ?? loaded.width, h: props.h ?? loaded.height };
+}
+
+const propsFor = (type, props, ctx) => {
+  if (type === 'text') return withLayout(props, ctx.measure);
+  return type === 'image' ? withAsset(props, ctx.asset) : props;
+};
+
 function describe(desc, ctx) {
   if (!isPlainObject(desc)) throw new Error('a node description must be an object');
   const { type, id, props = {}, tracks, children = [], depth, step, wordTracks = [] } = desc;
   if (!Array.isArray(children)) throw new Error('children must be an array of node descriptions');
   if (!Array.isArray(wordTracks)) throw new Error('wordTracks must be an array, one track map per word index');
-  return node(type, id, type === 'text' ? withLayout(props, ctx.measure) : props, {
+  return node(type, id, propsFor(type, props, ctx), {
     tracks: tracks === undefined ? {} : buildTrackMap(tracks, 'tracks'),
     children: children.map((child) => buildNode(child, ctx)),
     depth,
@@ -73,9 +86,10 @@ registries.kinds.add('free', {
       nodes: { type: 'array' },
       camera: { type: 'object' },
       background: { type: 'string' },
+      srcs: { type: 'array', items: { type: 'string' } },
     },
   },
-  srcFields: [],
+  srcFields: ['srcs'],
   targets: () => [],
   expand: expandFree,
 });

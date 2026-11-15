@@ -6,7 +6,10 @@ const FONT_STRETCHES = new Set([
   'semi-expanded', 'expanded', 'extra-expanded', 'ultra-expanded',
 ]);
 
-export const fontString = (font) => `${font.weight ?? DEFAULT_WEIGHT} ${font.size}px "${font.family}"`;
+// What a word without a track entry is drawn with: untouched.
+export const WORD_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1 });
+
+export const fontString =(font) => `${font.weight ?? DEFAULT_WEIGHT} ${font.size}px "${font.family}"`;
 
 function stretchOf(font) {
   const width = font.width ?? 'normal';

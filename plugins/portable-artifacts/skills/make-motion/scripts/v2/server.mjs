@@ -8,6 +8,7 @@ import { createReadStream, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registries } from '../../engine/registry.mjs';
+import { srcsOfShot } from '../../engine/assets.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ENGINE_DIR = realpathSync(path.join(SKILL_ROOT, 'engine'));
@@ -32,7 +33,7 @@ const MIME = Object.freeze({
 });
 const ASSET_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 
-const CSP = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'";
+const CSP = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 // "/" or "/seg/seg": each segment starts with a letter or digit and holds only letters, digits, ".", "_" and "-".
 const SAFE_PATH = /^\/(?:[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*)?$/;
 const ASSET_ROUTE = /^\/asset\/(\d+)$/;
@@ -58,7 +59,7 @@ function sendFile(req, res, file) {
 
 // The real path of `file` when it is a regular file inside `root` (symlinks resolved), else null. A missing file is
 // null; any other filesystem error is real and propagates.
-function fileInside(root, file) {
+export function fileInside(root, file) {
   let real;
   try {
     real = realpathSync(file);
@@ -77,6 +78,14 @@ function serveUnder(req, res, root, rel, extensions) {
   return file ? sendFile(req, res, file) : reply(res, 404, 'not found');
 }
 
+// The asset is checked again on every request: it must still resolve, through its links, to an image file inside the
+// film's folder, whatever has happened to the path since the server started.
+function serveAsset(req, res, asset) {
+  if (!asset) return reply(res, 404, 'not found');
+  const file = fileInside(asset.root, asset.file);
+  return file && ASSET_EXTENSIONS.has(path.extname(file).toLowerCase()) ? sendFile(req, res, file) : reply(res, 404, 'not found');
+}
+
 function route(ctx, req, res) {
   const pathname = req.url.split('?')[0];
   if (!SAFE_PATH.test(pathname)) return reply(res, 400, 'bad path');
@@ -87,7 +96,7 @@ function route(ctx, req, res) {
     return res.end(ctx.filmJson);
   }
   const asset = ASSET_ROUTE.exec(pathname);
-  if (asset) return ctx.assets[Number(asset[1])] ? sendFile(req, res, ctx.assets[Number(asset[1])]) : reply(res, 404, 'not found');
+  if (asset) return serveAsset(req, res, ctx.assets[Number(asset[1])]);
   if (pathname.startsWith(FONT_ROUTE)) {
     const name = pathname.slice(FONT_ROUTE.length);
     return name.includes('/') ? reply(res, 404, 'not found') : serveUnder(req, res, FONTS_DIR, name, FONT_EXTENSIONS);
@@ -99,13 +108,18 @@ function route(ctx, req, res) {
 function handle(ctx, req, res) {
   res.setHeader('content-security-policy', CSP);
   res.setHeader('x-content-type-options', 'nosniff');
+  res.setHeader('cross-origin-resource-policy', 'same-origin');
   if (!ctx.allowedHosts.has(req.headers.host)) return reply(res, 403, 'forbidden host');
-  if (req.method !== 'GET' && req.method !== 'HEAD') return reply(res, 405, 'method not allowed');
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    res.setHeader('allow', 'GET, HEAD');
+    return reply(res, 405, 'method not allowed');
+  }
   try {
     return route(ctx, req, res);
   } catch (err) {
-    if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain; charset=utf-8' });
-    return res.end(`error: ${err.message}`);
+    ctx.report(err); // the detail (it can name paths) goes to the operator, never to the client
+    if (res.headersSent) return res.destroy();
+    return reply(res, 500, 'internal error');
   }
 }
 
@@ -116,44 +130,57 @@ function resolveSrc(specDir, shotId, src) {
   const label = `shot "${shotId}": src "${src}"`;
   if (typeof src !== 'string' || src === '') throw new Error(`${label} must be a non-empty path`);
   if (path.isAbsolute(src)) throw new Error(`${label} must be relative to the film's folder`);
-  if (!ASSET_EXTENSIONS.has(path.extname(src).toLowerCase())) throw new Error(`${label} must be a png, jpg, webp or gif file`);
+  const isImage = (file) => ASSET_EXTENSIONS.has(path.extname(file).toLowerCase());
+  const notImage = `${label} must be a png, jpg, webp or gif file`;
+  if (!isImage(src)) throw new Error(notImage);
   const root = realpathSync(specDir);
   const file = fileInside(root, path.resolve(root, src));
   if (file === null) throw new Error(`${label} is not a file inside the film's folder`);
-  return file;
+  if (!isImage(file)) throw new Error(notImage); // a link named .png that points at something else
+  return { root, file };
 }
 
-// Each src a shot's kind names (its srcFields), in film order. A shot whose kind is not registered contributes none:
-// the page reports the unknown kind when it expands the shot.
+// Each src a shot's kind names (its srcFields), in film order: { root, file } with the real path. A shot whose kind
+// is not registered contributes none: the page reports the unknown kind when it expands the shot.
 function assetFiles(film, specDir) {
   return film.shots.flatMap((shot) => {
     if (!registries.kinds.has(shot.show)) return [];
-    const fields = registries.kinds.get(shot.show).srcFields ?? [];
-    return fields.filter((field) => shot[field] !== undefined).map((field) => resolveSrc(specDir, shot.id, shot[field]));
+    return srcsOfShot(shot, registries.kinds.get(shot.show).srcFields).map((src) => resolveSrc(specDir, shot.id, src));
   });
 }
 
 /**
- * @param {{ film: object, timeline: object, specDir: string }} opts specDir: the folder the film's src paths are relative to
- * @returns {Promise<{ url: string, close(): Promise<void> }>}
+ * @param {{ film: object, timeline: object, specDir: string, onError?: (err: Error) => void }} opts
+ *   specDir: the folder the film's src paths are relative to. onError: told of every failure the server meets after it
+ *   starts (a request that threw, a server error); each is also written to stderr, and none reaches a client.
+ * @returns {Promise<{ url: string, close(): Promise<void>, server: import('node:http').Server }>} server is for tests
  */
-export async function startV2Server({ film, timeline, specDir }) {
+export async function startV2Server({ film, timeline, specDir, onError }) {
   if (!film || !Array.isArray(film.shots)) throw new TypeError('startV2Server: film must have a shots array');
   if (!timeline || !Array.isArray(timeline.shots)) throw new TypeError('startV2Server: timeline must have a shots array (see buildTimeline)');
   if (typeof specDir !== 'string') throw new TypeError('startV2Server: specDir must be a path');
   const assets = assetFiles(film, specDir);
-  const ctx = { assets, filmJson: JSON.stringify({ film, timeline, assetCount: assets.length }), allowedHosts: new Set() };
+  const report = (err) => {
+    process.stderr.write(`v2 server: ${err?.stack ?? err}\n`);
+    if (onError) onError(err);
+  };
+  const ctx = { assets, filmJson: JSON.stringify({ film, timeline, assetCount: assets.length }), allowedHosts: new Set(), report };
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(0, '127.0.0.1', resolve);
+    server.listen(0, '127.0.0.1', () => {
+      server.off('error', reject);
+      resolve();
+    });
   });
+  server.on('error', report); // once listening, an error is reported, not lost (or thrown as unhandled)
   const { port } = server.address();
   ctx.allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
   return {
     url: `http://127.0.0.1:${port}/`,
-    close: () => new Promise((resolve) => {
-      server.close(() => resolve());
+    server,
+    close: () => new Promise((resolve, reject) => {
+      server.close((err) => (err && err.code !== 'ERR_SERVER_NOT_RUNNING' ? reject(err) : resolve()));
       server.closeAllConnections();
     }),
   };

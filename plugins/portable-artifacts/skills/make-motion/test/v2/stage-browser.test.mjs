@@ -1,8 +1,11 @@
 // The v2 render page: the `free` kind, the loopback server, and frames that repeat. Run with --test-concurrency=1.
+// Every browser and server a test opens is released with t.after, so a failed assertion cannot leak one.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import net from 'node:net';
+import { deflateSync, crc32 } from 'node:zlib';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, unlinkSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { registries } from '../../engine/registry.mjs';
@@ -10,7 +13,7 @@ import { node, isNode } from '../../engine/graph/node.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import '../../engine/kinds/free.mjs';
-import { startV2Server } from '../../scripts/v2/server.mjs';
+import { startV2Server, fileInside } from '../../scripts/v2/server.mjs';
 import { openStage } from './helpers/stage.mjs';
 
 const FPS = 30;
@@ -59,67 +62,107 @@ const FILM = {
 };
 const TL = buildTimeline(FILM, { fps: FPS });
 
+// A solid-colour PNG, built by hand so a browser can decode it.
+function solidPng(w, h, [r, g, b]) {
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  const row = Buffer.concat([Buffer.from([0]), ...Array.from({ length: w }, () => Buffer.from([r, g, b]))]);
+  const raw = Buffer.concat(Array.from({ length: h }, () => row));
+  return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+const RED = [255, 0, 0];
+const BLUE = [0, 0, 255];
+
 let specDir;
 before(() => {
   specDir = mkdtempSync(path.join(tmpdir(), 'mm-v2-stage-'));
   mkdirSync(path.join(specDir, 'assets'));
-  writeFileSync(path.join(specDir, 'assets', 'pic.png'), Buffer.from('not really a png'));
-  writeFileSync(path.join(specDir, 'secret.txt'), 'outside the asset list');
+  writeFileSync(path.join(specDir, 'assets', 'pic.png'), solidPng(4, 4, RED));
+  writeFileSync(path.join(specDir, 'assets', 'pic2.png'), solidPng(4, 4, BLUE));
+  writeFileSync(path.join(specDir, 'secret.txt'), 'inside the folder but not an image');
   registries.kinds.add('pic', { schema: { properties: { src: { type: 'string' } } }, srcFields: ['src'], targets: () => [] });
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
 
+// A scratch folder (removed after the test) holding assets/pic.png, plus an outside folder beside it.
+function scratchDir(t) {
+  const base = realpathSync(mkdtempSync(path.join(tmpdir(), 'mm-v2-scratch-')));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const dir = path.join(base, 'film'), outside = path.join(base, 'outside');
+  mkdirSync(path.join(dir, 'assets'), { recursive: true }); mkdirSync(outside);
+  writeFileSync(path.join(dir, 'assets', 'pic.png'), solidPng(4, 4, RED));
+  writeFileSync(path.join(outside, 'target.png'), solidPng(4, 4, BLUE));
+  writeFileSync(path.join(dir, 'secret.txt'), 'not an image');
+  return { dir, outside };
+}
+
+const stageFor = async (t, film, opts) => {
+  const a = await openStage(film, opts);
+  if (!a) { t.skip('no browser'); return null; }
+  t.after(() => a.close());
+  return a;
+};
+const serve = async (t, film, opts = {}) => {
+  const s = await startV2Server({ film, timeline: buildTimeline(film, { fps: FPS }), specDir, ...opts });
+  t.after(() => s.close());
+  return s;
+};
+const picFilm = (src = 'assets/pic.png') => ({ fps: FPS, shots: [{ id: 'p', show: 'pic', src, hold: 1 }] });
+const pixelAt = (a, x, y) => a.page.evaluate(([px, py]) => Array.from(document.getElementById('stage').getContext('2d').getImageData(px, py, 1, 1).data), [x, y]);
+const seekAndPixel = async (a, frame, x, y) => { await a.page.evaluate((i) => window.__seek(i), frame); return pixelAt(a, x, y); };
+
 // ---- brief tests ----
 
 test('frame 40 hashes the same after seeking 40, 3, 40, and in a second browser', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const a = await stageFor(t, FILM); if (!a) return;
   const h1 = await a.hashFrame(FRAME); await a.hashFrame(3); const h2 = await a.hashFrame(FRAME); await a.close();
-  const b = await openStage(FILM); const h3 = await b.hashFrame(FRAME); await b.close();
+  const b = await stageFor(t, FILM); const h3 = await b.hashFrame(FRAME); await b.close();
   assert.equal(h1, h2); assert.equal(h1, h3);
 });
 
 test('the page makes no request off the loopback server', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const a = await stageFor(t, FILM); if (!a) return;
   await a.hashFrame(0);
-  assert.deepEqual(a.blocked, []); assert.deepEqual(a.errors, []); await a.close();
+  assert.deepEqual(a.blocked, []); assert.deepEqual(a.errors, []);
 });
 
-test('a request with a foreign Host header is refused', async () => {
-  const s = await startV2Server({ film: FILM, timeline: TL, specDir });
-  try {
-    // fetch() drops a Host override (it is a forbidden header name), so it would reach the server with the right Host
-    // and prove nothing; http.request sends what it is given.
-    const refused = await get(s, '/', { host: 'evil.example' }).catch((e) => e);
-    assert.ok(refused.status === 403 || refused instanceof Error, `got ${refused.status}`);
-    assert.equal((await get(s, '/')).status, 200); // the same request with the right Host is served
-  } finally { await s.close(); }
+test('a request with a foreign Host header is refused', async (t) => {
+  const s = await serve(t, FILM);
+  // fetch() drops a Host override (it is a forbidden header name), so it would reach the server with the right Host
+  // and prove nothing; http.request sends what it is given.
+  const refused = await get(s, '/', { host: 'evil.example' }).catch((e) => e);
+  assert.ok(refused.status === 403 || refused instanceof Error, `got ${refused.status}`);
+  assert.equal((await get(s, '/')).status, 200); // the same request with the right Host is served
 });
 
 // ---- the page ----
 
 test('the page reports its size, frame count and 2d post pass', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const a = await stageFor(t, FILM); if (!a) return;
   assert.deepEqual(a.info, { frameCount: LAST_FRAME, fps: FPS, size: [1920, 1080], post: '2d' });
-  await a.close();
 });
 
 test('frames differ over time and the frame is not blank', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const a = await stageFor(t, FILM); if (!a) return;
   const first = await a.hashFrame(0); const middle = await a.hashFrame(FRAME); const last = await a.hashFrame(LAST_FRAME);
-  assert.equal(new Set([first, middle, last]).size, 3); await a.close();
+  assert.equal(new Set([first, middle, last]).size, 3);
 });
 
 test('seeking a frame outside 0..frameCount throws', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const a = await stageFor(t, FILM); if (!a) return;
   for (const bad of [-1, LAST_FRAME + 1, 1.5, Number.NaN]) {
     const message = await a.page.evaluate((i) => { try { window.__seek(i); return ''; } catch (e) { return e.message; } }, bad);
     assert.match(message, /frame/, `seek(${bad})`);
   }
-  await a.close();
 });
 
 test('__snapshot gives each node a canvas-pixel bbox after camera and transforms', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const a = await stageFor(t, FILM); if (!a) return;
   const byId = (nodes) => Object.fromEntries(nodes.map((n) => [n.id, n]));
   const at0 = byId(await a.page.evaluate(() => window.__snapshot(0)));
   assert.deepEqual(at0.tri.bbox, [100, 100, 300, 250]);
@@ -133,11 +176,10 @@ test('__snapshot gives each node a canvas-pixel bbox after camera and transforms
   const turned = byId(await a.page.evaluate((i) => window.__snapshot(i), FRAME));
   assert.deepEqual(turned.spin.bbox, turned.spin.children[0].bbox);
   assert.notDeepEqual(turned.spin.children[0].bbox.slice(2), box.bbox.slice(2)); // rotating a rectangle changes its box
-  await a.close();
 });
 
 test('a text node carries its layout and the page measure agrees with the drawing', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const a = await stageFor(t, FILM); if (!a) return;
   const [headline] = (await a.page.evaluate(() => window.__snapshot(0))).filter((n) => n.id === 'headline');
   assert.ok(headline.layout.lines.length >= 2, 'maxWidth 700 wraps the headline');
   assert.equal(headline.layout.lines.flatMap((l) => l.words).length, 5);
@@ -148,52 +190,152 @@ test('a text node carries its layout and the page measure agrees with the drawin
     return ctx.measureText(text).width;
   }, word.text);
   assert.ok(Math.abs(drawn - word.width) < 0.5, `layout width ${word.width} vs canvas ${drawn}`);
-  await a.close();
 });
 
 test('measure returns font-level ascent and descent, not per-glyph ones', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const a = await stageFor(t, FILM); if (!a) return;
   const font = { family: 'Geist', weight: 600, size: 96 };
   const [x, tall] = await a.page.evaluate((f) => [window.__measure('x', f), window.__measure('Ålg', f)], font);
   assert.ok(x.ascent > 0 && x.descent > 0);
   assert.equal(x.ascent, tall.ascent); assert.equal(x.descent, tall.descent);
   assert.ok(tall.width > x.width);
-  await a.close();
 });
 
 // A one-shot free film with the given nodes, for drawing-rule comparisons.
 const filmOf = (nodes) => ({ fps: FPS, shots: [{ id: 's', show: 'free', hold: 1, nodes }] });
-const hashOf = async (film, t) => {
-  const a = await openStage(film); if (!a) return t.skip('no browser') ?? null;
-  try { return await a.hashFrame(0); } finally { await a.close(); }
+const hashOf = async (t, film) => {
+  const a = await stageFor(t, film); if (!a) return null;
+  return a.hashFrame(0);
 };
 const box = (id, extra = {}) => ({ type: 'path', id, props: { d: 'M100 100H500V400H100Z', fill: '#e2574c', ...extra } });
 
 test('opacity above 1 is clamped, so a child cannot out-shine its parent', async (t) => {
-  const over = await hashOf(filmOf([{ type: 'group', id: 'g', props: { opacity: 0.5 }, children: [box('b', { opacity: 1.5 })] }]), t);
-  const exact = await hashOf(filmOf([{ type: 'group', id: 'g', props: { opacity: 0.5 }, children: [box('b', { opacity: 1 })] }]), t);
+  const over = await hashOf(t, filmOf([{ type: 'group', id: 'g', props: { opacity: 0.5 }, children: [box('b', { opacity: 1.5 })] }]));
+  const exact = await hashOf(t, filmOf([{ type: 'group', id: 'g', props: { opacity: 0.5 }, children: [box('b', { opacity: 1 })] }]));
   if (over === null) return;
   assert.equal(over, exact);
 });
 
 test('a word beyond wordTracks draws untouched, as one with an identity entry does', async (t) => {
   const text = { text: 'one two three', font: { family: 'Geist', weight: 600, size: 96 }, maxWidth: 1600, fill: '#ffffff', x: 100, y: 100 };
-  const short = await hashOf(filmOf([{ type: 'text', id: 'w', props: text, wordTracks: [{ opacity: keys([0, 0.5]) }] }]), t);
-  const full = await hashOf(filmOf([{ type: 'text', id: 'w', props: text, wordTracks: [{ opacity: keys([0, 0.5]) }, {}, {}] }]), t);
+  const short = await hashOf(t, filmOf([{ type: 'text', id: 'w', props: text, wordTracks: [{ opacity: keys([0, 0.5]) }] }]));
+  const full = await hashOf(t, filmOf([{ type: 'text', id: 'w', props: text, wordTracks: [{ opacity: keys([0, 0.5]) }, {}, {}] }]));
   if (short === null) return;
   assert.equal(short, full);
 });
 
-test('__stateKey is stable for a frame and differs across frames', async (t) => {
-  const a = await openStage(FILM); if (!a) return t.skip('no browser');
-  const keysAt = await a.page.evaluate(() => [window.__stateKey(0), window.__stateKey(0), window.__stateKey(40)]);
-  assert.equal(keysAt[0], keysAt[1]); assert.notEqual(keysAt[0], keysAt[2]); await a.close();
+test('a text node box is the union of its words after each word x, y and scale', async (t) => {
+  const font = { family: 'Geist', weight: 600, size: 96 };
+  const props = { x: 100, y: 100, text: 'Hi', font, maxWidth: 1000 };
+  const a = await stageFor(t, filmOf([
+    { type: 'text', id: 'plain', props },
+    { type: 'text', id: 'moved', props, wordTracks: [{ x: keys([0, 50]), scale: keys([0, 2]) }] },
+  ])); if (!a) return;
+  const [plain, moved] = await a.page.evaluate(() => window.__snapshot(0));
+  const { width: w } = plain.layout.lines[0].words[0], { height: H } = plain.layout, ascent = plain.layout.lines[0].y;
+  const near = (got, want, what) => assert.ok(Math.abs(got - want) < 1e-6, `${what}: ${got} vs ${want}`);
+  [100, 100, w, H].forEach((want, i) => near(plain.bbox[i], want, `plain[${i}]`));
+  // scale 2 about the word centre (x + w/2 + 50, baseline): twice as wide and tall, left edge at 50 - w/2
+  [150 - w / 2, 100 - ascent, 2 * w, 2 * H].forEach((want, i) => near(moved.bbox[i], want, `moved[${i}]`));
+});
+
+test('blur is reported as a separate spread and does not widen the box', async (t) => {
+  const a = await stageFor(t, filmOf([box('sharp'), box('soft', { blur: 8 })])); if (!a) return;
+  const [sharp, soft] = await a.page.evaluate(() => window.__snapshot(0));
+  assert.deepEqual(soft.bbox, [100, 100, 400, 300]); assert.deepEqual(soft.bbox, sharp.bbox);
+  assert.equal(sharp.spread, 0); assert.equal(soft.spread, 24);
+});
+
+test('reveal clips a node and its children: a group at 0.5 shows the left half of its subtree', async (t) => {
+  const part = (id, d, fill) => ({ type: 'path', id, props: { d, fill } });
+  const a = await stageFor(t, filmOf([{
+    type: 'group', id: 'g', props: { reveal: 0.5 },
+    children: [part('left', 'M100 100H300V300H100Z', '#ff0000'), part('right', 'M500 100H700V300H500Z', '#00ff00')],
+  }])); if (!a) return;
+  assert.deepEqual(await seekAndPixel(a, 0, 200, 200), [255, 0, 0, 255]);
+  assert.deepEqual(await seekAndPixel(a, 0, 600, 200), [0, 0, 0, 255]); // the right child is outside the left half of 100..700
+});
+
+const BAD_LAYOUT = { size: 20, width: 10, height: 10, overflow: false, lines: [{ x: 0, y: 16, width: 10, words: [{ text: 'a', index: 0, x: 0, width: 10 }] }] };
+
+test('a seek after a failed seek equals a first seek', async (t) => {
+  const a = await stageFor(t, filmOf([
+    { ...box('b'), tracks: { x: keys([0, 0], [1, 300]) } }, // moves, so a frame left half-drawn differs from frame 0
+    { // invisible at frame 0; from frame 1 it draws and throws on its font width, after the clip and alpha are set
+      type: 'text', id: 'bad', props: { x: 50, y: 50, layout: BAD_LAYOUT, font: { family: 'Geist', size: 20, width: 'bogus' }, reveal: 0.1 },
+      tracks: { opacity: keys([0, 0], [1, 1]) },
+    },
+  ])); if (!a) return;
+  const first = await a.hashFrame(0);
+  const message = await a.page.evaluate(() => { try { window.__seek(15); return ''; } catch (e) { return e.message; } });
+  assert.match(message, /font\.width/);
+  assert.equal(await a.hashFrame(0), first);
+});
+
+const IMAGE_FILM = {
+  fps: FPS,
+  shots: [
+    { id: 'red', show: 'free', srcs: ['assets/pic.png'], hold: 1, nodes: [{ type: 'image', id: 'r', props: { src: 'assets/pic.png', x: 100, y: 100, w: 400, h: 300 } }] },
+    {
+      id: 'blue', show: 'free', srcs: ['assets/pic2.png'], hold: 1, background: '#202020',
+      nodes: [{ type: 'image', id: 'b', props: { src: 'assets/pic2.png', y: 100, w: 400, h: 300 }, tracks: { x: keys([0, 100], [1, 400]) } }],
+    },
+  ],
+};
+
+test('two shots each draw their own image through /asset/<n>, and a shot samples from its own start', async (t) => {
+  const a = await stageFor(t, IMAGE_FILM, { specDir }); if (!a) return;
+  assert.equal(a.info.frameCount, 60);
+  assert.deepEqual(await seekAndPixel(a, 0, 200, 200), [255, 0, 0, 255]);
+  assert.deepEqual(await seekAndPixel(a, 29, 200, 200), [255, 0, 0, 255]);
+  assert.deepEqual(await seekAndPixel(a, 30, 200, 200), [0, 0, 255, 255]); // shot 2 owns frame 30; its own asset 0 is /asset/1
+  const at = async (i) => (await a.page.evaluate((n) => window.__snapshot(n), i))[0].bbox;
+  assert.deepEqual(await at(30), [100, 100, 400, 300]); // local time 0
+  assert.deepEqual(await at(45), [250, 100, 400, 300]); // local time 0.5: x halfway from 100 to 400
+  assert.deepEqual(await seekAndPixel(a, 45, 200, 200), [32, 32, 32, 255]); // the image has moved off this pixel
+  assert.deepEqual(a.errors, []);
+});
+
+test('two shots may declare the same src, and an image takes its own size when none is given', async (t) => {
+  const image = { type: 'image', id: 'i', props: { src: 'assets/pic.png', x: 100, y: 100 } };
+  const a = await stageFor(t, {
+    fps: FPS,
+    shots: [{ id: 'one', show: 'free', srcs: ['assets/pic.png'], hold: 1, nodes: [image] }, { id: 'two', show: 'free', srcs: ['assets/pic.png'], hold: 1, nodes: [image] }],
+  }, { specDir }); if (!a) return;
+  assert.deepEqual(await seekAndPixel(a, 0, 101, 101), [255, 0, 0, 255]);
+  assert.deepEqual(await seekAndPixel(a, 30, 101, 101), [255, 0, 0, 255]);
+  assert.deepEqual((await a.page.evaluate(() => window.__snapshot(0)))[0].bbox, [100, 100, 4, 4]); // the 4x4 picture
+});
+
+test('an image whose src the shot does not declare stops the page, naming the shot and the src', async (t) => {
+  const film = { fps: FPS, shots: [{ id: 'lone', show: 'free', srcs: ['assets/pic.png'], hold: 1, nodes: [{ type: 'image', id: 'i', props: { src: 'assets/pic2.png' } }] }] };
+  let stage;
+  try {
+    stage = await openStage(film, { specDir });
+  } catch (err) {
+    assert.match(err.message, /shot "lone".*assets\/pic2\.png/);
+    return;
+  }
+  if (stage === null) return t.skip('no browser');
+  await stage.close();
+  assert.fail('the page started although the shot does not declare the image');
+});
+
+test('the CSP stops an inline script from running', async (t) => {
+  const a = await stageFor(t, FILM); if (!a) return;
+  const ran = await a.page.evaluate(() => {
+    const script = document.createElement('script');
+    script.textContent = 'window.__inlineRan = true';
+    document.head.append(script);
+    return window.__inlineRan === true;
+  });
+  assert.equal(ran, false);
 });
 
 // ---- the free kind ----
 
 const fakeMeasure = (text) => ({ width: [...text].length * 10, ascent: 8, descent: 2 });
-const ctxFor = (extra = {}) => ({ canvas: { w: 1920, h: 1080 }, unit: 10.8, timing: TL.shots[0], measure: fakeMeasure, seed: 1, asset: () => { throw new Error('no assets'); }, ...extra });
+const ctxFor = (extra = {}) => ({ canvas: { w: 1920, h: 1080 }, unit: 1, timing: TL.shots[0], measure: fakeMeasure, seed: 1, asset: () => { throw new Error('no assets'); }, ...extra });
 const expandFree = (shot, extra) => registries.kinds.get('free').expand({ id: 's', show: 'free', ...shot }, ctxFor(extra));
 
 test('free builds real nodes through node() and track()', () => {
@@ -228,6 +370,21 @@ test('free names the node when its description is wrong', () => {
   assert.throws(() => expandFree({ nodes: [{ type: 'text', id: 't', props: { text: 'hi', maxWidth: 100 } }] }), /node "t".*font/);
 });
 
+test('free asks ctx.asset(src) for an image node and defaults its size from the answer', () => {
+  const asked = [];
+  const asset = (src) => { asked.push(src); return { width: 40, height: 30 }; };
+  const { nodes } = expandFree({ srcs: ['a.png'], nodes: [{ type: 'image', id: 'i', props: { src: 'a.png' } }, { type: 'image', id: 'j', props: { src: 'a.png', w: 5 } }] }, { asset });
+  assert.deepEqual({ ...nodes[0].props }, { src: 'a.png', w: 40, h: 30 });
+  assert.deepEqual({ ...nodes[1].props }, { src: 'a.png', w: 5, h: 30 });
+  assert.deepEqual(asked, ['a.png', 'a.png']);
+  assert.throws(() => expandFree({ nodes: [{ type: 'image', id: 'i', props: {} }] }), /node "i".*src/);
+  assert.throws(() => expandFree({ nodes: [{ type: 'image', id: 'k', props: { src: 'b.png' } }] }), /node "k".*no assets/); // ctx.asset's own error passes through
+});
+
+test('free declares its srcs array as the shot field the server serves', () => {
+  assert.deepEqual(registries.kinds.get('free').srcFields, ['srcs']);
+});
+
 test('node() is what free calls: a description and node() agree', () => {
   const built = node('group', 'g', { x: 1 });
   const { nodes } = expandFree({ nodes: [{ type: 'group', id: 'g', props: { x: 1 } }] });
@@ -236,65 +393,141 @@ test('node() is what free calls: a description and node() agree', () => {
 
 // ---- the loopback server ----
 
-const get = (s, urlPath, headers = {}) => new Promise((resolve, reject) => {
+const request = (s, urlPath, { method = 'GET', headers = {} } = {}) => new Promise((resolve, reject) => {
   const { port } = new URL(s.url);
-  http.get({ host: '127.0.0.1', port, path: urlPath, headers }, (res) => {
+  const req = http.request({ host: '127.0.0.1', port, path: urlPath, method, headers }, (res) => {
     const chunks = [];
     res.on('data', (c) => chunks.push(c));
     res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }));
-  }).on('error', reject);
+  });
+  req.on('error', reject);
+  req.end();
+});
+const get = (s, urlPath, headers = {}) => request(s, urlPath, { headers });
+const rawRequest = (s, text) => new Promise((resolve, reject) => {
+  const { port } = new URL(s.url);
+  const socket = net.connect(port, '127.0.0.1', () => socket.write(text));
+  const chunks = [];
+  socket.on('data', (c) => chunks.push(c));
+  socket.on('end', () => resolve(Buffer.concat(chunks).toString('latin1')));
+  socket.on('error', reject);
+});
+const portOf = (s) => new URL(s.url).port;
+const CSP = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+
+test('the server serves the page, engine modules, the two v1 modules and film.json under a CSP', async (t) => {
+  const s = await serve(t, FILM);
+  const page = await get(s, '/');
+  assert.equal(page.status, 200);
+  assert.equal(page.headers['content-security-policy'], CSP);
+  assert.equal(page.headers['x-content-type-options'], 'nosniff');
+  assert.equal(page.headers['cross-origin-resource-policy'], 'same-origin');
+  for (const ok of ['/engine/registry.mjs', '/engine/page/stage.mjs', '/shared/errors.mjs', '/v1/seeded.mjs', '/v1/formats.mjs', '/engine/fonts/shared/geist-sans-latin-600-normal.woff2']) {
+    const res = await get(s, ok);
+    assert.equal(res.status, 200, ok);
+    assert.equal(res.headers['cross-origin-resource-policy'], 'same-origin', ok);
+  }
+  const film = JSON.parse((await get(s, '/film.json')).body.toString('utf8'));
+  assert.equal(film.film.shots[0].id, 'all'); assert.equal(film.timeline.frameCount, LAST_FRAME);
 });
 
-test('the server serves the page, engine modules, the two v1 modules and film.json under a CSP', async () => {
-  const s = await startV2Server({ film: FILM, timeline: TL, specDir });
-  try {
-    const page = await get(s, '/');
-    assert.equal(page.status, 200);
-    assert.equal(page.headers['content-security-policy'], "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'");
-    assert.equal(page.headers['x-content-type-options'], 'nosniff');
-    for (const ok of ['/engine/registry.mjs', '/engine/page/stage.mjs', '/shared/errors.mjs', '/v1/seeded.mjs', '/v1/formats.mjs', '/engine/fonts/shared/geist-sans-latin-600-normal.woff2']) {
-      assert.equal((await get(s, ok)).status, 200, ok);
-    }
-    const film = JSON.parse((await get(s, '/film.json')).body.toString('utf8'));
-    assert.equal(film.film.shots[0].id, 'all'); assert.equal(film.timeline.frameCount, LAST_FRAME);
-  } finally { await s.close(); }
+test('the server refuses everything outside its allow-list', async (t) => {
+  const s = await serve(t, FILM);
+  for (const bad of ['/engine/../package.json', '/engine/%2e%2e/package.json', '/engine/..%2fpackage.json', '/engine/page%2fstage.mjs', '/engine/page\\stage.mjs', '/template/formats.mjs', '/v1/vars.mjs', '/engine/fonts/shared/../../package.json', '/package.json', '/node_modules/playwright/package.json', '/asset/../secret.txt']) {
+    const { status } = await get(s, bad);
+    assert.ok(status === 400 || status === 404, `${bad} -> ${status}`);
+  }
+  assert.equal((await get(s, '/engine/page/index.html')).status, 200);
+  assert.equal((await get(s, '/engine/README.md')).status, 404); // extension not allow-listed
+  assert.equal((await get(s, '/engine/fonts/shared/metrics.json')).status, 404);
+  const post = await request(s, '/film.json', { method: 'POST' });
+  assert.equal(post.status, 405); assert.equal(post.headers.allow, 'GET, HEAD');
 });
 
-test('the server refuses everything outside its allow-list', async () => {
-  const s = await startV2Server({ film: FILM, timeline: TL, specDir });
-  try {
-    for (const bad of ['/engine/../package.json', '/engine/%2e%2e/package.json', '/engine/..%2fpackage.json', '/engine/page%2fstage.mjs', '/engine/page\\stage.mjs', '/template/formats.mjs', '/v1/vars.mjs', '/engine/fonts/shared/../../package.json', '/package.json', '/node_modules/playwright/package.json', '/asset/../secret.txt']) {
-      const { status } = await get(s, bad);
-      assert.ok(status === 400 || status === 404, `${bad} -> ${status}`);
-    }
-    assert.equal((await get(s, '/engine/page/index.html')).status, 200);
-    assert.equal((await get(s, '/engine/README.md')).status, 404); // extension not allow-listed
-    assert.equal((await get(s, '/engine/fonts/shared/metrics.json')).status, 404);
-    assert.equal((await get(s, '/engine/fonts/shared/geist-sans-latin-600-normal.woff2', { host: 'localhost' })).status, 403);
-    const post = await new Promise((resolve) => {
-      const { port } = new URL(s.url);
-      const req = http.request({ host: '127.0.0.1', port, path: '/film.json', method: 'POST' }, (res) => { res.resume(); resolve(res.statusCode); });
-      req.end();
-    });
-    assert.equal(post, 405);
-  } finally { await s.close(); }
+test('the server answers only the Host headers of its own port', async (t) => {
+  const s = await serve(t, FILM);
+  const port = portOf(s);
+  assert.equal((await get(s, '/', { host: `localhost:${port}` })).status, 200);
+  assert.equal((await get(s, '/', { host: `127.0.0.1:${port}` })).status, 200);
+  for (const host of [`[::1]:${port}`, 'localhost', `localhost:${Number(port) + 1}`, `127.0.0.1.evil.example:${port}`]) {
+    assert.equal((await get(s, '/', { host })).status, 403, `Host "${host}"`);
+  }
+  assert.match(await rawRequest(s, 'GET / HTTP/1.0\r\n\r\n'), /^HTTP\/1\.1 403 /); // no Host line at all
+  assert.equal((await get(s, '/engine/page/stage.mjs', { host: 'evil.example' })).status, 403);
 });
 
-test('the server serves each src the film names by index and nothing else', async () => {
-  const film ={ fps: FPS, shots: [{ id: 'p', show: 'pic', src: 'assets/pic.png', hold: 1 }] };
-  const s = await startV2Server({ film, timeline: buildTimeline(film, { fps: FPS }), specDir });
-  try {
-    const hit = await get(s, '/asset/0');
-    assert.equal(hit.status, 200); assert.equal(hit.headers['content-type'], 'image/png'); assert.equal(hit.body.toString(), 'not really a png');
-    assert.equal((await get(s, '/asset/1')).status, 404);
-    assert.equal((await get(s, '/asset/assets/pic.png')).status, 404);
-    assert.equal((await get(s, '/asset/%30')).status, 400);
-  } finally { await s.close(); }
+test('HEAD answers with the headers and no body', async (t) => {
+  const s = await serve(t, FILM);
+  const head = await request(s, '/engine/page/stage.mjs', { method: 'HEAD' });
+  assert.equal(head.status, 200); assert.ok(Number(head.headers['content-length']) > 0);
+  assert.equal(head.headers['content-type'], 'text/javascript; charset=utf-8'); assert.equal(head.body.length, 0);
 });
 
-test('the server refuses a film whose src leaves the spec directory', async () => {
-  const outside = { fps: FPS, shots: [{ id: 'p', show: 'pic', src: '../secret.txt', hold: 1 }] };
-  await assert.rejects(() => startV2Server({ film: outside, timeline: buildTimeline(outside, { fps: FPS }), specDir }), /src/);
-  const missing = { fps: FPS, shots: [{ id: 'p', show: 'pic', src: 'assets/none.png', hold: 1 }] };
-  await assert.rejects(() => startV2Server({ film: missing, timeline: buildTimeline(missing, { fps: FPS }), specDir }), /none\.png/);
+test('fileInside refuses a symlink that leaves its root and a missing file, and passes a real one', (t) => {
+  const { dir, outside } = scratchDir(t);
+  writeFileSync(path.join(dir, 'inside.mjs'), 'export {};');
+  writeFileSync(path.join(outside, 'outside.mjs'), 'export {};');
+  symlinkSync(path.join(outside, 'outside.mjs'), path.join(dir, 'escape.mjs'));
+  symlinkSync('inside.mjs', path.join(dir, 'alias.mjs'));
+  symlinkSync('loop.mjs', path.join(dir, 'loop.mjs'));
+  assert.equal(fileInside(dir, path.join(dir, 'escape.mjs')), null);
+  assert.equal(fileInside(dir, path.join(dir, 'none.mjs')), null);
+  assert.equal(fileInside(dir, path.join(dir, 'inside.mjs')), path.join(dir, 'inside.mjs'));
+  assert.equal(fileInside(dir, path.join(dir, 'alias.mjs')), path.join(dir, 'inside.mjs')); // an inside symlink resolves
+  assert.throws(() => fileInside(dir, path.join(dir, 'loop.mjs')), /ELOOP/); // a real filesystem error is not "not found"
+});
+
+test('the server serves each src the film names by index and nothing else', async (t) => {
+  const s = await serve(t, picFilm());
+  const hit = await get(s, '/asset/0');
+  assert.equal(hit.status, 200); assert.equal(hit.headers['content-type'], 'image/png'); assert.deepEqual(hit.body, solidPng(4, 4, RED));
+  assert.equal((await get(s, '/asset/1')).status, 404);
+  assert.equal((await get(s, '/asset/assets/pic.png')).status, 404);
+  assert.equal((await get(s, '/asset/%30')).status, 400);
+});
+
+test('the server refuses a film whose src leaves the spec directory or is not an image', async (t) => {
+  await assert.rejects(() => startV2Server({ film: picFilm('../secret.txt'), timeline: buildTimeline(picFilm('../secret.txt'), { fps: FPS }), specDir }), /src/);
+  await assert.rejects(() => serve(t, picFilm('assets/none.png')), /none\.png/);
+  await assert.rejects(() => serve(t, picFilm('secret.txt')), /png, jpg, webp or gif/);
+  const { dir, outside } = scratchDir(t);
+  symlinkSync(path.join(outside, 'target.png'), path.join(dir, 'assets', 'escape.png'));
+  symlinkSync(path.join(dir, 'secret.txt'), path.join(dir, 'assets', 'text.png'));
+  await assert.rejects(() => serve(t, picFilm('assets/escape.png'), { specDir: dir }), /inside the film's folder/); // an image, but outside
+  await assert.rejects(() => serve(t, picFilm('assets/text.png'), { specDir: dir }), /png, jpg, webp or gif/); // inside, but the real file is text
+});
+
+test('an asset swapped for a link out of the folder after start is refused when served', async (t) => {
+  const { dir, outside } = scratchDir(t);
+  const s = await serve(t, picFilm(), { specDir: dir });
+  assert.equal((await get(s, '/asset/0')).status, 200);
+  unlinkSync(path.join(dir, 'assets', 'pic.png'));
+  symlinkSync(path.join(outside, 'target.png'), path.join(dir, 'assets', 'pic.png'));
+  assert.equal((await get(s, '/asset/0')).status, 404);
+  unlinkSync(path.join(dir, 'assets', 'pic.png'));
+  symlinkSync(path.join(dir, 'secret.txt'), path.join(dir, 'assets', 'pic.png'));
+  assert.equal((await get(s, '/asset/0')).status, 404); // inside the folder, but no longer an image
+});
+
+test('a 500 says only "internal error" and the detail goes to onError', async (t) => {
+  const { dir } = scratchDir(t);
+  const seen = [];
+  const s = await serve(t, picFilm(), { specDir: dir, onError: (err) => seen.push(err) });
+  unlinkSync(path.join(dir, 'assets', 'pic.png'));
+  symlinkSync('pic.png', path.join(dir, 'assets', 'pic.png')); // a link loop: ELOOP, a real error rather than a miss
+  const res = await get(s, '/asset/0');
+  assert.equal(res.status, 500); assert.equal(res.body.toString(), 'internal error');
+  assert.equal(res.headers['cache-control'], 'no-store');
+  assert.ok(!res.body.toString().includes(dir));
+  assert.equal(seen.length, 1); assert.match(seen[0].message, /ELOOP/);
+});
+
+test('a server error after listen is reported through onError, and close() twice is fine', async (t) => {
+  const seen = [];
+  const s = await startV2Server({ film: FILM, timeline: TL, specDir, onError: (err) => seen.push(err) });
+  t.after(() => s.close());
+  s.server.emit('error', new Error('boom'));
+  assert.equal(seen.length, 1); assert.equal(seen[0].message, 'boom');
+  await s.close();
+  await s.close();
 });

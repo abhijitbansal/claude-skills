@@ -2,6 +2,7 @@
 // a matrix: draw.mjs applies it to the canvas and annotate() multiplies it down the tree, so a box always matches
 // what was drawn. Matrices are canvas-style [a, b, c, d, e, f]; boxes are [x, y, w, h].
 import { measurePath } from './geometry.mjs';
+import { WORD_IDENTITY } from './text-style.mjs';
 
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const HALF = 2;
@@ -47,11 +48,22 @@ function pathBounds({ d, stroke, strokeWidth = 1, rough = 0 }) {
   return [x - grow, y - grow, w + 2 * grow, h + 2 * grow];
 }
 
-function textBounds({ layout }) {
+// One word's box where draw.mjs puts it: scaled about its centre on the baseline, after its own x and y.
+function wordBox(line, word, tracks, { ascent, descent }) {
+  const t = { ...WORD_IDENTITY, ...tracks };
+  const scale = Math.abs(t.scale);
+  const half = (word.width / HALF) * scale;
+  const centre = line.x + word.x + word.width / HALF + t.x;
+  return [centre - half, line.y + t.y - ascent * scale, 2 * half, (ascent + descent) * scale];
+}
+
+// The union of the words' boxes, so a word that has moved or grown is inside it. The first baseline is the ascent;
+// the last baseline plus the descent is the layout's height.
+function textBounds(n) {
+  const { layout } = n.props;
   if (!layout || layout.lines.length === 0) return null;
-  const left = Math.min(...layout.lines.map((l) => l.x));
-  const right = Math.max(...layout.lines.map((l) => l.x + l.width));
-  return [left, 0, right - left, layout.height];
+  const metrics = { ascent: layout.lines[0].y, descent: layout.height - layout.lines.at(-1).y };
+  return union(layout.lines.flatMap((line) => line.words.map((word) => wordBox(line, word, n.words?.[word.index], metrics))));
 }
 
 function imageBounds({ w, h }) {
@@ -61,22 +73,39 @@ function imageBounds({ w, h }) {
 /** The node's own content box in its local space, or null when it draws nothing itself (a group, an empty text). */
 export function localBounds(n) {
   if (n.type === 'path') return pathBounds(n.props);
-  if (n.type === 'text') return textBounds(n.props);
+  if (n.type === 'text') return textBounds(n);
   if (n.type === 'image') return imageBounds(n.props);
   return null;
 }
 
-function annotateNode(n, parent) {
+/** The node's own content and all its descendants, in the node's local space (a child's box through its own
+ *  transform), or null when nothing in the subtree draws. This is what `reveal` clips. */
+export function contentBox(n) {
+  const own = localBounds(n);
+  const inner = n.children.flatMap((child) => {
+    const box = contentBox(child);
+    return box ? [transformBox(localMatrix(child), box)] : [];
+  });
+  const boxes = own ? [own, ...inner] : inner;
+  return boxes.length > 0 ? union(boxes) : null;
+}
+
+// ctx.filter blur(s) spreads its ink about three standard deviations past the edge.
+const BLUR_SPREAD_SIGMAS = 3;
+
+function annotateNode(n, parent, inheritedBlur) {
   const m = multiply(parent, localMatrix(n));
-  const children = n.children.map((child) => annotateNode(child, m));
+  const blur = n.blur > 0 ? n.blur : inheritedBlur; // a blurred parent blurs its children too (see draw.mjs)
+  const children = n.children.map((child) => annotateNode(child, m, blur));
   const own = localBounds(n);
   const boxes = [...(own ? [transformBox(m, own)] : []), ...children.map((c) => c.bbox)];
   const bbox = boxes.length > 0 ? union(boxes) : [clean(m[4]), clean(m[5]), 0, 0];
-  return { ...n, children, bbox, ...(n.type === 'text' ? { layout: n.props.layout } : {}) };
+  return { ...n, children, bbox, spread: blur * BLUR_SPREAD_SIGMAS, ...(n.type === 'text' ? { layout: n.props.layout } : {}) };
 }
 
-/** The sampled tree with a canvas-pixel `bbox: [x, y, w, h]` on every node (a group's is its children's union)
- *  and, on a text node, its `layout`. Plain data, so it crosses page.evaluate. */
+/** The sampled tree with a canvas-pixel `bbox: [x, y, w, h]` on every node (a group's is its children's union),
+ *  a `spread` (px the blur adds beyond the box; 0 without blur, never added to the box) and, on a text node, its
+ *  `layout`. Plain data, so it crosses page.evaluate. */
 export function annotate(sampled) {
-  return sampled.map((n) => annotateNode(n, IDENTITY));
+  return sampled.map((n) => annotateNode(n, IDENTITY, 0));
 }

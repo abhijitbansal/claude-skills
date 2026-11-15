@@ -1,5 +1,6 @@
 // Test helper: open a film in the v2 render page and hash frames. Registers no kinds itself; the film names
 // kinds the page registers. Returns null (callers t.skip) when no browser is installed, unless PA_REQUIRE_BROWSER=1.
+// close() is safe to call twice and always closes the server, even when closing the browser throws.
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -28,16 +29,24 @@ async function launchOrNull() {
 export async function openStage(film, { specDir = DEFAULT_SPEC_DIR } = {}) {
   const browser = await launchOrNull();
   if (browser === null) return null;
-  const timeline = buildTimeline(film, { fps: film.fps ?? DEFAULT_FPS });
-  const server = await startV2Server({ film, timeline, specDir });
-  const [width, height] = canvasSize(film);
+  let server;
+  let closing;
+  const close = () => {
+    closing ??= (async () => {
+      try {
+        await browser.close();
+      } finally {
+        if (server) await server.close();
+      }
+    })();
+    return closing;
+  };
   const blocked = [];
   const errors = [];
-  const close = async () => {
-    await browser.close();
-    await server.close();
-  };
   try {
+    const timeline = buildTimeline(film, { fps: film.fps ?? DEFAULT_FPS });
+    server = await startV2Server({ film, timeline, specDir });
+    const [width, height] = canvasSize(film);
     const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
     const page = await context.newPage();
     page.on('pageerror', (err) => errors.push(err.message));

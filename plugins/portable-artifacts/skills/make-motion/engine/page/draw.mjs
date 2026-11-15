@@ -1,14 +1,13 @@
 // Canvas 2D drawing of a sampled (and camera-applied) scene graph. drawFrame(ctx, sampled, env) paints the nodes in
 // order, each child after its parent inside the parent's transform. Nothing here reads a clock or a random source:
 // the same sampled tree draws the same pixels.
-import { applyFont } from './text-style.mjs';
+import { applyFont, WORD_IDENTITY } from './text-style.mjs';
 import { measurePath, path2D } from './geometry.mjs';
 import { roughShape } from './rough.mjs';
-import { localBounds, localMatrix } from './bounds.mjs';
+import { contentBox, localMatrix } from './bounds.mjs';
 
 const DEFAULT_TEXT_FILL = '#ffffff';
 const DEFAULT_STROKE_WIDTH = 1;
-const WORD_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1 });
 const HALF = 2;
 
 // Sampled values are not clamped (an overshoot ease can leave 0..1), so opacity, draw and reveal are clamped here.
@@ -77,9 +76,9 @@ function drawPath(ctx, n) {
 // ---- images ----
 
 function drawImage(ctx, n, assets) {
-  const { asset, w, h } = n.props;
-  const image = assets[asset];
-  if (!image) throw new Error(`image node "${n.id}": no asset ${asset} (the film names ${assets.length})`);
+  const { src, w, h } = n.props;
+  const image = assets.get(src);
+  if (!image) throw new Error(`image node "${n.id}": no loaded picture for src "${src}"`);
   ctx.drawImage(image, 0, 0, w ?? image.width, h ?? image.height);
 }
 
@@ -93,20 +92,15 @@ function drawBody(ctx, n, env) {
   return undefined; // a group draws only its children
 }
 
-// `reveal` keeps the left fraction of the node's own content box.
-function drawRevealed(ctx, n, env) {
-  ctx.save();
+// `reveal` keeps the left fraction of the node's whole box: its own content and every descendant, so a group at 0.5
+// shows the left half of its subtree. The clip stays on for the node's children.
+function clipToReveal(ctx, n) {
   const reveal = unit01(n.reveal);
-  if (reveal < 1) {
-    const box = localBounds(n);
-    if (box) {
-      ctx.beginPath();
-      ctx.rect(box[0], box[1], box[2] * reveal, box[3]);
-      ctx.clip();
-    }
-  }
-  drawBody(ctx, n, env);
-  ctx.restore();
+  const box = reveal < 1 ? contentBox(n) : null;
+  if (!box) return;
+  ctx.beginPath();
+  ctx.rect(box[0], box[1], box[2] * reveal, box[3]);
+  ctx.clip();
 }
 
 function drawNode(ctx, n, env) {
@@ -116,19 +110,32 @@ function drawNode(ctx, n, env) {
   ctx.transform(...localMatrix(n));
   ctx.globalAlpha *= opacity;
   if (n.blur > 0) ctx.filter = `blur(${n.blur}px)`; // a blurred parent blurs its children too
-  drawRevealed(ctx, n, env);
+  clipToReveal(ctx, n);
+  drawBody(ctx, n, env);
   for (const child of n.children) drawNode(ctx, child, env);
   ctx.restore();
+}
+
+/**
+ * Put the context back to a known base: default transform, alpha, composite, filter and clip, an empty save stack,
+ * and a cleared bitmap. A draw that threw halfway leaves its saves, clip and alpha behind; this undoes them.
+ */
+export function resetContext(ctx) {
+  if (typeof ctx.reset === 'function') {
+    ctx.reset();
+    return;
+  }
+  ctx.canvas.width = ctx.canvas.width; // assigning the width resets the whole 2D state, on every browser
 }
 
 /**
  * Paint `sampled` onto ctx. The caller has already painted the background.
  * @param {CanvasRenderingContext2D} ctx
  * @param {object[]} sampled sampleGraph output after applyCamera
- * @param {{ assets?: (ImageBitmap | HTMLImageElement)[], canvas: { w: number, h: number }, fields?: object[] }} env
+ * @param {{ assets?: Map<string, ImageBitmap | HTMLImageElement>, canvas: { w: number, h: number }, fields?: object[] }} env
  *   `canvas` and `fields` are for field nodes, which a later task draws.
  */
-export function drawFrame(ctx, sampled, { assets = [], canvas, fields = [] } = {}) {
+export function drawFrame(ctx, sampled, { assets = new Map(), canvas, fields = [] } = {}) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
   ctx.filter = 'none';
