@@ -73,7 +73,7 @@ The bar is not met. This counts as revision round 2 of 2.
 
 After revision 2 a third fresh reviewer sees the sheets. The gate passes only if its verdict is SHIP for both films. Any other verdict sends the frames and all three reviews to the owner, and engine work on the look stops until the owner answers. Individual findings under a SHIP verdict are recorded as follow-ups, not argued.
 
-## Revision 2 (in progress)
+## Revision 2 (commit `31e7ef0`)
 
 Director's rulings that stand against the second review, recorded so they are not flipped a third time:
 
@@ -93,3 +93,30 @@ Engine decisions sent to the implementer:
 - Line breaking avoids one-word lines when a size within 15% allows.
 - Unspoken words dimmer; the slug's right margin matches the text's left margin; a shot fades out as one group.
 - Sheets sample every shot at least every 1.2 s so a reviewer can judge motion.
+
+Decisions made during the revision:
+
+- Frame furniture (the texts inside a slug card or a caption card) is left out of the size-class and hero-ratio review rules only; every other rule still judges it.
+- The smear is parked. A 12-sample average still read as separate echoes at full size, and tinted the `pop` punch cut. It is opt-in by look data and off in both looks; the two slide cuts in the gate films became hard cuts.
+- The code review of revision 1 (0 critical, 5 important, 16 minor) fed this revision: a `pop` number kicker is now drawn; a text's rest scale is the scale it holds on most frames; text over a slug or caption card is a mechanical finding; the kinds tests were split into files under 800 lines (81 tests before and after, by the implementer's count). One important finding was void: the closing line's markup is the director's own.
+
+Results on the committed tree, measured by the controller after the implementer was stopped:
+
+| Check | Result |
+|---|---|
+| v2 suite, tap file | 773 tests, 773 pass, 0 fail, 0 skipped |
+| gate-desk | exit 0, ok, 0 findings, 638 frames, render 40.6 s, 12.50 MB, 4.70 Mbit/s |
+| gate-pop | exit 0, ok, 0 findings, 362 frames (236 captured), render 12.1 s, 5.31 MB, 3.52 Mbit/s |
+
+### Third independent look review (fresh agent, sheets only)
+
+Verdict: **desk: ship after fixes. pop: ship.** Strongest frame: desk `count` at 17.03 s (the weakest frame of round 1). Weakest: the desk how-to-count cut at 15.10 s.
+
+- desk, 1 high, 6 medium, 10 low. High: the `match` cut from `how` to `count` dissolves the numeral through the outgoing sentence, and the two slug cards sit on each other at half opacity for about five frames. Medium: the cut treatment differs from cut to cut; the first slug nearly touches the headline; in the push the picture's white mount stays bright while the picture is dimmed; the push cuts a figure ("459" reads "59"); the caption card covers the chart's one red bar; the picture arrives through a speckled dissolve.
+- pop, 0 high, 4 medium, 9 low. Medium: the establishing card's top edge enters the top band by about 2% of the height as it lands; the "NO CLOUD." line has a wider word gap than its neighbours; unspoken words are see-through, so the halftone shows inside the letters; four of five shots share one layout.
+
+## Outcome
+
+The pass rule asked for SHIP on both films. `pop` passed; `desk` did not, on one high finding. Both revision rounds are used, so the frames and the three reviews go to the owner, and no further look work is done until the owner answers.
+
+Trend over three independent reviews: desk ship-after-fixes, ship-after-fixes, ship-after-fixes (high findings fell to one, in a cut the director chose); pop not-yet, ship-after-fixes, ship.
