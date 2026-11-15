@@ -7,6 +7,7 @@ import { BOX_SHAPES } from './kinds.mjs';
 export const MAX_TEXT_WIDTH = 180; // wrap labels here first
 export const MAX_WIDENED_TEXT_WIDTH = 240; // a label that needs a third line widens the wrap, up to here
 export const MAX_LABEL_LINES = 2;
+export const MAX_NOTE_WIDTH = MAX_TEXT_WIDTH; // a note draws on one line; past this it is clipped with an ellipsis (the Explore panel shows it whole)
 const WIDEN_STEP = 10;
 
 export const LABEL_SIZE = 14;
@@ -75,6 +76,17 @@ export function trackedWidth(text, font, track) {
 }
 
 const oneLine = (text) => text.replace(/\s+/g, ' ').trim();
+
+/** `text` cut to fit `maxWidth` px on one line, with a closing ellipsis; `text` itself when it fits. */
+export function clipToWidth(text, font, maxWidth) {
+  if (measure(text, font) <= maxWidth) return text;
+  const chars = [...text];
+  while (chars.length > 1 && measure(`${chars.join('').trimEnd()}…`, font) > maxWidth) chars.pop();
+  return `${chars.join('').trimEnd()}…`;
+}
+
+/** Whether a node's note is wider than the card allows, so the card draws it clipped. */
+export const noteIsClipped = (note, theme) => measure(oneLine(note), fonts(theme).note) > MAX_NOTE_WIDTH;
 const widest = (lines, font) => Math.max(0, ...lines.map((l) => measure(l, font)));
 
 // Wrap to at most two lines. 180 px first; a label that still needs a third
@@ -94,7 +106,7 @@ function wrapLabel(text, font) {
 // The type line (when the card has one), the label lines and the note, stacked.
 function textBlock(node, f, typeLine) {
   const lines = wrapLabel(node.label, f.label);
-  const noteLine = node.note === undefined ? null : oneLine(node.note);
+  const noteLine = node.note === undefined ? null : clipToWidth(oneLine(node.note), f.note, MAX_NOTE_WIDTH);
   const typeWidth = typeLine === null ? 0 : trackedWidth(typeLine, f.type, TYPE_TRACK);
   const width = Math.max(widest(lines, f.label), noteLine ? measure(noteLine, f.note) : 0, typeWidth);
   const height = (typeLine === null ? 0 : lineHeight(f.type) + TYPE_GAP) + lines.length * lineHeight(f.label) + (noteLine ? NOTE_GAP + lineHeight(f.note) : 0);

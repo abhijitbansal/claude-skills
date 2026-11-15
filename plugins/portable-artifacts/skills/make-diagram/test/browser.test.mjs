@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { slugify } from '../scripts/lib/output.mjs';
 import { launchBrowser, haveBrowser, buildPage, scratchDir, EXAMPLES, example } from './helpers/browser.mjs';
+import { enterPlay } from './helpers/page.mjs';
 import { PROTOTYPE_NAMED_SPECS } from './helpers/prototype-ids.mjs';
 
 let browser;
@@ -121,7 +122,7 @@ test('a single node with no edges fits, presents and zooms without NaN', async (
   const { url } = buildPage({ title: 'Solo', type: 'flow', nodes: [{ id: 'a', label: 'Only node' }] }, { name: 'solo' });
   const { page, problems, context } = await open(url);
   assert.ok((await viewBox(page)).every(Number.isFinite));
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   const vb = await viewBox(page);
   assert.ok(vb.every(Number.isFinite) && vb[2] > 0 && vb[3] > 0, String(vb));
@@ -140,7 +141,7 @@ test('a stage with no size (display: none) refits without NaN or errors', async 
   await page.evaluate(() => { document.getElementById('pa-stage').style.display = 'none'; });
   await settle(page);
   await page.keyboard.press('0');
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.keyboard.press('+');
   const hiddenView = await viewBox(page);
   assert.ok(hiddenView.every(Number.isFinite) && hiddenView[2] > 0 && hiddenView[3] > 0, `a usable viewBox even with no stage size: ${hiddenView}`);
@@ -279,7 +280,7 @@ test('Play: P enters, the caption line and count show the beat, arrows and the b
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
   assert.equal(await page.locator('[data-pa-caption]').isVisible(), false);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await page.locator('[data-pa-caption]').isVisible(), true);
   assert.equal(await page.textContent('[data-pa-line]'), '01 / 03 · WALKTHROUGH · The browser calls the API — TLS ends at the load balancer.');
   assert.equal(await page.textContent('[data-pa-count]'), '1 / 3');
@@ -309,7 +310,7 @@ test('Play: P enters, the caption line and count show the beat, arrows and the b
 test('presentation hides what is not revealed yet; revealing a nested node reveals its ancestor groups', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   // step 1 shows web and api; api sits in vpc inside aws
   let hidden = await hiddenIds(page);
   assert.ok(hidden.includes('db') && hidden.includes('pay'), `db and pay wait: ${hidden}`);
@@ -339,7 +340,7 @@ test('a step that names only a node deep in nested groups reveals both groups an
     steps: [{ title: 'Only the deep node', focus: ['x'], show: ['x'] }],
   };
   const { page, problems, context } = await open(buildPage(spec, { name: 'nested' }).url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   assert.deepEqual((await hiddenIds(page)).sort(), ['edge-0', 'y'], 'y and its edge wait; x, its three groups and nothing else show');
   const groupsVisible = await page.evaluate(() => ['outer', 'mid', 'inner'].map((id) => !document.querySelector(`.pa-group[data-id="${id}"]`).classList.contains('pa-hidden')));
@@ -355,7 +356,7 @@ test('a step that names only a node deep in nested groups reveals both groups an
 test('the camera moves to the step focus: viewBox holds the focus box plus 48 px; reduced motion jumps at once', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   const focusBox = (pg, ids) => pg.evaluate((list) => {
     const data = JSON.parse(document.getElementById('pa-data').textContent);
@@ -376,7 +377,7 @@ test('the camera moves to the step focus: viewBox holds the focus box plus 48 px
   await context.close();
 
   const reduced = await open(built('architecture').url, { reducedMotion: 'reduce' });
-  await reduced.page.keyboard.press('p');
+  await enterPlay(reduced.page);
   const vb0 = await viewBox(reduced.page);
   assert.ok(holds(vb0, await focusBox(reduced.page, ['web', 'api'])), 'no waiting needed under reduced motion');
   await reduced.page.keyboard.press('ArrowRight');
@@ -406,7 +407,7 @@ test('a sequence presents message by message: lifelines, frames and notes appear
   const spec = example('sequence');
   delete spec.steps; // the viewer builds one step per message
   const { page, problems, context } = await open(buildPage(spec, { name: 'sequence-auto' }).url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
   assert.equal(total, spec.messages.length);
   let hidden = await hiddenIds(page);
@@ -425,7 +426,7 @@ test('a zero-message sequence still presents its participants', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { url } = buildPage({ title: 'Lonely', type: 'sequence', participants: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }] }, { name: 'lonely' });
   const { page, problems, context } = await open(url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await page.textContent('[data-pa-count]'), '1 / 1');
   assert.deepEqual(await hiddenIds(page), []);
   assert.deepEqual(problems, []);
@@ -462,7 +463,7 @@ test('a step that highlights a group draws its frame in the accent colour', asyn
   };
   const { page, problems, context } = await open(buildPage(spec, { name: 'group-highlight' }).url);
   const stroke = (sel) => page.evaluate((s) => { const c = getComputedStyle(document.querySelector(s)); return [c.stroke, c.strokeWidth]; }, sel);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   const accent = await stroke('.pa-node[data-id="a"] .pa-shape');
   const plain = await stroke('.pa-group[data-id="vpc"] .pa-group-box');
   assert.notDeepEqual(plain, accent);
@@ -479,7 +480,7 @@ test('the Everything step uses the fit camera, not a padded focus box', async (t
   for (const name of ['architecture']) {
     const { page, problems, context } = await open(built(name).url);
     const total = example(name).steps.length + 1;
-    await page.keyboard.press('p');
+    await enterPlay(page);
     for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
     assert.ok((await page.textContent('[data-pa-line]')).endsWith('· Everything'), name);
     await settle(page);
@@ -507,7 +508,7 @@ for (const [name, spec] of Object.entries(PROTOTYPE_NAMED_SPECS)) {
       await page.click(`.pa-node[data-id="${target}"]`);
       await page.keyboard.press('Escape');
     }
-    await page.keyboard.press('p');
+    await enterPlay(page);
     const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
     for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
     await settle(page);
@@ -525,7 +526,7 @@ test('screenshots: presentation mid-step (light and dark), a hover trace and a p
   const shot = (page, name) => page.screenshot({ path: path.join(scratchDir(), name) });
   for (const colorScheme of ['light', 'dark']) {
     const { page, problems, context } = await open(built('architecture').url, { colorScheme });
-    await page.keyboard.press('p');
+    await enterPlay(page);
     await page.keyboard.press('ArrowRight');
     await settle(page);
     await shot(page, `architecture-present-${colorScheme}.png`);
@@ -541,7 +542,7 @@ test('screenshots: presentation mid-step (light and dark), a hover trace and a p
   await shot(hover.page, 'architecture-hover.png');
   await hover.context.close();
   const phone = await open(built('flow').url, { width: 390, height: 780 });
-  await phone.page.keyboard.press('p');
+  await enterPlay(phone.page);
   await settle(phone.page);
   await shot(phone.page, 'flow-phone-present.png');
   assert.deepEqual(phone.problems, []);
@@ -552,7 +553,7 @@ test('a group with no nodes is revealed by the last auto step', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const spec = { title: 'Empty group', type: 'architecture', groups: [{ id: 'empty', label: 'Empty' }], nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b' }] };
   const { page, problems, context } = await open(buildPage(spec, { name: 'empty-group' }).url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.ok((await hiddenIds(page)).includes('empty'), 'hidden at the start');
   const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
   for (let i = 1; i < total; i++) await page.keyboard.press('ArrowRight');
@@ -586,7 +587,7 @@ test('a sequence step with no focus keeps the headers of its messages\' particip
 test('a double click on the canvas in Play neither steps nor leaves', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('architecture').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   const c = await stageCentre(page);
   await page.mouse.dblclick(c.x, c.y + 60);
   assert.equal(await page.textContent('[data-pa-count]'), '1 / 3');
@@ -600,7 +601,7 @@ test('presentation never zooms in past 2x of the fit, or 100% when the fit is ti
   for (const [name, spec] of [['architecture', example('architecture')], ['flow', example('flow')], ['solo', { title: 'Solo', type: 'flow', nodes: [{ id: 'a', label: 'Only node' }] }]]) {
     for (const width of [1440, 390]) {
       const { page, problems, context } = await open(buildPage(spec, { name: `zoomcap-${name}` }).url, { width, height: width === 390 ? 780 : 900 });
-      await page.keyboard.press('p');
+      await enterPlay(page);
       const total = Number((await page.textContent('[data-pa-count]')).split(' / ')[1]);
       for (let i = 0; i < total; i++) {
         await settle(page);
@@ -619,7 +620,7 @@ test('presentation never zooms in past 2x of the fit, or 100% when the fit is ti
 test('at 390 px a hop beat is drawn at 100% or its own fit, never smaller than readable', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await open(built('story').url, { width: 390, height: 844 });
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   const m = await page.evaluate(() => {
     const stage = document.getElementById('pa-stage');
@@ -649,7 +650,7 @@ test('at 390 px a beat whose box fits at 100% is shown at 100%, not at 2x of a t
     stories: [{ id: 's', title: 'S', beats: [{ title: 'Look at c', focus: ['c'] }] }],
   };
   const { page, problems, context } = await open(buildPage(spec, { name: 'focus-100' }).url, { width: 390, height: 844 });
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   const m = await page.evaluate(() => {
     const svg = document.querySelector('#pa-stage svg');
@@ -886,7 +887,7 @@ test('hostile text in labels renders as text in the page (Review Focus 1)', asyn
   assert.equal(await page.locator('b').count(), 0);
   assert.ok((await page.textContent('.pa-node .pa-label')).includes(evil));
   assert.equal(await page.title(), `T ${evil}`);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.ok((await page.textContent('[data-pa-line]')).includes(evil));
   assert.equal(await page.locator('b').count(), 0);
   assert.deepEqual(problems, []);

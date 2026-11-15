@@ -6,7 +6,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildPage, example, launchBrowser } from './helpers/browser.mjs';
-import { openPage, closeBrowser, skipUnlessBrowser, settle } from './helpers/page.mjs';
+import { openPage, closeBrowser, skipUnlessBrowser, settle, enterPlay } from './helpers/page.mjs';
 
 let own; // the browser the iframe test launches itself (openPage waits for a top-level paReady, which a host page never sets)
 after(async () => { await own?.close(); await closeBrowser(); });
@@ -93,7 +93,7 @@ test('a refused request falls back to the pa-fill layer: the title and the expor
 test('F in Play enters full screen and leaves the story playing', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url, { init: REFUSES });
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.click('[data-pa-play]'); // the transport's Play starts the story
   const playing = async () => (await page.getAttribute('[data-pa-play]', 'aria-label')) === 'Pause';
   assert.equal(await playing(), true, 'the story plays');
@@ -143,7 +143,7 @@ test('Escape closes the panel before it leaves the fallback, and leaves the fall
   assert.equal(await fillOn(page), true, 'the layer stayed');
   await page.keyboard.press('Escape');
   assert.equal(await fillOn(page), false, 'then the layer went');
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await page.isVisible('[data-pa-caption]'), true);
   await page.keyboard.press('f');
   await page.waitForFunction(() => document.documentElement.classList.contains('pa-fill'));

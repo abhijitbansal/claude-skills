@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { buildPage, example, scratchDir } from './helpers/browser.mjs';
 import { contrastRatio } from '../shared/contrast.mjs';
-import { openPage, closeBrowser, skipUnlessBrowser } from './helpers/page.mjs';
+import { openPage, closeBrowser, skipUnlessBrowser, enterPlay } from './helpers/page.mjs';
 
 after(closeBrowser);
 
@@ -25,7 +25,7 @@ for (const colorScheme of ['light', 'dark']) {
     assert.equal(plain.filter, 'none');
     assert.equal(plain.stroke, await varColour(page, '--k-service'), 'app (client) -> gateway takes the service hue');
     await page.screenshot({ path: path.join(scratchDir(), `look-${colorScheme}.png`) });
-    await page.keyboard.press('p');
+    await enterPlay(page);
     for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: the dot shows for 2.4 s
     await page.keyboard.press('ArrowRight');
     await page.keyboard.press('ArrowLeft'); // beat 1 again, now at 0.5×

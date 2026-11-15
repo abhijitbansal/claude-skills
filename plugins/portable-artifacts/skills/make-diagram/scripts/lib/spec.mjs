@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
-import { formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
+import { formatAjvErrors, pathJoin, makeResult } from '../../shared/errors.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { themeFor } from './theme.mjs';
@@ -14,6 +14,7 @@ import { suggestion, notFound, checkLength, checkCount, checkRefs, registerIds }
 import { isOneEmoji, graphemeCount } from './emoji.mjs';
 import { checkStories } from './stories.mjs';
 import { lintGeometry } from './lint.mjs';
+import { semanticWarnings, layoutWarnings } from './warnings.mjs';
 
 export { UsageError };
 
@@ -370,17 +371,21 @@ function wordSchemaError(e) {
   return e;
 }
 
-// Lay the diagram out and lint the geometry: a spec that passes is buildable.
+// Lay the diagram out and lint the geometry: a spec that passes is buildable. Also the warnings only the layout shows
+// (labels too small to read at the size the page fits it to).
 async function lintLayout(spec) {
   const { layoutDiagram } = await import('./layout.mjs');
   const theme = themeFor(spec);
-  return lintGeometry(await layoutDiagram(spec, theme), { theme });
+  const geometry = await layoutDiagram(spec, theme);
+  return { errors: lintGeometry(geometry, { theme }), warnings: layoutWarnings(geometry) };
 }
 
 /**
  * Validate a parsed spec: schema, then semantic checks, then (when
  * `layout` is true and those pass) layout and geometry lint. A failure inside
  * the layout itself is a bug, not a spec error, and is thrown.
+ * Returns { ok, errors }, plus `warnings` ({ path, message } advice that never changes `ok`) when there are any;
+ * warnings are worked out only for a spec that has no errors.
  */
 export async function validateSpec(spec, { layout = true } = {}) {
   if (!validateSchema(spec)) {
@@ -392,6 +397,12 @@ export async function validateSpec(spec, { layout = true } = {}) {
   checkLength(errors, spec, 'subtitle', '', LIMITS.subtitle);
   if (spec.type === 'sequence') checkSequence(spec, errors);
   else checkGraph(spec, errors);
-  if (layout && errors.length === 0) errors.push(...await lintLayout(spec));
-  return { ok: errors.length === 0, errors };
+  if (errors.length > 0) return makeResult(errors);
+  const warnings = semanticWarnings(spec, themeFor(spec));
+  if (layout) {
+    const laid = await lintLayout(spec);
+    errors.push(...laid.errors);
+    if (laid.errors.length === 0) warnings.push(...laid.warnings);
+  }
+  return makeResult(errors, errors.length === 0 ? warnings : []);
 }

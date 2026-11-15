@@ -183,7 +183,7 @@ test('without playwright installed the check skips and exits 0', () => {
   fs.mkdirSync(path.join(dir, 'scripts/lib'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'shared'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
+  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'scripts/lib/legibility.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs', 'shared/stale-copy.mjs']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
   const { file } = buildPage(example('flow'), { name: 'flow' });
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/check.mjs'), file], { encoding: 'utf8', env: { ...process.env, PA_NO_BROWSER: '' } });
   assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -199,7 +199,7 @@ test('usage errors exit 2', () => {
   assert.equal(run(['a.html', 'b.html']).status, 2);
   const unknown = run(['--bogus']);
   assert.equal(unknown.status, 2);
-  assert.match(unknown.stderr, /Unknown option '--bogus'; usage: node scripts\/check\.mjs <page\.html> \[--json\]/);
+  assert.match(unknown.stderr, /Unknown option '--bogus'; usage: node scripts\/check\.mjs <page\.html> \[--json\] \[--shots <dir>\]/);
   const missing = run([path.join(tmp(), 'nope.html')]);
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /cannot read/);
@@ -231,4 +231,81 @@ test('the page limit is 1024 KB and an oversized page is refused without writing
   const accepted = await build(spec, { out, maxBytes: exactly });
   assert.equal(accepted.ok, true);
   assert.ok(fs.existsSync(out));
+});
+
+// ---- PA-22: the legibility rule ---------------------------------------------------------------------------------
+
+const chainSpec = (n) => ({
+  title: `chain of ${n}`,
+  type: 'architecture',
+  nodes: Array.from({ length: n }, (_, i) => ({ id: `n${i}`, label: `Service number ${i}` })),
+  edges: Array.from({ length: n - 1 }, (_, i) => ({ from: `n${i}`, to: `n${i + 1}`, label: 'calls' })),
+});
+
+test('a 60-node chain fails the legibility rule at 1440 px (not at 390 px) and says what to do', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { file } = buildPage(chainSpec(60), { name: 'sixty-chain' });
+  const r = run([file]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.match(r.stdout, /^1440px: the diagram fits on this screen at \d+% zoom, so labels draw about [\d.]+ px \(the floor is 8 px\): split it into several diagrams/m);
+  assert.doesNotMatch(r.stdout, /^390px: the diagram fits/m, 'a phone fits everything small; the rule is for the desktop stage');
+});
+
+test('a chain that wraps into legible rows passes', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { file } = buildPage(chainSpec(12), { name: 'twelve-chain' });
+  const r = run([file]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+});
+
+// ---- PA-21 / NEW-73: --shots -------------------------------------------------------------------------------------
+
+test('--shots writes a PNG per viewport and colour scheme and prints each path', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { file } = buildPage(example('flow'), { name: 'flow' });
+  const out = tmp();
+  const r = run([file, '--shots', out]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const paths = r.stdout.split('\n').filter((l) => l.endsWith('.png'));
+  assert.equal(paths.length, 4, r.stdout);
+  for (const [width, scheme] of [[390, 'light'], [390, 'dark'], [1280, 'light'], [1280, 'dark']]) {
+    const hit = paths.find((p) => p.endsWith(`-${width}-${scheme}.png`));
+    assert.ok(hit, `no ${width} ${scheme} shot in ${paths.join(' ')}`);
+    assert.equal(fs.readFileSync(hit).subarray(1, 4).toString(), 'PNG');
+    assert.ok(hit.startsWith(fs.realpathSync(out)) || hit.startsWith(out), 'written under --shots');
+  }
+  const json = JSON.parse(run([file, '--shots', out, '--json']).stdout.split('\n')[0]);
+  assert.equal(json.ok, true);
+  assert.equal(json.shots.length, 4);
+});
+
+test('a failed check still takes its screenshots', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const bad = doctored('flow', (html) => html.replace('</body>', '<script>console.error("boom")</script></body>'));
+  const out = tmp();
+  const r = run([bad, '--shots', out]);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(r.stdout.split('\n').filter((l) => l.endsWith('.png')).length, 4);
+});
+
+test('--shots without a folder, or with a blank one, is a usage error; --help lists it', () => {
+  const { file } = buildPage(example('flow'), { name: 'flow' });
+  const none = run([file, '--shots']);
+  assert.equal(none.status, 2);
+  assert.match(none.stderr, /--shots/);
+  const blank = run([file, '--shots', ' ']);
+  assert.equal(blank.status, 2);
+  assert.match(blank.stderr, /--shots needs a folder path/);
+  const help = run(['--help']);
+  assert.equal(help.status, 0);
+  assert.match(help.stdout, /^usage: node scripts\/check\.mjs <page\.html> \[--json\] \[--shots <dir>\]\n$/);
+});
+
+test('a skipped check takes no screenshots and says so', () => {
+  const { file } = buildPage(example('flow'), { name: 'flow' });
+  const out = path.join(tmp(), 'shots');
+  const r = run([file, '--shots', out], { PA_NO_BROWSER: '1' });
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /^shots: skipped \(the check was skipped\)\n$/m);
+  assert.ok(!fs.existsSync(out), 'nothing was written');
 });

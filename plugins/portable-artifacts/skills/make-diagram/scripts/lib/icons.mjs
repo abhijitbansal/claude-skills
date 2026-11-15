@@ -5,7 +5,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { didYouMean, levenshtein } from '../../shared/errors.mjs';
+import { fileURLToPath } from 'node:url';
+import { levenshtein } from '../../shared/errors.mjs';
 import { roundTrip } from './svg-safe.mjs';
 
 export { scopeIds } from './svg-safe.mjs';
@@ -25,6 +26,9 @@ const IMPORTED_FILE = /^imported-[a-z]+\.json$/;
 const CLOUD_GUESSES = ['aws-', 'google-cloud-', 'google-'];
 
 export const IMPORT_COMMAND = 'node scripts/icons.mjs import <aws|gcp> <folder>';
+// The command with a path that works from any folder: an agent that reads this error runs it from the user's project.
+const ICONS_SCRIPT = fileURLToPath(new URL('../icons.mjs', import.meta.url));
+const scriptCommand = (rest) => `node ${/[^A-Za-z0-9_./:@+=-]/.test(ICONS_SCRIPT) ? JSON.stringify(ICONS_SCRIPT) : ICONS_SCRIPT} ${rest}`;
 
 export class IconError extends Error {
   constructor(message, suggestion = null) {
@@ -204,28 +208,47 @@ function split(ref) {
   return i < 0 ? [null, ref] : [ref.slice(0, i), ref.slice(i + 1)];
 }
 
-// The closest name by edit distance alone. Cloud names share long prefixes ("aws-", "google-cloud-"),
-// so didYouMean's prefix rule would offer "aws" for any unknown "aws-..." name.
+/**
+ * How many edits a typo may be away from a name and still count as it. Short words get none or one: at distance 2 a
+ * 4-letter word matches unrelated names ("move" and "code", "k8s" and "bus").
+ */
+export function nearLimit(word) {
+  const n = String(word).length;
+  if (n <= 3) return 0;
+  return n <= 5 ? 1 : Math.floor(n / 3);
+}
+
+// The closest name by edit distance alone, within nearLimit. Cloud names share long prefixes ("aws-", "google-cloud-"),
+// so a prefix rule would offer "aws" for any unknown "aws-..." name.
 function nearestName(name, names) {
   const w = name.toLowerCase();
-  const limit = Math.max(2, Math.floor(w.length / 3));
+  const limit = nearLimit(w);
   const scored = names.map((n) => ({ n, d: levenshtein(w, n) })).filter((e) => e.d <= limit).sort((a, b) => a.d - b.d);
   return scored.length ? scored[0].n : null;
+}
+
+// A typo's closest name (edit distance within nearLimit), else a name the word is a prefix of, or starts with.
+function closestName(name, names) {
+  const near = nearestName(name, names);
+  if (near !== null) return near;
+  const w = name.toLowerCase();
+  return w.length >= 3 ? (names.find((n) => n.startsWith(w) || w.startsWith(n)) ?? null) : null;
 }
 
 function suggestRef(prefix, name) {
   const cat = catalog(prefix);
   const names = Object.keys(cat);
   const guess = prefix === 'cloud' ? CLOUD_GUESSES.map((g) => `${g}${name}`).find((n) => has(cat, n)) : undefined;
-  const hit = guess ?? (prefix === 'cloud' ? nearestName(name, names) : didYouMean(name, names));
+  const hit = guess ?? (prefix === 'cloud' ? nearestName(name, names) : closestName(name, names));
   return hit === null || hit === undefined ? null : `${prefix}:${hit}`;
 }
 
 const unknownHint = (prefix, hit) => {
   if (hit) return `; did you mean ${JSON.stringify(hit)}?`;
+  const search = scriptCommand('search <word>');
   return prefix === 'cloud'
-    ? `; try: node scripts/icons.mjs search <word>. A service the pack lacks can be imported from the vendor's icon download: ${IMPORT_COMMAND}`
-    : '; try: node scripts/icons.mjs search <word>';
+    ? `; try: ${search}. A service the pack lacks can be imported from the vendor's icon download: ${scriptCommand('import <aws|gcp> <folder>')}`
+    : `; try: ${search}`;
 };
 
 // Resolve a ref to drawable markup. `lucide` icons are stroked outlines, `brand`
@@ -242,7 +265,7 @@ export function iconSvg(ref) {
     throw new IconError(`icon ${JSON.stringify(ref)} needs a "lucide:" or "brand:" prefix (or "cloud:" for AWS and Google Cloud services)${hint}`, hit);
   }
   if (!PREFIXES.includes(prefix)) {
-    const fixed = didYouMean(prefix, PREFIXES);
+    const fixed = closestName(prefix, PREFIXES);
     const hit = fixed && hasIcon(`${fixed}:${name}`) ? `${fixed}:${name}` : null;
     const hint = hit ? `; did you mean ${JSON.stringify(hit)}?` : '';
     throw new IconError(`unknown icon set ${JSON.stringify(prefix)}; use lucide:<name> or brand:<slug>; or cloud:<name> for AWS and Google Cloud services${hint}`, hit);
@@ -302,11 +325,24 @@ export function searchIcons(word, limit = DEFAULT_SEARCH_LIMIT) {
     else if (e.name.includes(w) || e.title.includes(w)) substring.push(e.ref);
     else rest.push(e);
   }
-  const maxDistance = Math.max(2, Math.floor(w.length / 3));
-  const near = rest
+  const higher = [...exact, ...prefix, ...substring];
+  // A typo's neighbours only when nothing better matched: beside a real hit they are noise ("sqs" and "lucide:sun").
+  const maxDistance = nearLimit(w);
+  const near = higher.length > 0 ? [] : rest
     .map((e) => ({ ref: e.ref, d: levenshtein(w, e.name) }))
     .filter((e) => e.d <= maxDistance)
     .sort((a, b) => a.d - b.d)
     .map((e) => e.ref);
-  return [...new Set([...exact, ...prefix, ...substring, ...near])].slice(0, limit);
+  return [...new Set([...higher, ...near])].slice(0, limit);
+}
+
+/**
+ * The one line a search with no match writes to stderr (stdout stays empty and the exit code 0): what to do instead,
+ * and what can be imported. Only AWS and Google Cloud icon packs have an importer; Azure has none.
+ */
+export function noMatchMessage(word) {
+  const w = String(word).trim();
+  const fallback = "use the node kind's default icon (references/kinds.md) or an emoji";
+  if (/azure/i.test(w)) return `no icon for azure, and no Azure pack can be imported (only AWS and Google Cloud (gcp) icon packs can); ${fallback}`;
+  return `no icon matches ${JSON.stringify(w)}; ${fallback}; only AWS and Google Cloud (gcp) icon packs can be imported: ${scriptCommand('import <aws|gcp> <folder>')}`;
 }

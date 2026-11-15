@@ -6,6 +6,8 @@ import { KINDS } from './kinds.mjs';
 import { nodeSize, edgeLabelSize, groupMinSize } from './sizes.mjs';
 import { edgeIds } from './edge-ids.mjs';
 import { legendLayout, placeLegend, drawingBounds, LEGEND_BAND } from './legend.mjs';
+import { STAGE_WIDTH, STAGE_HEIGHT, estimateFitScale, isLegible } from './legibility.mjs';
+import { lintGeometry } from './lint.mjs';
 
 export const OUTER_MARGIN = 24;
 const GROUP_PADDING = `[top=40,left=${OUTER_MARGIN},bottom=${OUTER_MARGIN},right=${OUTER_MARGIN}]`;
@@ -32,7 +34,14 @@ const SPACING = {
   'elk.spacing.nodeSelfLoop': '24',
 };
 
-function rootOptions(direction) {
+// A chain too long for one row or column: ELK folds its layers into several rows (columns when the flow runs down),
+// aiming at the shape of the stage. Tried only when the plain layout would draw its labels too small (see layoutGraph).
+const WRAPPING = {
+  'elk.layered.wrapping.strategy': 'MULTI_EDGE',
+  'elk.aspectRatio': String(Math.round((STAGE_WIDTH / STAGE_HEIGHT) * 100) / 100),
+};
+
+function rootOptions(direction, wrap) {
   return {
     'elk.algorithm': 'layered',
     'elk.direction': direction === 'down' ? 'DOWN' : 'RIGHT',
@@ -49,6 +58,7 @@ function rootOptions(direction) {
     // groups need no per-container offset conversion afterwards.
     'elk.json.shapeCoords': 'ROOT',
     'elk.json.edgeCoords': 'ROOT',
+    ...(wrap ? WRAPPING : {}),
   };
 }
 
@@ -108,7 +118,7 @@ function groupOrder(groups, nodes) {
   return order;
 }
 
-function buildElkGraph(spec, theme, sizes, direction) {
+function buildElkGraph(spec, theme, sizes, direction, wrap) {
   const groups = spec.groups ?? [];
   const nodes = spec.nodes ?? [];
   const groupIds = new Set(groups.map((g) => g.id));
@@ -120,7 +130,7 @@ function buildElkGraph(spec, theme, sizes, direction) {
   const ends = (id) => (groupIds.has(id) ? elkGroupId(id) : elkNodeId(id));
   return {
     id: 'root',
-    layoutOptions: rootOptions(direction),
+    layoutOptions: rootOptions(direction, wrap),
     children: members(undefined),
     edges: (spec.edges ?? []).map((e, i) => elkEdge(e, i, theme, ends)),
   };
@@ -254,25 +264,15 @@ function shiftDrawing(g, dx) {
   };
 }
 
-/** Lay out an architecture, flow or state spec. */
-export async function layoutGraph(spec, theme) {
-  const direction = spec.direction ?? DEFAULT_DIRECTION[spec.type];
-  const kinds = KINDS[spec.type];
+// The geometry for one ELK result. `layerResult` is the plain (unwrapped) result: layers are read from it, because a
+// wrapped layout puts several rows in one band along the main axis and would merge them into two false layers.
+function assembleGeometry(spec, theme, sizes, kindOf, direction, result, layerResult) {
   const nodes = spec.nodes ?? [];
-  const sizes = new Map();
-  const kindOf = new Map();
-  for (const n of nodes) {
-    const kindInfo = kinds.kinds[n.kind ?? kinds.default];
-    kindOf.set(n.id, kindInfo);
-    sizes.set(n.id, nodeSize(n, kindInfo, theme));
-  }
-
-  const result = await new ELK().layout(buildElkGraph(spec, theme, sizes, direction));
-
   const laidNodes = collect(result);
   const laidEdges = collectEdges(result);
   const axis = direction === 'down' ? 'y' : 'x';
-  const clustered = clusterLayers(nodes.map((n) => ({ ...laidNodes.get(elkNodeId(n.id)), id: n.id })), axis);
+  const plainNodes = collect(layerResult);
+  const clustered = clusterLayers(nodes.map((n) => ({ ...plainNodes.get(elkNodeId(n.id)), id: n.id })), axis);
   const layerOf = new Map(clustered.flatMap((layer, i) => layer.map((n) => [n.id, i])));
 
   const ids = edgeIds(spec);
@@ -298,4 +298,39 @@ export async function layoutGraph(spec, theme) {
     layers: clustered.map((layer) => layer.map((n) => n.id)),
   };
   return dx === 0 ? geometry : shiftDrawing(geometry, dx);
+}
+
+const fitOf = (g) => estimateFitScale(g.drawing.width, g.drawing.height);
+
+/**
+ * The plain layout, unless it would draw its labels below the legibility floor. Then the same graph with ELK's layer
+ * wrapping, which is kept only if it is safe and better: no group in the spec (wrapping across group boundaries is
+ * untried), every edge routed in one section, the geometry lint clean, and a larger fit. Anything else keeps the plain
+ * layout, so a spec that validated before still does.
+ */
+async function layoutWithWrapping(spec, theme, sizes, kindOf, direction) {
+  const run = (wrap) => new ELK().layout(buildElkGraph(spec, theme, sizes, direction, wrap));
+  const plainResult = await run(false);
+  const plain = assembleGeometry(spec, theme, sizes, kindOf, direction, plainResult, plainResult);
+  if ((spec.groups ?? []).length > 0 || isLegible(fitOf(plain))) return plain;
+  try {
+    const wrapped = assembleGeometry(spec, theme, sizes, kindOf, direction, await run(true), plainResult);
+    return fitOf(wrapped) > fitOf(plain) && lintGeometry(wrapped, { theme }).length === 0 ? wrapped : plain;
+  } catch {
+    return plain; // ELK routed a wrapped edge in several sections (readEdge refuses): keep the layout that works
+  }
+}
+
+/** Lay out an architecture, flow or state spec. */
+export async function layoutGraph(spec, theme) {
+  const direction = spec.direction ?? DEFAULT_DIRECTION[spec.type];
+  const kinds = KINDS[spec.type];
+  const sizes = new Map();
+  const kindOf = new Map();
+  for (const n of spec.nodes ?? []) {
+    const kindInfo = kinds.kinds[n.kind ?? kinds.default];
+    kindOf.set(n.id, kindInfo);
+    sizes.set(n.id, nodeSize(n, kindInfo, theme));
+  }
+  return layoutWithWrapping(spec, theme, sizes, kindOf, direction);
 }
