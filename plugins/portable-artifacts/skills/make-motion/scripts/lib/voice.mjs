@@ -127,7 +127,7 @@ export async function ensureKokoroModel({ dir = KOKORO_DIR, base = KOKORO_BASE_U
 // (getModelFile tries the FS cache, then localModelPath, then remote). There is no way to load the model without the check.
 // `download` ({ base, files, fetchImpl, log }) is passed to ensureKokoroModel. The folder survives `npm ci`, which wipes node_modules.
 export async function loadModel(kokoro, { root = MODEL_CACHE_DIR, ...download } = {}) {
-  await ensureKokoroModel({ dir: path.join(root, MODEL_ID), ...download });
+  await ensureKokoroModel({ ...download, dir: path.join(root, MODEL_ID) }); // dir last: verify the folder transformers will read
   const { env } = kokoro;
   env.localModelPath = root;
   env.allowLocalModels = true;

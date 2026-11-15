@@ -325,6 +325,16 @@ test('loadModel cannot reach transformers with a file that fails its hash: it re
   assert.equal(stub.env.allowRemoteModels, true, 'env was left alone');
 });
 
+test('loadModel verifies the same folder it loads from: a caller-supplied dir cannot split the two', async () => {
+  const root = tmpDir();
+  const elsewhere = tmpDir();
+  const stub = stubKokoro();
+  await loadModel(stub, { root, dir: elsewhere, base: BASE, files: pinned, fetchImpl: serve([]) });
+  assert.equal(stub.env.localModelPath, root);
+  assert.equal(readFileSync(path.join(root, MODEL_ID, 'config.json'), 'utf8'), '{}', 'the files were verified where transformers will read them');
+  assert.equal(existsSync(path.join(elsewhere, 'config.json')), false, 'and not in the folder the caller named');
+});
+
 test('loadModel fetches nothing when every file is cached and good', async () => {
   const root = tmpDir();
   const dir = path.join(root, MODEL_ID);
