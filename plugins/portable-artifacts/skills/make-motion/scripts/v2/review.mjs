@@ -1,7 +1,15 @@
-// Film review: audit snapshots of the film in Node. The page reports one snapshot per audit moment (the sheet frames
-// and one per half second); auditFrame checks each, the still-frame pacing rule runs on the whole film, and the
-// findings are deduplicated by (shot, rule, node) keeping the first time each occurs. A frame inside a cut's
-// transition is skipped: both shots are on screen then, so overlapping text is expected.
+// Film review: audit snapshots of the film in Node. The page reports one snapshot per audit moment (plan.mjs: the sheet
+// frames, every `on` landing, the last frame of each shot and one frame every 0.25 s); auditFrame checks each, the
+// still-frame pacing rule runs on the whole film, and the findings are deduplicated by (shot, rule, node) keeping the
+// first time each occurs.
+//
+// A frame inside a cut's window (the first `cut.dur` seconds of a shot that came in on a cut) shows both shots, so
+// overlapping text is expected; there the incoming shot is audited alone, through the page's __snapshotShot, so its own
+// nodes are still judged. A shot shorter than its cut window is audited at its last frame the same way.
+//
+// What escapes: a defect that is on screen for less than the sampling step (0.25 s, 7 frames at 30 fps) and falls
+// between two sampled frames, one that exists only while a text is still arriving, pulsing or pushed by the camera
+// (engine/review/frame.mjs judges landed, settled texts), and anything the audit has no rule for.
 import { registries } from '../../engine/registry.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
 import { auditFrame, textScalesIn } from '../../engine/review/frame.mjs';
@@ -9,11 +17,13 @@ import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 import { auditMoments } from './plan.mjs';
+import { pageFinding } from './report.mjs';
 
 const SNAPSHOT_CHUNK = 20; // snapshots fetched per page.evaluate, so a stop request is heard between chunks
 const HELD_CHUNK = 150;
 const SECOND_DECIMALS = 2;
 const DEFAULT_MODE = 'pro';
+const NOT_A_CUT_SHOT = -1;
 
 const timeText = (t) => t.toFixed(SECOND_DECIMALS);
 
@@ -40,15 +50,26 @@ export function hiddenWordsIn(tree) {
     }
     (n.children ?? []).forEach(walk);
   };
-  tree.forEach(walk);
+  (tree ?? []).forEach(walk);
   return hidden;
 }
 
+// The spec field a text finding is about, so its path points at what to edit (shots[2].kicker rather than shots[2]).
+function fieldOf(shot, finding) {
+  const field = {
+    kicker: 'kicker', caption: 'caption', label: 'label', tag: 'delta',
+    affix: finding.node?.endsWith('.prefix') ? 'prefix' : 'suffix',
+    hero: ['text', 'say', 'value'].find((name) => shot?.[name] !== undefined),
+  }[finding.role];
+  return field !== undefined && shot?.[field] !== undefined ? `.${field}` : '';
+}
+
 /**
- * One finding per (shot, rule, node): the earliest, its time in the message. Items are { shot, t, finding }.
+ * One finding per (shot, rule, node): the earliest, its time in the message. Items are { shot, t, finding }; with the
+ * film's `shots` array given, a finding about a text gets the path of the field that holds it.
  * @returns {{ kind: string, shot: string, path: string, message: string, t: number, rule: string, node: string }[]} in time order
  */
-export function dedupeFindings(items) {
+export function dedupeFindings(items, shots = []) {
   const first = new Map();
   for (const item of items) {
     const key = JSON.stringify([item.shot, item.finding.rule, item.finding.node]);
@@ -56,27 +77,31 @@ export function dedupeFindings(items) {
   }
   return [...first.values()]
     .sort((a, b) => a.t - b.t)
-    .map(({ shot, t, finding }) => ({ ...finding, shot, t, message: `${finding.message} (at ${timeText(t)} s)` }));
+    .map(({ shot, t, finding }) => {
+      const spec = shots.find((s) => s?.id === shot);
+      return { ...finding, shot, t, path: `${finding.path}${fieldOf(spec, finding)}`, message: `${finding.message} (at ${timeText(t)} s)` };
+    });
 }
 
-// The frames to audit: those outside the first `cut.dur` seconds of a shot that came in on a cut.
-function auditableFrames(film, timeline) {
-  const inTransition = (frame) => {
+// For each audit frame: which shot to audit alone ([shot index, frame]) when the frame is inside a cut window, else
+// [-1, frame] for the whole frame.
+export function auditPlan(film, timeline) {
+  const windowShot = (frame) => {
     const shot = shotAtFrame(timeline, frame);
-    if (shot.index === 0) return false;
+    if (shot.index === 0) return NOT_A_CUT_SHOT;
     const cut = registries.cuts.get(film.shots[shot.index].cut ?? 'cut');
-    return frame / timeline.fps - shot.start < Math.min(cut.dur, shot.duration);
+    return frame / timeline.fps - shot.start < Math.min(cut.dur, shot.duration) ? shot.index : NOT_A_CUT_SHOT;
   };
-  return auditMoments(film, timeline).filter((frame) => !inTransition(frame));
+  return auditMoments(film, timeline).map((frame) => [windowShot(frame), frame]);
 }
 
-async function snapshotsOf(session, frames, signal) {
+async function snapshotsOf(session, plan, signal) {
   const out = [];
-  for (let from = 0; from < frames.length; from += SNAPSHOT_CHUNK) {
+  for (let from = 0; from < plan.length; from += SNAPSHOT_CHUNK) {
     signal?.throwIfAborted();
-    const chunk = frames.slice(from, from + SNAPSHOT_CHUNK);
-    const trees = await session.page.evaluate((list) => list.map((i) => window.__snapshot(i)), chunk);
-    chunk.forEach((frame, k) => out.push({ frame, tree: trees[k] }));
+    const chunk = plan.slice(from, from + SNAPSHOT_CHUNK);
+    const trees = await session.page.evaluate((list) => list.map(([shot, i]) => (shot < 0 ? window.__snapshot(i) : window.__snapshotShot(shot, i))), chunk);
+    chunk.forEach(([, frame], k) => out.push({ frame, tree: trees[k] }));
   }
   return out;
 }
@@ -108,7 +133,7 @@ function frameFindings(film, timeline, restingOf, { frame, tree }) {
   const [width, height] = canvasSize(film);
   const look = resolveLook(film), canvas = { w: width, h: height };
   const ctx = {
-    look, canvas, safe: safeRectFor(canvas, look), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, t,
+    look, canvas, safe: safeRectFor(canvas, look), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, shotIndex: shot.index, t,
     isFirstShot: shot.index === 0, ...restingOf.get(shot.id),
   };
   return auditFrame(tree, ctx).map((finding) => ({ shot: shot.id, t, finding }));
@@ -119,7 +144,7 @@ function pacingFindings(film, timeline, held) {
   return stillStretches({ held, timeline, maxStillSeconds }).map((s) => ({
     kind: 'creative',
     shot: s.shot,
-    path: `shots[${s.shot}]`,
+    path: `shots[${timeline.shots.findIndex((x) => x.id === s.shot)}]`,
     t: s.start,
     rule: 'still',
     node: '',
@@ -133,10 +158,32 @@ function pacingFindings(film, timeline, held) {
  */
 export async function reviewFilm({ session, signal }) {
   const { film, timeline } = session;
-  const snapshots = await snapshotsOf(session, auditableFrames(film, timeline), signal);
+  const snapshots = await snapshotsOf(session, auditPlan(film, timeline), signal);
   const restingOf = restingByShot(timeline, snapshots);
   const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap));
-  const deduped = dedupeFindings(audited);
+  const deduped = dedupeFindings(audited, film.shots);
   const still = pacingFindings(film, timeline, await heldFlags(session, signal));
   return [...deduped, ...still].sort((a, b) => a.t - b.t);
+}
+
+const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });
+const listOf = (names) => names.map((name) => EFFECTS[name] ?? name).join(' and ');
+
+/**
+ * What the page and the post pass say about themselves, as findings (shot null, path ''): a post pass that had to fall
+ * back to 2D (a shader that would not build is mechanical, a browser without WebGL2 is advice when the look loses an
+ * effect), and every page error, console error, blocked request and server error the session collected.
+ */
+export function sessionFindings(session) {
+  const notice = session.info?.postNotice;
+  const out = [];
+  if (notice?.failed) {
+    const dropped = notice.dropped.length > 0 ? `${listOf(notice.dropped)} from the look were dropped` : 'the look asks for nothing else';
+    out.push(pageFinding('mechanical', `WebGL was unavailable (${notice.reason}); the 2D post pass was used, with grain only: ${dropped}`));
+  } else if (notice?.dropped.length > 0) {
+    out.push(pageFinding('creative', `post: ${notice.reason}, so ${listOf(notice.dropped)} from the look are dropped; the 2D post pass has grain only`));
+  }
+  for (const message of new Set(session.errors ?? [])) out.push(pageFinding('mechanical', `page: ${message}`));
+  for (const url of new Set(session.blocked ?? [])) out.push(pageFinding('mechanical', `page: request blocked: ${url}`));
+  return out;
 }

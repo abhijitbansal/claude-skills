@@ -1,20 +1,44 @@
 // The post pass: the finished 2D frame is shown through one WebGL2 fragment shader that adds bloom (8 taps above 0.7
 // luminance), a halftone overlay and film grain. The grain is a hash of the pixel, the film seed and
 // floor(t * GRAIN_FPS), so it changes 12 times a second and a held frame between two changes is identical, and the same
-// frame is the same pixels every time (an integer hash, no sin(), so no GPU rounding enters it). Without WebGL2 the
-// frame is copied with a cached noise tile at the grain's strength instead (grain only: no bloom or halftone).
-// createPost(canvas, { grain, halftone, bloom, seed }) -> { kind: 'webgl2' | '2d', render(sourceCanvas, t), setStrengths }.
-import { mulberry32 } from '../seeded.mjs';
-
+// frame is the same pixels every time (an integer hash, no sin(), so no GPU rounding enters it).
+//
+// Without WebGL2 the frame is copied with the same grain, added the same way from the same hash (grainNoise is the
+// shader's hash in integer arithmetic, so the two paths agree to a level), but no bloom and no halftone: `dropped`
+// names the ones the look asked for. A shader that will not compile or link falls back to that path on a fresh canvas
+// (the old one has taken a WebGL context and cannot give a 2D one) and says why in `unavailable`.
+//
+// createPost(canvas, { grain, halftone, bloom, seed }) -> { kind: 'webgl2' | '2d', canvas, render(sourceCanvas, t),
+//   setStrengths, unavailable?: { reason, failed }, dropped }. render throws when the WebGL context is lost or a GL call
+//   failed, so a blank frame is never encoded as if it were good.
 export const GRAIN_FPS = 12;
 const REFERENCE_SIDE = 1080;
-const NOISE_TILE = 256;
-const GRAIN_GAIN = 2; // the grain swings +-strength * GRAIN_GAIN / 2 around the picture: 0.05 is about +-13/255
-const HASH_MULTIPLIER = 2654435761;
+const GRAIN_GAIN = 2; // the grain swings +-strength around the picture: 0.05 is about +-13/255
+const BYTE = 255;
+const UINT_MAX = 4294967295;
+const PCG_MULTIPLY = 747796405;
+const PCG_ADD = 2891336365;
+const PCG_WORD = 277803737;
+const EFFECTS_NEEDING_WEBGL = Object.freeze(['halftone', 'bloom']);
 
 /** Which grain pattern shows at time t: it changes GRAIN_FPS times a second. For t = frame / fps this equals
  *  floor(frame * 12 / fps) at every frame of every fps a film can have (test/v2/post-browser.test.mjs checks it). */
 export const grainPhase = (t) => Math.floor(t * GRAIN_FPS);
+
+// The shader's PCG hash in 32-bit integer arithmetic.
+function pcg(v) {
+  const state = (Math.imul(v, PCG_MULTIPLY) + PCG_ADD) >>> 0;
+  const word = Math.imul(((state >>> ((state >>> 28) + 4)) ^ state) >>> 0, PCG_WORD) >>> 0;
+  return ((word >>> 22) ^ word) >>> 0;
+}
+
+/** The grain value in 0..1 at pixel (x, y), y from the top: the shader's noise(), for the 2D path and the tests. */
+export function grainNoise(x, y, phase, seed) {
+  const hashed = pcg((y ^ pcg((phase ^ pcg(seed >>> 0)) >>> 0)) >>> 0);
+  return pcg((x ^ hashed) >>> 0) / UINT_MAX;
+}
+
+class ShaderError extends Error {}
 
 const VERTEX = `#version 300 es
 void main() {
@@ -76,7 +100,7 @@ function compile(gl, type, source) {
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    throw new Error(`post pass: the ${type === gl.VERTEX_SHADER ? 'vertex' : 'fragment'} shader did not compile: ${gl.getShaderInfoLog(shader)}`);
+    throw new ShaderError(`the ${type === gl.VERTEX_SHADER ? 'vertex' : 'fragment'} shader did not compile: ${gl.getShaderInfoLog(shader)}`);
   }
   return shader;
 }
@@ -86,8 +110,15 @@ function link(gl) {
   gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, VERTEX));
   gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, FRAGMENT));
   gl.linkProgram(program);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(`post pass: the shader did not link: ${gl.getProgramInfoLog(program)}`);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new ShaderError(`the shader did not link: ${gl.getProgramInfoLog(program)}`);
   return program;
+}
+
+// A blank or half-drawn frame must never be encoded: say so the moment the context is gone or a call failed.
+function checkGl(gl) {
+  if (gl.isContextLost()) throw new Error('post pass: the WebGL context was lost');
+  const error = gl.getError();
+  if (error !== gl.NO_ERROR) throw new Error(`post pass: WebGL error 0x${error.toString(16)} while drawing the frame`);
 }
 
 function glPost(gl, canvas, initial, seed) {
@@ -108,55 +139,63 @@ function glPost(gl, canvas, initial, seed) {
   let strengths = initial;
   return {
     kind: 'webgl2',
+    canvas,
+    dropped: [],
     setStrengths(next) { strengths = { ...strengths, ...next }; },
     render(source, t) {
+      if (gl.isContextLost()) throw new Error('post pass: the WebGL context was lost');
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
       gl.uniform1f(at('uGrain'), strengths.grain);
       gl.uniform1f(at('uHalftone'), strengths.halftone);
       gl.uniform1f(at('uBloom'), strengths.bloom);
       gl.uniform1ui(at('uPhase'), grainPhase(t) >>> 0);
       gl.drawArrays(gl.TRIANGLES, 0, 3);
+      checkGl(gl);
     },
   };
 }
 
-// Mid-grey noise from the film seed, drawn in 'overlay' so its mean leaves the picture's tones where they were.
-function noiseTile(seed) {
-  const tile = new OffscreenCanvas(NOISE_TILE, NOISE_TILE);
-  const ctx = tile.getContext('2d');
-  const image = ctx.createImageData(NOISE_TILE, NOISE_TILE);
-  const random = mulberry32(seed);
-  for (let i = 0; i < image.data.length; i += 4) {
-    const v = Math.floor(random() * 256);
-    image.data.set([v, v, v, 255], i);
+// Adds the shader's grain to RGBA pixel data in place: +-strength around each channel, rounded to a level.
+function addGrain(data, { width, height, strength, phase, seed }) {
+  const swing = GRAIN_GAIN * strength * BYTE;
+  const inner = pcg((phase ^ pcg(seed >>> 0)) >>> 0);
+  for (let y = 0; y < height; y++) {
+    const row = pcg((y ^ inner) >>> 0);
+    for (let x = 0; x < width; x++) {
+      const delta = (pcg((x ^ row) >>> 0) / UINT_MAX - 0.5) * swing;
+      const i = (y * width + x) * 4;
+      for (let k = 0; k < 3; k++) data[i + k] = Math.min(BYTE, Math.max(0, Math.round(data[i + k] + delta)));
+    }
   }
-  ctx.putImageData(image, 0, 0);
-  return tile;
 }
 
-function twoDPost(canvas, initial, seed) {
-  const ctx = canvas.getContext('2d');
-  const tile = noiseTile(seed);
+function twoDPost(canvas, initial, seed, unavailable) {
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   let strengths = initial;
   return {
     kind: '2d',
+    canvas,
+    unavailable,
+    dropped: EFFECTS_NEEDING_WEBGL.filter((name) => initial[name] > 0),
     setStrengths(next) { strengths = { ...strengths, ...next }; },
     render(source, t) {
-      ctx.globalCompositeOperation = 'source-over';
-      ctx.globalAlpha = 1;
       ctx.drawImage(source, 0, 0);
       if (strengths.grain <= 0) return;
-      const random = mulberry32((seed ^ Math.imul(grainPhase(t), HASH_MULTIPLIER)) >>> 0);
-      const [ox, oy] = [Math.floor(random() * NOISE_TILE), Math.floor(random() * NOISE_TILE)];
-      ctx.globalCompositeOperation = 'overlay';
-      ctx.globalAlpha = Math.min(1, strengths.grain * GRAIN_GAIN);
-      for (let y = -oy; y < canvas.height; y += NOISE_TILE) {
-        for (let x = -ox; x < canvas.width; x += NOISE_TILE) ctx.drawImage(tile, x, y);
-      }
-      ctx.globalAlpha = 1;
-      ctx.globalCompositeOperation = 'source-over';
+      const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      addGrain(image.data, { width: canvas.width, height: canvas.height, strength: strengths.grain, phase: grainPhase(t), seed });
+      ctx.putImageData(image, 0, 0);
     },
   };
+}
+
+// A canvas that has taken a WebGL context cannot give a 2D one: put a fresh one in its place.
+function freshCanvas(old) {
+  const fresh = document.createElement('canvas');
+  fresh.id = old.id;
+  fresh.width = old.width;
+  fresh.height = old.height;
+  old.replaceWith(fresh);
+  return fresh;
 }
 
 /**
@@ -166,5 +205,11 @@ function twoDPost(canvas, initial, seed) {
 export function createPost(canvas, { grain, halftone, bloom, seed }) {
   const strengths = { grain, halftone, bloom };
   const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true, antialias: false, alpha: false, depth: false, stencil: false });
-  return gl ? glPost(gl, canvas, strengths, seed) : twoDPost(canvas, strengths, seed);
+  if (!gl) return twoDPost(canvas, strengths, seed, { reason: 'this browser has no WebGL2', failed: false });
+  try {
+    return glPost(gl, canvas, strengths, seed);
+  } catch (err) {
+    if (!(err instanceof ShaderError)) throw err;
+    return twoDPost(freshCanvas(canvas), strengths, seed, { reason: err.message, failed: true });
+  }
 }

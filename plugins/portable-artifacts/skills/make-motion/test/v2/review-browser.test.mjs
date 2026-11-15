@@ -112,3 +112,29 @@ test('the number kind keeps one word per digit of its value on screen at the end
   assert.deepEqual([...hidden].sort((a, b) => a - b), words.map((_, i) => i).filter((i) => !shown.includes(i)), 'every other step is hidden');
   assert.ok(hidden.size >= 1);
 });
+
+// ---- the cut window ----
+
+test('inside a cut window __snapshot has both shots and __snapshotShot only the incoming one', async (t) => {
+  const box = (id, x) => ({ type: 'path', id, props: { d: 'M0 0H100V100H0Z', fill: '#fff', x, y: 100 } });
+  const session = await open(t, { version: 2, fps: FPS, shots: [
+    { id: 'a', show: 'free', hold: 2, nodes: [box('from', 100)] },
+    { id: 'b', show: 'free', hold: 2, cut: 'slide', nodes: [box('into', 100)] },
+  ] }); if (!session) return;
+  const ids = (nodes) => nodes.map((n) => n.id).sort();
+  const mixed = await session.page.evaluate((i) => window.__snapshot(i), 66); // 0.2 s into the 0.4 s slide
+  const alone = await session.page.evaluate((i) => window.__snapshotShot(1, i), 66);
+  assert.deepEqual(ids(mixed), ['from', 'into']);
+  assert.deepEqual(ids(alone), ['into']);
+  assert.deepEqual(alone[0].bbox, [100, 100, 100, 100], 'where the shot puts it, not slid across the frame');
+});
+
+test('a text of the incoming shot outside the safe area is found although it only ever shows inside the cut window of its shot', async (t) => {
+  const text = (id, x) => ({ type: 'text', id, props: { x, y: 400, text: 'Edge', font: { family: 'Geist', weight: 600, size: 96 }, maxWidth: 900, fill: '#ffffff' } });
+  const session = await open(t, { version: 2, fps: FPS, shots: [
+    { id: 'a', show: 'free', hold: 2, nodes: [text('fine', 300)] },
+    { id: 'b', show: 'free', hold: 1, cut: 'slide', nodes: [text('edge', 10)] },
+  ] }); if (!session) return;
+  const found = await reviewFilm({ session });
+  assert.deepEqual(found.filter((f) => f.kind === 'mechanical').map((f) => [f.shot, f.node, f.path]), [['b', 'edge', 'shots[1]']]);
+});

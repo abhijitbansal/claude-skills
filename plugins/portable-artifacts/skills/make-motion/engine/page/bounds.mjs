@@ -94,19 +94,21 @@ export function contentBox(n) {
 // ctx.filter blur(s) spreads its ink about three standard deviations past the edge.
 const BLUR_SPREAD_SIGMAS = 3;
 
-function annotateNode(n, parent, inheritedBlur) {
+function annotateNode(n, parent, inheritedBlur, opts) {
   const m = multiply(parent, localMatrix(n));
   const blur = n.blur > 0 ? n.blur : inheritedBlur; // a blurred parent blurs its children too (see draw.mjs)
-  const children = n.children.map((child) => annotateNode(child, m, blur));
+  const children = n.children.map((child) => annotateNode(child, m, blur, opts));
   const own = localBounds(n);
   const boxes = [...(own ? [transformBox(m, own)] : []), ...children.map((c) => c.bbox)];
   const bbox = boxes.length > 0 ? union(boxes) : [clean(m[4]), clean(m[5]), 0, 0];
-  return { ...n, children, bbox, spread: blur * BLUR_SPREAD_SIGMAS, ...(n.type === 'text' ? { layout: n.props.layout } : {}) };
+  const text = n.type === 'text' ? { layout: n.props.layout, ...(opts.lineInk ? { lineInk: opts.lineInk(n) } : {}) } : {};
+  return { ...n, children, bbox, spread: blur * BLUR_SPREAD_SIGMAS, ...text };
 }
 
 /** The sampled tree with a canvas-pixel `bbox: [x, y, w, h]` on every node (a group's is its children's union),
  *  a `spread` (px the blur adds beyond the box; 0 without blur, never added to the box) and, on a text node, its
- *  `layout`. Plain data, so it crosses page.evaluate. */
-export function annotate(sampled) {
-  return sampled.map((n) => annotateNode(n, IDENTITY, 0));
+ *  `layout` and, when `opts.lineInk(node)` is given, its `lineInk`: per line the measured ink above and below the
+ *  baseline in the text's own pixels, [{ ascent, descent }]. Plain data, so it crosses page.evaluate. */
+export function annotate(sampled, opts = {}) {
+  return sampled.map((n) => annotateNode(n, IDENTITY, 0, opts));
 }

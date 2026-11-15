@@ -6,6 +6,14 @@ import { launchBrowser, guardNetwork } from '../lib/browser.mjs';
 import { canvasSize } from '../../template/formats.mjs';
 import { startV2Server } from './server.mjs';
 
+const PAGE_ERROR = /^page\.evaluate: (?:Error: )?([^\n]*)/;
+
+/** The message of an error the page threw inside `page.evaluate` (a film the page cannot draw, a lost WebGL context), or
+ *  null for any other error: those are the machine's trouble, these are the film's or the browser's. */
+export function pageErrorMessage(err) {
+  return PAGE_ERROR.exec(String(err?.message ?? ''))?.[1] ?? null;
+}
+
 /**
  * @param {{ film: object, timeline: object, specDir: string }} loaded what loadFilm returns
  * @param {{ initScript?: string }} [options] initScript: JavaScript that runs in the page before its own code (tests

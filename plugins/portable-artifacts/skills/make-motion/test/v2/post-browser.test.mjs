@@ -149,3 +149,96 @@ test('without WebGL2 the 2D post pass is used: it reports 2d, draws grain and re
   await strengths(s, ZERO);
   assert.notEqual(await shoot(s, 10), on);
 });
+
+// ---- failures the post pass must not hide ----
+
+import { ffmpegOrNull } from './helpers/session.mjs';
+import { renderFilm } from '../../scripts/v2/render.mjs';
+import { sessionFindings } from '../../scripts/v2/review.mjs';
+import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+const loseContext = (s) => s.page.evaluate(() => document.getElementById('stage').getContext('webgl2').getExtension('WEBGL_lose_context').loseContext());
+const seekMessage = (s, frame) => s.page.evaluate((i) => { try { window.__seek(i); return ''; } catch (e) { return e.message; } }, frame);
+
+test('a lost WebGL context makes a seek throw, so a blank frame is never drawn as if it were good', async (t) => {
+  const s = await open(t, stillFilm()); if (!s) return;
+  if (s.info.post !== 'webgl2') return t.skip('this browser has no WebGL2');
+  assert.equal(await seekMessage(s, 3), '');
+  await loseContext(s);
+  assert.match(await seekMessage(s, 3), /WebGL context was lost/);
+});
+
+test('a render on a lost WebGL context fails and leaves no video', async (t) => {
+  if (!await ffmpegOrNull()) return t.skip('no ffmpeg');
+  const s = await open(t, stillFilm()); if (!s) return;
+  if (s.info.post !== 'webgl2') return t.skip('this browser has no WebGL2');
+  await loseContext(s);
+  const folder = mkdtempSync(path.join(tmpdir(), 'mm-v2-lost-'));
+  t.after(() => rmSync(folder, { recursive: true, force: true }));
+  await assert.rejects(renderFilm({ out: path.join(folder, 'lost.mp4'), session: s }), /page\.evaluate: .*WebGL context was lost/);
+  assert.deepEqual(readdirSync(folder), [], 'neither the video nor its partial file');
+});
+
+test('a shader that will not compile falls back to the 2D pass on a fresh canvas and says what was dropped', async (t) => {
+  const broken = 'WebGL2RenderingContext.prototype.getShaderParameter = function () { return false; };';
+  const pop = stillFilm({ mode: 'viral', look: 'pop', format: '9:16' });
+  const s = await open(t, pop, { initScript: broken }); if (!s) return;
+  assert.equal(s.info.post, '2d');
+  assert.equal(s.info.postNotice.failed, true);
+  assert.match(s.info.postNotice.reason, /fragment shader did not compile|vertex shader did not compile/);
+  assert.deepEqual(s.info.postNotice.dropped, ['halftone']);
+  await s.page.evaluate(() => window.__seek(4));
+  assert.ok(await maxDifference(s) > 0, 'the new canvas shows the frame with grain');
+  const found = sessionFindings(s);
+  assert.deepEqual(found.map((f) => f.kind), ['mechanical']);
+  assert.match(found[0].message, /^WebGL was unavailable \(.*\); the 2D post pass was used, with grain only: halftone from the look were dropped$/);
+  const desk = await open(t, stillFilm(), { initScript: broken });
+  assert.match(sessionFindings(desk)[0].message, /the look asks for nothing else/);
+});
+
+test('without WebGL2 a look that asks for halftone or bloom gets a creative finding naming them', async (t) => {
+  const none = "const get = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return kind === 'webgl2' ? null : get.call(this, kind, ...rest); };";
+  const pop = await open(t, stillFilm({ mode: 'viral', look: 'pop', format: '9:16' }), { initScript: none }); if (!pop) return;
+  const found = sessionFindings(pop);
+  assert.deepEqual(found.map((f) => f.kind), ['creative']);
+  assert.match(found[0].message, /halftone from the look are dropped/);
+  const desk = await open(t, stillFilm(), { initScript: none });
+  assert.deepEqual(sessionFindings(desk), [], 'desk asks for grain only: nothing is lost');
+});
+
+test('the 2D grain is the WebGL grain: the two paths agree to under 2 levels on average', async (t) => {
+  const s = await open(t, stillFilm()); if (!s) return;
+  if (s.info.post !== 'webgl2') return t.skip('this browser has no WebGL2');
+  const result = await s.page.evaluate(async () => {
+    const { createPost } = await import('/engine/page/post.mjs');
+    window.__seek(10);
+    const source = window.__source;
+    const make = (forceTwoD) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = source.width; canvas.height = source.height;
+      if (forceTwoD) {
+        const real = canvas.getContext.bind(canvas);
+        canvas.getContext = (kind, ...rest) => (kind === 'webgl2' ? null : real(kind, ...rest));
+      }
+      return { canvas, post: createPost(canvas, { grain: 0.05, halftone: 0, bloom: 0, seed: 7 }) };
+    };
+    const [gl, two] = [make(false), make(true)];
+    gl.post.render(source, 10 / 30); two.post.render(source, 10 / 30);
+    const pixels = (canvas) => {
+      const copy = document.createElement('canvas');
+      copy.width = canvas.width; copy.height = canvas.height;
+      const ctx = copy.getContext('2d');
+      ctx.drawImage(canvas, 0, 0);
+      return ctx.getImageData(0, 0, copy.width, copy.height).data;
+    };
+    const [a, b, plain] = [pixels(gl.canvas), pixels(two.canvas), source.getContext('2d').getImageData(0, 0, source.width, source.height).data];
+    let sum = 0, noise = 0, count = 0;
+    for (let i = 0; i < a.length; i += 4) for (let k = 0; k < 3; k++) { sum += Math.abs(a[i + k] - b[i + k]); noise += Math.abs(a[i + k] - plain[i + k]); count++; }
+    return { kinds: [gl.post.kind, two.post.kind], mean: sum / count, grain: noise / count };
+  });
+  assert.deepEqual(result.kinds, ['webgl2', '2d']);
+  assert.ok(result.grain > 3, `the grain is there: ${result.grain} levels from the source on average`);
+  assert.ok(result.mean < 2, `the two paths differ by ${result.mean} levels on average`);
+});

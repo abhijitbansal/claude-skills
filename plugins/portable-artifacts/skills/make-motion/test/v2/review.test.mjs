@@ -8,13 +8,13 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { stillStretches } from '../../engine/review/pacing.mjs';
 import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
-import { dedupeFindings, safeRectFor } from '../../scripts/v2/review.mjs';
+import { dedupeFindings, safeRectFor, sessionFindings, auditPlan } from '../../scripts/v2/review.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from '../../scripts/v2/layout.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
 const ctx = (extra = {}) => {
-  const base = { look: registries.looks.get('desk'), canvas: CANVAS, mode: 'pro', shotId: 'hero', t: 1.2, ...extra };
+  const base = { look: registries.looks.get('desk'), canvas: CANVAS, mode: 'pro', shotId: 'hero', shotIndex: 0, t: 1.2, ...extra };
   return { safe: safeRectFor(base.canvas, base.look), ...base };
 };
 
@@ -51,7 +51,7 @@ test('overflow is a creative finding that names the shot', () => {
   const f = auditFrame([textNode({ overflow: true })], ctx());
   assert.deepEqual(kinds(f), ['creative']);
   assert.match(f[0].message, /cut words/);
-  assert.equal(f[0].path, 'shots[hero]');
+  assert.equal(f[0].path, 'shots[0]');
 });
 
 test('text outside the safe area is mechanical', () => {
@@ -68,6 +68,49 @@ test('a clean frame has no findings', () => {
 
 test('text still arriving is not checked against the safe area', () => {
   assert.deepEqual(auditFrame([textNode({ size: 132, x: 10, wordOpacity: 0.5 })], ctx()), []);
+});
+
+test('the audit never throws: a text with no lines or no words is skipped, an empty frame has no findings', () => {
+  const bare = (layout) => ({ ...textNode({ id: 'bare' }), layout });
+  assert.deepEqual(auditFrame([bare({ size: 44, width: 0, height: 0, overflow: false, lines: [] })], ctx()), []);
+  assert.deepEqual(auditFrame([bare({ size: 44, width: 0, height: 0, overflow: false, lines: [{ x: 0, y: 40, width: 0, words: [] }] })], ctx()), []);
+  assert.deepEqual(auditFrame([bare(undefined)], ctx()), []);
+  assert.deepEqual(auditFrame([], ctx()), []);
+  assert.deepEqual(auditFrame([{ type: 'group', id: 'g', children: [], bbox: [0, 0, 0, 0] }], ctx()), [], 'a shot with no text');
+});
+
+test('a text whose box is not a finite number is left out of every rule and reported once as unmeasurable', () => {
+  const broken = { ...textNode({ id: 'broken', size: 20, x: 10 }), bbox: [Number.NaN, 300, 100, 50] };
+  const sound = textNode({ id: 'sound', size: 132, y: 600 });
+  const found = auditFrame([broken, sound], ctx());
+  assert.deepEqual(found.map((f) => [f.kind, f.rule, f.message]), [['mechanical', 'measure', 'broken: could not be measured']]);
+  const infinite = { ...textNode({ id: 'inf' }), layout: { ...textNode({}).layout, size: Number.POSITIVE_INFINITY } };
+  assert.deepEqual(auditFrame([infinite], ctx()).map((f) => f.message), ['inf: could not be measured']);
+});
+
+test('the size floor is judged only for a landed text: a text still arriving at a small scale is not a defect', () => {
+  const arriving = textNode({ id: 'arriving', size: 20, wordOpacity: 0.5 });
+  assert.deepEqual(auditFrame([arriving], ctx()), []);
+  assert.deepEqual(kinds(auditFrame([textNode({ id: 'landed', size: 20 })], ctx())), ['mechanical']);
+});
+
+test('the ink reaches accents and descenders: a measured line, an accented capital and the glyphs of other scripts', () => {
+  const SAFE_TOP = 60;
+  // 132 px, baseline at 160: the cap line is at 68, inside the safe top (60); an accent reaches 35
+  const hero = (word, extra = {}) => ({ ...textNode({ id: 'hero', size: 132, x: 300, y: 160 - 0.9 * 132, words: 1, word }), ...extra });
+  assert.ok(160 - 0.7 * 132 >= SAFE_TOP);
+  assert.deepEqual(auditFrame([hero('ECOLE')], ctx()), [], 'capitals stay under the safe edge');
+  assert.deepEqual(kinds(auditFrame([hero('ÉCOLE')], ctx())), ['mechanical'], 'an accented capital crosses it (no measurement: from the font ascent)');
+  assert.deepEqual(kinds(auditFrame([hero('ECOLE', { lineInk: [{ ascent: 0.95 * 132, descent: 0 }] })], ctx())), ['mechanical'], 'a measured line whose glyphs reach 125 px above the baseline');
+  assert.deepEqual(auditFrame([hero('ECOLE', { lineInk: [{ ascent: 0.65 * 132, descent: 0 }] })], ctx()), [], 'a measured line lower than the cap line leaves room');
+  const upper = (word) => textNode({ id: 'upper', size: 132, x: 200, y: 300, word, words: 1 });
+  const lowerAt = (inkTop) => textNode({ id: 'lower', size: 44, x: 200, y: yForInkTop(inkTop, 44), words: 1 });
+  for (const word of ['gypsy', 'ça', 'ура']) {
+    assert.deepEqual(kinds(auditFrame([upper(word), lowerAt(inkBottom(upper(word)) - 132 * WORD_DESCENT)], ctx())), ['mechanical'], `${word} has a descender that reaches into the line below`);
+  }
+  assert.deepEqual(kinds(auditFrame([upper('ABC'), lowerAt(inkBottom(upper('ABC')) + 5)], ctx())), [], 'capitals end at the baseline: a line starting just under it is clear');
+  const measured = { ...upper('ABC'), lineInk: [{ ascent: 0.7 * 132, descent: 0.25 * 132 }] };
+  assert.deepEqual(kinds(auditFrame([measured, lowerAt(measured.bbox[1] + 0.9 * 132 + 0.1 * 132)], ctx())), ['mechanical'], 'a measured descent of 0.25 em reaches the label below');
 });
 
 test('text that is not visible is ignored by every rule', () => {
@@ -350,12 +393,95 @@ test('each cut gets a strip of 5 frames from 0.2 s before to 0.2 s after, named 
   assert.deepEqual(sheets.map((s) => s.name).sort(), ['a.png', 'b.png', 'c.png', 'cut-a-b.png', 'cut-b-c.png']);
 });
 
-test('the audit moments are the sheet frames plus one per half second, without duplicates, in order', () => {
-  const f = film([{ id: 'a', hold: 3, show: 'free' }]);
+test('the audit moments are the sheet frames, one frame every 0.25 s and each shot last frame, without duplicates, in order', () => {
+  const f = film([{ id: 'a', hold: 3, show: 'free' }, { id: 'b', hold: 2, show: 'free', cut: 'slide' }]);
   const timeline = buildTimeline(f, { fps: 30 });
   const moments = auditMoments(f, timeline);
   assert.deepEqual(moments, [...new Set(moments)].sort((p, q) => p - q));
-  for (const second of [0, 0.5, 1, 1.5, 2, 2.5]) assert.ok(moments.includes(second * 30), `${second}s`);
-  assert.ok(moments.includes(Math.round((0.1) * 30)), 'start + 0.1 s from the sheet');
-  assert.ok(moments.every((m) => Number.isInteger(m) && m >= 0 && m <= timeline.frameCount));
+  for (let quarter = 0; quarter < 20; quarter++) assert.ok(moments.includes(Math.round(quarter * 0.25 * 30)), `${quarter * 0.25}s`);
+  assert.ok(moments.includes(Math.round(0.1 * 30)), 'start + 0.1 s from the sheet');
+  assert.ok(moments.includes(89) && moments.includes(149), 'the last frame of each shot');
+  assert.ok(moments.every((m) => Number.isInteger(m) && m >= 0 && m < timeline.frameCount));
+});
+
+test('every on landing + 0.05 s is audited, also inside a cut window, and a shot shorter than its cut is audited at its last frame', () => {
+  const f = film([
+    { id: 'a', hold: 2, show: 'free' },
+    { id: 'b', hold: 1, show: 'free', cut: 'slide', on: [{ at: 0.1, do: 'circle' }] }, // slide takes 0.4 s: 0.15 s is inside it
+  ]);
+  const timeline = buildTimeline(f, { fps: 30 });
+  const moments = auditMoments(f, timeline);
+  assert.ok(moments.includes(Math.round((2 + 0.15) * 30)), 'the landing at 0.15 s into b');
+  assert.ok(moments.includes(Math.round(3 * 30) - 1), 'the last frame of b');
+});
+
+test('sheet names stay unique, also when a renamed strip would land on another shot name', () => {
+  const f = film([
+    { id: 'a', hold: 1, show: 'free' }, { id: 'b', hold: 1, show: 'free' },
+    { id: 'cut-a-b', hold: 1, show: 'free' }, { id: 'cut-a-b-2', hold: 1, show: 'free' },
+  ]);
+  const names = planSheets(f, buildTimeline(f, { fps: 30 })).map((s) => s.name);
+  assert.equal(new Set(names).size, names.length, names.join(', '));
+  assert.ok(names.includes('cut-a-b.png') && names.includes('cut-a-b-2.png'), 'the shots keep their own names');
+});
+
+// ---- the audit plan, session findings, finding paths ----
+
+import { describeError, reportOf } from '../../scripts/v2/report.mjs';
+
+test('a frame inside a cut window is audited for the incoming shot alone; a frame outside it for the whole picture', () => {
+  const f = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 1, show: 'free', cut: 'slide' }]);
+  const timeline = buildTimeline(f, { fps: 30 });
+  const plan = new Map(auditPlan(f, timeline).map(([shot, frame]) => [frame, shot]));
+  assert.equal(plan.get(60), 1, 'the first frame of b, on the slide cut');
+  assert.equal(plan.get(68), 1, 'the quarter-second frame inside the 0.4 s window');
+  assert.equal(plan.get(75), -1, 'after the window');
+  assert.equal(plan.get(30), -1, 'inside a');
+  assert.equal(plan.get(89), -1, 'the last frame of b, long after the window');
+  const hard = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 1, show: 'free' }]);
+  assert.ok([...new Map(auditPlan(hard, buildTimeline(hard, { fps: 30 }))).keys()].every((shot) => shot === -1), 'a hard cut has no window');
+});
+
+test('a finding about a text points at the spec field that holds it, with the shot id alongside', () => {
+  const at = (role, node, extra = {}) => ({ shot: 's2', t: 1, finding: { kind: 'mechanical', path: 'shots[1]', message: 'm', rule: 'r', node, role, ...extra } });
+  const shots = [{ id: 's1' }, { id: 's2', say: 'hi', text: 'Hello', kicker: 'k', label: 'l', delta: '+1', prefix: '$', suffix: 'm', value: 5, caption: 'c' }];
+  const path = (item) => dedupeFindings([item], shots)[0].path;
+  assert.equal(path(at('kicker', 's2.kicker')), 'shots[1].kicker');
+  assert.equal(path(at('hero', 's2.text')), 'shots[1].text');
+  assert.equal(path(at('label', 's2.label')), 'shots[1].label');
+  assert.equal(path(at('tag', 's2.delta')), 'shots[1].delta');
+  assert.equal(path(at('affix', 's2.value.prefix')), 'shots[1].prefix');
+  assert.equal(path(at('affix', 's2.value.suffix')), 'shots[1].suffix');
+  assert.equal(path(at('caption', 's2.caption')), 'shots[1].caption');
+  assert.equal(path(at('body', 'x')), 'shots[1]', 'a text with no field of its own');
+  assert.equal(dedupeFindings([at('hero', 'h')], [{ id: 's1' }, { id: 's2', say: 'hi' }])[0].path, 'shots[1].say', 'a hero with only a say');
+  assert.equal(dedupeFindings([at('kicker', 'k')], [{ id: 's1' }, { id: 's2' }])[0].path, 'shots[1]', 'a field the shot does not have');
+  assert.equal(dedupeFindings([at('hero', 'h')], shots)[0].shot, 's2');
+});
+
+test('session findings: page errors, blocked requests and a failed post pass are findings; a clean session has none', () => {
+  assert.deepEqual(sessionFindings({ info: { post: 'webgl2' }, errors: [], blocked: [] }), []);
+  const found = sessionFindings({ info: { post: 'webgl2' }, errors: ['boom', 'boom', 'second'], blocked: ['http://example.com/x'] });
+  assert.deepEqual(found.map((f) => [f.kind, f.message, f.path, f.shot]), [
+    ['mechanical', 'page: boom', '', null], ['mechanical', 'page: second', '', null], ['mechanical', 'page: request blocked: http://example.com/x', '', null],
+  ]);
+});
+
+test('describeError splits "what. how to fix" and gives a hint to the errors that carry none', () => {
+  assert.deepEqual(describeError(new Error('ffmpeg not found. Install it (brew install ffmpeg)')), { message: 'ffmpeg not found', hint: 'Install it (brew install ffmpeg)' });
+  assert.equal(describeError(new Error('cannot read x.json: ENOENT')).hint.includes('existing film'), true);
+  assert.deepEqual(describeError(new Error('line one\nline two')), { message: 'line one', hint: '' });
+  assert.deepEqual(describeError('plain'), { message: 'plain', hint: '' });
+});
+
+test('a report has the same keys whatever stopped the run, and ok needs a valid film, no error and no mechanical finding', () => {
+  const base = { validated: true, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null };
+  const keys = Object.keys(reportOf(base)).sort();
+  assert.deepEqual(keys, ['captured', 'capture', 'findings', 'frames', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed'].sort());
+  assert.equal(reportOf(base).ok, true);
+  assert.equal(reportOf({ ...base, validated: false }).ok, false);
+  assert.equal(reportOf({ ...base, findings: [{ kind: 'creative' }] }).ok, true);
+  assert.equal(reportOf({ ...base, findings: [{ kind: 'mechanical' }] }).ok, false);
+  const withError = reportOf({ ...base, error: { message: 'm', hint: 'h' } });
+  assert.deepEqual([withError.ok, withError.error], [false, { message: 'm', hint: 'h' }]);
 });

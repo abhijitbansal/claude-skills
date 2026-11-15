@@ -4,14 +4,15 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { HERE, browserAvailable, ffmpegOrNull, headlessPids, probeVideo } from './helpers/session.mjs';
 import { registries } from '../../engine/registry.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
-import { jpegInput } from '../../scripts/v2/render.mjs';
+import { jpegInput, sweepPartials } from '../../scripts/v2/render.mjs';
 import { encodeArgs } from '../../scripts/lib/ffmpeg.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
@@ -96,7 +97,7 @@ test('a misspelled flag suggests the right one; with --json the usage error is o
   assert.equal(run.status, 2);
   const report = parse(run);
   assert.equal(report.ok, false);
-  assert.match(report.errors[0].message, /did you mean '--outline'/);
+  assert.match(report.error.message, /did you mean '--outline'/);
 });
 
 test('no film path, two film paths and a bad --out exit 2', () => {
@@ -203,7 +204,7 @@ test('--json prints exactly one object, with stages, findings and the report key
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stdout.trim().split('\n').length, 1, 'one line on stdout');
   const report = parse(run);
-  assert.deepEqual(Object.keys(report).sort(), ['captured', 'capture', 'findings', 'frames', 'msPerFrame', 'ok', 'output', 'post', 'sheets', 'stages', 'timed'].sort());
+  assert.deepEqual(Object.keys(report).sort(), ['captured', 'capture', 'findings', 'frames', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed'].sort());
   assert.equal(report.msPerFrame, null, 'nothing was rendered');
   assert.equal(report.ok, true);
   assert.equal(report.timed, 'estimated');
@@ -235,7 +236,7 @@ test('text mode prints valid, a line per finding, then the sheets, output and fr
   assert.equal(run.status, 1);
   const lines = run.stdout.trim().split('\n');
   assert.equal(lines[0], 'valid');
-  assert.match(lines[1], /^mechanical: shots\[off\]: text "edge" is outside the safe area.* \(at 0\.00 s\)$/);
+  assert.match(lines[1], /^mechanical: shots\[0\]: text "edge" is outside the safe area.* \(at 0\.00 s\)$/);
   assert.match(lines.at(-3), /^sheets: .+ \(1 file\)$/);
   assert.match(lines.at(-2), /^output: none/);
   assert.equal(lines.at(-1), 'frames: 30');
@@ -249,7 +250,7 @@ test('the mechanical gate fires: text forced off the canvas makes ok false and e
   assert.equal(report.ok, false);
   const [finding] = report.findings.filter((f) => f.kind === 'mechanical');
   assert.equal(finding.shot, 'off');
-  assert.equal(finding.path, 'shots[off]');
+  assert.equal(finding.path, 'shots[0]');
   assert.equal(finding.t, 0);
   assert.ok(existsSync(report.output), 'the video exists');
   assert.equal(probeVideo(report.output).frames, report.frames);
@@ -307,7 +308,7 @@ test('a full run renders an H.264 yuv420p MP4 of the film, one frame per film fr
   assert.equal(video.frames, report.frames);
   assert.ok(Math.abs(video.duration - report.frames / FPS) < 0.05, `duration ${video.duration}`);
   assert.deepEqual([video.width, video.height], [1920, 1080]);
-  assert.deepEqual(readdirSync(path.dirname(report.output)).filter((f) => f !== 'sheets' && f !== 'film.mp4'), []);
+  assert.deepEqual(readdirSync(path.dirname(report.output)).filter((f) => f !== 'film.sheets' && f !== 'film.mp4'), []);
 });
 
 test('a held shot is not re-captured every frame: captured is one per grain pattern, and the MP4 still has every frame', async (t) => {
@@ -373,13 +374,179 @@ test('SIGINT during a render leaves no temp files and no browser behind', async 
   const out = outPath('sigint');
   const child = spawn(process.execPath, [MAKE, filmPath('long'), '--json', '--out', out], { stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => child.kill('SIGKILL'));
-  let stderr = '';
+  let stderr = '', stdout = '';
   child.stderr.on('data', (chunk) => { stderr += chunk; });
+  child.stdout.on('data', (chunk) => { stdout += chunk; });
   assert.ok(await until(() => /render \d+\/\d+ frames/.test(stderr), 120_000), `the render never started: ${stderr}`);
   const closed = new Promise((resolve) => child.on('close', (code) => resolve(code)));
   child.kill('SIGINT');
   assert.equal(await closed, 130);
-  const left = existsSync(path.dirname(out)) ? readdirSync(path.dirname(out)).filter((f) => f !== 'sheets') : [];
+  const left = existsSync(path.dirname(out)) ? readdirSync(path.dirname(out)).filter((f) => f !== 'film.sheets') : [];
   assert.deepEqual(left, [], 'no partial or finished video');
+  assert.ok(await until(() => [...headlessPids()].every((pid) => before.has(pid)), 10_000), 'a headless browser is still running');
+  const report = JSON.parse(stdout);
+  assert.deepEqual(Object.keys(report).sort(), [...REPORT_KEYS, 'error'].sort(), 'the same shape, with an error');
+  assert.equal(report.error.message, 'interrupted');
+  assert.equal(report.ok, false);
+  assert.deepEqual(report.stages.map((s) => [s.name, s.ok]), [['validate', true], ['timeline', true], ['review', true], ['render', false]], 'what ran before the stop stays');
+  assert.equal(report.sheets.length, 1, 'the sheets already written stay');
+});
+
+// ---- the --json contract on every path ----
+
+const REPORT_KEYS = ['captured', 'capture', 'findings', 'frames', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed'];
+const shapeOf = (run) => {
+  assert.equal(run.stdout.trim().split('\n').length, 1, `one line on stdout, got ${JSON.stringify(run.stdout)}`);
+  const report = parse(run);
+  assert.deepEqual(Object.keys(report).filter((k) => k !== 'error').sort(), [...REPORT_KEYS].sort());
+  return report;
+};
+
+test('a missing film file: the full report shape with an error, exit 2', () => {
+  const run = make([path.join(dir, 'missing.json'), '--json']);
+  assert.equal(run.status, 2);
+  const report = shapeOf(run);
+  assert.equal(report.ok, false);
+  assert.match(report.error.message, /^cannot read .*missing\.json/);
+  assert.match(report.error.hint, /existing film/);
+  assert.deepEqual(report.stages.map((s) => [s.name, s.ok]), [['validate', false]]);
+});
+
+test('no ffmpeg: the report keeps the stages that ran, and says how to install it', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  const run = make([filmPath('held'), '--json', '--out', outPath('json-no-ffmpeg')], BARE);
+  assert.equal(run.status, 2);
+  const report = shapeOf(run);
+  assert.equal(report.error.message, 'ffmpeg not found');
+  assert.match(report.error.hint, /brew install ffmpeg/);
+  assert.deepEqual(report.stages.map((s) => s.name), ['validate', 'timeline']);
+  assert.equal(report.frames, 60, 'the timeline is known');
+  assert.equal(report.timed, 'estimated');
+});
+
+test('an ffmpeg that exits non-zero: the error carries its words, the sheets and findings stay, nothing is left behind', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const out = outPath('json-ffmpeg-fails');
+  const run = make([filmPath('off'), '--json', '--out', out], { FFMPEG_PATH: '/usr/bin/false' });
+  assert.equal(run.status, 2, run.stderr);
+  const report = shapeOf(run);
+  assert.match(report.error.message, /^ffmpeg failed/);
+  assert.deepEqual(report.stages.map((s) => [s.name, s.ok]), [['validate', true], ['timeline', true], ['review', true], ['render', false]]);
+  assert.equal(report.sheets.length, 1);
+  assert.ok(report.findings.some((f) => f.kind === 'mechanical'), 'the findings already found stay');
+  assert.equal(report.ok, false);
+  assert.deepEqual(readdirSync(path.dirname(out)).filter((f) => f !== 'film.sheets'), [], 'no partial video');
+});
+
+test('an ffmpeg error keeps the last 5 lines ffmpeg said', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const script = path.join(dir, 'noisy-ffmpeg.sh');
+  writeFileSync(script, '#!/bin/sh\nfor n in 1 2 3 4 5 6 7 8; do echo "line $n" >&2; done\nexit 1\n', { mode: 0o755 });
+  const run = make([filmPath('held'), '--json', '--out', outPath('json-noisy')], { FFMPEG_PATH: script });
+  const report = shapeOf(run);
+  assert.match(report.error.message, /line 4 \| line 5 \| line 6 \| line 7 \| line 8$/);
+  assert.doesNotMatch(report.error.message, /line 3/);
+});
+
+test('a usage error under --json is the same shape with an error', () => {
+  const report = shapeOf(make([filmPath('gate'), '--fast', '--json']));
+  assert.match(report.error.message, /Unknown option '--fast'/);
+  assert.match(report.error.hint, /exit codes: 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted/);
+});
+
+test('a film the page cannot draw is a finding, not an error: ok false, exit 1, the shape intact', async (t) => {
+  if (!await needs(t)) return;
+  const film = { version: 2, shots: [{ id: 'bad', show: 'free', hold: 1, nodes: [{ type: 'path', id: 'b', props: { d: 'M0 0H10V10Z', fill: '#fff', blend: 'dodge' } }] }] };
+  writeFileSync(path.join(dir, 'throws.json'), JSON.stringify(film));
+  const run = make([path.join(dir, 'throws.json'), '--json', '--no-render', '--out', outPath('throws')]);
+  assert.equal(run.status, 1, run.stderr);
+  const report = shapeOf(run);
+  assert.equal(report.error, undefined);
+  assert.equal(report.ok, false);
+  assert.ok(report.findings.some((f) => f.kind === 'mechanical' && /^page: .*blend must be one of/.test(f.message)), JSON.stringify(report.findings));
+});
+
+// ---- where things go ----
+
+test('sheets go to a folder named for the video: films in one folder do not share them, and a stale sheet is removed', async (t) => {
+  if (!await needs(t)) return;
+  const [one, two] = ['one', 'two'].map((name) => outPath('shared', `${name}.mp4`));
+  mkdirSync(path.dirname(one), { recursive: true });
+  mkdirSync(`${one.slice(0, -4)}.sheets`, { recursive: true });
+  writeFileSync(path.join(`${one.slice(0, -4)}.sheets`, 'stale-shot.png'), 'old');
+  writeFileSync(path.join(`${one.slice(0, -4)}.sheets`, 'notes.txt'), 'mine');
+  const a = parse(make([filmPath('gate'), '--json', '--no-render', '--out', one]));
+  const b = parse(make([filmPath('held'), '--json', '--no-render', '--out', two]));
+  assert.deepEqual(a.sheets.map((f) => path.dirname(f)), Array(3).fill(`${one.slice(0, -4)}.sheets`));
+  assert.deepEqual(b.sheets.map((f) => path.dirname(f)), [`${two.slice(0, -4)}.sheets`]);
+  assert.deepEqual(readdirSync(`${one.slice(0, -4)}.sheets`).sort(), ['cut-hook-rows.png', 'hook.png', 'notes.txt', 'rows.png'], 'the stale png is gone, a file that is not a png is left');
+  assert.deepEqual(readdirSync(`${two.slice(0, -4)}.sheets`), ['held.png']);
+});
+
+test('paths in the report are as the user gave them: relative stay relative to the current directory', async (t) => {
+  if (!await needs(t)) return;
+  const run = spawnSync(process.execPath, [MAKE, 'held.json', '--json', '--no-render', '--out', 'rel/held.mp4'], { encoding: 'utf8', cwd: dir });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(parse(run).sheets, [path.join('rel', 'held.sheets', 'held.png')]);
+  const absolute = parse(make([filmPath('held'), '--json', '--no-render', '--out', outPath('abs')]));
+  assert.ok(path.isAbsolute(absolute.sheets[0]));
+});
+
+test('the default output is out/<film name>.mp4 beside the film, and its sheets out/<film name>.sheets', async (t) => {
+  if (!await needs(t)) return;
+  const run = spawnSync(process.execPath, [MAKE, 'held.json', '--json', '--no-render'], { encoding: 'utf8', cwd: dir });
+  assert.equal(run.status, 0, run.stderr);
+  assert.deepEqual(parse(run).sheets, [path.join('out', 'held.sheets', 'held.png')]);
+});
+
+test('a partial video left by a killed run is swept when older than an hour, and a fresh one is not', () => {
+  const folder = mkdtempSync(path.join(tmpdir(), 'mm-v2-sweep-'));
+  try {
+    const old = path.join(folder, '.film.mp4.partial-111.mp4'), fresh = path.join(folder, '.film.mp4.partial-222.mp4'), other = path.join(folder, 'film.mp4');
+    for (const file of [old, fresh, other]) writeFileSync(file, 'x');
+    const longAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    utimesSync(old, longAgo, longAgo);
+    utimesSync(other, longAgo, longAgo);
+    assert.deepEqual(sweepPartials(folder), ['.film.mp4.partial-111.mp4']);
+    assert.deepEqual(readdirSync(folder).sort(), ['.film.mp4.partial-222.mp4', 'film.mp4']);
+  } finally {
+    rmSync(folder, { recursive: true, force: true });
+  }
+});
+
+// ---- a crash nobody caught ----
+
+test('an uncaught exception or a stray rejection winds the run down and the report carries it as its error', async (t) => {
+  if (!await needs(t)) return;
+  const before = headlessPids();
+  for (const [name, code] of [['thrown', "throw new Error('boom thrown')"], ['rejected', "Promise.reject(new Error('boom rejected'))"]]) {
+    const hook = path.join(dir, `crash-${name}.mjs`);
+    writeFileSync(hook, `setTimeout(() => { ${code}; }, 250);\n`);
+    const run = make([filmPath('gate'), '--json', '--no-render', '--out', outPath(`crash-${name}`)], { NODE_OPTIONS: `--import=${pathToFileURL(hook).href}` });
+    assert.equal(run.status, 2, `${name}: ${run.stderr}`);
+    const report = shapeOf(run);
+    assert.equal(report.error.message, `boom ${name}`);
+    assert.equal(report.ok, false);
+  }
+  assert.ok(await until(() => [...headlessPids()].every((pid) => before.has(pid)), 10_000), 'a headless browser is still running');
+});
+
+test('a stalled ffmpeg does not hold the first interrupt', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const script = path.join(dir, 'stalled-ffmpeg.sh');
+  writeFileSync(script, '#!/bin/sh\nexec sleep 120\n', { mode: 0o755 }); // reads nothing: the pipe fills and a write waits
+  const before = headlessPids();
+  const child = spawn(process.execPath, [MAKE, filmPath('long'), '--json', '--out', outPath('stalled')], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FFMPEG_PATH: script } });
+  t.after(() => child.kill('SIGKILL'));
+  let stderr = '', stdout = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  child.stdout.on('data', (chunk) => { stdout += chunk; });
+  assert.ok(await until(() => /render started/.test(stderr), 120_000), `the render never started: ${stderr}`);
+  await new Promise((resolve) => setTimeout(resolve, 1500)); // long enough for the pipe to fill and a write to wait
+  const closed = new Promise((resolve) => child.on('close', (code) => resolve(code)));
+  child.kill('SIGINT');
+  const code = await Promise.race([closed, new Promise((resolve) => setTimeout(() => resolve('still running'), 20_000))]);
+  assert.equal(code, 130);
+  assert.equal(JSON.parse(stdout).error.message, 'interrupted');
   assert.ok(await until(() => [...headlessPids()].every((pid) => before.has(pid)), 10_000), 'a headless browser is still running');
 });

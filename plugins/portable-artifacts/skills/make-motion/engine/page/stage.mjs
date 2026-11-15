@@ -3,7 +3,9 @@
 // seeks: __seek(i) draws frame i, __snapshot(i) reports its laid-out nodes, __stateKey(i) a stable key of its state.
 // window.__ready resolves once the page can be seeked. A frame is drawn in 2D into an offscreen canvas (window.__source,
 // the picture before the post pass) and the visible canvas shows it through the post pass (post.mjs): WebGL2 when the
-// browser has it, else a 2D copy with a noise tile. __ready reports which as post: 'webgl2' | '2d'.
+// browser has it, else a 2D copy with the same grain. __ready reports which as post: 'webgl2' | '2d' and, for '2d',
+// postNotice: { reason, failed, dropped } (failed: a shader that would not build; dropped: effects the look asked for).
+// __seek draws frames 0 .. frameCount - 1.
 import { registries } from '../registry.mjs';
 import '../fields/index.mjs';
 import { buildFilm, resolveLook } from '../graph/film.mjs';
@@ -11,7 +13,7 @@ import { stateKey } from '../graph/sample.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '/v1/formats.mjs';
 import { drawFrame, resetContext } from './draw.mjs';
 import { annotate } from './bounds.mjs';
-import { createMeasure } from './text-style.mjs';
+import { applyFont, createMeasure } from './text-style.mjs';
 import { facesFor, loadFaces } from './fonts-shared.mjs';
 import { createPost, grainPhase } from './post.mjs';
 
@@ -69,12 +71,27 @@ const heldFlags = (key) => (from, to) => {
   });
 };
 
+// The measured ink of each line of a text node, [{ ascent, descent }] in the text's own pixels: how far its glyphs
+// really reach above and below the baseline (accents, ascenders, descenders). Undefined for a text without a font.
+function lineInkOf(ctx) {
+  return (n) => {
+    const font = n.props.font;
+    if (!font) return undefined;
+    applyFont(ctx, font, { tracked: true });
+    return n.props.layout.lines.map((line) => {
+      const m = ctx.measureText(line.words.map((word) => word.text).join(' '));
+      return { ascent: m.actualBoundingBoxAscent, descent: m.actualBoundingBoxDescent };
+    });
+  };
+}
+
 // The page's API: what the render, the review and the tests call.
-function installApi({ fps, draw, post, source, measure, frameState, keys, setGrain }) {
+function installApi({ fps, draw, post, source, measure, frameState, keys, setGrain, snapshotOf, snapshotShot }) {
   window.__seek = (i) => {
     draw(i);
     post.render(source, i / fps);
   };
+  window.__snapshotShot = snapshotShot;
   window.__source = source; // the frame before the post pass, for tests
   window.__setPost = (next) => { // new strengths for the next __seek, for tests
     post.setStrengths(next);
@@ -82,7 +99,7 @@ function installApi({ fps, draw, post, source, measure, frameState, keys, setGra
   };
   window.__stampFamily = STAMP_FAMILY;
   window.__measure = measure; // the layout measure, for tests
-  window.__snapshot = (i) => annotate(frameState(i).sampled);
+  window.__snapshot = (i) => snapshotOf(frameState(i).sampled);
   window.__stateKey = keys.captureKey;
   // withGrain: compared by __stateKey (what is captured), else by the 2D state alone.
   window.__heldFlags = (from, to, withGrain) => heldFlags(withGrain ? keys.captureKey : keys.drawKey)(from, to);
@@ -114,14 +131,23 @@ async function init() {
   };
   const draw = (i) => {
     const { background, sampled } = frameState(i);
+    // frame frameCount is the instant the film ends: it can be sampled but there is no frame to draw
+    if (i === frameCount) throw new Error(`frame must be an integer in 0..${frameCount - 1} to draw, got ${i}`);
     resetContext(ctx); // a seek that threw halfway must not leave its clip, alpha or save stack to the next one
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, w, h);
     drawFrame(ctx, sampled, { assets, canvas, time: i / fps });
   };
   const keys = frameKeys({ frameState, fps, grainNow: () => grain });
-  installApi({ fps, draw, post, source, measure, frameState, keys, setGrain: (value) => { grain = value; } });
-  return { frameCount, fps, size: [w, h], post: post.kind };
+  const snapshotOf = (sampled) => annotate(sampled, { lineInk: lineInkOf(document.createElement('canvas').getContext('2d')) });
+  // Shot `index` alone at frame i: only its own nodes, as they stand inside a cut window where both shots are drawn.
+  const snapshotShot = (index, i) => {
+    frameState(i);
+    return snapshotOf(built.sampleShot(index, Math.max(0, i / fps - timeline.shots[index].start)));
+  };
+  installApi({ fps, draw, post, source, measure, frameState, keys, snapshotOf, snapshotShot, setGrain: (value) => { grain = value; } });
+  const notice = post.unavailable ? { postNotice: { ...post.unavailable, dropped: post.dropped } } : {};
+  return { frameCount, fps, size: [w, h], post: post.kind, ...notice };
 }
 
 window.__ready = init();

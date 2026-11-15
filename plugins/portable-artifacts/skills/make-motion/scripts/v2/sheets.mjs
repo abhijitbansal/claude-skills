@@ -2,7 +2,7 @@
 // cut (plan.mjs says which frames). The page seeks each frame and draws the visible canvas, post pass included, onto a
 // sheet canvas with each tile stamped "<shot id> . <seconds>s" in the bundled mono face; Node lays the tiles out
 // (layout.mjs) and writes the PNG. No ffmpeg and no screenshots. writeSheets also returns the film review's findings.
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { canvasSize } from '../../template/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
@@ -52,9 +52,26 @@ async function writeOne(session, sheet, dir, canvas, signal) {
   const columns = sheet.kind === 'cut' ? CUT_COLUMNS : shotColumns(canvas);
   const { width, height, placements } = layoutSheet({ tiles: sheet.tiles, canvas, columns });
   const png = await session.page.evaluate(composeInPage, { width, height, placements, colours: COLOURS });
-  const file = path.join(dir, sheet.name);
-  writeFileSync(file, Buffer.from(png, 'base64'));
+  return writeAtomically(path.join(dir, sheet.name), Buffer.from(png, 'base64'));
+}
+
+// The file appears whole or not at all: written under a temp name beside it, then renamed.
+function writeAtomically(file, bytes) {
+  const temp = path.join(path.dirname(file), `.${path.basename(file)}.tmp-${process.pid}`);
+  try {
+    writeFileSync(temp, bytes);
+    renameSync(temp, file);
+  } finally {
+    rmSync(temp, { force: true });
+  }
   return file;
+}
+
+// The folder belongs to one video, so the PNGs in it are the last run's sheets; they go before the new ones are made,
+// and a sheet the film no longer has cannot linger.
+function clearOwnSheets(dir) {
+  mkdirSync(dir, { recursive: true });
+  for (const name of readdirSync(dir)) if (name.toLowerCase().endsWith('.png')) rmSync(path.join(dir, name), { force: true });
 }
 
 /**
@@ -66,7 +83,7 @@ export async function writeSheets({ specPath, dir, session, signal }) {
   const own = session === undefined;
   const open = own ? await openSession(loadFilm(specPath)) : session;
   try {
-    mkdirSync(dir, { recursive: true });
+    clearOwnSheets(dir);
     const [w, h] = canvasSize(open.film);
     const files = [];
     for (const sheet of planSheets(open.film, open.timeline)) files.push(await writeOne(open, sheet, dir, { w, h }, signal));

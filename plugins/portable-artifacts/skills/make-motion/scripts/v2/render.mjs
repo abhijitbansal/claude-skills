@@ -4,7 +4,7 @@
 // previous frame's is not captured again: the previous picture is sent twice. The video is written to a partial file
 // beside the output and renamed when ffmpeg is done, so a stop or a failure leaves no half-written MP4 behind.
 import { spawn } from 'node:child_process';
-import { mkdirSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { findFfmpeg, encodeArgs } from '../lib/ffmpeg.mjs';
@@ -14,7 +14,10 @@ import { openSession } from './session.mjs';
 export const JPEG_QUALITY = 98;
 const HELD_CHUNK = 150; // frames whose held flags are fetched in one page.evaluate
 const MS_PER_SECOND = 1000;
-const STDERR_KEEP = 2000;
+const STDERR_KEEP = 4000;
+const STDERR_LINES = 5;
+const PARTIAL_MAX_AGE_MS = 60 * 60 * 1000;
+const PARTIAL_RE = /^\..+\.partial-\d+\.mp4$/;
 const QUIET = ['-hide_banner', '-loglevel', 'error'];
 
 // A JPEG decodes to full-range YUV; the video is limited-range yuv420p like every other, so scale between the two.
@@ -28,9 +31,22 @@ export function jpegInput(args) {
   return [...args.slice(0, at + 1), 'mjpeg', ...args.slice(at + 2, input + 2), ...JPEG_RANGE_FILTER, ...args.slice(input + 2)];
 }
 
-// An ffmpeg process with a promise for its end and a write() that waits for the pipe and fails when ffmpeg has died.
-function startEncoder(ffmpeg, args) {
+// A promise that rejects when `signal` aborts (never settles without one); a stalled ffmpeg must not hold a stop request.
+function abortion(signal) {
+  const promise = new Promise((_, reject) => {
+    if (!signal) return;
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+  promise.catch(() => {}); // it is only ever raced: an abort nobody is waiting on is not an unhandled rejection
+  return promise;
+}
+
+// An ffmpeg process with a promise for its end and a write() that waits for the pipe, fails when ffmpeg has died and
+// gives way to `signal`. Its failures carry the last STDERR_LINES lines ffmpeg said.
+function startEncoder(ffmpeg, args, signal) {
   const child = spawn(ffmpeg, args, { stdio: ['pipe', 'ignore', 'pipe'] });
+  const aborted = abortion(signal);
   let stderr = '';
   let failure = null;
   let exitCode = null; // set once the process has ended
@@ -40,17 +56,19 @@ function startEncoder(ffmpeg, args) {
     child.on('error', (err) => { failure ??= err; exitCode = -1; resolve(-1); });
     child.on('close', (code) => { exitCode = code; resolve(code); });
   });
-  const fail = (code) => new Error(`ffmpeg failed (${failure?.message ?? `exit ${code}`}): ${stderr.trim().split('\n').at(-1) ?? ''}`);
+  const said = () => stderr.trim().split('\n').filter(Boolean).slice(-STDERR_LINES).join(' | ');
+  const fail = (code) => new Error(`ffmpeg failed (${failure?.message ?? `exit ${code}`}): ${said()}`);
   return {
     async write(buffer) {
+      signal?.throwIfAborted();
       if (!failure && exitCode === null && !child.stdin.write(buffer)) {
-        await Promise.race([new Promise((resolve) => child.stdin.once('drain', resolve)), ended]); // ffmpeg dying must not leave this waiting
+        await Promise.race([new Promise((resolve) => child.stdin.once('drain', resolve)), ended, aborted]); // neither a dying nor a stalled ffmpeg may hold this
       }
       if (failure || exitCode !== null) throw fail(exitCode);
     },
     async finish() {
       child.stdin.end();
-      const code = await ended;
+      const code = await Promise.race([ended, aborted]);
       if (code !== 0 || failure) throw fail(code);
     },
     async stop() {
@@ -58,6 +76,15 @@ function startEncoder(ffmpeg, args) {
       await ended;
     },
   };
+}
+
+// A video that was being written when a run was killed leaves `.<name>.partial-<pid>.mp4` beside the output; those older
+// than an hour belong to no live run and are removed.
+export function sweepPartials(dir, { olderThanMs = PARTIAL_MAX_AGE_MS, now = Date.now() } = {}) {
+  if (!existsSync(dir)) return [];
+  const stale = readdirSync(dir).filter((name) => PARTIAL_RE.test(name) && now - statSync(path.join(dir, name)).mtimeMs > olderThanMs);
+  for (const name of stale) rmSync(path.join(dir, name), { force: true });
+  return stale;
 }
 
 // Which of frames from..to equal their predecessor under the capture key.
@@ -104,8 +131,9 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
   const started = performance.now();
   try {
     mkdirSync(path.dirname(out), { recursive: true });
+    sweepPartials(path.dirname(out));
     const args = encodeArgs({ fps: open.timeline.fps, out: partial });
-    encoder = startEncoder(ffmpeg, [...QUIET, ...(exact ? args : jpegInput(args))]);
+    encoder = startEncoder(ffmpeg, [...QUIET, ...(exact ? args : jpegInput(args))], signal);
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });
     await encoder.finish();
     encoder = null;

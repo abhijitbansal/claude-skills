@@ -155,13 +155,13 @@ test('the page reports its size, frame count and which post pass it runs', async
 
 test('frames differ over time and the frame is not blank', async (t) => {
   const a = await stageFor(t, FILM); if (!a) return;
-  const first = await a.hashFrame(0); const middle = await a.hashFrame(FRAME); const last = await a.hashFrame(LAST_FRAME);
+  const first = await a.hashFrame(0); const middle = await a.hashFrame(FRAME); const last = await a.hashFrame(LAST_FRAME - 1);
   assert.equal(new Set([first, middle, last]).size, 3);
 });
 
-test('seeking a frame outside 0..frameCount throws', async (t) => {
+test('seeking a frame outside 0..frameCount - 1 throws, and so does the frame at frameCount, which can be sampled but not drawn', async (t) => {
   const a = await stageFor(t, FILM); if (!a) return;
-  for (const bad of [-1, LAST_FRAME + 1, 1.5, Number.NaN]) {
+  for (const bad of [-1, LAST_FRAME, LAST_FRAME + 1, 1.5, Number.NaN]) {
     const message = await a.page.evaluate((i) => { try { window.__seek(i); return ''; } catch (e) { return e.message; } }, bad);
     assert.match(message, /frame/, `seek(${bad})`);
   }

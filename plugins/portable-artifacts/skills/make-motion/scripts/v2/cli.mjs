@@ -4,7 +4,7 @@ import { parseCli, UsageError } from '../../shared/cli.mjs';
 
 export const LIST_NAMES = Object.freeze(['kinds', 'looks', 'modes', 'devices', 'cuts', 'fields']);
 export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render']);
-const USAGE = `node scripts/make.mjs <film.json>; accepted flags: ${FLAGS.join(', ')}`;
+const USAGE = `node scripts/make.mjs <film.json>; accepted flags: ${FLAGS.join(', ')}; exit codes: 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted`;
 const OPTIONS = Object.freeze({
   out: { type: 'string' },
   json: { type: 'boolean' },
