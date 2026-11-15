@@ -88,4 +88,4 @@ export function paint(ctx, fieldPlan, t) {
   withSavedState(ctx, () => drawMesh(ctx, fieldPlan, t));
 }
 
-registries.fields.add('mesh', { summary: 'A paper base with a few large soft colour blobs that sway slowly.', plan, paint });
+registries.fields.add('mesh', { summary: 'A paper base with a few large soft colour blobs that sway slowly.', animated: true, plan, paint });

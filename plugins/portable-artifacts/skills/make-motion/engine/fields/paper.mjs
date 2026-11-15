@@ -181,4 +181,4 @@ export function paint(ctx, fieldPlan, t) {
   blitCached(ctx, cache, fieldPlan, buildPaper);
 }
 
-registries.fields.add('paper', { summary: 'Warm paper stock: a flat tint, soft blotches, thin fibres and a few specks.', plan, paint });
+registries.fields.add('paper', { summary: 'Warm paper stock: a flat tint, soft blotches, thin fibres and a few specks.', animated: false, plan, paint });

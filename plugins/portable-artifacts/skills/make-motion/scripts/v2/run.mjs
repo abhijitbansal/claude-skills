@@ -127,6 +127,7 @@ function buildReport({ loaded, session, review, rendered, stages }) {
     stages,
     frames: loaded.timeline.frameCount,
     captured: rendered?.captured ?? 0,
+    msPerFrame: rendered?.msPerFrame ?? null,
     findings,
   };
 }

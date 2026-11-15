@@ -123,7 +123,7 @@ function captionNode(shot, ctx, { group, hero, w, h, centre, leaves }) {
   const x = corner[0];
   const y = corner[1] + CAPTION.gap * unit - (layout.lines[0].y - CAP_HEIGHT * font.size);
   const tracks = { ...enterTracks(look, unit, look.moves.enter.dur + CAPTION.lag, { y }), opacity: captionOpacity(look, leaves) };
-  const text = node('text', `${shot.id}.caption`, { x, y, layout, font, fill: look.palette.ink2 }, { tracks });
+  const text = node('text', `${shot.id}.caption`, { x, y, layout, font, fill: look.palette.ink2, role: 'caption' }, { tracks });
   return { text, box: inkBox(x, y, layout) };
 }
 

@@ -84,9 +84,11 @@ export function planSheets(film, timeline) {
   return uniqueNames([...shots, ...cuts]);
 }
 
-/** The frames the audit looks at: every sheet frame and one per half second, each once, in order. */
+/** The frames the audit looks at: every sheet frame, one per half second and the last frame of each shot (its resting
+ *  state, which says which words stay hidden), each once, in order. */
 export function auditMoments(film, timeline) {
   const frames = new Set(planSheets(film, timeline).flatMap((sheet) => sheet.tiles.map((t) => t.frame)));
+  timeline.shots.forEach((shot) => frames.add(lastFrameOf(timeline, shot)));
   for (let t = 0; t < timeline.duration; t += AUDIT_STEP) frames.add(Math.min(timeline.frameCount - 1, Math.round(t * timeline.fps)));
   return [...frames].sort((a, b) => a - b);
 }

@@ -115,7 +115,7 @@ function kickerNodes(shot, ctx, placed, landAt) {
   const baseline = capLine - KICKER.gap * unit;
   const x = desk ? placed.x : placed.span.x;
   const y = baseline - layout.lines[0].y;
-  const kicker = node('text', `${shot.id}.kicker`, { x, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, landAt, { y }) });
+  const kicker = node('text', `${shot.id}.kicker`, { x, y, layout, font, fill: look.palette.ink2, role: 'kicker' }, { tracks: enterTracks(look, unit, landAt, { y }) });
   if (!desk) return [kicker];
   const ruleY = baseline - CAP_HEIGHT * font.size - KICKER.ruleGap * unit - KICKER.rule * unit;
   const rule = node('path', `${shot.id}.rule`, { x, y: ruleY, d: rectPath(KICKER.ruleLength * unit, KICKER.rule * unit), fill: look.palette.rule }, { tracks: wipeIn(look, landAt) });
@@ -135,7 +135,7 @@ function expandStatement(shot, ctx) {
   const times = wordTimes(words.map((w) => w.word.text), timing);
   const matched = arrivesMatched(shot, ctx);
   const hero = heroId(shot, 'text');
-  const text = node('text', hero, { x: placed.x, y: placed.y, layout: placed.layout, font: placed.font, fill: look.palette.ink }, {
+  const text = node('text', hero, { x: placed.x, y: placed.y, layout: placed.layout, font: placed.font, fill: look.palette.ink, role: 'hero' }, {
     wordTracks: wordTracksFor(words, times, ctx, matched),
   });
   const boxes = boxesFor(placed, words);
@@ -169,7 +169,7 @@ function statementTargets(shot) {
 
 registries.kinds.add('statement', {
   summary: 'A line of type as the whole frame, its words arriving as they are spoken; *starred* words are emphasised. An optional kicker sits above it.',
-  example: { id: 'hook', show: 'statement', say: 'Most dashboards cannot tell you *where a number came from*.', kicker: 'The problem' },
+  example: { id: 'hook', show: 'statement', say: 'Numbers need *sources*.', kicker: 'The problem' },
   schema: {
     properties: {
       text: { type: 'string', minLength: 1, maxLength: TEXT_MAX },

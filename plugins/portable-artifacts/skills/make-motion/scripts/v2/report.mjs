@@ -14,7 +14,7 @@ export const reviewFinding = ({ kind, shot, path, message, t }) => ({ kind, shot
 
 /** The report of a run that stopped at validation. */
 export const invalidReport = ({ stages, findings }) => ({
-  ok: false, output: null, sheets: [], timed: null, post: null, capture: null, stages, frames: 0, captured: 0, findings,
+  ok: false, output: null, sheets: [], timed: null, post: null, capture: null, stages, frames: 0, captured: 0, msPerFrame: null, findings,
 });
 
 const plainNarration = (shot) => (typeof shot.say === 'string' ? parseSay(shot.say).plain : '');
@@ -36,7 +36,7 @@ export function formatText(report, { sheetsDir }) {
   if (report.timed === null) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
-  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${report.post})`;
+  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${report.post}, ${report.msPerFrame.toFixed(1)} ms per frame)`;
   lines.push(`frames: ${counts}`);
   return lines.join('\n');
 }

@@ -37,7 +37,7 @@ function buildTag(params) {
     fill: colourOf(look, style.fill ?? DEFAULT_FILL),
   });
   const label = node('text', `${id}.text`, {
-    x: -w / HALF + PAD_X * unit, y: -h / HALF + PAD_Y * unit, layout, font, fill: colourOf(look, style.text ?? DEFAULT_TEXT),
+    x: -w / HALF + PAD_X * unit, y: -h / HALF + PAD_Y * unit, layout, font, fill: colourOf(look, style.text ?? DEFAULT_TEXT), role: 'tag',
   });
   const [x, y] = box;
   const group = entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, children: [plate, label] });

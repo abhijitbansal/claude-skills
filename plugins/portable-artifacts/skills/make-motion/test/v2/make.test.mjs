@@ -18,6 +18,9 @@ const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FPS = 30;
 const GRAIN_FPS = 12;
 const STILL_BAR = { type: 'path', id: 'bar', props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' } };
+const PALETTE = { paper: '#f3eee3', ink: '#15130f', ink2: '#5b554a', accent: '#ffe14a', accent2: '#d63a2f', rule: '#cfc7b6' };
+const MESH = { type: 'field', id: 'f', props: { field: 'mesh', params: {}, w: 1920, h: 1080, unit: 1, seed: 1, palette: PALETTE } };
+const meshShot = (id, hold) => ({ id, show: 'free', hold, background: '#000000', nodes: [MESH] });
 const still = (id, hold) => ({ id, show: 'free', hold, background: '#f3eee3', nodes: [STILL_BAR] });
 
 const FILMS = {
@@ -31,6 +34,8 @@ const FILMS = {
   ] }] },
   stillLong: { version: 2, shots: [still('long', 8), still('end', 1)] },
   stillLast: { version: 2, shots: [still('first', 1), still('last', 8)] },
+  meshLong: { version: 2, shots: [meshShot('mesh', 7), meshShot('end', 1)] },
+  meshShort: { version: 2, fps: FPS, shots: [meshShot('mesh', 2)] },
   invalid: { version: 2, shots: [{ id: 'a', show: 'nope', hold: 1 }] },
   v1: { version: 1, scenes: [] },
   long: { version: 2, mode: 'pro', shots: [
@@ -198,7 +203,8 @@ test('--json prints exactly one object, with stages, findings and the report key
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stdout.trim().split('\n').length, 1, 'one line on stdout');
   const report = parse(run);
-  assert.deepEqual(Object.keys(report).sort(), ['captured', 'capture', 'findings', 'frames', 'ok', 'output', 'post', 'sheets', 'stages', 'timed'].sort());
+  assert.deepEqual(Object.keys(report).sort(), ['captured', 'capture', 'findings', 'frames', 'msPerFrame', 'ok', 'output', 'post', 'sheets', 'stages', 'timed'].sort());
+  assert.equal(report.msPerFrame, null, 'nothing was rendered');
   assert.equal(report.ok, true);
   assert.equal(report.timed, 'estimated');
   assert.match(report.post, /^(webgl2|2d)$/);
@@ -258,6 +264,26 @@ test('a shot that holds still longer than the mode allows is a creative finding 
   assert.equal(found[0].kind, 'creative');
   assert.equal(found[0].shot, 'long');
   assert.match(found[0].message, /8\.00 s from 0\.00 s; the pro mode allows 6 s/);
+});
+
+test('a film on a mesh field is not reported as still, and every frame of it is captured', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const sheets = make([filmPath('meshLong'), '--no-render', '--json', '--out', outPath('mesh-long')]);
+  assert.deepEqual(parse(sheets).findings.filter((f) => /holds still/.test(f.message)), [], 'a 7 s mesh shot moves');
+  const run = make([filmPath('meshShort'), '--json', '--out', outPath('mesh-short')]);
+  assert.equal(run.status, 0, run.stderr);
+  const report = parse(run);
+  assert.equal(report.captured, report.frames, 'the picture changes every frame, so none is reused');
+  assert.equal(report.frames, 60);
+  assert.equal(typeof report.msPerFrame, 'number');
+  assert.ok(report.msPerFrame > 0);
+});
+
+test('every registered field says whether it is painted from the time', () => {
+  for (const name of registries.fields.names()) assert.equal(typeof registries.fields.get(name).animated, 'boolean', name);
+  assert.equal(registries.fields.get('mesh').animated, true);
+  assert.equal(registries.fields.get('paper').animated, false);
+  assert.equal(registries.fields.get('halftone').animated, false);
 });
 
 test('the final shot of a film may hold still', async (t) => {

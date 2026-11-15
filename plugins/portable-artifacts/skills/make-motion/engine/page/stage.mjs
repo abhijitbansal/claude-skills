@@ -4,6 +4,8 @@
 // window.__ready resolves once the page can be seeked. A frame is drawn in 2D into an offscreen canvas (window.__source,
 // the picture before the post pass) and the visible canvas shows it through the post pass (post.mjs): WebGL2 when the
 // browser has it, else a 2D copy with a noise tile. __ready reports which as post: 'webgl2' | '2d'.
+import { registries } from '../registry.mjs';
+import '../fields/index.mjs';
 import { buildFilm, resolveLook } from '../graph/film.mjs';
 import { stateKey } from '../graph/sample.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '/v1/formats.mjs';
@@ -16,10 +18,10 @@ import { createPost, grainPhase } from './post.mjs';
 // The face the review sheets stamp their tiles with; the sheet code reads window.__stampFamily.
 const STAMP_FAMILY = 'JetBrains Mono';
 const DEFAULT_SEED = 1;
-// Fields whose paint reads the time (engine/fields/mesh.mjs: the blobs sway), so their frames differ though the sampled
-// tree is the same. The other fields are painted once and cached.
-const ANIMATED_FIELDS = new Set(['mesh']);
-const hasAnimatedField = (nodes) => nodes.some((n) => (n.type === 'field' && ANIMATED_FIELDS.has(n.props.field)) || hasAnimatedField(n.children));
+// A field registered with `animated: true` paints from the time (mesh: the blobs sway), so its frames differ though the
+// sampled tree is the same. The other fields are painted once and cached.
+const isAnimatedField = (name) => registries.fields.has(name) && registries.fields.get(name).animated === true;
+const hasAnimatedField = (nodes) => nodes.some((n) => (n.type === 'field' && isAnimatedField(n.props.field)) || hasAnimatedField(n.children));
 
 async function fetchJson(url) {
   const res = await fetch(url);

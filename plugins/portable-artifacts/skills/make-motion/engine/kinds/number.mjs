@@ -185,12 +185,12 @@ function figureGroup(shot, ctx, fig, { left, baseline, tracks }) {
   const digitsX = left + fig.preW - fig.digits.inkLeft;
   const inkRight = left + fig.preW + fig.digits.inkWidth;
   const children = [
-    ...(fig.prefix ? [node('text', `${hero}.prefix`, { x: left - gx, y: affixY(fig.prefix), layout: fig.prefix, font: fig.small, fill: look.palette.ink })] : []),
+    ...(fig.prefix ? [node('text', `${hero}.prefix`, { x: left - gx, y: affixY(fig.prefix), layout: fig.prefix, font: fig.small, fill: look.palette.ink, role: 'affix' })] : []),
     node('text', `${hero}.digits`, {
-      x: digitsX - gx, y: baseline - fig.digits.ascent - gy, layout: fig.digits.layout, font: fig.font, fill: look.palette.ink,
+      x: digitsX - gx, y: baseline - fig.digits.ascent - gy, layout: fig.digits.layout, font: fig.font, fill: look.palette.ink, role: 'hero',
       steps: fig.digits.steps, advance: fig.digits.advance,
     }, { wordTracks: fig.digits.wordTracks }),
-    ...(fig.suffix ? [node('text', `${hero}.suffix`, { x: inkRight + AFFIX_GAP * fig.size - gx, y: affixY(fig.suffix), layout: fig.suffix, font: fig.small, fill: look.palette.ink })] : []),
+    ...(fig.suffix ? [node('text', `${hero}.suffix`, { x: inkRight + AFFIX_GAP * fig.size - gx, y: affixY(fig.suffix), layout: fig.suffix, font: fig.small, fill: look.palette.ink, role: 'affix' })] : []),
   ];
   const group = node('group', hero, { x: gx, y: gy }, { tracks, children });
   return { group, hero, box: [left, capTop, fig.total, CAP_HEIGHT * fig.size] };
@@ -233,7 +233,7 @@ function deskParts(shot, ctx, steps, times) {
   const rule = node('path', `${shot.id}.rule`, { x: left, y: ruleY, d: rectPath(fig.total, DESK.rule * unit), fill: look.palette.rule }, { tracks: wipeIn(look, times.land + look.moves.draw.dur) });
   const y = ruleY + (DESK.rule + DESK.labelGap) * unit - (layout.lines[0].y - CAP_HEIGHT * font.size);
   const labelAt = times.land + look.moves.enter.dur;
-  const label = node('text', `${shot.id}.label`, { x: left, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, labelAt, { y }) });
+  const label = node('text', `${shot.id}.label`, { x: left, y, layout, font, fill: look.palette.ink2, role: 'label' }, { tracks: enterTracks(look, unit, labelAt, { y }) });
   const boxes = { value: figure.box, label: inkBox(left, y, layout) };
   const nodes = [figure.group, rule, label];
   if (shot.delta === undefined) return { nodes, boxes, hero: figure.hero };
@@ -284,7 +284,7 @@ function plainTag(ctx, id, text, { cx, top, maxWidth, at, fromStep, toStep }) {
   const corners = [[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]];
   const plate = node('path', `${id}.plate`, { d: polyline(corners, true), fill: colourOf(look, style.fill ?? 'ink') });
   const label = node('text', `${id}.text`, {
-    x: -w / HALF + TAG.padX * size - inset, y: -h / HALF + TAG.padY * size, layout, font, fill: colourOf(look, style.text ?? 'paper'),
+    x: -w / HALF + TAG.padX * size - inset, y: -h / HALF + TAG.padY * size, layout, font, fill: colourOf(look, style.text ?? 'paper'), role: 'tag',
   });
   const group = entrance({ id, at, look, unit, cx, cy: top + h / HALF, children: [plate, label] });
   return { nodes: [group], box: [cx - w / HALF, top, w, h] };
@@ -296,7 +296,7 @@ function popDelta(shot, ctx, { cx, width, top, at }) {
   const layout = layoutText({ text: setCase(look, 'label', shot.delta), font, maxWidth: width, align: 'center', measure });
   const x = cx - width / HALF;
   const y = top - (layout.lines[0].y - CAP_HEIGHT * font.size);
-  const text = node('text', `${shot.id}.delta`, { x, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, at) });
+  const text = node('text', `${shot.id}.delta`, { x, y, layout, font, fill: look.palette.ink2, role: 'tag' }, { tracks: enterTracks(look, unit, at) });
   return { nodes: [text], box: inkBox(x, y, layout) };
 }
 

@@ -8,19 +8,22 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { stillStretches } from '../../engine/review/pacing.mjs';
 import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
-import { dedupeFindings } from '../../scripts/v2/review.mjs';
+import { dedupeFindings, safeRectFor } from '../../scripts/v2/review.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from '../../scripts/v2/layout.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
-const ctx = (extra = {}) => ({ look: registries.looks.get('desk'), canvas: CANVAS, mode: 'pro', shotId: 'hero', t: 1.2, ...extra });
+const ctx = (extra = {}) => {
+  const base = { look: registries.looks.get('desk'), canvas: CANVAS, mode: 'pro', shotId: 'hero', t: 1.2, ...extra };
+  return { safe: safeRectFor(base.canvas, base.look), ...base };
+};
 
 // A text node as annotate() reports it: layout sizes in pixels, a canvas-pixel bbox (the font's whole ascent box, as
 // annotate measures it), one entry per word in `words`. The font: ascent 0.9 em, descent 0.25 em, line height 1.3 em.
 const ASCENT = 0.9, DESCENT = 0.25, LINE_HEIGHT = 1.3;
 const INK_ABOVE = ASCENT - 0.7; // the cap line is 0.7 em above the baseline, the kinds' CAP_HEIGHT
 const WORD_DESCENT = 0.12; // the kinds' WORD_DESCENT: ink below the baseline when a word has a descender
-function textNode({ id = 't', size = 44, x = 200, y = 300, words = 3, perLine = words, overflow = false, opacity = 1, wordOpacity = 1, scale = 1, word = 'word', children = [] } = {}) {
+function textNode({ id = 't', size = 44, x = 200, y = 300, words = 3, perLine = words, overflow = false, opacity = 1, wordOpacity = 1, scale = 1, word = 'word', role, children = [] } = {}) {
   const lines = [];
   for (let from = 0; from < words; from += perLine) {
     const count = Math.min(perLine, words - from);
@@ -30,7 +33,7 @@ function textNode({ id = 't', size = 44, x = 200, y = 300, words = 3, perLine = 
   const width = Math.min(words, perLine) * size * 2;
   const height = lines.at(-1).y + size * DESCENT;
   return {
-    type: 'text', id, depth: 0, props: {}, x, y, scale, scaleX: 1, scaleY: 1, rotate: 0, opacity, visible: opacity > 0, children,
+    type: 'text', id, depth: 0, props: role === undefined ? {} : { role }, x, y, scale, scaleX: 1, scaleY: 1, rotate: 0, opacity, visible: opacity > 0, children,
     words: Array.from({ length: words }, () => ({ opacity: wordOpacity, x: 0, y: 0, scale: 1 })),
     layout: { size, width, height, overflow, lines },
     bbox: [x, y, width * scale, height * scale], spread: 0,
@@ -132,6 +135,65 @@ test('a hero under 3 times the smallest text is creative; exactly 3 times is fin
   assert.deepEqual(kinds(weak), ['creative']);
   assert.match(weak[0].message, /hero/);
   assert.deepEqual(auditFrame([textNode({ id: 'a', size: 132 }), textNode({ id: 'b', size: 44, y: 700 })], ctx()), []);
+});
+
+test('an affix is left out of the contrast and the size count; a tag is left out of the contrast', () => {
+  const figure = textNode({ id: 'digits', size: 427, x: 200, y: 100, words: 1, word: '459', role: 'hero' });
+  const suffix = textNode({ id: 'suffix', size: 192, x: 1100, y: 100, words: 1, word: 'rows', role: 'affix' });
+  const label = textNode({ id: 'label', size: 72, x: 200, y: 700, words: 1, role: 'label' });
+  assert.deepEqual(auditFrame([figure, suffix, label], ctx()), [], 'hero 427 against label 72; the suffix at 192 is an affix');
+  assert.deepEqual(auditFrame([figure, suffix], ctx()), [], 'the only other text is an affix: nothing to contrast with');
+  const bigTag = textNode({ id: 'tag', size: 200, x: 1100, y: 100, words: 1, role: 'tag' });
+  assert.deepEqual(auditFrame([textNode({ id: 'h', size: 300, x: 200, y: 100, words: 1, role: 'hero' }), bigTag], ctx()), [], 'nor is a tag a size to contrast with');
+  const bodySuffix = { ...suffix, props: {} };
+  const onlyHeroAndBody = auditFrame([figure, bodySuffix], ctx());
+  assert.deepEqual(onlyHeroAndBody.map((f) => f.rule), ['hero'], 'with no role the suffix is body, and 427 against 192 is weak contrast');
+  const delta = textNode({ id: 'delta', size: 44, x: 700, y: 700, words: 1, role: 'tag' });
+  assert.deepEqual(auditFrame([figure, label, delta], ctx()).filter((f) => f.rule === 'hero'), [], 'a tag is not the smallest text');
+  const smallBody = textNode({ id: 'small', size: 200, x: 900, y: 750, words: 1 });
+  assert.equal(auditFrame([textNode({ id: 'h', size: 300, x: 200, y: 100, words: 1, role: 'hero' }), smallBody], ctx()).filter((f) => f.rule === 'hero').length, 1, 'a body text 200 against a hero of 300 is weak contrast');
+});
+
+test('four sizes of which one is an affix are three sizes; four non-affix sizes are four', () => {
+  const at = (id, size, y, role) => textNode({ id, size, x: 200, y, words: 1, role });
+  const three = [at('a', 427, 40, 'hero'), at('b', 192, 400, 'affix'), at('c', 72, 700), at('d', 44, 820, 'label')];
+  assert.deepEqual(auditFrame(three, ctx()).filter((f) => f.rule === 'sizes'), []);
+  const four = [at('a', 427, 40, 'hero'), at('b', 192, 400, 'body'), at('c', 72, 700), at('d', 44, 820, 'label')];
+  assert.equal(auditFrame(four, ctx()).filter((f) => f.rule === 'sizes').length, 1);
+});
+
+test('hidden words: the safe-area and overlap checks use the words that are not hidden, and only once those have landed', () => {
+  // Alpha Bravo Omega, 96 px: hidden = Alpha and Bravo (steps of a count), Omega is the value that stays
+  const count = (x, { last = 1, id = 'count' } = {}) => {
+    const node = textNode({ id, size: 96, x, y: 400, words: 3, word: 'Omega' });
+    return { ...node, words: [{ ...node.words[0], opacity: 0 }, { ...node.words[1], opacity: 0 }, { ...node.words[2], opacity: last }] };
+  };
+  const hidden = new Map([['count', new Set([0, 1])]]);
+  const run = (node, extra = {}) => auditFrame([node], ctx({ hiddenWords: hidden, ...extra }));
+  assert.deepEqual(run(count(10)).filter((f) => f.rule === 'safe-area'), [], 'the shown word is inside although the hidden ones start outside');
+  assert.deepEqual(run(count(1400)).map((f) => f.rule), ['safe-area'], 'the shown word is outside');
+  assert.deepEqual(run(count(1400, { last: 0.5 })).filter((f) => f.rule === 'safe-area'), [], 'an intermediate value (not landed) is not audited');
+  assert.deepEqual(auditFrame([count(1400)], ctx()).filter((f) => f.rule === 'safe-area'), [], 'without the hidden list nothing has landed');
+  const near = { ...count(1400, { id: 'other' }), id: 'other' };
+  assert.deepEqual(run(near, { hiddenWords: new Map([['other', new Set([0, 1])]]) }).map((f) => f.rule), ['safe-area']);
+});
+
+test('a text is judged only once it has settled: not mid-spring, mid-pulse or while still fading in', () => {
+  const out = textNode({ id: 'out', size: 132, x: 10, words: 1 }); // outside the safe area at rest
+  const rule = (node, extra = {}) => auditFrame([node], ctx(extra)).filter((f) => f.rule === 'safe-area').length;
+  assert.equal(rule(out, { restScales: new Map([['out', 1]]) }), 1, 'at its resting scale it is judged');
+  assert.equal(rule({ ...out, scale: 1.1 }, { restScales: new Map([['out', 1]]) }), 0, 'a spring or a push passing through another scale is not');
+  assert.equal(rule({ ...out, scale: 1.01 }, { restScales: new Map([['out', 1]]) }), 1, 'within 2 percent counts as settled');
+  const pulsing = { ...out, words: [{ opacity: 1, x: 0, y: 0, scale: 1.12 }] };
+  assert.equal(rule(pulsing), 0, 'a word in the middle of an emphasis pulse');
+  const group = { type: 'group', id: 'g', opacity: 0.9, visible: true, scale: 1, scaleX: 1, scaleY: 1, children: [out], bbox: out.bbox };
+  assert.equal(auditFrame([group], ctx()).filter((f) => f.rule === 'safe-area').length, 0, 'inside a group still fading in');
+});
+
+test('a text whose every word is hidden is judged by all of them', () => {
+  const node = textNode({ id: 'count', size: 96, x: 10, y: 400, words: 2, word: 'Omega' });
+  const f = auditFrame([node], ctx({ hiddenWords: new Map([['count', new Set([0, 1])]]) }));
+  assert.deepEqual(f.map((x) => x.rule), ['safe-area']);
 });
 
 test('a lone text, or texts of one size, have no hero to compare', () => {
