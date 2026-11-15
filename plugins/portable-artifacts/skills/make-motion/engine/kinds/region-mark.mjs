@@ -1,6 +1,7 @@
 // What a `highlight` aimed at a clipping region draws. A filled marker band disappears over a dark picture, so a region
-// highlight is a marker frame around the region, drawn on side by side, with the rest of the picture dimmed by a
-// multiply of ink that has the region cut out of it (the region itself stays clean). A hand look (desk) draws the frame as four marker strokes 7 units wide
+// highlight is a marker frame around the region, drawn on side by side, with everything of the picture card around it
+// (its mount, tape and shadow too) receding under a scrim of the look's paper that has the region cut out of it (the
+// region itself stays clean). A hand look (desk) draws the frame as four marker strokes 7 units wide
 // that hug the region with a 6-unit gap and overshoot the corners a little, each drawn twice, the second pass the same
 // geometry moved a unit or so, so the stroke reads as marker rather than vector; stepped at its hand rate. A crisp look
 // draws a ruled, square-cornered frame. Built from plain nodes in the picture's own space (the caller puts them in a
@@ -12,9 +13,11 @@ import { landing, isHand, colourOf, deviceRng, spread, smoothPath, polyline } fr
 // alpha each pass's opacity (where the two passes overlap the stroke reads denser, as marker ink does)
 const HAND = Object.freeze({ width: 7, overshoot: 6, wobble: 1.5, gap: 6, cap: 'round', pass: [1.2, -1.2], alpha: 0.85 });
 const CRISP = Object.freeze({ width: 10, overshoot: 0, wobble: 0, gap: 5, cap: 'square', pass: null, alpha: 1 });
-const DIM = 0.45; // opacity of the ink overlay outside the region, multiplied over the picture (a spotlight, not a grey veil)
-const DIM_BLEND = 'multiply';
-const DIM_EASE = 'outCubic';
+// opacity of the paper scrim outside the region: the surroundings recede into the paper and a figure sliced at the frame
+// edge fades toward the paper (look gate fix pass F1: tuned on the rendered desk proof within 0.6 to 0.8; at 0.72 a
+// sliced "59" still read as a number)
+const SCRIM = 0.8;
+const SCRIM_EASE = 'outCubic';
 const DRAW_SHARE = 2; // the frame takes this many of the look's draw moves, a quarter of it per side
 const SIDES = 4;
 
@@ -38,21 +41,23 @@ function handPoints(a, b, spec, unit, rng, floor) {
   });
 }
 
-// The overlay: the picture rectangle clockwise with the region counter-clockwise inside it, so the region is a hole
-// under the nonzero fill rule the draw layer uses (the same hole an even-odd fill would leave).
-function dimPath([px, py, pw, ph], [x, y, w, h]) {
-  const outer = [[px, py], [px + pw, py], [px + pw, py + ph], [px, py + ph]];
+// The scrim: one path of every covered outline (clockwise, as the devices draw them) and the region counter-clockwise
+// after them. Under the nonzero fill rule the draw layer uses, a pixel inside any outline is filled once, however many
+// overlap there (tape over the paper is not scrimmed twice), and the region inside the paper is a hole.
+function scrimPath(outlines, [x, y, w, h]) {
   const inner = [[x, y], [x, y + h], [x + w, y + h], [x + w, y]];
-  return `${polyline(outer, true)}${polyline(inner, true)}`;
+  return `${outlines.map((points) => polyline(points, true)).join('')}${polyline(inner, true)}`;
 }
 
 /**
- * The nodes of a region highlight: [dim overlay, side0..side3], every coordinate in the picture's own space.
- * @param {{ id: string, region: number[], picture: number[], at: number, look: object, unit: number, seed: number, dim?: boolean }} p
- *   region and picture are [x, y, w, h]; the frame closes, and the overlay reaches DIM, on `at`. `dim: false` leaves
- *   the overlay out (a close-up that is all region has nothing to dim).
+ * The nodes of a region highlight: [scrim, side0..side3], every coordinate in the space of the group the caller puts
+ * them in.
+ * @param {{ id: string, region: number[], cover?: number[][][], at: number, look: object, unit: number, seed: number }} p
+ *   region is [x, y, w, h]; `cover` is the outlines the scrim lies on (the whole picture card), each a clockwise list of
+ *   [x, y] points; the frame closes, and the scrim reaches SCRIM, on `at`. Without `cover` there is no scrim (a
+ *   close-up that is all region has nothing around it).
  */
-export function regionMark({ id, region, picture, at, look, unit, seed, dim = true }) {
+export function regionMark({ id, region, cover, at, look, unit, seed }) {
   const hand = isHand(look);
   const spec = hand ? HAND : CRISP;
   const pad = (spec.gap + spec.width / 2) * unit; // the stroke's centre line
@@ -73,9 +78,9 @@ export function regionMark({ id, region, picture, at, look, unit, seed, dim = tr
     const moved = points.map(([x, y]) => [x + spec.pass[0] * unit, y + spec.pass[1] * unit]);
     return [first, node('path', `${id}.side${i}.pass2`, { ...props, d: pathOf(moved) }, { tracks: { draw }, step })];
   });
-  if (!dim) return sides;
-  const overlay = node('path', `${id}.dim`, { d: dimPath(picture, region), fill: colourOf(look, 'ink'), blend: DIM_BLEND }, {
-    tracks: { opacity: landing(at, { ease: DIM_EASE, dur: at - start }, 0, DIM) },
+  if (cover === undefined) return sides;
+  const scrim = node('path', `${id}.scrim`, { d: scrimPath(cover, region), fill: colourOf(look, 'paper') }, {
+    tracks: { opacity: landing(at, { ease: SCRIM_EASE, dur: at - start }, 0, SCRIM) },
   });
-  return [overlay, ...sides];
+  return [scrim, ...sides];
 }

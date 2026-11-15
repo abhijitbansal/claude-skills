@@ -30,11 +30,13 @@ const smoothstep = (lo, hi, v) => {
   return x * x * (3 - 2 * x);
 };
 
-// The endpoints are the plain frames; `blend` only ever sees 0 < p < 1.
-function defineCut(dur, blend, summary) {
+// The endpoints are the plain frames; `blend` only ever sees 0 < p < 1. `incomingOnly`: once p > 0 the cut draws only
+// the incoming shot (punch), where a slide or a match still shows the outgoing one.
+function defineCut(dur, blend, summary, { incomingOnly = false } = {}) {
   return Object.freeze({
     dur,
     summary,
+    incomingOnly,
     apply({ from, to, p, canvas, look, frame, background }) {
       if (!Array.isArray(from) || !Array.isArray(to)) throw new Error('cut.apply needs from and to sampled frames');
       if (!Number.isFinite(p)) throw new Error(`cut.apply: p must be a finite number, got ${p}`);
@@ -109,13 +111,13 @@ function slide({ from, to, p, canvas, frame, background }) {
 
 function punch({ to, p, canvas, frame, background }) {
   const cx = canvas.w / HALF, cy = canvas.h / HALF;
-  // a fixed node (a locked look's field) stays put, as it does under the camera
-  const fixed = to.filter((n) => n.props.fixed === true), moving = to.filter((n) => n.props.fixed !== true);
+  // a fixed node stays put, as it does under the camera, and in its place in the shot's order: a locked look's field
+  // at the back, a pinned overlay (slug, kicker tag, caption) over the picture it sits on
   const zoomed = (q) => {
     const zoom = lerp(PUNCH.zoom, 1, ease(PUNCH.ease)(q));
-    return moving.map((n) => Object.freeze({ ...n, x: cx + (n.x - cx) * zoom, y: cy + (n.y - cy) * zoom, scale: n.scale * zoom }));
+    return to.map((n) => (n.props.fixed === true ? n : Object.freeze({ ...n, x: cx + (n.x - cx) * zoom, y: cy + (n.y - cy) * zoom, scale: n.scale * zoom })));
   };
-  return smeared(zoomed, fixed, { p, frame, canvas, background });
+  return smeared(zoomed, [], { p, frame, canvas, background });
 }
 
 // ---- match ----
@@ -251,10 +253,21 @@ function match({ from, to, p }) {
 export const CUTS = Object.freeze({
   cut: defineCut(0, ({ to }) => to, 'A hard cut: the next shot replaces the last on its first frame.'),
   slide: defineCut(SLIDE.dur, slide, 'The last shot slides out to the left and the next slides in from the right over 0.4 s.'),
-  punch: defineCut(PUNCH.dur, punch, 'The next shot lands zoomed in and settles to full size over 0.2 s.'),
+  punch: defineCut(PUNCH.dur, punch, 'The next shot lands zoomed in and settles to full size over 0.2 s.', { incomingOnly: true }),
   match: defineCut(MATCH.dur, match, 'Carries the node both shots share (see "hero") across in 0.5 s while the rest fades.'),
 });
 
 for (const [name, cut] of Object.entries(CUTS)) {
   if (!registries.cuts.has(name)) registries.cuts.add(name, cut);
+}
+
+/**
+ * The first frame of a shot, counted from its start, that shows the incoming shot alone after cut `name` (default
+ * `cut`): 0 for a hard cut (no window); 1 for a cut that draws only the incoming shot once p > 0 (punch: on p 0 the
+ * outgoing shot is still the frame); null for a cut whose whole window shows the outgoing shot too (slide, match).
+ */
+export function aloneFromFrame(name) {
+  const cut = registries.cuts.get(name ?? 'cut');
+  if (cut.dur === 0) return 0;
+  return cut.incomingOnly === true ? 1 : null;
 }

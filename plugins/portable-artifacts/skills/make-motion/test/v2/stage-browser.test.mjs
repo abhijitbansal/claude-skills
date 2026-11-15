@@ -324,6 +324,19 @@ test('a seek after a failed seek equals a first seek', async (t) => {
   assert.equal(await a.hashFrame(0), first);
 });
 
+// look gate fix pass, review-rev2 M9: a clipping's picture is now a layer on every frame, so a throw inside a layer
+// must not leave its scratch context clipped or saved for the next draw
+test('a seek after a failed seek inside a layer group equals a first seek', async (t) => {
+  const a = await stageFor(t, filmOf([{ type: 'group', id: 'g', props: { layer: true }, children: [
+    { ...box('b'), tracks: { x: keys([0, 0], [1, 300]) } },
+    { type: 'text', id: 'bad', props: { x: 50, y: 50, layout: BAD_LAYOUT, font: { family: 'Geist', size: 20, width: 'bogus' }, reveal: 0.1 }, tracks: { opacity: keys([0, 0], [1, 1]) } },
+  ] }])); if (!a) return;
+  const first = await a.hashFrame(0);
+  const message = await a.page.evaluate(() => { try { window.__seek(15); return ''; } catch (e) { return e.message; } });
+  assert.match(message, /font\.width/);
+  assert.equal(await a.hashFrame(0), first);
+});
+
 const IMAGE_FILM = {
   fps: FPS,
   shots: [

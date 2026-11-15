@@ -11,16 +11,14 @@ import { applyAccent, gridX } from '../looks/index.mjs';
 import { unitOf } from '../units.mjs';
 import { srcsOfShot } from '../assets.mjs';
 import { resolveAnchor } from '../script/anchors.mjs';
-import { track, sample } from '../time/track.mjs';
 import { sampleGraph } from './sample.mjs';
-import { camera as trackCamera, applyCamera } from './camera.mjs';
+import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs';
 
 const DEFAULT_MODE = 'pro';
 const DEFAULT_SEED = 1;
 const DEFAULT_CUT = 'cut';
 const DEFAULT_BACKGROUND = '#000000';
 const TIME_DECIMALS = 1e9; // shot-local time is rounded to 1e-9 s, so float noise cannot change a sample
-const CAMERA_PROPS = Object.freeze(['x', 'y', 'zoom', 'rotate']);
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
 /** The film's look: its `look`, else its mode's default, with the film's `accent` applied. */
@@ -70,37 +68,14 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
 
 // ---- camera ----
 
-// One layer of keys ({ t, x?, y?, zoom?, rotate?, ease? }) as a track per property it names.
-function layerTracks(keys, where) {
-  return Object.fromEntries(CAMERA_PROPS.flatMap((name) => {
-    const named = keys.filter((k) => k[name] !== undefined);
-    if (named.length === 0) return [];
-    try {
-      return [[name, track(named.map((k) => ({ t: k.t, v: k[name], ease: k.ease })))]];
-    } catch (err) {
-      throw new Error(`${where}: camera ${name}: ${err.message}`);
-    }
-  }));
-}
-
 /**
  * A shot's camera as (t) => { x, y, zoom, rotate }. A kind gives either a track map (free) or layers of keys, which
- * add: pans and turns sum, zooms multiply, so a drift, a push and a punch combine.
+ * add: pans and turns sum, zooms multiply, so a drift, a push and a punch combine (camera.mjs layeredCamera).
  */
 function cameraOf(spec, canvas, where) {
   if (spec === undefined) return trackCamera({ canvas });
   if (!Array.isArray(spec)) return trackCamera({ tracks: spec, canvas });
-  const layers = spec.map((keys, i) => layerTracks(keys, `${where} layer ${i}`));
-  return (t) => {
-    const cam = { x: 0, y: 0, zoom: 1, rotate: 0 };
-    for (const layer of layers) {
-      for (const [name, tr] of Object.entries(layer)) {
-        if (name === 'zoom') cam.zoom *= sample(tr, t);
-        else cam[name] += sample(tr, t);
-      }
-    }
-    return cam;
-  };
+  return layeredCamera(spec, where);
 }
 
 // ---- hero boxes ----

@@ -17,9 +17,9 @@ const FIT_EPSILON = 1e-6;
 // fitText sets a text up to this much smaller than the largest size that fits, for a better layout (rankOf below).
 const CLEAN_BREAK_SHARE = 0.85;
 
-// A layout is not clean when a sentence ends inside a line ("file. Scripts") or a line ends between two words marked
-// `together` (together[i]: keep word i with word i + 1; a statement marks its highlight runs this way).
-function unclean(layout, together = []) {
+/** A layout is not clean when a sentence ends inside a line ("file. Scripts") or a line ends between two words marked
+ *  `together` (together[i]: keep word i with word i + 1; a statement marks its highlight runs this way). */
+export function unclean(layout, together = []) {
   const midSentence = layout.lines.some((line) => line.words.slice(0, -1).some((w) => endsSentence(w.text)));
   return midSentence || layout.lines.slice(0, -1).some((line) => together[line.words.at(-1).index] === true);
 }

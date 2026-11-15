@@ -11,6 +11,8 @@ import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
 import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings, restingByShot } from '../../scripts/v2/review.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from '../../scripts/v2/layout.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
+import { buildFilm } from '../../engine/graph/film.mjs';
+import { FPS, measure, IMAGES, canvasOf, viralOf, filmOf } from './helpers/kinds.mjs';
 
 const CANVAS = { w: 1920, h: 1080 };
 const ctx = (extra = {}) => {
@@ -670,4 +672,69 @@ test('a text whose words rest a hair off scale 1 (a move sampled before its end)
   // a word still mid-pulse is not at rest
   const pulsing = tree().map((n) => ({ ...n, words: n.words.map((w, i) => (i === 0 ? { ...w, scale: 1.08 } : w)) }));
   assert.ok(!auditFrame(pulsing, ctx({ restScales: resting.restScales, restWords: resting.restWords })).some((f) => f.rule === 'safe-area'), 'a word mid-pulse');
+});
+
+// ---- look gate fix pass, review-rev2 I3: a text drawn under a picture is covered ----
+
+// A picture (an image node) on screen, already measured.
+const picture = (box, opacity = 1) => ({ type: 'image', id: 'pic', depth: 0, props: { w: box[2], h: box[3] }, x: box[0], y: box[1], scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity, visible: opacity > 0, children: [], bbox: box, spread: 0 });
+
+test('a text drawn before a picture that covers its ink is mechanical (a pinned kicker left under the zoomed picture of a punch); a text drawn after it, or clear of it, is not', () => {
+  const kicker = textNode({ id: 'c.kicker', size: 44, x: 300, y: 400, words: 2 });
+  const over = picture([200, 350, 900, 600]);
+  const found = auditFrame([kicker, over], ctx()).filter((f) => f.rule === 'covered');
+  assert.equal(found.length, 1, JSON.stringify(found));
+  assert.equal(found[0].kind, 'mechanical');
+  assert.equal(found[0].node, 'c.kicker|pic');
+  assert.match(found[0].message, /is drawn under the picture/);
+  assert.deepEqual(auditFrame([over, kicker], ctx()).filter((f) => f.rule === 'covered'), [], 'drawn over the picture');
+  assert.deepEqual(auditFrame([kicker, picture([1200, 350, 400, 400])], ctx()).filter((f) => f.rule === 'covered'), [], 'clear of it');
+  assert.deepEqual(auditFrame([kicker, picture([200, 350, 900, 600], 0)], ctx()).filter((f) => f.rule === 'covered'), [], 'a picture not on screen');
+  // inside a group: the order is the order things are drawn in, children after their group
+  const group = { type: 'group', id: 'g', depth: 0, props: {}, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: [over], bbox: over.bbox, spread: 0 };
+  assert.equal(auditFrame([kicker, group], ctx()).filter((f) => f.rule === 'covered').length, 1, 'a picture inside a later group');
+});
+
+// ---- look gate fix pass, review-rev2 I1: the rest scale counts only frames where the text is on screen ----
+
+test('the reviewer\'s case: a pop number whose say never names the figure lands its label and delta late, and they rest at their landed scale, not the 0.6 they held while hidden', () => {
+  const shot = { id: 'n', show: 'number', say: 'More than you would think, and every one of them ships today.', value: 5, label: 'skills', delta: 'one file each' };
+  const film = filmOf([shot], 'pop', '9:16');
+  const timeline = buildTimeline(film, { fps: FPS });
+  const movie = buildFilm({ film, timeline, measure, assets: IMAGES, canvas: canvasOf('9:16'), viralInsets: viralOf(canvasOf('9:16')) });
+  const snapshots = auditMoments(film, timeline).map((frame) => ({ frame, tree: movie.sampleAt(frame / FPS) }));
+  const resting = restingByShot(timeline, snapshots).get('n');
+  const last = snapshots.at(-1).tree;
+  const texts = (function find(nodes) { return nodes.flatMap((n) => [...(n.type === 'text' ? [n.id] : []), ...find(n.children)]); })(last);
+  const late = texts.filter((id) => /^n\.(label|delta)/.test(id));
+  assert.ok(late.length >= 2, `the label and delta texts: ${texts}`);
+  for (const id of late) assert.ok(Math.abs(resting.restScales.get(id) - 1) < 1e-6, `${id} rests at ${resting.restScales.get(id)}`);
+});
+
+test('a text that lands late in its shot is judged at the scale it lands at, not the entrance scale it held while hidden', () => {
+  const timeline = { fps: 30, frameCount: 30, duration: 1, shots: [{ id: 'hero', index: 0, start: 0, end: 1, duration: 1 }] };
+  // hidden at the entrance's start scale on 3 sampled frames, then landed at 1 with its ink past the left safe edge
+  const tree = (frame) => [frame < 20 ? textNode({ id: 't', size: 44, x: -40, y: 300, scale: 0.6, opacity: 0 }) : textNode({ id: 't', size: 44, x: -40, y: 300 })];
+  const snapshots = [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree(frame) }));
+  const resting = restingByShot(timeline, snapshots).get('hero');
+  assert.ok(Math.abs(resting.restScales.get('t') - 1) < 1e-9, `the scale held while on screen: ${resting.restScales.get('t')}`);
+  const found = auditFrame(tree(29), ctx({ restScales: resting.restScales, hiddenWords: resting.hiddenWords, restWords: resting.restWords }));
+  assert.ok(found.some((f) => f.rule === 'safe-area'), `the landed layout is judged: ${JSON.stringify(found.map((f) => f.rule))}`);
+});
+
+test('a word that lands late is judged at the scale it lands at, not the scale it held while hidden', () => {
+  const timeline = { fps: 30, frameCount: 30, duration: 1, shots: [{ id: 'hero', index: 0, start: 0, end: 1, duration: 1 }] };
+  // the text is on screen throughout; its words are hidden at an entrance scale of 0.6 until frame 20
+  const tree = (frame) => {
+    const n = textNode({ id: 't', size: 44, x: -40, y: 300 });
+    return [{ ...n, words: n.words.map((w) => (frame < 20 ? { ...w, opacity: 0, scale: 0.6 } : w)) }];
+  };
+  const snapshots = [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree(frame) }));
+  const resting = restingByShot(timeline, snapshots).get('hero');
+  assert.deepEqual(resting.restWords.get('t'), [1, 1, 1], 'each word rests at the scale it holds once shown');
+  const found = auditFrame(tree(29), ctx({ restScales: resting.restScales, hiddenWords: resting.hiddenWords, restWords: resting.restWords }));
+  assert.ok(found.some((f) => f.rule === 'safe-area'), `the landed words are judged: ${JSON.stringify(found.map((f) => f.rule))}`);
+  // a text never fully shown on a sampled frame falls back to its last frame
+  const never = restingByShot(timeline, [0, 29].map((frame) => ({ frame, tree: [textNode({ id: 't', scale: 0.9, opacity: 0.5 })] }))).get('hero');
+  assert.ok(Math.abs(never.restScales.get('t') - 0.9) < 1e-9, 'the last frame\'s scale');
 });

@@ -11,6 +11,7 @@ import { gridX } from '../../engine/looks/index.mjs';
 import { pulsePeaks, enterStarts } from '../../engine/kinds/statement.mjs';
 import { pulseScale } from '../../engine/kinds/shared.mjs';
 import { landing } from '../../engine/devices/shared.mjs';
+import { subtreeBox } from './helpers/boxes.mjs';
 import '../../engine/looks/index.mjs';
 import '../../engine/modes/index.mjs';
 import '../../engine/devices/index.mjs';
@@ -318,15 +319,15 @@ test('pop stack: an emphasised word takes the accent with a flash of its fill, n
   const lines = stackLinesOf(nodes, 'a.text');
   const hiding = lines[1].node.wordTracks[1]; // ARE HIDING: HIDING is word 1 of the line
   const at = timing.words[3].start;
-  assert.equal(sample(hiding.fill, at), look.palette.ink, 'ink until it is spoken...');
-  near(sample(hiding.opacity, at), 0.4, '...at 0.4 opacity');
-  near(sample(hiding.opacity, at + look.moves.emphasize.dur), 1, 'full once lit');
+  // the fix pass (F5): a ghost is an opaque colour, ink mixed 40% into paper (#ffffff into #111111), not ink at an alpha
+  assert.equal(sample(hiding.fill, at), '#707070', 'the ghost colour until it is spoken...');
+  assert.equal(hiding.opacity, undefined, '...opaque throughout: the field never shows through the letters');
   assert.equal(sample(hiding.fill, at + look.moves.emphasize.dur), look.palette.accent, 'accent one emphasize move later');
   assert.ok(sample(hiding.fill, at + look.moves.emphasize.dur / 2) !== look.palette.ink, 'changing on the way');
   for (const l of lines) for (const w of l.node.wordTracks) assert.equal(w.scale, undefined, 'no word scales in a stack');
 });
 
-test('viral ghost words on every statement: all words on screen in ink at 0.4 opacity from the first frame, each lighting as spoken; with no say, in order 0.09 s apart from 0.2 s', () => {
+test('viral ghost words on every statement: all words on screen in the opaque ghost colour (ink mixed 40% into paper) from the first frame, each lighting as spoken; with no say, in order 0.09 s apart from 0.2 s', () => {
   const shots = [{ id: 'one', show: 'statement', say: 'Your charts are *hiding* something.' }, { id: 'two', show: 'statement', say: 'No cloud. No *upload*.', cut: 'cut' },
     { id: 'three', show: 'statement', hold: 2, text: 'Three quiet words' }];
   const film = filmFor(shots, 'pop', '9:16');
@@ -335,14 +336,14 @@ test('viral ghost words on every statement: all words on screen in ink at 0.4 op
   for (const [index, id] of [[0, 'one'], [1, 'two'], [2, 'three']]) {
     const texts = (t) => film.sampleShot(index, t).find((n) => n.id === `${id}.text`).children;
     const first = texts(0).flatMap((n) => n.words);
-    assert.ok(first.every((w) => Math.abs(w.opacity - 0.4) < EPS && w.fill === look.palette.ink), `${id}: every word on screen in ink at 0.4 on frame 0`);
+    assert.ok(first.every((w) => w.opacity === 1 && w.fill === '#707070'), `${id}: every word on screen, opaque, in the ghost colour on frame 0`);
     const end = texts(timeline.shots[index].duration).flatMap((n) => n.words);
     assert.ok(end.every((w) => (w.fill === look.palette.ink || w.fill === look.palette.accent) && w.opacity === 1), `${id}: every word lit by the end`);
   }
   const upload = film.sampleShot(1, timeline.shots[1].duration).find((n) => n.id === 'two.text').children.flatMap((n) => n.words).at(-1);
   assert.equal(upload.fill, look.palette.accent, 'the emphasised word lights in the accent');
   const quiet = expandIn(filmOf(shots, 'pop', '9:16'), 2).nodes.find((n) => n.id === 'three.text').children.flatMap((n) => n.wordTracks);
-  quiet.forEach((w, i) => assert.equal(w.opacity.points.find((p) => p.v === 1).t, 0.2 + 0.09 * i + look.moves.emphasize.dur, `word ${i} lights 0.09 s after the one before, from 0.2 s`));
+  quiet.forEach((w, i) => assert.equal(w.fill.points.at(-1).t, 0.2 + 0.09 * i + look.moves.emphasize.dur, `word ${i} lights 0.09 s after the one before, from 0.2 s`));
 });
 
 test('pop kicker: an accent tag at scale step 2, flush left, 28 units over the first line, inside the safe zone; a tall stack shrinks to keep it there', () => {
@@ -517,14 +518,59 @@ test('no frame of an emphasis pulse has a word overlapping its neighbour on the 
 
 test('a desk statement with a slug is not narrowed or traded for a nicer break below three times the slug kicker, so the hero keeps its ratio (the review hero rule)', () => {
   const look = registries.looks.get('desk');
-  // on 16:9 each of these fits at that size across columns 2 to 9 (with the fake measure; a square frame cannot hold them
-  // that large at all, and the review's hero rule says so there)
-  for (const format of ['16:9']) {
-    for (const say of ['The model writes *one small file*. Scripts do the rest.', 'Built on your machine. *Nothing* leaves it.', 'Most dashboards can\'t tell you where a number *came from*.']) {
-      const { nodes } = expandShot({ id: 'a', show: 'statement', say, kicker: 'How it works' }, 'desk', format);
-      const text = textNode(nodes, 'a.text');
-      if (text.props.layout.overflow) continue; // a text that cannot fit says so instead
-      assert.ok(text.props.font.size >= 3 * look.scale[1] - EPS, `${format} "${say}": ${text.props.font.size}`);
+  // On 16:9 each of these fits at that size across columns 2 to 9 (with the fake measure), so it must fit and hold the
+  // floor (restored, look gate fix pass M1c: no skip on overflow). Only 16:9: on 1:1, 4:5 and 9:16 the floor is a
+  // preference of the fitter (tradeFloor), not a rule; since the furniture ruling no review rule compares a statement
+  // with its slug's kicker, so a long statement there may legitimately be set below it.
+  for (const say of ['The model writes *one small file*. Scripts do the rest.', 'Built on your machine. *Nothing* leaves it.', 'Most dashboards can\'t tell you where a number *came from*.']) {
+    const { nodes } = expandShot({ id: 'a', show: 'statement', say, kicker: 'How it works' }, 'desk', '16:9');
+    const text = textNode(nodes, 'a.text');
+    assert.equal(text.props.layout.overflow, false, `16:9 "${say}" fits`);
+    assert.ok(text.props.font.size >= 3 * look.scale[1] - EPS, `16:9 "${say}": ${text.props.font.size}`);
+  }
+});
+
+// The ink of a landed text (the fake measure's ink, helpers/kinds.mjs) in canvas pixels, from its sampled position. The
+// measure leaves the font's tracking out; canvas adds it after every glyph but the last.
+function textInk(n) {
+  const { layout, font } = n.props;
+  const boxes = layout.lines.flatMap((line) => line.words.map((w) => {
+    const m = measure(w.text, font);
+    const tracked = (font.tracking ?? 0) * font.size * ([...w.text].length - 1);
+    const left = n.x + line.x + w.x + m.inkLeft, baseline = n.y + line.y;
+    return [left, baseline - m.inkAscent, m.inkRight + tracked - m.inkLeft, m.inkAscent + m.inkDescent];
+  }));
+  const l = Math.min(...boxes.map((b) => b[0])), t = Math.min(...boxes.map((b) => b[1]));
+  return [l, t, Math.max(...boxes.map((b) => b[0] + b[2])) - l, Math.max(...boxes.map((b) => b[1] + b[3])) - t];
+}
+
+test('fix pass F4: a desk statement\'s ink clears the slug card, its tape included, by at least two gutters in both axes, through the camera drift', () => {
+  const says = ['Most dashboards can\'t tell you where a number *came from*.', 'The model writes *one small file*. Scripts do the rest.', 'Built on your machine. *Nothing* leaves it.', 'Every chart shows the query behind it.'];
+  const kickers = ['The problem', 'How it works', 'portable-artifacts', 'A much longer kicker for the card'];
+  for (const format of ['16:9', '9:16', '1:1', '4:5']) {
+    for (const say of says) {
+      for (const kicker of kickers) {
+        for (const second of [false, true]) { // the drift runs the other way in the second shot of a film
+          const shot = { id: 'a', show: 'statement', say, kicker, cut: 'cut' };
+          const shots = second ? [FILLER, shot] : [shot];
+          const film = filmFor(shots, 'desk', format);
+          const index = shots.length - 1;
+          const { timing, ctx } = expandIn(filmOf(shots, 'desk', format), index);
+          const gutter = ctx.look.grid.gutter * ctx.unit;
+          for (const t of [timing.duration - 1 / FPS, timing.duration - 1]) {
+            const sampled = film.sampleShot(index, t);
+            const slug = ['a.slug.paper', 'a.slug.tape1', 'a.slug.tape2'].map((id) => subtreeBox(sampled, id));
+            assert.ok(slug.every(Boolean), 'the paper and two tape strips');
+            const card = [Math.min(...slug.map((b) => b[0])), Math.min(...slug.map((b) => b[1]))];
+            card.push(Math.max(...slug.map((b) => b[0] + b[2])) - card[0], Math.max(...slug.map((b) => b[1] + b[3])) - card[1]);
+            const text = all(sampled).find((n) => n.id === 'a.text');
+            const ink = textInk(text);
+            // EPS: a block dropped under the card sits exactly two gutters below it, to float noise
+            const clear = [card[0] - 2 * gutter + EPS, card[1] - 2 * gutter + EPS, card[2] + 4 * gutter - 2 * EPS, card[3] + 4 * gutter - 2 * EPS];
+            assert.ok(!overlaps(clear, ink), `${format} "${say}" / "${kicker}"${second ? ' (second shot)' : ''} at ${t.toFixed(2)}: ink ${ink.map(Math.round)} within two gutters of the slug ${card.map(Math.round)}`);
+          }
+        }
+      }
     }
   }
 });

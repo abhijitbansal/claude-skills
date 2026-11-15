@@ -4,24 +4,25 @@
 // platform safe zone on 9:16). A device aimed at `region:<name>` lands on that part of the drawn picture (through every
 // rotation on the way; circle, underline and arrow use the axis-aligned box of the turned region). Where the camera
 // moves (desk) a region event pushes in until the region fills 58% of the width, and a `highlight` there is a marker
-// frame with the rest of the picture dimmed (region-mark.mjs); where it is locked (pop) the shot cuts to a close-up of
+// frame with the rest of the picture card under a paper scrim (region-mark.mjs); where it is locked (pop) the shot cuts to a close-up of
 // the region instead (close-ups.mjs), its establishing picture a window of the source (`crop`, or an automatic 4:5 one on
 // a vertical format). The kicker and the caption are pinned to the frame over the picture (clipping-captions.mjs).
 // Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track, sample } from '../time/track.mjs';
-import { landing } from '../devices/shared.mjs';
+import { landing, pathPoints } from '../devices/shared.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { regionMark } from './region-mark.mjs';
 import { closeUpPlan, closeUps } from './close-ups.mjs';
 import { clippingProblems, establishingFindings } from './clipping-rules.mjs';
 import { pinnedRoom, captionNodes, kickerNodes } from './clipping-captions.mjs';
 import { stackArea } from './stack.mjs';
+import { layeredCamera } from '../graph/camera.mjs';
 import {
   HERO_SCHEMA, REGION_PREFIX, heroId, isWide, arrivesMatched, regionOf, isEditorial, cutsToCloseUp, requireDevice,
   compositionRect, fieldNode, defaultCamera, pushLayer, onDevices, placeDevices, deviceCamera, withEstablishingView,
-  openingLanding,
+  openingLanding, easePeak,
 } from './shared.mjs';
 
 const CAPTION_MAX = 80;
@@ -35,6 +36,8 @@ const CROP_WIDTH = 0.92; // ...drawn at this share of the available width (never
 const CARD_PAD = 48; // units the card reaches past the picture on every side
 const RISE = 80; // units the editorial picture rises in from
 const EDITORIAL_TURN = -2; // degrees
+const OPENING_OPACITY = 0.5; // the least of the picture shown on the first frame of a shot that opens on a hard cut
+const FADE_EASE = 'outCubic'; // the picture's fade where the look's enter ease overshoots (a spring)
 const CENTRE = Object.freeze({ wide: [0.54, 0.52], tall: [0.5, 0.46] }); // editorial; centred uses the composition centre
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const HALF = 2;
@@ -86,17 +89,22 @@ function hiddenFrom(tr, hideAt, easeName) {
 
 // The picture group at `centre`: the parts and any region marks, turned -2 degrees in an editorial composition and
 // entering from below, or popping in when centred, over the enter move from the shot start (a matched hero has no
-// entrance); gone on the frame of `hideAt` when the shot cuts to a close-up.
+// entrance); gone on the frame of `hideAt` when the shot cuts to a close-up. It is drawn as one layer (props.layer), so
+// its fade is a clean fade of one picture: card, shadows, keyline and image never show through one another. Seen whole
+// from its first frame (a hard cut), it is at least OPENING_OPACITY there on it.
 function pictureGroup(shot, ctx, { hero, centre, children, hideAt }) {
   const { look, unit, fps } = ctx;
   const editorial = isEditorial(look);
   const end = entranceEnd(look.moves.enter, hideAt, fps);
   const move = { ...look.moves.enter, dur: end };
   const enters = !arrivesMatched(shot, ctx) && end > 0;
-  const tracks = { opacity: hiddenFrom(enters ? openingLanding(shot, ctx, end, move, 0, 1) : track([{ t: 0, v: 1 }]), hideAt, move.ease) };
+  // the fade keeps the move's time but never its overshoot: a spring would carry the opacity past 1 and back below it
+  const fadeMove = easePeak(move.ease) > 1 ? { ...move, ease: FADE_EASE } : move;
+  const fade = enters ? openingLanding(shot, ctx, end, fadeMove, 0, 1, OPENING_OPACITY) : track([{ t: 0, v: 1 }]);
+  const tracks = { opacity: hiddenFrom(fade, hideAt, move.ease) };
   if (enters && editorial) tracks.y = landing(end, move, centre[1] + RISE * unit, centre[1]);
   if (enters && move.scale !== undefined) tracks.scale = landing(end, move, move.scale, 1);
-  const props = { x: centre[0], y: centre[1], ...(editorial ? { rotate: EDITORIAL_TURN } : {}) };
+  const props = { x: centre[0], y: centre[1], layer: true, ...(editorial ? { rotate: EDITORIAL_TURN } : {}) };
   return node('group', hero, props, { tracks, children });
 }
 
@@ -149,9 +157,9 @@ function cropSize(ctx, crop, room) {
   return { w: crop[2] * fit, h: crop[3] * fit };
 }
 
-// The picture's drawn size: on 16:9 its longer side is SHARE of the canvas short side; elsewhere its width is
-// TALL_WIDTH of the available width, its height at most TALL_HEIGHT of the available height.
-function pictureSize(ctx, picture, crop, room) {
+// The picture's drawn size before withinReach: on 16:9 its longer side is SHARE of the canvas short side; elsewhere its
+// width is TALL_WIDTH of the available width, its height at most TALL_HEIGHT of the available height.
+function plainSize(ctx, picture, crop, room) {
   const { canvas } = ctx;
   if (crop) return cropSize(ctx, crop, room);
   if (isWide(canvas)) {
@@ -163,18 +171,81 @@ function pictureSize(ctx, picture, crop, room) {
   return { w: picture.width * fit, h: picture.height * fit };
 }
 
+// `size` made smaller, where needed, so that a picture popping in about its centre (a look whose composition is not
+// editorial) keeps its keyline and shadow inside the available area at the peak of its enter spring: the area less the
+// spring's peak overshoot. The shadow's offset is allowed on every side, since the picture is centred in the area.
+function withinReach(ctx, size, room) {
+  const { look, unit } = ctx;
+  if (isEditorial(look)) return size;
+  const move = look.moves.enter;
+  const peak = move.scale === undefined ? 1 : Math.max(1, move.scale + (1 - move.scale) * easePeak(move.ease));
+  const edge = HALF * (look.keyline + Math.max(look.shadow.dx, look.shadow.dy)) * unit;
+  const available = availableArea(ctx, room);
+  const fit = Math.min(1, (available.w / peak - edge) / size.w, (available.h / peak - edge) / size.h);
+  return { w: size.w * fit, h: size.h * fit };
+}
+
+// The picture's drawn size: plainSize, kept inside the available area through its entrance (withinReach).
+const pictureSize = (ctx, picture, crop, room) => withinReach(ctx, plainSize(ctx, picture, crop, room), room);
+
 const isRegionEvent = (item) => regionOf(item.target) !== null;
 const isRegionHighlight = (item) => item.do === 'highlight' && isRegionEvent(item);
 
-// One group per region highlight, turned like the cutout, holding its frame and overlay in the picture's own space.
-function regionMarks(shot, ctx, { w, h, tilt, local }) {
+// The parts of the picture card a region scrim covers: the card's paper and tape strips or, in a look without a card,
+// the cut-out's keyline. Never both: the keyline lies inside the paper, and a second outline over the region would fill
+// the hole the scrim leaves there (nonzero rule).
+const CARD_RE = /\.(paper|tape\d+)$/;
+const KEYLINE_RE = /\.keyline$/;
+
+// A point turned by `deg` degrees about the origin.
+function turnBy([x, y], deg) {
+  const a = deg * DEGREES_TO_RADIANS, cos = Math.cos(a), sin = Math.sin(a);
+  return [x * cos - y * sin, x * sin + y * cos];
+}
+
+// `place` composed after node n's own transform (its rest props: x, y, rotate, scale).
+const through = (n, place) => (p) => {
+  const [x, y] = turnBy(p, n.props.rotate ?? 0);
+  const scale = n.props.scale ?? 1;
+  return place([x * scale + (n.props.x ?? 0), y * scale + (n.props.y ?? 0)]);
+};
+
+// The outline of every path under n whose id matches `re`, carried by `place` into the scrim's space.
+function outlinesUnder(n, re, place) {
+  const own = through(n, place);
+  const mine = n.type === 'path' && re.test(n.id) ? [pathPoints(n.props.d).map(own)] : [];
+  return [...mine, ...n.children.flatMap((child) => outlinesUnder(child, re, own))];
+}
+
+// What a region scrim covers, as outlines in the space of the marks group (the picture's space turned by the cut-out's
+// `tilt`): the picture card's paper and tape (or the keyline), each through its own place and turn, so the scrim lies
+// exactly on the card and nothing of it is left bright at its edge; the card's shadow stays on the desk.
+function scrimOutlines(parts, tilt) {
+  const of = (re) => parts.flatMap((part) => outlinesUnder(part, re, (p) => turnBy(p, -tilt)));
+  const card = of(CARD_RE);
+  return card.length > 0 ? card : of(KEYLINE_RE);
+}
+
+// The box of a marker frame's strokes in its group's space: the hull of their points, half a stroke wider.
+function strokesBox(nodes) {
+  const strokes = nodes.filter((n) => n.props.stroke);
+  const points = strokes.flatMap((n) => pathPoints(n.props.d));
+  const grow = Math.max(...strokes.map((n) => n.props.strokeWidth)) / HALF;
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  return [Math.min(...xs) - grow, Math.min(...ys) - grow, Math.max(...xs) - Math.min(...xs) + HALF * grow, Math.max(...ys) - Math.min(...ys) + HALF * grow];
+}
+
+// One group per region highlight, turned like the cutout, holding its frame and paper scrim in the picture's own space,
+// as { group, region: its name, frame: the box of its strokes in that space }.
+function regionMarks(shot, ctx, { cover, tilt, local }) {
   return (shot.on ?? []).flatMap((item, j) => {
     if (!isRegionHighlight(item)) return [];
-    const region = shot.regions?.[regionOf(item.target)];
+    const name = regionOf(item.target);
+    const region = shot.regions?.[name];
     if (!region) throw new Error(`clipping: shot "${shot.id}": on[${j}] target "${item.target}" names no region`);
     const id = `${shot.id}.on${j}`;
-    const children = regionMark({ id, region: local(region), picture: [-w / HALF, -h / HALF, w, h], at: ctx.at(item.at), look: ctx.look, unit: ctx.unit, seed: ctx.seed });
-    return [node('group', id, tilt === 0 ? {} : { rotate: tilt }, { children })];
+    const children = regionMark({ id, region: local(region), cover, at: ctx.at(item.at), look: ctx.look, unit: ctx.unit, seed: ctx.seed });
+    return [{ group: node('group', id, tilt === 0 ? {} : { rotate: tilt }, { children }), region: name, frame: strokesBox(children) }];
   });
 }
 
@@ -200,8 +271,10 @@ function pictureLayout(shot, ctx, room) {
   // A moving camera pushes in on a region; a locked one cuts to a close-up of it instead (close-ups.mjs).
   const plan = closeUp ? closeUpPlan(shot, ctx) : null;
   if (plan && plan.cuts.length > 0) requireDevice(look, 'punch', 'clipping');
-  const marks = closeUp ? [] : regionMarks(shot, ctx, { w, h, tilt, local });
-  const group = pictureGroup(shot, ctx, { hero, centre, children: [...parts, ...marks], hideAt: plan?.cuts[0]?.at });
+  const marks = closeUp ? [] : regionMarks(shot, ctx, { cover: scrimOutlines(parts, tilt), tilt, local });
+  const group = pictureGroup(shot, ctx, { hero, centre, children: [...parts, ...marks.map((m) => m.group)], hideAt: plan?.cuts[0]?.at });
+  // each marker frame's box on the canvas at rest, by region name (an editorial caption card moves under it)
+  const frames = Object.fromEntries(marks.map((m) => [m.region, turnedBox(centre, turn, m.frame)]));
   // a region's box is the part of it the drawn picture shows (an establishing crop may cut it)
   const shown = (r) => {
     const left = Math.max(r[0], -w / HALF), top = Math.max(r[1], -h / HALF);
@@ -210,18 +283,27 @@ function pictureLayout(shot, ctx, room) {
   const inPicture = Object.fromEntries(Object.entries(shot.regions ?? {}).map(([name, region]) => [`${REGION_PREFIX}${name}`, turnedBox(centre, turn, shown(local(region)))]));
   const close = plan ? closeUps(shot, ctx, { picture, area: availableArea(ctx, room), centre, plan }) : { nodes: [], camera: [], boxes: {} };
   const boxes = { image: turnedBox(centre, turn, [-w / HALF, -h / HALF, w, h]), ...inPicture, ...close.boxes };
-  return { hero, group, plan, close, boxes };
+  return { hero, group, plan, close, boxes, frames };
 }
 
 // The kicker and the caption, pinned over the picture. A stack caption captions the close-up of the first highlight and
-// arrives with it, or the picture from the start when there is none.
-function pinnedParts(shot, ctx, { plan, boxes }) {
+// arrives with it, or the picture from the start when there is none; an editorial caption card follows a push (`follow`).
+function pinnedParts(shot, ctx, { plan, boxes }, follow) {
   const area = isEditorial(ctx.look) ? null : stackArea(ctx);
   const kicker = kickerNodes(shot, ctx, { left: area?.left, pictureTop: boxes.image[1] });
   const lift = plan?.events.find((e) => e.item.do === 'highlight');
   const anchor = lift ? boxes[`${REGION_PREFIX}${lift.region}`] : boxes.image;
-  const caption = captionNodes(shot, ctx, { left: area?.left, maxWidth: area?.w, anchor, at: lift?.at ?? 0 });
+  const caption = captionNodes(shot, ctx, { left: area?.left, maxWidth: area?.w, anchor, at: lift?.at ?? 0, follow });
   return { nodes: [...kicker, ...(caption ? caption.nodes : [])], boxes: caption ? { caption: caption.box } : {} };
+}
+
+// What an editorial caption card follows when the camera pushes in on a region: the region's box and its marker frame's
+// at rest (the region itself where no frame is drawn), the push keys and the camera they make with the drift. Null
+// without a push.
+function followOf(laid, pushed, push, base) {
+  if (!push) return null;
+  const region = laid.boxes[pushed.target];
+  return { region, frame: laid.frames[regionOf(pushed.target)] ?? region, push, camera: layeredCamera([...base, push]) };
 }
 
 function expandClipping(given, ctx) {
@@ -231,15 +313,16 @@ function expandClipping(given, ctx) {
   if (problems.length > 0) throw new Error(`clipping: shot "${shot.id}": ${problems.map((e) => `${e.path}: ${e.message}`).join('; ')}`);
   const closeUp = cutsToCloseUp(look);
   const laid = pictureLayout(shot, ctx, pinnedRoom(shot, ctx));
-  const pins = pinnedParts(shot, ctx, laid);
-  const boxes = { ...laid.boxes, ...pins.boxes };
   // The camera pushes in on the first event aimed at a region, landing as the event does (moving cameras only).
   const pushed = closeUp ? undefined : (shot.on ?? []).find(isRegionEvent);
-  const push = pushed && boxes[pushed.target] ? pushLayer(ctx, boxes[pushed.target], ctx.at(pushed.at)) : null;
+  const push = pushed && laid.boxes[pushed.target] ? pushLayer(ctx, laid.boxes[pushed.target], ctx.at(pushed.at)) : null;
+  const drift = defaultCamera(look, timing, unit);
+  const pins = pinnedParts(shot, ctx, laid, followOf(laid, pushed, push, drift));
+  const boxes = { ...laid.boxes, ...pins.boxes };
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'image', skip: closeUp ? isRegionEvent : isRegionHighlight });
   return {
     nodes: placeDevices([fieldNode(shot, ctx), laid.group, ...laid.close.nodes, ...pins.nodes], devices),
-    camera: [...defaultCamera(look, timing, unit), ...(push ? [push] : []), ...laid.close.camera, ...deviceCamera(devices)],
+    camera: [...drift, ...(push ? [push] : []), ...laid.close.camera, ...deviceCamera(devices)],
     boxes,
     hero: laid.hero,
     background: look.palette.paper,

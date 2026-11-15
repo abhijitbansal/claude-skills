@@ -62,7 +62,7 @@ test('desk clipping: cutout on a card 48 units larger, rotated -2 degrees, 62% o
   assert.ok(textNode(nodes, 'c.caption'));
 });
 
-test('pop clipping: cutout only, upright, centred on the safe zone at 92% of its width, popping in', () => {
+test('pop clipping: cutout only, upright, centred on the safe zone at no more than 92% of its width, popping in', () => {
   const { nodes, canvas, hero, ctx } = expandShot({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3 }, 'pop', '9:16');
   const safe = viralOf(canvas);
   const safeW = canvas.w - safe.left - safe.right;
@@ -70,7 +70,9 @@ test('pop clipping: cutout only, upright, centred on the safe zone at 92% of its
   assert.equal(pic.props.rotate ?? 0, 0);
   near(pic.props.x, safe.left + safeW / 2);
   near(pic.props.y, (safe.top + canvas.h - safe.bottom) / 2);
-  near(all([pic]).find((n) => n.type === 'image').props.w, 0.92 * safeW, 'width');
+  // the fix pass (F5): smaller than 92% where its keyline and shadow at the spring's peak would leave the safe zone
+  // (kinds-clipping-focus.test.mjs checks the reach)
+  assert.ok(all([pic]).find((n) => n.type === 'image').props.w <= 0.92 * safeW + EPS, 'width');
   assert.ok(!all([pic]).some((n) => n.id.includes('card')));
   near(sample(pic.tracks.scale, 0), ctx.look.moves.enter.scale);
 });
@@ -85,7 +87,7 @@ test('pop establishing picture on a vertical format: a 4:5 crop of the source, a
   const targeted = imageOf({ ...POP_SHOT, on: [{ at: 'word:query', do: 'underline', target: 'region:query' }] });
   assert.deepEqual(targeted.image.props.clip, [800, 0, 800, 1000]);
   const safe = viralOf(targeted.canvas), safeW = targeted.canvas.w - safe.left - safe.right;
-  near(targeted.image.props.w, 0.92 * safeW, 'a cutout 92% of the safe width');
+  assert.ok(targeted.image.props.w <= 0.92 * safeW + EPS, 'a cutout at most 92% of the safe width');
   near(targeted.image.props.w / targeted.image.props.h, 4 / 5, '4:5');
   const centred = imageOf({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { mid: [0.3, 0.3, 0.2, 0.2] } });
   assert.deepEqual(centred.image.props.clip, [400, 0, 800, 1000], 'no region target: the crop is centred');
@@ -156,7 +158,7 @@ test('a pushed region sits on the composition centre, as far as the field allows
   assert.ok(Math.abs(rx - canvas.w / 2) < 0.5 && Math.abs(ry - canvas.h / 2) < 0.5, `region at ${rx}, ${ry}`);
 });
 
-test('a highlight on a region is a hand-drawn marker frame with the rest of the picture dimmed in desk', () => {
+test('a highlight on a region is a hand-drawn marker frame with the rest of the picture under a paper scrim in desk', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
     on: [{ at: 'word:query', do: 'highlight', target: 'region:query' }] };
   const { nodes, timing, ctx } = expandShot(shot, 'desk');
@@ -201,13 +203,17 @@ test('a highlight on a region is a hand-drawn marker frame with the rest of the 
   const top = pts(sides[0]).filter((_, i) => i % 2 === 1);
   const mean = top.reduce((a, b) => a + b, 0) / top.length;
   assert.ok(Math.abs(mean - (region[1] - 6 - half)) <= 1.5 + EPS, `top stroke centre ${mean} at the 6-unit gap (${region[1] - 6 - half})`);
-  const dim = all([pic]).find((n) => n.id === 'c.on0.dim');
-  assert.equal(dim.props.fill, ctx.look.palette.ink);
-  assert.equal(dim.props.blend, 'multiply', 'a multiply of ink, not a grey veil');
-  assert.equal(dim.props.d.match(/M/g).length, 2, 'the region is cut out of the overlay');
-  near(sample(dim.tracks.opacity, 0), 0);
-  assert.ok(sample(dim.tracks.opacity, at - 0.25) > 0 && sample(dim.tracks.opacity, at - 0.25) < 0.45, 'easing in with the frame');
-  near(sample(dim.tracks.opacity, at), 0.45, 'dims to 0.45 with the frame');
+  // the fix pass (F1): the surroundings recede into the paper, a scrim of the look's paper, not a multiply of ink
+  assert.ok(!all([pic]).some((n) => n.id === 'c.on0.dim'), 'no ink dim');
+  const scrim = all([pic]).find((n) => n.id === 'c.on0.scrim');
+  assert.equal(scrim.props.fill, ctx.look.palette.paper);
+  assert.equal(scrim.props.blend, undefined, 'plain paper over the picture, not a blend');
+  assert.equal(scrim.props.d.match(/M/g).length, 4, 'the card paper, its two tape strips, and the region cut out of them');
+  near(sample(scrim.tracks.opacity, 0), 0);
+  // 0.8: the brief's 0.72 tuned on the rendered proof (the range it allows is 0.6 to 0.8): at 0.72 a sliced "59" at the
+  // frame edge still read as a number
+  assert.ok(sample(scrim.tracks.opacity, at - 0.25) > 0 && sample(scrim.tracks.opacity, at - 0.25) < 0.8, 'easing in with the frame');
+  near(sample(scrim.tracks.opacity, at), 0.8, 'paper at 0.8 with the frame');
 });
 
 test('pop: the whole picture until the first region event, then a hard switch to the region as its own cut-out', () => {
@@ -490,9 +496,11 @@ test('crop: the establishing window of a locked camera is exactly the crop, fitt
   assert.deepEqual(photo.props.clip, [800, 0, 800, 1000], 'the crop in image pixels');
   const safe = viralOf(canvas);
   const w = canvas.w - safe.left - safe.right, h = canvas.h - safe.top - safe.bottom;
+  // the fix pass (F5): fitted inside the available space less the spring's overshoot and the keyline and shadow, so no
+  // larger than the plain fit (kinds-clipping-focus.test.mjs checks the reach)
   const fit = Math.min((0.92 * w) / 800, h / 1000);
-  near(photo.props.w, 800 * fit, 'fitted width');
-  near(photo.props.h, 1000 * fit, 'fitted height');
+  assert.ok(photo.props.w <= 800 * fit + EPS && photo.props.w > 0.75 * 800 * fit, `fitted width ${photo.props.w}`);
+  near(photo.props.w / photo.props.h, 800 / 1000, 'the crop\'s own shape');
   const desk = all(expandShot(shot, 'desk', '16:9').nodes).find((n) => n.type === 'image' && n.id.startsWith('c.image.'));
   assert.equal(desk.props.clip, undefined, 'desk pushes in on the whole picture');
 });

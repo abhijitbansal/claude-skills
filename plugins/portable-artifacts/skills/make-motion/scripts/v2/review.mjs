@@ -12,11 +12,12 @@
 // (engine/review/frame.mjs judges landed, settled texts), and anything the audit has no rule for.
 import { registries } from '../../engine/registry.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
-import { auditFrame, textScalesIn } from '../../engine/review/frame.mjs';
+import { auditFrame, textStatesIn } from '../../engine/review/frame.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
+import { aloneFromFrame } from '../../engine/cuts/index.mjs';
 import { auditMoments } from './plan.mjs';
 import { pageFinding } from './report.mjs';
 
@@ -91,6 +92,8 @@ export function auditPlan(film, timeline) {
     const shot = shotAtFrame(timeline, frame);
     if (shot.index === 0) return NOT_A_CUT_SHOT;
     const cut = registries.cuts.get(film.shots[shot.index].cut ?? 'cut');
+    // once p > 0 a punch draws only the incoming shot: its frames are audited as drawn (a pinned overlay's place included)
+    if (cut.incomingOnly === true && frame > Math.round(shot.start * timeline.fps)) return NOT_A_CUT_SHOT;
     return frame / timeline.fps - shot.start < Math.min(cut.dur, shot.duration) ? shot.index : NOT_A_CUT_SHOT;
   };
   return auditMoments(film, timeline).map((frame) => [windowShot(frame), frame]);
@@ -120,37 +123,39 @@ async function heldFlags(session, signal) {
 
 const SCALE_DECIMALS = 1e4; // scales that agree to 4 decimals are the same rest
 
-// text id -> the scale it stands at on most of `trees` (a tie goes to the later frame): its rest. A last frame that
-// catches the tail of a spring, a pulse or a push would otherwise leave the text's whole at-rest layout unjudged.
-function modalScales(trees) {
+// One more sighting of `scale` in a tally (rounded key -> { n, scale }).
+function tally(seen = new Map(), scale) {
+  const key = Math.round(scale * SCALE_DECIMALS) / SCALE_DECIMALS;
+  return seen.set(key, { n: (seen.get(key)?.n ?? 0) + 1, scale });
+}
+// The scale seen most in a tally (a tie goes to the one first seen latest), or `fallback` for an empty one.
+const modal = (seen, fallback) => (seen && seen.size > 0 ? [...seen.values()].reduce((best, c) => (c.n >= best.n ? c : best)).scale : fallback);
+
+// text id -> the scale it stands at on most of the `trees` where it shows in full (accumulated opacity 1): its rest. A
+// last frame that catches the tail of a spring, a pulse or a push would otherwise leave the text's whole at-rest layout
+// unjudged, and the frames before an entrance (hidden, held at the entrance's start scale) would outvote a text that
+// lands late. A text never shown in full on a sampled frame rests at its last frame's scale.
+function modalScales(trees, lastTree) {
   const counts = new Map();
-  trees.forEach((tree) => textScalesIn(tree).forEach((scale, id) => {
-    const key = Math.round(scale * SCALE_DECIMALS) / SCALE_DECIMALS;
-    const seen = counts.get(id) ?? new Map();
-    seen.set(key, { n: (seen.get(key)?.n ?? 0) + 1, scale });
-    counts.set(id, seen);
+  trees.forEach((tree) => textStatesIn(tree).forEach(({ scale, opacity }, id) => {
+    if (opacity >= 1) counts.set(id, tally(counts.get(id), scale));
   }));
-  return new Map([...counts].map(([id, seen]) => [id, [...seen.values()].reduce((best, c) => (c.n >= best.n ? c : best)).scale]));
+  const last = textStatesIn(lastTree);
+  return new Map([...last].map(([id, state]) => [id, modal(counts.get(id), state.scale)]));
 }
 
-// text id -> per word index, the scale the word holds on most of `trees` (ties: the later frame).
-function modalWordScales(trees) {
+// text id -> per word index, the scale the word holds on most of the `trees` where it and its text show in full
+// (ties: the one first seen latest), else on the last frame.
+function modalWordScales(trees, lastTree) {
   const counts = new Map();
-  const walk = (n) => {
-    if (n.type === 'text' && Array.isArray(n.words)) {
-      const perWord = counts.get(n.id) ?? [];
-      n.words.forEach((w, i) => {
-        const scale = w.scale ?? 1, key = Math.round(scale * SCALE_DECIMALS) / SCALE_DECIMALS;
-        const seen = perWord[i] ?? new Map();
-        seen.set(key, { n: (seen.get(key)?.n ?? 0) + 1, scale });
-        perWord[i] = seen;
-      });
-      counts.set(n.id, perWord);
-    }
-    (n.children ?? []).forEach(walk);
-  };
-  trees.forEach((tree) => (tree ?? []).forEach(walk));
-  return new Map([...counts].map(([id, perWord]) => [id, perWord.map((seen) => [...seen.values()].reduce((best, c) => (c.n >= best.n ? c : best)).scale)]));
+  trees.forEach((tree) => textStatesIn(tree).forEach(({ opacity, node }, id) => {
+    if (opacity < 1 || !Array.isArray(node.words)) return;
+    const perWord = counts.get(id) ?? [];
+    node.words.forEach((w, i) => { if ((w.opacity ?? 1) >= 1) perWord[i] = tally(perWord[i], w.scale ?? 1); });
+    counts.set(id, perWord);
+  }));
+  const last = textStatesIn(lastTree);
+  return new Map([...last].filter(([, s]) => Array.isArray(s.node.words)).map(([id, s]) => [id, s.node.words.map((w, i) => modal(counts.get(id)?.[i], w.scale ?? 1))]));
 }
 
 /**
@@ -166,16 +171,29 @@ export function restingByShot(timeline, snapshots) {
     const first = Math.round(shot.start * timeline.fps), last = Math.round(shot.end * timeline.fps) - 1;
     const tree = byFrame.get(last);
     const trees = snapshots.filter((snap) => snap.frame >= first && snap.frame <= last).map((snap) => snap.tree);
-    return [shot.id, tree ? { hiddenWords: hiddenWordsIn(tree), restScales: modalScales(trees), restWords: modalWordScales(trees) } : {}];
+    return [shot.id, tree ? { hiddenWords: hiddenWordsIn(tree), restScales: modalScales(trees, tree), restWords: modalWordScales(trees, tree) } : {}];
   }));
 }
 
-/** Is `frame` the first frame of a shot that came in on a hard cut, audited whole? The opening rule judges only that frame
- *  (engine/review/frame.mjs openingFindings): a film may open on its own field, and a soft cut shows the outgoing shot. */
+/**
+ * The frame on which shot `index` opens for the opening rule (engine/review/frame.mjs openingFindings), or null: the
+ * first frame that shows the shot alone after its cut (a hard cut's first frame, the frame after a punch's p 0:
+ * cuts/index.mjs aloneFromFrame); none after a slide or a match, which show the outgoing shot. The film's own first
+ * frame only in a mode that reads from frame 0 (its data sets hookFromFrameZero); elsewhere a film may open on its
+ * field (the director's ruling).
+ */
+export function openingFrameOf(film, timeline, index) {
+  const shot = timeline.shots[index];
+  const first = Math.round(shot.start * timeline.fps);
+  if (index === 0) return registries.modes.get(film.mode ?? DEFAULT_MODE).hookFromFrameZero === true ? first : null;
+  const offset = aloneFromFrame(film.shots[index].cut);
+  return offset === null || first + offset > Math.round(shot.end * timeline.fps) - 1 ? null : first + offset;
+}
+
+/** Is `frame`, audited whole, the frame a shot opens on (openingFrameOf)? */
 export function opensShotAt(film, timeline, frame, whole) {
   const shot = shotAtFrame(timeline, frame);
-  const hard = shot.index > 0 && (film.shots[shot.index].cut ?? 'cut') === 'cut';
-  return whole === true && hard && frame === Math.round(shot.start * timeline.fps);
+  return whole === true && frame === openingFrameOf(film, timeline, shot.index);
 }
 
 function frameFindings(film, timeline, restingOf, { frame, tree, whole }) {

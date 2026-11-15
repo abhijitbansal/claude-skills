@@ -132,17 +132,21 @@ function hiddenOf(n, hiddenWords) {
 
 const hasVisibleWord = (n) => !Array.isArray(n.words) || n.words.length === 0 || n.words.some((w) => w.opacity > 0);
 
-/** text node id -> its accumulated scale (its own, its groups' and the camera's) in a sampled tree: how big it stands. */
-export function textScalesIn(sampled) {
-  const scales = new Map();
-  const walk = (n, scale) => {
-    const s = scale * scaleOf(n);
-    if (n.type === 'text') scales.set(n.id, s);
-    (n.children ?? []).forEach((child) => walk(child, s));
+/** text node id -> { scale, opacity, node } in a sampled tree: its accumulated scale (its own, its groups' and the
+ *  camera's), how big it stands, and its accumulated opacity, how much of it shows. */
+export function textStatesIn(sampled) {
+  const states = new Map();
+  const walk = (n, scale, opacity) => {
+    const s = scale * scaleOf(n), o = opacity * (n.opacity ?? 1);
+    if (n.type === 'text') states.set(n.id, { scale: s, opacity: o, node: n });
+    (n.children ?? []).forEach((child) => walk(child, s, o));
   };
-  (sampled ?? []).forEach((n) => walk(n, 1));
-  return scales;
+  (sampled ?? []).forEach((n) => walk(n, 1, 1));
+  return states;
 }
+
+/** text node id -> its accumulated scale (its own, its groups' and the camera's) in a sampled tree: how big it stands. */
+export const textScalesIn = (sampled) => new Map([...textStatesIn(sampled)].map(([id, state]) => [id, state.scale]));
 
 // A word has arrived when it is at opacity 1, and is at rest when it is also at its resting scale (an emphasis pulse
 // scales a word up and back): `rest`, the scale it holds on most of its shot's frames (ctx.restWords), else 1.
@@ -336,6 +340,36 @@ function cardRules(texts, cards, ctx, unit) {
   }));
 }
 
+// Where the pictures (image nodes: { id, order, box }) and texts (id -> order) on screen fall in the order they are
+// drawn (a node before its children).
+function drawOrder(sampled) {
+  const pictures = [], textOrder = new Map();
+  let order = 0;
+  const walk = (n, opacity) => {
+    const o = opacity * (n.opacity ?? 1);
+    if (o <= 0) return;
+    order += 1;
+    if (n.type === 'image' && isBox(n.bbox)) pictures.push({ id: n.id, order, box: n.bbox });
+    if (n.type === 'text') textOrder.set(n.id, order);
+    (n.children ?? []).forEach((child) => walk(child, o));
+  };
+  (Array.isArray(sampled) ? sampled : []).forEach((n) => walk(n, 1));
+  return { pictures, textOrder };
+}
+
+// A text drawn before a picture that covers its ink by more than OVERLAP_UNITS both ways: mechanical, the text is hidden
+// under it (a pinned slug, kicker tag or caption drawn under a zoomed picture). Any frame: a cover is a cover in motion.
+function coverRules(texts, sampled, ctx, unit) {
+  const { pictures, textOrder } = drawOrder(sampled);
+  const limit = OVERLAP_UNITS * unit + EPSILON;
+  return texts.flatMap((t) => pictures.filter((p) => p.order > (textOrder.get(t.node.id) ?? Infinity)).flatMap((p) => {
+    const across = Math.min(t.ink[0] + t.ink[2], p.box[0] + p.box[2]) - Math.max(t.ink[0], p.box[0]);
+    const down = Math.min(t.ink[1] + t.ink[3], p.box[1] + p.box[3]) - Math.max(t.ink[1], p.box[1]);
+    if (across <= limit || down <= limit) return [];
+    return [finding(ctx, MECHANICAL, 'covered', `${t.node.id}|${p.id}`, `text "${t.node.id}" is drawn under the picture "${p.id}"; draw it after the picture or move it off`, t.role)];
+  }));
+}
+
 function wordRules(texts, ctx) {
   const modeName = typeof ctx.mode === 'string' ? ctx.mode : ctx.mode?.name;
   const out = [];
@@ -376,9 +410,9 @@ function showsContent(sampled) {
 }
 
 /**
- * A shot that opens on a frame with nothing but the field reads as a dropped frame: on the first frame of a shot that
- * came in on a hard cut, something else must be on screen.
- * Mechanical. The caller says which frame opens a shot (ctx.opensShot).
+ * A shot that opens on a frame with nothing but the field reads as a dropped frame: on the frame a shot opens on,
+ * something else must be on screen.
+ * Mechanical. The caller says which frame opens a shot (ctx.opensShot; scripts/v2/review.mjs openingFrameOf).
  */
 export function openingFindings(sampled, ctx) {
   if (showsContent(sampled)) return [];
@@ -395,8 +429,8 @@ export function openingFindings(sampled, ctx) {
  *   of the film (the viral hook rule). hiddenWords: node id -> indices of the words permanently hidden in this shot.
  *   restScales: node id -> accumulated scale on the shot's last frame (textScalesIn); a text is judged only while it
  *   stands within 0.2% of it (SETTLE_TOLERANCE). restWords: node id -> per word index the scale it rests at; a word
- *   is at rest within 0.2% of it (1 when absent). opensShot: the frame is the first of a shot that came in on a hard cut
- *   (the opening rule, openingFindings).
+ *   is at rest within 0.2% of it (1 when absent). opensShot: the frame is the one its shot opens on (the opening rule,
+ *   openingFindings).
  * @returns {{ kind: 'mechanical' | 'creative', path: string, message: string, rule: string, node: string, role?: string }[]}
  */
 export function auditFrame(sampled, ctx) {
@@ -405,5 +439,5 @@ export function auditFrame(sampled, ctx) {
   const { texts, unmeasured } = visibleTexts(sampled, unit, ctx);
   const lost = unmeasured.map((id) => finding(ctx, MECHANICAL, 'measure', id, `${id}: could not be measured`));
   const opening = ctx.opensShot === true ? openingFindings(sampled, ctx) : [];
-  return [...lost, ...opening, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit)];
+  return [...lost, ...opening, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit)];
 }

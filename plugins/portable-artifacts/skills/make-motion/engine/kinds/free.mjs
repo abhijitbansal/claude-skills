@@ -92,7 +92,8 @@ registries.kinds.add('free', {
       type: 'path',
       id: 'bar',
       props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' },
-      tracks: { reveal: { keys: [{ t: 0, v: 0 }, { t: 0.8, v: 1, ease: 'outCubic' }] } },
+      // from 0.05, not 0: a film may open on this example, and in a mode that reads from frame 0 that frame must show something
+      tracks: { reveal: { keys: [{ t: 0, v: 0.05 }, { t: 0.8, v: 1, ease: 'outCubic' }] } },
     }],
   },
   schema: {

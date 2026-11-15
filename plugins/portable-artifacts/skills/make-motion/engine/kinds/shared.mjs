@@ -7,7 +7,7 @@ import { track } from '../time/track.mjs';
 import { fitText } from '../text/layout.mjs';
 import { landing } from '../devices/shared.mjs';
 import { ease } from '../time/ease.mjs';
-import '../cuts/index.mjs';
+import { aloneFromFrame } from '../cuts/index.mjs';
 
 // Cap height as a share of the font size. Canvas reports only the font's ascent box, not the cap height, so the
 // layouts below place cap lines with this ratio (Fraunces and Archivo both sit close to it).
@@ -69,19 +69,25 @@ export function compositionRect(ctx) {
 /** A shot that arrives on a match cut keeps its hero on screen from the first frame: no entrance. */
 export const arrivesMatched = (shot, ctx) => ctx.timing.index > 0 && shot.cut === 'match';
 
-/** A shot the viewer sees whole from its first frame: the film's first shot, or one that comes in on a hard cut. */
-export const opensWhole = (shot, ctx) => ctx.timing.index === 0 || (shot.cut ?? 'cut') === 'cut';
+const EASE_SAMPLES = 100;
+/** The highest value an ease reaches between 0 and 1 (1 for one that does not overshoot). */
+export const easePeak = (name) => Math.max(1, ...Array.from({ length: EASE_SAMPLES + 1 }, (_, i) => ease(name)(i / EASE_SAMPLES)));
+
+/** A shot the viewer sees whole from its first frames: the film's first shot, or one whose cut shows it alone from the
+ *  start (a hard cut, or a punch once it is under way: cuts/index.mjs aloneFromFrame). */
+export const opensWhole = (shot, ctx) => ctx.timing.index === 0 || aloneFromFrame(shot.cut) !== null;
 
 /**
  * landing() for a hero's entrance, except that in a shot seen whole (opensWhole) an entrance that would start on the
  * shot's first frame starts from where it would be one frame in, so that frame already shows the hero (no shot opens
- * on the field alone). Elsewhere it is landing() exactly.
+ * on the field alone), and no lower than `floor` (for a rising value: a clipping's picture is at least half there).
+ * Elsewhere it is landing() exactly.
  */
-export function openingLanding(shot, ctx, at, move, from, to) {
+export function openingLanding(shot, ctx, at, move, from, to, floor = -Infinity) {
   const start = Math.max(0, at - move.dur);
   if (start > 0 || at <= 0 || !opensWhole(shot, ctx)) return landing(at, move, from, to);
   const first = ease(move.ease)(Math.min(1, 1 / (ctx.fps * at)));
-  return track([{ t: 0, v: from + (to - from) * first }, { t: at, v: to, ease: move.ease }]);
+  return track([{ t: 0, v: Math.max(floor, from + (to - from) * first) }, { t: at, v: to, ease: move.ease }]);
 }
 
 /** On-screen text as a typesetter sets it: an apostrophe inside a word becomes the typographic one (can't -> can, U+2019, t). */
@@ -233,19 +239,34 @@ export function pulseScale(look, { enterAt, enterFrom, pulse, peak }) {
   return track(keys);
 }
 
-// A ghost word (one not yet spoken, in a mode that reads from frame 0) is the look's ink at this opacity: quiet, but
-// readable at phone size, where ink2 sits too close to ink to show the progression.
-export const GHOST_OPACITY = 0.4;
+// A ghost word (one not yet spoken, in a mode that reads from frame 0) is an opaque colour: the look's ink mixed
+// GHOST_SHARE into its paper. Quiet, but readable at phone size (where ink2 sits too close to ink to show the
+// progression), and solid: the field never shows through its letters, as it would through ink at an alpha.
+const GHOST_SHARE = 0.4;
 const LIGHT_EASE = 'outCubic';
+const HEX_RADIX = 16;
+const CHANNEL_DIGITS = 2;
 
-/** A ghost word's tracks: ink at GHOST_OPACITY from frame 0, turning to full opacity and `lit` (ink or the accent)
- *  over the look's emphasize move from `at`, when it is spoken. */
+// `a` mixed `share` into `b` (both #rrggbb), channel by channel.
+function mixColour(a, b, share) {
+  const channel = (hex, i) => parseInt(hex.slice(1 + CHANNEL_DIGITS * i, 1 + CHANNEL_DIGITS * (i + 1)), HEX_RADIX);
+  const mixed = [0, 1, 2].map((i) => Math.round(channel(b, i) + (channel(a, i) - channel(b, i)) * share));
+  return `#${mixed.map((c) => c.toString(HEX_RADIX).padStart(CHANNEL_DIGITS, '0')).join('')}`;
+}
+
+const ghostInks = new WeakMap(); // palette -> its ghost colour
+/** A palette's ghost colour (#rrggbb): its ink mixed GHOST_SHARE into its paper, computed once per palette. */
+export function ghostInk(palette) {
+  if (!ghostInks.has(palette)) ghostInks.set(palette, mixColour(palette.ink, palette.paper, GHOST_SHARE));
+  return ghostInks.get(palette);
+}
+
+/** A ghost word's tracks: opaque, in the ghost colour from frame 0, turning to `lit` (ink or the accent) over the look's
+ *  emphasize move from `at`, when it is spoken. */
 export function ghostTracks(look, at, lit) {
   const { dur } = look.moves.emphasize;
-  return {
-    opacity: track([{ t: 0, v: GHOST_OPACITY }, { t: at, v: GHOST_OPACITY }, { t: at + dur, v: 1, ease: LIGHT_EASE }]),
-    fill: track([{ t: 0, v: look.palette.ink }, { t: at, v: look.palette.ink }, { t: at + dur, v: lit, ease: LIGHT_EASE }]),
-  };
+  const ghost = ghostInk(look.palette);
+  return { fill: track([{ t: 0, v: ghost }, { t: at, v: ghost }, { t: at + dur, v: lit, ease: LIGHT_EASE }]) };
 }
 
 /** A 0..1 wipe for a hairline: the look's draw move landing on `at`. */
@@ -257,6 +278,9 @@ export const rectPath = (w, h) => `M0 0H${w}V${h}H0Z`;
 // ---- camera ----
 
 const drifts = (look) => look.camera.style === 'desk' && look.camera.drift > 0;
+
+/** How far the look's resting camera drift moves a depth-0 node either way across, in px (0 where nothing drifts). */
+export const driftReach = (look, unit) => (drifts(look) ? (look.camera.drift * unit) / HALF : 0);
 
 /** The look's resting camera as layers of keys: desk drifts half a drift either way, alternating by shot. */
 export function defaultCamera(look, timing, unit) {

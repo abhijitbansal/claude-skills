@@ -21,8 +21,9 @@ import '../../engine/kinds/index.mjs';
 import '../../engine/cuts/index.mjs';
 import {
   FPS, measure, viralOf, filmOf, expandIn, expandShot, filmFor, all, textNode, near, inside, isTextOnly,
-  fakeSampled, THREE,
+  fakeSampled, THREE, FILLER,
 } from './helpers/kinds.mjs';
+import { worldOf, apply } from './helpers/boxes.mjs';
 
 let specDir;
 before(() => {
@@ -117,6 +118,25 @@ test('punch starts the incoming frame at zoom 1.15 and settles', () => {
   assert.deepEqual(out.map((n) => n.id), ['b']);
   near(out[0].scale, z);
   near(out[0].x, 960 + (500 - 960) * z);
+});
+
+// look gate fix pass, review-rev2 I3: a pinned overlay keeps its place over the picture through a punch
+test('a punch keeps the incoming shot\'s order: a pinned kicker stays over the picture, unzoomed, and the fixed field stays at the back', () => {
+  const canvas = { w: 1920, h: 1080 };
+  const to = [fakeSampled('field', 0, { fixed: true }), fakeSampled('picture', 500), fakeSampled('kicker', 300, { fixed: true })];
+  const ids = (out) => out.map((n) => n.id);
+  const out = registries.cuts.get('punch').apply({ from: [], to, p: 0.5, canvas });
+  assert.deepEqual(ids(out), ['field', 'picture', 'kicker'], 'the order the shot drew them in');
+  near(out[2].x, 300, 'the pinned kicker is not zoomed');
+  near(out[2].scale, 1);
+  assert.ok(out[1].scale > 1, 'the picture is');
+  const smeared = registries.cuts.get('punch').apply({ from: [], to, p: 0.5, canvas, frame: 1 / 6, background: '#000000' });
+  smeared.forEach((layer) => assert.deepEqual(ids(layer.children), [`${layer.id}.backdrop`, 'field', 'picture', 'kicker']));
+  // a real film: a pop clipping with a kicker tag, arriving on a punch
+  const shot = { id: 'c', show: 'clipping', src: 'shot.png', cut: 'punch', hold: 3, kicker: 'The proof' };
+  const f = filmFor([FILLER, shot], 'pop', '9:16');
+  const mid = ids(f.sampleAt(1 + 0.1));
+  assert.ok(mid.indexOf('c.kicker') > mid.indexOf('c.image'), `the kicker over the picture mid-punch: ${mid}`);
 });
 
 test('slide and punch smear what they move: 12 samples over half a frame of travel centred on p, each a whole picture (a layer) drawn at 1/(k+1) over the ones before, so every sample weighs the same; a slide shows both shots at p 0.5', () => {
@@ -293,10 +313,32 @@ test('every kind stays inside the safe area on every format once its entrances h
         const flushByInk = (n) => n.children.some((c) => c.props.stack) || (look === 'pop' && [`${shot.id}.delta`, `${shot.id}.caption`].includes(n.id));
         const drawn = annotate(sampleGraph(nodes, timing.duration).filter(isTextOnly).filter((n) => !flushByInk(n)));
         for (const n of drawn) inside(n.bbox, insets, canvas, `${look} ${format} ${shot.show} node ${n.id}`);
+        // the fix pass (review-rev2 M1a): the texts set flush by their ink, and the desk caption inside its card, are
+        // checked as drawn too: their ink measured here, through every transform above them, not the engine's boxes
+        const sampled = sampleGraph(nodes, timing.duration);
+        const inkIds = shot.show === 'number' ? (look === 'pop' ? ['n.delta.text'] : []) : shot.show === 'clipping' ? ['c.caption'] : [];
+        for (const id of inkIds) inside(drawnInk(sampled, id), insets, canvas, `${look} ${format} ${shot.show} ink of ${id}`);
       }
     }
   }
 });
+
+// The ink of text `id` in a sampled tree as drawn, in canvas pixels: each word's ink by the fake measure (helpers/
+// kinds.mjs, tracking added after every glyph but the last, as canvas does), carried through every transform above it.
+function drawnInk(sampled, id) {
+  const found = worldOf(sampled, id);
+  assert.ok(found && found.node.type === 'text', `a text ${id}`);
+  const { node: n, m } = found;
+  const { layout, font } = n.props;
+  const points = layout.lines.flatMap((line) => line.words.flatMap((w) => {
+    const ink = measure(w.text, font);
+    const tracked = (font.tracking ?? 0) * font.size * ([...w.text].length - 1);
+    const left = line.x + w.x + ink.inkLeft, right = line.x + w.x + ink.inkRight + tracked;
+    return [[left, line.y - ink.inkAscent], [right, line.y - ink.inkAscent], [left, line.y + ink.inkDescent], [right, line.y + ink.inkDescent]].map((p) => apply(m, p));
+  }));
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+}
 
 test('a match keeps the shared field first, under the outgoing frame, and the hero above it', () => {
   const field = (x) => Object.freeze({ ...fakeSampled('field', x), depth: 1 });

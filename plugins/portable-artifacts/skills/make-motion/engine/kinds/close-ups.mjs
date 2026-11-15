@@ -50,7 +50,7 @@ function closeUpDevice(shot, ctx, e, box, reach) {
   if (e.item.do === 'highlight' && emphasisStyled(ctx.look)) return { nodes: [], camera: [] }; // the cutout's shadow carries it
   if (e.item.do === 'highlight') {
     const at = e.at + markDuration(ctx.look);
-    return { nodes: regionMark({ id: `${shot.id}.on${e.j}`, region: around, picture: around, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, dim: false }), camera: [] };
+    return { nodes: regionMark({ id: `${shot.id}.on${e.j}`, region: around, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed }), camera: [] };
   }
   const at = e.item.do === 'punch' ? e.at : e.at + ctx.look.moves.draw.dur;
   const built = buildDevice(shot, ctx, { item: e.item, j: e.j, box: around, at });

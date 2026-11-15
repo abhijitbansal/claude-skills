@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
 import { auditFrame, openingFindings } from '../../engine/review/frame.mjs';
-import { safeRectFor, opensShotAt } from '../../scripts/v2/review.mjs';
+import { safeRectFor, opensShotAt, auditPlan } from '../../scripts/v2/review.mjs';
+import { auditMoments } from '../../scripts/v2/plan.mjs';
 import { FPS, measure, canvasOf, viralOf, filmOf, IMAGES } from './helpers/kinds.mjs';
 
 const square = (id, extra = {}) => ({ type: 'path', id, props: { d: 'M0 0H200V200H0Z', fill: '#ff0000', x: 400, y: 300 }, ...extra });
@@ -84,7 +85,7 @@ for (const look of ['desk', 'pop']) {
   }
 }
 
-test('the review judges the opening of a shot that comes in on a hard cut, and not the film\'s own first frame (a film may open on its field)', () => {
+test('the review judges the opening of a shot that comes in on a hard cut, and not the film\'s own first frame in a mode that does not read from frame 0 (a film may open on its field: the director\'s ruling)', () => {
   const film = filmOf([freeShot('a', [FADING]), freeShot('b', [FADING], { cut: 'cut' }), freeShot('c', [FADING], { cut: 'slide' })]);
   const { timeline } = built(film);
   const first = (i) => Math.round(timeline.shots[i].start * FPS);
@@ -92,4 +93,44 @@ test('the review judges the opening of a shot that comes in on a hard cut, and n
   assert.equal(opensShotAt(film, timeline, first(1), true), true, 'a hard cut must not land on the field alone');
   assert.equal(opensShotAt(film, timeline, first(1) + 1, true), false, 'only its first frame');
   assert.equal(opensShotAt(film, timeline, first(2), false), false, 'a slide shows the outgoing shot on that frame');
+});
+
+// ---- look gate fix pass, review-rev2 I2 (the director's ruling) ----
+
+test('in a mode that reads from frame 0 (hookFromFrameZero) the film\'s own first frame is judged too', () => {
+  const film = filmOf([freeShot('a', [FADING]), freeShot('b', [FADING], { cut: 'cut' })], 'pop', '9:16');
+  const { timeline } = built(film);
+  assert.equal(opensShotAt(film, timeline, 0, true), true, 'the hook frame must show something');
+  assert.equal(opensShotAt(film, timeline, 1, true), false, 'only frame 0');
+  // and the rule fires on it when only the field is there
+  const { sampled, canvas } = openingFrame(film, 0);
+  const findings = auditFrame(sampled, reviewCtx(film, canvas, { opensShot: true, shotId: 'a', shotIndex: 0 })).filter((f) => f.rule === 'empty-first-frame');
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].path, 'shots[0]');
+});
+
+test('a punch arrival is judged on its first frame that shows only the incoming shot (the one after p 0, which still shows the outgoing shot)', () => {
+  const film = filmOf([freeShot('a', [square('a.box')]), freeShot('b', [FADING], { cut: 'punch' })]);
+  const { timeline } = built(film);
+  const first = Math.round(timeline.shots[1].start * FPS);
+  assert.equal(opensShotAt(film, timeline, first, true), false, 'p 0 shows the outgoing shot');
+  assert.equal(opensShotAt(film, timeline, first + 1, true), true, 'the first frame of only the incoming shot');
+  assert.equal(opensShotAt(film, timeline, first + 2, true), false);
+  assert.ok(auditMoments(film, timeline).includes(first + 1), 'the audit looks at that frame');
+  // the punch window after p 0 is audited as drawn (the whole frame: only the incoming shot is there); p 0 alone
+  const plan = new Map(auditPlan(film, timeline).map(([shot, frame]) => [frame, shot]));
+  assert.equal(plan.get(first + 1), -1, 'the whole frame');
+  assert.equal(plan.get(first), 1, 'p 0: the incoming shot alone');
+  // a slide shows both shots throughout its window: the incoming shot is audited alone there
+  const slid = filmOf([freeShot('a', [square('a.box')]), freeShot('b', [FADING], { cut: 'slide' })]);
+  const slidTimeline = built(slid).timeline;
+  const slideStart = Math.round(slidTimeline.shots[1].start * FPS);
+  assert.equal(new Map(auditPlan(slid, slidTimeline).map(([shot, frame]) => [frame, shot])).get(slideStart + 2), 1);
+});
+
+test('a designed kind arriving on a punch opens whole: a clipping\'s picture is at least half there from the shot\'s first frame', () => {
+  const film = filmOf([{ id: 'a', show: 'statement', say: 'Hello there.' }, { id: 'b', show: 'clipping', cut: 'punch', src: 'shot.png', hold: 3 }], 'pop', '9:16');
+  const { movie } = built(film);
+  const pic = movie.sampleShot(1, 0).find((n) => n.id === 'b.image');
+  assert.ok(pic.opacity >= 0.5, `the picture on the shot's first frame: ${pic.opacity}`);
 });

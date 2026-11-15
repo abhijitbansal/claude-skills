@@ -1,9 +1,9 @@
-// Camera for the v2 engine: camera({ tracks, canvas }) gives (t) => { x, y, zoom, rotate }, and
+// Camera for the v2 engine: camera({ tracks, canvas }) and layeredCamera(layers) give (t) => { x, y, zoom, rotate }, and
 // applyCamera(sampled, cam, canvas) moves the top-level nodes of a sampled graph with depth parallax.
 // A node at depth d has k = 1 + d: it pans by -pan / k and zooms by 1 + (zoom - 1) / k about the canvas
 // centre. Camera rotate (degrees) turns top-level positions about the centre and adds to their rotate.
 // Children follow their parent; nodes with props.fixed are untouched. Pure and DOM-free.
-import { sample } from '../time/track.mjs';
+import { track, sample } from '../time/track.mjs';
 
 const CAMERA_TRACK_NAMES = Object.freeze(['x', 'y', 'zoom', 'rotate']);
 const CAMERA_DEFAULTS = Object.freeze({ x: 0, y: 0, zoom: 1, rotate: 0 });
@@ -23,6 +23,37 @@ function checkCam(cam) {
     if (!isFiniteNumber(cam?.[name])) throw new Error(`camera ${name} must be a finite number, got ${cam?.[name]}`);
   }
   if (cam.zoom <= 0) throw new Error(`camera zoom must be > 0, got ${cam.zoom}`);
+}
+
+// One layer of keys ({ t, x?, y?, zoom?, rotate?, ease? }) as a track per property it names.
+function layerTracks(keys, where) {
+  return Object.fromEntries(CAMERA_TRACK_NAMES.flatMap((name) => {
+    const named = keys.filter((k) => k[name] !== undefined);
+    if (named.length === 0) return [];
+    try {
+      return [[name, track(named.map((k) => ({ t: k.t, v: k[name], ease: k.ease })))]];
+    } catch (err) {
+      throw new Error(`${where}: camera ${name}: ${err.message}`);
+    }
+  }));
+}
+
+/**
+ * Layers of camera keys as (t) => { x, y, zoom, rotate }: the layers add, pans and turns summing and zooms multiplying,
+ * so a drift, a push and a punch combine. `where` names the owner in an error.
+ */
+export function layeredCamera(layers, where = 'camera') {
+  const tracks = layers.map((keys, i) => layerTracks(keys, `${where} layer ${i}`));
+  return (t) => {
+    const cam = { ...CAMERA_DEFAULTS };
+    for (const layer of tracks) {
+      for (const [name, tr] of Object.entries(layer)) {
+        if (name === 'zoom') cam.zoom *= sample(tr, t);
+        else cam[name] += sample(tr, t);
+      }
+    }
+    return cam;
+  };
 }
 
 export function camera({ tracks = {}, canvas } = {}) {

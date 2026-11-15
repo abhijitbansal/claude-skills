@@ -148,6 +148,9 @@ function layerContext(ctx, depth) {
     layerCanvases[depth] = canvas;
   }
   const layer = canvas.getContext('2d');
+  // a draw that threw inside a layer leaves its saves and clip on this scratch context: reset() empties the save stack
+  // and drops the clip (the lines after it set the rest, also where reset() is missing)
+  if (typeof layer.reset === 'function') layer.reset();
   layer.setTransform(1, 0, 0, 1, 0, 0);
   layer.globalAlpha = 1;
   layer.globalCompositeOperation = 'source-over';

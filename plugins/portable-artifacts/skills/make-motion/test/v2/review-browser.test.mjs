@@ -140,6 +140,35 @@ test('a text of the incoming shot outside the safe area is found although it onl
   assert.deepEqual(found.filter((f) => f.kind === 'mechanical').map((f) => [f.shot, f.node, f.path]), [['b', 'edge', 'shots[1]']]);
 });
 
+// look gate fix pass, review-rev2 I3: a punch's frames are audited as drawn, so a pinned overlay under the picture shows
+test('a pop clipping with a kicker tag arriving on a punch keeps the tag over the picture on every audited frame of the cut', async (t) => {
+  const film = { version: 2, mode: 'viral', look: 'pop', format: '9:16', fps: FPS, seed: 7, shots: [
+    { id: 'hook', show: 'statement', say: 'Your charts are *hiding* something.' },
+    { id: 'proof', show: 'clipping', cut: 'punch', src: 'assets/screenshot.png', kicker: 'The proof', caption: 'See it.', hold: 3 },
+  ] };
+  const session = await open(t, film); if (!session) return;
+  const found = await reviewFilm({ session });
+  assert.deepEqual(found.filter((f) => f.rule === 'covered' || f.rule === 'empty-first-frame').map((f) => `${f.rule}: ${f.message}`), []);
+});
+
+test('a pinned text over a picture that is whole when a punch arrives stays over it through the cut, and the audit would see it under the picture', async (t) => {
+  // a picture at full size from frame 0 and a text pinned to the frame (props.fixed) drawn over it
+  const pinnedOver = { id: 'b', show: 'free', cut: 'punch', hold: 2, srcs: ['assets/screenshot.png'], nodes: [
+    { type: 'image', id: 'pic', props: { src: 'assets/screenshot.png', x: 160, y: 140, w: 1600, h: 800 } },
+    { type: 'text', id: 'pinned', props: { x: 400, y: 500, text: 'Pinned', font: { family: 'Geist', weight: 600, size: 96 }, maxWidth: 900, fill: '#ffffff', fixed: true } },
+  ] };
+  const film = { version: 2, fps: FPS, shots: [{ id: 'a', show: 'free', hold: 1, nodes: [{ type: 'path', id: 'box', props: { d: 'M0 0H100V100H0Z', fill: '#fff', x: 100, y: 100 } }] }, pinnedOver] };
+  const session = await open(t, film); if (!session) return;
+  const found = await reviewFilm({ session });
+  assert.deepEqual(found.filter((f) => f.rule === 'covered').map((f) => f.message), []);
+  // the same text drawn first is under the picture on the cut's frames and is found
+  const under = { ...pinnedOver, nodes: [pinnedOver.nodes[1], pinnedOver.nodes[0]] };
+  const bad = await open(t, { ...film, shots: [film.shots[0], under] }); if (!bad) return;
+  const covered = (await reviewFilm({ session: bad })).filter((f) => f.rule === 'covered');
+  assert.equal(covered.length, 1, JSON.stringify(covered));
+  assert.equal(covered[0].node, 'pinned|pic');
+});
+
 // ---- the director's round 1 ----
 
 test('a region event that comes before the whole picture has been shown is a creative finding at shots[i].on[j], and the event is moved', async (t) => {

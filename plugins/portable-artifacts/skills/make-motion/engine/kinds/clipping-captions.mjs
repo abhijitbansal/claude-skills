@@ -1,10 +1,12 @@
 // What a clipping sets around its picture, pinned to the frame (props.fixed: a camera push leaves it in place) and drawn
 // over the picture so that it is never covered: the kicker (the slug in an editorial look, slug.mjs; a tag in a stack
-// look, as a statement sets it) and the caption (label caps on a small paper card, bottom left on column 2, upright, for
-// the whole shot, in an editorial look; one line in the display face, flush left on the stack edge, directly under the
+// look, as a statement sets it) and the caption (label caps on a small paper card, upright, for the whole shot, in an
+// editorial look: bottom left on column 2 while the whole picture is seen, then, moving with a camera push, directly under
+// the pushed region's marker frame; one line in the display face, flush left on the stack edge, directly under the
 // picture or the close-up, in a stack look). Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
+import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
 import { slugNodes, SLUG } from './slug.mjs';
@@ -49,8 +51,49 @@ export function kickerNodes(shot, ctx, { left, pictureTop }) {
   return tag.build({ ...params, box: [left, pictureTop - KICKER_GAP * ctx.unit - h, 1, 1] }).nodes.map(pinned);
 }
 
-// editorial: the caption on a card device, upright, in with the look's enter move as the slug is, for the whole shot.
-function cardCaption(shot, ctx) {
+/**
+ * Where an editorial caption card goes once the camera has pushed in on a region, as [x, y, w, h] on screen: its left
+ * edge on the region's left edge and its top `gutter` under the frame's lowest ink; above the frame when that would run
+ * past the bottom of `area`; inside `area` always (moved left off its right edge, and into it when neither fits).
+ * @param {{ region: number[], frame: number[], size: { w: number, h: number }, gutter: number, area: { left: number, top: number, right: number, bottom: number } }} p
+ *   region and frame are [x, y, w, h] on screen
+ */
+export function captionAfterPush({ region, frame, size, gutter, area }) {
+  const x = Math.max(area.left, Math.min(region[0], area.right - size.w));
+  const under = frame[1] + frame[3] + gutter, above = frame[1] - gutter - size.h;
+  if (under + size.h <= area.bottom) return [x, under, size.w, size.h];
+  if (above >= area.top) return [x, above, size.w, size.h];
+  return [x, Math.max(area.top, Math.min(under, area.bottom - size.h)), size.w, size.h];
+}
+
+// A canvas box at rest as the camera `cam` shows a depth-0 node there (zoom about the centre, then the pan).
+function onScreen(canvas, cam, [x, y, w, h]) {
+  const cx = canvas.w / HALF, cy = canvas.h / HALF;
+  return [cx + (x - cx) * cam.zoom - cam.x, cy + (y - cy) * cam.zoom - cam.y, w * cam.zoom, h * cam.zoom];
+}
+
+// The caption card's tracks with a push added: its x and y move from where it rests to captionAfterPush's place over
+// the push (the push's keys and ease, starting no earlier than the card's own entrance has ended), and x then follows the
+// camera drift to the end of the shot, so the card stays under the region; pinned to the frame, it is never zoomed.
+function followTracks(card, box, ctx, { region, frame, push, camera }) {
+  const { look, canvas, unit, timing } = ctx;
+  const landed = push.at(-1), camAt = camera(landed.t), camEnd = camera(timing.duration);
+  const margin = look.grid.margin * unit;
+  const area = { left: margin, top: margin, right: canvas.w - margin, bottom: canvas.h - margin };
+  const to = captionAfterPush({ region: onScreen(canvas, camAt, region), frame: onScreen(canvas, camAt, frame), size: { w: box[2], h: box[3] }, gutter: look.grid.gutter * unit, area });
+  const [x0, y0] = [card.props.x, card.props.y], [x1, y1] = [x0 + to[0] - box[0], y0 + to[1] - box[1]];
+  const rise = card.tracks.y ? card.tracks.y.points.map((p, i) => ({ t: p.t, v: p.v, ...(i > 0 ? { ease: look.moves.enter.ease } : {}) })) : [{ t: 0, v: y0 }];
+  const start = Math.min(landed.t, Math.max(push[0].t, rise.at(-1).t));
+  return {
+    ...card.tracks,
+    x: track([{ t: 0, v: x0 }, { t: start, v: x0 }, { t: landed.t, v: x1, ease: landed.ease }, { t: Math.max(landed.t, timing.duration), v: x1 - (camEnd.x - camAt.x) }]),
+    y: track([...rise, { t: start, v: y0 }, { t: landed.t, v: y1, ease: landed.ease }]),
+  };
+}
+
+// editorial: the caption on a card device, upright, in with the look's enter move as the slug is, for the whole shot:
+// bottom left on column 2 until a push, then under the pushed region (followTracks).
+function cardCaption(shot, ctx, follow) {
   const { look, canvas, unit, seed, measure } = ctx;
   const font = fontFor(look, 'label', sizeAt(look, CARD_CAPTION.step, unit), unit);
   const layout = layoutText({ text: setCase(look, 'label', shot.caption), font, maxWidth: gridSpan(look, canvas, 1, CARD_CAPTION.columns).w, measure });
@@ -64,7 +107,8 @@ function cardCaption(shot, ctx) {
   // frame furniture: the review's sizes and hero rules leave the texts of a card out
   const text = node('text', `${shot.id}.caption`, { x, y, layout, font, fill: look.palette.ink2, role: 'caption', furniture: true });
   // the card's own hand tilt is replaced: a caption card sits square on the grid
-  const group = node('group', id, { ...card.props, rotate: 0, fixed: true }, { tracks: card.tracks, children: [...asTextCard(id, card.children), text] });
+  const tracks = follow ? followTracks(card, box, ctx, follow) : card.tracks;
+  const group = node('group', id, { ...card.props, rotate: 0, fixed: true }, { tracks, children: [...asTextCard(id, card.children), text] });
   return { nodes: [group], box: inkBox(card.props.x + x, card.props.y + y, layout) };
 }
 
@@ -94,11 +138,12 @@ function lineCaption(shot, ctx, { left, maxWidth, anchor, at }) {
 }
 
 /**
- * The caption as { nodes, box }, or null without one.
- * @param {{ left: number, maxWidth: number, anchor: number[], at: number }} place for a stack look: the stack edge, the
- *   width it may take, the box it captions and when it arrives (an editorial look places its card on the grid)
+ * The caption as { nodes, box } (the box where it rests), or null without one.
+ * @param {{ left: number, maxWidth: number, anchor: number[], at: number, follow: object | null }} place for a stack
+ *   look: the stack edge, the width it may take, the box it captions and when it arrives; for an editorial look (which
+ *   places its card on the grid) `follow`, the push it moves with ({ region, frame, push, camera }), or null
  */
 export function captionNodes(shot, ctx, place) {
   if (shot.caption === undefined) return null;
-  return isEditorial(ctx.look) ? cardCaption(shot, ctx) : lineCaption(shot, ctx, place);
+  return isEditorial(ctx.look) ? cardCaption(shot, ctx, place.follow) : lineCaption(shot, ctx, place);
 }

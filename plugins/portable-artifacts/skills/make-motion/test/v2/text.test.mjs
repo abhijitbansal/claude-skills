@@ -314,6 +314,13 @@ test('words marked together stay on one line when a slightly smaller size allows
   const kept = fit({ together });
   assert.ok(lineTexts(kept).includes('Nothing leaves it.'), `the run on one line: ${JSON.stringify(lineTexts(kept))}`);
   assert.ok(kept.size >= 0.85 * 160, `at most 15% smaller: ${kept.size}`);
+  // the control (restored, look gate fix pass M1b): where the plain fit breaks a run, the mark is what keeps it whole.
+  // The case above no longer shows that, since the one-word-line rule alone keeps "Nothing leaves it." together.
+  const how = 'The model writes one small file and scripts do the rest.';
+  const run = (l) => lineTexts(l).some((line) => line.includes('one small file'));
+  const howFit = (extra) => fitText({ text: how, font: { family: 'x', size: 300, lineHeight: 1.1 }, maxWidth: 520, measure: serif, ...extra }, { min: 72, max: 300, maxHeight: 691, maxLines: 4 });
+  assert.ok(!run(howFit({})), `without the mark the run breaks: ${JSON.stringify(lineTexts(howFit({})))}`);
+  assert.ok(run(howFit({ together: [false, false, false, true, true, false, false, false, false, false, false] })), `with it the run stays whole: ${JSON.stringify(lineTexts(howFit({ together: [false, false, false, true, true] })))}`);
 });
 
 // ---- revision 2: no line of one word (E5) ----

@@ -3,20 +3,20 @@
 // with the kicker on a slug card in the top right (slug.mjs); a centred one centres it on the composition with the
 // kicker above; a stack (pop) sets each line at its own size to fill the width (stack.mjs). Emphasis follows the look's
 // emphasis system: a highlight behind each emphasised run (desk), or a recolour (with a pulse for recolor-scale).
-// In a mode that reads from frame 0 (viral) every word is on screen from the first frame as a ghost (ink at 0.4) and
+// In a mode that reads from frame 0 (viral) every word is on screen from the first frame as a ghost (opaque, ink mixed
+// 40% into paper) and
 // lights as it is spoken. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { layoutText } from '../text/layout.mjs';
+import { layoutText, unclean } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
-import { ease } from '../time/ease.mjs';
 import { landing } from '../devices/shared.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
   isEditorial, requireDevice, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale,
-  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks,
+  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, driftReach,
 } from './shared.mjs';
 import { wordTimes } from './words.mjs';
 import { slugBox, slugNodes, SLUG } from './slug.mjs';
@@ -32,6 +32,7 @@ const KICKER_MAX = 40;
 const DESK = Object.freeze({ centre: 0.5, height: 0.64, fromStep: 3, max: 300, toWide: 9, toTall: 11, minTo: 5 });
 const POP = Object.freeze({ fromStep: 3, toStep: 5 }); // so a long word can shrink the block
 const FIRST_COLUMN = 2;
+const SLUG_CLEAR = 2; // gutters between a statement's ink and the slug card, its tape included (look gate fix pass F4)
 const CENTRED_TO = 11;
 const KICKER = Object.freeze({ step: 1, gap: 28, ruleGap: 12, rule: 2 }); // a centred look's kicker above the text
 // The highlighter band behind a run reaches this far (em of the text) past the run's highest and lowest ink.
@@ -59,8 +60,8 @@ function highlightTogether(text, ctx) {
 }
 
 // The text fitted to columns FIRST_COLUMN..`to` and centred on DESK.centre of the height: { layout, font, x, y, span }.
-// `tradeFloor`: the fit gives up size for a better break (fitText) only down to this size; `clear` (the slug card grown
-// by a gutter, or null): the fit prefers a layout whose block, so placed, stays off it.
+// `tradeFloor`: the fit gives up size for a better break (fitText) only down to this size; `clear` (slugClearance, or
+// null): the fit prefers a layout whose block, so placed, stays off it.
 function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const { look, canvas, unit } = ctx;
   const span = gridSpan(look, canvas, FIRST_COLUMN, to);
@@ -83,10 +84,18 @@ function blockInk(placed, measure) {
 }
 
 const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
-const grown = ([x, y, w, h], by) => [x - by, y - by, w + HALF * by, h + HALF * by];
 
-// `placed` moved down until its block clears `clear` (the slug card grown by a gutter), as far as the bottom margin allows
-// (never up).
+// The room a statement's ink keeps from the slug: the card's paper and tape grown by SLUG_CLEAR gutters on every side,
+// and across by the camera drift as well (the slug is fixed to the frame; the text drifts with the camera).
+function slugClearance(slug, ctx) {
+  const { look, unit } = ctx;
+  const by = SLUG_CLEAR * look.grid.gutter * unit;
+  const drift = driftReach(look, unit);
+  const [x, y, w, h] = slug.inked;
+  return [x - by - drift, y - by, w + HALF * (by + drift), h + HALF * by];
+}
+
+// `placed` moved down until its block clears `clear` (slugClearance), as far as the bottom margin allows (never up).
 function dropBelow(placed, clear, ctx) {
   const { look, canvas, unit, measure } = ctx;
   const block = blockInk(placed, measure);
@@ -95,24 +104,29 @@ function dropBelow(placed, clear, ctx) {
 }
 
 // desk: the type carries the frame, fitted to columns 2 to 9 (2 to 11 on vertical formats); with a slug, the span stops
-// a column earlier, and earlier again, until the block clears the card by a gutter. Narrowing stops before the text
-// would overflow (a long sentence on a square frame), and before it falls under the review's hero ratio over the slug's
-// kicker when dropping the block below the card clears it; a block that still meets the card then drops below it (the
+// a column earlier, and earlier again, until the block clears the card (slugClearance). Narrowing stops before the text
+// would overflow (a long sentence on a square frame), and, when dropping the block below the card clears it, before it
+// falls under the review's hero ratio over the slug's kicker or breaks worse than the wider span (a sentence ending
+// mid-line, a highlight run split: layout.mjs unclean); a block that still meets the card then drops below it (the
 // frame review reports text left over a card: card-overlap).
 function composeEditorial(text, shot, ctx) {
   const { look, canvas, unit, measure } = ctx;
   const last = isWide(canvas) ? DESK.toWide : DESK.toTall;
   const slug = slugBox(shot, ctx);
-  const clear = slug ? grown(slug.turned, look.grid.gutter * unit) : null;
+  const clear = slug ? slugClearance(slug, ctx) : null;
   // a statement stays three times the slug's kicker (the hero ratio the review asks of a frame's own texts; the slug is
   // frame furniture, which the review leaves out)
   const floor = slug ? MIN_HERO_RATIO * sizeAt(look, SLUG.kickerStep, unit) : 0;
   const clears = (p) => !overlaps(clear, blockInk(p, measure));
+  const together = highlightTogether(text, ctx);
   let placed = fitEditorial(text, ctx, last, floor, clear);
   for (let to = last - 1; clear && to >= DESK.minTo && !clears(placed); to--) {
     const narrower = fitEditorial(text, ctx, to, floor, clear);
     if (narrower.layout.overflow && !placed.layout.overflow) break;
-    if (narrower.font.size < floor && placed.font.size >= floor && clears(dropBelow(placed, clear, ctx))) break;
+    const dropped = clears(dropBelow(placed, clear, ctx));
+    if (narrower.font.size < floor && placed.font.size >= floor && dropped) break;
+    // a narrower span that breaks worse (a sentence ending mid-line, a highlight run split) gives way to the drop
+    if (unclean(narrower.layout, together) && !unclean(placed.layout, together) && dropped) break;
     placed = narrower;
   }
   if (!clear || clears(placed)) return placed;
@@ -140,10 +154,6 @@ const placedWords = (layout) => layout.lines.flatMap((line) => line.words.map((w
 
 // One word's box in canvas pixels: cap line to just under the baseline.
 const wordBox = (at, { line, word }, size) => capBox(at.x + line.x + word.x, at.y + line.y, word.width, size);
-
-const EASE_SAMPLES = 100;
-// The highest value an ease reaches between 0 and 1 (1 for one that does not overshoot).
-const easePeak = (name) => Math.max(1, ...Array.from({ length: EASE_SAMPLES + 1 }, (_, i) => ease(name)(i / EASE_SAMPLES)));
 
 // How far a word's pulse may scale it (about its centre): the look's peak, but never so far that its ink meets a
 // neighbour on its line, also when that neighbour is at its own peak. Each side of the word may grow by half the gap.
@@ -179,7 +189,8 @@ export function enterStarts(words, look) {
 }
 
 // A mode with `hookFromFrameZero` (viral) reads from the first frame: in every statement of a recolour look every word
-// is on screen from frame 0 as a ghost (ink at 0.4, shared.mjs ghostTracks) and takes its own colour when it is spoken.
+// is on screen from frame 0 as a ghost (opaque, ink mixed 40% into paper, shared.mjs ghostTracks) and takes its own
+// colour when it is spoken.
 export const ghostWords = (ctx) => ctx.mode.hookFromFrameZero === true && ctx.look.emphasis !== 'highlight';
 
 // A ghost word that lights to `to` when spoken at `at`, pulsing as it does when `peak` is given.

@@ -137,6 +137,13 @@ export function polyline(points, closed = false) {
   return `M${at2(points[0])}${points.slice(1).map((p) => `L${at2(p)}`).join('')}${closed ? 'Z' : ''}`;
 }
 
+/** The coordinate pairs of a path string the devices build (M, L, Q and C take only pairs), as [x, y] points: for a
+ *  polyline or a rounded rectangle, a polygon through its corners. */
+export function pathPoints(d) {
+  const nums = d.match(/-?\d+(?:\.\d+)?/g).map(Number);
+  return Array.from({ length: nums.length / HALF }, (_, i) => [nums[HALF * i], nums[HALF * i + 1]]);
+}
+
 /** An open Catmull-Rom spline through `points` as cubic Beziers: one smooth stroke. */
 export function smoothPath(points) {
   const last = points.length - 1;

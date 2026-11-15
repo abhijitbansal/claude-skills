@@ -6,7 +6,7 @@
 // kicker tag, STACK.kickerGap over the first line) is centred in the available height; when it does not fit, every line
 // is set smaller in proportion. The hero is a group holding one text node per line, each tagged `stack: <hero id>` so the
 // review counts the lines of one stack as one size class. Emphasis recolours: in a mode that reads from frame 0 every
-// word is on screen from the first frame as a ghost (ink at 0.4, shared.mjs ghostTracks) and lights as it is spoken (ink, or the accent when emphasised); in any
+// word is on screen from the first frame as a ghost (opaque, ink mixed 40% into paper, shared.mjs ghostTracks) and lights as it is spoken (ink, or the accent when emphasised); in any
 // other mode words fade in on their times and an emphasised one turns accent. Nothing scales. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';

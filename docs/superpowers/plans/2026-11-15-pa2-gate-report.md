@@ -119,4 +119,25 @@ Verdict: **desk: ship after fixes. pop: ship.** Strongest frame: desk `count` at
 
 The pass rule asked for SHIP on both films. `pop` passed; `desk` did not, on one high finding. Both revision rounds are used, so the frames and the three reviews go to the owner, and no further look work is done until the owner answers.
 
+## Owner's decision and the targeted fix pass
+
+The owner chose one targeted fix pass with the director's own check and no fourth review.
+
+- Film script (director): the cut into `count` is a hard cut.
+- desk: the picture's surroundings, mount and tape included, go under a paper scrim at 0.8 instead of an ink dim; the caption card sits under the highlighted region after the push; the picture enters on a clean fade and is at least half visible on its first frame; text clears the slug by two gutters.
+- pop: the establishing card stays inside the safe area through its spring; unspoken words are an opaque mix of ink into paper.
+- From the code review of revision 2 (0 critical, 3 important, 18 minor): a text's rest scale counts only frames where it is on screen; the film's first frame is judged in a mode that hooks from frame zero (other modes may open on the field, by the director's ruling), and a punch arrival is judged on its first frame; overlays pinned over a picture stay on top through a punch, with a new `covered` finding; three weakened tests restored. The `free` example's reveal now starts visible, because the new first-frame rule caught it.
+
+Measured on the final tree by the controller, implementer stopped:
+
+| Check | Result |
+|---|---|
+| v2 suite, tap file | 793 tests, 793 pass, 0 fail, 0 skipped |
+| gate-desk | exit 0, ok, 0 findings, 638 frames, render 38.7 s, 12.63 MB |
+| gate-pop | exit 0, ok, 0 findings, 362 frames (230 captured), render 11.8 s, 5.48 MB |
+
+Director's check of the sheets: the high finding is gone (the cut into `count` is clean); the dimmed surroundings read as paper; the caption no longer covers the chart's bars at rest. Known and left: the sliced "59" at the frame edge is still faintly legible under the scrim; the caption card crosses the chart while the push runs; the slug and caption card fade in from near zero after a hard cut; `pop` "NO CLOUD." keeps its wider word gap (the stack ruling); the smear is parked. Not reviewed by a fourth independent reviewer, by the owner's choice. The version 1 suite was not run in the gate rounds; no version 1 file was changed.
+
+The gate is closed on the owner's decision. Remaining look findings from the third review are follow-ups for the showreel plan.
+
 Trend over three independent reviews: desk ship-after-fixes, ship-after-fixes, ship-after-fixes (high findings fell to one, in a cut the director chose); pop not-yet, ship-after-fixes, ship.

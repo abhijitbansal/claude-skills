@@ -7,6 +7,7 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
+import { pathPoints } from '../devices/shared.mjs';
 import { sizeAt, fontFor, setCase, isEditorial, inkExtent, asTextCard } from './shared.mjs';
 
 export const SLUG = Object.freeze({ top: 0.14, turn: 3, pad: 30, gap: 18, numeralStep: 3, kickerStep: 2, digits: 2, maxColumns: 3 });
@@ -47,7 +48,29 @@ function slugParts(shot, ctx) {
   return { numFont, kickFont, numeral, kicker, numInk, kickInk, w, h, pad, gap };
 }
 
-/** The slug's unturned box [x, y, w, h] in canvas pixels, and its box once turned (axis-aligned), or null. */
+// The slug's card device, as slugNodes builds it (the same id and seed, so the same tape).
+const slugCard = (shot, ctx, box) => registries.devices.get('card').build({ id: `${shot.id}.slug`, box, at: ctx.look.moves.enter.dur, look: ctx.look, unit: ctx.unit, seed: ctx.seed }).nodes[0];
+
+// A point turned by `deg` degrees about the origin.
+function turnBy([x, y], deg) {
+  const a = deg * DEGREES_TO_RADIANS, cos = Math.cos(a), sin = Math.sin(a);
+  return [x * cos - y * sin, x * sin + y * cos];
+}
+
+// The canvas box of the card's paper and tape strips (not its shadow), the card turned exactly SLUG.turn about (cx, cy).
+function inkedBox(card, cx, cy) {
+  const inked = card.children.filter((n) => n.id.endsWith('.paper') || n.props.tape === true);
+  const points = inked.flatMap((n) => pathPoints(n.props.d).map((p) => {
+    const [x, y] = turnBy(p, n.props.rotate ?? 0);
+    const [tx, ty] = turnBy([x + (n.props.x ?? 0), y + (n.props.y ?? 0)], SLUG.turn);
+    return [cx + tx, cy + ty];
+  }));
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+}
+
+/** The slug's unturned box [x, y, w, h] in canvas pixels, its box once turned (axis-aligned), and the box its card's
+ *  paper and tape cover (`inked`, axis-aligned), or null. */
 export function slugBox(shot, ctx) {
   if (!hasSlug(shot, ctx.look)) return null;
   const { w, h } = slugParts(shot, ctx);
@@ -55,17 +78,17 @@ export function slugBox(shot, ctx) {
   const a = SLUG.turn * DEGREES_TO_RADIANS;
   const tw = w * Math.cos(a) + h * Math.sin(a), th = w * Math.sin(a) + h * Math.cos(a);
   const cx = box[0] + w / HALF, cy = box[1] + h / HALF;
-  return { box, turned: [cx - tw / HALF, cy - th / HALF, tw, th] };
+  return { box, turned: [cx - tw / HALF, cy - th / HALF, tw, th], inked: inkedBox(slugCard(shot, ctx, box), cx, cy) };
 }
 
 /** The slug's nodes: one group (the card's entrance, turned exactly +3 degrees) holding the card and the two lines. */
 export function slugNodes(shot, ctx) {
   const placed = slugBox(shot, ctx);
   if (placed === null) return [];
-  const { look, unit, seed } = ctx;
+  const { look } = ctx;
   const parts = slugParts(shot, ctx);
   const id = `${shot.id}.slug`;
-  const card = registries.devices.get('card').build({ id, box: placed.box, at: look.moves.enter.dur, look, unit, seed }).nodes[0];
+  const card = slugCard(shot, ctx, placed.box);
   const left = -parts.w / HALF + parts.pad, top = -parts.h / HALF + parts.pad;
   const numBaseline = top + parts.numInk.up;
   const kickBaseline = numBaseline + parts.gap + parts.kickInk.up;

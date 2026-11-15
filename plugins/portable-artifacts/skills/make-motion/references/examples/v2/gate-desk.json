@@ -27,14 +27,12 @@
       "show": "statement",
       "cut": "cut",
       "kicker": "How it works",
-      "hero": "idea",
       "say": "The model writes *one small file*. Scripts do the rest."
     },
     {
       "id": "count",
       "show": "number",
-      "cut": "match",
-      "hero": "idea",
+      "cut": "cut",
       "kicker": "In numbers",
       "say": "Five skills. One file each.",
       "value": 5,
