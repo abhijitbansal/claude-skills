@@ -10,7 +10,7 @@ import { parseCaptions, groupWords, captionState, CaptionError, CAPTION_STYLES, 
 import { captionZone } from '../template/formats.mjs';
 import { graphemes } from '../template/defaults.mjs';
 import { validateSpec, withDefaults, loadSpec } from '../scripts/lib/spec.mjs';
-import { captionBoxProblem, main as checkMain } from '../scripts/check.mjs';
+import { captionBoxProblem, main as checkMain } from '../scripts/lib/check-main.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
 import { requireRender, BROWSER_ONLY, assertRendersIdentically } from './helpers/render.mjs';

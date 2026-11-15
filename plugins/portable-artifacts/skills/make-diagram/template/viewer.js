@@ -178,7 +178,7 @@
       if (keyboard && inPanel && back && back.focus && !within(back, options.panel)) back.focus();
       else if (inPanel) keepFocus([options.panel], 'explore');
       else if (hadFocus && target && target.blur) target.blur(); // focusout clears the focus trace
-      panel.paint();
+      camera.holdView(panel.paint); // the panel hiding widens the stage: no jump on Close either
       emit();
     }
 
@@ -285,7 +285,7 @@
       var from = trace.selected() || (trace.routed() && trace.routed().from);
       if (shift && id && from && id !== from && els.nodes[id] && els.nodes[from]) trace.route(from, id);
       else trace.toggle(id);
-      panel.paint();
+      camera.holdView(panel.paint); // the panel opening narrows the stage: keep the drawing under the pointer
       emit();
     }
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });

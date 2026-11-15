@@ -43,7 +43,7 @@ Ids are lowercase letters, digits, `-` and `_`, starting with a letter (`^[a-z][
 | `kind` | per type, see [kinds.md](kinds.md); the first kind listed is the default |
 | `icon` | `lucide:<name>`, `brand:<slug>` or `cloud:<name>` (AWS and Google Cloud services, drawn in their own colours; one the pack lacks can be imported with `node scripts/icons.mjs import <aws\|gcp> <folder>`); default is the kind's icon. Find one with `node scripts/icons.mjs search <word>`. Kinds drawn as bare shapes (flow `start`, `end`, `decision`; state `start`, `end`, `choice`) take no icon |
 | `group` | a group id |
-| `note` | up to 60 characters, one line, shown under the label |
+| `note` | up to 60 characters are accepted, but the card draws one line of at most 27 characters (180 px at 11 px mono) and clips the rest with an ellipsis, and `validate` warns. The Explore panel shows the whole note; put longer text in `detail` |
 | `tone` | `neutral` (default) \| `accent` \| `good` \| `warn` \| `bad`; colours only the border and the icon (not a `cloud:` icon, which keeps its own colours) |
 | `emoji` | exactly one emoji (a pictograph with its skin tone or joins, a flag, a keycap); drawn in the icon tile instead of the icon. Not on kinds drawn as bare shapes |
 | `detail` | up to 400 characters of plain text, shown in the Explore panel |
@@ -90,7 +90,7 @@ Prefer stories. A spec with both is an error (use stories; steps is the older fo
 | steps | 25 |
 | group nesting | 3 |
 | node, group or participant label | 48 characters (wraps to 2 lines) |
-| note | 60 characters (1 line) |
+| note | 60 characters accepted, 27 fit on the card (1 line) |
 | edge or message label, frame label | 40 characters |
 | page title / subtitle | 120 / 160 characters |
 | step title / note | 60 / 200 characters |

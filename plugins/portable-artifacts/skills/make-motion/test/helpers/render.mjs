@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { findFfmpeg, findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 import { launchBrowser } from '../../scripts/lib/browser.mjs';
 import { assertSameRender } from './framemd5.mjs';
+import { withTestWorkers } from './workers-arg.mjs';
 
 const RENDER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/render.mjs');
 const PINNED_BUILD_DATE = '1793318400'; // 30 Oct 2026 00:00 UTC: render.mjs stamps the build date into the MP4 comment tag
@@ -63,7 +64,7 @@ export async function requireRender(t, { need = DEFAULT_NEED, skipStatic = false
  */
 export async function renderHash(specPath, args = [], { env = {} } = {}) {
   const out = path.join(mkdtempSync(path.join(tmpdir(), 'rh-')), 'v.mp4');
-  const r = spawnSync(process.execPath, [RENDER, specPath, '--out', out, ...args], {
+  const r = spawnSync(process.execPath, [RENDER, specPath, '--out', out, ...withTestWorkers(args)], {
     encoding: 'utf8',
     env: { ...process.env, SOURCE_DATE_EPOCH: PINNED_BUILD_DATE, ...env },
   });

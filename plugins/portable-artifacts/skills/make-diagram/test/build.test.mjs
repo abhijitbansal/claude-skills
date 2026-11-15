@@ -207,9 +207,13 @@ for (const name of NAMES) {
 test('page parts: toolbar, SVG, text alternative, data block and runtime', () => {
   const html = readOut(run([example('architecture')]));
   assert.ok(html.includes('role="group" aria-label="Diagram controls"') && !html.includes('role="toolbar"'), 'a plain group: no roving-tabindex promise');
-  for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-chapters', 'data-pa-line', 'data-pa-scrub', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle data-mode="auto"', 'data-pa-caption', 'id="pa-stage"', /data-pa-panel[\s>]/, 'data-pa-panel-title', 'data-pa-panel-close', 'data-pa-panel-body', 'data-pa-tip', 'data-pa-find', 'data-pa-found', 'data-pa-empty', 'data-pa-tally']) {
+  for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-chapters', 'data-pa-line', 'data-pa-scrub', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle data-mode="auto"', 'data-pa-caption', 'id="pa-stage"', /data-pa-panel[\s>]/, 'data-pa-panel-title', 'data-pa-panel-close', 'data-pa-panel-body', 'data-pa-tip', 'data-pa-find', 'data-pa-found']) {
     assert.ok(typeof hook === 'string' ? html.includes(hook) : hook.test(html), String(hook));
   }
+  // W2P-M03: the panel is hidden until something is selected, so an empty state inside it (count chips and the
+  // hint) could never be seen. It is gone; the hint rides on the Explore button's title instead.
+  assert.doesNotMatch(html, /<[a-z]+ [^>]*data-pa-(empty|tally)/, 'no empty state inside the hidden panel (the runtime still looks the holders up, so test the markup, not the string)');
+  assert.match(html, /data-pa-mode="explore"[^>]*title="[^"]*Click a node or edge[^"]*Shift-click a second node[^"]*"/);
   assert.match(html, /<svg [^>]*role="graphics-document"/);
   assert.equal(html.match(/role="graphics-document"/g).length, 1);
   assert.ok(!/role="img"/.test(html.replace(/<section class="sr-only"[\s\S]*?<\/section>/, '')), 'no nested img roles');

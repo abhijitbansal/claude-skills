@@ -5,8 +5,10 @@
 //
 //   var panel = PADiagram.panel({ panel, tip, found }, data, els, trace, { isOff, onPick, onBeat, onClose });
 //
-// panel   aside[data-pa-panel] with data-pa-panel-title, data-pa-panel-close,
-//         data-pa-empty (holding data-pa-tally) and data-pa-panel-body inside it.
+// panel   aside[data-pa-panel] with data-pa-panel-title, data-pa-panel-close and
+//         data-pa-panel-body inside it, and optionally data-pa-empty (holding
+//         data-pa-tally) for a host whose panel stays visible when nothing is
+//         selected. make-diagram's own page hides the panel then, so it has none.
 // tip     [data-pa-tip], positioned inside the stage.
 // found   the row the Find matches go in (buttons that pick a node).
 // isOff() true hides the panel and the tooltip (the story is on).

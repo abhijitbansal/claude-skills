@@ -1,7 +1,7 @@
-// A copy of the skill with no node_modules: validate, preview and render print the doctor's command and exit 2 (PA-08), not a raw
+// A copy of the skill with no node_modules: validate, preview, render, check, voice and cutout print the doctor's command and exit 2 (PA-08), not a raw
 // ERR_MODULE_NOT_FOUND stack with exit 1. The entry scripts check for node_modules with Node built-ins, then import the rest.
-// No browser: none of these gets past the preflight. (check.mjs is not covered: it exports functions its tests import, so it
-// still imports its dependencies statically.)
+// No browser: none of these gets past the preflight. (The functions the check tests import live in lib/check-main.mjs,
+// so scripts/check.mjs is a thin entry like the others: W2P-M12.)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { cpSync, existsSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
@@ -24,7 +24,11 @@ function bareCopy() {
 const run = (copy, script, args) => spawnSync(process.execPath, [path.join(copy, 'scripts', script), ...args], { encoding: 'utf8' });
 const FIX = (copy) => `scripts/doctor.mjs --fix node_modules`.replace('scripts/', `${path.join(copy, 'scripts')}/`);
 
-for (const [script, args] of [['validate.mjs', ['motion.json']], ['preview.mjs', ['motion.json']], ['render.mjs', ['motion.json']]]) {
+const ENTRIES = [
+  ['validate.mjs', ['motion.json']], ['preview.mjs', ['motion.json']], ['render.mjs', ['motion.json']],
+  ['check.mjs', ['motion.json']], ['voice.mjs', ['hello', '--out', 'v.wav']], ['cutout.mjs', ['photo.png']],
+];
+for (const [script, args] of ENTRIES) {
   test(`${script} in a copy with no node_modules prints the doctor command and exits 2, with no stack`, () => {
     const copy = bareCopy();
     const r = run(copy, script, args);

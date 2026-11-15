@@ -19,7 +19,7 @@ import { planContext } from '../template/sketch/plan-context.mjs';
 import { validateSpec, withDefaults, loadSpec } from '../scripts/lib/spec.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
-import { waitReady } from '../scripts/check.mjs';
+import { waitReady } from '../scripts/lib/check-main.mjs';
 import { probed } from './render-probe.mjs';
 import { requireRender, BROWSER_ONLY, assertRendersIdentically } from './helpers/render.mjs';
 import { sketchExtremes } from './helpers/sketch-block-params.mjs';

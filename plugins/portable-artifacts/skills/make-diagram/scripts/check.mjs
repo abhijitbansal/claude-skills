@@ -9,19 +9,16 @@
 // exit 0 ok or skipped (no browser), 1 problems, 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchBrowser, BrowserUnavailable } from './lib/browser.mjs';
 import { skipHint } from './lib/doctor-hint.mjs';
+import { takeShots } from './lib/shots.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 import { MIN_STAGE_WIDTH, isLegible, legibilityMessage } from './lib/legibility.mjs';
 
 const USAGE = 'node scripts/check.mjs <page.html> [--json] [--shots <dir>]';
 const OPTIONS = { json: { type: 'boolean' }, shots: { type: 'string' } };
-const SHOT_SCRIPT = fileURLToPath(new URL('../shared/shot.mjs', import.meta.url));
-const SHOT_WIDTHS = '390,1280';
-const SHOT_TIMEOUT_MS = 120000;
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 780 }];
 const READY_MS = 5000;
 const TEXT_TOLERANCE_PX = 2;
@@ -189,23 +186,7 @@ function report(result, json) {
   }
 }
 
-/**
- * One PNG per viewport (390, 1280) and colour scheme into `dir`, through shared/shot.mjs in its own process (its own
- * browser, started after the check's closed). Returns { status, paths, message? }: status is shot.mjs's exit code, 0 on success.
- */
-export function takeShots(file, dir, { run = spawnSync, script = SHOT_SCRIPT } = {}) {
-  const r = run(process.execPath, [script, file, '--widths', SHOT_WIDTHS, '--out', dir, '--json'], { encoding: 'utf8', timeout: SHOT_TIMEOUT_MS });
-  let body = null;
-  try {
-    body = JSON.parse(String(r.stdout ?? '').trim().split('\n').at(-1));
-  } catch {
-    body = null;
-  }
-  const paths = (body?.shots ?? []).map((s) => s.path);
-  if (r.status === 0 && body?.ok) return { status: 0, paths };
-  const message = body?.errors?.[0]?.message ?? body?.problems?.[0] ?? firstLine(r.stderr || r.error?.message || 'the screenshot run failed');
-  return { status: r.status ?? 1, paths, message };
-}
+export { takeShots }; // the --shots half lives in lib/shots.mjs (no browser import), so a test can stub it
 
 // PA_CHECK_TIMEOUT_MS shortens the wall-clock cap (tests; slow machines can raise it).
 function timeoutFromEnv(env) {

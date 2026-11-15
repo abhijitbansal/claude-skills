@@ -437,25 +437,43 @@ test('a route export carries no pa-route', async (t) => {
   await context.close();
 });
 
-// ---- Find and the count chips (Task 6) --------------------------------------------------------
+// ---- Find (Task 6) --------------------------------------------------------
 
-const chips = (page) => texts(page, '[data-pa-tally] .pa-chip');
 const foundTexts = (page) => texts(page, '[data-pa-found] .pa-chip');
 
-test('nothing selected: count chips by kind, the stories and the beats, and the hint; a walkthrough has no stories chip', async (t) => {
+// W2P-M03: the panel is hidden until something is selected, so it carries no empty state (count chips, hint);
+// the hint rides on the Explore button's title. Visibility is asserted, not textContent (which reads hidden nodes).
+test('nothing selected: the panel is hidden and has no empty state; the hint is on the Explore button; a selection shows it and Close hides it again', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const story = await openPage(built('story').url);
-  assert.deepEqual(await chips(story.page), ['1 user', '1 client', '1 gateway', '1 service', '1 database', '1 queue', '1 external', '2 stories', '9 beats']);
-  assert.equal(await story.page.textContent('[data-pa-empty] .hint'), 'Click a node or edge. Shift-click a second node to trace a path.');
+  assert.equal(await story.page.isVisible('[data-pa-panel]'), false, 'nothing selected: the panel takes no room');
+  assert.equal(await story.page.locator('[data-pa-empty]').count(), 0, 'no empty state');
+  assert.equal(await story.page.locator('[data-pa-tally]').count(), 0, 'no count chips');
+  assert.match(await story.page.getAttribute('[data-pa-mode="explore"]', 'title'), /Click a node or edge\. Shift-click a second node to trace a path\./);
   await story.page.click('.pa-node[data-id="orders"]');
-  assert.equal(await story.page.isHidden('[data-pa-empty]'), true, 'the empty state gives way to the selection');
+  assert.equal(await story.page.isVisible('[data-pa-panel]'), true, 'a selection shows the panel');
   await story.page.click('[data-pa-panel-close]');
-  assert.equal(await story.page.isHidden('[data-pa-panel]'), true, 'the empty state is not shown on its own: the panel hides');  assert.deepEqual(story.problems, []);
+  assert.equal(await story.page.isVisible('[data-pa-panel]'), false, 'Close hides it again');
+  assert.deepEqual(story.problems, []);
   await story.context.close();
+});
 
-  const arch = await openPage(built('architecture').url);
-  assert.deepEqual(await chips(arch.page), ['1 client', '1 service', '1 database', '1 external', '3 beats'], 'groups are not a kind; a step-derived timeline is not a story');
-  await arch.context.close();
+// W2P-M04: the panel opening narrows the stage; the drawing must stay under the pointer (no rescale, no jump),
+// on the first selection and again on Close, so a Shift-click on a second node still hits its target.
+test('opening and closing the panel does not move or rescale the clicked node', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('architecture').url);
+  const box = () => page.locator('.pa-node[data-id="web"]').boundingBox();
+  const near = (a, b, what) => assert.ok(Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2 && Math.abs(a.width - b.width) < 0.5, `${what}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+  const before = await box();
+  await page.click('.pa-node[data-id="web"]');
+  assert.equal(await page.isVisible('[data-pa-panel]'), true);
+  near(await box(), before, 'after the panel opened');
+  await page.click('[data-pa-panel-close]');
+  assert.equal(await page.isVisible('[data-pa-panel]'), false);
+  near(await box(), before, 'after Close');
+  assert.deepEqual(problems, []);
+  await context.close();
 });
 
 test('/ focuses Find; typing filters the canvas and lists matches; Enter selects the first and fits the camera; a chip picks; Escape clears', async (t) => {

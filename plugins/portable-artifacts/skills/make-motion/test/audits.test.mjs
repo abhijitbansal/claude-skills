@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
-import * as checkModule from '../scripts/check.mjs';
+import * as checkModule from '../scripts/lib/check-main.mjs';
 import { readFileSync } from 'node:fs';
 import { validateSpec, withDefaults } from '../scripts/lib/spec.mjs';
 import { contrastRatio } from '../shared/contrast.mjs';

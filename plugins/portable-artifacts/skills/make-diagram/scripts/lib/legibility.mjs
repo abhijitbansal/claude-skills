@@ -24,7 +24,11 @@ export const labelPx = (scale) => LABEL_PX * scale;
 export const isLegible = (scale) => labelPx(scale) >= MIN_LABEL_PX;
 
 /** The same sentence for the validate warning and the check problem: what fits, what it draws at, what to do. */
-export function legibilityMessage(scale, where = 'on a 1440 px screen', { direction = true } = {}) {
-  const fix = direction ? 'split it into several diagrams, or use fewer nodes in a row (direction down for a long chain)' : 'split it into several diagrams, or use fewer participants and messages';
+export function legibilityMessage(scale, where = 'on a 1440 px screen', { direction = true, grouped = false } = {}) {
+  const fix = grouped
+    ? 'split it into several diagrams, one per group (a diagram with groups is never wrapped into rows), or use fewer nodes'
+    : direction
+      ? 'split it into several diagrams, or use fewer nodes in a row (direction down for a long chain)'
+      : 'split it into several diagrams, or use fewer participants and messages';
   return `fits ${where} at ${Math.round(scale * 100)}% zoom, so labels draw about ${labelPx(scale).toFixed(1)} px (the floor is ${MIN_LABEL_PX} px): ${fix}`;
 }

@@ -91,5 +91,6 @@ export function semanticWarnings(spec, theme) {
 export function layoutWarnings(geometry) {
   const size = geometry.drawing ?? geometry;
   const scale = estimateFitScale(size.width, size.height);
-  return isLegible(scale) ? [] : [{ path: '', message: `the diagram ${legibilityMessage(scale, undefined, { direction: !geometry.participants })}` }];
+  const grouped = (geometry.groups ?? []).length > 0;
+  return isLegible(scale) ? [] : [{ path: '', message: `the diagram ${legibilityMessage(scale, undefined, { direction: !geometry.participants, grouped })}` }];
 }

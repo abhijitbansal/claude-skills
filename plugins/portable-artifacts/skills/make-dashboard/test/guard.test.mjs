@@ -74,6 +74,17 @@ const REJECTED = {
   'a mixed-case self-reference (non-recursive)': 'WITH T AS (SELECT * FROM t) SELECT * FROM T',
   'a mixed-case forward reference': 'WITH a AS (SELECT * FROM B), b AS (SELECT 1 AS n) SELECT * FROM a',
   'a mixed-case CTE named after a system view': 'WITH Duckdb_Databases AS (SELECT 1 AS path) SELECT path FROM duckdb_databases',
+  // An attached catalog is allowed whatever its schema, so the system-schema
+  // denial is the only thing refusing these: it must fold case too (kills a
+  // mutation that compares the raw schema name).
+  'an attached catalog with an upper-case pg_catalog schema': 'SELECT * FROM shop.PG_CATALOG.pg_tables',
+  'an attached catalog with a mixed-case information_schema': 'SELECT * FROM shop.Information_Schema.tables',
+  'an attached catalog with a quoted upper-case system schema': 'SELECT * FROM shop."INFORMATION_SCHEMA"."TABLES"',
+  'the system catalog in upper case': 'SELECT * FROM SYSTEM.main.duckdb_settings',
+  // JS lower-cases the Kelvin sign (U+212A) to ASCII "k"; DuckDB does not. Both
+  // sides must still refuse a lookalike of a system name.
+  'a CTE named after duckdb_keywords with a Kelvin sign': 'WITH duckdb_Keywords AS (SELECT 1 AS a) SELECT * FROM duckdb_keywords',
+  'a Kelvin-sign lookalike of a system table function': 'SELECT * FROM "duckdb_Keywords"()',
 };
 
 for (const [name, sql] of Object.entries(REJECTED)) {
@@ -119,6 +130,21 @@ for (const [name, sql] of Object.entries(ACCEPTED)) {
     assert.equal(await verdict(sql), null);
   });
 }
+
+// The guard lower-cases with JS rules (Unicode-aware); DuckDB folds ASCII only.
+// A lookalike name can therefore pass the guard (it matches a CTE or source
+// after folding) yet never bind in DuckDB. That is fail-closed: it must not run.
+test('a Kelvin-sign lookalike of a CTE name passes the guard but cannot bind', async () => {
+  const sql = 'WITH Kpi AS (SELECT 1 AS a) SELECT * FROM kpi';
+  assert.equal(await verdict(sql), null);
+  await assert.rejects(db.conn.runAndReadAll(sql), /does not exist/);
+});
+
+test('a Kelvin-sign lookalike of a system view never returns system data', async () => {
+  const sql = 'SELECT * FROM duckdb_Keywords';
+  assert.match(await verdict(sql), /not allowed/);
+  await assert.rejects(db.conn.runAndReadAll(sql), /does not exist/);
+});
 
 test('shadowing a system object is called out by name', async () => {
   assert.equal(

@@ -18,7 +18,7 @@ import { handPose } from '../template/sketch/hand.mjs';
 import { HAND_LEAD, HAND_EXIT, handHome } from '../template/sketch/timing.mjs';
 import lucide from '../template/sketch/lucide.mjs';
 import { checkSketchDuration } from '../scripts/lib/sketch-check.mjs';
-import { sketchPlans } from '../scripts/check.mjs';
+import { sketchPlans } from '../scripts/lib/check-main.mjs';
 import { changeGaps } from '../template/viral.mjs';
 import { probed, framed, meanLuma } from './render-probe.mjs';
 import { requireRender, assertRendersIdentically, renderHash, BROWSER_ONLY } from './helpers/render.mjs';

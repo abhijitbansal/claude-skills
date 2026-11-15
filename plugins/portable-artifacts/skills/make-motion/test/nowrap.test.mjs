@@ -12,7 +12,7 @@ import { bindWithNbsp, findTokens } from '../shared/nowrap.mjs';
 import { nowrapProblems } from '../shared/nowrap-probe.mjs';
 import { substituteVars } from '../template/vars.mjs';
 import { canvasSize } from '../template/formats.mjs';
-import { main as checkMain, wrapProblems } from '../scripts/check.mjs';
+import { main as checkMain, wrapProblems } from '../scripts/lib/check-main.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CHECK = path.join(root, 'scripts/check.mjs');

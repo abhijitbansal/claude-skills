@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { BLANK_BOARD_STDERR } from './helpers/blank-board.mjs';
-import * as checkModule from '../scripts/check.mjs';
+import * as checkModule from '../scripts/lib/check-main.mjs';
 import { loadSpec } from '../scripts/lib/spec.mjs';
 import { specHasVideo } from '../scripts/lib/video.mjs';
 import { planScene } from '../template/sketch/plan.mjs';

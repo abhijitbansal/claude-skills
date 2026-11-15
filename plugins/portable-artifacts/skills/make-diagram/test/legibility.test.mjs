@@ -43,6 +43,15 @@ test('the message names direction only where a direction exists', () => {
   assert.doesNotMatch(legibilityMessage(0.3, undefined, { direction: false }), /direction/);
 });
 
+// W2P-M02: "direction down for a long chain" is wrong advice for a diagram with groups (it is never
+// wrapped, and cloud-architecture is already direction down), so the fix is worded by situation.
+test('the message for a grouped diagram says groups are never wrapped, and does not suggest direction down', () => {
+  const message = legibilityMessage(0.3, undefined, { grouped: true });
+  assert.doesNotMatch(message, /direction down/);
+  assert.match(message, /one per group/);
+  assert.match(message, /never wrapped/);
+});
+
 test('isLegible follows the label floor', () => {
   assert.equal(isLegible(MIN_LABEL_PX / LABEL_PX), true);
   assert.equal(isLegible(MIN_LABEL_PX / LABEL_PX - 0.01), false);
@@ -68,6 +77,14 @@ test('cloud-architecture is the shipped example the gate reports: tall and group
   const w = r.warnings?.find((x) => /labels draw about/.test(x.message));
   assert.ok(w, JSON.stringify(r.warnings));
   assert.match(w.message, /labels draw about 6\.\d px/);
+  assert.match(w.message, /one per group/);
+  assert.doesNotMatch(w.message, /direction down/);
+});
+
+test('a tall ungrouped diagram keeps the direction advice', async () => {
+  const r = await validateSpec(chain(60));
+  const w = r.warnings?.find((x) => /labels draw about/.test(x.message));
+  assert.match(w.message, /direction down for a long chain/);
 });
 
 test('the shipped examples carry no legibility warning', async () => {
@@ -135,6 +152,22 @@ test('a 60-character note is clipped on the card so the card stays within the no
   const w = r.warnings?.find((x) => x.path === 'nodes[0].note');
   assert.ok(w, JSON.stringify(r.warnings));
   assert.match(w.message, /clipped on the card/);
+});
+
+// W2P-M01: schema.md promised "up to 60 characters" while the card clips at MAX_NOTE_WIDTH (27 mono
+// characters at 11 px, measured below), so a spec that followed the docs got a clip and a warning.
+test('schema.md states the note length that fits on the card, not only the 60-character input limit', () => {
+  const fit = Math.floor(MAX_NOTE_WIDTH / measure('a', fonts(theme).note));
+  assert.equal(fit, 27, 'the cap moved: update schema.md and this test together');
+  assert.ok(measure('a'.repeat(fit), fonts(theme).note) <= MAX_NOTE_WIDTH);
+  assert.ok(measure('a'.repeat(fit + 1), fonts(theme).note) > MAX_NOTE_WIDTH);
+  const md = fs.readFileSync(here('../references/schema.md'), 'utf8');
+  const row = md.split('\n').find((l) => l.startsWith('| `note` | up to 60'));
+  assert.ok(row, 'the node note row is missing');
+  assert.match(row, new RegExp(`${fit} characters`), row);
+  assert.match(row, /clip/i, row);
+  const limit = md.split('\n').find((l) => l.startsWith('| note |'));
+  assert.match(limit, new RegExp(`${fit}`), limit);
 });
 
 test('a short note is drawn whole and draws no warning', async () => {
