@@ -1,6 +1,9 @@
-// Bundled fonts (shared/fonts/*.woff2, served at /engine/fonts/shared/<file>) the stage loads through FontFace.
-// facesFor(film) is the seam: it returns every face the film needs. A later task widens it (theme fonts, more
-// faces through engine/fonts/index.mjs); the stage only ever calls facesFor and loadFaces.
+// Bundled fonts the stage loads through FontFace: shared/fonts/*.woff2 (served at /engine/fonts/shared/<file>) and the
+// variable display faces engine/fonts/index.mjs lists (served at /engine/fonts/<file>).
+// facesFor(film) is the seam: it returns every face the film needs, each as { family, url, descriptors }. A later
+// task widens it (theme fonts); the stage only ever calls facesFor and loadFaces.
+import { fontFaces } from '../fonts/index.mjs';
+
 const FONT_URL_PREFIX = '/engine/fonts/shared/';
 
 // [family, weight, file] for every file in shared/fonts/ (the family name is the key shared/fonts/metrics.json uses).
@@ -24,7 +27,11 @@ const SHARED_FACES = Object.freeze([
   ['Schibsted Grotesk', 400, 'schibsted-grotesk-latin-400-normal.woff2'],
   ['Schibsted Grotesk', 700, 'schibsted-grotesk-latin-700-normal.woff2'],
   ['Young Serif', 400, 'young-serif-latin-400-normal.woff2'],
-].map(([family, weight, file]) => Object.freeze({ family, weight, file, url: `${FONT_URL_PREFIX}${file}` })));
+].map(([family, weight, file]) => Object.freeze({
+  family,
+  url: `${FONT_URL_PREFIX}${file}`,
+  descriptors: Object.freeze({ weight: String(weight), style: 'normal' }),
+})));
 
 // Every string a `family` key holds anywhere in the film (a node's font object names one).
 function familiesIn(value, found = new Set()) {
@@ -40,15 +47,16 @@ function familiesIn(value, found = new Set()) {
 
 export function facesFor(film) {
   const wanted = familiesIn(film);
-  const bundled = new Set(SHARED_FACES.map((face) => face.family));
+  const available = [...SHARED_FACES, ...fontFaces()];
+  const bundled = new Set(available.map((face) => face.family));
   for (const family of wanted) {
     if (!bundled.has(family)) throw new Error(`unknown font family "${family}" (bundled: ${[...bundled].join(', ')})`);
   }
-  return SHARED_FACES.filter((face) => wanted.has(face.family));
+  return available.filter((face) => wanted.has(face.family));
 }
 
 export async function loadFaces(faces) {
-  const loaded = await Promise.all(faces.map((face) => new FontFace(face.family, `url(${face.url})`, { weight: String(face.weight), style: 'normal' }).load()));
+  const loaded = await Promise.all(faces.map((face) => new FontFace(face.family, `url(${face.url})`, face.descriptors).load()));
   for (const face of loaded) document.fonts.add(face);
   await document.fonts.ready;
 }
