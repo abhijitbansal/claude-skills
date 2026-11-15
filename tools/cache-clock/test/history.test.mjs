@@ -171,6 +171,21 @@ test("a subagent compaction resets only that agent's accounting chain", () => {
   assert.equal(sum.models.find((m) => m.model === "claude-sonnet-5.5").coldIdle, 0);
 });
 
+test("pings are left out of calls and cold counts, and their cost is shown as keep-warm spend", () => {
+  const msg = (o) => JSON.stringify({ type: "user.message", timestamp: iso(T0), data: o });
+  const s = { model: "claude-sonnet-5.5", ttl: 300 };
+  const log = [record(T0, { ...s, input: 100_000, read: 0, write: 100_000 }),
+    msg({ content: "cache-clock keep-warm", transformedContent: "[cache-clock:keepwarm] Reply with exactly: ." }),
+    record(T0 + 4 * MIN, { ...s, input: 100_000, read: 100_000, write: 0, nanoAiu: 2e9 }),
+    msg({ content: "carry on" }), record(T0 + 8 * MIN, { ...s, input: 101_000, read: 100_000, write: 1000 })].join("\n");
+  const sum = summarize([{ id: "kw", ...parseSessionLog(log) }]);
+  const m = sum.models[0];
+  assert.deepEqual([m.calls, m.coldIdle, m.coldBreak, m.pings, sum.pings], [2, 0, 0, 1, 1]);
+  assert.ok(Math.abs(m.keepWarmUsd - 0.02) < 1e-12);
+  assert.ok(Math.abs(m.spentUsd - (0.02 + 2 * 111133000 / 1e11)) < 1e-12);
+  assert.match(formatReport(sum), /keep-warm: 1 ping\(s\), \$0\.02/);
+});
+
 test("report CLI reads a session-state directory and prints JSON", () => {
   const root = mkdtempSync(join(tmpdir(), "cc-report-"));
   mkdirSync(join(root, "sess-1"));

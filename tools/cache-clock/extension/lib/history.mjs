@@ -3,6 +3,7 @@
 
 import { classifyCall, extraUsd, isMainInteraction, lostTokens, normalizeUsage } from "./usage.mjs";
 import { tokens, usd } from "./format.mjs";
+import { isPingMessage } from "./keepwarm.mjs";
 
 const NANO_AIU_PER_USD = 1e11;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -15,6 +16,8 @@ export function parseSessionLog(text) {
   let lastAt = null;
   // Calls in different epochs are never compared: a compaction rewrote the context in between.
   const epochs = new Map();
+  // True from a root keep-warm user message until the next root user message.
+  let pingTurn = false;
   for (const line of String(text).split("\n")) {
     if (!line.trim()) continue;
     let event;
@@ -33,17 +36,19 @@ export function parseSessionLog(text) {
     if (event.type === "session.usage_checkpoint") checkpoint = event.data ?? null;
     const agentKey = event.agentId ?? "main";
     if (event.type === "session.compaction_complete" && event.data?.success !== false) epochs.set(agentKey, (epochs.get(agentKey) ?? 0) + 1);
+    if (event.type === "user.message" && agentKey === "main") pingTurn = isPingMessage(event.data);
     if (event.type !== "session.usage_record") continue;
     const raw = event.data?.usage;
     const call = normalizeUsage(raw, event.timestamp);
     if (!call) continue;
-    calls.push({ agentKey, call, epoch: epochs.get(agentKey) ?? 0, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
+    const ping = agentKey === "main" && pingTurn && isMainInteraction(call);
+    calls.push({ agentKey, call, ping, epoch: epochs.get(agentKey) ?? 0, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
   }
   return { calls, checkpoint, badLines, lastAt };
 }
 
 function emptyModel(call) {
-  return { model: call.model, displayName: call.displayName, calls: 0, coldIdle: 0, coldBreak: 0, coldSwitch: 0, lostTokens: 0, extraUsd: 0, unpricedRewrites: 0, spentUsd: 0, idleMinutes: [] };
+  return { model: call.model, displayName: call.displayName, calls: 0, coldIdle: 0, coldBreak: 0, coldSwitch: 0, lostTokens: 0, extraUsd: 0, unpricedRewrites: 0, spentUsd: 0, pings: 0, keepWarmUsd: 0, idleMinutes: [] };
 }
 
 /**
@@ -73,7 +78,7 @@ export function summarize(sessions, { since = 0, now = Date.now() } = {}) {
     withCalls += 1;
     surfaces[s.client ?? "unknown"] = (surfaces[s.client ?? "unknown"] ?? 0) + 1;
     const prevByKey = new Map();
-    for (const { agentKey, call, epoch, nanoAiu } of s.calls) {
+    for (const { agentKey, call, ping, epoch, nanoAiu } of s.calls) {
       const key = agentKey;
       const last = isMainInteraction(call) ? prevByKey.get(key) : undefined;
       const prev = last && last.epoch === epoch ? last.call : null;
@@ -83,8 +88,15 @@ export function summarize(sessions, { since = 0, now = Date.now() } = {}) {
       lastAt = Math.max(lastAt ?? call.at, call.at);
       const m = models.get(call.model) ?? emptyModel(call);
       models.set(call.model, m);
-      m.calls += 1;
       m.spentUsd += nanoAiu / NANO_AIU_PER_USD;
+      // A keep-warm ping set `prevByKey` above, so the next real call is compared with it,
+      // but it is spend, not a model call or a cold send.
+      if (ping) {
+        m.pings += 1;
+        m.keepWarmUsd += nanoAiu / NANO_AIU_PER_USD;
+        continue;
+      }
+      m.calls += 1;
       // Background calls (titles, summaries) cost money but keep their own cache.
       if (!isMainInteraction(call)) continue;
       const kind = classifyCall(prev, call);
@@ -116,6 +128,8 @@ export function summarize(sessions, { since = 0, now = Date.now() } = {}) {
     extraUsd: extraUsdTotal,
     unpricedRewrites,
     spentUsd: list.reduce((t, m) => t + m.spentUsd, 0),
+    pings: list.reduce((t, m) => t + m.pings, 0),
+    keepWarmUsd: list.reduce((t, m) => t + m.keepWarmUsd, 0),
     perWeekUsd: unpricedRewrites ? null : days ? (extraUsdTotal / days) * 7 : 0,
     sessions: { withCalls, checkpointOnly, checkpointOnlyUsd },
     surfaces,
@@ -138,6 +152,7 @@ export function formatReport(sum) {
   out.push("");
   out.push(`estimated extra for cold rewrites: ${usd(sum.extraUsd)} of ${usd(sum.spentUsd)} spent` +
     (sum.unpricedRewrites ? ` (priced subtotal only; ${sum.unpricedRewrites} rewrite(s) missing prices; * marks incomplete rows)` : ` · about ${usd(sum.perWeekUsd)} per week at this rate`));
+  if (sum.pings > 0) out.push(`keep-warm: ${sum.pings} ping(s), ${usd(sum.keepWarmUsd)} (in total spent; not counted as calls or cold sends)`);
   out.push("Switch rewrites describe observed read loss, not proof the model switch caused it. Extra cost is estimated against a warm read, not measured savings.");
   if (sum.sessions.checkpointOnly) {
     const n = sum.sessions.checkpointOnly;

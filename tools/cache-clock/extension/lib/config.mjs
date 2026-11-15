@@ -1,4 +1,5 @@
-// Settings shared by every session: guard mode, cost threshold, heads-up lead time.
+// Settings shared by every session: guard mode, cost threshold, heads-up lead time,
+// and the keep-warm window, budget and payback stop.
 
 import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
@@ -6,7 +7,14 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { MODES } from "./guard.mjs";
 
-export const DEFAULTS = Object.freeze({ mode: "refuse", minUsd: 0.1, headsUpMin: 5 });
+export const DEFAULTS = Object.freeze({
+  mode: "refuse", minUsd: 0.1, headsUpMin: 5, keepWarmHours: 0, keepWarmMaxUsd: 0.5, keepWarmPayback: true,
+});
+
+export const KEEPWARM_ON_HOURS = 3;
+export const KEEPWARM_MAX_HOURS = 12;
+export const KEEPWARM_CONFIRM_ABOVE_HOURS = 6;
+export const KEEPWARM_MAX_USD = 5;
 
 const FILE = "config.json";
 
@@ -17,20 +25,50 @@ export function configDir(env = process.env) {
 
 const isAmount = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
 
+// One entry per setting: the rule as shown to the user, and the check for it.
+const RULES = {
+  mode: { rule: `one of ${MODES.join(", ")}`, ok: (v) => MODES.includes(v) },
+  minUsd: { rule: "a dollar amount of 0 or more", ok: isAmount },
+  headsUpMin: { rule: "minutes, 0 or more", ok: isAmount },
+  keepWarmHours: { rule: `hours from 0 to ${KEEPWARM_MAX_HOURS}`, ok: (v) => isAmount(v) && v <= KEEPWARM_MAX_HOURS },
+  keepWarmMaxUsd: { rule: `dollars from 0 to ${KEEPWARM_MAX_USD}`, ok: (v) => isAmount(v) && v <= KEEPWARM_MAX_USD },
+  keepWarmPayback: { rule: "true or false", ok: (v) => typeof v === "boolean" },
+};
+const KEYS = Object.keys(RULES);
+
 function validated(raw) {
-  return {
-    mode: MODES.includes(raw?.mode) ? raw.mode : DEFAULTS.mode,
-    minUsd: isAmount(raw?.minUsd) ? raw.minUsd : DEFAULTS.minUsd,
-    headsUpMin: isAmount(raw?.headsUpMin) ? raw.headsUpMin : DEFAULTS.headsUpMin,
-  };
+  return Object.fromEntries(KEYS.map((key) => [key, RULES[key].ok(raw?.[key]) ? raw[key] : DEFAULTS[key]]));
+}
+
+/** What is wrong with a parsed config.json, as sentences; an absent key is not wrong. */
+function problemsIn(raw) {
+  const bad = KEYS.filter((key) => Object.hasOwn(raw, key) && !RULES[key].ok(raw[key]))
+    .map((key) => `config.json: ${key} must be ${RULES[key].rule}`);
+  const unknown = Object.keys(raw).filter((key) => !KEYS.includes(key))
+    .map((key) => `config.json: unknown setting "${key}"; accepted: ${KEYS.join(", ")}`);
+  return [...bad, ...unknown];
+}
+
+/** Reads config.json without writing it: { config, problem }, problem null when nothing is wrong. */
+export function loadConfigResult(dir) {
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(join(dir, FILE), "utf8"));
+  } catch (err) {
+    const problem = err.code === "ENOENT" ? null
+      : err instanceof SyntaxError ? `config.json is not valid JSON (${err.message})`
+        : `config.json could not be read (${err.message})`;
+    return { config: { ...DEFAULTS }, problem };
+  }
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return { config: { ...DEFAULTS }, problem: "config.json must hold a JSON object" };
+  }
+  const found = problemsIn(raw);
+  return { config: validated(raw), problem: found.length ? found.join("; ") : null };
 }
 
 export function loadConfig(dir) {
-  try {
-    return validated(JSON.parse(readFileSync(join(dir, FILE), "utf8")));
-  } catch {
-    return { ...DEFAULTS };
-  }
+  return loadConfigResult(dir).config;
 }
 
 export function saveConfig(dir, config) {
@@ -94,10 +132,38 @@ function amount(text) {
   return text !== undefined && text !== "" && isAmount(v) ? v : null;
 }
 
+const KEEPWARM_USAGE = `keepwarm takes on, off, hours from 0 to ${KEEPWARM_MAX_HOURS}, budget <dollars 0 to ${KEEPWARM_MAX_USD}>, or payback on|off`;
+const hoursPatch = (keepWarmHours) => ({ kind: "set", patch: { keepWarmHours } });
+
+/** `keepwarm` forms: on | off | <hours> | budget <usd> | payback on|off. `rest` is what follows the verb. */
+function parseKeepWarm(rest) {
+  const [first, second, ...extra] = rest;
+  if (first === "budget") {
+    const v = amount(second);
+    return extra.length || v === null || v > KEEPWARM_MAX_USD
+      ? { kind: "error", message: `keepwarm budget takes dollars from 0 to ${KEEPWARM_MAX_USD}, e.g. 0.50` }
+      : { kind: "set", patch: { keepWarmMaxUsd: v } };
+  }
+  if (first === "payback") {
+    return extra.length || !["on", "off"].includes(second)
+      ? { kind: "error", message: "keepwarm payback takes on or off" }
+      : { kind: "set", patch: { keepWarmPayback: second === "on" } };
+  }
+  if (second !== undefined || first === undefined) return { kind: "error", message: KEEPWARM_USAGE };
+  if (first === "on") return hoursPatch(KEEPWARM_ON_HOURS);
+  if (first === "off") return hoursPatch(0);
+  const hours = /^\d+(\.\d+)?$/.test(first) ? Number(first) : null;
+  if (hours === null || hours > KEEPWARM_MAX_HOURS) return { kind: "error", message: KEEPWARM_USAGE };
+  // Long windows cost real money: the caller shows an estimate and asks first.
+  return hours > KEEPWARM_CONFIRM_ABOVE_HOURS ? { kind: "confirm", patch: { keepWarmHours: hours } } : hoursPatch(hours);
+}
+
 /** Parses the argument string of `/cache-clock`. */
 export function parseCommand(args) {
-  const [verb = "", value, ...rest] = String(args ?? "").trim().split(/\s+/).filter(Boolean);
-  if (rest.length) return { kind: "error", message: `too many arguments: ${args}` };
+  const [verb = "", ...rest] = String(args ?? "").trim().split(/\s+/).filter(Boolean);
+  if (verb === "keepwarm") return parseKeepWarm(rest);
+  const [value, ...surplus] = rest;
+  if (surplus.length) return { kind: "error", message: `too many arguments: ${args}` };
   if (verb === "" || verb === "status") return { kind: "status" };
   if (verb === "help") return { kind: "help" };
   if (verb === "guard") {

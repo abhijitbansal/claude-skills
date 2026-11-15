@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { createClock } from "../extension/lib/clock.mjs";
 import { decide } from "../extension/lib/guard.mjs";
 import { normalizeUsage } from "../extension/lib/usage.mjs";
-import { usage, T0, MIN } from "./fixtures.mjs";
+import { PING_PROMPT } from "../extension/lib/keepwarm.mjs";
+import { usage, pingUsage, T0, MIN } from "./fixtures.mjs";
 
 const at = (ms) => new Date(ms).toISOString();
 const feed = (clock, o) => clock.ingest(normalizeUsage(usage({ ...o, at: at(o.at) }), o.at));
@@ -21,6 +22,12 @@ test("snapshot reports warm with time left inside the ttl", () => {
   assert.equal(s.msLeft, 3 * MIN);
   assert.equal(s.contextTokens, 200_000);
   assert.ok(Math.abs(s.extraUsd - 0.48) < 1e-9);
+});
+
+test("the snapshot carries the last call's prompt limit", () => {
+  const c = createClock();
+  feed(c, { at: T0, maxPromptTokens: 128_000 });
+  assert.equal(c.snapshot(T0).maxPromptTokens, 128_000);
 });
 
 test("snapshot reports cold after expiry", () => {
@@ -112,6 +119,14 @@ test("unpriced rewrites are counted without pretending they cost zero", () => {
   assert.equal(c.tally().unpricedRewrites, 1);
 });
 
+test("a ping refreshes the clock but is not tallied", () => {
+  const c = createClock();
+  feed(c, { at: T0, model: "claude-sonnet-5.5", ttl: 300, input: 200_000, read: 0, write: 200_000, output: 0 });
+  assert.equal(c.ingestPing(normalizeUsage(pingUsage({ at: at(T0 + 4 * MIN) }), T0 + 4 * MIN)).kind, "warm");
+  assert.deepEqual(c.tally(), { calls: 1, coldIdle: 0, coldBreak: 0, coldSwitch: 0, extraUsd: 0, unpricedRewrites: 0 });
+  assert.equal(c.snapshot(T0 + 8 * MIN, "claude-sonnet-5.5").state, "warm");
+});
+
 const cfg = { mode: "refuse", minUsd: 0.1 };
 
 test("decide guards prompts that merely start with a path, but not commands or shell escapes", () => {
@@ -130,6 +145,10 @@ test("after one refusal any prompt in the same cold episode goes through", () =>
   assert.equal(decide({ snap: coldSnap, prompt: "something else", config: cfg, refusedKey: first.key }).action, "warn");
 });
 const coldSnap = { model: "claude-sonnet-5.5", state: "cold", expiresAt: T0, extraUsd: 0.48 };
+
+test("decide never guards a ping, even on a cold cache", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: PING_PROMPT, config: cfg }).action, "allow");
+});
 
 test("decide allows slash commands, warm caches and cheap cold sends", () => {
   assert.equal(decide({ snap: coldSnap, prompt: "  /cache-clock", config: cfg }).action, "allow");

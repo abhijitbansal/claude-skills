@@ -11,6 +11,14 @@ export function createClock() {
   let staleModels = new Set();
   let tally = { calls: 0, coldIdle: 0, coldBreak: 0, coldSwitch: 0, extraUsd: 0, unpricedRewrites: 0 };
 
+  /** Records `call` as the newest observation for its model and the conversation. */
+  function remember(call) {
+    lastByModel.set(call.model, call);
+    lastModel = call.model;
+    lastConversation = call;
+    staleModels = new Set([...staleModels].filter((m) => m !== call.model));
+  }
+
   function ingest(call) {
     if (!call) return null;
     // After a compaction the context is new: its first write is not a cold rewrite.
@@ -27,11 +35,16 @@ export function createClock() {
       extraUsd: tally.extraUsd + (extra ?? 0),
       unpricedRewrites: tally.unpricedRewrites + (isCold && extra === null ? 1 : 0),
     };
-    lastByModel.set(call.model, call);
-    lastModel = call.model;
-    lastConversation = call;
-    staleModels = new Set([...staleModels].filter((m) => m !== call.model));
+    remember(call);
     return { kind, lostTokens: lost, extraUsd: extra, call };
+  }
+
+  /** A keep-warm ping refreshes the cache clock like a call, but is not a model call in the tally. */
+  function ingestPing(call) {
+    if (!call) return null;
+    const kind = classifyCall(lastConversation, call);
+    remember(call);
+    return { kind, call };
   }
 
   /** The context was rewritten (compaction): the next send's cost is not an idle tax. */
@@ -58,7 +71,7 @@ export function createClock() {
       return {
         model: model ?? "unknown", displayName: last?.displayName ?? model ?? "unknown selection",
         state: "unknown", reason: !model ? "selection-unavailable" : model === "auto" ? "auto" : !unqualified ? "qualified-selection" : "model-switch",
-        expiresAt: null, msLeft: null, ttlSec: null, lastCallAt: context.at,
+        expiresAt: null, msLeft: null, ttlSec: null, lastCallAt: context.at, maxPromptTokens: null,
         contextTokens, prices: priced ?? null, coldUsd: costs?.coldUsd ?? null,
         warmUsd: costs?.warmUsd ?? null, extraUsd: costs?.extraUsd ?? null,
       };
@@ -75,6 +88,7 @@ export function createClock() {
       msLeft: expiresAt === null ? null : expiresAt - now,
       ttlSec: last.ttlSec,
       lastCallAt: last.at,
+      maxPromptTokens: last.maxPromptTokens,
       prices: last.prices,
       contextTokens: costs?.contextTokens ?? last.inputTokens + last.outputTokens,
       coldUsd: costs?.coldUsd ?? null,
@@ -85,6 +99,7 @@ export function createClock() {
 
   return {
     ingest,
+    ingestPing,
     invalidate,
     snapshot,
     tally: () => ({ ...tally }),

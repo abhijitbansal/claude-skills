@@ -12,7 +12,7 @@ set -eu
 BASE_URL="${CACHE_CLOCK_BASE_URL:-https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/extension}"
 # Every file the extension ships; a test keeps this list in step with extension/.
 # extension.mjs comes last, so an interrupted download never looks like an extension.
-FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
+FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/keepwarm.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
 MODE="link"
 PROJECT=""
 

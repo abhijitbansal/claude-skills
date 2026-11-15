@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HELP, usd, perM, duration, tokens, card, refusal, coldWarn, headsUp } from "../extension/lib/format.mjs";
-import { DEFAULTS, configDir, loadConfig, saveConfig, parseCommand } from "../extension/lib/config.mjs";
+import { DEFAULTS, configDir, loadConfig, loadConfigResult, saveConfig, parseCommand } from "../extension/lib/config.mjs";
 import { T0, MIN } from "./fixtures.mjs";
 
 test("usd picks precision by size", () => {
@@ -88,8 +88,8 @@ test("saveConfig round-trips through loadConfig and creates the directory", () =
   const dir = join(mkdtempSync(join(tmpdir(), "cc-")), "nested");
   const cfg = { mode: "warn", minUsd: 0.25, headsUpMin: 0 };
   saveConfig(dir, cfg);
-  assert.deepEqual(loadConfig(dir), cfg);
-  assert.deepEqual(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")), cfg);
+  assert.deepEqual(loadConfig(dir), { ...DEFAULTS, ...cfg });
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")), { ...DEFAULTS, ...cfg });
 });
 
 test("parseCommand understands status, guard, min, headsup and help", () => {
@@ -105,6 +105,47 @@ test("parseCommand understands status, guard, min, headsup and help", () => {
   assert.equal(parseCommand("min -3").kind, "error");
   assert.equal(parseCommand("headsup soon").kind, "error");
   assert.equal(parseCommand("explode").kind, "error");
+});
+
+test("parseCommand understands keepwarm and rejects values outside the ranges", () => {
+  assert.deepEqual(parseCommand("keepwarm on"), { kind: "set", patch: { keepWarmHours: 3 } });
+  assert.deepEqual(parseCommand("keepwarm off"), { kind: "set", patch: { keepWarmHours: 0 } });
+  assert.deepEqual(parseCommand("keepwarm 6"), { kind: "set", patch: { keepWarmHours: 6 } });
+  assert.deepEqual(parseCommand("keepwarm 8"), { kind: "confirm", patch: { keepWarmHours: 8 } });
+  assert.deepEqual(parseCommand("keepwarm budget $0.25"), { kind: "set", patch: { keepWarmMaxUsd: 0.25 } });
+  assert.deepEqual(parseCommand("keepwarm payback off"), { kind: "set", patch: { keepWarmPayback: false } });
+  assert.match(parseCommand("keepwarm 13").message, /on, off, hours from 0 to 12/);
+  assert.match(parseCommand("keepwarm budget 6").message, /dollars from 0 to 5/);
+  assert.match(parseCommand("keepwarm payback maybe").message, /on or off/);
+  assert.equal(parseCommand("guard warn now").kind, "error");
+});
+
+test("loadConfigResult reports bad and unknown settings and leaves the file alone", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  const text = JSON.stringify({ keepWarmHours: 20, keepWarmPayback: "yes", colour: "red" });
+  writeFileSync(join(dir, "config.json"), text);
+  const { config, problem } = loadConfigResult(dir);
+  assert.deepEqual(config, DEFAULTS);
+  assert.match(problem, /keepWarmHours must be hours from 0 to 12/);
+  assert.match(problem, /keepWarmPayback must be true or false/);
+  assert.match(problem, /unknown setting "colour"; accepted: mode, minUsd/);
+  assert.equal(readFileSync(join(dir, "config.json"), "utf8"), text);
+  assert.equal(loadConfigResult(mkdtempSync(join(tmpdir(), "cc-"))).problem, null);
+});
+
+test("loadConfigResult reports unparseable and non-object files, and keeps valid keys beside bad ones", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  writeFileSync(join(dir, "config.json"), "{not json");
+  const bad = loadConfigResult(dir);
+  assert.deepEqual(bad.config, DEFAULTS);
+  assert.match(bad.problem, /^config\.json is not valid JSON \(/);
+  writeFileSync(join(dir, "config.json"), "[1]");
+  assert.match(loadConfigResult(dir).problem, /config\.json must hold a JSON object/);
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ mode: "warn", minUsd: -1 }));
+  const mixed = loadConfigResult(dir);
+  assert.deepEqual(mixed.config, { ...DEFAULTS, mode: "warn" });
+  assert.equal(mixed.problem, "config.json: minUsd must be a dollar amount of 0 or more");
+  assert.deepEqual(loadConfig(dir), mixed.config);
 });
 
 test("help explains what the clock does, what a cold send triggers, every command and the report", () => {
