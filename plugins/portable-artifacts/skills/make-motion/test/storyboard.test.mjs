@@ -299,7 +299,9 @@ test('a plan from a 30 s brief passes make-explainer validate.mjs with no warnin
   assert.equal(validated.status, 0, validated.stdout + validated.stderr);
   const report = JSON.parse(validated.stdout);
   assert.deepEqual(report.errors, []);
-  assert.deepEqual(report.warnings, []);
+  // The generatedBy provenance warning is the agent's to answer (build --model/--effort/--agent);
+  // the storyboard's own content must raise no other warning.
+  assert.deepEqual(report.warnings.filter((w) => w.path !== 'generatedBy'), []);
 });
 
 test('a plan from a brief with a named theme and long beats still validates (real sibling)', { skip: REAL_SIBLING_SKIP }, () => {

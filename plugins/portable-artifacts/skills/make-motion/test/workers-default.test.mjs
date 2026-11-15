@@ -3,6 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseWorkers } from '../scripts/lib/workers.mjs';
+import { parseArgs } from '../scripts/lib/render-main.mjs';
 import { withTestWorkers } from './helpers/workers-arg.mjs';
 
 test('parseWorkers: no --workers means auto, so a long film is not captured on one page', () => {
@@ -30,8 +31,42 @@ test('withTestWorkers: a test that names --workers (either spelling) keeps its o
   assert.deepEqual(withTestWorkers(['--workers=auto', '--fps', '10']), ['--workers=auto', '--fps', '10']);
 });
 
-test('withTestWorkers: a mode that refuses --workers (contact sheet, poster, batch) gets none', () => {
-  for (const flag of ['--contact-sheet', '--poster', '--batch']) assert.deepEqual(withTestWorkers([flag, '1']), [flag, '1'], flag);
+// --batch is not here: a batch takes --workers (vars.test.mjs renders one with --workers 2), so it is pinned like a plain render.
+test('withTestWorkers: a mode that refuses --workers (contact sheet, poster) gets none', () => {
+  for (const flag of ['--contact-sheet', '--poster']) assert.deepEqual(withTestWorkers([flag, '1']), [flag, '1'], flag);
+});
+
+test('withTestWorkers: a batch render gets --workers 1, as render.mjs accepts --workers with --batch', () => {
+  const args = ['--batch', 'rows.json', '--out', 'o/{index}.mp4'];
+  assert.deepEqual(withTestWorkers(args), [...args, '--workers', '1']);
+});
+
+// W3-M05: most render tests spawn render.mjs themselves, so the helper above cannot pin them. Under the test runner
+// (NODE_TEST_CONTEXT is set in every test process and in what it spawns) auto counts as one page; --workers still wins.
+function withRunner(value, fn) {
+  const saved = process.env.NODE_TEST_CONTEXT;
+  if (value === undefined) delete process.env.NODE_TEST_CONTEXT; else process.env.NODE_TEST_CONTEXT = value;
+  try {
+    return fn();
+  } finally {
+    if (saved === undefined) delete process.env.NODE_TEST_CONTEXT; else process.env.NODE_TEST_CONTEXT = saved;
+  }
+}
+const workersFor = (...flags) => parseArgs(['motion.json', ...flags]).workers;
+
+test('render.mjs under the test runner: no --workers (and auto) is one page, however many cores there are', () => {
+  withRunner('child-v8', () => {
+    assert.equal(workersFor(), 1);
+    assert.equal(workersFor('--workers', 'auto'), 1);
+  });
+});
+
+test('render.mjs under the test runner: an explicit --workers is never capped', () => {
+  withRunner('child-v8', () => assert.equal(workersFor('--workers', '4'), 4));
+});
+
+test('render.mjs outside the test runner: no --workers is auto, from the real core count', () => {
+  withRunner(undefined, () => assert.equal(workersFor(), parseWorkers(undefined)));
 });
 
 test('withTestWorkers: leaves the caller\'s array alone', () => {

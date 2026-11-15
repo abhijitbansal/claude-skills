@@ -463,7 +463,13 @@ test('nothing selected: the panel is hidden and has no empty state; the hint is 
 test('opening and closing the panel does not move or rescale the clicked node', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('architecture').url);
-  const box = () => page.locator('.pa-node[data-id="web"]').boundingBox();
+  // The ResizeObserver refit runs a frame after the panel opens: settle (the viewBox holds still) before each read, or the
+  // box can be read before the refit and the test passes without the fix. Seed to see it fail: in viewer.js replace
+  // camera.holdView(panel.paint) with panel.paint() and the box moves or rescales after the settle.
+  const box = async () => {
+    await settle(page);
+    return page.locator('.pa-node[data-id="web"]').boundingBox();
+  };
   const near = (a, b, what) => assert.ok(Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2 && Math.abs(a.width - b.width) < 0.5, `${what}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
   const before = await box();
   await page.click('.pa-node[data-id="web"]');

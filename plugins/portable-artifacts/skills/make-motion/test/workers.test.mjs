@@ -182,12 +182,13 @@ test('render: --workers 1 and --workers 4 give the same MP4 (q3-revenue at 320x1
   assert.deepEqual(progress(r.stdout), progress(one.stdout), 'the same progress lines');
 });
 
-// W2P-M11: no flag is auto. renderHash pins --workers 1 for the parallel test run, so this one spawns render itself.
+// W2P-M11: no flag is auto. renderHash pins --workers 1 for the parallel test run, so this one spawns render itself, and
+// removes NODE_TEST_CONTEXT (undefined drops a variable from the child's env) because under the runner auto is one page.
 test('render: no --workers flag (auto) gives the same MP4 as --workers 1', async (t) => {
   if (!await requireRender(t)) return;
   const one = await renderHash(EXAMPLE, [...SMALL, '--workers', '1']);
   const out = path.join(mkdtempSync(path.join(tmpdir(), 'wk-')), 'v.mp4');
-  const r = cli(['--out', out, ...SMALL], { SOURCE_DATE_EPOCH: '1793318400' });
+  const r = cli(['--out', out, ...SMALL], { SOURCE_DATE_EPOCH: '1793318400', NODE_TEST_CONTEXT: undefined });
   assert.equal(r.status, 0, r.stderr);
   assert.equal(createHash('sha256').update(readFileSync(out)).digest('hex'), one.sha256);
 });

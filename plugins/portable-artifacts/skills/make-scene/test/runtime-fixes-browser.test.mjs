@@ -364,7 +364,12 @@ test('F15: 24 long group names at 320 x 568: the legend is at most 30% of the ho
 });
 
 // ---- PA-48: Escape closes the tour, arrows step beats with canvas focus, the Tour button plays ----------------------
-// Seed for each: revert the key handler (chrome/index.js onKey / controls.js onKey) or the click handler and it fails.
+// runtime-keys.test.mjs pins only the pure helpers (keys.js); these three tests are what pin the wiring. Run them in the
+// serial browser slot, and show each one failing once with exactly one of these seeds applied (restore between seeds):
+//   - Escape test: in chrome/index.js onKey, make `escape === 'tour'` never close the tour (drop the closeTour() call).
+//   - arrows test: in controls.js onKey, delete the `arrowOwner(...) !== 'camera'` early return, so the canvas keeps Left and Right.
+//   - Tour button test: in chrome/index.js, change the tourButton click to `openTour()` (no `!reduced()`), so it opens paused.
+// No seed has been run yet: until it has, PA-48's wiring is proven by reading, not by a failing test.
 
 test('PA-48: Escape closes an open tour (the Explore panel still closes first)', async (t) => {
   const ctx = await openHarness(t);

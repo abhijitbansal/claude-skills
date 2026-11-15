@@ -15,6 +15,7 @@ import { GRID, MIN_COLOURS, canvasPng } from './lib/canvas-shot.mjs';
 import { SCHEMES, parseShotsDir, shotName } from './lib/shots.mjs';
 import { distinctColours } from './lib/png.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
+import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 
 const USAGE = 'node scripts/check.mjs <page.html> [--shots <dir>] [--json]';
 const OPTIONS = { json: { type: 'boolean' }, shots: { type: 'string' } };
@@ -241,6 +242,7 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new UsageError(`cannot read ${positionals[0]}`);
     const timeoutMs = timeoutFromEnv(process.env);
     const shotsDir = parseShotsDir(values.shots);
+    warnIfStaleCopy();
     const result = await checkPage(file, { timeoutMs, shotsDir });
     report(result, json, shotsDir !== null);
     process.exitCode = result.status === 'failed' ? 1 : 0;

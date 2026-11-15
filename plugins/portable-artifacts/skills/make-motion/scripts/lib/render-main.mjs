@@ -28,7 +28,7 @@ import { startServer, assetSrcs } from './server.mjs';
 import { launchBrowser, guardNetwork } from './browser.mjs';
 import { readyBudget, waitReady, boundPage, frameLimit } from './ready.mjs';
 import { findFfmpeg, findFfprobe, encodeArgs, probeAudio, probeGraph, measureLoudness, draftSize, QUALITIES } from './ffmpeg.mjs';
-import { parseWorkers, captureInOrder } from './workers.mjs';
+import { parseWorkers, autoCpus, captureInOrder } from './workers.mjs';
 import { wantsHelp, printHelp } from './help.mjs';
 import { specHasVideo, prepareVideo, videoAudioTracks } from './video.mjs';
 import { synthesiseCues } from './cues.mjs';
@@ -80,7 +80,7 @@ function checkTheme(name) {
   throw new UsageError(`--theme: unknown theme ${JSON.stringify(name)}; ${near ? `did you mean ${JSON.stringify(near)}?` : `available: ${themes.join(', ')}`}`);
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) { // exported for test/workers-default.test.mjs
   const opts = { contact: false };
   const rest = [];
   for (let i = 0; i < argv.length; i++) {
@@ -156,7 +156,7 @@ function checkBatch(opts) {
 
 // --workers and --quality: a value outside the accepted set is a usage error, and so is one a contact sheet would ignore.
 function checkCapture(opts) {
-  const workers = parseWorkers(opts.workers);
+  const workers = parseWorkers(opts.workers, autoCpus());
   if (opts.quality !== undefined && !QUALITIES.includes(opts.quality)) {
     throw new UsageError(`--quality must be ${QUALITIES.map((q) => JSON.stringify(q)).join(' or ')} (got ${JSON.stringify(opts.quality)})`);
   }

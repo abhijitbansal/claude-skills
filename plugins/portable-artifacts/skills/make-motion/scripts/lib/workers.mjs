@@ -16,6 +16,18 @@ async function captureFrame(page, _k, sec) {
 const AUTO_CAP = 8;
 const WORKERS_HELP = `--workers must be an integer from 1 to ${MAX_WORKERS} or "auto"`;
 
+const TEST_RUNNER_CPUS = 2; // auto leaves one core free, so two cores is one page
+
+/**
+ * The core count `auto` works from. `node --test` runs files in parallel and sets NODE_TEST_CONTEXT in every test
+ * process and in what it spawns, so a test that renders without naming --workers would open up to 8 pages of its own
+ * (W2P-M11): there, auto is one page. An explicit --workers is never capped; a test of the real auto count removes
+ * NODE_TEST_CONTEXT from the env it spawns with.
+ */
+export function autoCpus(env = process.env) {
+  return env.NODE_TEST_CONTEXT ? TEST_RUNNER_CPUS : os.availableParallelism();
+}
+
 /** `--workers` text -> a count: undefined and "auto" are max(1, min(8, cpus - 1)), else an integer 1-16. */
 export function parseWorkers(text, cpus = os.availableParallelism()) {
   if (text === undefined || text === 'auto') return Math.max(1, Math.min(AUTO_CAP, cpus - 1));
