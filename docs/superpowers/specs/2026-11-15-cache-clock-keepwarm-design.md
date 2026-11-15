@@ -1,6 +1,6 @@
 # cache-clock keep-warm design
 
-Date: 2026-11-15. Status: awaiting owner approval. Separate from the portable-artifacts 2.0 work: its own branch and pull request.
+Date: 2026-11-15. Status: awaiting owner approval. A separate topic from the portable-artifacts 2.0 work, built as its own commits on the session's branch (`worktree-New-Motion`) unless the owner asks for a second branch.
 
 Paths are relative to `tools/cache-clock/`. `L/` is `extension/lib/`.
 
