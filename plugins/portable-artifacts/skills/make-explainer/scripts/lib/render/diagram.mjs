@@ -116,6 +116,7 @@ export function render(section, ctx) {
 </div>
 <button type="button" class="btn dg-present" data-dg-present aria-haspopup="dialog" aria-label="Present diagram: ${esc(title)}">Present</button>
 ${overlay(title, prefix)}
-<script type="application/json" data-dg-data>${jsonBlock(built.data)}</script>${caption}
+<script type="application/json" data-dg-data>${jsonBlock(built.data)}</script>
+<p class="dg-cue" data-dg-cue hidden>Scrolls sideways: swipe or scroll the drawing, or press Present to see all of it.</p>${caption}
 </figure>`;
 }

@@ -24,11 +24,11 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 | `description` | optional subtitle |
 | `theme` | optional: `paper` (default), `blueprint`, `editorial`, `ink`, `dusk`, `press`, `poster`, `mono`, `brief`. `build.mjs --theme <name>` and `serve.mjs --watch --theme <name>` override it. An unknown name fails with did-you-mean. The page also has an icon toggle that cycles Auto, Light, Dark |
 | `generatedBy` | optional object `{ model?, effort?, agent? }`: who made the dashboard, shown in the page footer beside the refresh time and in the generator meta; each field is 1-60 characters of letters, digits, space and `. _ : / ( ) + -`; `build.mjs --model`, `--effort` and `--agent` override it; a missing field shows as "not reported" |
-| `maxRows` | integer 1–100000, default 5000; applied to every query. Longer results are cut and the card says "truncated at N" |
+| `maxRows` | integer 1–100000, default 5000; applied to every query. Longer results are cut and the card says "truncated at N rows; raise `maxRows` in the spec or aggregate in SQL" |
 | `sources.<name>` | `name` matches `^[a-z][a-z0-9_]*$` and is not `main`, `temp` or `system` (DuckDB catalogs). `type`: `csv`, `parquet`, `json`, `duckdb`, `sqlite` (take `path`) or `postgres`, `mysql` (take `env`, never `path`). `path` is relative to the **spec file**, not the cwd, and must resolve (symlinks followed) to a regular file inside the spec's folder. Only `--allow-outside` on validate/build lifts the folder rule; it is deliberately not a spec field |
 | `queries.<name>` | one SQL `SELECT` (CTEs and UNIONs fine). Each source name is a table/view in the query. No other statement types |
-| `kpis[]` | `id`, `title`, `query`, `field` required. Shows the first row's `field`. `format`: `number`, `currency` (USD), `percent` (value is a fraction: 0.25 → 25%), `compact` |
-| `charts[]` | `id`, `title`, `query` required, plus **exactly one of `kind` or `vegaLite`**. `width`: `full` (default) or `half` (two columns from 900px). See "Chart fields" below |
+| `kpis[]` | `id`, `title`, `query`, `field` required. Shows the `field` of the query's one row (more than one row is a warning at validate and build; zero rows shows a dash); the tile's *Query* disclosure shows its SQL. `format`: `number`, `currency` (USD), `percent` (value is a fraction: 0.25 → 25%), `compact` |
+| `charts[]` | `id`, `title`, `query` required, plus **exactly one of `kind` or `vegaLite`**. A dashboard needs at least one chart or KPI. `width`: `full` (default) or `half` (two columns from 900px). See "Chart fields" below |
 
 `id` values are unique across charts and KPIs and match `^[A-Za-z][A-Za-z0-9_-]*$`.
 
@@ -85,11 +85,11 @@ Any Vega-Lite 6 unit, layer or concat spec **without `data`**. Use it for what t
   Column names come from the SQL, so alias aggregates: `SUM(amount) AS revenue`.
 - Dates arrive as `YYYY-MM-DD` strings (DATE) or ISO strings (TIMESTAMP), so use `"type": "temporal"`.
   They are UTC: use `utc` time units (`utcyearmonth`, `utcmonth`, …) or axes shift by a month/day.
-- `url`, `data` and `usermeta` keys are rejected at any depth (`lookup` `from.data`, image marks, the `url` channel,
+- `url`, `data`, `usermeta` and `href` keys are rejected at any depth (`href` as a channel or a mark property too) (`lookup` `from.data`, image marks, the `url` channel,
   `usermeta.embedOptions`). Charts never fetch anything and the export/editor actions stay off.
 - Fields in `encoding.*.field`, `encoding.*.sort.field` and `facet`/`row`/`column` are checked against the query columns.
   Fields inside `transform` entries are not checked.
-- Theme (palette, grid, light/dark) comes from the page. Do not set colors, `config`, `width` or `autosize`; set `height` only if you need it (default 260).
+- Theme (palette, grid, light/dark) comes from the page. Do not set colors; a top-level `config`, `width` or `autosize` is an error; set `height` only if you need it (default 260).
 - Tooltips are added to every mark automatically.
 - Use at most 8 colour categories. Fold the rest into "Other" in SQL.
 
@@ -97,8 +97,7 @@ Any Vega-Lite 6 unit, layer or concat spec **without `data`**. Use it for what t
 
 1. Schema (did-you-mean on typos). 2. Cross-references: unique ids, queries exist, source files exist, inside the spec folder, regular files.
 3. SQL parses as exactly one SELECT. 4. Vega-Lite compiles. 5. Each query is bound against the real sources on the locked-down
-database (`LIMIT 0`), so unknown tables or columns are reported at `queries.<name>` with DuckDB's cause lines. The same column types check the kind roles, view names and `vegaLite` fields, so a typo in `x` or `field` fails at validate. Value-based rules (negatives, slice and colour counts) run at build, where rows exist. Then at build:
-queries run (30 s limit, `--timeout <seconds>`), and fields are checked against the result columns.
+database (`LIMIT 0`), so unknown tables or columns are reported at `queries.<name>` with DuckDB's cause lines. The same column types check the kind roles, view names and `vegaLite` fields, so a typo in `x` or `field` fails at validate. 6. Every query runs (30 s limit, `--timeout <seconds>`) and every chart is expanded, as build does: value-based rules (negatives, slice and colour counts, conversion errors) fail at validate too, and a KPI query with more than one row is a warning. `validate.mjs --bind-only` stops after step 5. `inspect.mjs --spec` runs steps 1-4 only, so a draft can list its tables before its queries work.
 
 ## SQL rules
 
@@ -121,7 +120,7 @@ CTE scoping follows DuckDB's binder: a CTE body sees only the CTEs defined befor
 real `WITH RECURSIVE` (a self or forward reference would bind to the *catalog*). CTE names that shadow a system view, table or
 table function (`duckdb_databases`, `pg_settings`, …) are rejected: `CTE name "x" shadows a system object; rename it`.
 
-Every query is also bound with `LIMIT 0` against the real sources at validate time. Result cells pass through a scrubber for
+Every query is also bound with `LIMIT 0` and then run against the real sources at validate time. Table and CTE names match case-insensitively, as DuckDB binds them (`WITH Totals ... FROM totals`); a system name is refused in any case. Result cells pass through a scrubber for
 connection-string secrets, but that is defence in depth only: the guard is the control.
 
 ## Types in results

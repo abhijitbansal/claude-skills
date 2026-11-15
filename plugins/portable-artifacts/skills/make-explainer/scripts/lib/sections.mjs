@@ -16,6 +16,7 @@ import * as timeline from './render/timeline.mjs';
 import * as compare from './render/compare.mjs';
 import * as callout from './render/callout.mjs';
 import * as code from './render/code.mjs';
+import * as diff from './render/diff.mjs';
 import * as details from './render/details.mjs';
 import * as image from './render/image.mjs';
 import * as checklist from './render/checklist.mjs';
@@ -30,7 +31,7 @@ import * as review from './render/review.mjs';
 import * as verdict from './render/verdict.mjs';
 
 const MODULES = {
-  tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, details, image, checklist, diagram, chart, motion, scene,
+  tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, diff, details, image, checklist, diagram, chart, motion, scene,
   decision, approval, question, review, verdict,
 };
 

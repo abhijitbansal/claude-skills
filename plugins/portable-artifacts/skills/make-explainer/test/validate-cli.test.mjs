@@ -24,12 +24,32 @@ function withSpec(obj, fn) {
   }
 }
 
-const doc = (sections) => ({ title: 'T', sections });
+// Carries generatedBy so the validate nudge for a missing one (tested below) stays out of the other pins.
+const doc = (sections) => ({ title: 'T', generatedBy: { model: 'test-model', effort: 'high', agent: 'test' }, sections });
 
-test('valid spec exits 0 and says so', () => {
+test('valid spec exits 0 and says so; a missing generatedBy is the one nudge it carries', () => {
   const r = run([FIXTURE]);
   assert.equal(r.status, 0);
-  assert.match(r.stdout, /all-types\.explainer\.json: valid\n$/);
+  assert.match(r.stdout, /^generatedBy: warning: add generatedBy \{"model"/);
+  assert.match(r.stdout, /all-types\.explainer\.json: valid \(1 warning\)\n$/);
+  withSpec(doc([{ type: 'text', text: 'x' }]), (file) => {
+    const clean = run([file]);
+    assert.equal(clean.status, 0);
+    assert.equal(clean.stdout, `${file}: valid\n`);
+  });
+});
+
+test('the generatedBy nudge is JSON-visible, never an error, and left out of a spec that already has errors', () => {
+  withSpec({ title: 'T', sections: [{ type: 'text', text: 'x' }] }, (file) => {
+    const r = run([file, '--json']);
+    assert.equal(r.status, 0);
+    const body = JSON.parse(r.stdout);
+    assert.equal(body.ok, true);
+    assert.deepEqual(body.warnings.map((w) => w.path), ['generatedBy']);
+  });
+  withSpec({ title: 'T', sections: [{ type: 'text', text: 'TODO: x' }] }, (file) => {
+    assert.deepEqual(JSON.parse(run([file, '--json']).stdout).warnings, []);
+  });
 });
 
 test('invalid spec exits 1 with path: message lines', () => {

@@ -6,7 +6,33 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Edit(*.sh)",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/shellcheck-on-edit.sh\""
+          },
+          {
+            "type": "command",
+            "if": "Write(*.sh)",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/shellcheck-on-edit.sh\""
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/skill-hint.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUseFailure": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/skill-hint.sh\""
           }
         ]
       }

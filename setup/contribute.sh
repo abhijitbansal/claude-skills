@@ -14,21 +14,45 @@ PLUGIN="core-workflow"
 MESSAGE=""
 NO_PR=0
 AUTO_MERGE=0
+# Capture mode stops after capture unless --commit or --push; --skill mode
+# commits and pushes by default.
+COMMIT_FLAG=""
+ACCEPTED="--skill <name>, --plugin <name>, --message <text>, --commit, --push, --no-pr, --auto-merge"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --skill)        SKILL="$2"; shift ;;
     --plugin)       PLUGIN="$2"; shift ;;
     --message)      MESSAGE="$2"; shift ;;
+    --commit)       COMMIT_FLAG="commit" ;;
+    --push)         COMMIT_FLAG="push" ;;
     --no-pr)        NO_PR=1 ;;
     --auto-merge)   AUTO_MERGE=1 ;;
-    *) fail "unknown arg: $1"; exit 2 ;;
+    *) fail "unknown arg: $1 (accepted: ${ACCEPTED})" || true; exit 2 ;;
   esac
   shift
 done
 
+if [[ -n "${COMMIT_FLAG}" ]]; then
+  DO_COMMIT=1; [[ "${COMMIT_FLAG}" == "push" ]] && DO_PUSH=1 || DO_PUSH=0
+elif [[ -n "${SKILL}" ]]; then
+  DO_COMMIT=1; DO_PUSH=1
+else
+  DO_COMMIT=0; DO_PUSH=0
+fi
+
 # Step 1: preflight
 gh_auth_check
+# --skill mode must validate before it commits; a missing runner would push an
+# untested scaffold.
+if [[ -n "${SKILL}" ]]; then
+  for tool in bats uv; do
+    command -v "${tool}" >/dev/null 2>&1 || {
+      fail "--skill needs bats and uv to validate before committing; '${tool}' not found (install bats-core and uv)" || true
+      exit 1
+    }
+  done
+fi
 
 # Step 2: sync
 cd "${REPO}"
@@ -88,8 +112,22 @@ description: <one-line trigger description; when should Claude pick this skill>
 EOF
   fi
   info "scaffolded plugins/${PLUGIN}/skills/${SKILL}/"
+  STAGE_PATHS=("plugins/${PLUGIN}/skills/${SKILL}")
 else
   bash "${SCRIPT_DIR}/capture.sh"
+  # Only the paths capture.sh writes; never untracked debris.
+  STAGE_PATHS=()
+  for p in templates/home-CLAUDE.md templates/user-settings.json claude-setup.toml; do
+    [[ -e "${REPO}/${p}" ]] && STAGE_PATHS+=("${p}")
+  done
+  if (( DO_COMMIT == 0 )); then
+    git --no-pager diff --stat -- "${STAGE_PATHS[@]}"
+    git --no-pager diff -- "${STAGE_PATHS[@]}"
+    info "captured on branch ${branch}; nothing committed. Review the diff above for secrets and private names."
+    info "to keep it: git -C \"${REPO}\" add -- ${STAGE_PATHS[*]} && git -C \"${REPO}\" commit, then push and open a PR yourself."
+    info "next time pass --commit (commit only) or --push (commit, push, open a PR) to do it in one run once you trust the capture."
+    exit 0
+  fi
 fi
 
 # Step 5: validate
@@ -108,18 +146,23 @@ if command -v shellcheck >/dev/null 2>&1; then
   shellcheck "${REPO}"/setup/*.sh 2>/dev/null || true
 fi
 
-# Step 6: commit
-if [[ -z "$(git status --porcelain)" ]]; then
+# Step 6: commit (only the paths this run wrote)
+if [[ -z "$(git status --porcelain -- "${STAGE_PATHS[@]}")" ]]; then
   info "nothing to commit; aborting"
   git switch -
   git branch -d "${branch}"
   exit 0
 fi
-git add -A
+git add -- "${STAGE_PATHS[@]}"
 msg="${MESSAGE:-chore: contribute via claude-skills-contribute}"
 git commit -m "${msg}
 
 Co-Authored-By: Claude <noreply@anthropic.com>"
+
+if (( DO_PUSH == 0 )); then
+  info "committed on ${branch}; not pushed (--commit). Push with: git -C \"${REPO}\" push -u origin ${branch}"
+  exit 0
+fi
 
 # Step 7: push
 git push -u origin "${branch}" 2>/dev/null || warn "git push failed (no remote?)"
@@ -129,9 +172,15 @@ if (( NO_PR == 0 )); then
   gh pr create --title "${msg}" --body "Automated contribution from claude-skills-contribute." || warn "gh pr create failed"
 fi
 
-# Step 9: merge
+# Step 9: merge. --auto queues the squash-merge until required checks pass; it
+# does not merge now. Branch protection (e.g. a solo CODEOWNERS review) can
+# still hold it, and only an admin merge gets past that.
 if (( AUTO_MERGE == 1 )); then
-  gh pr merge --squash --delete-branch || warn "gh pr merge failed"
+  if gh pr merge --auto --squash --delete-branch; then
+    info "merge queued: GitHub squash-merges once checks pass and reviews allow"
+  else
+    warn "gh pr merge --auto failed (auto-merge disabled on the repo?)"
+  fi
 fi
 
 info "done"

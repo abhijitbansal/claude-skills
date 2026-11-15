@@ -1057,12 +1057,12 @@
       <h3 class="gal-h3">Plan mode</h3>
       <p>The <code>plan</code> preset of make-explainer turns a proposal into a page a reviewer answers in the browser: one option per decision, approve or changes per item, free text and an overall verdict. Copy or Download hands back a <code>plan-answers.json</code> that the agent checks with <code>answers.mjs</code>. <b>Save as HTML</b>, a sticky button in the left menu, downloads the page itself with the answers inside, to keep, share or hand to the agent (<code>answers.mjs</code> reads it too). The same sample plan in its two themes; it is not switched by the theme bar above.</p>
       <div class="gal-grid">
-        <div class="gitem gal-card reveal"><h4>Plan, techie</h4><p class="gal-meta">make-explainer · <code>--preset plan</code> · <code>--theme mono</code></p>
+        <div class="gitem gal-card reveal"><h4>Plan, techie</h4><p class="gal-meta">make-explainer · <code>scaffold.mjs plan</code> · <code>--theme mono</code></p>
           <a href="showcase/portable-artifacts/gallery/plan-page/index.html" target="_blank" rel="noopener" aria-label="Open the plan page in the mono theme"><img class="gal-media" src="showcase/portable-artifacts/gallery/plan-page/thumb.jpg" alt="A plan page in the mono theme: monospace headings, a summary and the numbers the plan rests on" loading="lazy" width="1280" height="720"></a>
           <p>Monospace, cyan accent and blunt numbers, for a senior developer who wants the decisions and the evidence. Open it, pick an option, then use Save as HTML in the left menu, or Copy and Download in the Answers section.</p>
           <p class="gal-links"><a href="showcase/portable-artifacts/gallery/plan-page/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/plan-page/explainer.json" target="_blank" rel="noopener">View spec</a></p>
         </div>
-        <div class="gitem gal-card reveal"><h4>Plan, executive</h4><p class="gal-meta">make-explainer · <code>--preset plan</code> · <code>--theme brief</code></p>
+        <div class="gitem gal-card reveal"><h4>Plan, executive</h4><p class="gal-meta">make-explainer · <code>scaffold.mjs plan</code> · <code>--theme brief</code></p>
           <a href="showcase/portable-artifacts/gallery/plan-page/brief/index.html" target="_blank" rel="noopener" aria-label="Open the plan page in the brief theme"><img class="gal-media" src="showcase/portable-artifacts/gallery/plan-page/brief/thumb.jpg" alt="The same plan page in the brief theme: serif headings on warm paper" loading="lazy" width="1280" height="720"></a>
           <p>The same spec for an engineering manager: serif headings, warm paper and the decision and verdict up front.</p>
           <p class="gal-links"><a href="showcase/portable-artifacts/gallery/plan-page/brief/index.html" target="_blank" rel="noopener">Open full page ↗</a><a href="showcase/portable-artifacts/gallery/plan-page/explainer.json" target="_blank" rel="noopener">View spec</a></p>
@@ -1215,6 +1215,14 @@
 
     <section id="whats-new" class="doc-section">
       <h2><span class="ix">14</span> What's new</h2>
+      <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">1.3.0</h4>
+      <p style="margin-bottom:12px">15 Nov 2026 · pages land in <code>.scratch/</code>, every script answers <code>--help</code>, checks can leave screenshots, and make-explainer checklists gain steps and expected results. The full list, including the behaviour changes to read before upgrading, is in the <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
+      <div class="inv" style="margin-bottom:24px">
+        <div class="row"><span class="nm">Default output</span><span class="dc">make-diagram, make-explainer and make-scene build to <code>$PA_OUTPUT_DIR</code>, else <code>&lt;git root&gt;/.scratch/&lt;slug&gt;.html</code> in a repository, else <code>~/.agent/diagrams/</code>, and end with a bare <code>file://</code> line. make-dashboard still writes <code>dist/index.html</code>.</span></div>
+        <div class="row"><span class="nm">Look at the page</span><span class="dc"><code>check.mjs --shots &lt;dir&gt;</code> writes light and dark PNGs at 390 and 1280 px; a skipped check is not a pass.</span></div>
+        <div class="row"><span class="nm">Checklists</span><span class="dc">Items take <code>steps</code>, <code>expect</code> and <code>tags</code>, groups take an <code>intro</code>, and <code>build --md</code> writes a markdown twin.</span></div>
+        <div class="row"><span class="nm">Also</span><span class="dc">a <code>diff</code> section, make-dashboard validating every query and chart, make-diagram warnings and <code>--format svg</code>, make-scene <code>--fragment</code>, make-motion <code>--workers auto</code> by default, and a doctor that says <code>stale</code> for an install older than a security pin.</span></div>
+      </div>
       <h4 style="margin:18px 0 8px;font-size:14px;color:var(--text-faint);font-family:var(--font-mono);letter-spacing:.08em;text-transform:uppercase">1.2.0</h4>
       <p style="margin-bottom:12px">6 Nov 2026 · make-motion draws by hand, make-explainer gains a Simple English toggle and make-diagram gains <code>cloud:</code> icons. The full list, including the behaviour changes to read before upgrading, is in the <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/CHANGELOG.md">changelog</a>.</p>
       <div class="inv" style="margin-bottom:24px">
@@ -1295,7 +1303,7 @@
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>8 plugins · 92 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
+      <span>8 plugins · 92 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

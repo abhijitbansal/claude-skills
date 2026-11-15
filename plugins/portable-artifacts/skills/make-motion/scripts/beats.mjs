@@ -10,6 +10,7 @@ import path from 'node:path';
 import { UsageError } from '../shared/cli.mjs';
 import { didYouMean } from '../shared/errors.mjs';
 import { findFfmpeg } from './lib/ffmpeg.mjs';
+import { wantsHelp, printHelp } from './lib/help.mjs';
 import { inputClashes } from './lib/paths.mjs';
 import { MAX_BEATS_FILE_BYTES } from './lib/beats-file.mjs';
 import { SAMPLE_RATE, MIN_BPM, MAX_BPM, BPM_LIMITS, DRIFT_LIMIT, minSeconds, checkAudioPath, decodePcm, detectBeats } from './lib/beats.mjs';
@@ -139,6 +140,7 @@ function whyNoBeat(opts, { drift, confidenceBeforeDrift }, narrowed) {
 }
 
 async function main() {
+  if (wantsHelp(process.argv.slice(2))) return printHelp(USAGE);
   const opts = parseArgs(process.argv.slice(2));
   checkAudioFile(opts.audio);
   const out = outputPath(opts);

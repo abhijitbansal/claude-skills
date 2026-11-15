@@ -21,6 +21,7 @@ const plan = (patch = {}) => ({
     { type: 'decision', id: 'theme', question: 'Which theme?', options: [{ label: 'Mono' }, { label: 'Brief' }], recommended: 'Mono', why: 'Dark by default.', default: 'Brief' },
     { type: 'approval', id: 'budget', title: 'Budget', item: 'Approve the budget', why: 'It is small.' },
     { type: 'question', id: 'owner', title: 'Owner', text: 'Who owns the rollout?', default: 'The author' },
+    { type: 'text', text: 'The cache plan, in one line.' },
     { type: 'verdict', text: 'Ship it?' },
   ],
   ...patch,

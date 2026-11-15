@@ -85,6 +85,33 @@ function lintHeading(text, path, sectionTitle) {
   return errors;
 }
 
+// ---- warnings: raw markdown and label titles -------------------------------------------------------
+
+// markdown.mjs renders bold, italic, code, links and "- " lists; these three print as typed, so they warn.
+const MARKDOWN_PATTERNS = [
+  [/^ {0,3}#{1,6}[ \t]+\S/m, 'a "#" heading', 'use the section title, or **bold** text'],
+  [/^ {0,3}\d+[.)][ \t]+\S/m, 'a numbered list', 'use a steps section, or a "- " list'],
+  [/^ *\|.*\|[ \t]*$(?:\n(?: *\|)?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$)/m, 'a markdown table', 'use a table section'],
+];
+
+/** Warnings for markdown syntax this page prints literally in one prose string -> [{ path, message }], one per pattern. */
+export function rawMarkdownWarnings(text, path) {
+  return MARKDOWN_PATTERNS.filter(([pattern]) => pattern.test(text)).map(([, what, fix]) => ({
+    path,
+    message: `contains ${what}, which prints as typed (the page renders bold, italic, code, links and "- " lists only); ${fix}`,
+  }));
+}
+
+/** Titles that name the kind of section instead of its claim (references/style.md: a title is a claim). */
+export const LABEL_TITLES = ['overview', 'summary', 'introduction', 'changes', 'background', 'conclusion'];
+
+/** A warning when a section title is just a label ("Overview", "Summary:") -> [{ path, message }]. */
+export function labelTitleWarnings(title, path) {
+  const bare = title.trim().replace(/[\s:.—-]+$/u, '').toLowerCase();
+  if (!LABEL_TITLES.includes(bare)) return [];
+  return [{ path, message: `title ${q(title.trim())} is a label, not a claim; say what the section shows, such as "Search now ignores case"` }];
+}
+
 /**
  * Lint one prose string. `heading`: the string is a heading (title, summary).
  * `sectionTitle`: it is a section's title (also rejects "01 ..." numbering).

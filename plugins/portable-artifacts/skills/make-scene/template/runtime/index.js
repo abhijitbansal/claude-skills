@@ -252,6 +252,7 @@ function mount(host, graph, opts = {}) {
 
     controlsApi = createControls({
       camera, dom: canvas, target, distance, nearestFocus: nearestFocusDistance(graph.focus), reducedMotion: isReduced, onInput: wake,
+      isTouring: () => host.classList.contains('sc-touring'), // the chrome sets this class while the tour is open
       polarMax: graph.env?.sky === 'space' ? Math.PI - MAX_ELEVATION_CLAMP : Math.PI / 2 - MAX_ELEVATION_CLAMP,
       polarMin: graph.env?.sky === 'space' ? MAX_ELEVATION_CLAMP : 0,
     });

@@ -8,6 +8,8 @@ const NON_PROSE = new Set([
   'type', 'id', 'key', 'src', 'path', 'code', 'language', 'diagram', 'scene', 'dashboard', 'chart', 'video', 'spec', 'poster',
   'data', 'kind', 'x', 'y', 'color', 'format', 'icon', 'tone', 'tag', 'status', 'change', 'severity', 'align',
   'theme', 'preset', 'mode', 'meta', 'recommended', 'target',
+  // A checklist item's free tags: short labels shown as chips, not sentences. A diff section's patch and file name.
+  'tags', 'diff', 'file',
 ]);
 // A field that is prose in one section type and not in another: a decision's default names an option label;
 // a question's default is a sentence the reader sees.

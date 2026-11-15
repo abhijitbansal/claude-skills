@@ -2,7 +2,7 @@
 // height = value (zero-based). Window light density is bucketed by value so
 // the runtime can keep one emissive setting per batch.
 import { emptyGraph, finalizeGraph, tableFallback } from '../lib/graph.mjs';
-import { compareT, groupIndex, groupsFrom, itemsFrom, groupColour } from '../lib/palette.mjs';
+import { compareT, groupIndex, groupsFrom, itemsFrom, groupColour, namedTimes } from '../lib/palette.mjs';
 import { clearPosition, ringCandidates } from '../lib/views.mjs';
 
 export const MAX_HEIGHT = 9; // H: the tallest building is FLOOR + H
@@ -98,7 +98,7 @@ function viewOfDistrict(target, distance, { placed, openSide, skip }) {
   return { position: clearPosition(target, ringCandidates(target, headings, FOCUS_ELEVATIONS, distance), blockers), target };
 }
 
-function buildFocus(placed, groups) {
+function buildFocus(placed, groups, times) {
   const focus = new Map();
   const addFocus = (key, view) => {
     if (!focus.has(key)) focus.set(key, view);
@@ -119,6 +119,15 @@ function buildFocus(placed, groups) {
       const target = [p.x, p.height / 2, p.z];
       addFocus(p.label, viewOfDistrict(target, BUILDING_FOCUS + p.height * 0.5, { placed, openSide: openSideOf(p.z), skip: (q) => q === p }));
     }
+  }
+  // A t value a beat names: the whole column of buildings at that t, seen from the near side across every district.
+  for (const { key, indexes } of times) {
+    const column = indexes.map((i) => placed[i]);
+    const [z0, z1] = [Math.min(...column.map((p) => p.z)), Math.max(...column.map((p) => p.z))];
+    const tall = Math.max(...column.map((p) => p.height));
+    const target = [column.reduce((n, p) => n + p.x, 0) / column.length, tall * 0.4, (z0 + z1) / 2];
+    const distance = Math.max(FOCUS_MIN, FOCUS_PER_UNIT * (z1 - z0 + FOOTPRINT + FOCUS_MARGIN) + tall * 0.3);
+    addFocus(key, viewOfDistrict(target, distance, { placed, openSide: 1, skip: (p) => indexes.includes(p.index) }));
   }
   return Object.fromEntries(focus);
 }
@@ -151,7 +160,7 @@ export function build({ rows }, spec = {}) {
     at: [-(total / 2) * SLOT_PITCH - LABEL_GAP, 0.1, (i - (groups.length - 1) / 2) * ROW_PITCH],
     size: LABEL_SIZE,
   }));
-  g.focus = rows.length === 0 ? {} : buildFocus(placed, groups);
+  g.focus = rows.length === 0 ? {} : buildFocus(placed, groups, namedTimes(rows, spec));
   g.fallback = tableFallback(rows);
   return finalizeGraph(g);
 }

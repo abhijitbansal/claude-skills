@@ -5,7 +5,7 @@
     "url": "https://github.com/abhijitbansal"
   },
   "metadata": {
-    "description": "Abhijit's AI-agent skills: iOS dev loop, Linear PM, core workflow helpers",
+    "description": "Decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt: files that open offline, built by whatever coding agent you already use.",
     "version": "1.0.0"
   },
   "plugins": [
@@ -22,7 +22,7 @@
     {
       "name": "core-workflow",
       "source": "./plugins/core-workflow",
-      "description": "General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook"
+      "description": "General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook; /learn lesson-capture into the skills catalog."
     },
     {
       "name": "second-wind",

@@ -3,7 +3,7 @@
 // to the sea on every side and reads as an island. Heights are normalized to 0..1 (the largest value is 1); bands and
 // sea level are in the same units.
 import { emptyGraph, finalizeGraph, tableFallback } from '../lib/graph.mjs';
-import { compareT, groupIndex, groupsFrom, itemsFrom } from '../lib/palette.mjs';
+import { compareT, groupIndex, groupsFrom, itemsFrom, namedTimes } from '../lib/palette.mjs';
 import { InternalError } from '../lib/internal-error.mjs';
 import { clearPosition, ringCandidates } from '../lib/views.mjs';
 
@@ -110,7 +110,7 @@ function buildLabels(groups, ts, size) {
 
 // Views from the open side (the near edge for a front row, the far one for a back row), then down the rows from either
 // end, lowest elevation first; the first whose line of sight crosses no cell but those `skip` leaves out.
-function buildFocus(rows, groups, ts, values, cells, size) {
+function buildFocus(rows, groups, ts, values, cells, size, times) {
   const T = ts.length;
   const cols = T + 2;
   const { xOf, zOf, pitchX, pitchZ } = frame(groups.length, T, size);
@@ -142,6 +142,12 @@ function buildFocus(rows, groups, ts, values, cells, size) {
     const target = [xOf(ti), values[cell] * RELIEF * 0.8, zOf(gi)];
     addFocus(label, viewOf(target, CELL_FOCUS, zOf(gi) < 0 ? -1 : 1, (c) => c.gi === gi && c.ti === ti));
   });
+  // A t value a beat names: that whole column of the surface, seen from the near edge.
+  const tIndex = new Map(ts.map((t, i) => [keyOfT(t), i]));
+  for (const { key, indexes } of times) {
+    const ti = tIndex.get(keyOfT(rows[indexes[0]].t));
+    addFocus(key, viewOf([xOf(ti), RELIEF * 0.3, 0], Math.max(FOCUS_MIN, FOCUS_PER_UNIT * size[1]), 1, (c) => c.ti === ti));
+  }
   return Object.fromEntries(focus);
 }
 
@@ -166,7 +172,7 @@ export function build({ rows }, spec = {}) {
   g.items = itemsFrom(rows, spec.units);
   g.surfaces = [{ id: 's0', nx, nz, size, heights, bands: BANDS.map((b) => ({ ...b })), cells }];
   g.labels = buildLabels(groups, ts, size);
-  g.focus = buildFocus(rows, groups, ts, normalized, cells, size);
+  g.focus = buildFocus(rows, groups, ts, normalized, cells, size, namedTimes(rows, spec));
   g.fallback = tableFallback(rows);
   return finalizeGraph(g);
 }

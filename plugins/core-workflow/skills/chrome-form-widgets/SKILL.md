@@ -34,7 +34,7 @@ On any form that submits something, stop before Submit unless the user explicitl
 ## Rules that prevent the known failures
 
 1. Verify by read-back (`find`, `read_page`, `get_page_text`), not by eyeballing a down-scaled screenshot. If you must use a screenshot, take it at full scale of the area.
-2. Do a final sweep before hand-over: scroll to top and `find` any required field still showing `Select...` or empty, including a phone-country flyout and any unlabeled `Country` box.
+2. Do a final sweep before hand-over: scroll to top and `find` any required field still showing `Select...` or empty, including a phone-country flyout and any unlabeled `Country` box. The sweep also names, by read-back: every upload (the filename the page shows, not "upload clicked"), every repeating section (the entry count, for example "2 work entries", and that none is half-filled or pending), and every required URL or site field (its value).
 3. Do not chain a click on the next control behind an option click without a screenshot or read-back between them; coordinates shift after scroll or reflow.
 4. Refs are not stable across steps on single-page apps (Workday reuses the same ref for the primary button). After Save and Continue, wait 4 to 5 s and `get_page_text` to read "current step N of M" before any retry.
 5. Discovery: `find` caps near 19 matches, so run a second narrower `find`. `read_page filter=interactive` is viewport-scoped.

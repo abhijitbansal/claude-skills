@@ -33,10 +33,10 @@ test('a clean live run as test-board records it has no warning', () => {
   expect(tally([live])).toEqual({ passed: 10, failed: 0, warnings: 0 })
   expect(formatBand(rec, tally([live]), 120).text).not.toContain('warning')
 })
-test('failing tests and restored history are not warnings by themselves', () => {
+test('failing tests are not warnings by themselves, and restored history is not counted', () => {
   const live = { ...pass, exitCode: null, commandStatus: 'unknown' }
   expect(tally([{ ...live, passed: 9, failed: 1 }])).toEqual({ passed: 9, failed: 1, warnings: 0 })
-  expect(tally([{ ...live, stale: true }])).toEqual({ passed: 10, failed: 0, warnings: 0 })
+  expect(tally([{ ...live, stale: true }])).toBeUndefined()
 })
 test('a tool error or a reported nonzero exit is a warning', () => {
   expect(tally([{ ...pass, exitCode: null, commandStatus: 'tool-error' }])).toMatchObject({ warnings: 1 })

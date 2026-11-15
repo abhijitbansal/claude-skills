@@ -35,13 +35,18 @@ node make-scene/scripts/doctor.mjs                # optional: what is missing, a
 node make-scene/scripts/validate.mjs make-scene/references/examples/city.scene.json
 node make-scene/scripts/build.mjs    make-scene/references/examples/city.scene.json --out city.html
 node make-scene/scripts/check.mjs    city.html    # optional; skips when no browser is installed
+node make-scene/scripts/check.mjs    city.html --shots .scratch/shots   # also the dark scheme, and PNGs to look at
 node make-scene/scripts/rows.mjs git --weeks 12   # commits per top-level folder per week, as data.file
 ```
 
 Or just ask your agent: *"Show our commits per week per folder as a 3D city,
 with a tour of the busiest weeks."* It writes `scene.json`, validates, builds
-and tells you where the page is. Default output folder is `~/.agent/scenes/`
-(`PA_OUTPUT_DIR` or `--out` change it); the default theme is `dusk`.
+and tells you where the page is (the path, then its `file://` URL on its own
+line). The page goes to `<git root>/.scratch/` for a spec inside a repository,
+else `~/.agent/diagrams/` (`PA_OUTPUT_DIR` or `--out` change it); the default
+theme is `dusk`. `build.mjs --fragment` writes the scene alone (its CSS, host,
+runtime and mount call) to paste into another page. `validate.mjs` prints
+warnings (a link a city does not draw, a blank title) without failing.
 
 ## Requirements
 
@@ -73,8 +78,9 @@ examples: [`references/examples/`](references/examples/).
 
 Drag, scroll or pinch to orbit and zoom (auto-orbit stops at the first touch);
 hover or tap for the exact label and value; the Explore list flies to any
-group or item; Play or Space runs the tour, arrow keys step the beats; `F` is
-full screen; PNG export saves the current view; the toggle follows light and
+group or item; the Tour button starts the tour, Space plays or pauses it and
+`P` opens it paused, Left and Right step the beats (even with the canvas
+focused) and Escape closes it; `F` is full screen; PNG export saves the current view; the toggle follows light and
 dark.
 
 ## Security

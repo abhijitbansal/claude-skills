@@ -83,7 +83,7 @@ test('type and required errors use readable paths', () => {
   const errs = validate({ title: 5, charts: [{}] });
   assert.deepEqual(errs, [
     { path: 'title', message: 'must be string' },
-    { path: 'charts[0].id', message: 'required' },
+    { path: 'charts[0].id', message: 'required (string)' },
   ]);
 });
 

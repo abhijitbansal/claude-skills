@@ -25,7 +25,10 @@
 #   --screen <id>            Repeatable. One per screen to capture.
 #                            At least one is required.
 #   --no-build               Forwarded to launch.sh.
-#   --sim "<name>"           Forwarded to launch.sh.
+#   --sim "<name|UDID>"      Forwarded to launch.sh; every simctl call in this
+#                            script then targets that device's UDID. Without
+#                            it the only booted simulator is used; several
+#                            booted is an error.
 #   --no-deliver             Skip deliver.sh entirely (local-only run).
 #
 # Usage:
@@ -47,21 +50,26 @@ APP_NAME_LC="$(echo "${APP_NAME}" | tr '[:upper:]' '[:lower:]')"
 
 # shellcheck source=branch-dir.sh
 source "$SCRIPT_DIR/branch-dir.sh"
+# shellcheck source=sim-resolve.sh
+source "$SCRIPT_DIR/sim-resolve.sh"
 
 BUNDLE_ID="${APP_BUNDLE_ID}"
 DESCRIPTION=""
 SCREENS=()
 LAUNCH_ARGS=()
 DO_DELIVER=true
+SIM_NAME=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --description) DESCRIPTION="$2"; shift 2 ;;
     --screen)      SCREENS+=("$2"); shift 2 ;;
     --no-build)    LAUNCH_ARGS+=("--no-build"); shift ;;
-    --sim)         LAUNCH_ARGS+=("--sim" "$2"); shift 2 ;;
+    --sim)
+      [[ $# -ge 2 ]] || { echo "[bundle] --sim needs a simulator name or UDID" >&2; exit 2; }
+      SIM_NAME="$2"; LAUNCH_ARGS+=("--sim" "$2"); shift 2 ;;
     --no-deliver)  DO_DELIVER=false; shift ;;
-    -h|--help)     sed -n '2,38p' "$0"; exit 0 ;;
+    -h|--help)     sed -n '2,41p' "$0"; exit 0 ;;
     *)             echo "[bundle] Unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -87,6 +95,10 @@ echo "==> bundle: launching for ${#SCREENS[@]} screen(s)"
 # nothing when the array is empty and to the elements otherwise.
 "$SCRIPT_DIR/launch.sh" ${LAUNCH_ARGS[@]+"${LAUNCH_ARGS[@]}"}
 
+# launch.sh booted (or reused) exactly one target; resolve it once so every
+# call below addresses that UDID instead of simctl's pick of "booted".
+SIM_UDID="$(sim_resolve "${SIM_NAME}")" || exit 1
+
 # Walk the screen list. Between screens we terminate + relaunch + openurl
 # (instead of just openurl) so a previous screen's sheet/modal doesn't
 # stack underneath the next one. Cost: ~1s of app cold-start per screen,
@@ -98,7 +110,7 @@ snap_to() {
   local stamp
   stamp="$(date +%Y%m%d-%H%M%S)"
   local out="$SNAP_DIR/${APP_NAME_LC}-snap-$stamp-$label.png"
-  xcrun simctl io booted screenshot "$out" >/dev/null
+  xcrun simctl io "${SIM_UDID}" screenshot "$out" >/dev/null
   echo "$out"
 }
 
@@ -116,8 +128,8 @@ for raw in "${SCREENS[@]}"; do
   # link don't bleed into this capture. The very first iteration skips
   # this because launch.sh already did a clean cold start.
   if [[ ${#CAPTURED[@]} -gt 0 ]]; then
-    xcrun simctl terminate booted "$BUNDLE_ID" 2>/dev/null || true
-    xcrun simctl launch booted "$BUNDLE_ID" >/dev/null
+    xcrun simctl terminate "${SIM_UDID}" "$BUNDLE_ID" 2>/dev/null || true
+    xcrun simctl launch "${SIM_UDID}" "$BUNDLE_ID" >/dev/null
     # Give the home screen a beat to settle before the next deep link.
     sleep 1
   fi
@@ -127,7 +139,7 @@ for raw in "${SCREENS[@]}"; do
       # No deep link — launch already landed us here.
       ;;
     scan)
-      xcrun simctl openurl booted "${APP_URL_SCHEME}://scan" >/dev/null
+      xcrun simctl openurl "${SIM_UDID}" "${APP_URL_SCHEME}://scan" >/dev/null
       sleep 2  # scanner sheet animation
       ;;
     doc)
@@ -135,9 +147,10 @@ for raw in "${SCREENS[@]}"; do
         echo "[bundle] 'doc' screen requires a path: --screen doc:<rel-path>" >&2
         exit 1
       fi
-      # URL-encode spaces minimally; the only realistic case in store paths.
-      local_path="${arg// /%20}"
-      xcrun simctl openurl booted "${APP_URL_SCHEME}://doc?path=$local_path" >/dev/null
+      # Percent-encode everything but '/' so spaces, '&', '#', '%' and
+      # non-ASCII in a store path survive the query string.
+      local_path="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$arg")"
+      xcrun simctl openurl "${SIM_UDID}" "${APP_URL_SCHEME}://doc?path=$local_path" >/dev/null
       sleep 2  # navigation push animation
       ;;
     *)

@@ -6,7 +6,8 @@ export function formatValue(value, format) {
   const opts = {
     currency: { style: 'currency', currency: 'USD', maximumFractionDigits: abs >= 1000 ? 0 : 2 },
     percent: { style: 'percent', maximumFractionDigits: 1 },
-    compact: { notation: 'compact', maximumFractionDigits: 1 },
+    // three significant digits, like the axis's d3 '.3~s' (views.mjs rewrites its G and k to B and K)
+    compact: { notation: 'compact', maximumSignificantDigits: 3 },
   }[format] ?? { maximumFractionDigits: 2 };
   return new Intl.NumberFormat('en-US', opts).format(value);
 }

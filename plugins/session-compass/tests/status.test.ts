@@ -1,5 +1,5 @@
 import { expect, test } from 'claude-code/testing'
-import { START, T0, WT, startWorld } from './fixtures/world'
+import { PANE_PROPS, START, T0, WT, startWorld } from './fixtures/world'
 
 const STATUS = 'mcp__session-compass__compass_status'
 
@@ -22,12 +22,41 @@ test('compass_status merges fields and stores the record', async ($, on) => {
   expect(world.data.get('session:sess-1')).toMatchObject({ goal: 'barcode fallback', step: 'implement' })
 })
 
-test('compass_status with every field empty answers an error naming the fields', async ($, on) => {
+test('compass_status with no field answers an error naming the fields', async ($, on) => {
   const { world } = startWorld(on)
   await $.session.start(START)
-  const out = await $.tool.call({ tool: STATUS, goal: '' } as never)
+  const out = await $.tool.call({ tool: STATUS } as never)
   expect(JSON.stringify(out)).toContain('goal, step, next')
   expect((world.seen.get('record') as { goal?: string }).goal).toBeUndefined()
+})
+
+test('compass_status with an empty string clears that field', async ($, on) => {
+  const { world } = startWorld(on)
+  await $.session.start(START)
+  await $.tool.call({ tool: STATUS, goal: 'g', next: 'review' } as never)
+  const out = await $.tool.call({ tool: STATUS, next: '' } as never)
+  expect(out.deny).toBeUndefined()
+  expect((world.seen.get('record') as { next?: string }).next).toBeUndefined()
+  expect(world.data.get('session:sess-1')).toMatchObject({ goal: 'g' })
+  expect((world.data.get('session:sess-1') as { next?: string }).next).toBeUndefined()
+})
+
+test('a partial stored record of this session is healed at start, keeping its goal', async ($, on) => {
+  const partial = { id: 'sess-1', goal: 'kept', artifacts: [] }
+  const { world } = startWorld(on, {}, { 'session:sess-1': partial, index: ['sess-1'] })
+  await $.session.start(START)
+  expect(world.data.get('session:sess-1')).toMatchObject({ goal: 'kept', worktree: WT, lastActive: T0 })
+})
+
+test('a malformed record of another session is left out of the all-sessions list', async ($, on) => {
+  const bad = { id: 'bad', repo: 'r', branch: 'b', lastActive: 'never', artifacts: [] }
+  startWorld(on, {}, { 'session:bad': bad, index: ['bad'] })
+  await $.session.start(START)
+  const ui = await $.ui.mount({
+    plugin: 'session-compass', surface: 'terminal', component: 'Pane', requestId: 'compass', props: PANE_PROPS,
+  } as never)
+  await ui.press({ key: 'tab-all' })
+  expect(await ui.find({ text: 'No other sessions recorded.' })).toBeDefined()
 })
 
 test('the reminder section is added after the engine sections', async ($, on) => {

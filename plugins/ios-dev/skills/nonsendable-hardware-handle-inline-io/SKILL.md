@@ -41,8 +41,9 @@ never needs to cross an isolation boundary at all.
 Only extract the read-then-decide **logic** — classifying the read result as
 free / same-destination / occupied, naming the occupant, producing warning
 copy — into a pure, `Sendable`, testable helper (e.g. a
-`TagOverwriteClassifier`). That classifier takes plain data in (decoded NDEF
-payload) and returns a plain enum out; it never touches the `NFCTag` itself.
+`TagOverwriteClassifier`). That classifier takes plain data in (the record
+payloads, `[Data]`, decoded inline from the `NFCNDEFMessage`) and returns a
+plain enum out; it never touches the `NFCTag` or the message itself.
 The split is: **I/O stays un-factored and inline; only pure computation gets
 extracted.**
 
@@ -66,22 +67,44 @@ func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) 
             session.invalidate(errorMessage: "Could not connect to tag")
             return
         }
-        // readNDEF happens inline, in this session, on this tag.
-        tag.readNDEF { message, error in
-            // Pure, Sendable, unit-testable — no NFCTag crosses this boundary.
-            let verdict = TagOverwriteClassifier.classify(message)
-            switch verdict {
-            case .free:
-                self.writePayload(to: tag, session: session)
-            case .occupied(let occupantName):
-                session.invalidate(errorMessage: "Tag occupied by \(occupantName)")
-            case .sameDestination:
-                self.writePayload(to: tag, session: session) // idempotent overwrite
+        // Check writability BEFORE the pre-read: a read-only or unsupported
+        // tag should stop here, not after we have promised to overwrite it.
+        tag.queryNDEFStatus { status, _, statusError in
+            guard statusError == nil, status == .readWrite else {
+                session.invalidate(errorMessage: "This tag can't be written")
+                return
+            }
+            // readNDEF happens inline, in this session, on this tag.
+            tag.readNDEF { message, readError in
+                // Fail OPEN on a read error: an empty tag also reports an error
+                // here, and blocking every such tag would make the guard useless.
+                // But leave a breadcrumb, so an "it overwrote without asking"
+                // report can be traced to a failed pre-read.
+                if let readError {
+                    Logger.nfc.notice("overwrite pre-read failed, treating tag as free: \(readError.localizedDescription, privacy: .public)")
+                }
+                // Decode HERE: only plain `[Data]` crosses into the classifier.
+                // Pure, Sendable, unit-testable — no NFCTag, no NFCNDEFMessage.
+                let payloads = message?.records.map(\.payload) ?? []
+                switch TagOverwriteClassifier.classify(payloads) {
+                case .free:
+                    self.writePayload(to: tag, session: session)
+                case .occupied(let occupantName):
+                    session.invalidate(errorMessage: "Tag occupied by \(occupantName)")
+                case .sameDestination:
+                    self.writePayload(to: tag, session: session) // idempotent overwrite
+                }
             }
         }
     }
 }
 ```
+
+Typechecked against the iOS 27.2 simulator SDK in Swift 6 mode: no errors; the
+only diagnostics are the Sendable-capture warnings CoreNFC's non-Sendable
+`NFCTag`/session produce in any closure-based shape (`@preconcurrency import
+CoreNFC` quiets them). Not run on a tag: a simulated read failure on an occupied
+tag is a hardware check.
 
 Generalizes to any hardware-session API whose live handle is non-Sendable and
 session-scoped: CoreNFC (`NFCTag`), some AVFoundation delegate objects, and

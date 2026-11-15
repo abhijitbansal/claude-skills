@@ -24,6 +24,9 @@
 .dg-stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .dg figcaption { grid-column: 1; grid-row: 2; max-width: 66ch; color: var(--text-3); font-size: var(--fs-sm); }
 .dg-present { grid-column: 2; grid-row: 2; padding: 4px 14px; font-size: var(--fs-sm); }
+/* shown by diagram.js while the slot scrolls sideways */
+.dg-cue { grid-column: 1 / -1; grid-row: 3; margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+.dg-cue[hidden] { display: none; }
 .dg > script { display: none; }
 
 .dg-overlay { width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--page); color: var(--text); }
@@ -97,7 +100,7 @@
 .slide-diagram .dg { --dg-max-h: max(calc(100dvh - 17rem), 160px); }
 
 @media print {
-  .dg-present { display: none; }
+  .dg-present, .dg-cue { display: none; }
   .dg-slot { break-inside: avoid; overflow: visible; }
   .dg-stage { width: 100%; }
 }

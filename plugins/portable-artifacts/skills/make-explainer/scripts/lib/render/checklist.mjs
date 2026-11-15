@@ -17,17 +17,33 @@ const TAGS = {
 export const itemKey = (groupTitle, itemText) => `${groupTitle}\u0000${itemText}`;
 export const itemId = (groupTitle, itemText) => crypto.createHash('sha256').update(itemKey(groupTitle, itemText)).digest('hex').slice(0, ID_HEX);
 
+// Free tags are the author's own words, so they carry no meaning of their own: one neutral chip each, escaped by chip().
+const freeTags = (tags = []) => tags.map((t) => chip([t, 'square', 'neutral']));
+
+function chips(it) {
+  const known = Object.hasOwn(TAGS, it.tag) ? [chip(TAGS[it.tag])] : [];
+  const all = [...known, ...freeTags(it.tags)];
+  return all.length === 0 ? '' : `<span class="cl-item-chip">${all.join('')}</span>`;
+}
+
+// Steps and the expected result sit under the item, outside its label, so a tester can select a command without ticking the box.
+function detail(it) {
+  const steps = it.steps === undefined || it.steps.length === 0 ? '' : `<ol class="cl-steps">${it.steps.map((s) => `<li>${inline(s)}</li>`).join('')}</ol>`;
+  const expect = it.expect === undefined ? '' : `<p class="cl-expect"><strong>You should see</strong> ${inline(it.expect)}</p>`;
+  return steps + expect === '' ? '' : `<div class="cl-detail">${steps}${expect}</div>`;
+}
+
 function item(group, it) {
-  const tag = Object.hasOwn(TAGS, it.tag) ? `<span class="cl-item-chip">${chip(TAGS[it.tag])}</span>` : '';
   const note = it.note === undefined ? '' : `<span class="cl-note">${inline(it.note)}</span>`;
-  return `<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="${itemId(group.title, it.text)}"><span class="cl-main"><span class="cl-line"><span class="cl-text">${inline(it.text)}</span>${tag}</span>${note}</span></label></li>`;
+  return `<li class="cl-item"><label class="cl-label"><input type="checkbox" class="cl-box" data-id="${itemId(group.title, it.text)}"><span class="cl-main"><span class="cl-line"><span class="cl-text">${inline(it.text)}</span>${chips(it)}</span>${note}</span></label>${detail(it)}</li>`;
 }
 
 function renderGroup(group) {
   const items = group.items.map((it) => item(group, it));
+  const intro = group.intro === undefined ? '' : `<div class="cl-group-intro prose">\n${renderMarkdown(group.intro)}\n</div>\n`;
   return `<div class="cl-group" role="group" aria-label="${plain(group.title)}" data-group>
 <div class="cl-group-head"><h3>${inline(group.title)}</h3><span class="cl-tally"><span data-group-done>0</span> / ${group.items.length}<span class="sr-only"> done</span></span></div>
-<ul class="cl-items">
+${intro}<ul class="cl-items">
 ${items.join('\n')}
 </ul>
 </div>`;

@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { iconSvg, hasIcon, searchIcons, listIcons, DEFAULT_ICON, IconError } from '../scripts/lib/icons.mjs';
+import { iconSvg, hasIcon, searchIcons, listIcons, noMatchMessage, nearLimit, DEFAULT_ICON, IconError } from '../scripts/lib/icons.mjs';
 import { sanitizeNodes, resolveCurated, brandEntry, licenseOf } from '../scripts/dev/build-icons.mjs';
 
 // Imported cloud icons are read from a folder; point it at an empty temp one so counts never depend on the machine's home folder.
@@ -287,4 +287,79 @@ test('CLI works when the skill directory is reached through a symlink', () => {
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
+});
+
+// ---- PA-17 / G-67: search that does not return junk, a hint that works from anywhere ------------------------
+
+test('an unknown icon points at the absolute path of the search command', () => {
+  assert.throws(() => iconSvg('lucide:zzzzzzzzzzzz'), (e) => {
+    assert.ok(e instanceof IconError);
+    assert.ok(e.message.includes(CLI), `no absolute path to icons.mjs in: ${e.message}`);
+    assert.match(e.message, /search <word>/);
+    return true;
+  });
+  assert.throws(() => iconSvg('cloud:aws-zzzzzzzzzzzz'), (e) => e instanceof IconError && e.message.includes(CLI) && /import <aws\|gcp> <folder>/.test(e.message));
+});
+
+test('search drops near misses when an exact, prefix or substring hit exists', () => {
+  assert.deepEqual(searchIcons('sqs'), ['cloud:aws-sqs']);
+  assert.ok(searchIcons('s3').every((ref) => ref.includes('s3')), searchIcons('s3').join(' '));
+  assert.ok(searchIcons('s3').includes('cloud:aws-s3'));
+  assert.deepEqual(searchIcons('redis'), ['brand:redis']);
+  // A six-letter word still allows two edits, so only the tier rule keeps gitlab out of a github search.
+  const github = searchIcons('github');
+  assert.ok(github.includes('brand:github'));
+  assert.ok(!github.includes('brand:gitlab'), github.join(' '));
+});
+
+test('search scales the near-miss distance: short words get none, so k8s, llm and slack return nothing unrelated', () => {
+  assert.equal(nearLimit('k8s'), 0);
+  assert.equal(nearLimit('move'), 1);
+  assert.equal(nearLimit('databse'), 2);
+  assert.deepEqual(searchIcons('k8s'), []);
+  assert.deepEqual(searchIcons('llm'), []);
+  assert.deepEqual(searchIcons('move'), []);
+  assert.deepEqual(searchIcons('slack'), []);
+  assert.ok(searchIcons('databse').includes('lucide:database'), 'a seven-letter typo still finds its word');
+});
+
+test('the seven common searches still resolve exactly', () => {
+  assert.deepEqual(searchIcons('lambda'), ['cloud:aws-lambda']);
+  assert.deepEqual(searchIcons('cloud run'), ['cloud:google-cloud-run']);
+  assert.deepEqual(searchIcons('api gateway'), ['cloud:aws-api-gateway']);
+  assert.deepEqual(searchIcons('dynamodb'), ['cloud:aws-dynamodb']);
+});
+
+test('a suggestion for a mistyped lucide name is not a far-off neighbour', () => {
+  assert.throws(() => iconSvg('lucide:move'), (e) => e instanceof IconError && e.suggestion === null && !/did you mean/.test(e.message));
+});
+
+test('CLI search with no match: stdout empty, exit 0, and stderr says what to do instead', () => {
+  const r = run('search', 'k8s');
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /no icon matches "k8s"/);
+  assert.match(r.stderr, /default icon/);
+  assert.match(r.stderr, /only AWS and Google Cloud \(gcp\) icon packs can be imported/);
+});
+
+test('CLI search for azure says there is no azure pack to import', () => {
+  const r = run('search', 'azure');
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, '');
+  assert.match(r.stderr, /no icon for azure/);
+  assert.match(r.stderr, /no Azure pack can be imported/);
+  assert.doesNotMatch(r.stderr, /import azure/);
+});
+
+test('CLI search with a match prints nothing to stderr', () => {
+  const r = run('search', 'sqs');
+  assert.equal(r.status, 0);
+  assert.equal(r.stdout, 'cloud:aws-sqs\n');
+  assert.equal(r.stderr, '');
+});
+
+test('noMatchMessage names the word and keeps to one line', () => {
+  assert.ok(!noMatchMessage('zzz').includes('\n'));
+  assert.match(noMatchMessage('Azure'), /azure/i);
 });

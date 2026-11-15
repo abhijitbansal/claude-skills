@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { FORMATS, SAFE_MARGIN_PX, SAFE_REFERENCE_SIDE, DEFAULT_CAPTION_TOP, safeMargin, safeInsets, captionZone } from '../template/formats.mjs';
 import { validateSpec, withDefaults, loadSpec } from '../scripts/lib/spec.mjs';
-import * as checkModule from '../scripts/check.mjs';
+import * as checkModule from '../scripts/lib/check-main.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { requireRender, BROWSER_ONLY, assertRendersIdentically, renderHash } from './helpers/render.mjs';
 

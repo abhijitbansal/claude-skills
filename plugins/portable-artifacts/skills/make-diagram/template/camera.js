@@ -190,6 +190,16 @@
       var inside = b[0] >= cam.cx - halfW && b[0] + b[2] <= cam.cx + halfW && b[1] >= cam.cy - halfH && b[1] + b[3] <= cam.cy + halfH;
       if (!inside) { fitted = false; moveTo({ cx: b[0] + b[2] / 2, cy: b[1] + b[3] / 2, s: cam.s }, { instant: true }); }
     }
+    // Runs `change` (it opens or closes the side panel, so the stage changes size) and keeps every diagram
+    // point where it was drawn (the stage keeps its left and top edges, so the centre moves with half of the
+    // size change). The view is no longer fitted, so the resize that follows does not refit and rescale the
+    // drawing under the pointer.
+    function holdView(change) {
+      var before = size();
+      change();
+      var after = size();
+      if (before.w !== after.w || before.h !== after.h) panBy((after.w - before.w) / 2, (after.h - before.h) / 2);
+    }
     // On a resize a fitted view refits; any other view keeps its camera.
     function onResize() {
       if (fitted) cam = fitCamera();
@@ -204,7 +214,7 @@
       zoom: function () { return cam.s / fitScale(size()); },
       isFitted: function () { return fitted; },
       unfit: function () { fitted = false; },
-      onResize: onResize,
+      onResize: onResize, holdView: holdView,
       glideMs: function () { return CAMERA_MS; },
     };
   };

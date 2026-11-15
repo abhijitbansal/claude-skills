@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText, lintPlaceholders, loadBannedPhrases } from '../scripts/lib/lint.mjs';
+import { lintText, lintPlaceholders, loadBannedPhrases, rawMarkdownWarnings, labelTitleWarnings, LABEL_TITLES } from '../scripts/lib/lint.mjs';
+import { validateSpec } from '../scripts/lib/spec.mjs';
 
 const P = 'sections[0].text';
 const errorsOf = (text, opts) => lintText(text, P, opts).errors;
@@ -93,4 +94,56 @@ test('several problems in one string are all reported', () => {
     'still has a TODO placeholder — replace it with real content',
     'banned phrase "delve"; replace it with "dig into"',
   ]);
+});
+
+// ---- raw markdown and label titles are warnings (PA-19) ---------------------------------------------
+
+const mdWarn = (text) => rawMarkdownWarnings(text, P);
+
+test('a heading, a numbered list or a table in prose prints literally, so each warns once with the fix', () => {
+  const heading = mdWarn('Intro.\n\n## Design\n\nMore.');
+  assert.equal(heading.length, 1);
+  assert.equal(heading[0].path, P);
+  assert.match(heading[0].message, /heading/);
+  assert.match(heading[0].message, /bold|section/);
+  const numbered = mdWarn('Steps:\n1. Open it\n2. Run it');
+  assert.equal(numbered.length, 1);
+  assert.match(numbered[0].message, /numbered list/);
+  assert.match(numbered[0].message, /steps section|"- " list/);
+  const table = mdWarn('| a | b |\n|---|---|\n| 1 | 2 |');
+  assert.equal(table.length, 1);
+  assert.match(table[0].message, /table/);
+  assert.equal(mdWarn('# One\n\n1. a\n\n| a |\n|---|').length, 3, 'one warning per pattern, not per line');
+});
+
+test('bold, italic, code, links, dash lists, a hash inside a line and a year with a dot do not warn', () => {
+  assert.deepEqual(mdWarn('**Bold**, *italic*, `code`, [a link](https://example.com) and issue #12 in a line.'), []);
+  assert.deepEqual(mdWarn('- one\n- two'), []);
+  assert.deepEqual(mdWarn('It shipped in 2026. Then more.'), []);
+  assert.deepEqual(mdWarn('Use a pipe | in prose, and a|b too.'), []);
+  assert.deepEqual(mdWarn('#hashtag is not a heading'), []);
+});
+
+test('a label title warns; the scaffold\'s own generated titles do not', () => {
+  for (const title of ['Overview', 'summary', 'Introduction:', ' Changes ', 'Background.', 'Conclusion']) {
+    const found = labelTitleWarnings(title, 'sections[1].title');
+    assert.equal(found.length, 1, title);
+    assert.match(found[0].message, /label, not a claim/);
+  }
+  assert.deepEqual(labelTitleWarnings('Search now ignores case', 'sections[1].title'), []);
+  assert.deepEqual(labelTitleWarnings('Overview of the cache layer', 'sections[1].title'), [], 'only a title that is the label alone');
+  for (const generated of ['The branch in numbers', 'Files changed', 'How the branch got here', 'Regression checks', 'Repository root', 'Other areas', 'Approve, change or stop this plan']) {
+    assert.deepEqual(labelTitleWarnings(generated, 'x'), [], generated);
+  }
+  assert.deepEqual(LABEL_TITLES, ['overview', 'summary', 'introduction', 'changes', 'background', 'conclusion']);
+});
+
+test('validate reports them as warnings only, at the string path, and never for table cells or code', async () => {
+  const r = await validateSpec({ title: 'T', sections: [
+    { type: 'text', title: 'Overview', text: 'Intro.\n\n## Design' },
+    { type: 'table', title: 'Numbers', columns: ['a'], rows: [['# not prose']] },
+    { type: 'code', code: '# a comment\n1. x' },
+  ] });
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.deepEqual(r.warnings.filter((w) => /label, not a claim|heading/.test(w.message)).map((w) => w.path), ['sections[0].title', 'sections[0].text']);
 });

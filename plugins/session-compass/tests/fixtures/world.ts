@@ -60,6 +60,7 @@ export function startWorld(on: On, over: Partial<World> = {}, seed: Record<strin
     ...over,
   }
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('session.id', () => ({ value: world.id }))
   on('session.turns', () => ({ value: world.turns }))
   on('session.cwd', () => ({ value: WT }))

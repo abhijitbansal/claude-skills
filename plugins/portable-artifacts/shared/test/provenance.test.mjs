@@ -20,6 +20,28 @@ test('schema is closed and its field rule accepts realistic values, rejects host
   assert.ok(!ok(''));
 });
 
+test('model ids with [ ] (a context-size suffix such as [1m]) are accepted, quotes and angle brackets still are not', () => {
+  const f = GENERATED_BY_SCHEMA.properties.model;
+  const ok = (v) => new RegExp(f.pattern, 'u').test(v);
+  assert.ok(ok('claude-opus-5-5[1m]'), 'the u flag Ajv compiles patterns with must accept the escaped brackets');
+  assert.ok(ok('Claude Opus 5.5 [1M context]'));
+  assert.ok(!ok('x"y') && !ok('x<y') && !ok('x>y') && !ok("x'y") && !ok('x\ny'));
+  assert.equal(GENERATED_BY_SCHEMA.properties.effort.pattern, f.pattern, 'effort and agent share the field rule');
+  assert.match(f.description, /^letters, digits, spaces/);
+});
+
+test('host is an alias of agent: normalised before the closed schema sees it, never added to the schema', () => {
+  assert.deepEqual(mergeGeneratedBy({ model: 'A', host: 'Copilot CLI' }, {}), { model: 'A', agent: 'Copilot CLI' });
+  assert.deepEqual(mergeGeneratedBy({ host: 'Copilot CLI' }, { agent: 'Codex' }), { agent: 'Codex' }, 'a flag still wins');
+  assert.deepEqual(mergeGeneratedBy({ host: 'H', agent: 'A' }, {}), { host: 'H', agent: 'A' }, 'both given: keep both so the schema names the stray host');
+  assert.deepEqual(withGeneratedBy({ title: 'T', generatedBy: { host: 'Codex' } }, {}).generatedBy, { agent: 'Codex' });
+  const spec = { title: 'T', generatedBy: { host: 'Codex' } };
+  withGeneratedBy(spec, {});
+  assert.deepEqual(spec.generatedBy, { host: 'Codex' }, 'the spec is not mutated');
+  assert.equal('host' in GENERATED_BY_SCHEMA.properties, false);
+  assert.deepEqual(Object.keys(PROVENANCE_OPTIONS).sort(), ['agent', 'effort', 'model']);
+});
+
 test('flags override the spec field by field; nothing given → undefined', () => {
   assert.deepEqual(mergeGeneratedBy({ model: 'A', effort: 'low' }, { effort: 'high' }), { model: 'A', effort: 'high' });
   assert.deepEqual(mergeGeneratedBy(undefined, { agent: 'Copilot CLI' }), { agent: 'Copilot CLI' });

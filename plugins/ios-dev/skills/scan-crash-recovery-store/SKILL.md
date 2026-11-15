@@ -37,7 +37,7 @@ let capturedRoom = try await roomBuilder.capturedRoom(from: roomData)
 try ScanRecoveryStore.save(capturedRoom)            // ① raw result on disk FIRST
 let plan = try await buildFloorPlan(capturedRoom)   // ② hang/crash-prone build
 try persistToModelStore(plan)                       // ③ final commit
-ScanRecoveryStore.clear()                           // ④ only now
+ScanRecoveryStore.clearAfterCommit()                // ④ only now: file AND attempt counter
 ```
 
 **2. Harden the store: atomic writes, tolerate unreadable/partial files, and
@@ -52,17 +52,19 @@ file is already on disk, so timing out is safe — show the raw capture or offer
 a retry instead of hanging forever.
 
 ```swift
-let plan = try await withThrowingTaskGroup(of: FloorPlanData.self) { group in
-    group.addTask { try await buildFloorPlan(capturedRoom) }
-    group.addTask {
-        try await Task.sleep(for: .seconds(30))
-        throw ScanProcessingTimeout()
-    }
-    guard let result = try await group.next() else { throw ScanProcessingTimeout() }
-    group.cancelAll()
-    return result
-}
+let plan = try await timeBox(.seconds(30)) { try await buildFloorPlan(capturedRoom) }
 ```
+
+Do **not** build `timeBox` from `withThrowingTaskGroup` (a race between the work
+and a sleeping child): the group awaits *every* child before it returns, so a
+worker that does not cooperate with cancellation (a blocking call, a long
+synchronous loop) holds the "timeout" until it finishes on its own. Measured:
+a worker that ignores cancellation blocked the task-group version for its full
+2 s against a 200 ms limit; the version below returned in 0.2 s. `timeBox` in
+`references/crash-marker-store.md` races an unstructured `Task` through a
+resume-once continuation and **abandons** the worker. The abandoned task keeps
+running until it finishes, so the worker must also check `Task.isCancelled` at
+its own checkpoints, or it leaks CPU and memory for as long as it runs.
 
 **4. Freeze the elapsed clock across interruptions.** Accumulate active time;
 never compute `Date().timeIntervalSince(startedAt)` at render time. Pause the
@@ -83,6 +85,18 @@ sequence around `ModelContainer` init. The marker path there is a
 placeholder — resolve it under the real Application Support directory, not
 literally `/tmp`.
 
+**6. Cap automatic recovery attempts.** Reading the recovery file back at
+launch and rebuilding is fine, but a file that *decodes* and then crashes the
+rebuild is retried on every launch with no limit: relaunch → rebuild → crash →
+relaunch. Clearing on decode-mismatch (step 2) does not cover it. Either gate
+the rebuild behind a user prompt, or persist an **attempt counter before the
+rebuild** and, after N failures, move the file aside and offer export — never
+delete it. `RecoveryGate` in `references/crash-marker-store.md` does this; it is
+the same design as `file-handoff-inbox-backstop` (counter on disk before heavy
+work, quarantine after N, never delete) — reuse that pattern rather than
+inventing a second one. Note: the crash sentinel (step 5) only guards
+`ModelContainer` init, not the rebuild.
+
 ## Evidence
 
 - **a private floor-plan scanner app** — scan-recovery commit series: `ScanRecoveryStore.save` writes
@@ -95,6 +109,7 @@ literally `/tmp`.
 
 ## Related skills
 
+- `file-handoff-inbox-backstop` — the attempt-counter-and-quarantine pattern step 6 reuses.
 - `avfoundation-capture-delivery-watchdog` — detecting stalled/interrupted capture sessions during the scan itself.
 - `swift6-mainactor-compile-fixes` — run the hang-prone plan/scene build off the main actor, and make the Codable recovery DTOs decodable off-main under MainActor-default isolation.
 - `swiftdata-inmemory-test-harness` — exercising the safe-mode/recovery path without touching the real ModelContainer.

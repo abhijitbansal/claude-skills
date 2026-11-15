@@ -1,11 +1,24 @@
 import type { EngineInterface, RenderElement } from 'claude-code'
 import type { SessionRecord } from '../types'
-import { basename, truncate } from './record'
+import { basename } from './record'
 
 // Pure view builders: no `$` here (the host does not follow it out of register.tsx).
 export type Tally = { passed: number; failed: number; warnings?: number }
 export type BandLine = { text: string; isDim: boolean }
 type Els = Pick<ReturnType<EngineInterface['ui']['resolve']>, 'Box' | 'Text'>
+
+// Copied from test-board's format.ts (mods cannot import each other): East Asian
+// Wide/Fullwidth blocks, emoji drawn as emoji, and an emoji variation selector take two cells.
+const WIDE = /[ᄀ-ᅟ⺀-〾ぁ-㏿㐀-䶿一-鿿ꀀ-꓏가-힣豈-﫿︰-﹏＀-｠￠-￦\u{20000}-\u{3fffd}️]|\p{Emoji_Presentation}/u
+const segmenter = typeof Intl === 'object' && 'Segmenter' in Intl ? new Intl.Segmenter() : undefined
+const graphemes = (s: string): string[] =>
+  segmenter === undefined ? Array.from(s) : Array.from(segmenter.segment(s), g => g.segment)
+const cellsOf = (g: string): number => (WIDE.test(g) ? 2 : 1)
+
+/** Terminal cells a string takes: a grapheme is one cell, two when wide. */
+export function cellWidth(s: string): number {
+  return graphemes(s).reduce((cells, g) => cells + cellsOf(g), 0)
+}
 
 export function tally(runs: readonly unknown[] | undefined): Tally | undefined {
   if (runs === undefined) return undefined
@@ -14,6 +27,8 @@ export function tally(runs: readonly unknown[] | undefined): Tally | undefined {
   let isAny = false
   let warnings = 0
   for (const run of runs) {
+    // A run restored from history (test-board marks it stale) is not this session's: it neither counts nor warns.
+    if (run !== null && typeof run === 'object' && (run as Record<string, unknown>).stale === true) continue
     isAny = true
     if (run === null || typeof run !== 'object') { warnings += 1; continue }
     const r = run as Record<string, unknown>
@@ -42,12 +57,15 @@ export function formatBand(rec: SessionRecord, tests: Tally | undefined, columns
   const count = rec.artifacts.length
   const artifacts = `${count} artifact${count === 1 ? '' : 's'}`
   const testText = tests ? `tests ${tests.passed} ✓ ${tests.failed} ✗` : undefined
+  const isFailing = (tests?.failed ?? 0) > 0
   const warnings = tests?.warnings ?? 0
-  // Reserve the warning first: dropping optional segments must not erase a failed/unknown run.
-  const warning = warnings > 0 ? `tests: ${warnings} warning${warnings === 1 ? '' : 's'}` : ''
-  const prefix = warning === '' ? '' : `${warning} · `
-  if (prefix.length >= columns) return { text: truncate(warning, Math.max(0, columns)), isDim }
-  const available = columns - prefix.length
+  // Reserve failed tests and warnings first: dropping optional segments must not erase a failed/unknown run.
+  const warning = warnings > 0 ? `tests: ${warnings} warning${warnings === 1 ? '' : 's'}` : undefined
+  const reserved = [isFailing ? testText : undefined, warning].filter((s): s is string => s !== undefined).join(' · ')
+  const prefix = reserved === '' ? '' : `${reserved} · `
+  if (cellWidth(prefix) >= columns) return { text: fitCells(reserved, Math.max(0, columns)), isDim }
+  const available = columns - cellWidth(prefix)
+  const where = (wt: string): string => (rec.branch === '' ? `${rec.repo} · ${wt}` : `${rec.repo} · ${wt} (${rec.branch})`)
   const attempts = [
     { wt: lastTwo(rec.worktree), hasArtifacts: true, hasTests: true },
     { wt: lastTwo(rec.worktree), hasArtifacts: false, hasTests: true },
@@ -57,15 +75,30 @@ export function formatBand(rec: SessionRecord, tests: Tally | undefined, columns
   let text = ''
   for (const a of attempts) {
     text = [
-      `${rec.repo} · ${a.wt} (${rec.branch})`,
+      where(a.wt),
       goal,
       now,
       a.hasArtifacts ? artifacts : undefined,
-      a.hasTests ? testText : undefined,
+      a.hasTests && !isFailing ? testText : undefined,
     ].filter((s): s is string => s !== undefined).join(' · ')
-    if (text.length <= available) return { text: prefix + text, isDim }
+    if (cellWidth(text) <= available) return { text: prefix + text, isDim }
   }
-  return { text: prefix + truncate(text, available), isDim }
+  return { text: prefix + fitCells(text, available), isDim }
+}
+
+// Cuts to at most `max` terminal cells, ending in `…` when anything was cut.
+function fitCells(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  if (cellWidth(flat) <= max) return flat
+  if (max <= 0) return ''
+  let out = ''
+  let cells = 0
+  for (const g of graphemes(flat)) {
+    if (cells + cellsOf(g) > max - 1) break
+    out += g
+    cells += cellsOf(g)
+  }
+  return `${out}…`
 }
 
 // The compass line stacked above whatever the next band drew.

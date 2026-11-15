@@ -101,8 +101,10 @@
     wrap.className = 'table-view';
     var table = document.createElement('table');
     var head = table.createTHead().insertRow();
+    var numeric = PA.numericColumns(q.columns, q.rows);
     q.columns.forEach(function (col) {
       var th = document.createElement('th');
+      if (numeric.has(col)) th.className = 'num';
       var b = document.createElement('button');
       b.type = 'button';
       b.textContent = col;
@@ -121,7 +123,11 @@
     var body = table.createTBody();
     shown.forEach(function (r) {
       var tr = body.insertRow();
-      q.columns.forEach(function (col) { tr.insertCell().textContent = r[col] === null || r[col] === undefined ? '' : String(r[col]); });
+      q.columns.forEach(function (col) {
+        var td = tr.insertCell();
+        td.textContent = PA.cellText(r[col], col, numeric.has(col));
+        if (numeric.has(col)) td.className = 'num';
+      });
     });
     wrap.appendChild(table);
     el.textContent = '';
@@ -161,15 +167,24 @@
   // The shared toggle (in the page) announces a theme change; charts take their colours from the CSS tokens.
   document.addEventListener('pa:theme', function () { render(); });
 
+  // The selected tab is aria-selected and in the tab order; the tabpanel is labelled by it.
+  function labelPanel(c) {
+    var panel = document.getElementById('panel-' + c.id);
+    document.querySelectorAll('#card-' + c.id + ' [role=tab]').forEach(function (b) {
+      var on = b.getAttribute('data-view') === active[c.id];
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+      if (on && panel) panel.setAttribute('aria-labelledby', b.id);
+    });
+  }
+
   function select(c, name, focus) {
     active[c.id] = name;
     saved[c.id] = name;
     PA.writeStore(session, 'pa-views', JSON.stringify(saved));
+    labelPanel(c);
     document.querySelectorAll('#card-' + c.id + ' [role=tab]').forEach(function (b) {
-      var on = b.getAttribute('data-view') === name;
-      b.setAttribute('aria-selected', String(on));
-      b.tabIndex = on ? 0 : -1;
-      if (on && focus) b.focus();
+      if (b.getAttribute('data-view') === name && focus) b.focus();
     });
     syncExport(c);
     renderChart(c, config());
@@ -239,6 +254,14 @@
     var menu = document.querySelector('#card-' + c.id + ' details.export');
     if (!menu) return;
     syncExport(c);
+    // Escape closes the open menu and returns focus to its summary, like any disclosure menu.
+    menu.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape' || !menu.open) return;
+      menu.open = false;
+      var summary = menu.querySelector('summary');
+      if (summary) summary.focus();
+      e.preventDefault();
+    });
     menu.addEventListener('click', function (e) {
       var kind = e.target && e.target.getAttribute && e.target.getAttribute('data-export');
       if (!kind) return;
@@ -265,10 +288,8 @@
     var list = document.querySelector('#card-' + c.id + ' [role=tablist]');
     if (!list) return;
     var buttons = Array.prototype.slice.call(list.querySelectorAll('[role=tab]'));
+    labelPanel(c);
     buttons.forEach(function (b) {
-      var on = b.getAttribute('data-view') === active[c.id];
-      b.setAttribute('aria-selected', String(on));
-      b.tabIndex = on ? 0 : -1;
       b.addEventListener('click', function () { select(c, b.getAttribute('data-view'), false); });
     });
     list.addEventListener('keydown', function (e) {

@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
-import * as checkModule from '../scripts/check.mjs';
+import * as checkModule from '../scripts/lib/check-main.mjs';
 import { readFileSync } from 'node:fs';
 import { validateSpec, withDefaults } from '../scripts/lib/spec.mjs';
 import { contrastRatio } from '../shared/contrast.mjs';
@@ -244,7 +244,7 @@ test('stillStretches: the stretch from the first step of a still state to the la
   assert.deepEqual(stillStretches(spec, steps), [{ from: 4, to: 7.5 }]);
   assert.deepEqual(deadStretchProblems(spec, steps, [[item('text', 'a')]]), [{
     path: 'scenes[0]',
-    message: 'nothing changes from 4.00s to 7.50s (3.5s); add motion, or set "hold": true on text "a" if it is meant to sit still',
+    message: 'nothing changes from 4.00s to 7.50s (3.5s); add motion, such as a slow camera push-in, or set "hold": true on text "a" if it is meant to sit still',
   }]);
 });
 
@@ -253,7 +253,7 @@ test('deadStretchProblems: the message names the shown elements that lack hold, 
   const items = [[item('text', 'a'), item('shape', 'panel', { shape: 'rect' }), item('text', 'kept'), item('text', 'gone')]];
   const steps = grid(12, (t) => [measured({ sig: t < 4 ? `m${t}` : 'a' }), measured({ sig: 'p' }), measured({ sig: 'k', hold: true }), measured({ sig: t < 5 ? 'x' : 'y', shown: false })]);
   const [problem] = deadStretchProblems(spec, steps, items);
-  assert.equal(problem.message, 'nothing changes from 4.00s to 9.00s (5.0s); add motion, or set "hold": true on text "a", rect "panel" if they are meant to sit still');
+  assert.equal(problem.message, 'nothing changes from 4.00s to 9.00s (5.0s); add motion, such as a slow camera push-in, or set "hold": true on text "a", rect "panel" if they are meant to sit still');
 });
 
 test('deadStretchProblems: block parts are named as their block, once; a plain group child keeps its own name', () => {
@@ -262,7 +262,7 @@ test('deadStretchProblems: block parts are named as their block, once; a plain g
   const items = [[part('lt/card'), part('lt/name'), part('lt/role'), item('text', 'note')]];
   const steps = grid(12, (t) => [0, 1, 2, 3].map((j) => measured({ sig: j === 0 && t < 4 ? `m${t}` : `s${j}` })));
   const [problem] = deadStretchProblems(spec, steps, items, [new Set(['lt'])]);
-  assert.equal(problem.message, 'nothing changes from 4.00s to 9.00s (5.0s); add motion, or set "hold": true on block "lt", text "note" if they are meant to sit still');
+  assert.equal(problem.message, 'nothing changes from 4.00s to 9.00s (5.0s); add motion, such as a slow camera push-in, or set "hold": true on block "lt", text "note" if they are meant to sit still');
   const [plain] = deadStretchProblems(spec, steps, items);
   assert.match(plain.message, /on text "lt\/card", text "lt\/name", text "lt\/role", text "note" if they are/, 'without the written spec the ids are all there is');
 });
@@ -329,7 +329,7 @@ test('bad-dead-stretch: nothing changes from 4.00 s to 7.50 s', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const r = check([path.join(FIXTURES, 'bad-dead-stretch.json')]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.deepEqual(lines(r.stdout), ['scenes[0]: nothing changes from 4.00s to 7.50s (3.5s); add motion, or set "hold": true on text "drift" if it is meant to sit still', 'check: 1 problem']);
+  assert.deepEqual(lines(r.stdout), ['scenes[0]: nothing changes from 4.00s to 7.50s (3.5s); add motion, such as a slow camera push-in, or set "hold": true on text "drift" if it is meant to sit still', 'check: 1 problem']);
 });
 
 test('bad-text-floor: a 22 px text shown for 1.5 s', async (t) => {
@@ -350,7 +350,7 @@ test('ok-hold: a 10 s static title with "hold": true passes; the same title with
   const bad = check([writeSpec(spec)]);
   assert.equal(bad.status, 1, bad.stdout + bad.stderr);
   // The rise preset has settled to within a tenth of a pixel by the 0.75 s step.
-  assert.match(lines(bad.stdout)[0], /^scenes\[0\]: nothing changes from 0\.\d\ds to 7\.00s \(\d\.\ds\); add motion, or set "hold": true on text "headline" if it is meant to sit still$/);
+  assert.match(lines(bad.stdout)[0], /^scenes\[0\]: nothing changes from 0\.\d\ds to 7\.00s \(\d\.\ds\); add motion, such as a slow camera push-in, or set "hold": true on text "headline" if it is meant to sit still$/);
   assert.equal(lines(bad.stdout)[1], 'check: 1 problem');
 });
 
@@ -363,10 +363,10 @@ test('hold on a group covers its children; a hold element beside a static one th
   assert.equal(held.status, 0, held.stdout + held.stderr);
   const loose = check([writeSpec(scenes([group(false)]))]);
   assert.equal(loose.status, 1, loose.stdout + loose.stderr);
-  assert.deepEqual(lines(loose.stdout), ['scenes[0]: nothing changes from 0.00s to 5.00s (5.0s); add motion, or set "hold": true on text "a", text "b" if they are meant to sit still', 'check: 1 problem']);
+  assert.deepEqual(lines(loose.stdout), ['scenes[0]: nothing changes from 0.00s to 5.00s (5.0s); add motion, such as a slow camera push-in, or set "hold": true on text "a", text "b" if they are meant to sit still', 'check: 1 problem']);
   const beside = check([writeSpec(scenes([{ ...child('title', 300, 'Held title'), x: 960, hold: true }, { ...child('note', 700, 'Static note'), x: 960 }]))]);
   assert.equal(beside.status, 1, beside.stdout + beside.stderr);
-  assert.match(beside.stdout, /^scenes\[0\]: nothing changes from 0\.00s to 5\.00s \(5\.0s\); add motion, or set "hold": true on text "note" if it is meant to sit still$/m);
+  assert.match(beside.stdout, /^scenes\[0\]: nothing changes from 0\.00s to 5\.00s \(5\.0s\); add motion, such as a slow camera push-in, or set "hold": true on text "note" if it is meant to sit still$/m);
 });
 
 test('a last line shown for 1.5 s is info on stderr, not a failure; --json lists it under info', async (t) => {
@@ -415,7 +415,7 @@ test('contrast: a text crossing a bright flash for a single sampled moment is a 
 test('dead stretch: a static title beside an invisible drifting rect, or one drifting off the canvas, is still a dead stretch', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const title = { id: 'title', type: 'text', text: 'Hello world', x: 960, y: 400, fontSize: 96 };
-  const stretch = 'scenes[0]: nothing changes from 0.00s to 5.00s (5.0s); add motion, or set "hold": true on text "title" if it is meant to sit still';
+  const stretch = 'scenes[0]: nothing changes from 0.00s to 5.00s (5.0s); add motion, such as a slow camera push-in, or set "hold": true on text "title" if it is meant to sit still';
   const ghost = { id: 'ghost', type: 'shape', shape: 'rect', x: 100, y: 800, width: 100, height: 100, opacity: 0, keyframes: [{ t: 0, x: 100 }, { t: 7.5, x: 1500 }] };
   const invisible = check([writeSpec({ scenes: [{ id: 's', duration: 8, elements: [title, ghost] }] })]);
   assert.equal(invisible.status, 1, invisible.stdout + invisible.stderr);
@@ -431,7 +431,7 @@ test('dead stretch: a static lower-third block is named as the block, and hold o
   const spec = (hold) => ({ scenes: [{ id: 's', duration: 8, elements: [{ id: 'lt', type: 'block', block: 'lower-third', x: 100, y: 818, ...(hold ? { hold: true } : {}), params: { name: 'Ada Lovelace', role: 'Head of Research' } }] }] });
   const r = check([writeSpec(spec(false))]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.match(lines(r.stdout)[0], /^scenes\[0\]: nothing changes from \d\.\d\ds to 5\.00s \(\d\.\ds\); add motion, or set "hold": true on block "lt" if it is meant to sit still$/);
+  assert.match(lines(r.stdout)[0], /^scenes\[0\]: nothing changes from \d\.\d\ds to 5\.00s \(\d\.\ds\); add motion, such as a slow camera push-in, or set "hold": true on block "lt" if it is meant to sit still$/);
   assert.doesNotMatch(r.stdout, /lt\//, 'no part id is mentioned: hold goes on the block');
   const held = check([writeSpec(spec(true))]);
   assert.equal(held.status, 0, held.stdout + held.stderr);
@@ -443,7 +443,7 @@ test('dead stretch: one in the second scene is reported on that scene, from the 
   const still = { id: 'second', type: 'text', text: 'Hello world', x: 960, y: 540, fontSize: 64 };
   const r = check([writeSpec({ scenes: [{ id: 'a', duration: 3, elements: [moving] }, { id: 'b', duration: 9, elements: [still] }] })]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
-  assert.deepEqual(lines(r.stdout), ['scenes[1]: nothing changes from 3.00s to 9.00s (6.0s); add motion, or set "hold": true on text "second" if it is meant to sit still', 'check: 1 problem']);
+  assert.deepEqual(lines(r.stdout), ['scenes[1]: nothing changes from 3.00s to 9.00s (6.0s); add motion, such as a slow camera push-in, or set "hold": true on text "second" if it is meant to sit still', 'check: 1 problem']);
 });
 
 // Gate 2 fix H1: a typing text's node holds its whole text at every moment (typed, caret, untyped rest), so the typed
@@ -456,7 +456,7 @@ test('dead stretch: a typing text is change while it types, and still once it is
   assert.equal(typing.status, 0, typing.stdout + typing.stderr);
   const long = check([writeSpec({ scenes: [{ id: 'typed', duration: 12, elements: [line] }] })]);
   assert.equal(long.status, 1, long.stdout + long.stderr);
-  assert.match(lines(long.stdout)[0], /^scenes\[0\]: nothing changes from 5\.\d\ds to 9\.00s \(3\.\ds\); add motion, or set "hold": true on text "line" if it is meant to sit still$/);
+  assert.match(lines(long.stdout)[0], /^scenes\[0\]: nothing changes from 5\.\d\ds to 9\.00s \(3\.\ds\); add motion, such as a slow camera push-in, or set "hold": true on text "line" if it is meant to sit still$/);
 });
 
 // Gate 2 fix M3: a `fade` is a window as the other transitions are: the screenshot inside it is half the scene, so no
@@ -609,7 +609,7 @@ test('stillStretches: a finished board held while narration plays is exempt; onl
   assert.deepEqual(stillStretches(narrated([{ start: 4.5, end: 5 }]), stillFrom4()), [{ from: 5, to: 9 }], 'a pause of 0.5 s then 4 s of silence');
   assert.deepEqual(stillStretches(narrated([{ start: 0, end: 5 }, { start: 6, end: 8 }]), stillFrom4()), [], '1 s and 1 s: neither gap is longer than 3 s');
   assert.deepEqual(deadStretchProblems(narrated([{ start: 0, end: 5.5 }]), stillFrom4(), [[item('text', 'a')]]).map((p) => p.message), [
-    'nothing changes from 5.50s to 9.00s (3.5s); add motion, or set "hold": true on text "a" if it is meant to sit still',
+    'nothing changes from 5.50s to 9.00s (3.5s); add motion, such as a slow camera push-in, or set "hold": true on text "a" if it is meant to sit still',
   ]);
 });
 

@@ -23,6 +23,7 @@ function parseArgs(argv) {
   try {
     parsed = parseCli(argv, OPTIONS, USAGE);
   } catch (e) {
+    if (e.help === true) throw e; // --help: the usage line, exit 0
     throw new UsageError(`${e.message} (accepted options: ${ACCEPTED})`);
   }
   const { values, positionals } = parsed;
@@ -118,7 +119,7 @@ export function main(argv) {
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
     exitUsage(e);
-    return 2;
+    return e.help === true ? 0 : 2; // --help is a usage line on stdout, not an error
   }
 }
 

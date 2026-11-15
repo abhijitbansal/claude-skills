@@ -138,12 +138,14 @@ const checkGroup = (title, where, note) => ({
 
 const sha1 = (text) => createHash('sha1').update(text).digest('hex').slice(0, KEY_HASH);
 
-// The localStorage namespace: the branch as a slug. A name with no ASCII letters, or one too long for the
-// key limit, gets a short hash so two different branches never share ticks. A detached HEAD has no name and
+// The localStorage namespace: <repo>-<branch> as a slug (the branch alone when the facts name no repository, so
+// two repositories on the same branch name do not share ticks). A name with no ASCII letters, or one too long for
+// the key limit, gets a short hash so two different branches never share ticks. A detached HEAD has no name and
 // a new sha per commit, so it is keyed by the repository instead and the ticks survive new commits.
 function checklistKey(facts) {
   if (!facts?.branch) return 'checklist';
-  const name = facts.detached ? `${facts.repo ?? 'repo'}-detached` : facts.branch;
+  const branchName = facts.repo ? `${facts.repo}/${facts.branch}` : facts.branch;
+  const name = facts.detached ? `${facts.repo ?? 'repo'}-detached` : branchName;
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
   const room = LIMITS.checklistKey - KEY_HASH - 1;
   if (slug === '') return `checklist-${sha1(name)}`;
@@ -383,7 +385,17 @@ const BUILDERS = { recap, checklist, concept, slides, plan };
 // The presets scaffold can start: a preset is listed once it has a builder.
 export const PRESET_NAMES = PRESETS.filter((p) => Object.hasOwn(BUILDERS, p));
 
+// Who made the page, as the footer prints it. The agent knows its own model, effort and host; a script never
+// guesses them, so each is a TODO that validate rejects until it is replaced (delete the object to leave the footer
+// as "not reported"). The strings pass the field pattern (letters, digits, spaces and . _ : / ( ) + [ ] -).
+const GENERATED_BY = {
+  model: todo('your model id (for example claude-opus-5-5)'),
+  effort: todo('your effort level (for example high)'),
+  agent: todo('your agent host (for example claude-code)'),
+};
+
 /** Starter spec for a preset: facts is gather.mjs output (or null), title overrides the TODO title. */
 export function scaffold(preset, { facts = null, title } = {}) {
-  return BUILDERS[preset](facts, title);
+  const { sections, ...head } = BUILDERS[preset](facts, title);
+  return { ...head, generatedBy: { ...GENERATED_BY }, sections };
 }

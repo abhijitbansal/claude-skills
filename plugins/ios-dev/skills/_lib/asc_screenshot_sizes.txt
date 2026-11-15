@@ -1,0 +1,35 @@
+# App Store Connect screenshot pixel sizes accepted by the release pre-flight
+# `screenshot-sizes` gate (preflight.sh, appstore mode). One WIDTHxHEIGHT per
+# line, both orientations listed. Keep the list in this one file; it rots when
+# Apple adds a device class.
+#
+# Provenance (honest labels, nothing here is measured against App Store Connect):
+#   iPhone block: copied from the slot-size table of a private app's screenshot
+#                 renderer, which records what App Store Connect accepted for
+#                 iPhone in 2026 (6.9"/6.7" required slot, 6.5" optional slot).
+#   iPad block:   UNSOURCED. Entered from Apple's published screenshot
+#                 specification as recalled, not copied from a working tool.
+#                 Check it against the current specification before relying on
+#                 it for an iPad release:
+#                 https://developer.apple.com/help/app-store-connect/reference/screenshot-specifications
+
+# iPhone 6.9" / 6.7" slot
+1290x2796
+2796x1290
+1320x2868
+2868x1320
+# iPhone 6.5" slot
+1284x2778
+2778x1284
+1242x2688
+2688x1242
+
+# iPad (unsourced, see above)
+2064x2752
+2752x2064
+2048x2732
+2732x2048
+1668x2420
+2420x1668
+1668x2388
+2388x1668

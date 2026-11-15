@@ -1,5 +1,10 @@
 # DocumentTextLoader: single grounding-text entry point with versioned cache
 
+**A sketch, not a drop-in.** `readCache`, `writeCache`, `rasterizeRecognizeFormat`
+and `clipForModel` are not defined here — write them in your app (the clip is in
+`ondevice-generable-anti-hallucination`, Fix #4; `rasterizeRecognizeFormat` feeds
+`VisionLayoutFormatter` from `ocr-layout-formatter.md`). Not compiled.
+
 ```swift
 @MainActor
 enum DocumentTextLoader {

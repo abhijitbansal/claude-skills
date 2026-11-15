@@ -22,6 +22,9 @@ A refresh is `build.mjs` again: it re-runs every query and rewrites `dist/index.
 Use absolute paths in schedules, since cron and launchd start in a bare environment. Replace `<skill-dir>`
 with the folder containing `SKILL.md` and `/abs/dashboard.json` with your spec.
 
+A scheduled dashboard reruns its queries under the same titles, so a finding title ("North drives half of revenue")
+goes stale on the next refresh. Give a scheduled dashboard neutral titles that stay true ("Revenue by region").
+
 Find your node path first: `command -v node`.
 
 ## cron (Linux, macOS)

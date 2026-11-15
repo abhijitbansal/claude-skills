@@ -64,7 +64,7 @@ const COMMON = ['id', 'type', 'x', 'y', 'opacity', 'scale', 'rotate', 'keyframes
 const TEXT_STYLE = ['fontSize', 'fontWeight', 'color', 'align', 'maxWidth', 'font'];
 const FIELDS = {
   text: [...COMMON, 'text', 'role', 'exit', 'typing', 'anchor', ...TEXT_STYLE],
-  counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', ...TEXT_STYLE],
+  counter: [...COMMON, 'from', 'to', 'decimals', 'prefix', 'suffix', 'group', ...TEXT_STYLE],
   shape: [...COMMON, 'shape', 'width', 'height', 'radius', 'fill', 'stroke', 'strokeWidth', 'elevated', 'cap', 'arrow'],
   image: [...COMMON, 'src', 'width', 'height', 'fit', 'grade'],
   chart: [...COMMON, 'vegaLite', 'width', 'height'],
@@ -143,6 +143,7 @@ const element = {
     from: num,
     decimals: { type: 'integer', minimum: 0, maximum: 6 },
     prefix: { type: 'string' }, suffix: { type: 'string' },
+    group: { type: 'boolean' }, // a counter only: digit grouping, 48,200 (template/counter-format.mjs)
     shape: { enum: ['rect', 'ellipse', 'line'] },
     width: { type: 'number', minimum: 0 },
     height: { type: 'number', minimum: 0 },
@@ -300,6 +301,8 @@ const loudness = {
   required: ['integrated', 'truePeak'],
   properties: { integrated: { type: 'number', minimum: -30, maximum: -5 }, truePeak: { type: 'number', minimum: -3, maximum: 0 } },
 };
+const SCENE_ID_PATTERN = '^[A-Za-z0-9][A-Za-z0-9_.-]*$';
+const SCENE_ID_RULE = 'letters, digits, "_", "-" and ".", starting with a letter or digit (a scene id is also a file name, so no slash or space)';
 export const SCHEMA = {
   definitions: { element },
   type: 'object',
@@ -335,7 +338,8 @@ export const SCHEMA = {
         additionalProperties: false,
         required: ['id', 'duration', 'elements'],
         properties: {
-          id: { type: 'string', minLength: 1 },
+          // Also a file name (render --contact-sheet writes <id>.png) and a URL part (/art/<id>.svg): no slash, no leading dot.
+          id: { type: 'string', pattern: SCENE_ID_PATTERN, description: SCENE_ID_RULE },
           duration: { type: 'number', minimum: 0.2, maximum: 60 },
           background: color,
           style: { enum: [...STYLES] },
@@ -381,7 +385,7 @@ export function loadSpec(file) {
 function checkIds(spec, errors) {
   const seen = new Map();
   const claim = (id, at) => {
-    if (seen.has(id)) errors.push({ path: at, message: `duplicate id "${id}" (first used at ${seen.get(id)})` });
+    if (seen.has(id)) errors.push({ path: at, message: `duplicate id "${id}" (first used at ${seen.get(id)}); scene ids and element ids share one namespace; rename one` });
     else seen.set(id, at);
   };
   spec.scenes.forEach((scene, si) => {
@@ -851,6 +855,14 @@ function checkTheme(spec, errors) {
   errors.push({ path: 'theme', message: `unknown theme ${JSON.stringify(spec.theme)}; ${near ? `did you mean ${JSON.stringify(near)}?` : `available: ${themes.join(', ')}`}` });
 }
 
+// H.264 in yuv420p needs an even width and height: an odd `size` passes everything else and fails at the final encode.
+function checkEvenSize(spec, errors) {
+  (spec.size ?? []).forEach((value, i) => {
+    if (value % 2 === 0) return;
+    errors.push({ path: `size[${i}]`, message: `${value} is odd; the MP4 encoder needs an even width and height, use ${value - 1} or ${value + 1}` });
+  });
+}
+
 // A `format` fixes the canvas size, so a `size` beside it must be the same one; either alone is enough.
 function checkFormat(spec, errors) {
   if (spec.format === undefined || spec.size === undefined) return;
@@ -1066,6 +1078,7 @@ export function validateSpec(input, { dir = process.cwd(), values = {} } = {}) {
   errors.push(...sketchErrors);
   checkSketchBlocks(written, spec, errors); // the texts and icons a sketch block's params draw: the block params have passed, so it has expanded
   checkIds(spec, errors);
+  checkEvenSize(spec, errors);
   checkFormat(spec, errors);
   checkTheme(spec, errors);
   checkColor(spec, 'background', '', errors);

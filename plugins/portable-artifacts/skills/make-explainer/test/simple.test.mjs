@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSpec, validateSpec } from '../scripts/lib/spec.mjs';
-import { SIMPLE_SECTIONS, lintSimple, withSimple, hasSimple } from '../scripts/lib/simple.mjs';
+import { SIMPLE_SECTIONS, lintSimple, withSimple, hasSimple, numberParityWarnings } from '../scripts/lib/simple.mjs';
 import { inlineCode } from '../scripts/lib/inline-code.mjs';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
@@ -332,4 +332,51 @@ test('an existing example spec validates with no new warnings; only the -simple 
     assert.deepEqual(r.warnings.filter((w) => /simple/i.test(w.message)), [], name);
     assert.equal(hasSimple(spec), name.endsWith('-simple.explainer.json'), name);
   }
+});
+
+// ---- an item-level simple key says where it belongs (G-62) ---------------------------------------
+
+test('a simple object on a list item is an error that points at the section-level simple.items[n]', async () => {
+  const errors = await errorsOf(doc([
+    { type: 'text', text: 'Fine.' },
+    { type: 'steps', items: [{ title: 'Run it', text: 'x' }, { title: 'Open it', text: 'y', simple: { text: 'z' } }] },
+  ]));
+  assert.deepEqual(errors, [{ path: 'sections[1].items[1].simple', message: 'unknown property; put the simple wording on the section, not the item: sections[1].simple.items[1]' }]);
+});
+
+// ---- digit-run parity between a field and its simple twin (G-63) ---------------------------------
+
+const parity = (section) => numberParityWarnings(section, AT);
+
+test('a simple twin that says 400 where the normal text says 410 warns, naming both numbers and the simple path', () => {
+  const found = parity({ type: 'text', text: 'The request takes 410 ms.', simple: { text: 'The request takes 400 ms.' } });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].path, 'sections[0].simple.text');
+  assert.match(found[0].message, /400/);
+  assert.match(found[0].message, /410/);
+});
+
+test('the same numbers, a twin with no digits, or a normal text with none, stay quiet', () => {
+  assert.deepEqual(parity({ type: 'text', text: 'It takes 410 ms and 3 tries.', simple: { text: 'It takes 3 tries and 410 ms.' } }), []);
+  assert.deepEqual(parity({ type: 'text', text: 'It takes 410 ms.', simple: { text: 'It takes a short time.' } }), [], 'a plainer omission is not a conflict');
+  assert.deepEqual(parity({ type: 'text', text: 'It takes five seconds.', simple: { text: 'It takes 5 seconds.' } }), [], 'a spelled-out number has no digits to compare');
+  assert.equal(parity({ type: 'text', text: 'It takes 410 ms and 3 tries.', simple: { text: 'It takes 410 ms and 5 tries.' } }).length, 1, 'a new number beside a shared one is flagged');
+});
+
+test('numbers keep their separators: 1,204 and 1.5 are one number each', () => {
+  assert.deepEqual(parity({ type: 'text', text: 'Costs 1,204 or 1.5 each.', simple: { text: 'Costs 1,204 or 1.5 each.' } }), []);
+  assert.equal(parity({ type: 'text', text: 'Costs 1,204.', simple: { text: 'Costs 1,240.' } }).length, 1);
+});
+
+test('lists compare by position, nested fields included; code spans are not prose', () => {
+  const cards = { type: 'cards', items: [{ title: 'A', text: 'Holds 12 rows.' }, { title: 'B', text: 'Holds 30 rows.' }], simple: { items: [{ text: 'Holds 12 rows.' }, { text: 'Holds 31 rows.' }] } };
+  const found = parity(cards);
+  assert.deepEqual(found.map((f) => f.path), ['sections[0].simple.items[1].text']);
+  assert.deepEqual(parity({ type: 'text', text: 'Run `npm i v18`.', simple: { text: 'Run `npm i v20`.' } }), []);
+});
+
+test('the parity warning comes through validate as a warning, never an error', async () => {
+  const r = await validate(doc([{ type: 'text', title: 'Speed', text: 'The request takes 410 ms.', simple: { text: 'The request takes 400 ms.' } }]));
+  assert.equal(r.ok, true);
+  assert.equal(r.warnings.filter((w) => w.path === 'sections[0].simple.text' && /400/.test(w.message)).length, 1);
 });

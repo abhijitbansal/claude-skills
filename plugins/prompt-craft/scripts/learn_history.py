@@ -59,7 +59,9 @@ def learn(home, env=None) -> dict:
         if not parts or not parts[0].startswith("/"):
             continue
         name = parts[0]
-        ts = rec.get("timestamp") or profile["learned_at"]
+        if "/" in name[1:] or "\\" in name:
+            continue  # a file path typed at the prompt, not a command
+        ts =rec.get("timestamp") or profile["learned_at"]
         entry = by_command.setdefault(name, {"count": 0, "last_ts": ts})
         entry["count"] += 1
         entry["last_ts"] = ts

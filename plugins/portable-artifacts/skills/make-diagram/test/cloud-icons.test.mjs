@@ -89,7 +89,7 @@ test('an unknown cloud icon suggests a near name, and names the import command w
   assert.throws(() => iconSvg('cloud:zzzzzzzzzzzz'), (e) => {
     assert.ok(e instanceof IconError);
     assert.equal(e.suggestion, null);
-    assert.match(e.message, /node scripts\/icons\.mjs import <aws\|gcp> <folder>/);
+    assert.match(e.message, /icons\.mjs import <aws\|gcp> <folder>/);
     return true;
   });
   assert.throws(() => iconSvg('clod:aws-lambda'), (e) => e instanceof IconError && e.suggestion === 'cloud:aws-lambda');
@@ -431,7 +431,7 @@ test('a spec naming a missing imported icon fails validation naming the import c
   const result = await validateSpec(archSpec([{ id: 'a', label: 'Vault', icon: 'cloud:aws-zzzz-unlisted-service' }]));
   assert.equal(result.ok, false);
   assert.equal(result.errors[0].path, 'nodes[0].icon');
-  assert.match(result.errors[0].message, /node scripts\/icons\.mjs import <aws\|gcp> <folder>/);
+  assert.match(result.errors[0].message, /icons\.mjs import <aws\|gcp> <folder>/);
 });
 
 // ---- the command line ------------------------------------------------------------------

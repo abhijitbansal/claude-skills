@@ -42,8 +42,8 @@ description: "Configure GitHub branch protection on a solo-owner (or owner-led) 
    "merge without waiting for requirements" — while everyone else is still
    blocked by step 2. Apply the full protection payload in one PUT (the
    classic API requires all four top-level keys present, even when `null`):
-   ```bash
-   cat > /tmp/bp.json <<'JSON'
+   Write this JSON to `.scratch/bp.json` with the Write tool (no heredoc):
+   ```json
    {
      "required_status_checks": null,
      "enforce_admins": false,
@@ -58,9 +58,10 @@ description: "Configure GitHub branch protection on a solo-owner (or owner-led) 
      "allow_deletions": false,
      "required_conversation_resolution": true
    }
-   JSON
+   ```
+   ```bash
    gh api -X PUT repos/OWNER/REPO/branches/main/protection \
-     -H "Accept: application/vnd.github+json" --input /tmp/bp.json
+     -H "Accept: application/vnd.github+json" --input .scratch/bp.json
    ```
 
 4. **Merge your own PRs with the admin bypass explicitly.**
@@ -87,21 +88,42 @@ Why: self-authored PRs need the owner's `--admin` bypass, and the auto mode
 classifier and a bash guard hook can deliberately deny that merge and any branch
 deletion by the agent. Do not retry, chain, or look for workarounds.
 
+The allow list does not decide this alone. Whether `Bash(gh pr merge:*)` is
+allowed or not, the classifier gates `--admin` on an explicit user ask in the
+same turn: the recorded outcomes are a merge that passed after "merge it" and
+merges that were denied without one. So an allow rule is not a reason to run
+the merge yourself; plan on the hand-over below.
+
 What to do:
 
-1. Verify CI is green and the PR is mergeable (`gh pr checks N`,
-   `gh pr view N --json mergeable`).
+1. Verify CI is green and the PR is mergeable. `gh pr checks N` exits 8 while
+   checks are still pending: that is "wait", not an error. Wait with a
+   Monitor on `gh pr checks N`, not with sleep loops, then read
+   `gh pr view N --json mergeable`.
 2. Hand the user ONE copy-paste line with the `!` prefix:
    ```text
    ! gh pr merge N --squash --admin --delete-branch
    ```
+   If other PRs are stacked on this one, retarget each open child before the
+   parent merges (`gh pr edit <child> --base main`). Merging the parent with
+   `--delete-branch` auto-closes a child that still points at it, and a closed
+   PR's base cannot be changed afterwards.
 3. The agent never deletes branches itself. The `--delete-branch` flag in
    the line above covers the remote; the user runs `git branch -d <name>`
    locally.
-4. Check `git branch --merged` and detach any worktree still holding the
-   branch before handing off, so the user's delete succeeds.
+4. List what is merged with plain `git branch --merged` (and, for squash
+   merges, `gh pr list --state merged --head <branch>`: a squash-merged branch
+   is not an ancestor, so `--merged` misses it), then hand over ONE `!` delete
+   line per branch. To clean up all merged branches, local and remote, not only
+   this session's, use the `/cleanup-branches` command: it prints the table and
+   the lines and deletes nothing. Detach any worktree still holding a branch
+   before handing off, so the user's delete succeeds.
 5. State plainly that the merge is pending the user, and continue with
    independent work.
+6. Read the protection back instead of trusting the PUT response:
+   `gh api repos/OWNER/REPO/branches/main/protection` (check
+   `enforce_admins.enabled` is `false` and
+   `required_pull_request_reviews.require_code_owner_reviews` is `true`).
 
 Evidence (mined, 9 sessions across 6 projects): a private app `6cacae0b` (classifier
 denial text), cubby `1d26271a` (bash-guard text), a private project `fda30a90`

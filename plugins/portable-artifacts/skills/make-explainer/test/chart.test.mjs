@@ -168,8 +168,8 @@ test('an inline chart renders a light and a dark SVG with marks, axis titles and
   const [light, lightNarrow, dark, darkNarrow] = svgs(html);
   assert.equal(svgs(html).length, PER_CHART);
   for (const svg of [light, lightNarrow, dark, darkNarrow]) {
-    assert.match(svg, />team</);
-    assert.match(svg, />bugs</);
+    assert.match(svg, />Team</);
+    assert.match(svg, />Bugs</);
     assert.match(svg, />Core</);
     assert.ok((svg.match(/<path[^>]*d="M[^"]*"[^>]*fill="#/g) ?? []).length >= 3, 'one bar per row');
   }
@@ -225,7 +225,7 @@ test('a dashboard chart renders from the dashboard rows; its title names the fig
   const { html, assets } = await make([dashboard()]);
   const [light] = svgs(html);
   assert.match(light, />North</);
-  assert.match(light, />region</);
+  assert.match(light, />Region</);
   assert.match(light, />\$\d/, 'the dashboard chart format applies');
   assert.match(html, /<figure class="ch" aria-label="Revenue by region">/);
   assert.match(html, /role="img" aria-label="Bar chart of revenue by region\./, 'the name is not repeated in the image label');
@@ -357,13 +357,13 @@ test('ISO date-times plot on a time axis', async () => {
 test('a raw vegaLite dashboard chart renders, names its figure from the chart title and lists every column', async () => {
   const dir = folder();
   const spec = JSON.parse(fs.readFileSync(path.join(dir, 'sales.dashboard.json'), 'utf8'));
-  spec.charts.push({ id: 'raw', title: 'Raw view', query: 'by_region', vegaLite: { width: 300, autosize: { type: 'pad' }, mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } } });
+  spec.charts.push({ id: 'raw', title: 'Raw view', query: 'by_region', vegaLite: { mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' }, y: { field: 'revenue', type: 'quantitative' } } } });
   fs.writeFileSync(path.join(dir, 'sales.dashboard.json'), JSON.stringify(spec));
   assert.deepEqual(await errorsOf(doc([dashboard({ chart: 'raw' })]), dir), []);
   const { html } = await make([dashboard({ chart: 'raw' })], dir);
   assert.equal(svgs(html).length, PER_CHART);
   assert.match(svgs(html)[0], />region</);
-  assert.match(svgs(html)[0], /width="600"/, 'the static width replaces a width in the view');
+  assert.match(svgs(html)[0], /width="600"/, 'the build sets the static width');
   assert.match(html, /<figure class="ch" aria-label="Raw view">/);
   assert.match(html, /role="img" aria-label="Chart\. The plotted values/);
   assert.match(html, /<th scope="col">region<\/th><th scope="col">revenue<\/th>/);

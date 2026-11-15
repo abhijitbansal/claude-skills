@@ -35,13 +35,18 @@ export function applyStatus(
   input: StatusInput,
   now: number,
 ): SessionRecord | { error: string } {
-  const given = STATUS_FIELDS.filter(k => (input[k] ?? '').trim() !== '')
+  const given = STATUS_FIELDS.filter(k => input[k] !== undefined)
   if (given.length === 0) {
-    return { error: 'compass_status needs at least one non-empty field of: goal, step, next' }
+    return { error: 'compass_status needs at least one field of: goal, step, next (an empty string clears one)' }
   }
-  const patch: StatusInput = {}
-  for (const k of given) patch[k] = truncate(input[k] ?? '', LIMITS[k])
-  return { ...rec, ...patch, statusAt: now, lastActive: now }
+  // A field left out keeps its value; an empty (or blank) string clears it.
+  const next: SessionRecord = { ...rec, statusAt: now, lastActive: now }
+  for (const k of given) {
+    const value = (input[k] ?? '').trim()
+    if (value === '') delete next[k]
+    else next[k] = truncate(value, LIMITS[k])
+  }
+  return next
 }
 
 export function artifactKey(a: Artifact): string {
@@ -51,7 +56,8 @@ export function artifactKey(a: Artifact): string {
     case 'doc': return `doc:${a.path}`
     case 'commit': return `commit:${a.sha}`
     case 'push': return `push:${a.remote}:${a.branch}`
-    case 'pr': return `pr:${a.number}`
+    // A PR number repeats across repos; its URL does not. Older records may lack the URL.
+    case 'pr': return a.url !== '' ? `pr:${a.url}` : `pr:${a.number}`
   }
 }
 

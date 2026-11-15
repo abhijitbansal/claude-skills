@@ -1,0 +1,8 @@
+[
+  { "id": "kind-area", "prompt": "Build a dashboard from data/sales.csv with an area chart of monthly revenue (sum of amount per month of date).", "expect": ["kind=area"] },
+  { "id": "kind-scatter", "prompt": "Build a dashboard from data/tickets.csv with a scatter plot of first_response_min (across) against resolved_hours (up), one dot per ticket, coloured by priority.", "expect": ["kind=scatter"] },
+  { "id": "kind-bubble", "prompt": "Build a dashboard from data/tickets.csv with a bubble chart per team: average first_response_min across, average resolved_hours up, and the bubble size set by the number of tickets.", "expect": ["kind=bubble"] },
+  { "id": "kind-heatmap", "prompt": "Build a dashboard from data/tickets.csv with a heatmap of ticket counts: channel across and team down, darker where there are more tickets.", "expect": ["kind=heatmap"] },
+  { "id": "kind-histogram", "prompt": "Build a dashboard from data/tickets.csv with a histogram of resolved_hours so I can see how long tickets usually take.", "expect": ["kind=histogram"] },
+  { "id": "kind-boxplot", "prompt": "Build a dashboard from data/tickets.csv with a box plot of resolved_hours for each team.", "expect": ["kind=boxplot"] }
+]

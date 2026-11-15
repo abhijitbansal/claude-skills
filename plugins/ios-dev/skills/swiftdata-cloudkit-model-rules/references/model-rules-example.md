@@ -19,6 +19,10 @@ final class Item {
 
     // inverse on exactly ONE side; declaring it on both sides crashes
     // the container at init.
+    // Relationships must be OPTIONAL — the `Optional` is what CloudKit checks.
+    // A non-optional `[Photo] = []` default does NOT satisfy it (container init
+    // throws NSCocoaErrorDomain 134060, "all relationships be optional").
+    // No `.unique` / `#Unique` constraints and no `.deny` delete rule either.
     @Relationship(deleteRule: .cascade, inverse: \Photo.item)
     var photos: [Photo]? = []
 

@@ -52,6 +52,17 @@ export const boxOf = (page, ids) => page.evaluate((list) => {
 /** Whether the viewBox holds `box` with `pad` around it (1 px of rounding allowed). */
 export const holds = (vb, box, pad = 48) => vb[0] <= box[0] - pad + 1 && vb[1] <= box[1] - pad + 1 && vb[0] + vb[2] >= box[0] + box[2] + pad - 1 && vb[1] + vb[3] >= box[1] + box[3] + pad - 1;
 
+/**
+ * Presses P and leaves the story paused on beat 1. P now enters Play and starts it (motion allowed);
+ * tests that step or inspect beat 1 want it still, so this pauses it with Space when it is running.
+ * Tests of the playing behaviour itself press 'p' directly.
+ */
+export async function enterPlay(page) {
+  await page.keyboard.press('p');
+  const running = await page.evaluate(() => document.getElementById('pa-stage').classList.contains('pa-playing'));
+  if (running) await page.keyboard.press('Space');
+}
+
 export const stageCentre = async (page) => {
   const r = await page.locator('#pa-stage').boundingBox();
   return { x: r.x + r.width / 2, y: r.y + 5 };

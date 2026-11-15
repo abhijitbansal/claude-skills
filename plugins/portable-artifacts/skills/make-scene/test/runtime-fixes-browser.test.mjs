@@ -362,3 +362,50 @@ test('F15: 24 long group names at 320 x 568: the legend is at most 30% of the ho
   const explore = await page.locator('.sc-explore').boundingBox();
   assert.ok(explore.y + explore.height <= m.legendTop + 1, `Explore ends at ${Math.round(explore.y + explore.height)}, the legend starts at ${Math.round(m.legendTop)}`);
 });
+
+// ---- PA-48: Escape closes the tour, arrows step beats with canvas focus, the Tour button plays ----------------------
+// runtime-keys.test.mjs pins only the pure helpers (keys.js); these three tests are what pin the wiring. Run them in the
+// serial browser slot, and show each one failing once with exactly one of these seeds applied (restore between seeds):
+//   - Escape test: in chrome/index.js onKey, make `escape === 'tour'` never close the tour (drop the closeTour() call).
+//   - arrows test: in controls.js onKey, delete the `arrowOwner(...) !== 'camera'` early return, so the canvas keeps Left and Right.
+//   - Tour button test: in chrome/index.js, change the tourButton click to `openTour()` (no `!reduced()`), so it opens paused.
+// No seed has been run yet: until it has, PA-48's wiring is proven by reading, not by a failing test.
+
+test('PA-48: Escape closes an open tour (the Explore panel still closes first)', async (t) => {
+  const ctx = await openHarness(t);
+  if (!ctx) return;
+  const { page } = ctx;
+  await page.evaluate(() => document.querySelector('canvas').focus());
+  await page.keyboard.press('p');
+  assert.equal(await page.locator('.sc-tour').isVisible(), true, 'P opened the tour');
+  await page.keyboard.press('e');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.sc-explore').isVisible(), false, 'the first Escape closed Explore');
+  assert.equal(await page.locator('.sc-tour').isVisible(), true, 'the tour stayed up behind it');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.sc-tour').isVisible(), false, 'the next Escape closed the tour');
+});
+
+test('PA-48: with the canvas focused and the tour open, Left and Right step beats', async (t) => {
+  const ctx = await openHarness(t);
+  if (!ctx) return;
+  const { page } = ctx;
+  await page.evaluate(() => document.querySelector('canvas').focus());
+  await page.keyboard.press('p');
+  assert.equal(await beatText(page), '1 / 5');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await beatText(page), '2 / 5', 'Right stepped to the next beat');
+  await page.keyboard.press('ArrowLeft');
+  assert.equal(await beatText(page), '1 / 5', 'Left stepped back');
+  assert.equal(await page.evaluate(() => document.activeElement.tagName), 'CANVAS', 'focus stayed on the canvas');
+});
+
+test('PA-48: the Tour button starts the tour playing, as its title says', async (t) => {
+  const ctx = await openHarness(t);
+  if (!ctx) return;
+  const { page } = ctx;
+  assert.match(await page.getByRole('button', { name: 'Tour' }).getAttribute('title'), /^Play the guided tour/);
+  await page.getByRole('button', { name: 'Tour' }).click();
+  assert.equal(await page.getByRole('button', { name: 'Pause' }).count(), 1, 'playing, so the transport offers Pause');
+  await page.waitForFunction(() => document.querySelector('.sc-cap-count').textContent === '2 / 5', null, { timeout: 7000 });
+});

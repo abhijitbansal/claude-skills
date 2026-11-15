@@ -7,7 +7,7 @@ sections; local scripts validate it, lint the prose and render it. Works with
 any agent that can run shell commands. Nothing leaves your machine
 unless you opt in with `--image-api` (see below).
 
-- **One spec, `explainer.json`**: a title and 1 to 40 sections of 24 types.
+- **One spec, `explainer.json`**: a title and 1 to 40 sections of 25 types.
   The agent never writes HTML, CSS, SVG or script; the spec accepts none of
   them, and text fields take only a small markdown subset.
 - **Facts come from scripts**: `gather.mjs git` reads a branch (commits, files
@@ -65,15 +65,17 @@ node make-explainer/scripts/doctor.mjs                # optional: what is missin
 node make-explainer/scripts/gather.mjs git --out facts.json
 node make-explainer/scripts/scaffold.mjs recap --facts facts.json --out explainer.json
 # replace every "TODO: ..." in explainer.json with real prose, then:
-node make-explainer/scripts/validate.mjs explainer.json   # warnings (soft caps) do not block
-node make-explainer/scripts/build.mjs    explainer.json   # add --model/--effort/--agent to stamp the page
-node make-explainer/scripts/check.mjs    ~/.agent/diagrams/<name>.html   # optional; skips when no browser is installed
+node make-explainer/scripts/validate.mjs explainer.json   # warnings (soft caps) do not block; --strict makes the length caps errors
+node make-explainer/scripts/build.mjs    explainer.json   # add --model/--effort/--agent to stamp the page; prints the file:// URL last
+node make-explainer/scripts/check.mjs    <the built page>.html --shots .scratch/shots   # optional; skips when no browser is installed; look at the PNGs
 ```
 
 Or just ask your agent: *"Recap this branch with a manual test checklist."* It
 gathers the facts, fills the file, runs validate and build and tells you where
-the page is. The default output folder is `~/.agent/diagrams/`; set
-`PA_OUTPUT_DIR` or pass `--out <file.html|dir>` to change it. A section with
+the page is. Without `--out` a spec inside a git repository builds into
+`<git root>/.scratch/<slug>.html`; any other spec builds into `~/.agent/diagrams/`;
+set `PA_OUTPUT_DIR` or pass `--out <file.html|dir>` to change it. `build` prints the
+page as a `file://` URL alone on its last line. A section with
 files (a video, an interactive chart) also writes `<name>.assets/` next to the
 page, so keep the two together.
 
@@ -81,6 +83,8 @@ page, so keep the two together.
 
 - Node.js ≥ 20 and a one-time `npm ci --omit=dev` inside this folder (Ajv only).
 - `gather.mjs` needs `git` on `PATH`.
+- Without `node_modules`, `validate.mjs` and `build.mjs` print one line naming the doctor command (`doctor.mjs --fix node_modules`) and exit 2.
+- `doctor.mjs` exits 0 when nothing *required* is missing (an optional browser is still listed), 1 when a required item is missing or a `--fix` failed, 2 on a usage error. Those codes are kept as they are.
 - Diagram and chart sections need the **`make-diagram`** and **`make-dashboard`**
   skills in folders next to this one, each with its own `npm ci --omit=dev`.
   `bin/install.mjs` installs them for you (this skill's `package.json` lists
@@ -103,7 +107,7 @@ page, so keep the two together.
 ## Sections
 
 `tldr`, `text`, `kpis`, `cards`, `table`, `risks`, `files`, `steps`,
-`timeline`, `compare`, `callout`, `code`, `details`, `checklist`, `diagram`,
+`timeline`, `compare`, `callout`, `code`, `diff`, `details`, `checklist`, `diagram`,
 `chart`, `scene`, `motion`, `image`, and for plans `decision`, `approval`,
 `question`, `review`, `verdict`. Every field and limit:
 [`references/sections.md`](references/sections.md) and

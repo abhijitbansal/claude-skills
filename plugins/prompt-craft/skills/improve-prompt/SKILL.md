@@ -22,14 +22,17 @@ same way twice — *deterministic at the start* instead of guessed at the end.
    Mark the load-bearing ones. The user resolves these *before* implementation.
 4. **Out of scope** — what you are deliberately NOT doing, to stop scope creep.
 5. **Recommended commands** — 1–3 slash commands that fit the work, ranked
-   canonical-first and personalized to your usage. Build a context JSON from the
-   restated goal and call the advisor:
+   canonical-first and personalized to your usage. Write the restated goal
+   verbatim to a scratch file with the Write tool (never inline it in a shell
+   string: an apostrophe in the goal breaks the quoting and the advisor then
+   reports "no commands"), then call the advisor with that file:
    ```sh
-   printf '%s' '{"prompt":"<restated goal>","git_state":{"dirty":false,"unpushed":0},"cwd":"'"$PWD"'"}' \
-     | /usr/bin/python3 "${CLAUDE_PLUGIN_ROOT}/scripts/advisor.py" --mode prompt
+   printf '%s' '{"git_state":{"dirty":false,"unpushed":0}}' \
+     | /usr/bin/python3 "${CLAUDE_PLUGIN_ROOT}/scripts/advisor.py" --mode prompt --prompt-file <goal file>
    ```
    Render the returned recommendations here, each with its `why`. If the advisor
-   returns nothing, say so — don't invent commands.
+   returns nothing, say so — don't invent commands. If it exits non-zero, report
+   its stderr line instead of treating that as "nothing to recommend".
 
 ## Rules
 

@@ -105,3 +105,56 @@ test('builder_agent is an optional requirement in every target, and a missing ag
   fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
   assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
 });
+
+// ---- PA-14: --for <spec> reads the spec -------------------------------------------------------------------
+
+const writeSpec = (spec, name = 'x.diagram.json') => {
+  const dir = tmp('doctor-spec-');
+  const file = path.join(dir, name);
+  fs.writeFileSync(file, typeof spec === 'string' ? spec : JSON.stringify(spec));
+  return file;
+};
+const emptyIconDir = () => tmp('doctor-icons-');
+const withIconDir = (dir) => ({ ...process.env, MAKE_DIAGRAM_ICON_DIR: dir });
+const SPEC_NEEDS_IMPORT = { title: 'T', type: 'architecture', nodes: [{ id: 'a', label: 'A', icon: 'cloud:aws-imported-only-name' }, { id: 'b', label: 'B', icon: 'cloud:aws-lambda' }], edges: [{ from: 'a', to: 'b' }] };
+
+test('--for <spec> with only bundled icons needs nothing beyond a plain run', () => {
+  const file = writeSpec({ ...SPEC_NEEDS_IMPORT, nodes: [{ id: 'a', label: 'A', icon: 'cloud:aws-lambda' }, { id: 'b', label: 'B', icon: 'lucide:database' }] });
+  // The exit code also reflects the machine's own node_modules (stale here), so only this spec's icon requirement is read.
+  const r = run(SKILL, ['--json', '--for', file], withIconDir(emptyIconDir()));
+  assert.equal(JSON.parse(r.stdout).missing.some((m) => m.id === 'cloud_icons'), false, r.stdout);
+});
+
+test('--for <spec> reports a cloud icon that is neither bundled nor imported, with the import command, and exits 1', () => {
+  const file = writeSpec(SPEC_NEEDS_IMPORT);
+  const r = run(SKILL, ['--json', '--for', file], withIconDir(emptyIconDir()));
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const m = JSON.parse(r.stdout).missing.find((x) => x.id === 'cloud_icons');
+  assert.ok(m, r.stdout);
+  assert.equal(m.required, true);
+  assert.match(m.why, /cloud:aws-imported-only-name/);
+  assert.doesNotMatch(m.why, /cloud:aws-lambda/, 'a bundled icon is not missing');
+  assert.match(m.fix.manual.darwin, /icons\.mjs import <aws\|gcp> <folder>/);
+  assert.equal(m.fix.auto, null, 'the doctor never downloads a vendor pack');
+});
+
+test('--for <spec> is satisfied once the icon has been imported into the icon folder', () => {
+  const dir = emptyIconDir();
+  const bundled = JSON.parse(fs.readFileSync(path.join(SKILL, 'icons/cloud.json'), 'utf8')).icons['aws-lambda'];
+  fs.writeFileSync(path.join(dir, 'imported-aws.json'), JSON.stringify({ icons: { 'aws-imported-only-name': bundled } }));
+  const r = run(SKILL, ['--json', '--for', writeSpec(SPEC_NEEDS_IMPORT)], withIconDir(dir));
+  assert.equal(JSON.parse(r.stdout).missing.some((m) => m.id === 'cloud_icons'), false, r.stdout);
+});
+
+test('--for <spec> on a file that is not JSON exits 2 and says so (it used to be ignored)', () => {
+  const r = run(SKILL, ['--for', writeSpec('{not json')], withIconDir(emptyIconDir()));
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /cannot read spec .*x\.diagram\.json/);
+});
+
+test('requirementsFor(spec) reads the file; the plain and check targets do not', async () => {
+  const requirementsFor = await loadRequirements();
+  const reqs = requirementsFor(writeSpec(SPEC_NEEDS_IMPORT));
+  assert.deepEqual(idsOf(reqs), ['node', 'node_modules', 'cloud_icons', 'builder_agent']);
+  assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'dev_deps', 'chromium', 'builder_agent']);
+});

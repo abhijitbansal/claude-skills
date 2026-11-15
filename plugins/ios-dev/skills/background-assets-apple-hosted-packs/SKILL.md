@@ -1,7 +1,6 @@
 ---
 name: background-assets-apple-hosted-packs
 description: "A Background Assets asset pack fails to download or EXTRACT on device or TestFlight — ProcessingPipelineError, AssetPackManagerError, STExtractionService faults, a pack stuck at downloading/failed, works dev-signed but fails on TestFlight (or vice versa), or external testers can't download despite READY_FOR_TESTING. Also for building/uploading Apple-hosted packs (ba-package, altool --upload-asset-pack, AssetPackManager) beyond what the base skill covers. Prerequisite: read ios-dev:background-assets-manifest-drift-blind-redownload first — it owns manifest-schema drift, the local content-cache check before re-downloading multi-GB sources, and pack-version immutability (new content = new pack id/version + client constant bump); this skill adds only the delivery/extraction sharp edges it lacks."
-promotion_target: Fold into ios-dev:background-assets-manifest-drift-blind-redownload as an "extraction failures + install channels" section — this file carries only the delta.
 ---
 
 # Apple-hosted Background Assets: delivery & extraction sharp edges
@@ -54,7 +53,8 @@ worked:
 Escalation heuristic that saved the investigation: when (a) ≥2 well-reasoned app-side
 fixes (clean pack rebuild, full app reinstall) fail with **byte-identical** failure
 signatures, and (b) a cross-OS A/B test isolates the OS version (identical pack +
-device model: iOS 26.6 failed every attempt, 26.5.2 succeeded cleanly) — conclude
+device model: iOS 26.6 failed every attempt, 26.5.2 succeeded cleanly; observed
+2026-07-18 in session 0052, not re-tested on a later 26.x since) — conclude
 platform bug. File Apple Feedback with the full evidence chain (error strings, A/B
 matrix, Console captures) and/or a Developer Forums post; stop guessing app-side.
 
@@ -69,3 +69,9 @@ terminal state is confirmed.
 `xcrun ba-serve` (self-hosted local dry-run) requires its own build-variant setup —
 materially more work than runbooks imply. Budget it as a real investigation task in
 the host project before promising a "quick local test" of pack delivery.
+
+## Related skills
+
+- `background-assets-manifest-drift-blind-redownload` — the prerequisite for this
+  skill: manifest-schema drift, the local cache check before a multi-GB re-download,
+  and pack-version immutability (new content = new pack id).

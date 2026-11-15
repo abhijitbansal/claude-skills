@@ -14,6 +14,15 @@ const table = (over = {}) =>
     alternatives: [alt('city'), alt('forest'), alt('galaxy'), alt('terrain', { eligible: false, needs: 'terrain needs t on every row', estBytes: 0 })],
     ...over,
   });
+// The switch command for a world: the wrapped lines under "  <world>:" joined back into the one command to paste.
+const commandOf = (t, world) => {
+  const lines = t.split('\n');
+  const at = lines.indexOf(`  ${world}:`);
+  if (at < 0) return null;
+  const body = [];
+  for (let i = at + 1; i < lines.length && lines[i].startsWith('    '); i++) body.push(lines[i].trim().replace(/ \\$/, ''));
+  return body.join(' ');
+};
 const lineOf = (t, world) => t.split('\n').find((l) => l.startsWith(world) || l.includes(`| ${world} `) || l.trimStart().startsWith(world));
 
 test('cost table switch tokens are zero', () => {
@@ -33,17 +42,29 @@ test('ineligible rows have no command', () => {
   const line = lineOf(table(), 'terrain');
   assert.match(line, /not available: needs t on every row/);
   assert.doesNotMatch(line, /build\.mjs/);
+  assert.equal(commandOf(table(), 'terrain'), null);
 });
 
-test('command text is node <skill-dir>/scripts/build.mjs <spec> --world <w>', () => {
-  const line = lineOf(table(), 'forest');
-  assert.ok(line.includes(`node ${SKILL}/scripts/build.mjs scene.json --world forest`));
+test('command text is node <skill-dir>/scripts/build.mjs <spec> --world <w>, under the table and not in its rows', () => {
+  assert.equal(commandOf(table(), 'forest'), `node ${SKILL}/scripts/build.mjs scene.json --world forest`);
+  assert.doesNotMatch(lineOf(table(), 'forest'), /build\.mjs|--world/);
+});
+
+test('the commands wrap: no line is longer than its longest path, however many flags the build was given', () => {
+  const skillDir = '/Users/someone/.claude/plugins/cache/claude-skills/portable-artifacts/1.2.0/skills/make-scene';
+  const specPath = '/Users/someone/projects/a-long-project-name/docs/scenes/commits-per-folder.scene.json';
+  const flags = { out: '/Users/someone/projects/a-long-project-name/.scratch/pages', theme: 'editorial', allowOutside: true };
+  const t = table({ skillDir, specPath, flags });
+  const longest = Math.max(`    node ${skillDir}/scripts/build.mjs \\`.length, `    ${specPath} --world forest \\`.length);
+  for (const line of t.split('\n')) assert.ok(line.length <= longest, `${line.length} chars: ${line}`);
+  assert.equal(commandOf(t, 'forest'), `node ${skillDir}/scripts/build.mjs ${specPath} --world forest --out ${flags.out} --theme editorial --allow-outside`);
+  assert.ok(t.split('\n').every((l) => l.length < 140), 'no 500-character line');
 });
 
 test('flags the build was given are repeated, quoted, after --world', () => {
   const t = table({ flags: { out: '/tmp/my pages', theme: 'press', allowOutside: true } });
-  assert.ok(lineOf(t, 'forest').includes(`scene.json --world forest --out '/tmp/my pages' --theme press --allow-outside`));
-  assert.ok(lineOf(table(), 'forest').trimEnd().endsWith('--world forest'));
+  assert.ok(commandOf(t, 'forest').endsWith(`scene.json --world forest --out '/tmp/my pages' --theme press --allow-outside`));
+  assert.ok(commandOf(table(), 'forest').endsWith('--world forest'));
 });
 
 test('the current world is marked and has no switch command', () => {
@@ -65,20 +86,20 @@ test('heavy rows add the phone warning, light rows do not', () => {
 
 test('a spec path with spaces is shell-quoted', () => {
   const t = table({ specPath: 'my scenes/a.json' });
-  assert.ok(lineOf(t, 'forest').includes("build.mjs 'my scenes/a.json' --world forest"));
+  assert.ok(commandOf(t, 'forest').includes("build.mjs 'my scenes/a.json' --world forest"));
 });
 
 test('header columns are named', () => {
   const header = table().split('\n')[1];
-  assert.equal(header.split('|').map((c) => c.trim()).join('|'), 'world|fit|switch tokens|page size|render|command');
+  assert.equal(header.split('|').map((c) => c.trim()).join('|'), 'world|fit|switch tokens|page size|render');
 });
 
 test('a skill dir with a space is quoted as part of the script path', () => {
   const t = table({ skillDir: '/Users/Jane Doe/skills/make-scene' });
-  assert.ok(lineOf(t, 'forest').includes("node '/Users/Jane Doe/skills/make-scene/scripts/build.mjs' scene.json --world forest"));
+  assert.equal(commandOf(t, 'forest'), "node '/Users/Jane Doe/skills/make-scene/scripts/build.mjs' scene.json --world forest");
 });
 
 test('arguments starting with a dash are quoted', () => {
   const t = table({ specPath: '-x.json' });
-  assert.ok(lineOf(t, 'forest').includes("build.mjs '-x.json' --world forest"));
+  assert.ok(commandOf(t, 'forest').includes("build.mjs '-x.json' --world forest"));
 });

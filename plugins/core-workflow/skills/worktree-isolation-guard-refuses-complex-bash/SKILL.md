@@ -27,6 +27,14 @@ Later variants:
   it stays inside the worktree`)
 - a `for` loop whose arguments contain "git" (`names git in a form too complex
   to verify`)
+- `ln -s <main checkout>/node_modules node_modules` (refused three times in
+  one session) and `cd <abs path> && ls -d …/node_modules`
+- `find … \( -name a -o -name b \)`
+- a `claude -p "<prompt text that names git>"` call
+- a `git commit` that was refused and left the tree dirty
+- a `grep -n 'a\|b'` alternation refused as `runs a string through eval`
+  (seen once, not reproduced; most likely the literal `eval` substring match,
+  since a word such as "retrieval" contains it)
 
 ## Root cause
 
@@ -56,19 +64,38 @@ compound forms; advice also conflicted across sessions (some said use
    `node --test "/abs/path/to/worktree/plugins/<pkg>/ev[a]l/…"`. The quoted
    glob is expanded by `node --test` itself (Node 21+), not by the shell.
    For other commands, use the unquoted form so the shell expands it:
-   `ls /abs/path/to/worktree/plugins/<pkg>/ev[a]l/`.
+   `ls /abs/path/to/worktree/plugins/<pkg>/ev[a]l/`. Two limits of that glob:
+   in zsh an unquoted glob that matches nothing is an error
+   (`no matches found`), so it fails for a file that does not exist yet. Create
+   new files under such a directory with Write/Edit, and read or change
+   existing ones with Read/Edit. And the guard refuses `git` with a glob in its
+   arguments (`redirects git through a glob pattern`), so never stage with
+   `git add …/ev[a]l/…`: stage the parent directory by literal path, or hand
+   the `git add` to the user per item 4.
 7. The guard's pattern match is text-based and inconsistent: the same
    command can pass in one session and be refused in another. Treat a refusal
    as a signal to simplify, not as proof the command was unsafe.
 8. After a refusal, retry the simple form. Do not reword the same compound
    command to slip past the guard; the only exception is the literal-name
    false positive in item 6.
+9. Variants and their plain forms: `ln -s … node_modules` → run
+   `npm ci --prefix <abs skill dir>` (or hand it to the user) instead of
+   linking; `find … \( -o \)` → two finds, or Glob; a `claude -p` prompt that
+   names git → write the prompt to a file with Write and pass the path; after
+   a refused `git commit`, run `git status` before any review-package or
+   next-step call, because the tree may be dirty and the commit never happened.
+10. macOS path spellings. `/tmp`, `/var` and `/etc` are symlinks into
+    `/private`, so the same directory has two spellings (`/tmp/x` and
+    `/private/tmp/x`; the session scratchpad is printed with `/private`).
+    When a hook, allow rule or script compares paths, fold both sides with
+    `realpath` first (or match both spellings); a literal that matches one
+    spelling silently misses the other.
 
 ## Evidence
 
 Mined from session digests; about 6 sessions across 3 projects found
 independently: a private-project worktree `e9097288` (the `-C` refusal), a
-private document-scanner app `ea9bc432` (string through `.`), a
+private iOS app `ea9bc432` (string through `.`), a
 private-bot worktree `bb35f1a6` (too complex to verify), a private bot
 `c2a681f5` (withheld error text).
 

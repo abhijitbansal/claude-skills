@@ -55,11 +55,17 @@ test('--fix with an unknown id reports it instead of installing anything', () =>
   assert.match(r.stdout + r.stderr, /no-such-requirement/);
 });
 
-test('requirementsFor: plain and the real ALL need no browser (nothing here uses one)', async () => {
+test('requirementsFor: a build needs no browser; the check target (and ALL) needs playwright and a browser', async () => {
   const requirementsFor = await loadRequirements();
   const { ALL } = await import(pathToFileURL(path.join(SKILL, 'shared/doctor.mjs')).href);
   assert.deepEqual(idsOf(requirementsFor()), ['node', 'node_modules', 'builder_agent']);
-  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules', 'builder_agent']);
+  assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'dev_deps', 'chromium', 'builder_agent']);
+  assert.deepEqual(idsOf(requirementsFor(ALL)), ['node', 'node_modules', 'dev_deps', 'chromium', 'builder_agent']);
+});
+
+test('--for check is an accepted target', () => {
+  const r = run(SKILL, ['--for', 'check', '--json']);
+  assert.notEqual(r.status, 2, r.stderr);
 });
 
 test('a build missing its vendored chart libraries prints the npm ci command', () => {

@@ -12,17 +12,25 @@ installed plugins, then summarizes what changed. Nothing is written into the rep
 
 ## Steps
 
-1. **Rebuild the registry** (both scopes, atomic write):
+1. **Keep the old registry** so step 4 can diff against it (the rebuild
+   overwrites the file in place):
    ```sh
-   /usr/bin/python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_registry.py" --repo-root "$PWD"
+   cp ~/.claude/prompt-craft/registry.json ~/.claude/prompt-craft/registry.prev.json
    ```
-2. **Relearn usage** (honors `CLAUDE_CODE_SKIP_PROMPT_HISTORY`):
+   If there is no registry yet, skip the copy; every command is then new.
+2. **Rebuild the registry** (both scopes, atomic write), passing the running
+   Claude Code version so the next staleness check agrees with this build:
+   ```sh
+   /usr/bin/python3 "${CLAUDE_PLUGIN_ROOT}/scripts/build_registry.py" --repo-root "$PWD" --claude-version "$(claude --version | head -n1 | tr -dc '0-9.')"
+   ```
+   If `claude` is not on PATH, omit `--claude-version`.
+3. **Relearn usage** (honors `CLAUDE_CODE_SKIP_PROMPT_HISTORY`):
    ```sh
    /usr/bin/python3 "${CLAUDE_PLUGIN_ROOT}/scripts/learn_history.py"
    ```
-3. **Summarize** from `~/.claude/prompt-craft/registry.json`: N commands across M
-   sources; your top personalized recommendations; commands newly discovered since the
-   last build. Naming: prompt-craft's own commands are `/prompt-craft:<name>`; bare
+4. **Summarize** from `~/.claude/prompt-craft/registry.json`: N commands across M
+   sources; your top personalized recommendations; commands newly discovered, meaning
+   names in the new registry that are absent from `registry.prev.json`. Naming: prompt-craft's own commands are `/prompt-craft:<name>`; bare
    forms (`/commit`, `/pr`, `/goal`, `/ecc:plan`, `/code-review`) are external/canonical.
 
 ## Statusline wiring (optional, reversible)

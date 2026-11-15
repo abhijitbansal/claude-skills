@@ -117,7 +117,8 @@ test('install hints name the doctor with its real path and the missing item id',
   const doctor = quoteArg(path.join(SKILL, 'scripts/doctor.mjs'));
   const { INSTALL_HINT } = await lib('voice.mjs');
   assert.ok(INSTALL_HINT.includes(`node ${doctor} --for voiceover, id kokoro)`), INSTALL_HINT);
-  assert.ok(INSTALL_HINT.includes(`${quoteArg(SKILL.replace(/[\\/]$/, ''))} && npm install kokoro-js@1.2.1 --no-save`), INSTALL_HINT);
+  // The doctor's own step (shared/doctor.mjs onDemandHint), which also names an installed onnxruntime-node: test/install-hints.test.mjs.
+  assert.match(INSTALL_HINT, new RegExp(`${quoteArg(SKILL.replace(/[\\/]$/, '')).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} && npm install (?:\\S+@\\S+ )*kokoro-js@1\\.2\\.1(?: \\S+@\\S+)* --no-save`), INSTALL_HINT);
   assert.doesNotMatch(INSTALL_HINT, /--prefix/);
   assert.doesNotMatch(INSTALL_HINT, /<skill-dir>/);
   const { findFfmpeg } = await lib('ffmpeg.mjs');
@@ -154,7 +155,11 @@ test('the ffmpeg hint installs into make-motion', async () => {
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
   process.env.PATH = tmp('doctor-nopath-'); delete process.env.FFMPEG_PATH;
   try {
-    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => e.message.includes(`npm i ffmpeg-static --no-save --prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`));
+    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => {
+      // PA-10: the hint is the doctor's own step (shared onDemandHint): `cd <skill> && npm install <pin> [siblings] --no-save`, not a `--prefix` command.
+      const skill = quoteArg(SKILL.replace(/[\\/]$/, '')).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`cd ${skill} && npm install (?:\\S+@\\S+ )*ffmpeg-static@\\d\\S* (?:\\S+@\\S+ )*--no-save`).test(e.message) && !/--prefix/.test(e.message);
+    });
   } finally {
     process.env.PATH = saved.p;
     if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;

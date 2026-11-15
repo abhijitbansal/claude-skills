@@ -82,4 +82,4 @@ node scripts/icons.mjs list brand           # every brand ref
 node scripts/icons.mjs list                 # all three catalogs (add lucide, brand or cloud for one)
 ```
 
-Refs are printed best match first, one per line. A search with no match prints nothing; use a kind's default icon then. An `icon` on a kind drawn as a bare shape (flow `start`, `end`, `decision`; state `start`, `end`, `choice`) is an error: `kind "decision" is drawn as a shape without an icon; remove icon or use kind "step"`.
+Refs are printed best match first, one per line. A search with no match prints nothing on stdout and one line on stderr (exit 0); use a kind's default icon then. Only AWS and Google Cloud icon packs can be imported (`icons.mjs import <aws|gcp> <folder>`); there is no Azure pack. An `icon` on a kind drawn as a bare shape (flow `start`, `end`, `decision`; state `start`, `end`, `choice`) is an error: `kind "decision" is drawn as a shape without an icon; remove icon or use kind "step"`.

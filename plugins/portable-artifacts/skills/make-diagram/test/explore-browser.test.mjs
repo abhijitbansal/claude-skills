@@ -4,7 +4,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildPage, example } from './helpers/browser.mjs';
-import { openPage, closeBrowser, skipUnlessBrowser, settle, viewBox, boxOf, holds } from './helpers/page.mjs';
+import { openPage, closeBrowser, skipUnlessBrowser, settle, viewBox, boxOf, holds, enterPlay } from './helpers/page.mjs';
 import { PROTOTYPE_NAMED_SPECS } from './helpers/prototype-ids.mjs';
 
 after(closeBrowser);
@@ -28,11 +28,12 @@ const tap = async (page, sel) => {
 test('a node click opens the panel: emoji, kind, label, detail, Sends to and Receives from; the selection and its neighbours stay lit', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  assert.equal(await page.isVisible('[data-pa-panel]'), true, 'the panel is there in Explore');
+  assert.equal(await page.isHidden('[data-pa-panel]'), true, 'the panel stays hidden until something is selected');
   assert.equal(await title(page), 'Map');
   assert.equal(await bodyHidden(page), true);
   assert.equal(await page.isHidden('[data-pa-panel-close]'), true);
   await page.click('.pa-node[data-id="orders"]');
+  assert.equal(await page.isVisible('[data-pa-panel]'), true, 'a selection opens it');
   assert.equal(await title(page), 'Orders service');
   assert.equal(await page.textContent('.panel-icon'), '📦');
   assert.equal(await page.textContent('.panel-kind'), 'service');
@@ -48,6 +49,7 @@ test('a node click opens the panel: emoji, kind, label, detail, Sends to and Rec
   await page.click('[data-pa-panel-close]');
   assert.equal(await title(page), 'Map');
   assert.equal(await bodyHidden(page), true);
+  assert.equal(await page.isHidden('[data-pa-panel]'), true, 'closing hides the panel again');
   assert.deepEqual(await selectedIds(page), []);
   assert.equal(await page.locator('.pa-dim').count(), 0);
   assert.deepEqual(problems, []);
@@ -137,7 +139,7 @@ test('an edge click shows its label, style, ends and the beats that use it; a be
   assert.equal(await page.isHidden('[data-pa-panel]'), true, 'the panel hides in Play');
   await page.keyboard.press('Escape');
   assert.equal(await page.isVisible('[data-pa-caption]'), false);
-  assert.equal(await page.isVisible('[data-pa-panel]'), true);
+  assert.equal(await page.isHidden('[data-pa-panel]'), true, 'back in Explore with nothing selected: still hidden');
   assert.equal(await title(page), 'Map', 'entering Play dropped the selection');
   assert.deepEqual(problems, []);
   await context.close();
@@ -182,7 +184,7 @@ test('hover shows a tooltip: "label — note" for a node, the label for an edge,
   assert.equal(await page.textContent('[data-pa-tip]'), 'POST /orders');
   await page.mouse.move(2, 2);
   assert.equal(await page.isHidden('[data-pa-tip]'), true, 'leaving the diagram hides it');
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.dispatchEvent('.pa-node[data-id="db"]', 'pointerover');
   assert.equal(await page.isHidden('[data-pa-tip]'), true, 'no tooltip in Play');
   await page.keyboard.press('Escape');
@@ -275,7 +277,7 @@ for (const width of [1280, 390]) {
   });
 }
 
-test('Escape on Close never drops focus to the page: an edge falls back to its first end, a group to the panel title', async (t) => {
+test('Escape on Close never drops focus to the page: an edge falls back to its first end, a group (the panel hides) to the Explore tab', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const story = await openPage(built('story').url);
   await tap(story.page, '.pa-edge[data-id="edge-0"]');
@@ -294,7 +296,7 @@ test('Escape on Close never drops focus to the page: an edge falls back to its f
   await arch.page.focus('[data-pa-panel-close]');
   await arch.page.keyboard.press('Enter');
   assert.equal(await bodyHidden(arch.page), true);
-  assert.notEqual(await arch.page.evaluate(() => document.activeElement.tagName), 'BODY', 'a group has no focus stop: focus lands on the panel');
+  assert.equal(await arch.page.evaluate(() => document.activeElement?.getAttribute('data-pa-mode')), 'explore', 'a group has no focus stop and the panel hides: focus lands on the Explore tab');
   assert.deepEqual(arch.problems, []);
   await arch.context.close();
 });
@@ -304,7 +306,7 @@ test('pressing P with the pointer over a node hides the tooltip and it stays hid
   const { page, problems, context } = await openPage(built('story').url);
   await page.hover('.pa-node[data-id="gateway"]');
   assert.equal(await page.isVisible('[data-pa-tip]'), true);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await page.isHidden('[data-pa-tip]'), true, 'entering Play hides the tip');
   await page.dispatchEvent('.pa-node[data-id="gateway"]', 'pointermove', { clientX: 30, clientY: 30 });
   assert.equal(await page.isHidden('[data-pa-tip]'), true);
@@ -331,7 +333,7 @@ test('a group and a node named "null" are not selected by a null id', async (t) 
   await context.close();
 });
 
-test('the panel title announces itself politely and is a focus fallback', async (t) => {
+test('the panel title announces itself politely and stays focusable', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
   assert.equal(await page.getAttribute('[data-pa-panel-title]', 'aria-live'), 'polite');
@@ -356,8 +358,10 @@ test('shift-click traces the shortest route along the arrows: hops listed in ord
   assert.deepEqual(await routeIds(page), ['api', 'db', 'edge-0', 'edge-1', 'web']);
   assert.deepEqual(await dimmedNodes(page), ['pay']);
   assert.deepEqual(await selectedIds(page), [], 'a route replaces the selection');
-  await page.click('.pa-node[data-id="pay"]');
-  assert.equal(await title(page), 'Payments', 'a plain click ends the route and selects');
+  // The panel narrows the stage and the drawing stays where it was drawn (W2P-M04), so Payments, at the far right, is
+  // behind the panel now: a plain click on a hop ends the route instead.
+  await page.click('.pa-node[data-id="api"]');
+  assert.equal(await title(page), 'Checkout API', 'a plain click ends the route and selects');
   assert.deepEqual(await routeIds(page), []);
   assert.deepEqual(problems, []);
   await context.close();
@@ -370,7 +374,7 @@ test('against the arrows the route ignores direction and says so; Shift+Enter on
   await page.click('.pa-node[data-id="web"]', { modifiers: ['Shift'] });
   assert.equal(await title(page), 'Route');
   assert.equal(await page.textContent('.panel-note'), 'ignores arrow direction');
-  assert.deepEqual(await texts(page, '[data-pa-hops] li'), ['Payments → Checkout API · charges card', 'Checkout API → Web app · POST /checkout']);
+  assert.deepEqual(await texts(page, '[data-pa-hops] li'), ['Payments ← Checkout API · charges card', 'Checkout API ← Web app · POST /checkout'], 'each step in the order walked, with ← where the arrow runs the other way');
   await page.click('.pa-node[data-id="web"]');
   await page.focus('.pa-node[data-id="db"]');
   await page.keyboard.press('Shift+Enter');
@@ -435,26 +439,53 @@ test('a route export carries no pa-route', async (t) => {
   await context.close();
 });
 
-// ---- Find and the count chips (Task 6) --------------------------------------------------------
+// ---- Find (Task 6) --------------------------------------------------------
 
-const chips = (page) => texts(page, '[data-pa-tally] .pa-chip');
 const foundTexts = (page) => texts(page, '[data-pa-found] .pa-chip');
 
-test('nothing selected: count chips by kind, the stories and the beats, and the hint; a walkthrough has no stories chip', async (t) => {
+// W2P-M03: the panel is hidden until something is selected, so it carries no empty state (count chips, hint);
+// the hint rides on the Explore button's title. Visibility is asserted, not textContent (which reads hidden nodes).
+test('nothing selected: the panel is hidden and has no empty state; the hint is on the Explore button; a selection shows it and Close hides it again', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const story = await openPage(built('story').url);
-  assert.deepEqual(await chips(story.page), ['1 user', '1 client', '1 gateway', '1 service', '1 database', '1 queue', '1 external', '2 stories', '9 beats']);
-  assert.equal(await story.page.textContent('[data-pa-empty] .hint'), 'Click a node or edge. Shift-click a second node to trace a path.');
+  assert.equal(await story.page.isVisible('[data-pa-panel]'), false, 'nothing selected: the panel takes no room');
+  assert.equal(await story.page.locator('[data-pa-empty]').count(), 0, 'no empty state');
+  assert.equal(await story.page.locator('[data-pa-tally]').count(), 0, 'no count chips');
+  assert.match(await story.page.getAttribute('[data-pa-mode="explore"]', 'title'), /Click a node or edge\. Shift-click a second node to trace a path\./);
   await story.page.click('.pa-node[data-id="orders"]');
-  assert.equal(await story.page.isHidden('[data-pa-empty]'), true, 'the empty state gives way to the selection');
+  assert.equal(await story.page.isVisible('[data-pa-panel]'), true, 'a selection shows the panel');
   await story.page.click('[data-pa-panel-close]');
-  assert.equal(await story.page.isVisible('[data-pa-empty]'), true);
+  assert.equal(await story.page.isVisible('[data-pa-panel]'), false, 'Close hides it again');
   assert.deepEqual(story.problems, []);
   await story.context.close();
+});
 
-  const arch = await openPage(built('architecture').url);
-  assert.deepEqual(await chips(arch.page), ['1 client', '1 service', '1 database', '1 external', '3 beats'], 'groups are not a kind; a step-derived timeline is not a story');
-  await arch.context.close();
+// W2P-M04: the panel opening narrows the stage; the drawing must stay under the pointer (no rescale, no jump),
+// on the first selection and again on Close, so a Shift-click on a second node still hits its target.
+test('opening and closing the panel does not move or rescale the clicked node', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('architecture').url);
+  // The ResizeObserver refit runs a frame after the panel opens: settle (the viewBox holds still) before each read, or the
+  // box can be read before the refit and the test passes without the fix. Seed to see it fail: in viewer.js replace
+  // camera.holdView(panel.paint) with panel.paint() and the box moves or rescales after the settle.
+  // The shape's own box: boundingBox() of the node also takes in its stroke and focus ring, which a selection thickens.
+  const box = async () => {
+    await settle(page);
+    return page.evaluate(() => {
+      const r = document.querySelector('.pa-node[data-id="web"] .pa-shape').getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    });
+  };
+  const near = (a, b, what) => assert.ok(Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2 && Math.abs(a.width - b.width) < 0.5, `${what}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
+  const before = await box();
+  await page.click('.pa-node[data-id="web"]');
+  assert.equal(await page.isVisible('[data-pa-panel]'), true);
+  near(await box(), before, 'after the panel opened');
+  await page.click('[data-pa-panel-close]');
+  assert.equal(await page.isVisible('[data-pa-panel]'), false);
+  near(await box(), before, 'after Close');
+  assert.deepEqual(problems, []);
+  await context.close();
 });
 
 test('/ focuses Find; typing filters the canvas and lists matches; Enter selects the first and fits the camera; a chip picks; Escape clears', async (t) => {
@@ -512,7 +543,7 @@ test('Find matches regex characters literally; a match found while in Play leave
   await page.keyboard.press('Escape');
   assert.deepEqual(await dimmedNodes(page), [], 'Escape on the stage clears the filter');
   assert.equal(await page.inputValue('[data-pa-find]'), '');
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await page.isVisible('[data-pa-caption]'), true);
   await page.fill('[data-pa-find]', 'cold');
   await page.keyboard.press('Enter');
@@ -580,7 +611,7 @@ test('a further shift-click while a route shows re-targets from the route start'
 test('Escape in the Find field during Play pauses the story', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.click('[data-pa-play]');
   assert.equal(await playing(page), true, 'precondition: playing');
   await page.focus('[data-pa-find]');
@@ -628,15 +659,15 @@ test('arrow keys with focus in the details panel scroll it and leave the camera 
   await context.close();
 });
 
-test('arrow keys still pan from inside the panel when it has nothing to scroll, as after a mouse Close', async (t) => {
+test('after a mouse Close the panel hides, focus moves to the Explore tab and arrow keys pan', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('flow').url, { width: 1440, height: 900 });
   await page.click('.pa-node[data-id="ask"]');
   await settle(page);
   await page.click('[data-pa-panel-close]');
   await settle(page);
-  const inPanel = await page.evaluate(() => document.querySelector('[data-pa-panel]').contains(document.activeElement));
-  assert.ok(inPanel, 'precondition: Close hands focus to the panel');
+  assert.equal(await page.isHidden('[data-pa-panel]'), true, 'precondition: Close hides the panel');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-pa-mode')), 'explore', 'Close hands focus to the Explore tab, not the page');
   for (const key of ['ArrowRight', 'ArrowDown']) {
     const box = await viewBox(page);
     await page.keyboard.press(key);

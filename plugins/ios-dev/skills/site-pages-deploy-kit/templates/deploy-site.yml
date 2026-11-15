@@ -1,7 +1,7 @@
 name: Deploy site
 
 # Publishes the marketing/legal site to the public {{SITE_REPO}} repo
-# (GitHub Pages source) whenever site/ changes land on main. The site/
+# (GitHub Pages source) whenever {{SITE_DIR}}/ changes land on main. The {{SITE_DIR}}/
 # directory in THIS repo is the source of truth; the public repo is a
 # force-pushed derivative.
 #
@@ -14,7 +14,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "site/**"
+      - "{{SITE_DIR}}/**"
       - "scripts/deploy-site.sh"
       - ".github/workflows/deploy-site.yml"
   workflow_dispatch:
@@ -33,9 +33,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # subtree split walks site/ history
+          fetch-depth: 0   # subtree split walks {{SITE_DIR}}/ history
 
-      - name: Push site/ subtree to the public Pages repo
+      - name: Push {{SITE_DIR}}/ subtree to the public Pages repo
         env:
           SITE_DEPLOY_KEY: ${{ secrets.SITE_DEPLOY_KEY }}
         run: |
@@ -64,5 +64,5 @@ jobs:
           {
             echo "### Site deployed"
             echo ""
-            echo "Force-pushed \`site/\` to {{SITE_REPO}} (main). Pages republishes in ~1 min."
+            echo "Force-pushed \`{{SITE_DIR}}/\` to {{SITE_REPO}} (main). Pages republishes in ~1 min."
           } >> "$GITHUB_STEP_SUMMARY"

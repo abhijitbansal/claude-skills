@@ -17,7 +17,7 @@ import { validateSpec, withDefaults } from '../scripts/lib/spec.mjs';
 import { buildTimeline, seekTo } from '../template/timeline.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
-import { waitReady } from '../scripts/check.mjs';
+import { waitReady } from '../scripts/lib/check-main.mjs';
 import { requireRender, renderHash, makeTestVideo, BROWSER_ONLY } from './helpers/render.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

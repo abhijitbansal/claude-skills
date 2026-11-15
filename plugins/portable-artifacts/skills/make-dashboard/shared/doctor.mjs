@@ -13,7 +13,24 @@ const REPO = 'abhijitbansal/claude-skills';
 export const KOKORO_PIN = 'kokoro-js@1.2.1';
 // make-motion's cutout.mjs runs MODNet on this (MIT); installed on demand like kokoro, never by `npm ci`.
 export const CUTOUT_PIN = 'onnxruntime-node@1.31.1';
+// make-motion's optional static ffmpeg (used when no ffmpeg is on PATH); installed on demand like kokoro, never by `npm ci`.
+export const FFMPEG_STATIC_PIN = 'ffmpeg-static@5.3.0';
 const SKILLS_CLI = 'skills@1.7.2';
+
+// What `npm ci --omit=dev` puts in a skill's node_modules, as the consent prompt shows it. Measured 2026-11 on macOS in
+// a dev checkout: `npm ls --omit=dev --all --parseable` per skill, then the on-disk size (du blocks) of every
+// package in that tree, rounded. A fresh install of the published package should land close to these; re-measure on one
+// (`npm ci --omit=dev`, then du) before trusting them to the MB. make-motion lists playwright as a production
+// dependency, so its figure is its whole tree.
+export const INSTALL_SIZES = {
+  'make-explainer': '≈3 MB',
+  'make-diagram': '≈11 MB',
+  'make-dashboard': '≈150 MB',
+  'make-motion': '≈58 MB',
+  'make-scene': '≈3 MB',
+};
+const UNKNOWN_SIZE = '≈3–150 MB, depending on the skill';
+const installSize = (name) => INSTALL_SIZES[name] ?? UNKNOWN_SIZE;
 const USER_SCOPE_DIRS = ['.claude', '.agents', '.copilot', '.gemini'];
 const PROJECT_SCOPE_DIRS = [...USER_SCOPE_DIRS, '.github'];
 const USAGE = 'doctor.mjs [--json] [--for <spec.json|target>] | --fix <id[,id]>';
@@ -42,7 +59,34 @@ export function defaultCtx(skillDir) {
       }
     },
     which: (cmd) => spawnSync(platform === 'win32' ? 'where' : 'which', [cmd], { stdio: 'ignore' }).status === 0,
+    readdir: (p) => fs.readdirSync(p),
+    dirSize,
   };
+}
+
+// On-disk bytes under a folder (symlinks are counted, not followed; a hard link is counted once). Never throws.
+function dirSize(root) {
+  const seen = new Set();
+  const walk = (p) => {
+    let st;
+    try {
+      st = fs.lstatSync(p);
+    } catch {
+      return 0;
+    }
+    if (seen.has(`${st.dev}:${st.ino}`)) return 0;
+    seen.add(`${st.dev}:${st.ino}`);
+    let total = (st.blocks ?? Math.ceil(st.size / 512)) * 512;
+    if (st.isDirectory()) {
+      try {
+        for (const name of fs.readdirSync(p)) total += walk(path.join(p, name));
+      } catch {
+        // unreadable folder: count what was seen
+      }
+    }
+    return total;
+  };
+  return walk(root);
 }
 
 const pp = (ctx) => (ctx.platform === 'win32' ? path.win32 : path.posix);
@@ -117,7 +161,8 @@ function reinstallNote({ omitDev, restore, dir }) {
   return `npm ci reinstalls node_modules from the lockfile and removes ${removes.join(' and ')}; ${back}`;
 }
 
-export function nodeModules({ omitDev = true, restore = [] } = {}) {
+// size: what the consent prompt shows; default is the measured figure for this skill (INSTALL_SIZES).
+export function nodeModules({ omitDev = true, restore = [], size } = {}) {
   return {
     id: 'node_modules',
     rank: RANK.nodeModules,
@@ -126,13 +171,19 @@ export function nodeModules({ omitDev = true, restore = [] } = {}) {
       return stale.length > 0 ? `installs the skill's own npm packages; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : "installs the skill's own npm packages";
     },
     required: true,
-    size: '≈30–60 MB',
+    size: size ?? ((ctx) => installSize(pp(ctx).basename(ctx.skillDir))),
     // An install made before a security pin landed keeps the vulnerable version until npm ci reruns.
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) && staleOverrides(ctx, 'own').length === 0,
     fix: (ctx) => {
-      const argv = ['npm', 'ci', ...(omitDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
+      const modules = pp(ctx).join(ctx.skillDir, 'node_modules');
+      const installed = ctx.exists(modules);
+      // An install that already has playwright (a dev checkout, a --link install) keeps its dev packages: --omit=dev would delete it.
+      const dropDev = omitDev && !(installed && ctx.exists(pp(ctx).join(modules, 'playwright')));
+      const argv = ['npm', 'ci', ...(dropDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
       const out = { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
-      const notes = ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules')) ? reinstallNote({ omitDev, restore, dir: ctx.skillDir }) : undefined;
+      const stale = installed ? staleOverrides(ctx, 'own') : [];
+      if (stale.length > 0) out.stale = stale;
+      const notes = installed ? reinstallNote({ omitDev: dropDev, restore, dir: ctx.skillDir }) : undefined;
       return notes ? { ...out, notes } : out;
     },
     needsSudo: () => false,
@@ -226,14 +277,19 @@ function locateSister(ctx, plan, name) {
   return null;
 }
 
-export function sisterSkill(name) {
+// size: what the consent prompt shows; default is the measured figure for that skill (INSTALL_SIZES).
+export function sisterSkill(name, { size } = {}) {
   if (typeof name !== 'string' || !SISTER_NAME.test(name)) throw new TypeError(`sisterSkill: invalid skill name ${JSON.stringify(name)}`);
   const sisterDir = (ctx) => pp(ctx).join(pp(ctx).dirname(ctx.skillDir), name);
   const skillPresent = (ctx) => ctx.exists(pp(ctx).join(sisterDir(ctx), 'SKILL.md'));
   // The sister's node_modules also counts as missing when it predates a pin in the sister's own package.json.
   const stale = (ctx) => staleOverrides(ctx, 'own', sisterDir(ctx));
-  const depsPresent = (ctx) => ctx.exists(pp(ctx).join(sisterDir(ctx), 'node_modules')) && stale(ctx).length === 0;
+  const modulesDir = (ctx) => pp(ctx).join(sisterDir(ctx), 'node_modules');
+  const depsPresent = (ctx) => ctx.exists(modulesDir(ctx)) && stale(ctx).length === 0;
   const present = (ctx) => skillPresent(ctx) && depsPresent(ctx);
+  // Like nodeModules: a sister that already has playwright keeps its dev packages.
+  const keepsDev = (ctx) => ctx.exists(modulesDir(ctx)) && ctx.exists(pp(ctx).join(modulesDir(ctx), 'playwright'));
+  const installStep = (ctx) => ['npm', 'ci', ...(keepsDev(ctx) ? [] : ['--omit=dev']), '--prefix', sisterDir(ctx)];
   return {
     id: name,
     rank: RANK.sister,
@@ -242,18 +298,21 @@ export function sisterSkill(name) {
       return stale(ctx).length > 0 ? `${name} is installed but its dependencies predate the patched ${stale(ctx).join(', ')} pinned in its package.json "overrides"` : `${name} is installed but its dependencies are not`;
     },
     required: true,
-    size: '≈30–60 MB',
+    size: size ?? installSize(name),
     check: present,
     fix: (ctx) => {
       const plan = sisterPlan(ctx);
-      const install0 = ['npm', 'ci', '--omit=dev', '--prefix', sisterDir(ctx)];
+      const install0 = installStep(ctx);
       if (skillPresent(ctx)) {
         // Folder is there, its npm packages are not: install them only, never re-add the skill.
-        const reinstall = ctx.exists(pp(ctx).join(sisterDir(ctx), 'node_modules')) ? `; npm ci reinstalls ${name}'s node_modules from its lockfile and removes its dev packages` : '';
-        return { auto: [install0], manual: manualAll(render([install0], ctx.platform)), notes: `${name} is installed but its dependencies are not current; this runs npm ci in ${sisterDir(ctx)} only${reinstall}` };
+        const dev = keepsDev(ctx) ? 'keeps its dev packages' : 'removes its dev packages';
+        const reinstall = ctx.exists(modulesDir(ctx)) ? `; npm ci reinstalls ${name}'s node_modules from its lockfile and ${dev}` : '';
+        const out = { auto: [install0], manual: manualAll(render([install0], ctx.platform)), notes: `${name} is installed but its dependencies are not current; this runs npm ci in ${sisterDir(ctx)} only${reinstall}` };
+        const names = ctx.exists(modulesDir(ctx)) ? stale(ctx) : [];
+        return names.length > 0 ? { ...out, stale: names } : out;
       }
       const add = ['npx', '--yes', SKILLS_CLI, 'add', REPO, '--skill', name, '-y', ...(plan?.global ? ['-g'] : [])];
-      const install = ['npm', 'ci', '--omit=dev', '--prefix', sisterDir(ctx)];
+      const install = installStep(ctx);
       if (plan === null) {
         const hint = `reinstall with your host's installer (for example run \`npx ${SKILLS_CLI} add ${REPO} --skill ${name} -y\` from your project root, or reinstall the plugin), then ${render([install], ctx.platform)}`;
         return { auto: null, manual: manualAll(hint) };
@@ -381,11 +440,24 @@ function staleOverrides(ctx, scope = 'all', dir = ctx.skillDir) {
 // kokoro and cutout are both `npm install <pin> --no-save`. npm rebuilds node_modules from package.json and the
 // lockfile and prunes every package not in them, so an install that leaves the other one off the command line
 // deletes it. Each fix therefore names its own pin plus the pin of whichever sibling is already installed.
-const ON_DEMAND_PINS = [{ pkg: 'kokoro-js', pin: KOKORO_PIN, id: 'kokoro' }, { pkg: 'onnxruntime-node', pin: CUTOUT_PIN, id: 'cutout' }];
+// ffmpeg-static joins them: its script hint used to be `npm i ffmpeg-static --no-save --prefix <skill>`, which pruned both.
+const ON_DEMAND_PINS = [
+  { pkg: 'kokoro-js', pin: KOKORO_PIN, id: 'kokoro' },
+  { pkg: 'onnxruntime-node', pin: CUTOUT_PIN, id: 'cutout' },
+  { pkg: 'ffmpeg-static', pin: FFMPEG_STATIC_PIN, id: 'ffmpeg-static' },
+];
 
 function onDemandInstall(ctx, id) {
+  if (!ON_DEMAND_PINS.some((p) => p.id === id)) throw new TypeError(`unknown on-demand install ${JSON.stringify(id)}; known: ${ON_DEMAND_PINS.map((p) => p.id).join(', ')}`);
   const pins = ON_DEMAND_PINS.filter((p) => p.id === id || ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', p.pkg))).map((p) => p.pin);
   return { argv: ['npm', 'install', ...pins, '--no-save'], cwd: ctx.skillDir };
+}
+
+// The command text for an on-demand install ('kokoro', 'cutout', 'ffmpeg-static'), exactly the step `--fix <id>` runs.
+// A script that cannot find the package prints this in its error hint, so the hint and the doctor never disagree
+// (one that names only its own pin would delete the other on-demand packages).
+export function onDemandHint(id, ctx) {
+  return render([onDemandInstall(ctx, id)], ctx.platform);
 }
 
 export function kokoro() {
@@ -398,14 +470,15 @@ export function kokoro() {
       return stale.length > 0 ? `local text-to-speech for voiceover; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : 'local text-to-speech for voiceover';
     },
     required: false,
-    size: '≈250 MB, plus a 90 MB model on first use',
+    // The plan register's figure for a kokoro-js install (du on macOS, about 1.9x the 250 MB this used to say); not re-measured here.
+    size: '≈465 MB, plus a 90 MB model on first use',
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'kokoro-js')) && staleOverrides(ctx, 'extra').length === 0,
     fix: (ctx) => {
       // Run inside the skill folder so npm applies the skill's package.json "overrides" (patched sharp
       // and global-agent). --prefix applied them in Linux tests with npm 10.8/10.9, but was reported
       // not to on macOS with npm 10.8.2; running from the folder works either way.
       const step = onDemandInstall(ctx, 'kokoro');
-      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; this keeps an installed cutout (onnxruntime-node), but a later `--fix node_modules` (npm ci) removes both, so rerun `--fix kokoro` (and `--fix cutout`)' };
+      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; kokoro-js shares onnxruntime-node with cutout, so installing both costs less than the two sizes added; this keeps an installed cutout (onnxruntime-node), but a later `--fix node_modules` (npm ci) removes both, so rerun `--fix kokoro` (and `--fix cutout`)' };
     },
     needsSudo: () => false,
   };
@@ -504,11 +577,13 @@ export async function diagnose(requirements, ctx) {
       id: r.id,
       why: typeof r.why === 'function' ? r.why(ctx) : r.why,
       required: r.required,
-      size: r.size,
+      size: typeof r.size === 'function' ? r.size(ctx) : r.size,
       fix: { auto: fix.auto === null ? null : render(fix.auto, ctx.platform), manual: fix.manual },
       needsSudo: r.needsSudo(ctx),
     };
     if (fix.notes) entry.notes = fix.notes;
+    // Installed, but older than a pin in package.json "overrides": reported as stale, not missing. Still required, still exit 1.
+    if (fix.stale?.length > 0) entry.stale = fix.stale;
     if (fix.sudoHint) entry.sudoHint = fix.sudoHint;
     missing.push(entry);
   }
@@ -563,7 +638,8 @@ export async function runFixes(ids, requirements, ctx, run = defaultRun) {
     if (req.id === 'node_modules' && !result.ok) nodeModulesFailed = true;
     results.push(result);
   }
-  for (const id of wanted) results.push({ id, ok: false, refused: 'unknown id' });
+  const accepted = [...new Set(requirements.map((r) => r.id))];
+  for (const id of wanted) results.push({ id, ok: false, refused: 'unknown id', accepted });
   return results;
 }
 
@@ -622,7 +698,78 @@ function describe(m, platform) {
   const cmd = m.fix.auto ?? m.fix.manual[platform] ?? m.fix.manual.linux;
   const sudo = m.needsSudo ? ' (needs sudo: run it yourself)' : '';
   const notes = m.notes ? ` Note: ${m.notes}.` : '';
-  return `missing (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${cmd}${sudo}${notes}`;
+  const state = m.stale ? `stale (older than the pinned ${m.stale.join(', ')} override${m.stale.length > 1 ? 's' : ''})` : 'missing';
+  return `${state} (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${cmd}${sudo}${notes}`;
+}
+
+const formatBytes = (b) => (b >= 1e9 ? `${(b / 1e9).toFixed(1)} GB` : `${Math.round(b / 1e6)} MB`);
+const SEMVER = /^(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/;
+const semverOf = (v) => SEMVER.exec(v)?.slice(1, 4).map(Number) ?? null;
+const olderThan = (a, b) => {
+  for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i] < b[i];
+  return false;
+};
+
+// Other, older versions of this plugin in the plugin cache (<home>/.claude/plugins/cache/<marketplace>/<plugin>/<version>)
+// next to the one this skill runs from, with their sizes. Empty outside the cache or when the folder cannot be read.
+// Only older copies: a newer one may be the install the user wants. Read-only; the doctor never removes anything.
+export function olderPluginCopies(ctx) {
+  if (typeof ctx.readdir !== 'function') return [];
+  const P = pp(ctx);
+  const cacheRoot = P.join(ctx.homedir ?? os.homedir(), '.claude', 'plugins', 'cache');
+  const rel = P.relative(cacheRoot, P.resolve(ctx.skillDir));
+  if (rel === '' || rel.startsWith('..') || P.isAbsolute(rel)) return [];
+  const [marketplace, plugin, version, skills] = rel.split(P.sep);
+  const running = semverOf(version ?? '');
+  if (!running || skills !== 'skills') return [];
+  const pluginDir = P.join(cacheRoot, marketplace, plugin);
+  let names;
+  try {
+    names = ctx.readdir(pluginDir);
+  } catch {
+    return [];
+  }
+  return names
+    .map((name) => ({ name, parts: semverOf(name) }))
+    .filter((c) => c.parts && c.name !== version && olderThan(c.parts, running))
+    .sort((a, b) => (olderThan(a.parts, b.parts) ? -1 : 1))
+    .map(({ name }) => {
+      const dir = P.join(pluginDir, name);
+      let bytes = null;
+      try {
+        if (typeof ctx.dirSize === 'function') bytes = ctx.dirSize(dir);
+      } catch {
+        // size unknown
+      }
+      return { version: name, path: dir, bytes };
+    });
+}
+
+// One note: the copies, their sizes, and the command for the user to run. The doctor never runs it.
+function describeOlderCopies(copies, platform) {
+  const q = quoteFor(platform);
+  const list = copies.map((c) => (c.bytes == null ? c.version : `${c.version} (${formatBytes(c.bytes)})`)).join(', ');
+  const total = copies.every((c) => c.bytes != null) ? copies.reduce((sum, c) => sum + c.bytes, 0) : null;
+  const rm = platform === 'win32' ? copies.map((c) => `rmdir /s /q ${q(c.path)}`).join(' && ') : `rm -rf ${copies.map((c) => q(c.path)).join(' ')}`;
+  return `older copies of this plugin sit in the plugin cache: ${list}. ${total === null ? 'To remove them' : `To free about ${formatBytes(total)}`}, run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${rm}`;
+}
+
+// A stable per-user folder for large files that should survive a plugin update (the voice and cutout models):
+// $CLAUDE_PLUGIN_DATA when the host sets it, else the OS cache folder, else <skill>/.cache (the old, per-version place).
+// Callers add their own subfolder. Nothing is created here.
+export function stableCacheDir({ skillDir, env = process.env, platform = process.platform, homedir = os.homedir() } = {}) {
+  const P = platform === 'win32' ? path.win32 : path.posix;
+  if (env.CLAUDE_PLUGIN_DATA) return P.resolve(env.CLAUDE_PLUGIN_DATA);
+  if (platform === 'win32') {
+    const base = env.LOCALAPPDATA || (homedir ? P.join(homedir, 'AppData', 'Local') : '');
+    if (base) return P.join(base, 'portable-artifacts', 'Cache');
+  } else if (platform === 'darwin') {
+    if (homedir) return P.join(homedir, 'Library', 'Caches', 'portable-artifacts');
+  } else {
+    if (env.XDG_CACHE_HOME && P.isAbsolute(env.XDG_CACHE_HOME)) return P.join(env.XDG_CACHE_HOME, 'portable-artifacts');
+    if (homedir) return P.join(homedir, '.cache', 'portable-artifacts');
+  }
+  return P.join(skillDir, '.cache');
 }
 
 const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
@@ -632,7 +779,7 @@ function printFixResult(r, platform) {
   const out = (line) => process.stdout.write(`${line}\n`);
   if (r.ok) out(`fixed: ${r.id} (ran: ${r.ran})${r.note ? ` Note: ${r.note}.` : ''}`);
   else if (r.skipped) out(`skipped: ${r.id} — ${r.skipped} (run doctor --fix node_modules first)`);
-  else if (r.refused) out(`refused: ${r.id} — ${r.refused}${r.manual ? `. Run it yourself${shell}: ${r.manual}` : ''}`);
+  else if (r.refused) out(`refused: ${r.id} — ${r.refused}${r.accepted ? ` (accepted ids: ${r.accepted.join(', ')})` : ''}${r.manual ? `. Run it yourself${shell}: ${r.manual}` : ''}`);
   else if (r.elsewhere) out(`installed elsewhere: ${r.id} — ${r.manual}`);
   else if (r.stillMissing) out(`still missing: ${r.id} after (ran: ${r.ran}). ${r.manual}`);
   else if (r.ran === undefined) out(`failed: ${r.id} — ${r.error}`);
@@ -678,11 +825,14 @@ async function fixMain(raw, { ctx, json, requirementsFor, spec, run }) {
 
 async function diagnoseMain({ ctx, json, skill, spec, requirementsFor }) {
   const result = await diagnose(requirementsFor(spec), ctx);
+  const older = olderPluginCopies(ctx);
+  if (older.length > 0) result.olderCopies = older;
   if (json) process.stdout.write(`${JSON.stringify(result)}\n`);
   else {
     if (result.missing.length === 0) process.stdout.write(`ok: everything ${skill} needs is installed\n`);
     for (const m of result.missing) process.stdout.write(`${describe(m, ctx.platform)}\n`);
     for (const i of result.info ?? []) process.stdout.write(`Note: ${i.id} — ${i.note}\n`);
+    if (older.length > 0) process.stdout.write(`Note: ${describeOlderCopies(older, ctx.platform)}\n`);
   }
   if (!result.ok) process.exitCode = 1;
 }

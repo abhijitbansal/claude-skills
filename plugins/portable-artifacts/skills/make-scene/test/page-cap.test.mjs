@@ -9,7 +9,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { build } from '../scripts/build.mjs';
 import { MAX_PAGE_BYTES } from '../scripts/lib/bundle.mjs';
-import { buildPage, pageErrors } from '../scripts/lib/page-size.mjs';
+import { buildPage, capError, pageErrors } from '../scripts/lib/page-size.mjs';
 import { listThemes } from '../shared/theme.mjs';
 import { loadSibling } from '../scripts/lib/siblings.mjs';
 import { PINNED_ENV, tempDir } from './helpers/scene-fixtures.mjs';
@@ -17,9 +17,12 @@ import { PINNED_ENV, tempDir } from './helpers/scene-fixtures.mjs';
 const SCRIPTS = fileURLToPath(new URL('../scripts/', import.meta.url));
 const VALIDATE = path.join(SCRIPTS, 'validate.mjs');
 const BUILD = path.join(SCRIPTS, 'build.mjs');
-const CAP_MESSAGE = /^the page is \d+ KB; the limit is 1408 KB - use fewer rows or fewer groups$/;
+// A data scene's message may end by naming the worlds whose page does fit the same rows (PA-47).
+const FITS = '(, or pick a world that fits these rows \\((?:city|forest|galaxy|terrain)(?:, (?:city|forest|galaxy|terrain))*\\))?';
+const CAP_MESSAGE = new RegExp(`^the page is \\d+ KB; the limit is 1408 KB - use fewer rows or fewer groups${FITS}$`);
 // validate says which measure it used: the heaviest theme's page plus room for the provenance stamp.
-const VALIDATE_CAP_MESSAGE = /^the page is \d+ KB in the heaviest theme \(\w+, with room for provenance\); the limit is 1408 KB - use fewer rows or fewer groups$/;
+const VALIDATE_CAP_MESSAGE = new RegExp(`^the page is \\d+ KB in the heaviest theme \\(\\w+, with room for provenance\\); the limit is 1408 KB - use fewer rows or fewer groups${FITS}$`);
+const worldsFitting = (message) => (/rows \(([^)]+)\)$/.exec(message)?.[1] ?? '').split(', ').filter(Boolean);
 const HEAP_MB = 256;
 const TIMEOUT_MS = 120_000;
 
@@ -63,6 +66,21 @@ test('validate rejects a forest build would reject: 20 groups of 100 rows is ove
   sameCapError(v.result.errors, built.errors);
 });
 
+test('the over-cap message of a forest names the worlds that fit the same rows, in build and in validate', async (t) => {
+  const { dir, file } = specIn(t, { title: 'Forest', world: 'forest', data: { rows: gridRows(20, 100) } });
+  const built = await build(file, { env: env(dir) });
+  const fits = worldsFitting(built.errors[0].message);
+  assert.ok(fits.includes('city') && fits.includes('galaxy'), `build names the fitting worlds: ${built.errors[0].message}`);
+  assert.ok(!fits.includes('forest'), 'the world that is over the cap is not offered');
+  assert.deepEqual(worldsFitting(validated(file).result.errors[0].message), fits, 'validate names the same worlds');
+});
+
+test('capError names fitting worlds only when it is given some', () => {
+  assert.deepEqual(capError(2000, 1000), capError(2000, 1000, { fits: [] }));
+  assert.match(capError(2000, 1000, { fits: ['city', 'terrain'] }).message, /fewer groups, or pick a world that fits these rows \(city, terrain\)$/);
+  assert.equal(capError(900, 1000, { fits: ['city'] }), null);
+});
+
 test('validate rejects one group of 2000 rows in a forest, and accepts the same rows as a city', async (t) => {
   const rows = Array.from({ length: 2000 }, (_, i) => ({ group: 'only', t: `w${String(i).padStart(4, '0')}`, value: i % 40 }));
   const forest = specIn(t, { title: 'F', world: 'forest', data: { rows } });
@@ -96,7 +114,7 @@ test('validate rejects a page that is under the cap in dusk but over it in the h
   const maxBytes = Math.floor((dusk + heaviest) / 2);
   const result = await pageErrors(SMALL_CITY, { dir, maxBytes });
   assert.equal(result.ok, false, `dusk is ${dusk} bytes, the cap ${maxBytes}, the heaviest theme ${heaviest}`);
-  assert.match(result.errors[0].message, /^the page is \d+ KB in the heaviest theme \(\w+, with room for provenance\); the limit is \d+ KB - use fewer rows or fewer groups$/);
+  assert.match(result.errors[0].message, /^the page is \d+ KB in the heaviest theme \(\w+, with room for provenance\); the limit is \d+ KB - use fewer rows or fewer groups(, or pick a world that fits these rows \([a-z, ]+\))?$/);
   const shown = Number(/is (\d+) KB/.exec(result.errors[0].message)[1]);
   assert.ok(Math.abs(shown - heaviest / 1024) <= 2, `the message cites the heaviest size (${shown} KB vs ${heaviest / 1024})`);
   const sizes = await Promise.all(listThemes().map(async (theme) => [theme, await bytesIn(theme)]));

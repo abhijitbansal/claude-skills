@@ -18,13 +18,13 @@ function sandbox() {
 }
 const run = (args, env = {}) => spawnSync(process.execPath, [BUILD, ...args], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '', PA_OUTPUT_DIR: '', ...env } });
 
-test('--out file.html writes the page and prints theme / wrote / open lines', () => {
+test('--out file.html writes the page and prints theme and wrote lines, then the file:// URL alone on its own line', () => {
   const { root, done } = sandbox();
   try {
     const out = path.join(root, 'deep', 'my.html');
     const r = run([CORE, '--out', out]);
     assert.equal(r.status, 0, r.stderr + r.stdout);
-    assert.equal(r.stdout, `theme: paper\nwrote ${out}\nopen: ${pathToFileURL(out).href}\n`);
+    assert.equal(r.stdout, `theme: paper\nwrote ${out}\n${pathToFileURL(out).href}\n`);
     assert.match(fs.readFileSync(out, 'utf8'), /^<!doctype html>/);
     assert.ok(!fs.existsSync(path.join(root, 'deep', 'my.assets')), 'no assets folder when nothing needs one');
   } finally { done(); }

@@ -7,7 +7,7 @@
 // ringed by two lower puffs of the same colour (decoration, in a foliage batch per group): a fuller crown that
 // grows with the cluster, so the silhouette still tracks the value.
 import { emptyGraph, finalizeGraph, tableFallback } from '../lib/graph.mjs';
-import { compareT, groupIndex, groupsFrom, itemsFrom, groupColour } from '../lib/palette.mjs';
+import { compareT, groupIndex, groupsFrom, itemsFrom, groupColour, namedTimes } from '../lib/palette.mjs';
 import { ringSlots } from '../lib/ring.mjs';
 
 export const LEAF_MIN = 0.25;
@@ -178,6 +178,8 @@ export function build({ rows }, spec = {}) {
   g.anim = { sway: leaves.map((_, n) => `b${n + 2}`), orbits: [] };
   g.labels = labels;
   for (const [key, view] of labelViews) if (!views.has(key)) views.set(key, view);
+  // t only orders branches here, so a t value a beat names flies to the tree of its first row.
+  for (const { key, indexes } of namedTimes(rows, spec)) if (!views.has(key) && views.has(rows[indexes[0]].group)) views.set(key, views.get(rows[indexes[0]].group));
   g.focus = Object.fromEntries(views);
   g.fallback = tableFallback(rows);
   return finalizeGraph(g);

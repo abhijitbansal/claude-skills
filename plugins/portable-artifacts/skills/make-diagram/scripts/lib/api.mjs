@@ -4,6 +4,7 @@ import { themeFor } from './theme.mjs';
 import { validateSpec } from './spec.mjs';
 import { layoutDiagram } from './layout.mjs';
 import { lintGeometry } from './lint.mjs';
+import { layoutWarnings } from './warnings.mjs';
 import { renderSvg, diagramCss } from './render.mjs';
 import { DiagramError } from './diagram-error.mjs';
 import { LIMITS } from './schema.mjs';
@@ -12,7 +13,7 @@ import { viewerData } from './data.mjs';
 import { beatsOf } from './stories.mjs';
 import { runtimeSource } from './runtime.mjs';
 
-// validateSpec(spec, { layout }) -> { ok, errors }: the same checks buildDiagram runs, for callers that only validate.
+// validateSpec(spec, { layout }) -> { ok, errors } (plus warnings when there are any): the same checks buildDiagram runs, for callers that only validate.
 export { validateSpec } from './spec.mjs';
 
 const ID_PREFIX = /^[A-Za-z0-9_-]+$/;
@@ -102,7 +103,8 @@ export function viewerRuntime() {
  * Build a diagram from a spec.
  *
  * `theme` is a theme name or a loaded theme object (default: the spec's theme,
- * else blueprint). Resolves to { svg, css, width, height, steps, ids, data, geometry }:
+ * else blueprint). Resolves to { svg, css, width, height, steps, ids, data, geometry, warnings }
+ * (`warnings`: { path, message } advice that never fails a build; see warnings.mjs):
  * `svg` uses classes and CSS variables only (no fonts, no <style>; include
  * `css` once per page), `steps` is the spec's steps (copied; ids it never
  * reveals get a final "Everything" step) or ones built from the layout, `ids`
@@ -122,6 +124,7 @@ export async function buildDiagram(spec, { theme, idPrefix } = {}) {
   const geometry = await layoutDiagram(spec, resolved);
   const lint = lintGeometry(geometry, { theme: resolved });
   if (lint.length > 0) throw new DiagramError(lint);
+  const warnings = [...(semantic.warnings ?? []), ...layoutWarnings(geometry)];
   const ids = idsOf(spec);
   const steps = stepsOf(spec, geometry, ids);
   const { beats, chapters } = beatsOf(spec, steps);
@@ -136,5 +139,6 @@ export async function buildDiagram(spec, { theme, idPrefix } = {}) {
     ids,
     data: viewerData(spec, { geometry, steps, ids, width, height, beats, chapters }),
     geometry,
+    warnings,
   };
 }

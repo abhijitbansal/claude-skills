@@ -58,6 +58,9 @@ export function slideBudget(spec) {
     if (s.type === 'code' && codeLines(s.code) > SLIDE_LIMITS.codeLines) {
       errors.push({ path: pathJoin(at, 'code'), message: `slide has ${codeLines(s.code)} code lines; the limit is ${SLIDE_LIMITS.codeLines} — show the key lines or split the section` });
     }
+    if (s.type === 'diff' && codeLines(s.diff) > SLIDE_LIMITS.codeLines) {
+      errors.push({ path: pathJoin(at, 'diff'), message: `slide has ${codeLines(s.diff)} diff lines; the limit is ${SLIDE_LIMITS.codeLines} — show the key lines or split the section` });
+    }
     const w = wordCount(s, at);
     if (w > SLIDE_LIMITS.words) {
       errors.push({ path: at, message: `slide has ${w} words; the limit is ${SLIDE_LIMITS.words} — cut text or split this section into two slides` });
@@ -89,7 +92,7 @@ export const isSlides = (spec) => spec.mode === 'slides' || spec.preset === 'sli
 // A section without a title is named after its type in labels and the outline.
 const TYPE_LABELS = {
   tldr: 'TL;DR', text: 'Text', kpis: 'KPIs', cards: 'Cards', table: 'Table', risks: 'Risks', files: 'Files', steps: 'Steps',
-  timeline: 'Timeline', compare: 'Comparison', callout: 'Note', code: 'Code', details: 'Details', checklist: 'Checklist',
+  timeline: 'Timeline', compare: 'Comparison', callout: 'Note', code: 'Code', diff: 'Diff', details: 'Details', checklist: 'Checklist',
   diagram: 'Diagram', scene: 'Scene', chart: 'Chart', motion: 'Video', image: 'Image',
   decision: 'Decision', approval: 'Approval', question: 'Open question', verdict: 'Verdict', review: 'Review these first',
 };

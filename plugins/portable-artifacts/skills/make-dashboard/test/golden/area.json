@@ -3,7 +3,7 @@
     "x": {
       "field": "month",
       "type": "temporal",
-      "title": "month",
+      "title": "Month",
       "timeUnit": "utcyearmonth",
       "scale": {
         "type": "utc"
@@ -24,12 +24,15 @@
           "bind": "scales"
         }
       ],
-      "mark": "area",
+      "mark": {
+        "type": "area",
+        "point": true
+      },
       "encoding": {
         "y": {
           "field": "revenue",
           "type": "quantitative",
-          "title": "revenue"
+          "title": "Revenue"
         }
       }
     },
@@ -72,19 +75,19 @@
         "y": {
           "field": "revenue",
           "type": "quantitative",
-          "title": "revenue"
+          "title": "Revenue"
         },
         "tooltip": [
           {
             "field": "month",
             "type": "temporal",
-            "title": "month",
+            "title": "Month",
             "timeUnit": "utcyearmonth"
           },
           {
             "field": "revenue",
             "type": "quantitative",
-            "title": "revenue"
+            "title": "Revenue"
           }
         ],
         "opacity": {

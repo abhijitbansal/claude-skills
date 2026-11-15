@@ -1,53 +1,14 @@
 #!/usr/bin/env node
 // node scripts/voice.mjs "<text>" --out <file.wav> [--voice af_heart] [--speed 1] [--phonemes]
 // node scripts/voice.mjs --text-file narration.txt --out <file.wav> [--phonemes]   (no shell expansion of $ or backticks)
-// node scripts/voice.mjs --list-voices
-// Synthesises a voiceover clip locally with Kokoro; reference the wav from motion.json `audio[].src`.
-// Also writes <file>.json beside it with every sentence's start and end second (a captions `src`)
-// and the phonemes Kokoro spoke for it.
-// Prints three lines: the wav path, "<seconds> s, <voice>", and the sidecar path.
-// With --phonemes, a "<sentence><TAB><phonemes>" line per sentence follows, to check how a word is read.
-import { mkdirSync } from 'node:fs';
+// node scripts/voice.mjs --dir <folder> [--voice af_heart] [--speed 1]   (every .txt in the folder -> <name>.wav beside it)
+// node scripts/voice.mjs --list-voices   (a static table: no model is loaded or downloaded)
+// Synthesises a voiceover clip locally with Kokoro; the full description is at the top of lib/voice-cli.mjs. --help exits 0.
+// A thin entry: it checks for node_modules with Node built-ins only, then loads the body (lib/voice-cli.mjs), which imports ajv
+// through spec.mjs. Without node_modules the one line names the doctor command and the exit is 2 (shared/preflight.mjs).
 import path from 'node:path';
-import { UsageError } from './lib/spec.mjs';
-import { parseVoiceArgs, loadKokoro, loadModel, synthesize, sidecarPath, phonemeLines, USAGE, INSTALL_HINT } from './lib/voice.mjs';
+import { fileURLToPath } from 'node:url';
+import { preflight } from '../shared/preflight.mjs';
 
-const EXIT_USAGE = 2;
-const EXIT_FAILURE = 1;
-
-function listVoices(tts) {
-  for (const [name, info] of Object.entries(tts.voices ?? {})) {
-    process.stdout.write(`${name}\t${info.language ?? ''}\t${info.gender ?? ''}\t${info.overallGrade ?? ''}\n`);
-  }
-}
-
-async function run(opts, tts, kokoro) {
-  if (opts.listVoices) { listVoices(tts); return; }
-  if (!Object.hasOwn(tts.voices ?? {}, opts.voice)) throw new UsageError(`unknown voice "${opts.voice}"; run --list-voices`);
-  const out = path.resolve(opts.out);
-  mkdirSync(path.dirname(out), { recursive: true });
-  const { seconds, sentences } = await synthesize(tts, kokoro, { ...opts, out });
-  process.stdout.write(`${out}\n${seconds.toFixed(2)} s, ${opts.voice}\n${sidecarPath(out)}\n`);
-  if (opts.phonemes) process.stdout.write(phonemeLines(sentences));
-}
-
-// The model session is always disposed before the process ends, on success and on failure:
-// exiting with a live onnxruntime session aborts with "mutex lock failed" (SIGABRT), and so does
-// process.exit(), so the exit code is set and the event loop is left to drain.
-async function main() {
-  const opts = parseVoiceArgs(process.argv.slice(2));
-  const kokoro = await loadKokoro();
-  const tts = await loadModel(kokoro);
-  try {
-    await run(opts, tts, kokoro);
-  } finally {
-    await tts.model.dispose();
-  }
-}
-
-main().catch((e) => {
-  process.stderr.write(`${e.message}\n`);
-  const usage = e instanceof UsageError;
-  if (usage && e.message !== USAGE && e.message !== INSTALL_HINT) process.stderr.write(`${USAGE}\n`);
-  process.exitCode = usage ? EXIT_USAGE : EXIT_FAILURE;
-});
+const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (preflight(SKILL_ROOT)) await (await import('./lib/voice-cli.mjs')).run();

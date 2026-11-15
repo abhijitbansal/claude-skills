@@ -32,3 +32,4 @@ shellcheck setup/*.sh adapters/*.sh
 - [ ] Shell scripts are `set -euo pipefail` and pass `bash -n` + `shellcheck`
 - [ ] No secrets, tokens, or personal paths committed
 - [ ] Docs/README updated if behavior or install steps changed
+- [ ] Site updated (`site/` and `docs/` pages, `python3 scripts/sweep_counts.py --check` clean) if a skill, command or install step changed

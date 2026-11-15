@@ -104,6 +104,7 @@ function csvColumns(header, columns = {}) {
 }
 
 const NUMERIC = /^-?\d+(\.\d+)?$/;
+const YEAR = /^\d{4}$/;
 const MAX_CELL_ERRORS = 10;
 
 // The value column must hold finite numbers. Name the column, the file line
@@ -145,10 +146,26 @@ function readCsv(ref, dir, columns) {
     if (more > 0) shown.push({ path: 'data.csv', message: `… and ${more} more non-numeric value cells` });
     throw new DataError(shown);
   }
-  // A time column that is all numbers sorts as numbers, not as text.
-  const ts = rows.filter((r) => r.t !== undefined);
-  if (ts.length > 0 && ts.every((r) => NUMERIC.test(r.t))) for (const r of ts) r.t = Number(r.t);
-  return { rows, links: [] };
+  return { rows: numericTimes(rows), links: [] };
+}
+
+/**
+ * A time column that is all numbers (text such as "1", "2", "10") sorts as numbers, not as text, so t "10" follows t "2".
+ * Returns new rows when it converts and the same array otherwise: the caller's rows (and the spec they came from,
+ * which `build --world` writes back) are never retyped. A calendar value ("2026-W30") is not a plain number and
+ * keeps the column as text. So does a column of bare years ("2025", "2026"): they sort right as text and, like any
+ * date, read as time to the world ranking (recommend.mjs), which must not change once the rows are loaded.
+ * A string that would not print back as written ("01", "1.50") keeps the column as text, so a tour focus can still
+ * name it exactly as the data spells it.
+ */
+export function numericTimes(rows) {
+  if (!Array.isArray(rows)) return rows;
+  const given = rows.filter((r) => r !== null && typeof r === 'object' && r.t !== undefined);
+  if (given.every((r) => typeof r.t === 'string' && YEAR.test(r.t))) return rows;
+  const plain = (t) => typeof t === 'number' || (typeof t === 'string' && NUMERIC.test(t) && String(Number(t)) === t);
+  if (given.length === 0 || !given.every((r) => plain(r.t))) return rows;
+  if (given.every((r) => typeof r.t === 'number')) return rows;
+  return rows.map((r) => (r !== null && typeof r === 'object' && typeof r.t === 'string' ? { ...r, t: Number(r.t) } : r));
 }
 
 /**
@@ -157,8 +174,11 @@ function readCsv(ref, dir, columns) {
  */
 export function readSource(spec, dir) {
   const data = spec.data ?? {};
-  if (data.rows !== undefined) return { rows: data.rows, links: [] };
-  if (data.file !== undefined) return readJsonFile(data.file, dir);
+  if (data.rows !== undefined) return { rows: numericTimes(data.rows), links: [] };
+  if (data.file !== undefined) {
+    const file = readJsonFile(data.file, dir);
+    return { ...file, rows: numericTimes(file.rows) };
+  }
   if (data.csv !== undefined) return readCsv(data.csv, dir, data.columns);
   return { rows: [], links: [] };
 }
@@ -169,12 +189,13 @@ export function loadData(spec, dir) {
   return { rows, links: [...links, ...(spec.links ?? [])] };
 }
 
-/** Lowercased groups and labels: what a tour beat's focus may name. */
+/** Lowercased groups, labels and t values (a week, a month): what a tour beat's focus may name. */
 export function focusKeys(rows) {
   const keys = new Set();
   for (const r of rows) {
     keys.add(r.group.toLowerCase());
     if (typeof r.label === 'string' && r.label !== '') keys.add(r.label.toLowerCase());
+    if (r.t !== undefined) keys.add(String(r.t).toLowerCase());
   }
   return keys;
 }

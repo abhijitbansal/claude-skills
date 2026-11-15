@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// node scripts/scaffold.mjs <recap|checklist|concept|slides|plan> [--facts facts.json] [--title <text>] [--out <file>]
+// node scripts/scaffold.mjs <recap|checklist|concept|slides|plan> [--facts facts.json] [--title <text>] [--out <file>] [--force]
 // Prints a starter explainer.json on stdout. Facts (from gather.mjs) fill the numbers, files,
 // commits and folders; every sentence is a "TODO: ..." string that validate.mjs rejects until
 // it is replaced. Write it to a file with --out: scaffold.mjs recap --facts f.json --out explainer.json
+// --out refuses a file that exists (it may already be filled in); --force replaces it.
 // exit 0 ok, 2 usage / unreadable facts
 import fs from 'node:fs';
 import { emit } from './lib/write-out.mjs';
@@ -11,8 +12,8 @@ import { CHANGES } from './lib/schema.mjs';
 import { didYouMean } from '../shared/errors.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
-const USAGE = `node scripts/scaffold.mjs <${PRESET_NAMES.join('|')}> [--facts facts.json] [--title <text>] [--out <file>]`;
-const OPTIONS = { facts: { type: 'string' }, title: { type: 'string' }, out: { type: 'string' } };
+const USAGE = `node scripts/scaffold.mjs <${PRESET_NAMES.join('|')}> [--facts facts.json] [--title <text>] [--out <file>] [--force]`;
+const OPTIONS = { facts: { type: 'string' }, title: { type: 'string' }, out: { type: 'string' }, force: { type: 'boolean' } };
 
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 const bad = (path, what) => new UsageError(`facts.${path} must be ${what}; produce the file with: node scripts/gather.mjs git --out facts.json`);
@@ -82,7 +83,7 @@ try {
   const preset = presetFrom(positionals);
   if (values.title !== undefined && values.title.trim() === '') throw new UsageError(`--title must not be empty; pass --title <text> or leave it out for a TODO title; usage: ${USAGE}`);
   const facts = values.facts === undefined ? null : readFacts(values.facts);
-  emit(`${JSON.stringify(scaffold(preset, { facts, title: values.title }), null, 2)}\n`, values.out);
+  emit(`${JSON.stringify(scaffold(preset, { facts, title: values.title }), null, 2)}\n`, values.out, { overwrite: values.force === true });
 } catch (e) {
   if (!(e instanceof UsageError)) throw e;
   exitUsage(e);

@@ -134,14 +134,25 @@ node make-motion/scripts/doctor.mjs   # optional: reports ffmpeg, the browser an
 #   Windows: winget install Gyan.FFmpeg   (then open a new terminal)
 #   Linux:   sudo apt-get install ffmpeg  (and use: npx playwright install --with-deps chromium)
 
-SKILL=path/to/make-motion
-cp $SKILL/references/examples/q3-revenue.json motion.json
-node $SKILL/scripts/validate.mjs motion.json              # `valid`, or path-precise errors
-node $SKILL/scripts/render.mjs motion.json --contact-sheet # out/contact/<scene>.png
-node $SKILL/scripts/check.mjs motion.json                 # safe area, overlaps, empty endings, contrast, reading time, dead stretches, small text
-node $SKILL/scripts/preview.mjs motion.json --open         # scrubber, play/pause, live reload
-node $SKILL/scripts/render.mjs motion.json                 # out/motion.mp4, 1920x1080 @ 30 fps
+# <skill-dir> is the real path of the make-motion folder: write it out in each command (no shell variable), one command per call.
+cp <skill-dir>/references/examples/q3-revenue.json motion.json
+node <skill-dir>/scripts/validate.mjs motion.json              # `valid`, or path-precise errors
+node <skill-dir>/scripts/render.mjs motion.json --contact-sheet # out/contact/<scene>.png
+node <skill-dir>/scripts/check.mjs motion.json                 # safe area, overlaps, empty endings, contrast, reading time, dead stretches, small text
+node <skill-dir>/scripts/preview.mjs motion.json --open         # scrubber, play/pause, live reload
+node <skill-dir>/scripts/render.mjs motion.json                 # out/motion.mp4, 1920x1080 @ 30 fps
 ```
+
+An agent's shell refuses compound commands, so run each script as one plain command with its literal path: no `&&`, `;`,
+`$VAR` or pipe, and no `; echo $?`. The verdict a script prints is the result; edit `motion.json` with your file tool, not
+`sed -i` or a heredoc.
+
+Install sizes (macOS, `du` of the production tree from `npm ls --omit=dev --all --parseable`; measure your own with that
+command): `npm ci` about 58 MB, Chromium about 150 MB more, the voiceover (`kokoro-js`) about 465 MB plus a 90 MB model on
+first use, the cutout (`onnxruntime-node`) about 300 MB plus a 25 MB model, and the two share `onnxruntime-node`, so both
+cost less than the sum. The models go in a per-user folder, not the plugin folder, so a plugin update does not fetch them again.
+
+To run this skill's tests one browser at a time, use `npm run test:serial` (`npm test` runs files in parallel).
 
 From an agent, just ask: *"Make an 8-second clip: Q3 revenue up 18%, then a
 bar chart of Q1–Q3."* In Claude Code or Copilot you can call `/make-motion …`,
@@ -214,16 +225,25 @@ its own page, [`references/sketch.md`](references/sketch.md), and
 |---|---|---|
 | `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image, video and audio paths, video trims against the clip length (needs ffprobe), audio scene/start/fade fits, captions files parsed (a cue out of order names its line), chart compile, no remote URLs) | `--json` |
 | `blocks.mjs list` / `blocks.mjs show <name>` | One line per block with its params (optional ones marked `?`); or one block's params table (type, required, default, description), where it goes on each format, and a ready-to-paste element. An unknown name exits 2 with the closest one and the list | none |
-| `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices`, `--phonemes` (one `<sentence><TAB><phonemes>` line per sentence after the usual three lines, to check how a word with two readings was said; the sidecar `.json` always carries `phonemes`) |
+| `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~465 MB on macOS + 90 MB model once, with download progress on stderr) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices` (a static table: no model is loaded), `--dir <folder>` (every `.txt` becomes a `.wav` beside it on one model load; unchanged ones are skipped), `--phonemes` (one `<sentence><TAB><phonemes>` line per sentence after the usual three lines, to check how a word with two readings was said; the sidecar `.json` always carries `phonemes`) |
 | `cutout.mjs <photo.png\|clip.mp4>` | Cuts the person out of a photo (`<stem>.png`, RGBA) or a clip (`<stem>.webm`, VP9 alpha) with MODNet, locally, for a `text-behind-subject` block (onnxruntime-node installed on demand, ~300 MB, plus a 25 MB model once; `doctor --fix cutout`) | `--out <dir>` (default a `cutout` folder beside the input), `--fps <1-60>` (clips) |
 | `beats.mjs <audio>` | Beat grid of an audio file (ffmpeg; the first five minutes) → `<stem>.beats.json` for a spec's root `beats`; prints the path and `<bpm> BPM, <n> beats`; exit 1 with `no steady beat found in <file> (confidence …; needs 0.5)` | `--out <file>.json`, `--min-confidence <0-1>`, `--bpm <n>` (force the tempo), `--min-bpm <n>` / `--max-bpm <n>` (narrow the search) |
 | `storyboard.mjs <brief.json>` | For a clip over 20 s: a make-explainer `plan` page spec from a brief `{ "title", "seconds", "scenes": [{ "id", "beat", "seconds" }], "theme"? }`; prints the plan path and `build: node …/make-explainer/scripts/build.mjs <plan>`. Skips with one stdout line `storyboard: skipped (not needed (12s is 20s or less))`, `(make-explainer is not installed beside make-motion (looked in <path>))` or `(no one to ask (non-interactive run))`, no file, exit 0. Exit 1: the brief breaks a rule; exit 2: usage or IO | `--out <plan.json>` (required), `--non-interactive` |
 | `preview.mjs <spec>` | Local preview on `127.0.0.1`: scrubber, play/pause, scene markers, Space and ←/→ for single frames, and live reload when the file changes (invalid specs show their errors in the page). Audio tracks play in sync, approximately; `M` mutes. Click an element to copy its spec path and id (`scenes[1].elements[3]  id=title`) with a 2 s toast. The MP4 timing is exact | `--open` |
 | `render.mjs <spec>` | MP4 (H.264, yuv420p; AAC audio when the spec has `audio` tracks, `cues` or an unmuted `video` clip with sound, followed by one `audio: … LUFS integrated, true peak … dBTP` line) via Playwright frame capture → ffmpeg. The provenance stamp (`generatedBy` or the flags) goes into the MP4's `comment` tag, and the model into `artist` when reported (`--no-provenance`, or a root `"provenance": false`, leaves both out and empties the preview footer; ffmpeg's own encoder tag stays). `--poster <seconds>` writes one frame instead of the MP4 (`out/poster.jpg`, or `--poster-out <file>.jpg\|.png`), with the captions layer hidden and everything else, grain and vignette included, as in the film; a time past the end exits 2 | `--out <file>`, `--fps <n>`, `--size WxH`, `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--workers <n or auto>`, `--quality <draft or final>`, `--loudness <-30 to -5 LUFS, or off>`, `--true-peak <-3 to 0 dBTP>`, `--no-provenance`, `--poster <seconds>` and `--poster-out <file>` (neither goes with `--batch` or `--contact-sheet`), `--contact-sheet`, `--batch <rows.json>` (with an `--out` template holding `{index}` or a `{var}`) |
 | `check.mjs <spec>` | Seeks the render page to every contact-sheet moment and reads each element's box: a visible text or counter outside the safe area (60 px at 1080 on the short side, on every side) while it is not moving, visible texts or counters overlapping while neither is moving or fading (a cross-fade swap is fine), a scene that ends with nothing on screen; text whose colour has less than 4.5:1 (3:1 for large text) contrast against the pixels behind it, a text on screen for less than 0.75 × (0.5 + 0.3 × words) seconds (a last line under 2 s is only an `info:` note), more than 3 s in which nothing changes (not in the last 3 s, not for `"hold": true` elements) and text under 28 px at 1080 on the short side for 0.5 s or more (a contrast or size finding at one moment only is a warning); with `captions`, a text or counter held in the caption zone while a caption shows and a captions layer that leaves it (measured once per caption group). An element that has left the frame entirely is gone, not clipped. It also warns on stderr (never a failure) when the first scene shows nothing at t = 0. Exit 0 ok, 1 problems, 2 usage; without a browser it prints `check: skipped (no browser: …)` and exits 0 | `--json`, `--theme <name>` |
-| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the video frame cache once it passes 2 GB; `--fix cache` deletes it. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover\|cutout>`, `--fix <id[,id]>` |
+| `doctor.mjs` | What the skill needs and is missing (ffmpeg, a browser, `node_modules`), with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Lists the frame caches (video frames and cutout mattes) once together they pass 2 GB; `--fix cache` deletes them, never the models. Runs before `npm ci` | `--json`, `--for <spec.json\|check\|voiceover\|cutout>`, `--fix <id[,id]>` |
 
 Two renders of the same spec and media give identical frames and audio; the MP4 `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
+
+Known gap: the byte-identical claim fails now and then in CI on Ubuntu. Three of eight make-motion runs on 2026-11-15 had one
+such failure each: the `push` and `blur` loops in `test/transitions.test.mjs` (the first gave hashes starting `98962a41` and
+`1d6494e6`) and the grain test in `test/workers.test.mjs`. Every one had film grain and a vignette over a transition window.
+The cause is unknown. On macOS the same clips give the same PNG for every frame, across browser launches and across pages.
+A failing byte-identical test writes the per-frame MD5 of both MP4s to `test/.out/framemd5` (CI uploads that
+folder). Those decoded frame numbers are approximate, because x264 carries a change in one frame into the frames around it.
+So the test also keeps every captured PNG and copies the ones that differ into the same folder, which names the exact
+frames. No fix has been tried.
 
 Limits: up to 50 scenes (no cap on the total length, but render time grows with it: use `--workers` and `--quality draft`), up to 20 audio tracks, 30 cues and 20 captions tracks; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at

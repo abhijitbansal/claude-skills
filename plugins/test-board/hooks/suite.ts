@@ -9,8 +9,11 @@ export const cartoonInner = (wrapped: RegExpExecArray): string =>
   wrapped[1] === undefined ? (wrapped[2] ?? '') : wrapped[1].replaceAll("'\\''", "'")
 const CARTOON_PREFIX = /^cartoon\s+(?:--tag\s+\S+\s+)?(?:--\s+)?/
 const CARTOON_UTILITY = /^cartoon\s+(?:logs|stats|adapters|doctor|ingest|help|version)\b/
-const TRAILING_PIPE = /\s*\|\s*(?:head|tail|grep|rg)\b.*$/
+// A copy or slice of the output (`| tee log`, `|& tail`) is not part of the suite's identity.
+const TRAILING_PIPE = /\s*\|&?\s*(?:head|tail|grep|rg|tee)\b.*$/
 const STDERR_MERGE = /\s*2>&1/g
+// Trailing output redirects (`> log`, `>> log`, `2> err`, `&> log`), never a `>` inside quotes earlier on.
+const TRAILING_REDIRECTS = /(?:\s+(?:&>>?|\d?>>?)\s*[^\s"'&|;<>]+)+\s*$/
 
 function joinDirs(outer: string | undefined, inner: string | undefined): string | undefined {
   if (outer === undefined || inner === undefined) return inner ?? outer
@@ -33,7 +36,7 @@ export function splitCommand(command: string): { cdDir?: string; normalized: str
     return dir === undefined ? { normalized: inner.normalized } : { cdDir: dir, normalized: inner.normalized }
   }
   if (!CARTOON_UTILITY.test(rest)) rest = rest.replace(CARTOON_PREFIX, '')
-  rest = rest.replace(TRAILING_PIPE, '').replace(STDERR_MERGE, '')
+  rest = rest.replace(TRAILING_PIPE, '').replace(STDERR_MERGE, '').replace(TRAILING_REDIRECTS, '')
   const normalized = rest.replace(/\s+/g, ' ').trim()
   return cdDir === undefined ? { normalized } : { cdDir, normalized }
 }
@@ -47,6 +50,13 @@ export function resolveDir(base: string, dir: string): string {
     else parts.push(part)
   }
   return `/${parts.join('/')}`
+}
+
+/** A leading `~` or `~/` as the shell expands it, given the home directory; anything else unchanged. */
+export function expandHome(dir: string, home: string | undefined): string {
+  if (home === undefined || home === '') return dir
+  if (dir === '~') return home
+  return dir.startsWith('~/') ? `${home}${dir.slice(1)}` : dir
 }
 
 export function suiteKey(worktreeRoot: string, normalized: string): string {

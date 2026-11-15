@@ -2,6 +2,7 @@
 // names, seeked per frame with goToAndStop; template/lottie-guard.mjs refuses remote assets, remote fonts, non-raster
 // data URLs, external segments and expressions, in the validator and again in the page.
 import { test } from 'node:test';
+import { readSchema } from './helpers/schema-docs.mjs';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -597,7 +598,7 @@ test('lottie-badge.json renders byte-identical twice', async (t) => {
 });
 
 test('the docs name the element: schema.md and SKILL.md describe lottie, the licences table names lottie-web', () => {
-  const schema = readFileSync(path.join(root, 'references/schema.md'), 'utf8');
+  const schema = readSchema(root);
   const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
   const readme = readFileSync(path.join(root, 'README.md'), 'utf8');
   const pa = readFileSync(path.join(root, '../../README.md'), 'utf8');

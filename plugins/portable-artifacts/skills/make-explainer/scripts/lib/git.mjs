@@ -187,7 +187,7 @@ export function isTestPath(p) {
  * Facts for the branch checked out in `dir`, measured against `base` (default: main, master,
  * origin/main, origin/master). Committed work only; the working tree is never read.
  * -> { repo, branch, detached, base, mergeBase, commits: [{ sha, date, subject }],
- *      files: [{ path, oldPath?, change, add, del, binary }], tests: [path], date }
+ *      files: [{ path, oldPath?, change, add, del, binary }], tests: [path], date, dirty, warnings: [text] }
  */
 export function gatherGit({ repo: dir = '.', base } = {}) {
   const root = repoRoot(path.resolve(dir));
@@ -201,14 +201,30 @@ export function gatherGit({ repo: dir = '.', base } = {}) {
   const mergeBase = merge.out.trim();
   const files = readFiles(root, mergeBase);
   const tip = run(root, ['log', '-1', '--format=%cs', 'HEAD', '--']);
+  const current = currentBranch(root);
+  const commits = readCommits(root, `${mergeBase}..HEAD`);
+  const dirty = isDirty(root);
   return {
     repo: path.basename(root),
-    ...currentBranch(root),
+    ...current,
     base: baseRef,
     mergeBase,
-    commits: readCommits(root, `${mergeBase}..HEAD`),
+    commits,
     files,
     tests: files.filter((f) => f.change !== 'deleted' && isTestPath(f.path)).map((f) => f.path),
     date: tip.out.trim(),
+    dirty,
+    warnings: factWarnings({ branch: current.branch, baseRef, commits, dirty }),
   };
+}
+
+// Uncommitted work: a modified or staged tracked file, or an untracked one that is not ignored.
+const isDirty = (root) => run(root, ['status', '--porcelain']).out.trim() !== '';
+
+// What a script cannot fix but the reader should know before trusting the facts.
+function factWarnings({ branch, baseRef, commits, dirty }) {
+  const out = [];
+  if (commits.length === 0) out.push(`no commits on ${branch} beyond ${baseRef}, so a recap would be empty; check out the feature branch, or pass --base <the branch it started from>`);
+  if (dirty) out.push('the work tree has uncommitted changes; these facts cover committed work only, so commit them first if the recap should include them');
+  return out;
 }

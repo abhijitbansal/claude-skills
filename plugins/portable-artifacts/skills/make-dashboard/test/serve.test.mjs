@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { serve } from './helpers/live-harness.mjs';
+import { serve, stopChild, until } from './helpers/live-harness.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SERVE = path.join(ROOT, 'scripts/serve.mjs');
@@ -78,4 +78,46 @@ test('unknown flag, missing index.html and a busy port exit 2 with one line', as
   assert.equal(r.status, 2);
   assert.equal(r.stderr.trim().split('\n').length, 1);
   assert.match(r.stderr, /EADDRINUSE/);
+});
+
+// ---- PA-32 --------------------------------------------------------------------
+
+const FIXTURE_DATA = path.join(ROOT, 'test/fixtures/data');
+function watchProject() {
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dash-serve-watch-')));
+  fs.cpSync(FIXTURE_DATA, path.join(dir, 'data'), { recursive: true });
+  const spec = { title: 'T', sources: { sales: { type: 'csv', path: 'data/sales.csv' } }, queries: { total: 'SELECT SUM(amount) AS revenue FROM sales' }, kpis: [{ id: 'k', title: 'Revenue', query: 'total', field: 'revenue' }] };
+  fs.writeFileSync(path.join(dir, 'dashboard.json'), JSON.stringify(spec));
+  return dir;
+}
+
+test('--open without an opener on PATH keeps serving instead of crashing', async (t) => {
+  const emptyBin = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-nobin-'));
+  const child = spawn(process.execPath, [SERVE, path.join(root, 'dist'), '--open'], { env: { ...process.env, PATH: emptyBin }, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => stopChild(child));
+  let out = '';
+  let err = '';
+  child.stdout.on('data', (d) => { out += d; });
+  child.stderr.on('data', (d) => { err += d; });
+  await until(() => /http:\/\/127\.0\.0\.1:(\d+)\//.test(out) || child.exitCode !== null, { label: 'the serve URL' });
+  const port = Number(out.match(/http:\/\/127\.0\.0\.1:(\d+)\//)[1]);
+  await until(() => /could not open a browser/.test(err) || child.exitCode !== null, { label: 'the opener warning' });
+  assert.equal(child.exitCode, null, `serve exited: ${err}`);
+  assert.equal(await raw(port, '/'), 200);
+});
+
+test('--watch honours --out and a malformed URL gets 400 from the live server', async (t) => {
+  const dir = watchProject();
+  const out = path.join(dir, 'site');
+  const { port } = await start(t, ['--watch', path.join(dir, 'dashboard.json'), '--out', out]);
+  assert.ok(fs.existsSync(path.join(out, 'index.html')), 'the page is written under --out');
+  assert.ok(!fs.existsSync(path.join(dir, 'dist')), 'not under the default dist');
+  assert.equal(await raw(port, '//'), 400);
+  assert.equal(await raw(port, '/'), 200);
+});
+
+test('--out without --watch is a usage error', () => {
+  const r = spawnSync(process.execPath, [SERVE, path.join(root, 'dist'), '--out', root], { encoding: 'utf8', timeout: SPAWN_MS });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /need --watch/);
 });

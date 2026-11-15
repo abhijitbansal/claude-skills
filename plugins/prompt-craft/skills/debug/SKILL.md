@@ -12,6 +12,10 @@ description: Apply a disciplined debugging lens to a bug, test failure, crash, o
 The failure mode this prevents: guessing at fixes. A fix you can't reproduce
 failing first is a fix you can't prove worked.
 
+If `superpowers:systematic-debugging` is installed, prefer it for the full
+process: the command advisor already defers to it (`prefer_over` in
+`registry-notes.toml`). This lens is the lightweight fallback.
+
 ## Steps
 
 1. **Reproduce.** Get a deterministic repro — ideally a failing test. Can't

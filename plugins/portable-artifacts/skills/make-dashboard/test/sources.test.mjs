@@ -137,22 +137,24 @@ test('extensionsFor lists only what the sources need', () => {
   assert.deepEqual(extensionsFor({ sources: { a: { type: 'parquet' } } }), []);
 });
 
+const ONE_KPI = [{ id: 'k', title: 'N', query: 'q', field: 'n' }]; // a dashboard needs a chart or KPI
+
 test('source shape errors name the field', async () => {
   const q = { q: 'SELECT 1 AS n' };
   const dir = FIXTURES;
-  let r = await validateSpec({ title: 't', queries: q, sources: { db: { type: 'postgres', path: 'x.db', env: 'PG_URL' } } }, { dir });
+  let r = await validateSpec({ title: 't', queries: q, kpis: ONE_KPI, sources: { db: { type: 'postgres', path: 'x.db', env: 'PG_URL' } } }, { dir });
   assert.deepEqual(r.errors, [{ path: 'sources.db.path', message: 'not allowed for type "postgres"; use env' }]);
-  r = await validateSpec({ title: 't', queries: q, sources: { db: { type: 'mysql' } } }, { dir });
+  r = await validateSpec({ title: 't', queries: q, kpis: ONE_KPI, sources: { db: { type: 'mysql' } } }, { dir });
   assert.deepEqual(r.errors, [{ path: 'sources.db.env', message: 'required for type "mysql" (the name of an environment variable holding the connection string)' }]);
-  r = await validateSpec({ title: 't', queries: q, sources: { s: { type: 'csv', env: 'X' } } }, { dir });
+  r = await validateSpec({ title: 't', queries: q, kpis: ONE_KPI, sources: { s: { type: 'csv', env: 'X' } } }, { dir });
   assert.deepEqual(r.errors.map((e) => e.path), ['sources.s.env', 'sources.s.path']);
-  r = await validateSpec({ title: 't', queries: q, sources: { db: { type: 'postgres', env: 'pg_url' } } }, { dir });
+  r = await validateSpec({ title: 't', queries: q, kpis: ONE_KPI, sources: { db: { type: 'postgres', env: 'pg_url' } } }, { dir });
   assert.equal(r.errors[0].path, 'sources.db.env');
   assert.match(r.errors[0].message, /pattern/);
 });
 
 test('unset env var is an error at validate and at build', async () => {
-  const spec = { title: 't', queries: { q: 'SELECT 1 AS n' }, sources: { db: { type: 'postgres', env: 'DASH_TEST_UNSET_PG_URL' } } };
+  const spec = { title: 't', queries: { q: 'SELECT 1 AS n' }, kpis: ONE_KPI, sources: { db: { type: 'postgres', env: 'DASH_TEST_UNSET_PG_URL' } } };
   const r = await validateSpec(spec, { dir: FIXTURES });
   assert.deepEqual(r.errors, [{ path: 'sources.db.env', message: 'environment variable DASH_TEST_UNSET_PG_URL is not set' }]);
   const dir = tmp();

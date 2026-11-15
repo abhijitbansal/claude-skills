@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { build, resolveScenePath } from '../scripts/build.mjs';
 import { WORLDS } from '../scripts/worlds/index.mjs';
 import { MAX_PAGE_BYTES } from '../scripts/lib/bundle.mjs';
@@ -15,6 +15,15 @@ const SKILL = fileURLToPath(new URL('..', import.meta.url)).replace(/\/$/, '');
 const BASE = { title: 'Commits per folder', units: 'commits', data: { file: 'rows.json' } };
 
 const read = (file) => fs.readFileSync(file, 'utf8');
+// The switch command for a world, from the wrapped lines under "  <world>:" in the printed table, as the one command to paste.
+function switchCommand(table, world) {
+  const lines = table.split('\n');
+  const at = lines.indexOf(`  ${world}:`);
+  if (at < 0) return null;
+  const body = [];
+  for (let i = at + 1; i < lines.length && lines[i].startsWith('    '); i++) body.push(lines[i].trim().replace(/ \\$/, ''));
+  return body.join(' ');
+}
 const env = (dir) => ({ ...PINNED_ENV, PA_OUTPUT_DIR: dir });
 
 function cli(args, { home, extraEnv = {} } = {}) {
@@ -98,13 +107,13 @@ test('over-cap page is an error with both sizes', async (t) => {
   assert.equal(typeof MAX_PAGE_BYTES, 'number');
 });
 
-test('default output is PA_OUTPUT_DIR or ~/.agent/scenes', async (t) => {
+test('default output is PA_OUTPUT_DIR, else <git root>/.scratch, else ~/.agent/diagrams (the shared rule)', async (t) => {
   const file = writeScene(t, BASE);
   const dir = tempDir(t);
   const result = await build(file, { env: env(dir) });
   assert.equal(result.out, path.join(dir, 'commits-per-folder.html'));
   assert.ok(fs.existsSync(result.out));
-  assert.equal(resolveScenePath({ title: 'Commits per folder', env: {}, home: '/home/x' }), '/home/x/.agent/scenes/commits-per-folder.html');
+  assert.equal(resolveScenePath({ title: 'Commits per folder', env: {}, home: '/home/x' }), '/home/x/.agent/diagrams/commits-per-folder.html');
   assert.equal(resolveScenePath({ title: 'T', out: '/tmp/a.html', env: { PA_OUTPUT_DIR: '/p' }, home: '/h' }), '/tmp/a.html');
   assert.equal(resolveScenePath({ title: 'T', out: '/tmp/dir', env: {}, home: '/h' }), '/tmp/dir/t.html');
   assert.equal(resolveScenePath({ title: '!!!', env: { PA_OUTPUT_DIR: '/p' }, home: '/h' }), '/p/scene.html');
@@ -112,7 +121,19 @@ test('default output is PA_OUTPUT_DIR or ~/.agent/scenes', async (t) => {
   const home = tempDir(t);
   const run = cli([file], { home });
   assert.equal(run.status, 0, run.stderr);
-  assert.ok(fs.existsSync(path.join(home, '.agent', 'scenes', 'commits-per-folder.html')), run.stdout);
+  assert.ok(fs.existsSync(path.join(home, '.agent', 'diagrams', 'commits-per-folder.html')), run.stdout);
+});
+
+test('a spec inside a git repository builds into <git root>/.scratch with no flags', async (t) => {
+  const file = writeScene(t, BASE);
+  const root = path.dirname(file);
+  fs.mkdirSync(path.join(root, '.git'));
+  const run = cli([file], { home: tempDir(t) });
+  assert.equal(run.status, 0, run.stderr);
+  const page = path.join(root, '.scratch', 'commits-per-folder.html');
+  assert.ok(fs.existsSync(page), run.stdout);
+  assert.equal(run.stdout.split('\n')[0], `wrote ${page}`);
+  assert.equal(resolveScenePath({ title: 'T', specPath: file, env: {}, home: '/h' }), path.join(root, '.scratch', 't.html'));
 });
 
 test('the switch command repeats --out, --theme and --allow-outside the build was given', async (t) => {
@@ -120,11 +141,10 @@ test('the switch command repeats --out, --theme and --allow-outside the build wa
   const dir = tempDir(t);
   const out = path.join(dir, 'my pages');
   const result = await build(file, { out, theme: 'press', allowOutside: true, env: env(tempDir(t)) });
-  const forest = result.table.split('\n').find((l) => l.startsWith('forest'));
+  const forest = switchCommand(result.table, 'forest');
   assert.ok(forest.includes(`${file} --world forest --out '${out}' --theme press --allow-outside`), forest);
   const plain = await build(file, { env: env(tempDir(t)) });
-  const line = plain.table.split('\n').find((l) => l.startsWith('forest'));
-  assert.ok(line.trimEnd().endsWith('--world forest'), line);
+  assert.ok(switchCommand(plain.table, 'forest').endsWith('--world forest'), plain.table);
 });
 
 test('same spec same bytes', async (t) => {
@@ -144,7 +164,8 @@ test('the alternatives table names every world, the current one, and the exact s
   assert.equal(terrain.eligible, false);
   assert.match(result.table, /terrain.*not available: needs t on every row/);
   assert.match(result.table, /city \(current\)/);
-  assert.ok(result.table.includes(`node ${SKILL}/scripts/build.mjs ${file} --world forest`), result.table);
+  assert.equal(switchCommand(result.table, 'forest'), `node ${SKILL}/scripts/build.mjs ${file} --world forest`, result.table);
+  assert.equal(switchCommand(result.table, 'terrain'), null, 'an ineligible world has no command');
   assert.doesNotMatch(result.table.split('\n').find((l) => l.startsWith('terrain')), /--world/);
   assert.match(result.table, /spec authoring ≈ \d+ tokens \(estimated\)/);
   const forest = result.alternatives.find((a) => a.world === 'forest');
@@ -168,7 +189,7 @@ test('CLI: prints wrote / open / world note / table; --json is one object', asyn
   const lines = text.stdout.split('\n');
   assert.equal(lines[0], 'scene.json: world set to forest');
   assert.equal(lines[1], `wrote ${path.join(out, 'commits-per-folder.html')}`);
-  assert.match(lines[2], /^open: file:\/\//);
+  assert.equal(lines[2], pathToFileURL(path.join(out, 'commits-per-folder.html')).href, 'the file:// URL, bare, on its own line');
   assert.match(text.stdout, /\nworld\s+\| fit/);
 
   const json = cli([file, '--json', '--theme', 'paper'], { extraEnv: { PA_OUTPUT_DIR: out } });

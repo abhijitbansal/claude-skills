@@ -2,6 +2,9 @@
 # PreToolUse guardrail (OPT-IN, off by default). Enable with
 # PROMPT_CRAFT_BLOCK_SECRETS=1. Blocks Read/Edit/Write of secret-looking files:
 # exit 2 stops the tool and the stderr message is fed back to Claude. Exit 0 allows.
+# Scope: only the Read/Edit/Write file tools (see hooks.json matcher). It is an
+# accident guard, not a sandbox: `cat .env` through Bash or a Grep over the
+# file is not covered.
 set -uo pipefail
 
 [[ "${PROMPT_CRAFT_BLOCK_SECRETS:-0}" == "1" ]] || exit 0
@@ -16,6 +19,12 @@ except Exception:
 [[ -n "$FILE" ]] || exit 0
 
 base="$(basename "$FILE")"
+# Checked-in templates hold placeholders, not secrets: allow them.
+case "$base" in
+  *.example | *.sample | *.template | *.dist)
+    exit 0
+    ;;
+esac
 # Conservative secret-name match to avoid false positives.
 case "$base" in
   .env | .env.* | *.pem | *.key | id_rsa | id_dsa | id_ecdsa | id_ed25519 | credentials | .npmrc | .pypirc)

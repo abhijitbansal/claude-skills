@@ -5,6 +5,29 @@ import { enhanceRaw, interactionsFor, NEAREST_X, ZOOM_X, legendParam } from './i
 
 export const AXIS_FORMAT = { number: ',.2~f', currency: '$,.2~f', percent: '.1~%', compact: '.3~s' };
 export const FORMAT_NAMES = Object.keys(AXIS_FORMAT);
+// d3's SI suffixes (1.2G, 1.5k) rewritten to the ones Intl uses on a KPI tile (1.2B, 1.5K), so a compact
+// number reads the same on the axis, the legend and the tile. A Vega expression: it runs in ast mode under the CSP.
+export const COMPACT_LABEL_EXPR = "replace(replace(datum.label, 'G', 'B'), 'k', 'K')";
+// A tooltip shows the exact value; only the axis and legend are abbreviated.
+const TOOLTIP_FORMAT = { ...AXIS_FORMAT, compact: AXIS_FORMAT.number };
+const axisProps = (name) => (name === 'compact' ? { format: AXIS_FORMAT.compact, labelExpr: COMPACT_LABEL_EXPR } : { format: AXIS_FORMAT[name] });
+// Category labels on vertical bars: Vega would hide every other one when they crowd (at 390 px), so
+// overlap is off and the labels turn 45 degrees once a band is narrower than the widest label.
+const LABEL_FONT_SIZE = 11; // vega-config.mjs axis labelFontSize
+// A label's width estimated at a monospace advance (0.6 em, the widest body font a theme ships) plus a little:
+// the views are built before the theme is known, and a label that turns too early costs less than one that collides.
+const CHAR_EM = 0.62;
+const LABEL_ROOM = 6;
+const SNAKE = /^[a-z][a-z0-9]*(_[a-z0-9]+)*$/;
+
+/** An axis title for a column: snake_case SQL aliases read as words (p50_ms -> "P50 ms"); any other name stays as written. */
+export function humanize(column) {
+  const name = String(column);
+  if (!SNAKE.test(name)) return name;
+  const words = name.replaceAll('_', ' ');
+  return words[0].toUpperCase() + words.slice(1);
+}
+const lowerFirst = (text) => text[0].toLowerCase() + text.slice(1);
 const HORIZONTAL_LABEL = 12;
 const HORIZONTAL_COUNT = 8;
 const TABLE = { name: 'table', label: 'Table' };
@@ -33,24 +56,38 @@ function tooltipRow(d, format) {
   };
 }
 
+const MIN_LINE_POINTS = 3;
+// Points per series (one series without a color role), counting rows with a y value.
+function seriesSizes(chart, result) {
+  if (chart.y === undefined) return [];
+  const counts = new Map();
+  for (const r of result.rows) {
+    if (r[chart.y] === null || r[chart.y] === undefined) continue;
+    const key = chart.color === undefined ? '' : r[chart.color] ?? null;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [...counts.values()];
+}
+
 // Per-chart context the builders share: field defs for every role in use.
 function context(chart, result) {
   const cls = (col) => classOf(result.types[result.columns.indexOf(col)]);
   const format = chart.format ? AXIS_FORMAT[chart.format] : undefined;
+  const tipFormat = chart.format ? TOOLTIP_FORMAT[chart.format] : undefined;
   // `where` is how the channel shows the number: an axis, a legend, or only the tooltip (theta).
   const def = (role, extra = {}, where = 'axis') => {
     const col = chart[role];
     if (col === undefined) return undefined;
     const type = cls(col);
-    const base = { field: fieldRef(col), type, title: col };
+    const base = { field: fieldRef(col), type, title: humanize(col) };
     if (type === 'temporal') {
       const unit = temporalUnit(result.rows.map((r) => r[col]));
       Object.assign(base, unit ? { timeUnit: unit } : {}, { scale: { type: 'utc' } });
     }
-    if (type === 'quantitative' && format && where !== 'tooltip') base[where] = { format };
+    if (type === 'quantitative' && format && where !== 'tooltip') base[where] = axisProps(chart.format);
     return { ...base, ...extra };
   };
-  const tooltip = (...defs) => defs.filter(Boolean).map((d) => tooltipRow(d, format));
+  const tooltip = (...defs) => defs.filter(Boolean).map((d) => tooltipRow(d, tipFormat));
   const labels = chart.x !== undefined ? result.rows.map((r) => String(r[chart.x] ?? '')) : [];
   const distinct = new Set(labels);
   const horizontal = chart.x !== undefined && cls(chart.x) === 'nominal'
@@ -58,7 +95,11 @@ function context(chart, result) {
   // The legend field: donut colours by x; every other kind by its color role.
   const legend = chart.kind === 'donut' ? chart.x : chart.color;
   const xNominal = chart.x !== undefined && cls(chart.x) === 'nominal';
-  return { def, tooltip, format, horizontal, xNominal, colorField: legend === undefined ? undefined : fieldRef(legend) };
+  // A nominal role keeps the query order (Vega-Lite would sort it alphabetically: Fri, Mon, Sat).
+  const queryOrder = (role) => (chart[role] !== undefined && cls(chart[role]) === 'nominal' ? { sort: null } : {});
+  const widest = Math.ceil(Math.max(0, ...[...distinct].map((l) => [...l].length * CHAR_EM * LABEL_FONT_SIZE))) + LABEL_ROOM;
+  const shortSeries = seriesSizes(chart, result).some((n) => n < MIN_LINE_POINTS);
+  return { def, tooltip, format, tipFormat, horizontal, xNominal, queryOrder, widest, shortSeries, colorField: legend === undefined ? undefined : fieldRef(legend) };
 }
 
 // Bars on a time axis read better as ordinal bands.
@@ -68,8 +109,15 @@ const banded = (d) => {
   return { ...rest, type: 'ordinal' };
 };
 
+// The x axis of vertical bars over categories: every label stays, turned when the bands are too narrow.
+function categoryAxis(widest) {
+  const narrow = `bandwidth('x') < ${widest}`;
+  return { labelOverlap: false, labelAngle: { expr: `${narrow} ? -45 : 0` }, labelAlign: { expr: `${narrow} ? 'right' : 'center'` } };
+}
+
 function bar(ctx, { color, stack, offset, sort } = {}) {
-  const x = banded(ctx.def('x', { sort: sort ?? null }));
+  const axis = ctx.xNominal && !ctx.horizontal ? { axis: categoryAxis(ctx.widest) } : {};
+  const x = banded(ctx.def('x', { sort: sort ?? null, ...axis }));
   const y = ctx.def('y', stack ? { stack } : {});
   const enc = ctx.horizontal ? { y: x, x: y } : { x, y };
   if (color) enc.color = ctx.def('color');
@@ -85,7 +133,8 @@ function lineLike(ctx, mark) {
   // A coloured area is stacked by Vega-Lite; the hover dots must sit on their band.
   const dotsY = mark === 'area' && color ? { ...y, stack: 'zero' } : y;
   // Zoom binds scales, which Vega-Lite supports only on continuous (temporal) x.
-  const main = { params: [...(ctx.xNominal ? [] : [ZOOM_X]), ...(color ? [legendParam(ctx.colorField)] : [])], mark, encoding: { y, ...(color ? { color, opacity: { condition: { param: 'pa_legend', empty: true, value: 1 }, value: 0.2 } } : {}) } };
+  // A series of one point draws no line at all, two barely show: give short series visible points.
+  const main = { params: [...(ctx.xNominal ? [] : [ZOOM_X]), ...(color ? [legendParam(ctx.colorField)] : [])], mark: ctx.shortSeries ? { type: mark, point: true } : mark, encoding: { y, ...(color ? { color, opacity: { condition: { param: 'pa_legend', empty: true, value: 1 }, value: 0.2 } } : {}) } };
   const rule = { params: [NEAREST_X], mark: { type: 'rule', tooltip: false }, encoding: { opacity: { condition: { param: 'pa_x', empty: false, value: 0.5 }, value: 0 } } };
   const dots = { mark: { type: 'point', filled: true }, encoding: { y: dotsY, ...(color ? { color } : {}), tooltip: ctx.tooltip(x, y, color), opacity: { condition: { param: 'pa_x', empty: false, value: 1 }, value: 0 } } };
   return { encoding: { x }, layer: [main, rule, dots] };
@@ -111,8 +160,8 @@ export const BUILDERS = {
     return { mark: 'circle', encoding: { x, y, size, ...(color ? { color } : {}), tooltip: ctx.tooltip(x, y, size, color) } };
   },
   heatmap: (ctx) => {
-    const x = banded(ctx.def('x'));
-    const y = banded(ctx.def('y'));
+    const x = banded(ctx.def('x', ctx.queryOrder('x')));
+    const y = banded(ctx.def('y', ctx.queryOrder('y')));
     const color = ctx.def('value', {}, 'legend');
     return { mark: 'rect', encoding: { x, y, color, tooltip: ctx.tooltip(x, y, color) } };
   },
@@ -123,16 +172,16 @@ export const BUILDERS = {
   },
   // VL builds the box-part tooltips itself and formats them with the config number format.
   boxplot: (ctx) => {
-    const x = ctx.def('x');
+    const x = ctx.def('x', ctx.queryOrder('x'));
     return {
       mark: { type: 'boxplot', extent: 1.5, tooltip: true },
       encoding: { y: ctx.def('value'), ...(x ? { x } : {}) },
-      ...(ctx.format ? { config: { numberFormat: ctx.format } } : {}),
+      ...(ctx.tipFormat ? { config: { numberFormat: ctx.tipFormat } } : {}),
     };
   },
   donut: (ctx) => {
     const theta = ctx.def('y', { stack: true }, 'tooltip');
-    const color = ctx.def('x');
+    const color = ctx.def('x', ctx.queryOrder('x'));
     return { mark: { type: 'arc', innerRadius: 60 }, encoding: { theta, color, tooltip: ctx.tooltip(color, theta) } };
   },
   // Alternates reuse the primary helpers; share and normalized add transforms.
@@ -146,7 +195,7 @@ export const BUILDERS = {
       { joinaggregate: [{ op: 'sum', field: fieldRef(chart.y), as: total }] },
       { calculate: `datum[${JSON.stringify(chart.y)}] / datum.${total}`, as: share },
     ];
-    const title = `Share of ${chart.y}`;
+    const title = `Share of ${SNAKE.test(String(chart.y)) ? lowerFirst(humanize(chart.y)) : chart.y}`; // "Share of revenue", "Share of Total Revenue"
     v.encoding[valueKey] = { field: share, type: 'quantitative', title, axis: { format: '.0%' } };
     v.encoding.tooltip.push({ field: share, type: 'quantitative', title, format: '.1%' }); // after the raw value
     return v;

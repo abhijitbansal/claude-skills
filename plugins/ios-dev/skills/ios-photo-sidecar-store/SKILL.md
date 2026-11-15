@@ -5,14 +5,21 @@ description: Designing or debugging photo/attachment storage in an iOS app that 
 
 # Photo sidecar store — the verified pattern
 
-Battle-tested across two shipped apps (doc scanner, inventory app); every rule below
-has a production incident behind it.
+Drawn from two shipped apps (doc scanner, inventory app). Rule 7 has a production
+incident behind it (it shipped broken once and recurred in a later feature, caught at
+plan review); the other rules are patterns those apps converged on, not individually
+incident-backed.
 
 ## Core architecture
 
-1. **Photos and thumbnails are FILES, never DB blobs.** Application Support, keyed by
-   a stable hash (CryptoKit) of the owning entity's UUID. The DB stores the reference,
-   not the bytes.
+1. **Photos and thumbnails are FILES, never DB blobs.** Application Support. The DB
+   stores the reference, not the bytes. **Which key names the file depends on the call
+   site (rules 1 and 7 do not conflict, they govern different things):**
+   - the **one primary slot that is swapped in place** (the cover/primary photo of an
+     owner, rule 8) uses an **owner-hash base name**: a stable CryptoKit hash of the
+     owning entity's UUID, so the slot has a fixed, findable name;
+   - **attachments, and any ref the sync bridge compares**, use a **fresh per-capture
+     UUID** (rule 7): a new capture is a new ref, never the owner's id.
 2. **Atomic sidecar pairs.** Write photo + thumbnail together; if the thumbnail write
    fails, roll the photo back. Never leave a half-pair.
 3. **Verify by content hash, never size equality.** A partial write matching size goes
@@ -29,7 +36,9 @@ has a production incident behind it.
    idempotent bridge, both directions, gated on sync-enabled. The resulting 2× photo
    bytes while sync is on is deliberate — the store copy IS the sync payload; it only
    exists while sync is on.
-7. **Fresh UUID per capture — never reuse the parent entity's id as a photo ref.** A
+7. **Fresh UUID per capture — never reuse the parent entity's id as a photo ref** (the
+   owner-hash base name in rule 1 names the primary *slot's file*; it is not the
+   ref value the bridge compares). A
    reused ref makes the sync bridge see "same ref, nothing changed", skip re-mirroring,
    and strand the old photo on both devices. (Real shipped bug — recurred a second
    time in a later feature; caught during plan review before it shipped again.)

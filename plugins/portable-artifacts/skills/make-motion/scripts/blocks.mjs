@@ -64,7 +64,8 @@ function show(name) {
   const side = def.params.properties.side;
   const otherSides = (side?.enum ?? []).filter((value) => value !== side.default);
   const { x, y } = def.place(FORMATS['16:9'].size, '16:9');
-  const element = { id: name.split('-')[0], type: 'block', x: Math.round(x), y: Math.round(y), block: name, params: def.example };
+  // `<name>-1`: scene ids and element ids share one namespace, and a bare first word ("title") is a likely scene id.
+  const element = { id: `${name}-1`, type: 'block', x: Math.round(x), y: Math.round(y), block: name, params: def.example };
   return [
     `${name}: ${def.summary}`,
     '',
@@ -104,7 +105,7 @@ export function main(argv) {
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
     exitUsage(e);
-    return 2;
+    return e.help === true ? 0 : 2; // --help is a usage line on stdout, not an error
   }
 }
 

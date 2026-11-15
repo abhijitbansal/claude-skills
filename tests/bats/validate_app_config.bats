@@ -148,3 +148,86 @@ YML
   [ "$status" -eq 1 ]
   [[ "$output" == *"ERROR: release.testflight_bump"* ]]
 }
+
+# --- CAT-51: build script gate -----------------------------------------------------------
+
+repo_yml() {  # $1 = repo dir; writes a good .claude/app.yml and echoes its path
+  mkdir -p "$1/.claude"
+  good_yml "$1/.claude/app.yml"
+}
+
+@test "default build.sh missing from the repo is a WARN pointing at /ios-scaffold, not an ERROR" {
+  repo_yml "${TMP}/r"
+  run bash "${VALIDATE}" "${TMP}/r/.claude/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: build script"* ]] || false
+  [[ "$output" == *"ios-scaffold"* ]] || false
+}
+
+@test "default build.sh present: no build-script warning" {
+  repo_yml "${TMP}/r"
+  : > "${TMP}/r/build.sh"
+  run bash "${VALIDATE}" "${TMP}/r/.claude/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"build script"* ]] || false
+}
+
+@test "explicit app.build_script naming a missing file is an ERROR" {
+  repo_yml "${TMP}/r"
+  python3 - "${TMP}/r/.claude/app.yml" <<'PY'
+import sys
+p = sys.argv[1]
+new = open(p).read().replace("  url_scheme: demo\n", "  url_scheme: demo\n  build_script: tools/build.sh\n")
+open(p, "w").write(new)
+PY
+  run bash "${VALIDATE}" "${TMP}/r/.claude/app.yml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ERROR: app.build_script"* ]] || false
+}
+
+@test "explicit app.build_script naming an existing file passes" {
+  repo_yml "${TMP}/r"
+  python3 - "${TMP}/r/.claude/app.yml" <<'PY'
+import sys
+p = sys.argv[1]
+new = open(p).read().replace("  url_scheme: demo\n", "  url_scheme: demo\n  build_script: tools/build.sh\n")
+open(p, "w").write(new)
+PY
+  mkdir -p "${TMP}/r/tools" && : > "${TMP}/r/tools/build.sh"
+  run bash "${VALIDATE}" "${TMP}/r/.claude/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"ERROR"* ]] || false
+}
+
+@test "app.build_script escaping the repo is an ERROR" {
+  repo_yml "${TMP}/r"
+  python3 - "${TMP}/r/.claude/app.yml" <<'PY'
+import sys
+p = sys.argv[1]
+new = open(p).read().replace("  url_scheme: demo\n", "  url_scheme: demo\n  build_script: ../evil.sh\n")
+open(p, "w").write(new)
+PY
+  run bash "${VALIDATE}" "${TMP}/r/.claude/app.yml"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"ERROR: app.build_script"* ]] || false
+}
+
+@test "a bare app.yml outside a .claude directory skips the build-script check" {
+  good_yml "${TMP}/app.yml"
+  run bash "${VALIDATE}" "${TMP}/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"build script"* ]] || false
+}
+
+@test "explicit app.build_script: build.sh (the /ios-init default) missing is only a WARN" {
+  repo_yml "${TMP}/r"
+  python3 - "${TMP}/r/.claude/app.yml" <<'PY'
+import sys
+p = sys.argv[1]
+new = open(p).read().replace("  url_scheme: demo\n", "  url_scheme: demo\n  build_script: build.sh   # optional\n")
+open(p, "w").write(new)
+PY
+  run bash "${VALIDATE}" "${TMP}/r/.claude/app.yml"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WARN: build script"* ]] || false
+}

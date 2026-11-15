@@ -1,6 +1,6 @@
 # Migrating personal learned-lesson files into claude-skills — plan of action
 
-**Status:** **Proposed — not yet executed, awaiting repo-owner approval.** This document only *proposes* file additions/edits; nothing in it has been run, no skill has been written, no PR opened, and no machine-local `~/.claude/skills` file has been touched. Counts below reflect the tree at planning time.
+**Status:** **Executed via PR #18 (2026-07-12); counts below are historical.** The text below is the plan as proposed and is kept as written; the tree has moved on since, so read its counts and file lists as the planning-time picture.
 
 **Scope:** a 28-candidate batch review that mined this machine's `~/.claude/skills` — 24 personal learned-lesson files plus 4 standalone `SKILL.md` directories — each independently categorized (Fable) then adversarially re-checked (Fable) against this repo's live 48-skill catalog. Candidates 1–27 ran through a Workflow (81 agents, 0 errors); candidate 28 (`on-device-model-eval-harness-precommitted-kill-criteria`) was mined and adversarially verified separately, in response to an owner request to confirm coverage of an "on-demand AI implementation" pattern before this plan executes — see the Correction log. Primary landing target: `ios-dev`; also `core-workflow` and `prompt-craft`.
 

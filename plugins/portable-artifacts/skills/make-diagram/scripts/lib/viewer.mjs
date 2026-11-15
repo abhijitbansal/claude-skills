@@ -105,19 +105,46 @@ const legendCss = () => [
   `@supports (color: color-mix(in srgb, red, red)){${FAMILIES.map((f) => `.lg-sw-${f}{background:color-mix(in srgb,var(--k-${f}) ${LEGEND_TINT}%,var(--surface))}`).join('')}}`,
 ].join('\n');
 
+// ---- font weights ---------------------------------------------------------------------------
+
+const WANTED_WEIGHT = 600; // what the page's headings and its current chip ask for
+// The weight of `role` (a theme font role) nearest to WANTED_WEIGHT, the heavier on a tie. A weight the font does not
+// ship is drawn by the browser as synthesised bold (Young Serif in press ships 400 only), so the page asks for a real one.
+export function nearestWeight(role, wanted = WANTED_WEIGHT) {
+  const have = Object.keys(role.weights).map(Number).sort((a, b) => a - b);
+  return have.reduce((best, w) => (Math.abs(w - wanted) < Math.abs(best - wanted) || (Math.abs(w - wanted) === Math.abs(best - wanted) && w > best) ? w : best), have[0]);
+}
+
+/** { display, strong }: the heading weight (display font) and the emphasis weight (body font) the theme has. */
+export const themeWeights = (theme) => ({ display: nearestWeight(theme.fonts.display), strong: nearestWeight(theme.fonts.body) });
+
+// ---- build record ----------------------------------------------------------------------------
+
+// What a rebuild needs: the spec's file name, the theme and the flags that chose it. File names only, never a folder.
+function buildMeta(build, theme) {
+  if (!build) return '';
+  const flags = (build.flags ?? []).join(' ') || 'none';
+  const content = [`spec=${build.spec}`, `theme=${theme.name}`, `out=${build.out}`, `flags=${flags}`].join('; ');
+  return `<meta name="pa-build" content="${esc(content)}">`;
+}
+
 // ---- page ---------------------------------------------------------------------------------
 
 /**
  * The finished page for `spec`. `built` is buildDiagram's result and `theme`
- * the loaded theme it was built with.
+ * the loaded theme it was built with. `build` ({ spec, out, flags }, file names only) is
+ * recorded in the page's pa-build meta when given.
  */
-export function renderViewer(spec, built, { theme, env = process.env }) {
+export function renderViewer(spec, built, { theme, env = process.env, build }) {
+  const weights = themeWeights(theme);
   const parts = {
     TITLE: esc(spec.title),
     SUBTITLE: spec.subtitle ? `<p class="sub">${esc(spec.subtitle)}</p>` : '',
     PROVENANCE: provenanceHtml('make-diagram', spec.generatedBy, buildDate(env)),
     FAVICON: faviconLink('make-diagram', theme),
     GENERATOR: generatorMeta('make-diagram', spec.generatedBy),
+    BUILD_META: buildMeta(build, theme),
+    WEIGHTS: `:root{--display-weight:${weights.display};--strong-weight:${weights.strong}}`,
     TOGGLE_ICONS: toggleIcons(),
     TOGGLE_CSS,
     TOGGLE_JS: inlineCode(TOGGLE_JS),

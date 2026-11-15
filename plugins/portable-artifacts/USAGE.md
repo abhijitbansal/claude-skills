@@ -55,12 +55,14 @@ never prompts and never installs anything on its own.
 
 ```bash
 node <skill-dir>/scripts/doctor.mjs --json                  # what is missing, with the fix for your OS
-node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # make-explainer, make-scene: also the sister skills the spec needs
-node <skill-dir>/scripts/doctor.mjs --json --for check      # make-diagram, make-explainer, make-motion, make-scene: Playwright and a browser
+node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # any skill; make-explainer and make-scene add the sister skills the spec needs
+node <skill-dir>/scripts/doctor.mjs --json --for check      # every skill: Playwright and a browser, before check.mjs
 node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: kokoro-js, before a voiceover
 node <skill-dir>/scripts/doctor.mjs --json --for cutout     # make-motion: onnxruntime-node, before cutout.mjs
 node <skill-dir>/scripts/doctor.mjs --fix node_modules      # install the named ids (comma-separated)
 ```
+
+Every entry script takes `--help` (usage on stdout, exit 0), and an unknown flag exits 2 with the flags it does accept.
 
 The consent flow in each SKILL.md: the agent runs the doctor first. If anything
 is missing it sends you one message with each item, why it is needed, its size
@@ -70,8 +72,7 @@ network) comes back to you as the exact command to run yourself; in Claude Code
 prefix it with `!`. On no the agent does what it can without the item, for
 example make-motion still writes and validates `motion.json` and hands you the
 render commands. `--for` takes a spec `.json` in every skill (make-explainer and
-make-scene add sister skills from it), `check` in make-diagram, make-explainer, make-motion and make-scene, and
-`voiceover` in make-motion; make-dashboard has no keyword target. Unknown or
+make-scene add sister skills from it), `check` (every skill), and `voiceover` or `cutout` (make-motion). Unknown or
 misspelled arguments exit 2 and list the accepted ones. `--fix` takes the same
 `--for` the diagnosis used: it resolves ids against that target, so an id the
 target does not list (say `chromium` with a spec that has no check step) is
@@ -89,14 +90,18 @@ If a build prints `warning: this script runs from …, not the installed copy �
 
 ### Tested hosts
 
-Tested live on this branch: **Claude Code**, and **GitHub Copilot CLI 1.0.98**
-(one non-interactive run per skill on 2026-10-15, plus reruns of the doctor
+Every number below was measured on a release before 1.2.0, and no run on 1.2.0 or later has a committed summary; which
+release each summary covers is in [`eval/results/INDEX.md`](eval/results/INDEX.md). Tested live: **Claude Code**, and
+**GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor
 install path: each run picked up its skill, ran the doctor, set the host name,
 validated and built a page). The browser check (`check.mjs`) was never run by an
 agent there, and consent was pre-granted in the prompt, so the ask-first step was
 not exercised. An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**:
-dashboard 10/10, motion 6/10, with the last four motion prompts stopped by the
-account's usage limit ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)).
+dashboard 10/10, motion 5/10 under today's scorer (the summary counted six valid, one of them an edit that left the seed untouched; four more prompts were stopped by the
+account's usage limit; the five that ran all built a page)
+([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)).
+A local model through Ollama (gemma4) built a dashboard 10/10 after a SKILL.md fix (a 2026-10-12 rerun gave 7/10 and 6/10) but only 4/10 to 7/10 on motion and 0/8 on explainer (on motion the cause found was the model ending its turn before it wrote the spec);
+the eval refuses those two without `--allow-local-models`.
 **Gemini CLI**: its install paths were checked against its documentation on
 2026-10-15 and not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku in Claude Code, median 1.5 validate runs, median 40 s)
 ([`eval/results/summary-scene-2026-10-19.md`](eval/results/summary-scene-2026-10-19.md)). Results:
@@ -113,7 +118,7 @@ Writing a spec is a small job, so every skill can run on a cheap model. Hosts di
 | VS Code Copilot Chat | Pick `artifact-builder` in the agent picker | the same `.agent.md` file | Deterministic per docs; not tested here |
 | Copilot CLI or VS Code, skill hand-off (VS Code untested) | The skill's "Cheaper model" section tells the running agent to start `artifact-builder` with a self-contained brief | the same `.agent.md` file | Advisory: the main agent may choose not to |
 | Codex | `~/.codex/agents/artifact-builder.toml` (model `gpt-6-luna`, low reasoning effort), or the `default_subagent_model` key under `[agents]` in Codex config | `~/.codex/agents/artifact-builder.toml` (project scope: `.codex/agents`) | Config-level. Written from the Codex docs, not run live |
-| Claude Code | `model: haiku` and `effort: low` in each `SKILL.md` frontmatter, per Claude Code's skill docs | none (no agent file) | Claude Code feature; not measured here |
+| Claude Code | `model: haiku` and `effort: low` in each `SKILL.md` frontmatter, per Claude Code's skill docs | none (no agent file) | Claude Code feature. The frontmatter path itself (no `--model` flag) has not been measured. `eval/run-eval.mjs --host claude-frontmatter` runs `claude` without `--model` on the account's default model, and whether the frontmatter applies in that harness is unverified (it reads the skill as a plain file); read the model that ran from the session log. Haiku forced with `--model haiku` was measured on every skill (see [`eval/results/INDEX.md`](eval/results/INDEX.md)) |
 | Gemini CLI | nothing | none | none |
 
 Install the agent file with one of these (add `--project <dir>` for project scope, and use `codex` or `agents` in place of `copilot` for those hosts):
@@ -146,7 +151,7 @@ The skill hand-off is advisory. In the one live trial (make-explainer on the def
 
 Cost: only that one trial was measured, at 18.7 AI Credits (about $0.19 at 1 credit = $0.01; 432k input tokens, 353k of them cached, 4.2k output tokens). The cost of the smoke and motion runs was not measured. Claude Haiku 5.5 is listed at $0.10 / $0.50 per 1M input / output tokens; the default model's price was not looked up here, so no saving is claimed.
 
-`model: haiku` in make-motion's frontmatter changes the model Claude Code uses for it. make-motion on Haiku in Claude Code itself was not measured: the motion gate measured Copilot's `claude-haiku-5.5`.
+`model: haiku` in make-motion's frontmatter changes the model Claude Code uses for it. The motion gate in the table above measured Copilot's `claude-haiku-5.5`; make-motion on Haiku in Claude Code was measured later with `--model haiku` (the 1.1.0 gates in [`eval/results/INDEX.md`](eval/results/INDEX.md)), and the frontmatter path with no `--model` flag has not been measured.
 
 Not tested: Codex (no account; the files come from the Codex docs), VS Code Copilot Chat, and a copy install for the hand-off trial.
 
@@ -166,9 +171,16 @@ from your project folder):
 3. `validate.mjs dashboard.json` checks the spec, parses and binds every query
    against the data, and compiles every chart. The agent fixes each
    `path: message` line until it prints `valid`.
-4. `build.mjs dashboard.json` writes `dist/index.html` and prints the
-   `serve:` command.
-5. Gives you the page path and URL, with one line per chart.
+4. `build.mjs dashboard.json` writes `dist/index.html` next to the spec (`--out <dir>`
+   picks another folder; this skill ignores `PA_OUTPUT_DIR`), then prints the page's
+   `file://` URL alone on its own line and the `serve:` command. `query.mjs dashboard.json
+   --chart <id>` prints the rows one chart will show, so a chart title can state what they show.
+5. Optionally `check.mjs dist --shots shots` opens the page at 1280 and 390 px, light and
+   dark, and fails on console errors, chart errors, empty panes or sideways scrolling; `--shots`
+   writes one PNG per width and colour scheme to open and look at. It needs Playwright and a
+   browser; without them it prints `check: skipped` and exits 0 (`--json` says `"skipped": true`,
+   and a skipped run is not a pass).
+6. Gives you the page path and URL, with one line per chart.
 
 **What the page can do:**
 
@@ -189,7 +201,7 @@ the first rows of the result.
 node <skill-dir>/scripts/serve.mjs --watch dashboard.json --open
 ```
 
-It rebuilds when you save the spec or a file source (csv, parquet, json, duckdb, sqlite) and reloads the page. Postgres and MySQL have no file to watch: add `--interval 60` (5 to 86400 seconds). The page has a *Rebuild now* button. A failed build shows a banner and keeps the last good page. A page opened from disk (`file://`) is static.
+It rebuilds when you save the spec or a file source (csv, parquet, json, duckdb, sqlite) and reloads the page. Postgres and MySQL have no file to watch: add `--interval 60` (5 to 86400 seconds). The page has a *Rebuild now* button. A failed build shows a banner and keeps the last good page. `--out <dir>` (with `--watch`) puts the watched build somewhere other than `dist/`. A page opened from disk (`file://`) is static.
 
 **Refresh the data:** rerun `node <skill-dir>/scripts/build.mjs
 dashboard.json`. No agent is needed. For a schedule, copy the cron or launchd
@@ -236,14 +248,20 @@ your project folder):
 3. `validate.mjs diagram.json` checks the spec, then lays the diagram out and
    lints the geometry (text that does not fit, overlapping nodes). The agent
    fixes each `path: message` line until it prints `valid`.
-4. `build.mjs diagram.json` writes one offline HTML file and prints its path.
-   The default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
-   `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
+4. `build.mjs diagram.json` writes one offline HTML file and prints `wrote <path>`, then
+   the page's `file://` URL alone on its own line. With no `--out` the page goes to
+   `$PA_OUTPUT_DIR` if that is set, else `<git root>/.scratch/<slug>.html` when the spec sits in
+   a git repository, else `~/.agent/diagrams/<slug>.html`. `--out file.html` or `--out dir` overrides all of
+   these; an `--out` that does not end in `.html` is a folder. Add `.scratch/` to `.gitignore`
+   (the build prints a note when it is not ignored). `--theme <name>` overrides the spec's
    theme: `blueprint` (default), `paper`, `ink`, `editorial`, `dusk`, `press`,
-   `poster`, `mono` or `brief`.
+   `poster`, `mono` or `brief`. `--format svg --out diagram.svg` writes one standalone SVG
+   instead, in the theme's light palette, with no browser.
 5. `check.mjs <page>` opens the page at 1440 and 390 px and reports overflow,
-   console errors, text that leaves its box and a node under the legend
-   overlay. It needs Playwright and a browser (a full `npm ci` plus
+   console errors, text that leaves its box, a node under the legend
+   overlay, labels that draw below the legibility floor at fit, and a story that cannot
+   reach its last beat. `--shots <dir>` also writes one PNG per width (390, 1280) and colour scheme;
+   open them and look before you report. It needs Playwright and a browser (a full `npm ci` plus
    `npx playwright install chromium` in the skill folder). Without them it
    prints `check: skipped` with the doctor command to run
    (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`) and exits 0.
@@ -302,7 +320,8 @@ your project folder):
    file (also `checklist`, `concept` and `slides`). `concept` and `slides` take no facts. Without `--facts`, `recap` is a shorter skeleton (tl;dr, how it works, risks: no numbers, files or timeline) and `checklist` has one TODO area group plus the regression group.
    The numbers, file list, timeline and checklist groups are filled in; every
    sentence is a `TODO: …` string. With no preset, the agent writes the file
-   from the section list.
+   from the section list. `--out` refuses a file that already exists, because it may
+   be filled in; edit that file in place, or pass `--force` to replace it.
 3. The agent reads the changed files and replaces each `TODO:` with prose.
    Section titles state the finding ("Search now ignores case"), not a label.
 4. `validate.mjs explainer.json` checks the schema and limits, file references,
@@ -310,10 +329,14 @@ your project folder):
    `TODO:` text, filler phrases ("leverage", "seamless", "delve"), titles
    numbered like `01` or ending in `!`, and (for slides) a slide with more
    than 6 points, 8 table rows, 12 code lines or 80 words. Each line is a JSON
-   path, the problem and the fix; text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words (1,800 on a plan page), `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Each warning names the section; resolve them before building where you can.
-5. `build.mjs explainer.json` writes one HTML file and prints its path. The
-   default folder is `~/.agent/diagrams/` (set `PA_OUTPUT_DIR`, or pass
-   `--out file.html` or `--out dir`). `--theme <name>` overrides the spec's
+   path, the problem and the fix; `--strict` turns the length caps into errors; without it text over the soft caps only warns (exit 0): title 8 words, label 4 words, paragraph 3 sentences or 60 words, text section 120 words, card text 30 words, list item 20 words, page prose 900 words (1,800 on a plan page), `tldr` 3 points. Emoji are allowed; dense emoji only warn: a prose string with 3 or more at more than 1 per 40 characters, or a section title with more than 3. Each warning names the section; resolve them before building where you can.
+5. `build.mjs explainer.json` writes one HTML file and prints its path, then the page's `file://` URL
+   alone on the last line. With no `--out` the page goes to `$PA_OUTPUT_DIR` if that is set, else
+   `<git root>/.scratch/<slug>.html` when the spec sits in a git repository (add `.scratch/` to
+   `.gitignore`), else `~/.agent/diagrams/`; to keep the page next to the spec in a project, pass
+   `--out ./<name>.html`. `--out file.html` or `--out dir` overrides all of these. `--strict` is the same as
+   in validate. `--md` also writes the markdown twin of the checklist sections (`<name>.md`) next to
+   the page and is an error when the spec has no checklist. `--theme <name>` overrides the spec's
    theme: `dusk` (default), `press`, `poster`, `paper`, `blueprint`, `ink`,
    `editorial`, `mono` or `brief` (see [Choosing a theme](#choosing-a-theme)); `--model`, `--effort` and `--agent` set the
    provenance stamp (see [section 7](#7-what-every-page-carries)). A video or an interactive chart adds a
@@ -321,9 +344,13 @@ your project folder):
    `--image-api <https-endpoint>` is an optional extra described
    [below](#optional-hero-image); without it the build never uses the network.
 6. Optionally runs `check.mjs <page>`, which opens the page at 1280, 390 and 1800 px and
-   fails on console errors or warnings, sideways scrolling, a deck that cannot
-   reach its last slide with the arrow keys, or a diagram Present overlay that
-   will not close on Esc. It needs Playwright and a browser (a full `npm ci` plus
+   fails on console errors or warnings, sideways scrolling, elements wider than the page,
+   content clipped sideways inside a slide, a deck that cannot
+   reach its last slide with the arrow keys, a number and its unit that wrap across two lines,
+   a KPI value wider than its tile, a checklist whose ticks are not saved, or a diagram Present overlay that
+   will not close on Esc. A page with a Simple English toggle is measured again with the toggle
+   pressed, and those problems say "(simple)". `--shots <dir>` writes one PNG per width (390, 1280)
+   and colour scheme to open and look at. It needs Playwright and a browser (a full `npm ci` plus
    `npx playwright install chromium` in the skill folder); without them it prints
    `check: skipped` with the doctor command to run
    (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`) and exits 0.
@@ -333,10 +360,15 @@ your project folder):
 risks), `checklist` (a group per area of changed files, a regression group, an
 intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
 `slides` (a deck), `plan` (a plan that explains before it asks, which the
-reviewer answers on the page, see below). **Sections** (24): `tldr`, `text`,
-`kpis`, `cards`, `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`,
+reviewer answers on the page, see below). **Sections** (25): `tldr`, `text`,
+`kpis`, `cards`, `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`, `diff` (a unified diff,
+one marked row per line),
 `details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`, and
 for plans `decision`, `approval`, `question`, `review`, `verdict`.
+
+A checklist item can carry `tags` (up to four free labels, next to the `regression` or `device` tag), `steps` (what to do,
+in order, as a numbered list under the item) and `expect` (a "You should see" line); a group can carry an `intro`
+("read this first"). Editing an item's `steps` or `expect` does not reset its tick; editing its `text` does.
 
 **Plan mode.** Ask for a plan, proposal or design to be reviewed and answered.
 `scaffold.mjs plan --title "…" --out plan.json` writes a starter that
@@ -674,7 +706,9 @@ mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
 file you supply. For narration the agent runs
 `voice.mjs --text-file voice/<scene>.txt --out voice/<scene>.wav` (a text file, not a quoted argument, because the shell expands `$` and backticks; Kokoro, local, 28 voices,
 `--voice af_heart` by default) after asking once to install `kokoro-js`
-(about 250 MB plus a 90 MB model downloaded a single time). Short UI sounds need no
+(about 465 MB on macOS, which it shares with cutout's `onnxruntime-node`, plus a 90 MB model downloaded a single time).
+`voice.mjs --list-voices` prints the voices without loading the model, and `voice.mjs --dir voice/` turns every `.txt` in
+a folder into a `.wav` beside it on one model load, skipping the ones that are unchanged. Short UI sounds need no
 file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`,
 `swoosh`, `typing`, `drop`, `ding`, each with `at`, or `scene` plus `at`, and optional `volume`,
 `pan` and `note`; a `typing` cue can instead name a text with `follow`) is synthesised at
@@ -701,15 +735,20 @@ play cues. Twelve recorded clicks and hits (Kenney, CC0) ship with the skill as
    the closest file in `references/examples/`.
 3. `validate.mjs scene.json` until it prints `valid`. Each line is a JSON path,
    the problem and the fix.
-4. `build.mjs scene.json` writes one HTML file and prints its path, then an
+4. `build.mjs scene.json` writes one HTML file and prints `wrote <path>`, then the page's
+   `file://` URL alone on its own line, then an
    **alternatives table**: each world, why it fits, the page size, a render
    weight and the exact command to switch. The agent shows you that table
-   unchanged. Default folder is `~/.agent/scenes/` (set `PA_OUTPUT_DIR`, or pass
-   `--out file.html` or `--out dir`); `--theme <name>` overrides the spec's
-   theme (default `dusk`).
+   unchanged. With no `--out` the page goes to `$PA_OUTPUT_DIR` if that is set, else
+   `<git root>/.scratch/<slug>.html` for a spec inside a git repository, else `~/.agent/diagrams/`;
+   `--out file.html` or `--out dir` overrides all of these. `--theme <name>` overrides the spec's
+   theme (default `dusk`). `--fragment` writes `<slug>.fragment.html` instead: the scene's css, host,
+   runtime and mount call, to paste into another page.
 5. Optionally runs `check.mjs <page>`, which opens the page at 1440 and 390 px
-   and fails on console errors, overflow, a blank canvas or a tour that cannot
-   reach its last beat. It needs Playwright and a browser; without them it
+   and fails on console errors, overflow, a blank canvas, a fallback data table that
+   stays visible once WebGL runs, or a tour that cannot reach its last beat. `--shots <dir>`
+   also checks the dark scheme and writes PNGs, one per width and scheme and one per tour beat:
+   open them and look. It needs Playwright and a browser, and a browser with WebGL; without them it
    prints `check: skipped` and exits 0.
 
 **Worlds** (from `data`): `city` (a district per group, buildings by `t`, height
@@ -785,6 +824,29 @@ is set in the spec, a dashboard refresh keeps the original author; a stamp passe
 only as flags is not kept by a refresh run without them. A dashboard also shows its
 refresh time. Set `SOURCE_DATE_EPOCH` to pin the footer date for a reproducible build.
 
+### Sharing a built page (Claude Code only)
+
+Other hosts have no Artifact tool, so this applies to Claude Code. When the reader is on another
+device or needs a link, hand the built HTML to the Artifact tool unchanged (a title, an icon and a
+one-sentence description are enough); do not rewrite it as new HTML by hand.
+
+- **One file or a folder.** A page with no `<name>.assets/` folder (a diagram, a scene, an explainer
+  with no video or interactive chart, a dashboard's `index.html`) is already one file. A page with
+  a `<name>.assets/` folder (an explainer with a video or an interactive chart) needs that folder
+  too: pass it through the Artifact tool's `files` map, or the media does not load for the reader.
+- **Size.** The Artifact tool caps a page at 16 MB, and each supporting file at 16 MB (15 MB for an
+  image, video or font). Check the sizes of `<name>.html` and its folder first.
+- **Ticks stay in each browser.** A checklist saves its ticks in the reader's own browser, so every
+  reader ticks their own copy: nothing reaches another device or the agent. Do not promise shared
+  progress. State that has to be shared or read back is a different Artifact feature (a runtime
+  capability) that these pages do not use.
+- **Keep private pages local.** A page that holds personal contacts or private plans
+  stays on this machine unless the owner asks to publish it, and a built dashboard embeds its query
+  results, so publishing it publishes the data. An Artifact is private by default; check who it is
+  shared with before you pass the link on.
+- **Not tried yet.** No built page from this plugin has been trial-published: open the published page
+  signed out and look at it before you send a link, and note its size.
+
 **Type.** The theme sets the fonts, all bundled, so nothing is fetched: `dusk`
 Funnel Display, Host Grotesk and Commit Mono; `press` Young Serif, Schibsted
 Grotesk and JetBrains Mono; `poster` Big Shoulders Display, Familjen Grotesk
@@ -845,7 +907,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
 | `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
-| `check: skipped (no browser: …)` from make-diagram, make-explainer or make-motion | Expected without Playwright or Chromium; the page is still built. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
+| `check: skipped (no browser: …)` from any skill's `check.mjs` (make-scene also skips when the browser has no WebGL) | Expected without Playwright or Chromium; the page is still built. A skipped check is not a pass: `--json` carries `"skipped": true`. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `kokoro-js is not installed` | `cd <skill-dir> && npm install kokoro-js@1.2.1 --no-save` (voiceover only; run it inside the skill folder so the skill's `overrides` apply; `npm ci` removes it) |
 | `onnxruntime-node is not installed` | `cd <skill-dir> && npm install onnxruntime-node@1.31.1 --no-save` (cutouts only; run it inside the skill folder so the skill's `overrides` apply; `npm ci` removes it, so rerun `doctor --fix cutout`; a kokoro install keeps it) |
@@ -863,7 +925,13 @@ results:
 node plugins/portable-artifacts/eval/run-eval.mjs --skill dashboard --host codex-oss --model gemma4
 node plugins/portable-artifacts/eval/run-eval.mjs --skill diagram --host claude --limit 3
 node plugins/portable-artifacts/eval/run-eval.mjs --skill explainer --host claude --only recap-from-repo,edit-existing
+node plugins/portable-artifacts/eval/run-eval.mjs --skill dashboard --host claude --set kinds
 ```
 
 It records: spec written, valid, validate retries, build or contact sheet ok,
-and which fields changed on edit prompts. See [`eval/README.md`](eval/README.md).
+the browser check where the skill has one, whether the spec used the feature the prompt asked for,
+and which fields changed on edit prompts. `--set <name>` picks a further prompt set, and
+`--host claude-frontmatter` runs Claude Code without a `--model` flag (the account's default model;
+whether the `SKILL.md` frontmatter applies is unverified, see [`eval/README.md`](eval/README.md)). A local model needs `--allow-local-models` on motion and explainer.
+Each run is billed on a billed host: count the prompts first. See [`eval/README.md`](eval/README.md)
+and the version each committed summary covers in [`eval/results/INDEX.md`](eval/results/INDEX.md).

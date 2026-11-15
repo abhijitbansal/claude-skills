@@ -5,7 +5,7 @@
 // so a plateau is one cell. Height is value / max, from the floor; a value below zero cannot be drawn on a
 // surface (the reader rejects it). The donut is one thick tube arc per segment, in row order from 12 o'clock.
 import { displayValue, groupColour } from '../lib/palette.mjs';
-import { sortedOf } from './dashboard-data.mjs';
+import { orderOf } from './dashboard-data.mjs';
 import { AxisError, focusCollector, legendOf, thinned, WIDTH } from './dashboard-frame.mjs';
 
 // A surface carries 25 heights per cell: past this many cells its page is far over the page cap anyway, so refuse
@@ -31,8 +31,8 @@ export function heatmapPart(model, { units }) {
   const { roles, points } = model;
   const groups = [{ name: roles.value, colour: 'accent' }];
   if (points.length === 0) return { groups, items: [], batches: [], tubes: [], surfaces: [], labels: [], focus: [], categories: { x: true, color: true } };
-  const xs = sortedOf(points.map((p) => p.x)); // both axes ascending, as the 2D chart's band scales are
-  const ys = sortedOf(points.map((p) => p.y));
+  const xs = orderOf(points.map((p) => p.x), model.xTemporal); // nominal axes in row order, temporal ones sorted, as the 2D chart's band scales are
+  const ys = orderOf(points.map((p) => p.y), model.yTemporal);
   const [T, G] = [xs.length, ys.length];
   if (T * G > MAX_CELLS) throw new AxisError(`${roles.x} has ${T} values and ${roles.y} has ${G}, which makes ${T * G} heatmap cells; a lift takes at most ${MAX_CELLS} (x values times y values); aggregate or filter in SQL`);
   const max = Math.max(0, ...points.map((p) => p.value));
@@ -93,7 +93,7 @@ function arc(a0, a1) {
   return Array.from({ length: n }, (_, k) => onRing(a0 + ((a1 - a0) * k) / (n - 1), RING_RADIUS, SEGMENT_RADIUS));
 }
 
-/** The part for a donut: one arc per row, its angle the row's share of the total, in name order. A zero row has no arc. */
+/** The part for a donut: one arc per row, its angle the row's share of the total, in row order. A zero row has no arc. */
 export function donutPart(model, { units }) {
   const { points, groupNames } = model;
   const total = points.reduce((n, p) => n + p.y, 0);
@@ -101,7 +101,7 @@ export function donutPart(model, { units }) {
   const [xFocus, itemFocus] = [focusCollector(), focusCollector()];
   const tubes = [];
   const labels = [];
-  // Items stay in row order; the arcs follow the legend (name) order, rows of one name in row order.
+  // Items stay in row order; the arcs follow the legend (row) order, rows of one name together.
   const arcOrder = points.map((_, idx) => idx).sort((a, b) => groupOf.get(points[a].x) - groupOf.get(points[b].x) || a - b);
   let angle = -Math.PI / 2;
   for (const idx of arcOrder) {
