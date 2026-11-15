@@ -30,7 +30,9 @@ regenerate on demand or in CI.
    `xcodebuild` forwards env vars to the test runner via the `TEST_RUNNER_`
    prefix: `TEST_RUNNER_DEMO_RECORDING=1 xcodebuild test-without-building …`.
 
-2. **Seed deterministic app data first** (before any recording): `xcrun simctl
+2. **Seed deterministic app data first** (before any recording). This needs a
+   booted simulator with the app installed, so run step 4's `bootstatus -b` line
+   and the build/install before this step and step 3: `xcrun simctl
    get_app_container <udid> <bundle> data` → copy fixture folders into
    `Documents/`. Control `@AppStorage` per-launch through the NSArgumentDomain:
    `app.launchArguments = ["-hasSeenOnboarding", "YES"]`.
@@ -60,10 +62,22 @@ regenerate on demand or in CI.
    rec_log=$(mktemp)
    xcrun simctl io "$UDID" recordVideo --codec=h264 --force out.mov 2>"$rec_log" &
    recpid=$!
-   stop_recording() { kill -INT "$recpid" 2>/dev/null || true; wait "$recpid" 2>/dev/null || true; }
+   stop_recording() {
+     kill -INT "$recpid" 2>/dev/null || true
+     wait "$recpid" 2>/dev/null || true
+     rm -f "$rec_log"
+   }
    trap stop_recording EXIT
-   # simctl prints "Recording started" to stderr after the first frame:
-   until grep -q "Recording started" "$rec_log"; do sleep 0.2; done
+   # simctl prints "Recording started" to stderr after the first frame. Wait at
+   # most ~10 s, and give up at once if recordVideo already exited (bad UDID,
+   # simulator not booted, codec error):
+   started=0
+   for _ in $(seq 50); do
+     if grep -q "Recording started" "$rec_log"; then started=1; break; fi
+     kill -0 "$recpid" 2>/dev/null || break
+     sleep 0.2
+   done
+   [ "$started" = 1 ] || { cat "$rec_log" >&2; echo "recordVideo did not start" >&2; exit 1; }
 
    TEST_RUNNER_DEMO_RECORDING=1 xcodebuild test-without-building -scheme App \
      -destination "id=$UDID" -derivedDataPath build \

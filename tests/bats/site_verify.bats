@@ -233,6 +233,25 @@ HTML
   [[ "$output" == *"support.html"* ]] || false
 }
 
+@test "a second <nav> (TOC or breadcrumb) on a page does not count toward the site nav" {
+  nav_page "${SITE}/index.html" index.html privacy.html
+  nav_page "${SITE}/privacy.html" index.html privacy.html
+  sed -i.bak 's#hi</body>#<nav class="toc"><a href="\#data">Data</a><a href="extra-page.html">Extra</a></nav>hi</body>#' "${SITE}/privacy.html"; rm -f "${SITE}/privacy.html.bak"
+  grep -q 'class="toc"' "${SITE}/privacy.html"
+  run bash "${VERIFY}" "${SITE}"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"FAIL"* ]]
+}
+
+@test "the first <nav> still decides: a differing first nav FAILs even with a TOC nav after it" {
+  nav_page "${SITE}/index.html" index.html privacy.html support.html
+  nav_page "${SITE}/privacy.html" index.html privacy.html
+  sed -i.bak 's#hi</body>#<nav class="toc"><a href="support.html">S</a></nav>hi</body>#' "${SITE}/privacy.html"; rm -f "${SITE}/privacy.html.bak"
+  run bash "${VERIFY}" "${SITE}"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"support.html"* ]] || false
+}
+
 @test "github.io project-site og:image resolves past the repo-name base path" {
   sed -i.bak 's#https://demo.app/og-card.png#https://user.github.io/demo-site/og-card.png#' "${SITE}/index.html"; rm -f "${SITE}/index.html.bak"
   run bash "${VERIFY}" "${SITE}"

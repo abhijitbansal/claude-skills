@@ -13,7 +13,7 @@ Run the project's `./build.sh` rather than constructing `xcodebuild` invocations
 
 | User intent | Command |
 |---|---|
-| Default / "build" / "build for sim" | `./build.sh` (simulator build, installed on the only booted simulator) |
+| Default / "build" / "build for sim" | `./build.sh` (simulator build, installed on the booted simulator; refuses and asks for `-s` when more than one is booted) |
 | Specific simulator | `./build.sh -s "<name or UDID>"` (names change between Xcode releases: list them with `xcrun simctl list devices available`) |
 | Real device (connected iPhone) | `./build.sh -d` (installs and launches with `devicectl`; add `--debug` for the Debug configuration) |
 | Build without installing or launching | `./build.sh --no-launch` |

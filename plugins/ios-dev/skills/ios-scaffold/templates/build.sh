@@ -5,7 +5,7 @@
 # Usage: ./build.sh [-s [<name|UDID>]] [-d [<device id>]] [--debug] [--no-launch] [-h|--help]
 #   -s           simulator build (the default). With a name or UDID, build for and
 #                install on that simulator; without one, build for any simulator
-#                and install on the only booted one.
+#                and install on the booted one (refuses when several are booted).
 #   -d           build for a connected iPhone, then install and launch it with
 #                devicectl. Optional device id; default: the first connected device.
 #   --debug      Debug configuration (default: Debug for -s, Release for -d).
@@ -90,6 +90,16 @@ else
   DEST="platform=iOS Simulator,name=${TARGET}"
 fi
 
+# `simctl ... booted` silently picks one device when several are booted. Refuse
+# before building, unless -s <name|UDID> was given or nothing is installed.
+if [[ "${MODE}" == sim && -z "${TARGET}" && "${LAUNCH}" -eq 1 ]]; then
+  booted_count="$(xcrun simctl list devices booted 2>/dev/null | grep -c '(Booted)' || true)"
+  if [[ "${booted_count:-0}" -gt 1 ]]; then
+    echo "build.sh: ${booted_count} simulators are booted and no -s given; pass -s <name|UDID> (xcrun simctl list devices booted)" >&2
+    exit 1
+  fi
+fi
+
 xcodebuild -scheme "${SCHEME}" -configuration "${CONFIG}" -destination "${DEST}" \
   ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} build
 
@@ -97,11 +107,19 @@ if [[ "${LAUNCH}" -eq 0 ]]; then
   exit 0
 fi
 
+# -showBuildSettings prints one block per target of the scheme (app, widget
+# extension, test bundles). Take the first block whose WRAPPER_EXTENSION is "app",
+# never the last block printed (which can be a .appex or a test bundle).
 app_path() {
   xcodebuild -scheme "${SCHEME}" -configuration "${CONFIG}" -destination "${DEST}" \
     ${SIGN_ARGS[@]+"${SIGN_ARGS[@]}"} -showBuildSettings 2>/dev/null \
-    | awk -F' = ' '$1 ~ /^ *TARGET_BUILD_DIR$/ { d = $2 } $1 ~ /^ *FULL_PRODUCT_NAME$/ { n = $2 }
-                   END { if (d != "" && n != "") print d "/" n }'
+    | awk -F' = ' '
+        function flush() { if (w == "app" && d != "" && n != "" && out == "") out = d "/" n; d = ""; n = ""; w = "" }
+        /^Build settings for action/ { flush(); next }
+        $1 ~ /^ *TARGET_BUILD_DIR$/ { d = $2 }
+        $1 ~ /^ *FULL_PRODUCT_NAME$/ { n = $2 }
+        $1 ~ /^ *WRAPPER_EXTENSION$/ { w = $2 }
+        END { flush(); if (out != "") print out }'
 }
 
 device_id() {

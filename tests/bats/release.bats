@@ -262,6 +262,43 @@ add_hooks() {  # committed, executable hooks that log "<name> <mode>" to ${TMP}/
   out_lacks ".scratch"
 }
 
+@test "--confirm-upload reuses the IPA a dry run built for the same HEAD (one archive, not two)" {
+  setup_release_env
+  printf 'build/Demo.ipa\nbuild/ExportOptions.plist\n' >> .git/info/exclude
+  run bash "${RELEASE}" testflight --dry-run < /dev/null
+  [ "$status" -eq 0 ]
+  run bash "${RELEASE}" testflight --confirm-upload < /dev/null
+  [ "$status" -eq 0 ]
+  out_has "reusing build/Demo.ipa"
+  [ "$(grep -c "^xcodebuild archive" "${MOCK_CALL_LOG}")" -eq 1 ]
+  # The reused IPA is still validated and uploaded.
+  [ "$(grep -c -e "--validate-app" "${MOCK_CALL_LOG}")" -eq 2 ]
+  [ "$(grep -c -e "--upload-app" "${MOCK_CALL_LOG}")" -eq 1 ]
+}
+
+@test "--confirm-upload rebuilds when HEAD moved since the IPA was built" {
+  setup_release_env
+  printf 'build/Demo.ipa\nbuild/ExportOptions.plist\n' >> .git/info/exclude
+  run bash "${RELEASE}" testflight --dry-run < /dev/null
+  [ "$status" -eq 0 ]
+  echo b > b.txt && commit_all "feat: B"
+  run bash "${RELEASE}" testflight --confirm-upload < /dev/null
+  [ "$status" -eq 0 ]
+  out_lacks "reusing build/Demo.ipa"
+  [ "$(grep -c "^xcodebuild archive" "${MOCK_CALL_LOG}")" -eq 2 ]
+}
+
+@test "--force never reuses a previously built IPA" {
+  setup_release_env
+  printf 'build/Demo.ipa\nbuild/ExportOptions.plist\n' >> .git/info/exclude
+  run bash "${RELEASE}" testflight --dry-run < /dev/null
+  [ "$status" -eq 0 ]
+  run bash "${RELEASE}" testflight --confirm-upload --force < /dev/null
+  [ "$status" -eq 0 ]
+  out_lacks "reusing build/Demo.ipa"
+  [ "$(grep -c "^xcodebuild archive" "${MOCK_CALL_LOG}")" -eq 2 ]
+}
+
 @test "a dry run followed by --confirm-upload still passes the tree-clean gate" {
   setup_release_env
   # Real apps gitignore their build outputs; the fixture commits build/gen, so

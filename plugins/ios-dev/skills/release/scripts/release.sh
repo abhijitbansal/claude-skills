@@ -125,29 +125,46 @@ check_asc_credentials
 # --- Stage 5: archive + export
 read -r -a xcodebuild_extra <<< "${XCODEBUILD_FLAGS:-}"
 export XCODEBUILD_FLAGS="${XCODEBUILD_FLAGS:-}"
-run_hook s5-pre
-mkdir -p build
 ipa_path="build/${APP_NAME}.ipa"
-if [[ -f fastlane/Fastfile ]]; then
-  bundle exec fastlane archive
-else
-  archive_path="build/${APP_NAME}.xcarchive"
-  archive_args=(
-    -scheme "${APP_SCHEME}"
-    -configuration Release
-    -destination "generic/platform=iOS"
-    -archivePath "${archive_path}"
-    DEVELOPMENT_TEAM="${APP_TEAM_ID}"
-    -allowProvisioningUpdates
-  )
-  # A command-line PRODUCT_BUNDLE_IDENTIFIER overrides every target, so with
-  # embedded extensions it would give them the app's id (duplicate
-  # CFBundleIdentifier in the archive). Only pass it for single-target apps.
-  if [[ -z "${TARGETS_EXTENSIONS:-}" ]]; then
-    archive_args+=(PRODUCT_BUNDLE_IDENTIFIER="${APP_BUNDLE_ID}")
-  fi
-  xcodebuild archive "${archive_args[@]}" ${xcodebuild_extra[@]+"${xcodebuild_extra[@]}"}
-  cat > build/ExportOptions.plist <<EOF
+
+# A confirmed upload must not pay for a second archive, and must upload the IPA
+# the user saw validated. The dry run records "<HEAD> <mode> <ipa>" next to the
+# IPA; --confirm-upload reuses that IPA only when the stamp still matches HEAD and
+# mode, never under --force (preflight FAILs may have been bypassed, so the tree
+# may be dirty). Delete the stamp (or the IPA) to force a rebuild.
+ipa_stamp_file="$(release_scratch_dir)/ipa-built-from"
+head_sha="$(git rev-parse HEAD 2>/dev/null || echo none)"
+ipa_stamp="${head_sha} ${MODE} ${ipa_path}"
+reuse_ipa=0
+if [[ ${CONFIRM} -eq 1 && ${DRY} -eq 0 && ${FORCE} -eq 0 && "${head_sha}" != none \
+      && -f "${ipa_path}" && -f "${ipa_stamp_file}" \
+      && "$(cat "${ipa_stamp_file}")" == "${ipa_stamp}" ]]; then
+  reuse_ipa=1
+fi
+
+build_ipa() {
+  run_hook s5-pre
+  mkdir -p build
+  if [[ -f fastlane/Fastfile ]]; then
+    bundle exec fastlane archive
+  else
+    local archive_path="build/${APP_NAME}.xcarchive"
+    local archive_args=(
+      -scheme "${APP_SCHEME}"
+      -configuration Release
+      -destination "generic/platform=iOS"
+      -archivePath "${archive_path}"
+      DEVELOPMENT_TEAM="${APP_TEAM_ID}"
+      -allowProvisioningUpdates
+    )
+    # A command-line PRODUCT_BUNDLE_IDENTIFIER overrides every target, so with
+    # embedded extensions it would give them the app's id (duplicate
+    # CFBundleIdentifier in the archive). Only pass it for single-target apps.
+    if [[ -z "${TARGETS_EXTENSIONS:-}" ]]; then
+      archive_args+=(PRODUCT_BUNDLE_IDENTIFIER="${APP_BUNDLE_ID}")
+    fi
+    xcodebuild archive "${archive_args[@]}" ${xcodebuild_extra[@]+"${xcodebuild_extra[@]}"}
+    cat > build/ExportOptions.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -157,15 +174,24 @@ else
   <key>destination</key><string>export</string>
 </dict></plist>
 EOF
-  xcodebuild -exportArchive \
-    -archivePath "${archive_path}" \
-    -exportPath build/ \
-    -exportOptionsPlist build/ExportOptions.plist \
-    -allowProvisioningUpdates \
-    ${xcodebuild_extra[@]+"${xcodebuild_extra[@]}"}
+    xcodebuild -exportArchive \
+      -archivePath "${archive_path}" \
+      -exportPath build/ \
+      -exportOptionsPlist build/ExportOptions.plist \
+      -allowProvisioningUpdates \
+      ${xcodebuild_extra[@]+"${xcodebuild_extra[@]}"}
+  fi
+  run_hook s5-post
+  [[ -f "${ipa_path}" ]] || { echo "no ${ipa_path} after export" >&2; exit 1; }
+  printf '%s\n' "${ipa_stamp}" > "${ipa_stamp_file}"
+}
+
+if [[ ${reuse_ipa} -eq 1 ]]; then
+  echo "reusing ${ipa_path}: built from this HEAD for ${MODE} by the earlier run (s5 hooks skipped; delete ${ipa_stamp_file} to rebuild)"
+else
+  rm -f "${ipa_stamp_file}"
+  build_ipa
 fi
-run_hook s5-post
-[[ -f "${ipa_path}" ]] || { echo "no ${ipa_path} after export" >&2; exit 1; }
 
 # --- Stage 6: validate, (confirm), upload
 xcrun altool --validate-app -f "${ipa_path}" --type ios \

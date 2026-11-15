@@ -101,10 +101,12 @@ def og_local_path(parsed):
 
 
 def nav_links(rel_page, html):
-    navs = re.findall(r"<nav\b.*?</nav>", html, re.S | re.I)
-    if not navs:
+    # Only the FIRST <nav> is the site nav; a later TOC or breadcrumb <nav> must
+    # neither add links to the comparison nor mask a missing one.
+    nav = re.search(r"<nav\b.*?</nav>", html, re.S | re.I)
+    if not nav:
         return None
-    hrefs = re.findall(r'href="([^"]*)"', "".join(navs))
+    hrefs = re.findall(r'href="([^"]*)"', nav.group(0))
     targets = set()
     for h in hrefs:
         # The home page's own "#features" is the same link a subpage writes as

@@ -385,7 +385,7 @@ elif shot_out="$(python3 "${ASSET_GATES}" screenshots "${SHOTS_DIR}" "${SIZES_FI
     pass screenshot-sizes
   else
     shot_list="$(grep -v '^SUMMARY' <<< "${shot_out}" | tr '\t' ' ' | tr '\n' ';')"
-    fail screenshot-sizes "${shot_bad} of ${shot_checked} not an App Store Connect size: ${shot_list} (sizes: skills/_lib/asc_screenshot_sizes.txt)"
+    fail screenshot-sizes "${shot_bad} of ${shot_checked} not an App Store Connect size: ${shot_list} (allow-list unverified against Apple's current spec: if App Store Connect accepts the size, add it to skills/_lib/asc_screenshot_sizes.txt)"
   fi
 else
   warn screenshot-sizes "asset_gates.py screenshots failed — sizes not checked"

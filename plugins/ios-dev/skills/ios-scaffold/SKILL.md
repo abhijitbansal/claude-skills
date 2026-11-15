@@ -53,3 +53,14 @@ CREATE) — usable in a pre-release hook (`scripts/release-hooks/s1-pre.sh`).
 DRIFT is printed but never fails the check: customised lanes and edited
 listings are expected, so a drift-failing gate would never go green on a real
 repo.
+
+**After a plugin update, expect one red run.** New managed files count as
+missing in every repo scaffolded before they existed: `build.sh` (or
+`app.build_script`), `.claude/rules/swift-lessons-by-symptom.md`,
+`.claude/hooks/guard-generated.sh`, and `.claude/settings.json` when absent. A
+`--check` gate such as `s1-pre.sh` then exits 1 until `scaffold.sh` is run once
+and the new files are committed (an existing `settings.json` is never edited; it
+prints how to wire the hook). A repo that deliberately builds without a
+`build.sh` cannot pass the gate while that file is missing, although
+`validate_app_config.sh` only warns about it: point `app.build_script` at the
+script it does use, or drop `--check` from the gate and read the CREATE lines.

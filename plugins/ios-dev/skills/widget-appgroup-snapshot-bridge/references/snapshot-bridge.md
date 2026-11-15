@@ -83,14 +83,21 @@ nonisolated enum WidgetSnapshotWriter {
         // Reload even on a skipped write: the flag may have changed.
         defer { WidgetCenter.shared.reloadAllTimelines() }
 
+        // Locked: delete the thumbnail files BEFORE Invariant A's early return,
+        // so a locked + transient-empty publish still removes them.
+        if isAppLocked { removeThumbnails(beside: url) }
+
         // INVARIANT A: never clobber a good snapshot with a TRANSIENT-empty one.
         // Before the store settles (iCloud-sync launch) empty is not real — skip
         // and let the post-settle backfill publish. After it settles, empty IS
         // real (user deleted everything): fall through and write the empty
         // snapshot, or the widget shows deleted titles forever.
-        if entries.isEmpty, !storeSettled, snapshotHasEntries(at: url) { return }
-
-        if isAppLocked { removeThumbnails(beside: url) }
+        if entries.isEmpty, !storeSettled, snapshotHasEntries(at: url) {
+            // The kept snapshot's entries still carry thumbnail paths whose files
+            // are now gone; strip the paths when locked (titles stay, per A).
+            if isAppLocked { stripThumbnailPaths(at: url) }
+            return
+        }
 
         let snapshot = WidgetSnapshot(entries: entries, generatedAt: .now)
         do {
@@ -112,6 +119,21 @@ nonisolated enum WidgetSnapshotWriter {
         do { try FileManager.default.removeItem(at: dir) } catch {
             Logger.widgetBridge.error("thumbnail cleanup failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Rewrite the kept snapshot with every `thumbnailRelativePath` set to nil.
+    private static func stripThumbnailPaths(at url: URL) {
+        guard let data = try? Data(contentsOf: url),
+              let existing = try? JSONDecoder().decode(WidgetSnapshot.self, from: data)
+        else { return }
+        let stripped = WidgetSnapshot(
+            entries: existing.entries.map {
+                WidgetSnapshot.Entry(id: $0.id, title: $0.title,
+                                     thumbnailRelativePath: nil, updatedAt: $0.updatedAt)
+            },
+            generatedAt: existing.generatedAt)
+        guard let out = try? JSONEncoder().encode(stripped) else { return }
+        try? out.write(to: url, options: [.atomic, .completeFileProtectionUntilFirstUserAuthentication])
     }
 
     private static func snapshotHasEntries(at url: URL) -> Bool {
@@ -169,10 +191,24 @@ Testing, `@MainActor` suite.
     // Read BEFORE the queue drains: the flag precedes any content write.
     #expect(box.defaults.bool(forKey: WidgetBridge.appLockKey) == true)
     WidgetSnapshotWriter.flush()
-    #expect(try readSnapshot(box.url).entries.count == 1)
+    let kept = try readSnapshot(box.url)
+    #expect(kept.entries.count == 1)
+    // The locked skip still removes thumbnails and strips their paths.
+    #expect(kept.entries.allSatisfy { $0.thumbnailRelativePath == nil })
 }
 ```
 
 Also cover: transient-empty before settle keeps the good snapshot; a locked
 write strips `thumbnailRelativePath` and deletes the thumbnails directory;
 unlock-then-lock in quick succession ends redacted.
+
+## Thumbnail contract
+
+- Widget thumbnails MUST live under `WidgetBridge.thumbnailsDirectory`
+  (`widget-thumbs/`) in the App Group container, and every
+  `thumbnailRelativePath` must be rooted there (e.g. `widget-thumbs/<id>.jpg`).
+  A thumbnail stored anywhere else is not removed by the locked write.
+- The app's thumbnail generator is the only writer into that folder. The writer
+  here never creates thumbnails, so after unlock the app must regenerate them
+  and republish; until then unlocked entries point at missing files and the
+  widget must render a placeholder when the file is absent.

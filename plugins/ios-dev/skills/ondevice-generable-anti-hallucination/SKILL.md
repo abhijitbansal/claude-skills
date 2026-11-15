@@ -67,11 +67,11 @@ prompt, and generation buffer inside the ~4K window:
 
 ```swift
 static let maxModelInputChars = 4000
+static let truncationMarker = "\n\n[… document truncated to fit the on-device model's context window]"
 
 static func clipForModel(_ text: String) -> String {
     guard text.count > maxModelInputChars else { return text }
-    return String(text.prefix(maxModelInputChars))
-        + "\n\n[… document truncated to fit the on-device model's context window]"
+    return String(text.prefix(maxModelInputChars)) + truncationMarker
 }
 ```
 
@@ -79,11 +79,15 @@ The SDK can budget by tokens instead of characters: `SystemLanguageModel.context
 (iOS 26.0) and `tokenCount(for:)` (iOS 26.4, `async throws`). When available,
 budget by token count and keep the character clip as the fallback below 26.4 or
 when `tokenCount` throws (checked against the iOS 27.2 SDK swiftinterface,
-2026-11; the snippet typechecks at 26.0 and 26.4 deployment targets):
+2026-11; the snippet typechecks at 26.0 and 26.4 deployment targets). Give it a
+distinct name and keep the sync `clipForModel` alongside it: an `async` overload
+with the same name wins overload resolution, and un-awaited sync call sites
+(such as the loader in `vision-layout-ocr-grounding`) then stop compiling with
+"expression is 'async' but is not marked with 'await'":
 
 ```swift
-// `truncationMarker` is the "[… document truncated …]" string from the clip above.
-static func clipForModel(_ text: String) async -> String {
+// Uses `truncationMarker` and `maxModelInputChars` from the clip above.
+static func clipForModelByTokens(_ text: String) async -> String {
     if #available(iOS 26.4, *) {
         let model = SystemLanguageModel.default
         let budget = model.contextSize / 2        // headroom: instructions, prompt, output
@@ -93,8 +97,7 @@ static func clipForModel(_ text: String) async -> String {
             return String(text.prefix(keep)) + truncationMarker
         }
     }
-    guard text.count > maxModelInputChars else { return text }
-    return String(text.prefix(maxModelInputChars)) + truncationMarker
+    return clipForModel(text)   // character clip fallback
 }
 ```
 

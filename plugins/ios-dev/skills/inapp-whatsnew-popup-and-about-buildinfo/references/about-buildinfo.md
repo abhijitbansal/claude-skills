@@ -52,13 +52,17 @@ echo "wrote $OUT (commit=$COMMIT, branch=$BRANCH)"
 
 **Sandboxed script phases.** With `ENABLE_USER_SCRIPT_SANDBOXING = YES` (the
 default in new Xcode projects) a Run Script phase cannot write into the source
-tree, and the generated file silently never appears. Either set
-`ENABLE_USER_SCRIPT_SANDBOXING = NO` for that target, declare `$(SRCROOT)/…/BuildInfo.swift`
-as the phase's output file, or skip the phase and call the script from `build.sh`
-or an XcodeGen `preBuildScripts` entry. (The script above was run against a
-scratch directory: it wrote `BuildInfo.swift` and left no temp file behind. The
-sandbox behaviour is stated from Xcode's documented model and not re-run in an
-Xcode build here.)
+tree, and the generated file silently never appears. The dependable options are
+to set `ENABLE_USER_SCRIPT_SANDBOXING = NO` for that target, or to skip the phase
+and call the script from `build.sh` or an XcodeGen `preBuildScripts` entry.
+Declaring `$(SRCROOT)/…/BuildInfo.swift` as the phase's output file is
+**unverified** and probably not enough: the script also writes a `.BuildInfo.XXXXXX`
+temp file in the output directory (an undeclared output) and runs `git rev-parse`
+and `git diff`, which read `.git` (not a declared input), so under the sandbox the
+git calls likely degrade silently to `unknown` or `mktemp` is denied. (The script
+above was run against a scratch directory: it wrote `BuildInfo.swift` and left no
+temp file behind. The sandbox behaviour is reasoned from Xcode's documented model
+and not re-run in an Xcode build here.)
 
 **Gitignore the output** (`<App>/Generated/BuildInfo.swift`) — it changes every
 build (the timestamp alone makes it non-deterministic), so committing it produces

@@ -643,6 +643,7 @@ JSON
   out_has "FAIL: screenshot-sizes"
   out_has "stretched.png"
   out_has "1290x2700"
+  out_has "unverified"
   out_lacks "good.png"
 }
 

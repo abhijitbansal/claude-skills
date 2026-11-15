@@ -111,7 +111,7 @@ Gates:
 | `whatsnew` | `release.whatsnew_file` has an entry for the next version (FAIL in appstore mode, WARN in testflight). SKIP when the key is unset or `--next-version` is absent | add the entry |
 | `inapp-whatsnew` | `release.inapp_changelog_file` has an entry for the next version — sibling gate for the in-app changelog surface, distinct from ASC metadata above; optional (FAIL in appstore mode, WARN in testflight when configured). SKIP when unset or `--next-version` is absent | add the `ChangelogEntry` |
 | `icon-opaque` | the light 1024 px icon in `AppIcon.appiconset` (the 1024x1024 entry of `Contents.json` without `appearances`) has no alpha channel. Dark and tinted variants keep alpha and are never checked. No appiconset, or no light entry, is a WARN, not a pass | re-encode the PNG without alpha (CoreGraphics `noneSkipLast`); the fix reaches App Store Connect only with the next uploaded build |
-| `screenshot-sizes` | appstore mode only: every PNG/JPEG under `marketing/screenshots/` has a pixel size listed in `skills/_lib/asc_screenshot_sizes.txt` (both orientations). SKIP in testflight mode, with no directory, or with no images | re-render at an accepted size; never scale non-uniformly. The size list is one data file: update it there when Apple adds a device class |
+| `screenshot-sizes` | appstore mode only: every PNG/JPEG under `marketing/screenshots/` has a pixel size listed in `skills/_lib/asc_screenshot_sizes.txt` (both orientations); every subfolder is walked, raw or source images included. **The allow-list is unverified** against Apple's current screenshot specification (the iPad block is unsourced), so a FAIL on a size App Store Connect does accept is a list gap, not a bad image. SKIP in testflight mode, with no directory, or with no images | re-render at an accepted size; never scale non-uniformly. The size list is one data file: add the size there once confirmed, and whenever Apple adds a device class |
 
 Report every WARN to the user even when the run continues.
 
@@ -352,7 +352,13 @@ xcrun altool --validate-app -f "build/${APP_NAME}.ipa" --type ios \
   --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
 ```
 
-`--dry-run` stops here, printing what WOULD upload (version, build, mode).
+`--dry-run` stops here, printing what WOULD upload (version, build, mode). It
+records the HEAD, mode and IPA path in `.scratch/release/ipa-built-from`. The
+later `--confirm-upload` run reuses that exact IPA (re-validating and uploading
+it, s5 hooks skipped) only while HEAD and mode are unchanged and `--force` is not
+given; otherwise it archives again. Running `--confirm-upload` without a prior dry
+run archives once, which is the same single archive. Delete the stamp file to force
+a rebuild.
 `release.sh` never prompts: without `--confirm-upload` it stops before the
 upload and says so, so an agent can run the whole flow and still keep the user's
 confirmation.

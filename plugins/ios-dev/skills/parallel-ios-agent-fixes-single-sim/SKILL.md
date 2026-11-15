@@ -25,8 +25,10 @@ description: Fan out multiple subagents to fix a batch of independent code-revie
    git worktree add -b fix/pure-logic ../app-fixP HEAD
    # A fresh worktree has only tracked files: bootstrap before the first build.
    (cd ../app-fixP && xcodegen generate)   # + copy any gitignored local config
+   xcrun simctl shutdown <UDID>             # clone refuses a Booted source (see below)
    xcrun simctl clone <UDID> app-fixP-sim   # new device, same type/runtime/state
    xcrun simctl list devices                 # read the clone's UDID (<UDID2>)
+   xcrun simctl boot <UDID>                  # bring the main simulator back
    xcrun simctl boot <UDID2>
    # subagent builds/tests in ../app-fixP with:
    #   -destination 'platform=iOS Simulator,id=<UDID2>' -derivedDataPath ../app-fixP/build
@@ -36,9 +38,13 @@ description: Fan out multiple subagents to fix a batch of independent code-revie
    files are usually gitignored, so the first `xcodebuild` in a new worktree fails
    on missing files that look like real defects (see Step 2 of
    `superpowers:using-git-worktrees` for the general rule). Cloning an existing
-   device is the cheap way to get a second simulator (`simctl clone <device> <new name>`,
-   usage checked with `xcrun simctl help clone`; not run end to end here); `xcrun simctl create` also
-   works. Scripts elsewhere in this plugin that boot a simulator (`app-preview`)
+   device is the cheap way to get a second simulator (`simctl clone <device> <new name>`),
+   but the source must be shut down: cloning a booted device fails with
+   `Unable to clone device in current state: Booted` (code 405, run against a booted
+   simulator). Because the main simulator is usually in use, `xcrun simctl create
+   <name> <devicetype> <runtime>` is often the easier route: it needs no shutdown
+   and gives a clean device (no copied app data). Only the refusal was run here, not a
+   successful clone. Scripts elsewhere in this plugin that boot a simulator (`app-preview`)
    take `--sim <name|UDID>`: pass the UDID here too.
 
 3. **Run the batches that share core files sequentially**, on the main tree and the main (first) simulator, one at a time — after all parallel batches are dispatched, or interleaved with them, but never concurrently with each other.

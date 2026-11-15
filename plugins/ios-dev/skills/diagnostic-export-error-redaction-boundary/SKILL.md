@@ -77,15 +77,17 @@ names **your own exportable-log sink** (`DiagLog`, `DiagnosticLog`, whatever the
 app calls it) and run it in review or CI:
 
 ```bash
-grep -rnE '(DiagnosticLog|DiagLog).*(localizedDescription|String\(describing: *error)' <source-root>
+grep -rnE '(DiagnosticLog|DiagLog).*(localizedDescription|String\(describing: *e(rr|rror)?\)|\\\(e(rr|rror)?\))' <source-root>
 ```
 
 Run against a sample, it flags a `DiagnosticLog.shared.record("… \(error.localizedDescription)")`
-line and a `DiagLog.add(String(describing: error))` line, and stays quiet on
+line, a `DiagLog.add(String(describing: error))` line and bare-interpolation
+`DiagLog.add("failed: \(error)")`, `\(err)` and `\(e)` lines, and stays quiet on
 `DiagnosticLog.shared.record(DiagnosticErrorRedactor.safeLabel(error))`.
 
 Limits, stated plainly: it only sees a sink name and a raw description **on the
-same line**. An indirect reporter such as `report(.failed(reason: error.localizedDescription))`
+same line**. Bare interpolation is matched only for the variable names `e`, `err`
+and `error`; add your own (`failure`, `underlying`) if the code uses them. An indirect reporter such as `report(.failed(reason: error.localizedDescription))`
 escapes it, so name those reporters in the pattern too, or review them by hand.
 Triage the existing hits first (each is an open item or needs an allowlist), and
 keep test code out of the path.

@@ -243,7 +243,11 @@ echo "xcodebuild $*" >> "${XLOG}"
 case "$*" in
   *-showBuildSettings*)
     mkdir -p "${FAKE_PRODUCTS}/Demo.app"
-    printf '    TARGET_BUILD_DIR = %s\n    FULL_PRODUCT_NAME = Demo.app\n' "${FAKE_PRODUCTS}" ;;
+    printf 'Build settings for action build and target Demo:\n    TARGET_BUILD_DIR = %s\n    FULL_PRODUCT_NAME = Demo.app\n    WRAPPER_EXTENSION = app\n' "${FAKE_PRODUCTS}"
+    # A scheme that also builds a widget prints a second target AFTER the app.
+    if [ -n "${FAKE_EXTRA_TARGET:-}" ]; then
+      printf '\nBuild settings for action build and target DemoWidget:\n    TARGET_BUILD_DIR = %s\n    FULL_PRODUCT_NAME = DemoWidget.appex\n    WRAPPER_EXTENSION = appex\n' "${FAKE_PRODUCTS}"
+    fi ;;
 esac
 exit 0
 SH
@@ -251,6 +255,11 @@ SH
 #!/bin/sh
 echo "xcrun $*" >> "${XLOG}"
 case "$*" in
+  *"simctl list devices booted"*)
+    # FAKE_BOOTED = number of simulators to report as booted (default 1).
+    i=0; while [ "$i" -lt "${FAKE_BOOTED:-1}" ]; do
+      echo "    iPhone Fake $i (AAAAAAAA-0000-0000-0000-00000000000$i) (Booted) "; i=$((i + 1))
+    done ;;
   *"devicectl list devices"*)
     out=""; for a in "$@"; do [ "$prev" = "--json-output" ] && out="$a"; prev="$a"; done
     printf '{"result":{"devices":[{"identifier":"DEV-OFF","connectionProperties":{"tunnelState":"disconnected"}},{"identifier":"DEV-ON","connectionProperties":{"tunnelState":"connected"}}]}}' > "$out" ;;
@@ -273,6 +282,39 @@ SH
   grep -q 'xcodebuild -scheme Demo -configuration Debug -destination generic/platform=iOS Simulator build' "${XLOG}"
   grep -q 'xcrun simctl install booted ' "${XLOG}"
   grep -q 'xcrun simctl launch booted com.example.demo' "${XLOG}"
+}
+
+@test "rendered build.sh installs the .app, not the widget extension, when the scheme builds both" {
+  cd "${TMP}/app"
+  bash "${SCAFFOLD}" >/dev/null
+  build_stubs
+  export FAKE_EXTRA_TARGET=1
+  run bash ./build.sh -s
+  [ "$status" -eq 0 ]
+  grep -q "xcrun simctl install booted ${FAKE_PRODUCTS}/Demo.app" "${XLOG}"
+  [ -z "$(grep -e 'appex' "${XLOG}" || true)" ]
+}
+
+@test "rendered build.sh -s with several simulators booted refuses before building and names the fix" {
+  cd "${TMP}/app"
+  bash "${SCAFFOLD}" >/dev/null
+  build_stubs
+  export FAKE_BOOTED=2
+  run bash ./build.sh -s
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"2 simulators are booted"* ]] || false
+  [[ "$output" == *"-s <name|UDID>"* ]] || false
+  [ -z "$(grep -e '^xcodebuild' -e 'simctl install' "${XLOG}" || true)" ]
+}
+
+@test "rendered build.sh -s <UDID> with several simulators booted still builds that one" {
+  cd "${TMP}/app"
+  bash "${SCAFFOLD}" >/dev/null
+  build_stubs
+  export FAKE_BOOTED=2
+  run bash ./build.sh -s 11111111-1111-1111-1111-111111111111
+  [ "$status" -eq 0 ]
+  grep -q 'xcrun simctl launch 11111111-1111-1111-1111-111111111111 com.example.demo' "${XLOG}"
 }
 
 @test "rendered build.sh -s <UDID> targets that simulator by id" {

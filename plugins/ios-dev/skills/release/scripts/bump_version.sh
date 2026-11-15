@@ -5,13 +5,20 @@ set -euo pipefail
 
 # --print: show what the bump would produce without writing project.yml (Stage 1
 # needs the planned version for preflight's --next-version before Stage 2 bumps).
+USAGE="usage: bump_version.sh [--print] {major|minor|patch|build}"
 PRINT_ONLY=0
-if [[ "${1:-}" == "--print" ]]; then PRINT_ONLY=1; shift; fi
-KIND="${1:-}"
-case "${KIND}" in
-  major|minor|patch|build) ;;
-  *) echo "usage: bump_version.sh [--print] {major|minor|patch|build}" >&2; exit 2 ;;
-esac
+KIND=""
+# Parse every argument: --print in any position, exactly one kind, nothing else.
+for arg in "$@"; do
+  case "${arg}" in
+    --print) PRINT_ONLY=1 ;;
+    major|minor|patch|build)
+      [[ -z "${KIND}" ]] || { echo "unexpected extra argument '${arg}'. ${USAGE}" >&2; exit 2; }
+      KIND="${arg}" ;;
+    *) echo "unknown argument '${arg}'. ${USAGE}" >&2; exit 2 ;;
+  esac
+done
+[[ -n "${KIND}" ]] || { echo "${USAGE}" >&2; exit 2; }
 [[ -f project.yml ]] || { echo "no project.yml here — version bumps happen in project.yml only" >&2; exit 1; }
 
 mv_line="$(grep -E '^[[:space:]]*MARKETING_VERSION:' project.yml | head -1)"
