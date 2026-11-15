@@ -220,6 +220,9 @@ export const register: Register = on => {
       description: 'Open the session compass pane, or open (more), hide or show the band',
       argumentHint: '[more|hide|show]',
     })
+    // View state is per session: a new session handled by this load starts shown and folded.
+    await update($, expanded, () => false)
+    await update($, hidden, () => null)
     const id = await $.session.id()
     const now = await $.clock.now()
     // A new load starts verified; a read that fails twice flips the flag until the store answers.
@@ -291,6 +294,9 @@ export const register: Register = on => {
   on('command.run', { command: 'compass' }, async ($, e) => {
     const arg = e.args.trim().toLowerCase()
     if (arg === 'more') {
+      if ((await read($, hidden)) === goalKey(await read($, record))) {
+        return { text: 'Compass band is hidden. /compass show brings it back; then /compass more expands it.' }
+      }
       const isOpen = await update($, expanded, v => !v)
       return { text: isOpen ? 'Compass band expanded. /compass more folds it.' : 'Compass band folded.' }
     }

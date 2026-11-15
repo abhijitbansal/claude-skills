@@ -100,6 +100,42 @@ test('dismiss and expand live in session state, never in the store', async ($, o
   expect([...world.data.keys()].filter(k => /hid|expand/.test(k))).toEqual([])
 })
 
+test('a new session starts with the band shown and folded, even after hide with no goal', async ($, on) => {
+  startWorld(on)
+  bottom(on)
+  await $.session.start(START)
+  await $.command.run(run('hide'))
+  const ui = await band($, 200)
+  expect(await ui.find({ text: /cubby · / })).toBeUndefined()
+  await $.session.start(START)
+  expect(await ui.find({ text: /cubby · / })).toBeDefined()
+})
+
+test('/compass more while the band is hidden says so and how to show it', async ($, on) => {
+  startWorld(on)
+  bottom(on)
+  await $.session.start(START)
+  await setStatus($, { goal: GOAL, next: NEXT })
+  await $.command.run(run('hide'))
+  const text = (await $.command.run(run('more'))).text
+  expect(text).toMatch(/hidden/)
+  expect(text).toMatch(/\/compass show/)
+  const ui = await band($, 30)
+  await $.command.run(run('show'))
+  // The refused toggle left the band folded.
+  expect(await ui.find({ text: `Next: ${NEXT}` })).toBeUndefined()
+})
+
+test('every row of the expanded band has a key', async ($, on) => {
+  startWorld(on)
+  bottom(on)
+  await $.session.start(START)
+  await setStatus($, { goal: GOAL, step: STEP, next: NEXT })
+  const ui = await band($, 30)
+  await ui.press({ key: 'more' })
+  for (const i of [0, 1, 2, 3]) expect(await ui.find({ key: `row-${i}` })).toBeDefined()
+})
+
 test('an unknown argument lists the accepted ones and opens nothing', async ($, on) => {
   const { world } = startWorld(on)
   await $.session.start(START)

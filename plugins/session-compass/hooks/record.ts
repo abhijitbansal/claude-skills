@@ -1,4 +1,5 @@
 import type { Artifact, SessionRecord } from '../types'
+import { clusters } from './cells'
 
 export const LIMITS = {
   goal: 80,
@@ -16,9 +17,16 @@ export type Where = { repo: string; worktree: string; branch: string }
 
 const STATUS_FIELDS = ['goal', 'step', 'next'] as const
 
+// Cuts to `max` UTF-16 units including the ellipsis, between clusters: never half an emoji.
 export function truncate(text: string, max: number): string {
   const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`
+  if (flat.length <= max) return flat
+  let kept = ''
+  for (const cluster of clusters(flat)) {
+    if (kept.length + cluster.length > max - 1) break
+    kept += cluster
+  }
+  return `${kept}…`
 }
 
 export function basename(path: string): string {

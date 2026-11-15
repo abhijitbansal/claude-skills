@@ -19,8 +19,8 @@ Up to two lines above the prompt: `repo · worktree (branch) · Goal · Now · N
   Otherwise it wraps onto a second line at a space or at a ` · ` separator, using the
   width the host gives the band. Only the end of line two is ever cut, with an `…`.
 - **Full text.** When line two is cut, it ends in `▸ /compass more` (`▸ more` on narrow
-  terminals; nothing under 24 columns). Click it, or type `/compass more`, to show the
-  repo, worktree, branch, goal, step and next in full, wrapped and unshortened. Click
+  terminals; nothing under 24 columns). Press it, or type `/compass more`, to show the
+  repo, worktree, branch, goal, step and next in full, wrapped and unshortened. Press
   `▾ fold` or type `/compass more` again to fold it. `/compass more` works even when
   nothing is cut, since it also shows `next`, which the band never does. An expanded band
   taller than the space above the prompt scrolls: focus it with ctrl+x tab.

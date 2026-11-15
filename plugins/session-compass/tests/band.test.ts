@@ -1,5 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { formatBand, fullLines, hintLabel, hintReserve, tally, wrapTwo } from '../hooks/band'
+import { cellWidth } from '../hooks/cells'
 import { newRecord } from '../hooks/record'
 
 const rec = {
@@ -103,4 +104,75 @@ test('fullLines carries every character of goal, step and next', () => {
   ])
   expect(fullLines({ ...rec, goal: undefined, step: undefined, firstPrompt: 'fix it' })[1])
     .toBe('Goal: "fix it" (no goal set)')
+})
+
+const FAMILY = '👨‍👩‍👧'
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+const rows = (line: { text: string; second?: string }): string => `${line.text}\n${line.second ?? ''}`
+
+test('cellWidth counts terminal cells: wide and emoji 2, combining and joiners 0', () => {
+  expect(cellWidth('abc')).toBe(3)
+  expect(cellWidth('✓ ✗ · …')).toBe(7)
+  expect(cellWidth('日本語')).toBe(6)
+  expect(cellWidth('👍')).toBe(2)
+  expect(cellWidth(FAMILY)).toBe(2)
+  expect(cellWidth('é')).toBe(1)
+  expect(cellWidth('🇯🇵')).toBe(2)
+})
+
+test('a CJK goal is measured in cells, so neither line overflows', () => {
+  const cjk = { ...rec, goal: '修复条码回退并更新文档'.repeat(5) }
+  // An independent count: this text is ASCII and CJK only, and every CJK character is two cells.
+  const cells = (s: string): number => [...s].reduce((n, ch) => n + ((ch.codePointAt(0) ?? 0) >= 0x2e80 ? 2 : 1), 0)
+  for (const columns of [30, 60, 90]) {
+    const line = formatBand(cjk, undefined, columns)
+    expect(cells(line.text)).toBeLessThanOrEqual(columns)
+    const reserve = line.isCut === true ? hintReserve(columns) : 0
+    expect(cells(line.second ?? '') + reserve).toBeLessThanOrEqual(columns)
+  }
+})
+
+test('an emoji goal is cut on whole emoji: no lone surrogate, no split joiner sequence', () => {
+  const emoji = { ...rec, goal: Array.from({ length: 30 }, () => '🚀').join('') }
+  const family = { ...rec, goal: `ok ${FAMILY.repeat(25)}` }
+  for (const columns of [25, 40, 61]) {
+    for (const r of [emoji, family]) {
+      const line = formatBand(r, undefined, columns)
+      expect(LONE_SURROGATE.test(rows(line))).toBe(false)
+      expect(cellWidth(line.text)).toBeLessThanOrEqual(columns)
+      expect(cellWidth(line.second ?? '') + (line.isCut === true ? hintReserve(columns) : 0)).toBeLessThanOrEqual(columns)
+    }
+  }
+  const cut = formatBand(family, undefined, 40)
+  expect(/[\u{1F468}\u{1F469}\u{1F467}‍]/u.test(rows(cut).replaceAll(FAMILY, ''))).toBe(false)
+})
+
+test('a width that is 0, negative, undefined or NaN falls back to a sensible width', () => {
+  for (const columns of [0, -5, Number.NaN, undefined as unknown as number]) {
+    const line = formatBand(long, TESTS, columns)
+    expect(rows(line)).not.toContain('NaN')
+    expect(cellWidth(line.text)).toBeGreaterThan(10)
+    expect(cellWidth(line.text)).toBeLessThanOrEqual(80)
+    expect(cellWidth(line.second ?? '')).toBeLessThanOrEqual(80)
+    expect(hintLabel(columns)).toBe('▸ /compass more')
+  }
+  expect(wrapTwo('x y', Number.NaN)).toEqual({ first: 'x y', isCut: false })
+})
+
+test('a long unbroken token fills line one and continues on line two', () => {
+  const url = 'https://example.com/a/very/long/path/that/goes/on'
+  const wrapped = wrapTwo(`see ${url}`, 30)
+  expect(wrapped.first.startsWith('see https://')).toBe(true)
+  expect(cellWidth(wrapped.first)).toBeLessThanOrEqual(30)
+  expect(`${wrapped.first.slice(4)}${wrapped.second}`).toBe(url)
+  expect(wrapped.isCut).toBe(false)
+  // A short word still moves whole to the next line.
+  expect(wrapTwo('see refresh', 8)).toEqual({ first: 'see', second: 'refresh', isCut: false })
+})
+
+test('a warning wider than the band still hints at the full text', () => {
+  const line = formatBand(rec, { passed: 0, failed: 0, warnings: 10_000_000 }, 26)
+  expect(line.text.startsWith('tests: 10000000 warnings')).toBe(true)
+  expect(line.isCut).toBe(true)
+  expect(hintLabel(26)).not.toBe('')
 })

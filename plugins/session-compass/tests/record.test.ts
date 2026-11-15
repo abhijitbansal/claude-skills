@@ -1,8 +1,17 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Artifact } from '../types'
 import {
-  LIMITS, addArtifact, applyStatus, newRecord, orderIndex, sortByActive, withFirstPrompt, ago,
+  LIMITS, addArtifact, applyStatus, newRecord, orderIndex, sortByActive, truncate, withFirstPrompt, ago,
 } from '../hooks/record'
+
+describe('truncate', () => {
+  test('never leaves half of a surrogate pair or a split emoji sequence', () => {
+    const family = '👨‍👩‍👧'
+    const cut = truncate(`a${family}${family}`, 10)
+    expect(cut).toBe(`a${family}…`)
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(truncate('a🚀🚀🚀', 3))).toBe(false)
+  })
+})
 
 const WHERE = { repo: 'cubby', worktree: '/w/feature-scan', branch: 'feature/scan' }
 const base = () => newRecord('s1', WHERE, 1000)
