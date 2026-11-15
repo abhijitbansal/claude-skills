@@ -6,12 +6,15 @@
 // `wav` is the file name of the shot's narration beside the sidecar, or null for a shot without `say`. Every time is in
 // seconds from the first sample of that shot's WAV, rounded to TIME_STEP; `seconds` is the WAV's length. The sidecar
 // holds no film-level time: where a shot sits in the film is the timeline's business.
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { parseSay } from '../../../engine/script/say.mjs';
 import { SAMPLE_RATE } from './words.mjs';
 
 export const SIDECAR_VERSION = 1;
 export const SIDECAR_FILE = 'voice.json';
+/** The file name of shot `index`'s narration beside the sidecar; the only name a sidecar may give. */
+export const wavName = (index) => `shot-${index}.wav`;
 const TIME_STEPS_PER_SECOND = 1e4;
 const JSON_INDENT = 2;
 
@@ -50,11 +53,20 @@ export function readSidecar(file) {
   }
 }
 
-/** Writes `data` as JSON to `file`, through a temporary file renamed into place, so a reader never sees half a file. */
+/**
+ * Writes `data` as JSON to `file`, through a temporary file renamed into place, so a reader never sees half a file.
+ * The temporary name is unique to this write and created exclusively (never through a planted file or link); it is
+ * removed when the write or the rename fails.
+ */
 export function writeSidecar(file, data) {
-  const partial = `${file}.partial-${process.pid}`;
-  writeFileSync(partial, `${JSON.stringify(data, null, JSON_INDENT)}\n`);
-  renameSync(partial, file);
+  const partial = `${file}.partial-${process.pid}-${randomUUID()}`;
+  try {
+    writeFileSync(partial, `${JSON.stringify(data, null, JSON_INDENT)}\n`, { flag: 'wx' });
+    renameSync(partial, file);
+  } catch (err) {
+    rmSync(partial, { force: true });
+    throw err;
+  }
 }
 
 const fail = (where, message) => {
@@ -70,7 +82,10 @@ function checkWord(w, where, seconds) {
 
 function checkShotWords(shot, where, tokens) {
   if (!Array.isArray(shot.sentences)) fail(`${where}.sentences`, 'must be an array');
-  const count = shot.sentences.reduce((n, s) => n + (Array.isArray(s?.words) ? s.words.length : 0), 0);
+  shot.sentences.forEach((s, i) => {
+    if (!Array.isArray(s?.words)) fail(`${where}.sentences[${i}].words`, 'must be an array of words');
+  });
+  const count = shot.sentences.reduce((n, s) => n + s.words.length, 0);
   if (count !== tokens.length) fail(`${where}.sentences`, `has ${count} words, the film's say has ${tokens.length}`);
   let k = 0;
   shot.sentences.forEach((sentence, s) => sentence.words.forEach((w, i) => {
@@ -81,13 +96,23 @@ function checkShotWords(shot, where, tokens) {
   }));
 }
 
+// A shot's WAV is null (no narration, or nothing speakable: then 0 s) or exactly shot-<index>.wav beside the sidecar,
+// so no sidecar can make a reader open a file anywhere else.
+function checkWav(shot, where, index, hasSay) {
+  if (!hasSay && shot.wav !== null) fail(`${where}.wav`, `must be null for a shot without say, got ${JSON.stringify(shot.wav)}`);
+  if (shot.wav === null) {
+    if (shot.seconds !== 0) fail(`${where}.wav`, `is null, so the shot has no narration time, but seconds is ${JSON.stringify(shot.seconds)}`);
+    return;
+  }
+  if (shot.wav !== wavName(index)) fail(`${where}.wav`, `must be ${JSON.stringify(wavName(index))} or null, got ${JSON.stringify(shot.wav)}`);
+}
+
 function checkShot(shot, filmShot, index) {
   const where = `shots[${index}]`;
   if (shot?.id !== filmShot.id) fail(`${where}.id`, `expected ${JSON.stringify(filmShot.id)} (the film's shot), got ${JSON.stringify(shot?.id)}`);
   const hasSay = filmShot.say !== undefined && filmShot.say !== null;
-  if (hasSay && (typeof shot.wav !== 'string' || shot.wav === '')) fail(`${where}.wav`, 'must name the WAV of a shot with narration');
-  if (!hasSay && shot.wav !== null) fail(`${where}.wav`, `must be null for a shot without say, got ${JSON.stringify(shot.wav)}`);
   if (!isTime(shot.seconds)) fail(`${where}.seconds`, `must be a number of seconds, 0 or more, got ${JSON.stringify(shot.seconds)}`);
+  checkWav(shot, where, index, hasSay);
   checkShotWords(shot, where, hasSay ? parseSay(filmShot.say).tokens : []);
 }
 

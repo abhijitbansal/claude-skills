@@ -1,42 +1,99 @@
 // A film's narration as WAVs and a sidecar of word times, cached by a hash of everything that shapes them.
-// Files live in <outDir>/.voice/<hash>/: voice.json (the sidecar) and shot-<index>.wav per narrated shot. A hit reads
-// and validates the sidecar and spawns nothing. A miss writes a job file and runs `node worker.mjs <job.json>` through
-// execFile (an argument array, never a shell; the film's text is only ever inside the job file). This process never
-// imports the optional voice package: only the worker does.
-import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+// Files live in <outDir>/.voice/<hash>/: voice.json (the sidecar) and shot-<index>.wav per shot with sound.
+// A hit reads and checks the entry and starts nothing; a corrupt or incomplete entry is removed and made again.
+// A miss fetches and checks the pinned model here, then runs `node worker.mjs <job.json>` through spawn (an argument
+// array, never a shell; the film's text is only ever inside the job file) in a staging folder of its own, which is
+// renamed into place when the worker succeeds and removed on every other path. This process never imports the
+// optional voice package: only the worker does.
+//
+// Failures reject with a VoiceSynthError carrying `kind` ('film': the author fixes the narration; 'machine': the
+// package, the runtime, the model, a timeout or this machine) and a one-line `hint`; a film error that belongs to one
+// shot also carries `shot`, that shot's id.
+import { spawn as spawnChild } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
+import { once } from 'node:events';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { registries } from '../../../engine/registry.mjs';
-import '../../../engine/modes/index.mjs';
+import { VOICE_SPEED_MAX, VOICE_SPEED_MIN } from '../../../engine/modes/index.mjs';
+import { optionalInstall } from '../../lib/doctor-hint.mjs';
 import { OPTIONAL_ROOT } from '../../lib/optional.mjs';
 import { ASIDE_SPEED_FACTOR, MAX_IDS } from './calls.mjs';
-import { MODEL_INFO, checkVoice } from './kokoro.mjs';
-import { voiceModelDir } from './model.mjs';
+import { STYLE_DIM, checkVoice } from './kokoro.mjs';
+import { VOICE_MODEL, ensureVoiceModel, voiceModelDir } from './model.mjs';
 import { SIDECAR_FILE, SIDECAR_VERSION, readSidecar, validateSidecar } from './sidecar.mjs';
-import { JOB_VERSION, SILENCE_QUANTUM_SAMPLES, TRIM } from './worker.mjs';
+import { ERROR_MARKER, INSTALL_HINT, JOB_VERSION, SILENCE_QUANTUM_SAMPLES, TRIM } from './worker.mjs';
 import { END_CAP_FRAMES, FRAME_SAMPLES, LEAD, SAMPLE_RATE } from './words.mjs';
 
-export const WORKER_PATH = fileURLToPath(new URL('./worker.mjs', import.meta.url));
+const VOICE_DIR = path.dirname(fileURLToPath(import.meta.url));
+export const WORKER_PATH = path.join(VOICE_DIR, 'worker.mjs');
+/** The sources whose bytes shape the sidecar and the WAVs: every voice module the worker loads, and say.mjs. */
+export const CODE_FILES = Object.freeze([
+  ...['words', 'calls', 'phonemes', 'tokens', 'kokoro', 'worker', 'sidecar'].map((name) => path.join(VOICE_DIR, `${name}.mjs`)),
+  path.resolve(VOICE_DIR, '../../../engine/script/say.mjs'),
+]);
+/** Every constant from outside those sources that reaches the audio or the times (theirs are in the code hash too). */
+export const HASH_CONSTANTS = Object.freeze({
+  lead: LEAD,
+  trim: TRIM,
+  frameSamples: FRAME_SAMPLES,
+  sampleRate: SAMPLE_RATE,
+  endCapFrames: END_CAP_FRAMES,
+  asideSpeedFactor: ASIDE_SPEED_FACTOR,
+  maxIds: MAX_IDS,
+  silenceQuantumSamples: SILENCE_QUANTUM_SAMPLES,
+  styleDim: STYLE_DIM,
+  voiceSpeedMin: VOICE_SPEED_MIN,
+  voiceSpeedMax: VOICE_SPEED_MAX,
+});
+/** The pinned model as the key sees it: the repo, the commit and every file's SHA-256. */
+export const MODEL_PIN = Object.freeze({
+  id: VOICE_MODEL.id,
+  commit: VOICE_MODEL.commit,
+  files: Object.freeze(VOICE_MODEL.files.map(({ path: file, sha256 }) => Object.freeze({ path: file, sha256 }))),
+});
 export const CACHE_DIR = '.voice';
-const DEFAULT_MODE = 'pro';
-const MAX_OUTPUT_BYTES = 16 * 1024 * 1024;
 export const DEFAULT_TIMEOUT_SECONDS = 600;
+const DEFAULT_MODE = 'pro';
 const MS_PER_SECOND = 1000;
+const STDERR_TAIL_LINES = 20;
+const WAV_HEADER_BYTES = 44;
+const BYTES_PER_SAMPLE = 2;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+const RERUN_HINT = `run again; if it repeats, reinstall the voice package: ${optionalInstall('kokoro')}`;
 
 export class VoiceSynthError extends Error {
-  constructor(message, options) {
-    super(message, options);
-    this.name = 'VoiceSynthError';
+  constructor(message, { kind, hint, shot, exitCode = null, signal = null, timedOut = false, cause } = {}) {
+    super(message, cause === undefined ? undefined : { cause });
+    Object.assign(this, { name: 'VoiceSynthError', kind, hint, exitCode, signal, timedOut });
+    if (shot !== undefined) this.shot = shot;
   }
 }
+
+const machine = (message, hint, extra = {}) => new VoiceSynthError(message, { kind: 'machine', hint, ...extra });
+const sha256Hex = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 function sortKeys(value) {
   if (Array.isArray(value)) return value.map(sortKeys);
   if (value === null || typeof value !== 'object') return value;
   return Object.fromEntries(Object.keys(value).sort().map((key) => [key, sortKeys(value[key])]));
 }
+
+/** SHA-256 hex over the files' names and the SHA-256 of their bytes, in order. */
+export function sourceHash(files) {
+  const hash = createHash('sha256');
+  for (const file of files) hash.update(`${path.basename(file)}\0${sha256Hex(readFileSync(file))}\n`);
+  return hash.digest('hex');
+}
+
+let codeSha256 = null;
+// The code hash of this run, computed once.
+const codeHash = () => {
+  codeSha256 ??= sourceHash(CODE_FILES);
+  return codeSha256;
+};
 
 // The film's mode's voice pace, from the modes registry (its own error for an unknown mode).
 function paceOf(film) {
@@ -47,79 +104,189 @@ function paceOf(film) {
 const sayOf = (shot) => shot.say ?? null;
 
 /**
- * SHA-256 hex of a canonical JSON (keys sorted) of what shapes the sidecar: each shot's id and say in order, the mode's
- * voiceSpeed and emphasisPause, the voice name, the model hash, the lead constants, the pad-trim settings (`trim`,
- * default worker.mjs TRIM) and the other timing constants.
+ * SHA-256 hex of a canonical JSON (keys sorted) of everything that shapes the sidecar: each shot's id and say in
+ * order, the mode's voiceSpeed and emphasisPause, the voice name, `code` (the code hash; default the CODE_FILES of
+ * this run), `runtimeLock` (the SHA-256 of the runtime's package-lock.json: phonemizer, eSpeak data, onnxruntime),
+ * `model` (default MODEL_PIN, every pinned file) and `constants` (default HASH_CONSTANTS).
  */
-export function voiceHash(film, { voice, modelSha256, lead = LEAD, trim = TRIM }) {
+export function voiceHash(film, { voice, runtimeLock, code = codeHash(), model = MODEL_PIN, constants = HASH_CONSTANTS }) {
+  if (!SHA256_HEX.test(String(runtimeLock))) throw new TypeError('voiceHash: runtimeLock must be the SHA-256 hex of the runtime lockfile');
   const input = {
     sidecarVersion: SIDECAR_VERSION,
     voice,
-    modelSha256,
     pace: paceOf(film),
-    timing: {
-      lead,
-      trim,
-      frameSamples: FRAME_SAMPLES,
-      sampleRate: SAMPLE_RATE,
-      endCapFrames: END_CAP_FRAMES,
-      asideSpeedFactor: ASIDE_SPEED_FACTOR,
-      maxIds: MAX_IDS,
-      silenceQuantumSamples: SILENCE_QUANTUM_SAMPLES,
-    },
+    code,
+    runtimeLock,
+    model,
+    constants,
     shots: film.shots.map((shot) => ({ id: shot.id, say: sayOf(shot) })),
   };
   return createHash('sha256').update(JSON.stringify(sortKeys(input))).digest('hex');
 }
 
-// The sidecar in `dir`, validated against the film, with every WAV it names present.
-function readValid(dir, film) {
+// The SHA-256 of the runtime folder's lockfile; machine trouble with the install hint when there is none.
+function lockHash(runtime) {
+  const file = path.join(runtime, 'package-lock.json');
+  if (!existsSync(file)) throw machine(`${file} is missing, so the optional voice package cannot be used`, INSTALL_HINT);
+  return sha256Hex(readFileSync(file));
+}
+
+// The sample count in a 16-bit WAV's header, or -1 when the file has no data chunk where encodeWav puts it.
+function wavSamples(file) {
+  const header = Buffer.alloc(WAV_HEADER_BYTES);
+  const fd = openSync(file, 'r');
   try {
-    const sidecar = validateSidecar(readSidecar(path.join(dir, SIDECAR_FILE)), film);
-    const missing = sidecar.shots.find((shot) => shot.wav !== null && !existsSync(path.join(dir, shot.wav)));
-    if (missing) throw new VoiceSynthError(`shots: ${missing.wav} is missing`);
-    return sidecar;
-  } catch (err) {
-    throw new VoiceSynthError(`the voice in ${dir} does not match the film: ${err.message}; delete that folder to synthesise it again`, { cause: err });
+    const read = readSync(fd, header, 0, WAV_HEADER_BYTES, 0);
+    return read === WAV_HEADER_BYTES && header.toString('ascii', 36, 40) === 'data' ? header.readUInt32LE(40) / BYTES_PER_SAMPLE : -1;
+  } finally {
+    closeSync(fd);
   }
 }
 
-const lastLine = (text) => text.split('\n').map((l) => l.trim()).filter((l) => l !== '').at(-1);
+function wavProblem(dir, shot) {
+  if (shot.wav === null) return null;
+  const file = path.join(dir, shot.wav);
+  if (!existsSync(file)) return `${shot.wav} is missing`;
+  const expected = Math.round(shot.seconds * SAMPLE_RATE);
+  const samples = wavSamples(file);
+  return samples === expected ? null : `${shot.wav} holds ${samples} samples, the sidecar says ${expected}`;
+}
 
-function workerError(err, stderr) {
-  const error = new VoiceSynthError(lastLine(String(stderr ?? '')) ?? `the voice worker failed: ${err.message}`, { cause: err });
-  return Object.assign(error, { exitCode: typeof err.code === 'number' ? err.code : null, timedOut: false });
+// { sidecar } when the entry in `dir` is complete and matches the film, else { problem }.
+function readEntry(dir, film) {
+  try {
+    const sidecar = validateSidecar(readSidecar(path.join(dir, SIDECAR_FILE)), film);
+    const problem = sidecar.shots.map((shot) => wavProblem(dir, shot)).find((p) => p !== null);
+    return problem === undefined ? { sidecar } : { problem };
+  } catch (err) {
+    return { problem: err.message };
+  }
+}
+
+// The cached sidecar, or null on a miss. A corrupt or incomplete entry is logged once and removed: it is this
+// module's own cache and can always be made again.
+function cachedSidecar(dir, film, log) {
+  if (!existsSync(dir)) return null;
+  const { sidecar, problem } = readEntry(dir, film);
+  if (sidecar) {
+    log(`voice: cached in ${dir}`);
+    return sidecar;
+  }
+  log(`voice: the cache entry ${dir} is incomplete (${problem}); removing it and synthesising again`);
+  rmSync(dir, { recursive: true, force: true });
+  return null;
+}
+
+const refuseDownload = () => Promise.reject(new Error('offline: no model file is downloaded'));
+
+// Fetches (unless offline) and checks the pinned model before the worker starts, so the timeout covers synthesis only.
+async function ensureModelFirst(ensureModel, dir, offline, log) {
+  try {
+    await ensureModel({ dir, log, ...(offline ? { fetchImpl: refuseDownload } : {}) });
+  } catch (err) {
+    const hint = offline
+      ? `run once without offline so the pinned voice model is fetched into ${dir}`
+      : `check the connection and run again; a file that keeps failing its pinned hash can be deleted from ${dir} so it is fetched again`;
+    throw machine(String(err?.message ?? err).split('\n')[0], hint, { cause: err });
+  }
+}
+
+const lineReader = (stream, onLine) => {
+  const reader = createInterface({ input: stream });
+  reader.on('line', (line) => {
+    if (line.trim() !== '') onLine(line);
+  });
+  return once(reader, 'close');
+};
+
+// The worker's classified error from its last stderr line, or null when that line is not one. A film error keeps the
+// `shot` it names; machine trouble never carries one.
+function markedError(line) {
+  if (!line?.startsWith(ERROR_MARKER)) return null;
+  try {
+    const { kind, message, hint, shot } = JSON.parse(line.slice(ERROR_MARKER.length));
+    if (typeof message !== 'string') return null;
+    const marked = { kind: kind === 'film' ? 'film' : 'machine', message, hint: String(hint ?? RERUN_HINT) };
+    return marked.kind === 'film' && typeof shot === 'string' ? { ...marked, shot } : marked;
+  } catch {
+    return null;
+  }
+}
+
+function workerError(code, signal, tail) {
+  const last = tail.at(-1);
+  const marked = markedError(last);
+  if (marked) return new VoiceSynthError(marked.message, { ...marked, exitCode: code, signal });
+  const what = signal ? `the voice worker was killed by ${signal}` : `the voice worker exited with code ${code}`;
+  return machine(last ? `${what}: ${last}` : what, RERUN_HINT, { exitCode: code, signal });
 }
 
 /**
- * Runs the worker on `jobFile` through `spawn` (execFile's signature, returning the child). -> its stdout; rejects
- * with its last stderr line, or, when it has not finished after `timeoutSeconds`, kills it (SIGKILL) and rejects with
- * an error that says so (`timedOut: true`).
+ * Runs the worker on `jobFile` through `spawn` (child_process.spawn's signature). Its stdout lines go to `log` as they
+ * come. Resolves on exit 0; rejects with its classified error, or, when it has not finished after `timeoutSeconds`,
+ * kills it (SIGKILL) and rejects with machine trouble that says so (`timedOut: true`).
  */
-function runWorker(spawn, jobFile, timeoutSeconds) {
+function runWorker(spawn, jobFile, timeoutSeconds, log) {
   return new Promise((resolve, reject) => {
     let settled = false;
-    let timer;
+    let timer = null;
+    const tail = [];
+    const keepTail = (line) => {
+      tail.push(line);
+      if (tail.length > STDERR_TAIL_LINES) tail.shift();
+    };
     const settle = (fn, value) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       fn(value);
     };
-    const child = spawn(process.execPath, [WORKER_PATH, jobFile], { maxBuffer: MAX_OUTPUT_BYTES, windowsHide: true }, (err, stdout, stderr) => {
-      if (err) settle(reject, workerError(err, stderr));
-      else settle(resolve, String(stdout ?? ''));
-    });
-    if (settled) return;
+    const child = spawn(process.execPath, [WORKER_PATH, jobFile], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    const streamsDone = Promise.all([lineReader(child.stdout, log), lineReader(child.stderr, keepTail)]);
     timer = setTimeout(() => {
-      child?.kill?.('SIGKILL');
-      const error = new VoiceSynthError(`the voice worker did not finish within ${timeoutSeconds} s and was killed`);
-      settle(reject, Object.assign(error, { exitCode: null, timedOut: true }));
+      child.kill('SIGKILL');
+      const hint = `run again; a long film may need a larger timeoutSeconds than ${timeoutSeconds}`;
+      settle(reject, machine(`the voice worker did not finish within ${timeoutSeconds} s and was killed`, hint, { timedOut: true }));
     }, timeoutSeconds * MS_PER_SECOND);
+    child.on('error', (err) => settle(reject, machine(`the voice worker could not start: ${err.message}`, RERUN_HINT, { cause: err })));
+    child.on('close', (code, signal) => {
+      streamsDone.then(() => (code === 0 ? settle(resolve) : settle(reject, workerError(code, signal, tail))));
+    });
   });
 }
 
-const OPTIONS = Object.freeze(['outDir', 'voice', 'spawn', 'log', 'runtime', 'modelDir', 'offline', 'timeoutSeconds']);
+// Moves the finished staging folder into place. When a concurrent run published the same entry first, its entry is
+// kept (it is checked like any other).
+function publish(staging, dir) {
+  try {
+    renameSync(staging, dir);
+  } catch (err) {
+    if (err.code !== 'ENOTEMPTY' && err.code !== 'EEXIST') throw err;
+  }
+}
+
+// Runs the worker in a fresh staging folder (unique name, created exclusively, as is the job file in it) and
+// publishes the folder as `dir`. The staging folder is removed on every path.
+async function synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log, timeoutSeconds }) {
+  mkdirSync(path.dirname(dir), { recursive: true });
+  const staging = `${dir}.partial-${process.pid}-${randomUUID()}`;
+  mkdirSync(staging);
+  try {
+    const { voiceSpeed, emphasisPause } = paceOf(film);
+    const shots = film.shots.map((shot) => ({ id: shot.id, say: sayOf(shot) }));
+    const job = { version: JOB_VERSION, dir: staging, shots, speed: voiceSpeed, emphasisPause, voice, runtime, modelDir };
+    const jobFile = path.join(staging, 'job.json');
+    writeFileSync(jobFile, `${JSON.stringify(job)}\n`, { flag: 'wx' });
+    log(`voice: synthesising ${shots.filter((s) => s.say !== null).length} narrated shots`);
+    await runWorker(spawn, jobFile, timeoutSeconds, log);
+    rmSync(jobFile);
+    publish(staging, dir);
+  } finally {
+    rmSync(staging, { recursive: true, force: true });
+  }
+}
+
+const OPTIONS = Object.freeze(['outDir', 'voice', 'spawn', 'log', 'runtime', 'modelDir', 'offline', 'timeoutSeconds', 'ensureModel']);
 
 function checkOptions(options) {
   const unknown = Object.keys(options).filter((key) => !OPTIONS.includes(key));
@@ -134,40 +301,24 @@ function checkOptions(options) {
 
 /**
  * The film's narration. -> Promise<{ dir, sidecar, cached }>. Options: `outDir` (the cache goes in <outDir>/.voice/),
- * `voice` ('af_heart'), `spawn` (execFile's signature; a test seam), `log(line)`, and the worker's two locations,
- * `runtime` (the optional voice package folder, default <skill>/optional/voice) and `modelDir` (default the model's
- * cache folder), `offline` (true: the worker refuses to download a missing model file) and `timeoutSeconds` (default
- * DEFAULT_TIMEOUT_SECONDS: after that the worker is killed and the call rejects with `timedOut: true`).
+ * `voice` ('af_heart'), `log(line)`, `runtime` (the optional voice package folder, default <skill>/optional/voice) and
+ * `modelDir` (default the model's cache folder), `offline` (true: a missing model file is not downloaded),
+ * `timeoutSeconds` (default DEFAULT_TIMEOUT_SECONDS, synthesis only) and two test seams: `spawn`
+ * (child_process.spawn's signature) and `ensureModel` (ensureVoiceModel's). Rejects with a VoiceSynthError
+ * ({ kind, hint, exitCode, signal, timedOut }); option mistakes are TypeErrors.
  */
 export async function synthesiseFilm(film, options = {}) {
   checkOptions(options);
-  const { outDir, voice, spawn = execFile, log = () => {}, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS } = options;
-  const dir = path.join(outDir, CACHE_DIR, voiceHash(film, { voice, modelSha256: MODEL_INFO.sha256, lead: LEAD }));
-  if (existsSync(path.join(dir, SIDECAR_FILE))) {
-    log(`voice: cached in ${dir}`);
-    return { dir, sidecar: readValid(dir, film), cached: true };
-  }
-  mkdirSync(dir, { recursive: true });
-  const { voiceSpeed, emphasisPause } = paceOf(film);
-  const job = {
-    version: JOB_VERSION,
-    dir,
-    shots: film.shots.map((shot) => ({ id: shot.id, say: sayOf(shot) })),
-    speed: voiceSpeed,
-    emphasisPause,
-    voice,
-    runtime: options.runtime ?? path.join(OPTIONAL_ROOT, 'voice'),
-    modelDir: options.modelDir ?? voiceModelDir(),
-    offline: options.offline ?? false,
-  };
-  const jobFile = path.join(dir, `job-${process.pid}.json`);
-  writeFileSync(jobFile, `${JSON.stringify(job)}\n`);
-  log(`voice: synthesising ${job.shots.filter((s) => s.say !== null).length} narrated shots`);
-  try {
-    const stdout = await runWorker(spawn, jobFile, timeoutSeconds);
-    stdout.split('\n').filter((line) => line.trim() !== '').forEach((line) => log(line));
-  } finally {
-    rmSync(jobFile, { force: true });
-  }
-  return { dir, sidecar: readValid(dir, film), cached: false };
+  const { outDir, voice, log = () => {}, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS } = options;
+  const { spawn = spawnChild, ensureModel = ensureVoiceModel } = options;
+  const runtime = options.runtime ?? path.join(OPTIONAL_ROOT, 'voice');
+  const modelDir = options.modelDir ?? voiceModelDir();
+  const dir = path.join(outDir, CACHE_DIR, voiceHash(film, { voice, runtimeLock: lockHash(runtime) }));
+  const cached = cachedSidecar(dir, film, log);
+  if (cached) return { dir, sidecar: cached, cached: true };
+  await ensureModelFirst(ensureModel, modelDir, options.offline ?? false, log);
+  await synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log, timeoutSeconds });
+  const made = readEntry(dir, film);
+  if (!made.sidecar) throw machine(`the voice worker finished, but its output in ${dir} is incomplete: ${made.problem}`, RERUN_HINT);
+  return { dir, sidecar: made.sidecar, cached: false };
 }

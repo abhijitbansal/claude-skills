@@ -1,31 +1,28 @@
-// Narration synthesis: the model call (kokoro.mjs), the child-process worker (worker.mjs) and the cache (synth.mjs).
-// Every test but the last runs without the optional voice install and without the model, through fakes. The last one
-// synthesises a fixture film for real and is skipped unless the runtime and all five pinned model files are present
-// locally; it never downloads.
+// Narration synthesis: the model call (kokoro.mjs), the worker's shot assembly (worker.mjs) and the cache
+// (synth.mjs), all through fakes, without the optional voice install or the model. No test downloads. The worker as a
+// child process and the real-model integration tests are in voice-worker.test.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { EventEmitter } from 'node:events';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { PassThrough } from 'node:stream';
 import { parseSay } from '../../engine/script/say.mjs';
 import { ACCEPTED_VOICES, STYLE_DIM, editCall, openKokoro, planShotCalls, prepareCall } from '../../scripts/v2/voice/kokoro.mjs';
 import {
-  FADE_SAMPLES, INSTALL_HINT, LEAD_KEEP_MS, SILENCE_QUANTUM_SAMPLES, TRIM, encodeWav, synthesiseShot, trimPads,
+  ERROR_MARKER, FADE_SAMPLES, INSTALL_HINT, LEAD_KEEP_MS, SILENCE_QUANTUM_SAMPLES, TRIM, encodeWav, sidecarShot,
+  synthesiseShot, trimPads,
 } from '../../scripts/v2/voice/worker.mjs';
-import { WORKER_PATH, synthesiseFilm, voiceHash } from '../../scripts/v2/voice/synth.mjs';
+import {
+  CODE_FILES, HASH_CONSTANTS, MODEL_PIN, WORKER_PATH, sourceHash, synthesiseFilm, voiceHash,
+} from '../../scripts/v2/voice/synth.mjs';
 import { readSidecar, sentencesOf, writeSidecar } from '../../scripts/v2/voice/sidecar.mjs';
 import { EMBEDDED_VOCAB } from '../../scripts/v2/voice/tokens.mjs';
 import { LEAD, SAMPLE_RATE } from '../../scripts/v2/voice/words.mjs';
 import { MAX_IDS, planCalls } from '../../scripts/v2/voice/calls.mjs';
-import { VOICE_MODEL, voiceModelDir } from '../../scripts/v2/voice/model.mjs';
-import { OPTIONAL_ROOT } from '../../scripts/lib/optional.mjs';
-import { optionalInstall } from '../../scripts/lib/doctor-hint.mjs';
+import { VOICE_MODEL } from '../../scripts/v2/voice/model.mjs';
 
-const HERE = path.dirname(fileURLToPath(import.meta.url));
-const FIXTURE_FILM = path.join(HERE, 'fixtures/voice/film-three-shots.json');
-const MODEL_SHA = VOICE_MODEL.files.find((f) => f.path === 'onnx/model_quantized.onnx').sha256;
 const scratch = () => mkdtempSync(path.join(os.tmpdir(), 'voice-synth-'));
 const withScratch = async (fn) => {
   const dir = scratch();
@@ -47,7 +44,9 @@ const FILM = Object.freeze({
   ],
 });
 const withShot = (film, index, changes) => ({ ...film, shots: film.shots.map((s, i) => (i === index ? { ...s, ...changes } : s)) });
-const hashOf = (film, overrides = {}) => voiceHash(film, { voice: 'af_heart', modelSha256: MODEL_SHA, lead: LEAD, ...overrides });
+const LOCK = 'a'.repeat(64);
+const hashOf = (film, overrides = {}) => voiceHash(film, { voice: 'af_heart', runtimeLock: LOCK, ...overrides });
+const withConstant = (changes) => ({ constants: { ...HASH_CONSTANTS, ...changes } });
 
 // ---------- voiceHash ----------
 
@@ -56,21 +55,41 @@ test('voiceHash is 64 hex characters and the same for the same input', () => {
   assert.equal(hashOf(FILM), hashOf(structuredClone(FILM)));
 });
 
-test('voiceHash changes when a say, a shot id, the voice, the model hash, a lead constant or the mode changes', () => {
+test('voiceHash changes with a say, a shot id, the voice, the mode, a lead constant, a trim setting or a speed limit', () => {
   const base = hashOf(FILM);
   assert.notEqual(hashOf(withShot(FILM, 0, { say: 'Every frame *counts*. Then it stops.' })), base);
   assert.notEqual(hashOf(withShot(FILM, 2, { id: 'end' })), base);
   assert.notEqual(hashOf(FILM, { voice: 'af_bella' }), base);
-  assert.notEqual(hashOf(FILM, { modelSha256: '0'.repeat(64) }), base);
-  assert.notEqual(hashOf(FILM, { lead: { ...LEAD, midPhraseMs: LEAD.midPhraseMs + 1 } }), base);
   assert.notEqual(hashOf({ ...FILM, mode: 'viral' }), base);
+  assert.notEqual(hashOf(FILM, withConstant({ lead: { ...LEAD, midPhraseMs: LEAD.midPhraseMs + 1 } })), base);
+  assert.notEqual(hashOf(FILM, withConstant({ trim: { ...TRIM, leadKeepSamples: TRIM.leadKeepSamples + 24 } })), base);
+  assert.notEqual(hashOf(FILM, withConstant({ voiceSpeedMax: HASH_CONSTANTS.voiceSpeedMax + 0.05 })), base);
+  assert.notEqual(hashOf(FILM, withConstant({ voiceSpeedMin: HASH_CONSTANTS.voiceSpeedMin - 0.05 })), base);
 });
 
-test('voiceHash changes when a pad-trim setting changes, so a sidecar made before a trim change is never re-used', () => {
+test('voiceHash changes with the runtime lockfile, any pinned model file (the voice file too) and the code', () => {
   const base = hashOf(FILM);
-  assert.equal(hashOf(FILM, { trim: { ...TRIM } }), base, 'the default trim is the module constants');
-  assert.notEqual(hashOf(FILM, { trim: { ...TRIM, leadKeepSamples: TRIM.leadKeepSamples + 24 } }), base);
-  assert.notEqual(hashOf(FILM, { trim: { ...TRIM, fadeSamples: TRIM.fadeSamples + 24 } }), base);
+  assert.notEqual(hashOf(FILM, { runtimeLock: 'b'.repeat(64) }), base);
+  const files = MODEL_PIN.files.map((f) => (f.path === 'voices/af_heart.bin' ? { ...f, sha256: '0'.repeat(64) } : f));
+  assert.notEqual(hashOf(FILM, { model: { ...MODEL_PIN, files } }), base);
+  assert.notEqual(hashOf(FILM, { code: 'c'.repeat(64) }), base);
+  assert.deepEqual(MODEL_PIN.files.map((f) => f.path), VOICE_MODEL.files.map((f) => f.path), 'every pinned file is in the key');
+});
+
+test('sourceHash changes when one byte of one source changes, and the code key covers the worker\'s modules and say.mjs', async () => {
+  await withScratch(async (dir) => {
+    const a = path.join(dir, 'a.mjs');
+    const b = path.join(dir, 'b.mjs');
+    writeFileSync(a, 'export const x = 1;\n');
+    writeFileSync(b, 'export const y = 2;\n');
+    const before = sourceHash([a, b]);
+    assert.equal(sourceHash([a, b]), before);
+    writeFileSync(b, 'export const y = 3;\n');
+    assert.notEqual(sourceHash([a, b]), before);
+  });
+  const names = CODE_FILES.map((f) => path.basename(f)).sort();
+  assert.deepEqual(names, ['calls.mjs', 'kokoro.mjs', 'phonemes.mjs', 'say.mjs', 'sidecar.mjs', 'tokens.mjs', 'words.mjs', 'worker.mjs']);
+  assert.ok(CODE_FILES.every((f) => existsSync(f)), 'every hashed source exists');
 });
 
 test('voiceHash does not change when an unrelated field changes (look, hold, a shot field other than id and say)', () => {
@@ -82,144 +101,243 @@ test('voiceHash does not change when an unrelated field changes (look, hold, a s
 
 // ---------- synthesiseFilm with a fake spawn ----------
 
-// An execFile stand-in that does what the worker does on success: writes the sidecar the job asks for.
-function fakeSpawn({ exitCode = 0, stderr = '' } = {}) {
+// A child_process.spawn stand-in: an emitter with stdout and stderr streams. `finish` ends both streams, then emits
+// 'close' with the exit code and signal, as a real child does.
+function fakeChild() {
+  const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kills: [] });
+  child.kill = (signal) => child.kills.push(signal);
+  child.finish = (code, signal = null) => {
+    child.stdout.end();
+    child.stderr.end();
+    setImmediate(() => child.emit('close', code, signal));
+  };
+  return child;
+}
+
+// What the worker writes on success: a WAV per narrated shot and the sidecar, into the job's folder.
+function writeWorkerOutput(job) {
+  const shots = job.shots.map((shot, index) => {
+    if (shot.say === null) return { id: shot.id, wav: null, seconds: 0, sentences: [] };
+    const { tokens } = parseSay(shot.say);
+    const words = tokens.map((t, k) => ({ text: t.text, start: k * 0.5, end: k * 0.5 + 0.4, emphasis: t.emphasis, aside: t.aside }));
+    writeFileSync(path.join(job.dir, `shot-${index}.wav`), encodeWav(new Float32Array(tokens.length * 12000), SAMPLE_RATE));
+    return { id: shot.id, wav: `shot-${index}.wav`, seconds: tokens.length * 0.5, sentences: sentencesOf(tokens, words) };
+  });
+  writeSidecar(path.join(job.dir, 'voice.json'), { version: 1, model: { id: 'm', commit: 'c', file: 'f', sha256: 's' }, voice: job.voice, sampleRate: 24000, shots });
+}
+
+// A spawn that behaves like the worker: one progress line, then (after `beforeExit`) either the output files and exit
+// 0, or `stderr` and `exitCode`.
+function fakeSpawn({ exitCode = 0, stderr = '', signal = null, beforeExit = async () => {} } = {}) {
   const calls = [];
-  const spawn = (file, args, options, callback) => {
-    calls.push({ file, args, options });
-    if (exitCode !== 0) {
-      const err = Object.assign(new Error(`Command failed: ${file}`), { code: exitCode });
-      setImmediate(() => callback(err, '', stderr));
-      return;
-    }
+  const spawn = (file, args, options) => {
+    const child = fakeChild();
     const job = JSON.parse(readFileSync(args[1], 'utf8'));
-    const shots = job.shots.map((shot, index) => {
-      if (shot.say === null) return { id: shot.id, wav: null, seconds: 0, sentences: [] };
-      const { tokens } = parseSay(shot.say);
-      const words = tokens.map((t, k) => ({ text: t.text, start: k * 0.5, end: k * 0.5 + 0.4, emphasis: t.emphasis, aside: t.aside }));
-      writeFileSync(path.join(job.dir, `shot-${index}.wav`), encodeWav(new Float32Array(tokens.length * 12000), SAMPLE_RATE));
-      return { id: shot.id, wav: `shot-${index}.wav`, seconds: tokens.length * 0.5, sentences: sentencesOf(tokens, words) };
+    calls.push({ file, args, options, job, child });
+    setImmediate(async () => {
+      child.stdout.write('voice: progress\n');
+      await beforeExit(child);
+      if (exitCode === 0 && signal === null) writeWorkerOutput(job);
+      child.stderr.write(stderr);
+      child.finish(exitCode, signal);
     });
-    writeSidecar(path.join(job.dir, 'voice.json'), { version: 1, model: { id: 'm', commit: 'c', file: 'f', sha256: 's' }, voice: job.voice, sampleRate: 24000, shots });
-    setImmediate(() => callback(null, 'voice: done\n', ''));
+    return child;
   };
   return { spawn, calls };
 }
 
-test('a cache miss spawns node worker.mjs <job.json> once, execFile-style with no shell; a second call is a cache hit with zero spawns', async () => {
+const noModel = async () => {};
+const opts = (outDir, more = {}) => ({ outDir, voice: 'af_heart', ensureModel: noModel, ...more });
+const voiceFolder = (outDir) => readdirSync(path.join(outDir, '.voice'));
+const marker = (error) => `${ERROR_MARKER}${JSON.stringify(error)}\n`;
+
+test('a cache miss spawns node worker.mjs <job.json> once with no shell; a second call is a cache hit with zero spawns', async () => {
   await withScratch(async (outDir) => {
     const hostile = withShot(FILM, 0, { say: 'Every $(touch pwned) frame; `id` | cat. Then it moves.' });
     const fake = fakeSpawn();
-    const first = await synthesiseFilm(hostile, { outDir, voice: 'af_heart', spawn: fake.spawn });
+    const first = await synthesiseFilm(hostile, opts(outDir, { spawn: fake.spawn }));
     assert.equal(fake.calls.length, 1);
     const [{ file, args, options }] = fake.calls;
     assert.equal(file, process.execPath);
-    assert.equal(args.length, 2);
-    assert.equal(args[0], WORKER_PATH);
-    assert.ok(args[1].endsWith('.json'), args[1]);
+    assert.deepEqual([args.length, args[0]], [2, WORKER_PATH]);
     assert.ok(args.every((a) => !a.includes('$(') && !a.includes('`') && !a.includes('|')), 'film text never reaches argv');
     assert.notEqual(options?.shell, true);
     assert.equal(first.cached, false);
-    assert.equal(first.dir, path.join(outDir, '.voice', hashOf(hostile)));
+    assert.equal(path.dirname(first.dir), path.join(outDir, '.voice'));
     assert.equal(first.sidecar.shots.length, 3);
-    assert.equal(existsSync(args[1]), false, 'the job file is removed after a successful run');
+    assert.deepEqual(voiceFolder(outDir), [path.basename(first.dir)], 'the job file and the staging folder are gone');
+    assert.deepEqual(readdirSync(first.dir).sort(), ['shot-0.wav', 'shot-2.wav', 'voice.json']);
 
-    const second = await synthesiseFilm(hostile, { outDir, voice: 'af_heart', spawn: fake.spawn });
+    const second = await synthesiseFilm(hostile, opts(outDir, { spawn: fake.spawn }));
     assert.equal(fake.calls.length, 1, 'a cache hit spawns nothing');
     assert.equal(second.cached, true);
     assert.deepEqual(second.sidecar, first.sidecar);
   });
 });
 
-test('the job file carries the shots (id and say, null for none), the pace, the voice and the two locations', async () => {
+test('the job carries the shots, the pace, the voice and the two locations, in a staging folder of its own', async () => {
   await withScratch(async (outDir) => {
-    let job;
+    const runtime = path.join(outDir, 'rt', 'voice');
+    mkdirSync(runtime, { recursive: true });
+    writeFileSync(path.join(runtime, 'package-lock.json'), '{}');
     const fake = fakeSpawn();
-    const spawn = (file, args, options, callback) => {
-      job = JSON.parse(readFileSync(args[1], 'utf8'));
-      fake.spawn(file, args, options, callback);
-    };
-    await synthesiseFilm(FILM, { outDir, voice: 'af_heart', spawn, runtime: '/x/voice', modelDir: '/x/model', offline: true });
+    const { dir } = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, runtime, modelDir: '/x/model' }));
+    const { job, args } = fake.calls[0];
     assert.deepEqual(job.shots, [
       { id: 'open', say: 'Every frame *counts*. Then it moves.' }, { id: 'hold', say: null }, { id: 'close', say: 'Done, _quietly_.' },
     ]);
-    assert.equal(job.speed, 1);
-    assert.equal(job.emphasisPause, 0);
-    assert.equal(job.voice, 'af_heart');
-    assert.equal(job.runtime, '/x/voice');
-    assert.equal(job.modelDir, '/x/model');
-    assert.equal(job.offline, true);
-    assert.equal(job.dir, path.join(outDir, '.voice', hashOf(FILM)));
+    assert.deepEqual([job.speed, job.emphasisPause, job.voice, job.runtime, job.modelDir], [1, 0, 'af_heart', runtime, '/x/model']);
+    assert.equal(job.offline, undefined, 'the worker is always offline: the parent fetched the model');
+    assert.notEqual(job.dir, dir, 'the worker writes into a staging folder, renamed into place on success');
+    assert.equal(path.dirname(args[1]), job.dir);
+    assert.match(path.basename(job.dir), /\.partial-\d+-[0-9a-f-]{36}$/);
   });
 });
 
-test('a worker exit code 1 rejects with the last line of its stderr and leaves no sidecar', async () => {
+test('the model is ensured in the parent before the worker starts, refusing downloads when offline', async () => {
   await withScratch(async (outDir) => {
-    const fake = fakeSpawn({ exitCode: 1, stderr: 'loading model\nsome detail\nshot "open": the model failed: bad input\n\n' });
-    await assert.rejects(
-      synthesiseFilm(FILM, { outDir, voice: 'af_heart', spawn: fake.spawn }),
-      (err) => {
-        assert.equal(err.message, 'shot "open": the model failed: bad input');
-        assert.equal(err.exitCode, 1);
-        return true;
-      },
-    );
-    assert.equal(existsSync(path.join(outDir, '.voice', hashOf(FILM), 'voice.json')), false);
-  });
-});
-
-test('a worker that never exits is killed after the timeout and the error says so', async () => {
-  await withScratch(async (outDir) => {
-    const kills = [];
-    let callback = null;
-    const spawn = (file, args, options, cb) => {
-      callback = cb;
-      return { kill: (signal) => { kills.push(signal); return true; } };
+    const order = [];
+    let fetchRefusal = null;
+    const ensureModel = async ({ dir, fetchImpl }) => {
+      order.push(`ensure ${dir}`);
+      fetchRefusal = fetchImpl ? await fetchImpl('https://example.invalid/x').catch((e) => e.message) : 'none';
     };
-    await assert.rejects(
-      synthesiseFilm(FILM, { outDir, voice: 'af_heart', spawn, timeoutSeconds: 0.05 }),
-      (err) => {
-        assert.match(err.message, /voice worker did not finish within 0\.05 s and was killed/);
-        assert.equal(err.timedOut, true);
-        assert.equal(err.exitCode, null);
-        return true;
-      },
-    );
-    assert.deepEqual(kills, ['SIGKILL']);
-    callback(Object.assign(new Error('killed'), { code: null, signal: 'SIGKILL' }), '', '');
+    const fake = fakeSpawn();
+    const spawn = (...a) => { order.push('spawn'); return fake.spawn(...a); };
+    await synthesiseFilm(FILM, opts(outDir, { spawn, ensureModel, modelDir: '/m', offline: true }));
+    assert.deepEqual(order, ['ensure /m', 'spawn']);
+    assert.match(fetchRefusal, /offline/);
   });
 });
 
-test('synthesiseFilm refuses a timeout that is not a positive number of seconds', async () => {
-  const fake = fakeSpawn();
-  await assert.rejects(synthesiseFilm(FILM, { outDir: os.tmpdir(), voice: 'af_heart', spawn: fake.spawn, timeoutSeconds: 0 }), /timeoutSeconds/);
-  assert.equal(fake.calls.length, 0);
+test('a model that cannot be ensured is machine trouble with a hint, and no worker starts', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn();
+    const ensureModel = async () => { throw new Error('voice model file config.json failed its pinned hash'); };
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, ensureModel })), (err) => {
+      assert.deepEqual([err.name, err.kind], ['VoiceSynthError', 'machine']);
+      assert.match(err.message, /config\.json failed its pinned hash/);
+      assert.ok(err.hint.length > 0);
+      return true;
+    });
+    assert.equal(fake.calls.length, 0);
+  });
 });
 
-test('synthesiseFilm refuses a voice other than af_heart, listing the accepted one, and spawns nothing', async () => {
+test('a real offline run with no model files refuses the download, writes no model file and is machine trouble', async () => {
+  await withScratch(async (outDir) => {
+    const modelDir = path.join(outDir, 'no-model');
+    await assert.rejects(synthesiseFilm(FILM, { outDir, voice: 'af_heart', modelDir, offline: true, spawn: fakeSpawn().spawn }), (err) => {
+      assert.equal(err.kind, 'machine');
+      assert.match(err.message, /config\.json.*offline/);
+      return true;
+    });
+    assert.equal(existsSync(path.join(modelDir, 'config.json')), false);
+  });
+});
+
+test('a film error from the worker rejects with kind film, its message, hint and shot, exit code 1, and leaves no entry', async () => {
+  await withScratch(async (outDir) => {
+    const error = { kind: 'film', message: 'shot "open": a stretch of narration is 600 model ids', hint: 'add a comma', shot: 'open' };
+    const fake = fakeSpawn({ exitCode: 1, stderr: `loading\n${marker(error)}` });
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn })), (err) => {
+      assert.deepEqual([err.kind, err.message, err.hint, err.shot, err.exitCode], ['film', error.message, 'add a comma', 'open', 1]);
+      return true;
+    });
+    assert.deepEqual(voiceFolder(outDir), [], 'no cache entry, no staging folder, no job file');
+  });
+});
+
+test('machine trouble from the worker carries no shot, even if its line names one', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn({ exitCode: 2, stderr: marker({ kind: 'machine', message: 'disk full', hint: 'free space', shot: 'open' }) });
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn })), (err) => {
+      assert.deepEqual([err.kind, err.shot, err.exitCode], ['machine', undefined, 2]);
+      return true;
+    });
+  });
+});
+
+test('a worker that dies without a classified error (a crash or a signal) is machine trouble naming the signal', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn({ exitCode: null, signal: 'SIGABRT', stderr: 'libc++abi: terminating\n' });
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn })), (err) => {
+      assert.deepEqual([err.kind, err.signal, err.exitCode], ['machine', 'SIGABRT', null]);
+      assert.match(err.message, /SIGABRT.*libc\+\+abi: terminating/);
+      assert.ok(err.hint.length > 0);
+      return true;
+    });
+    assert.deepEqual(voiceFolder(outDir), []);
+  });
+});
+
+test('a worker that never exits is killed after the timeout: machine trouble, and its staging folder is removed', async () => {
+  await withScratch(async (outDir) => {
+    let child = null;
+    const spawn = () => { child = fakeChild(); return child; };
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn, timeoutSeconds: 0.05 })), (err) => {
+      assert.match(err.message, /voice worker did not finish within 0\.05 s and was killed/);
+      assert.deepEqual([err.kind, err.timedOut, err.exitCode], ['machine', true, null]);
+      assert.match(err.hint, /timeoutSeconds/);
+      return true;
+    });
+    assert.deepEqual(child.kills, ['SIGKILL']);
+    assert.deepEqual(voiceFolder(outDir), []);
+    child.finish(null, 'SIGKILL');
+  });
+});
+
+test('the worker\'s progress lines reach log while it runs, not after it exits', async () => {
+  await withScratch(async (outDir) => {
+    let heard;
+    const heardProgress = new Promise((resolve) => { heard = resolve; });
+    const lines = [];
+    const log = (line) => { lines.push(line); if (line === 'voice: progress') heard(); };
+    const fake = fakeSpawn({ beforeExit: () => heardProgress });
+    await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, log }));
+    assert.ok(lines.includes('voice: progress'), 'the line was logged before the fake worker was allowed to exit');
+  });
+});
+
+test('a corrupt or incomplete cache entry is a miss: one log line, the entry removed, synthesised again', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn();
+    const lines = [];
+    const run = () => synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, log: (l) => lines.push(l) }));
+    const { dir } = await run();
+    writeFileSync(path.join(dir, 'voice.json'), '{ "version": 1, "sha');
+    const again = await run();
+    assert.deepEqual([again.cached, fake.calls.length], [false, 2]);
+    assert.equal(lines.filter((l) => l.includes('incomplete') && l.includes(dir)).length, 1);
+    rmSync(path.join(dir, 'shot-2.wav'));
+    const third = await run();
+    assert.deepEqual([third.cached, fake.calls.length], [false, 3]);
+    writeFileSync(path.join(dir, 'shot-0.wav'), encodeWav(new Float32Array(10), SAMPLE_RATE));
+    const fourth = await run();
+    assert.deepEqual([fourth.cached, fake.calls.length], [false, 4], 'a WAV of the wrong length is incomplete too');
+  });
+});
+
+test('a runtime folder without a lockfile is machine trouble with the install hint, and nothing starts', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn();
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, runtime: path.join(outDir, 'none') })), (err) => {
+      assert.deepEqual([err.kind, err.hint], ['machine', INSTALL_HINT]);
+      return true;
+    });
+    assert.equal(fake.calls.length, 0);
+  });
+});
+
+test('synthesiseFilm refuses a timeout that is not a positive number of seconds, and a voice other than af_heart', async () => {
   const fake = fakeSpawn();
+  await assert.rejects(synthesiseFilm(FILM, opts(os.tmpdir(), { spawn: fake.spawn, timeoutSeconds: 0 })), /timeoutSeconds/);
   await assert.rejects(
-    synthesiseFilm(FILM, { outDir: os.tmpdir(), voice: 'af_bella', spawn: fake.spawn }),
+    synthesiseFilm(FILM, opts(os.tmpdir(), { spawn: fake.spawn, voice: 'af_bella' })),
     (err) => err.message.includes('af_bella') && err.message.includes('af_heart'),
   );
   assert.equal(fake.calls.length, 0);
   assert.deepEqual(ACCEPTED_VOICES, ['af_heart']);
-});
-
-test('a cached sidecar that no longer matches the film is an error naming the folder, not a silent re-use', async () => {
-  await withScratch(async (outDir) => {
-    const fake = fakeSpawn();
-    const { dir } = await synthesiseFilm(FILM, { outDir, voice: 'af_heart', spawn: fake.spawn });
-    const file = path.join(dir, 'voice.json');
-    const data = readSidecar(file);
-    data.shots[0].sentences[0].words[0].text = 'Evry';
-    writeSidecar(file, data);
-    await assert.rejects(
-      synthesiseFilm(FILM, { outDir, voice: 'af_heart', spawn: fake.spawn }),
-      (err) => err.message.includes(dir) && err.message.includes('shots[0].sentences[0].words[0].text'),
-    );
-    assert.equal(fake.calls.length, 1);
-  });
 });
 
 // ---------- openKokoro with a fake onnxruntime ----------
@@ -362,18 +480,7 @@ test('editCall refuses an IPA hint on a token the voice reorders, naming it', ()
   assert.throws(() => editCall(chars, [merged, { ...merged }], tokens), /\$5.*pronunciation hint/);
 });
 
-test('planShotCalls splits a stretch over MAX_IDS at its comma and every call it returns fits', async () => {
-  const say = `${'ba '.repeat(100)}ba, ${'ba '.repeat(99)}ba.`;
-  const { tokens } = parseSay(say);
-  const plan = await planShotCalls(tokens, { speed: 1, emphasisPause: 0, shotId: 'long', phonemize: fakePhonemize, vocab: EMBEDDED_VOCAB });
-  const speech = plan.filter((c) => c.kind === 'speech');
-  assert.equal(speech.length, 2);
-  assert.equal(speech[0].tokens.length, 101);
-  assert.deepEqual([...speech[0].tokens, ...speech[1].tokens], tokens.map((_, i) => i));
-  assert.ok(speech.every((c) => c.input.ids.length <= MAX_IDS));
-});
-
-test('planShotCalls gives planCalls a countIds that always returns a finite number synchronously, and converges on exact counts', async () => {
+test('planShotCalls splits a stretch over MAX_IDS at its comma, every call fits, and countIds always returns a finite number', async () => {
   const { tokens } = parseSay(`${'ba '.repeat(100)}ba, ${'ba '.repeat(99)}ba.`);
   const seen = [];
   // A planner that checks what countIds returns, then defers to the real planCalls.
@@ -387,8 +494,11 @@ test('planShotCalls gives planCalls a countIds that always returns a finite numb
     },
   });
   const plan = await planShotCalls(tokens, { speed: 1, emphasisPause: 0, shotId: 'long', phonemize: fakePhonemize, vocab: EMBEDDED_VOCAB, planner });
+  const speech = plan.filter((c) => c.kind === 'speech');
   assert.ok(seen.length > 0);
-  assert.deepEqual(plan.filter((c) => c.kind === 'speech').map((c) => c.tokens.length), [101, 100]);
+  assert.deepEqual(speech.map((c) => c.tokens.length), [101, 100]);
+  assert.deepEqual(speech.flatMap((c) => c.tokens), tokens.map((_, i) => i));
+  assert.ok(speech.every((c) => c.input.ids.length <= MAX_IDS));
 });
 
 test('planShotCalls passes a skip item through without model input', async () => {
@@ -418,17 +528,11 @@ const fakeSpeak = async ({ ids }) => {
 };
 const shotDeps = { speak: fakeSpeak, phonemize: fakePhonemize, vocab: EMBEDDED_VOCAB, speed: 1, emphasisPause: 0 };
 
-test('a shot without say has no samples, no wav and an empty sentences list', async () => {
-  const shot = await synthesiseShot({ id: 'hold', say: null }, shotDeps);
-  assert.equal(shot.samples, null);
-  assert.deepEqual(shot.entry, { id: 'hold', seconds: 0, sentences: [] });
-});
-
 test('a pause inserts its silence and advances the next call\'s word times (hand-computed)', async () => {
   // "Wait (0.4) now.": speech [Wait], silence 0.4 s, speech [now.].
   // Call 1 ids [0 w a i t 0]: frames 12+2*5 = 22 = 13200 samples untrimmed. Call 2 [0 n o w . 0]: 13200 untrimmed.
   // Untrimmed first-word start: raw 12 * 600 = 7200, lead -119 + 12 * 12 = 25 ms = 600 samples -> 6600.
-  // Lead pad cut: min(6600 - 75 ms (1800), (12 - 2) * 600 = 6000) = 4800. Tail pad is 2 frames: nothing cut.
+  // Lead pad cut: 6600 - 75 ms (1800) = 4800, inside the 12-frame (7200-sample) pad. The tail pad is left.
   // So each call is 13200 - 4800 = 8400 samples and its times move 4800 earlier.
   // Wait: start 6600 - 4800 = 1800 = 0.075 s; last in its call: end (cum 18 + 2) * 600 = 12000 - 4800 = 7200 = 0.3 s.
   // Silence 0.4 s = 9600. now.: offset 8400 + 9600 = 18000; start 1800 + 18000 = 19800 = 0.825 s;
@@ -461,21 +565,6 @@ test('emphasis and aside are recorded per word, the aside call runs faster, and 
   assert.equal(shot.entry.sentences.length, 2);
   assert.deepEqual(speeds, [1, 1, 1 / 0.85]);
   for (const w of words) assert.ok(w.end > w.start && w.start >= 0 && w.end <= shot.entry.seconds, JSON.stringify(w));
-});
-
-test('a skip item adds no samples and gives its tokens zero-length words at the current offset', async () => {
-  // "Wait. - now." planned as speech [Wait.], skip [-], speech [now.] (the shape calls.mjs returns).
-  // Call 1 ids [0 w a i t . 0]: 12 + 2 * 6 = 24 frames = 14400 samples, minus the 4800-sample lead cut = 9600, so the
-  // skip sits at 9600 = 0.4 s. Call 2 [0 n o w . 0]: 13200 - 4800 = 8400 samples, starting at 9600.
-  const plan = async (tokens, opts) => {
-    const [first, second] = await planShotCalls([tokens[0], tokens[2]], opts);
-    return [first, { kind: 'skip', tokens: [1] }, { ...second, tokens: [2] }];
-  };
-  const shot = await synthesiseShot({ id: 's', say: 'Wait. - now.' }, { ...shotDeps, plan });
-  const words = shot.entry.sentences.flatMap((s) => s.words);
-  assert.equal(shot.samples.length, 9600 + 8400);
-  assert.deepEqual(words[1], { text: '-', start: 0.4, end: 0.4, emphasis: false, aside: false });
-  assert.ok(words[2].start >= words[1].end);
 });
 
 // A stand-in model with a 20-frame lead pad and a 15-frame tail pad, 2 frames per phoneme token, and a waveform whose
@@ -539,6 +628,46 @@ test('a skip planned by the real planCalls adds no samples and sits at the end o
   assert.deepEqual(words[1], { text: '-.', start: 0.35, end: 0.35, emphasis: false, aside: false });
 });
 
+test('a dash inside a call (the real planner) is a zero-length word at the next word\'s start, and the call is still trimmed', async () => {
+  // "Wait. - now." plans as speech [Wait.] then speech [-, now.]. Call 1 [0 w a i t . 0] = 24 frames = 14400 samples,
+  // lead cut 6600 - 1800 = 4800 -> 9600. Call 2 phonemes "now." (the dash has none) [0 n o w . 0] = 22 frames = 13200,
+  // cut 4800 -> 8400, from 9600: now. 9600 + 1800 = 11400 = 0.475 s to 9600 + (16 + 2) * 600 - 4800 = 15600 = 0.65 s;
+  // the dash sits at now.'s start. Total 9600 + 8400 = 18000 (the review's probe 3 gave the same values).
+  const shot = await synthesiseShot({ id: 's', say: 'Wait. - now.' }, shotDeps);
+  const words = shot.entry.sentences.flatMap((s) => s.words);
+  assert.equal(shot.samples.length, 18000);
+  assert.deepEqual(words.map((w) => [w.text, w.start, w.end]), [['Wait.', 0.075, 0.3], ['-', 0.475, 0.475], ['now.', 0.475, 0.65]]);
+});
+
+test('a shot without say, or whose say has nothing speakable, gets no WAV: wav null, 0 s', async () => {
+  const silent = await synthesiseShot({ id: 'hold', say: null }, shotDeps);
+  assert.deepEqual([silent.samples, silent.entry], [null, { id: 'hold', seconds: 0, sentences: [] }]);
+  assert.deepEqual(sidecarShot(1, silent), { shot: { id: 'hold', wav: null, seconds: 0, sentences: [] }, wav: null });
+  const shot = await synthesiseShot({ id: 'dash', say: '-' }, shotDeps);
+  assert.equal(shot.samples.length, 0);
+  const { shot: entry, wav } = sidecarShot(4, shot);
+  assert.equal(wav, null, 'no file is written');
+  assert.deepEqual(entry, { id: 'dash', wav: null, seconds: 0, sentences: [{ start: 0, end: 0, words: [{ text: '-', start: 0, end: 0, emphasis: false, aside: false }] }] });
+  const spoken = sidecarShot(4, await synthesiseShot({ id: 'one', say: 'One.' }, shotDeps));
+  assert.equal(spoken.shot.wav, 'shot-4.wav');
+  assert.equal(spoken.wav.toString('ascii', 0, 4), 'RIFF');
+});
+
+test('model output with a sample that is not a finite number, or frames that miss its length, is an error', async () => {
+  const withNaN = async (call) => {
+    const out = await fakeSpeak(call);
+    const waveform = Float32Array.from(out.waveform);
+    waveform[700] = Number.NaN;
+    return { ...out, waveform };
+  };
+  await assert.rejects(synthesiseShot({ id: 'open', say: 'Wait now.' }, { ...shotDeps, speak: withNaN }), /shot "open".*not a finite number/);
+  const short = async (call) => {
+    const out = await fakeSpeak(call);
+    return { ...out, waveform: out.waveform.subarray(0, out.waveform.length - 600) };
+  };
+  await assert.rejects(synthesiseShot({ id: 'open', say: 'Wait now.' }, { ...shotDeps, speak: short }), /shot "open".*frames/);
+});
+
 test('every word lies inside its shot\'s WAV after trimming, across calls, silences and asides', async () => {
   const shot = await synthesiseShot({ id: 's', say: 'One more time. Then, (0.4) _quietly_, we go on and on.' }, { ...shotDeps, speak: padSpeak });
   const words = shot.entry.sentences.flatMap((s) => s.words);
@@ -555,14 +684,6 @@ test('a silence is rounded to whole milliseconds, so seconds times 24000 is the 
   assert.equal(Math.round(shot.entry.seconds * SAMPLE_RATE), shot.samples.length);
 });
 
-test('a model whose frames do not add up to its waveform is an error, not drifting word times', async () => {
-  const speak = async (call) => {
-    const out = await fakeSpeak(call);
-    return { ...out, waveform: out.waveform.subarray(0, out.waveform.length - 600) };
-  };
-  await assert.rejects(synthesiseShot({ id: 'open', say: 'Wait now.' }, { ...shotDeps, speak }), /shot "open".*frames/);
-});
-
 test('encodeWav writes a 24 kHz mono 16-bit PCM WAV with clamped samples', () => {
   const wav = encodeWav(Float32Array.from([0, 1, -1, 0.5, 2]), SAMPLE_RATE);
   assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
@@ -574,119 +695,4 @@ test('encodeWav writes a 24 kHz mono 16-bit PCM WAV with clamped samples', () =>
   assert.equal(wav.toString('ascii', 36, 40), 'data');
   assert.equal(wav.readUInt32LE(40), 10);
   assert.deepEqual([0, 1, 2, 3, 4].map((i) => wav.readInt16LE(44 + i * 2)), [0, 32767, -32767, 16384, 32767]);
-});
-
-// ---------- the worker as a child process (no model needed: it fails before loading one) ----------
-
-function runWorker(job, dir) {
-  const jobFile = path.join(dir, 'job.json');
-  writeFileSync(jobFile, JSON.stringify(job));
-  return new Promise((resolve) => {
-    execFile(process.execPath, [WORKER_PATH, jobFile], (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr }));
-  });
-}
-const lastLine = (text) => text.split('\n').filter((l) => l.trim() !== '').at(-1);
-
-test('the worker exits 2 with the version 2 install hint (version 1 install command) as its last stderr line when the runtime is not installed', async () => {
-  await withScratch(async (dir) => {
-    const job = { version: 1, dir, shots: [{ id: 'a', say: 'Hi.' }], speed: 1, emphasisPause: 0, voice: 'af_heart', runtime: path.join(dir, 'missing', 'voice'), modelDir: path.join(dir, 'model'), offline: true };
-    const { code, stderr } = await runWorker(job, dir);
-    assert.equal(code, 2);
-    assert.equal(lastLine(stderr), INSTALL_HINT);
-    assert.ok(INSTALL_HINT.startsWith('the optional voice package is not installed. Run: '), INSTALL_HINT);
-    assert.ok(INSTALL_HINT.includes(optionalInstall('kokoro')), 'the same install command as version 1');
-  });
-});
-
-test('the worker refuses an unknown job field, listing the accepted ones', async () => {
-  await withScratch(async (dir) => {
-    const job = { version: 1, dir, shots: [], speed: 1, emphasisPause: 0, voice: 'af_heart', runtime: dir, modelDir: dir, offline: true, spead: 2 };
-    const { code, stderr } = await runWorker(job, dir);
-    assert.equal(code, 1);
-    assert.match(lastLine(stderr), /unknown field spead.*accepted: .*speed/);
-  });
-});
-
-// ---------- integration: the real model (skipped without it) ----------
-
-function runtimeDir() {
-  const dir = process.env.MAKE_MOTION_VOICE_RUNTIME ? path.resolve(process.env.MAKE_MOTION_VOICE_RUNTIME) : path.join(OPTIONAL_ROOT, 'voice');
-  const ok = ['index.mjs', 'node_modules/onnxruntime-node/package.json', 'node_modules/phonemizer/package.json'].every((f) => existsSync(path.join(dir, f)));
-  return ok ? dir : null;
-}
-
-function modelDir() {
-  const dir = process.env.MAKE_MOTION_VOICE_MODEL ? path.resolve(process.env.MAKE_MOTION_VOICE_MODEL) : voiceModelDir();
-  const ok = VOICE_MODEL.files.every((f) => existsSync(path.join(dir, f.path)) && statSync(path.join(dir, f.path)).size === f.bytes);
-  return ok ? dir : null;
-}
-
-function skipReason() {
-  if (runtimeDir() === null) return `the optional voice runtime is not installed (install: ${optionalInstall('kokoro')}, or set MAKE_MOTION_VOICE_RUNTIME)`;
-  if (modelDir() === null) return 'the pinned voice model is not present locally (a test never downloads it; set MAKE_MOTION_VOICE_MODEL to a folder holding all five files)';
-  return false;
-}
-
-const wavSamples = (file) => {
-  const bytes = readFileSync(file);
-  assert.equal(bytes.toString('ascii', 36, 40), 'data');
-  return bytes.readUInt32LE(40) / 2;
-};
-
-test('integration: the three-shot fixture film synthesises one WAV per narrated shot with words inside it', { skip: skipReason(), timeout: 300000 }, async () => {
-  const film = JSON.parse(readFileSync(FIXTURE_FILM, 'utf8'));
-  await withScratch(async (outDir) => {
-    const opts = { outDir, voice: 'af_heart', runtime: runtimeDir(), modelDir: modelDir(), offline: true };
-    const result = await synthesiseFilm(film, opts);
-    assert.equal(result.cached, false);
-    const { shots } = result.sidecar;
-    assert.equal(shots.length, 3);
-    assert.equal(shots[1].wav, null);
-    assert.deepEqual(shots[1].sentences, []);
-    for (const shot of [shots[0], shots[2]]) {
-      assert.equal(wavSamples(path.join(result.dir, shot.wav)), Math.round(shot.seconds * SAMPLE_RATE), shot.id);
-      // end >= start, not >: a zero-length span (a spaced dash) or a clamped start is a word with end === start.
-      for (const w of shot.sentences.flatMap((s) => s.words)) {
-        assert.ok(w.end >= w.start, `${shot.id} "${w.text}": end ${w.end} >= start ${w.start}`);
-        assert.ok(w.start >= 0 && w.end <= shot.seconds, `${shot.id} "${w.text}" lies inside its WAV of ${shot.seconds} s`);
-      }
-    }
-    const again = await synthesiseFilm(film, opts);
-    assert.equal(again.cached, true);
-  });
-});
-
-const runtimeSkip = () => (runtimeDir() === null ? skipReason() : false);
-
-test('integration: an offline job with a model file missing downloads nothing and fails naming the file', { skip: runtimeSkip(), timeout: 120000 }, async () => {
-  await withScratch(async (outDir) => {
-    const emptyModel = path.join(outDir, 'no-model');
-    mkdirSync(emptyModel);
-    await assert.rejects(
-      synthesiseFilm(FILM, { outDir, voice: 'af_heart', runtime: runtimeDir(), modelDir: emptyModel, offline: true }),
-      (err) => {
-        assert.equal(err.exitCode, 1);
-        assert.match(err.message, /config\.json/);
-        assert.match(err.message, /offline/);
-        return true;
-      },
-    );
-    assert.equal(existsSync(path.join(emptyModel, 'config.json')), false);
-  });
-});
-
-test('integration: a failure after the runtime has loaded exits 1 (not a signal) with the reason as the last stderr line', { skip: skipReason(), timeout: 300000 }, async () => {
-  // Over 512 ids with no comma, semicolon, colon or dash to split at: planCalls throws after the phonemizer has run,
-  // so the phonemizer's process-wide hook is installed when the error happens.
-  const film = { mode: 'pro', shots: [{ id: 'long', say: `${'ba '.repeat(200)}ba.` }] };
-  await withScratch(async (outDir) => {
-    await assert.rejects(
-      synthesiseFilm(film, { outDir, voice: 'af_heart', runtime: runtimeDir(), modelDir: modelDir(), offline: true }),
-      (err) => {
-        assert.equal(err.exitCode, 1);
-        assert.match(err.message, /^shot "long": a stretch of narration is \d+ model ids, over the limit of 512/);
-        return true;
-      },
-    );
-  });
 });

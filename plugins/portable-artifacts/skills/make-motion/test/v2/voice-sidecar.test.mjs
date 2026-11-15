@@ -110,6 +110,22 @@ test('validateSidecar rejects a narrated shot without a wav, and a silent shot w
   rejects((d) => { d.shots[1].wav = 'shot-1.wav'; }, 'shots[1].wav');
 });
 
+test('validateSidecar requires wav to be exactly shot-<index>.wav, so a sidecar can never name a file elsewhere', () => {
+  rejects((d) => { d.shots[0].wav = '../../x.wav'; }, 'shots[0].wav');
+  rejects((d) => { d.shots[2].wav = 'shot-0.wav'; }, 'shots[2].wav');
+  rejects((d) => { d.shots[0].wav = 'shot-0.WAV'; }, 'shots[0].wav');
+});
+
+test('validateSidecar accepts a narrated shot with nothing speakable (wav null, 0 s, zero-length words)', () => {
+  const film = { mode: 'pro', shots: [{ id: 'dash', say: '-' }] };
+  const data = { ...goodSidecar(), shots: [{ id: 'dash', wav: null, seconds: 0, sentences: [{ start: 0, end: 0, words: [word('-', 0, 0)] }] }] };
+  assert.equal(validateSidecar(data, film), data);
+});
+
+test('validateSidecar rejects a sentence without a words array at its path, not with a TypeError', () => {
+  rejects((d) => { d.shots[0].sentences[1] = { start: 1.2, end: 2.4 }; }, 'shots[0].sentences[1].words');
+});
+
 test('validateSidecar rejects a word count that differs from the say at shots[i].sentences', () => {
   rejects((d) => { d.shots[0].sentences[1].words.pop(); }, 'shots[0].sentences');
   rejects((d) => { d.shots[1].sentences = [{ start: 0, end: 1, words: [word('extra', 0, 1)] }]; }, 'shots[1].sentences');
