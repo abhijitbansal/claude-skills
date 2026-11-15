@@ -9,7 +9,7 @@
       "id": "problem",
       "show": "statement",
       "kicker": "The problem",
-      "say": "Most dashboards can't tell you *where a number came from*."
+      "say": "Most dashboards can't tell you where a number *came from*."
     },
     {
       "id": "proof",
@@ -24,10 +24,11 @@
     {
       "id": "how",
       "show": "statement",
-      "cut": "slide",
+      "cut": "cut",
       "kicker": "How it works",
       "hero": "idea",
-      "say": "The model writes *one small file*. Scripts do the rest."
+      "say": "The model writes one small file. Scripts do the rest.",
+      "on": [{ "at": "word:file", "do": "underline", "target": "word:5" }]
     },
     {
       "id": "count",
@@ -36,16 +37,15 @@
       "hero": "idea",
       "say": "Five skills. One spec each.",
       "value": 5,
-      "label": "skills, one JSON spec each",
-      "on": [{ "at": "word:One", "do": "underline", "target": "label" }]
+      "label": "skills",
+      "delta": "one JSON spec each"
     },
     {
       "id": "close",
       "show": "statement",
-      "cut": "slide",
+      "cut": "cut",
       "kicker": "portable-artifacts",
-      "say": "Built on your machine. *Nothing leaves it*.",
-      "on": [{ "at": "word:machine", "do": "underline", "target": "word:3" }]
+      "say": "Built on your machine. *Nothing leaves it*."
     }
   ]
 }
