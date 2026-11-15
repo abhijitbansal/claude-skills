@@ -224,8 +224,8 @@ Fix it by running `npm ci` in the installed skill folder (or its `doctor.mjs --f
 | `git` on `PATH` | — | — | only for `gather.mjs` | — | — |
 | Chromium for frame capture (once, ≈150 MB) | — | optional: only `check.mjs` (needs a full `npm ci`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) | optional: only `check.mjs` (needs a full `npm ci` plus a Chromium, as for make-diagram); build needs no browser, and `check.mjs` skips cleanly without one |
 | ffmpeg on `PATH` | — | — | only to render a motion spec | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks, ≥ 5.1 for the loudness limiter stage) | — |
-| onnxruntime-node (cutouts only, on demand) | — | — | — | `cd <skill-dir> && npm install onnxruntime-node@1.31.1 --no-save` (≈300 MB) plus a one-time 25 MB MODNet model download; the agent asks first; it keeps an installed kokoro-js, and `npm ci` removes both | — |
-| kokoro-js (voiceover only, on demand) | — | — | — | `cd <skill-dir> && npm install kokoro-js@1.2.1 --no-save` (≈250 MB) plus a one-time 90 MB voice model download; the agent asks first | — |
+| onnxruntime-node (cutouts only, on demand) | — | — | — | `npm ci --prefix <skill-dir>/optional/cutout` (≈300 MB, from that folder's lockfile) plus a one-time 25 MB MODNet model download (pinned commit, SHA-256 checked); the agent asks first; `npm ci` in the skill folder leaves it alone | — |
+| kokoro-js (voiceover only, on demand) | — | — | — | `npm ci --prefix <skill-dir>/optional/voice` (≈250 MB, from that folder's lockfile) plus a one-time 90 MB Kokoro model download (one pinned commit, each file SHA-256 checked); the agent asks first; `npm ci` in the skill folder leaves it alone | — |
 
 Install make-motion's tools per OS (run the Chromium download inside the
 make-motion skill folder, so it matches the Playwright version `npm ci` installed):
@@ -317,11 +317,11 @@ Everything this plugin depends on is open source:
 | [Caveat](https://github.com/googlefonts/caveat) 700 (`@fontsource/caveat` 5.3.0, latin subset; make-motion's hand-drawn writing) | OFL-1.1 |
 | Funnel Display, Host Grotesk, Commit Mono, Young Serif, Schibsted Grotesk, JetBrains Mono, Big Shoulders Display, Familjen Grotesk, Martian Mono, Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible (latin subsets, via Fontsource) | OFL-1.1 |
 | [Kenney](https://kenney.nl) Interface Sounds and Impact Sounds (12 files, bundled as 48 kHz WAV) | CC0-1.0 |
-| Inter (`@fontsource/inter`, still pinned in make-motion's `package.json`, no longer used) | OFL-1.1 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
-| [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js`, installed on demand) | Apache-2.0 |
+| [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js` 1.2.1, installed on demand into `optional/voice` from its lockfile) | Apache-2.0 |
 | [MODNet](https://github.com/ZHKKKe/MODNet) portrait matting weights (about 25 MB, downloaded on first use of `cutout.mjs` from Hugging Face `Xenova/modnet`, pinned to one commit and a SHA-256) | Apache-2.0 |
-| [onnxruntime-node](https://github.com/microsoft/onnxruntime) 1.31.1 (installed on demand, runs MODNet) | MIT |
+| Kokoro-82M ONNX weights (about 90 MB, downloaded on first voiceover from Hugging Face onnx-community/Kokoro-82M-v1.0-ONNX, pinned to one commit and a SHA-256 per file) | Apache-2.0 |
+| [onnxruntime-node](https://github.com/microsoft/onnxruntime) 1.31.1 (installed on demand into `optional/cutout` from its lockfile, runs MODNet) | MIT |
 
 Not used, by design: Remotion and GSAP (free to use, but not under OSI
 licences).

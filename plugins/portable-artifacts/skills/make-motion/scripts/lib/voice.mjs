@@ -1,15 +1,30 @@
 // Voiceover synthesis with Kokoro (kokoro-js, Apache-2.0), run locally on the CPU.
-// kokoro-js is installed on demand (it pulls onnxruntime, ~250 MB), never by `npm ci`.
+// kokoro-js is installed on demand (`doctor --fix kokoro`: npm ci from optional/voice's lockfile, ~250 MB), never by the
+// skill's own `npm ci`, and loaded from that folder (optional.mjs).
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from './spec.mjs';
-import { doctorCommand, npmInstallKokoro } from './doctor-hint.mjs';
+import { doctorCommand, optionalInstall } from './doctor-hint.mjs';
+import { importOptional } from './optional.mjs';
+import { ensurePinnedFile } from './pinned-file.mjs';
 import { sidecarPath } from './voice-sidecar.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const MODEL_CACHE_DIR = path.join(SKILL_ROOT, '.cache', 'models');
 export const MODEL_ID = 'onnx-community/Kokoro-82M-v1.0-ONNX';
+// The model (Apache-2.0) is downloaded by us, never by transformers.js: kokoro-js passes no revision, so transformers would
+// read the branch head, unhashed. These are the four files it reads for dtype 'q8', at one commit, each with its SHA-256.
+// Obtained 2026-11-15 with the command in docs/superpowers/plans/2026-11-15-pa2-security-pins.md Task 5 (main at that date);
+// the model file's sha256 and size equal the Hugging Face LFS metadata for that commit. About 92 MB in all.
+export const KOKORO_BASE_URL = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/1939ad2a8e416c0acfeecc08a694d14ef25f2231/';
+export const KOKORO_FILES = Object.freeze([
+  Object.freeze({ file: 'config.json', sha256: 'df34b4f930b23447cd4dc410fabfb42eb3f24e803e6c3f97d618fb359380a36f', bytes: 44 }),
+  Object.freeze({ file: 'tokenizer.json', sha256: '77a02c8e164413299b4b4c403b14f8e0e1c1b727db4d46a09d6327b861060a34', bytes: 3497 }),
+  Object.freeze({ file: 'tokenizer_config.json', sha256: 'be1cb066d6ef6b074b3f15e6a6dd21ac88ff3cdaedf325f0aaed686c70f75d20', bytes: 113 }),
+  Object.freeze({ file: 'onnx/model_quantized.onnx', sha256: 'fbae9257e1e05ffc727e951ef9b9c98418e6d79f1c9b6b13bd59f5c9028a1478', bytes: 92361116 }),
+]);
+export const KOKORO_DIR = path.join(MODEL_CACHE_DIR, MODEL_ID);
 export const DEFAULT_VOICE = 'af_heart';
 export const SAMPLE_RATE = 24000;
 // Kokoro truncates one generate() call at ~510 phoneme tokens (~27 s). 300 characters stays well under it.
@@ -20,7 +35,7 @@ const DTYPE = 'q8'; // ~90 MB download on first use
 const CLAUSE_BREAK = /(?<=[,;:—–])\s+/;
 
 export const USAGE = 'usage: node scripts/voice.mjs "<text>" | --text-file <file> --out <file.wav> [--voice af_heart] [--speed 1] [--phonemes] | --list-voices';
-export const INSTALL_HINT = `kokoro-js is not installed. Run: ${npmInstallKokoro()}`
+export const INSTALL_HINT = `kokoro-js is not installed. Run: ${optionalInstall('kokoro')}`
   + ' (about 250 MB; the voice model, about 90 MB, downloads once on first use; '
   + `doctor: ${doctorCommand('--for', 'voiceover')}, id kokoro)`;
 
@@ -92,19 +107,30 @@ export function chunkText(text, splitter = null, max = MAX_CHUNK_CHARS) {
   return sentences.map((s) => s.trim()).filter(Boolean).flatMap((s) => splitLong(s, max));
 }
 
-// The kokoro-js module, or a UsageError with the install command when it is absent.
-export async function loadKokoro() {
-  try {
-    return await import('kokoro-js');
-  } catch (e) {
-    if (e?.code === 'ERR_MODULE_NOT_FOUND' && /kokoro-js/.test(e.message)) throw new UsageError(INSTALL_HINT);
-    throw e;
+// The voice stack (KokoroTTS, TextSplitterStream, env, RawAudio) from optional/voice, or a UsageError with the install command
+// when it is absent. `opts` ({ root, importer, exists }) is for tests.
+export const loadKokoro = (opts = {}) => importOptional({ name: 'voice', pkg: 'kokoro-js', hint: INSTALL_HINT, ...opts });
+
+/**
+ * The folder of the verified model files, downloading any that is absent or whose SHA-256 differs (see ensurePinnedFile).
+ * Options replace the constants (tests); `log` receives one line before each download.
+ */
+export async function ensureKokoroModel({ dir = KOKORO_DIR, base = KOKORO_BASE_URL, files = KOKORO_FILES, fetchImpl = fetch, log = () => {} } = {}) {
+  for (const { file, sha256, bytes } of files) {
+    await ensurePinnedFile({ url: `${base}${file}`, sha256, bytes, file: path.join(dir, file), label: `Kokoro voice model file ${file}`, fetchImpl, log });
   }
+  return dir;
 }
 
-export async function loadModel(kokoro) {
-  const { env } = await import('@huggingface/transformers');
-  env.cacheDir = MODEL_CACHE_DIR; // survives `npm ci`, which wipes node_modules
+// Points transformers.js at the verified folder and turns off remote loading and its file cache, so only bytes that
+// ensureKokoroModel checked can reach the model (getModelFile tries the FS cache, then localModelPath, then remote).
+// The folder survives `npm ci`, which wipes node_modules.
+export function loadModel(kokoro, { root = MODEL_CACHE_DIR } = {}) {
+  const { env } = kokoro;
+  env.localModelPath = root;
+  env.allowLocalModels = true;
+  env.allowRemoteModels = false;
+  env.useFSCache = false;
   return kokoro.KokoroTTS.from_pretrained(MODEL_ID, { dtype: DTYPE, device: 'cpu' });
 }
 
@@ -149,7 +175,7 @@ export { sidecarPath };
 // reports the phonemes it spoke; a chunk it splits further joins into one audio and one phoneme
 // string. `deps.RawAudio` lets tests skip the model stack.
 export async function synthesize(tts, kokoro, { text, voice, speed, out }, deps = {}) {
-  const RawAudio = deps.RawAudio ?? (await import('@huggingface/transformers')).RawAudio;
+  const RawAudio = deps.RawAudio ?? kokoro.RawAudio;
   const spoken = [];
   for (const chunk of chunkText(text, kokoroSplitter(kokoro))) {
     const parts = [];

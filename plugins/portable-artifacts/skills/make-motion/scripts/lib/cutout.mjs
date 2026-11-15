@@ -1,5 +1,6 @@
 // Cutouts: a person lifted out of a photo or a clip with MODNet (Apache-2.0) on onnxruntime-node (MIT), run locally on the CPU.
-// onnxruntime-node is installed on demand (`doctor --fix cutout`), never by `npm ci`; the weights download once, on first use,
+// onnxruntime-node is installed on demand (`doctor --fix cutout`: npm ci from optional/cutout's lockfile), never by the skill's
+// own `npm ci`, and loaded from that folder (optional.mjs); the weights download once, on first use,
 // into <skill>/.cache/models/modnet/ and are checked against MODEL_SHA256 before every use. The image is decoded, shrunk,
 // enlarged and re-encoded on a Playwright page canvas (no sharp); only the matte comes from the model.
 import { createHash, randomBytes } from 'node:crypto';
@@ -8,10 +9,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from './spec.mjs';
-import { doctorCommand, npmInstallCutout } from './doctor-hint.mjs';
+import { doctorCommand, optionalInstall } from './doctor-hint.mjs';
+import { importOptional } from './optional.mjs';
 import { VIDEO_EXTENSIONS } from '../../template/media.mjs';
 import { fileInput } from './ffmpeg.mjs';
 import { fileSha256 } from './video.mjs';
+import { ensurePinnedFile } from './pinned-file.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 // The weights are MODNet's photographic portrait matting checkpoint (https://github.com/ZHKKKe/MODNet, Apache-2.0) as ONNX.
@@ -32,17 +35,15 @@ const MAX_SIDE = 8192; // px; a bigger picture is refused rather than held in a 
 const MAX_FPS = 60;
 const DEFAULT_FPS_CAP = 30;
 export const MAX_FRAMES = 900; // one run: 30 s at 30 fps
-const DOWNLOAD_SLACK = 2; // a download this many times the expected size is refused
 const MIN_FPS = 1;
 const CACHE_VERSION = 1; // salted into every cutout cache key; bump it when the matte or the folder layout changes
 const DONE = 'done.json';
 
 export const USAGE = 'usage: node scripts/cutout.mjs <photo.png|clip.mp4> [--out <dir>] [--fps n]';
-export const INSTALL_HINT = `onnxruntime-node is not installed. Run: ${npmInstallCutout()}`
+export const INSTALL_HINT = `onnxruntime-node is not installed. Run: ${optionalInstall('cutout')}`
   + ' (about 300 MB; the MODNet weights, 25 MB, download once on first use; '
   + `doctor: ${doctorCommand('--for', 'cutout')}, id cutout)`;
 
-const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 const extOf = (file) => path.extname(file).slice(1).toLowerCase();
 
 /** 'image' or 'video' by extension, else null. */
@@ -117,53 +118,21 @@ export function modelSize(w, h) {
   return [Math.max(MULTIPLE, rw - (rw % MULTIPLE)), Math.max(MULTIPLE, rh - (rh % MULTIPLE))];
 }
 
-// The response body, refused as soon as it passes `limit` bytes.
-async function readLimited(res, limit, url, bytes) {
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of res.body) {
-    size += chunk.length;
-    if (size > limit) throw new Error(`MODNet weights download failed: the response from ${url} is larger than the expected ${bytes} bytes; nothing was kept`);
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}
+/**
+ * The path of the weights in `dir`, downloading them first when absent or damaged (see ensurePinnedFile: checked against
+ * `sha256` before they are moved into place). Options replace the constants (tests); `log` receives one line before a download.
+ */
+export const ensureModel = ({ url = MODEL_URL, sha256 = MODEL_SHA256, bytes = MODEL_BYTES, dir = MODEL_DIR, fetchImpl = fetch, log = () => {} } = {}) => (
+  ensurePinnedFile({ url, sha256, bytes, file: path.join(dir, MODEL_FILE), label: 'MODNet weights', fetchImpl, log: (l) => log(`cutout: ${l}`) })
+);
 
 /**
- * The path of the weights in `dir`, downloading them first when absent or damaged: written to a partial file, checked
- * against `sha256`, and only then moved into place, so a half download or a tampered one is never used.
- * Options replace the constants (tests); `log` receives one line before a download.
+ * The onnxruntime-node module from optional/cutout, or a UsageError with the install command when it is absent.
+ * `opts` ({ root, importer, exists }) is for tests.
  */
-export async function ensureModel({ url = MODEL_URL, sha256 = MODEL_SHA256, bytes = MODEL_BYTES, dir = MODEL_DIR, fetchImpl = fetch, log = () => {} } = {}) {
-  const file = path.join(dir, MODEL_FILE);
-  if (existsSync(file) && fileSha256(file) === sha256) return file;
-  mkdirSync(dir, { recursive: true });
-  log(`cutout: downloading the MODNet weights (${Math.round(bytes / 1e6)} MB, once) from ${url}`);
-  const partial = `${file}.partial-${process.pid}-${randomBytes(4).toString('hex')}`;
-  try {
-    let res;
-    try { res = await fetchImpl(url); } catch (e) { throw new Error(`MODNet weights download failed: ${firstLine(e)} (${url}); check the connection and rerun`); }
-    if (!res.ok) throw new Error(`MODNet weights download failed: HTTP ${res.status} from ${url}; rerun later`);
-    const body = await readLimited(res, bytes * DOWNLOAD_SLACK, url, bytes);
-    const got = createHash('sha256').update(body).digest('hex');
-    if (got !== sha256) throw new Error(`sha256 mismatch for the MODNet weights from ${url}: expected ${sha256}, got ${got}; nothing was kept`);
-    writeFileSync(partial, body);
-    renameSync(partial, file);
-    return file;
-  } finally {
-    rmSync(partial, { force: true }); // gone already once moved into place
-  }
-}
-
-/** The onnxruntime-node module, or a UsageError with the install command when it is absent. `importer` is for tests. */
-export async function loadOnnx(importer = (name) => import(name)) {
-  try {
-    const mod = await importer('onnxruntime-node');
-    return mod.default?.InferenceSession ? mod.default : mod;
-  } catch (e) {
-    if (e?.code === 'ERR_MODULE_NOT_FOUND' && /onnxruntime-node/.test(e.message)) throw new UsageError(INSTALL_HINT);
-    throw e;
-  }
+export async function loadOnnx(opts = {}) {
+  const mod = await importOptional({ name: 'cutout', pkg: 'onnxruntime-node', hint: INSTALL_HINT, ...opts });
+  return mod.default?.InferenceSession ? mod.default : mod;
 }
 
 // ---- the page: decode, shrink, compose --------------------------------------------------------------------------------
@@ -276,7 +245,7 @@ function run(ffmpeg, args, what) {
   const r = spawnSync(ffmpeg, args, { encoding: 'utf8', maxBuffer: 1 << 26 });
   if (r.status !== 0) {
     const detail = (r.stderr ?? '').trim().split('\n').filter(Boolean).at(-1) ?? r.error?.message ?? `exit ${r.status}`;
-    const hint = /Unknown encoder|libvpx/i.test(detail) ? '; this ffmpeg has no libvpx-vp9 encoder (Homebrew and ffmpeg-static builds do)' : '';
+    const hint = /Unknown encoder|libvpx/i.test(detail) ? '; this ffmpeg has no libvpx-vp9 encoder (Homebrew builds do)' : '';
     throw new Error(`ffmpeg ${what} failed: ${detail}${hint}`);
   }
 }

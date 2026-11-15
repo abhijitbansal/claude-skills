@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { encodeArgs, findFfmpeg, probeAudio, preflightArgs, probeGraph } from '../scripts/lib/ffmpeg.mjs';
 import { writeWav } from './helpers/wav.mjs';
 import { requireRender } from './helpers/render.mjs';
@@ -26,11 +27,24 @@ test('findFfmpeg throws an install hint when nothing is found', async () => {
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
   process.env.PATH = '/nonexistent'; delete process.env.FFMPEG_PATH;
   try {
-    await assert.rejects(() => findFfmpeg({ skipStatic: true }), /ffmpeg not found.*brew install ffmpeg/s);
+    await assert.rejects(() => findFfmpeg(), /ffmpeg not found.*brew install ffmpeg/s);
   } finally {
     process.env.PATH = saved.p;
     if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;
   }
+});
+
+test('the not-found hint offers system installs and FFMPEG_PATH, never an npm install', async () => {
+  const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
+  process.env.PATH = '/nonexistent'; delete process.env.FFMPEG_PATH;
+  try {
+    await assert.rejects(() => findFfmpeg(), (e) => /FFMPEG_PATH/.test(e.message) && !/npm (?:install|i)\b|ffmpeg-static/.test(e.message));
+  } finally {
+    process.env.PATH = saved.p;
+    if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;
+  }
+  const source = readFileSync(fileURLToPath(new URL('../scripts/lib/ffmpeg.mjs', import.meta.url)), 'utf8');
+  assert.doesNotMatch(source, /ffmpeg-static/);
 });
 
 test('findFfmpeg warns when FFMPEG_PATH is set but not executable', async () => {
@@ -40,7 +54,7 @@ test('findFfmpeg warns when FFMPEG_PATH is set but not executable', async () => 
   let seen = '';
   process.stderr.write = (c) => { seen += c; return true; };
   try {
-    await assert.rejects(() => findFfmpeg({ skipStatic: true }), /ffmpeg not found/);
+    await assert.rejects(() => findFfmpeg(), /ffmpeg not found/);
   } finally {
     process.stderr.write = orig;
     process.env.PATH = saved.p;

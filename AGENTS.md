@@ -80,13 +80,16 @@ that bite hardest in this repo:
   a report that it does not on npm 10.8.2 was never reproduced, so do not state
   it as fact). In a guarded worktree (Shell rules below), run `npm --prefix
   <absolute skill dir> install …` or a `.scratch/` script instead of `cd … &&`.
+  Since 2026-11 make-motion's on-demand installs are `npm ci --prefix
+  <skill>/optional/<name>` from committed lockfiles, with their overrides in
+  that package, so `npm audit --package-lock-only` sees them.
 - **Changing an install command or pin is a cross-surface edit.** The doctor
   fix (`shared/doctor.mjs`, synced into every skill with `node
   bin/sync-shared.mjs`), the runtime error hint (`doctor-hint.mjs`), README,
   USAGE, `references/schema.md` and the changelog all print it. Grep the old
   form across the whole plugin before you push (PR #45 fixed the doctor and
-  missed the hint and schema.md; `bin/test/install-commands.test.mjs` now
-  guards the docs).
+  missed the hint and schema.md; `bin/test/dependency-pins.test.mjs` now
+  guards docs and code).
 - **A pin that fixes a vulnerability must also reach existing installs.** The
   doctor's check must go red for an install made before the pin (see
   `staleOverrides` in `shared/doctor.mjs`), otherwise everyone who already

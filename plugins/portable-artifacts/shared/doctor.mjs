@@ -10,9 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
 
 const REPO = 'abhijitbansal/claude-skills';
-export const KOKORO_PIN = 'kokoro-js@1.2.1';
-// make-motion's cutout.mjs runs MODNet on this (MIT); installed on demand like kokoro, never by `npm ci`.
-export const CUTOUT_PIN = 'onnxruntime-node@1.31.1';
+const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
 const SKILLS_CLI = 'skills@1.7.2';
 const USER_SCOPE_DIRS = ['.claude', '.agents', '.copilot', '.gemini'];
 const PROJECT_SCOPE_DIRS = [...USER_SCOPE_DIRS, '.github'];
@@ -104,17 +102,13 @@ export function nodeVersion(min = 20) {
 }
 
 // What `npm ci` removes from a node_modules that already exists, and the --fix ids that put it back.
-// restore: the --fix ids this skill has for that (dev_deps, kokoro, cutout); omitDev: the reinstall drops dev packages.
+// restore: the --fix ids this skill has for that (dev_deps); omitDev: the reinstall drops dev packages.
+// The optional voice and cutout installs live in <skill>/optional/, so npm ci in the skill folder never touches them.
 function reinstallNote({ omitDev, restore, dir }) {
-  const removes = [
-    ...(omitDev ? ['the dev packages'] : []),
-    ...(restore.includes('kokoro') ? ['any voiceover install (kokoro-js)'] : []),
-    ...(restore.includes('cutout') ? ['any cutout install (onnxruntime-node)'] : []),
-  ];
-  if (removes.length === 0) return undefined;
+  if (!omitDev) return undefined;
   const ids = restore.map((id) => `--fix ${id}`);
   const back = ids.length > 0 ? `restore with ${ids.join(' and ')}` : `restore the dev packages with npm ci --prefix ${dir} (this skill's doctor has no --fix id for them)`;
-  return `npm ci reinstalls node_modules from the lockfile and removes ${removes.join(' and ')}; ${back}`;
+  return `npm ci reinstalls node_modules from the lockfile and removes the dev packages; ${back}`;
 }
 
 export function nodeModules({ omitDev = true, restore = [] } = {}) {
@@ -270,9 +264,8 @@ export function sisterSkill(name) {
   };
 }
 
-// staticDir: the node_modules folder whose ffmpeg-static counts (default: this skill's; make-explainer points at make-motion's).
-export function ffmpeg({ staticDir } = {}) {
-  const staticBinary = (ctx) => pp(ctx).join(staticDir?.(ctx) ?? pp(ctx).join(ctx.skillDir, 'node_modules'), 'ffmpeg-static', ctx.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+// $FFMPEG_PATH, then PATH. An ffmpeg-static binary in node_modules is not looked for: its postinstall download is unpinned.
+export function ffmpeg() {
   return {
     id: 'ffmpeg',
     rank: RANK.ffmpeg,
@@ -282,8 +275,7 @@ export function ffmpeg({ staticDir } = {}) {
     check: (ctx) => {
       const p = ctx.env.FFMPEG_PATH;
       if (p && isExec(ctx, p)) return true;
-      if (ctx.which('ffmpeg')) return true;
-      return isExec(ctx, staticBinary(ctx));
+      return ctx.which('ffmpeg');
     },
     fix: (ctx) => {
       const hasBrew = ctx.platform === 'darwin' && ctx.which('brew');
@@ -353,87 +345,96 @@ export function browser({ required = false, dir, id = 'chromium' } = {}) {
   };
 }
 
+// A parsed JSON file, or null when it cannot be read or parsed: an unreadable file counts as nothing to compare.
+function readJson(ctx, p) {
+  try {
+    return JSON.parse(ctx.readFile(p));
+  } catch {
+    return null;
+  }
+}
+
 // Names whose installed version differs from an exact-version "overrides" pin in the skill's
-// package.json. An install made before a pin existed (fast-uri in every skill's tree; sharp and
-// global-agent in a kokoro install) keeps the vulnerable version until it is reinstalled.
-// Unreadable files count as not stale.
+// package.json. An install made before a pin existed (fast-uri in every skill's tree) keeps the
+// vulnerable version until it is reinstalled. Unreadable files count as not stale.
 // scope 'own': only packages in the skill's own package-lock.json tree (what `npm ci` installs), so
-// node_modules goes red for those alone. scope 'extra': the rest (sharp and global-agent come in only with
-// the on-demand kokoro install, which is not in the lockfile), so that staleness stays on the optional
-// kokoro item. An unreadable lockfile leaves 'own' empty and puts every pin in 'extra'.
+// node_modules goes red for those alone. scope 'extra': the rest. An unreadable lockfile leaves
+// 'own' empty and puts every pin in 'extra'. (The optional voice and cutout stacks have their own
+// package.json and lockfile now; staleLocked checks them.)
 function staleOverrides(ctx, scope = 'all', dir = ctx.skillDir) {
-  const read = (p) => {
-    try {
-      return JSON.parse(ctx.readFile(p));
-    } catch {
-      return null;
-    }
-  };
   const P = pp(ctx);
-  const overrides = read(P.join(dir, 'package.json'))?.overrides ?? {};
-  const locked = new Set(Object.keys(read(P.join(dir, 'package-lock.json'))?.packages ?? {}).map((k) => k.slice(k.lastIndexOf('node_modules/') + 'node_modules/'.length)));
+  const overrides = readJson(ctx, P.join(dir, 'package.json'))?.overrides ?? {};
+  const locked = new Set(Object.keys(readJson(ctx, P.join(dir, 'package-lock.json'))?.packages ?? {}).map((k) => k.slice(k.lastIndexOf('node_modules/') + 'node_modules/'.length)));
   const inScope = (name) => scope === 'all' || locked.has(name) === (scope === 'own');
   return Object.entries(overrides)
-    .filter(([name, want]) => inScope(name) && /^\d+\.\d+\.\d+$/.test(want) && (read(P.join(dir, 'node_modules', name, 'package.json'))?.version ?? want) !== want)
+    .filter(([name, want]) => inScope(name) && EXACT_VERSION.test(want) && (readJson(ctx, P.join(dir, 'node_modules', name, 'package.json'))?.version ?? want) !== want)
     .map(([name]) => name);
 }
 
-// kokoro and cutout are both `npm install <pin> --no-save`. npm rebuilds node_modules from package.json and the
-// lockfile and prunes every package not in them, so an install that leaves the other one off the command line
-// deletes it. Each fix therefore names its own pin plus the pin of whichever sibling is already installed.
-const ON_DEMAND_PINS = [{ pkg: 'kokoro-js', pin: KOKORO_PIN, id: 'kokoro' }, { pkg: 'onnxruntime-node', pin: CUTOUT_PIN, id: 'cutout' }];
+// make-motion's voiceover (kokoro-js) and cutout (onnxruntime-node, running MODNet) stacks are optional. Each is its own
+// locked package in <skill>/optional/<dir>/ (package.json with its own overrides, and a package-lock.json), installed with
+// `npm ci --prefix` and loaded from there by scripts/lib/optional.mjs. They are not in the skill's own lockfile, so
+// `npm ci` in the skill folder leaves them alone, and installing one never removes the other.
+export const OPTIONAL = { kokoro: { dir: 'voice', pkg: 'kokoro-js' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } };
 
-function onDemandInstall(ctx, id) {
-  const pins = ON_DEMAND_PINS.filter((p) => p.id === id || ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', p.pkg))).map((p) => p.pin);
-  return { argv: ['npm', 'install', ...pins, '--no-save'], cwd: ctx.skillDir };
+export const optionalInstallArgv = (ctx, id) => ['npm', 'ci', '--prefix', pp(ctx).join(ctx.skillDir, 'optional', OPTIONAL[id].dir)];
+
+// Names in { ...dependencies, ...overrides } of <dir>/package.json whose installed version is present and differs from an
+// exact pin. An install made before a pin landed keeps the old version until `npm ci` reruns. Unreadable files count as not stale.
+function staleLocked(ctx, dir) {
+  const P = pp(ctx);
+  const pkg = readJson(ctx, P.join(dir, 'package.json')) ?? {};
+  return Object.entries({ ...pkg.dependencies, ...pkg.overrides })
+    .filter(([name, want]) => typeof want === 'string' && EXACT_VERSION.test(want) && (readJson(ctx, P.join(dir, 'node_modules', name, 'package.json'))?.version ?? want) !== want)
+    .map(([name]) => name);
 }
 
-export function kokoro() {
+// The requirement behind kokoro() and cutout(): present when its own folder holds the package and nothing in it is stale.
+function optionalPackage({ id, why, size, notes }) {
+  const { dir, pkg } = OPTIONAL[id];
+  const folder = (ctx) => pp(ctx).join(ctx.skillDir, 'optional', dir);
+  // An install from before the move sits in the skill's node_modules and is no longer loaded; `--fix node_modules` removes it.
+  const oldInstallNote = (ctx) => {
+    const oldDir = pp(ctx).join(ctx.skillDir, 'node_modules');
+    return ctx.exists(pp(ctx).join(oldDir, pkg)) ? `the old ${pkg} install in ${oldDir} is no longer used; --fix node_modules removes it` : null;
+  };
   return {
-    id: 'kokoro',
-    rank: RANK.kokoro,
+    id,
+    rank: RANK[id],
     needsNodeModules: true,
     why: (ctx) => {
-      const stale = staleOverrides(ctx, 'extra');
-      return stale.length > 0 ? `local text-to-speech for voiceover; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : 'local text-to-speech for voiceover';
+      const stale = staleLocked(ctx, folder(ctx));
+      const old = oldInstallNote(ctx);
+      return `${why}${stale.length > 0 ? `; reinstall to get ${stale.join(', ')} as pinned in optional/${dir}/package.json` : ''}${old ? `; ${old}` : ''}`;
     },
     required: false,
-    size: '≈250 MB, plus a 90 MB model on first use',
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'kokoro-js')) && staleOverrides(ctx, 'extra').length === 0,
+    size,
+    check: (ctx) => ctx.exists(pp(ctx).join(folder(ctx), 'node_modules', pkg)) && staleLocked(ctx, folder(ctx)).length === 0,
+    presentInfo: (ctx) => {
+      const old = oldInstallNote(ctx);
+      return old ? { note: old } : null;
+    },
     fix: (ctx) => {
-      // Run inside the skill folder so npm applies the skill's package.json "overrides" (patched sharp
-      // and global-agent). --prefix applied them in Linux tests with npm 10.8/10.9, but was reported
-      // not to on macOS with npm 10.8.2; running from the folder works either way.
-      const step = onDemandInstall(ctx, 'kokoro');
-      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; this keeps an installed cutout (onnxruntime-node), but a later `--fix node_modules` (npm ci) removes both, so rerun `--fix kokoro` (and `--fix cutout`)' };
+      const argv = optionalInstallArgv(ctx, id);
+      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes };
     },
     needsSudo: () => false,
   };
 }
 
-// make-motion's cutout.mjs: onnxruntime-node (the MODNet weights, about 25 MB, download on first use). The install names
-// an installed kokoro-js too (see onDemandInstall), so neither removes the other. A pre-pin install counts as missing like
-// kokoro's does (the 'extra' overrides: not in the lockfile).
-export function cutout() {
-  return {
-    id: 'cutout',
-    rank: RANK.cutout,
-    needsNodeModules: true,
-    why: (ctx) => {
-      const stale = staleOverrides(ctx, 'extra');
-      return stale.length > 0 ? `cuts a person out of a photo or clip (text-behind-subject) with MODNet; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : 'cuts a person out of a photo or clip (text-behind-subject) with MODNet, locally';
-    },
-    required: false,
-    size: '≈300 MB, plus a 25 MB model on first use',
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'onnxruntime-node')) && staleOverrides(ctx, 'extra').length === 0,
-    fix: (ctx) => {
-      // From inside the skill folder, like kokoro, so npm applies the skill's package.json "overrides".
-      const step = onDemandInstall(ctx, 'cutout');
-      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 25 MB MODNet model downloads on first use; this keeps an installed voiceover (kokoro-js), but a later `--fix node_modules` (npm ci) removes both, so rerun `--fix cutout` (and `--fix kokoro`)' };
-    },
-    needsSudo: () => false,
-  };
-}
+export const kokoro = () => optionalPackage({
+  id: 'kokoro',
+  why: 'local text-to-speech for voiceover',
+  size: '≈250 MB, plus a 90 MB model on first use',
+  notes: 'installs from optional/voice/package-lock.json; the 90 MB voice model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone',
+});
+
+export const cutout = () => optionalPackage({
+  id: 'cutout',
+  why: 'cuts a person out of a photo or clip (text-behind-subject) with MODNet, locally',
+  size: '≈300 MB, plus a 25 MB model on first use',
+  notes: 'installs from optional/cutout/package-lock.json; the 25 MB MODNet model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone',
+});
 
 // The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing file
 // never fails doctor. The auto fix runs the skill's own shared/agents.mjs writer; the plugin's installer

@@ -4,6 +4,27 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [Unreleased]
+
+### Behaviour changes to know about
+
+- **The voiceover and cutout installs move to `optional/voice` and `optional/cutout`** and are installed by `npm ci`
+  from committed lockfiles (`doctor --fix kokoro`, `doctor --fix cutout`). An old install in the skill's `node_modules`
+  is ignored: run `doctor --fix kokoro` or `--fix cutout` once, and `--fix node_modules` removes the old copy. Each
+  folder carries its own `overrides`, which are the ones the skill's `package.json` used to hold for these installs:
+  `sharp` 0.35.5 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w; kokoro-js 1.2.1 reaches sharp ^0.34
+  through `@huggingface/transformers` 3.x) and `global-agent` 4.1.3 (global-agent 3.x pulls in roarr and sprintf-js,
+  GHSA-hp3w-g68c-fv3c). `npm audit --package-lock-only` in each folder reports 0 vulnerabilities (measured 2026-11-15).
+- **The Kokoro model is pinned to commit `1939ad2` with a SHA-256 per file.** The voice script downloads the four files
+  itself and checks each one before every use; a cached file that differs is downloaded again once. Before, kokoro-js
+  read the model from the Hugging Face branch head, unhashed.
+- **ffmpeg-static is no longer looked for.** Use a system ffmpeg or set `FFMPEG_PATH`. Its postinstall download was
+  unpinned and unhashed, and an existing install in `node_modules` no longer counts (the doctor says ffmpeg is missing
+  until you set `FFMPEG_PATH` to that binary).
+- **The unused `@fontsource/inter` and `@fontsource/jetbrains-mono` are removed** from make-motion.
+- **New standing tests: exact pins, locked installs, hashed downloads.** `bin/test/dependency-pins.test.mjs` fails on a
+  dependency range, an install without a lockfile or an unpinned or unhashed download.
+
 ## [1.2.0] - 2026-11-06
 
 make-motion draws by hand: a scene can be drawn on a white board by an illustrated hand, with sketch blocks, an `erase`

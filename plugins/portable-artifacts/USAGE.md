@@ -673,8 +673,7 @@ mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
 (approximately; `M` mutes) and the MP4 timing is exact. Music is always a
 file you supply. For narration the agent runs
 `voice.mjs --text-file voice/<scene>.txt --out voice/<scene>.wav` (a text file, not a quoted argument, because the shell expands `$` and backticks; Kokoro, local, 28 voices,
-`--voice af_heart` by default) after asking once to install `kokoro-js`
-(about 250 MB plus a 90 MB model downloaded a single time). Short UI sounds need no
+`--voice af_heart` by default) after asking once to install the voice package (doctor --fix kokoro: about 250 MB from optional/voice's lockfile, plus a 90 MB model downloaded once, pinned and SHA-256 checked). Short UI sounds need no
 file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`,
 `swoosh`, `typing`, `drop`, `ding`, each with `at`, or `scene` plus `at`, and optional `volume`,
 `pan` and `note`; a `typing` cue can instead name a text with `follow`) is synthesised at
@@ -847,8 +846,8 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
 | `check: skipped (no browser: …)` from make-diagram, make-explainer or make-motion | Expected without Playwright or Chromium; the page is still built. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
-| `kokoro-js is not installed` | `cd <skill-dir> && npm install kokoro-js@1.2.1 --no-save` (voiceover only; run it inside the skill folder so the skill's `overrides` apply; `npm ci` removes it) |
-| `onnxruntime-node is not installed` | `cd <skill-dir> && npm install onnxruntime-node@1.31.1 --no-save` (cutouts only; run it inside the skill folder so the skill's `overrides` apply; `npm ci` removes it, so rerun `doctor --fix cutout`; a kokoro install keeps it) |
+| `kokoro-js is not installed` | `npm ci --prefix <skill-dir>/optional/voice` (voiceover only; or doctor --fix kokoro; npm ci in the skill folder leaves it alone) |
+| `onnxruntime-node is not installed` | `npm ci --prefix <skill-dir>/optional/cutout` (cutouts only; or doctor --fix cutout; npm ci in the skill folder leaves it alone) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
 | `ffmpeg not found` | macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg` (then a new terminal), Linux `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
 | `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |

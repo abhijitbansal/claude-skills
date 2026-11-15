@@ -214,7 +214,7 @@ its own page, [`references/sketch.md`](references/sketch.md), and
 |---|---|---|
 | `validate.mjs <spec>` | Schema plus cross-field checks (unique ids, keyframe times, per-type props, image, video and audio paths, video trims against the clip length (needs ffprobe), audio scene/start/fade fits, captions files parsed (a cue out of order names its line), chart compile, no remote URLs) | `--json` |
 | `blocks.mjs list` / `blocks.mjs show <name>` | One line per block with its params (optional ones marked `?`); or one block's params table (type, required, default, description), where it goes on each format, and a ready-to-paste element. An unknown name exits 2 with the closest one and the list | none |
-| `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand, ~250 MB + 90 MB model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices`, `--phonemes` (one `<sentence><TAB><phonemes>` line per sentence after the usual three lines, to check how a word with two readings was said; the sidecar `.json` always carries `phonemes`) |
+| `voice.mjs "<text>"` | Local Kokoro voiceover → 24 kHz wav for `audio[].src` (kokoro-js installed on demand into optional/voice, ~250 MB, plus a 90 MB pinned model once) | `--out <file.wav>`, `--voice`, `--speed`, `--list-voices`, `--phonemes` (one `<sentence><TAB><phonemes>` line per sentence after the usual three lines, to check how a word with two readings was said; the sidecar `.json` always carries `phonemes`) |
 | `cutout.mjs <photo.png\|clip.mp4>` | Cuts the person out of a photo (`<stem>.png`, RGBA) or a clip (`<stem>.webm`, VP9 alpha) with MODNet, locally, for a `text-behind-subject` block (onnxruntime-node installed on demand, ~300 MB, plus a 25 MB model once; `doctor --fix cutout`) | `--out <dir>` (default a `cutout` folder beside the input), `--fps <1-60>` (clips) |
 | `beats.mjs <audio>` | Beat grid of an audio file (ffmpeg; the first five minutes) → `<stem>.beats.json` for a spec's root `beats`; prints the path and `<bpm> BPM, <n> beats`; exit 1 with `no steady beat found in <file> (confidence …; needs 0.5)` | `--out <file>.json`, `--min-confidence <0-1>`, `--bpm <n>` (force the tempo), `--min-bpm <n>` / `--max-bpm <n>` (narrow the search) |
 | `storyboard.mjs <brief.json>` | For a clip over 20 s: a make-explainer `plan` page spec from a brief `{ "title", "seconds", "scenes": [{ "id", "beat", "seconds" }], "theme"? }`; prints the plan path and `build: node …/make-explainer/scripts/build.mjs <plan>`. Skips with one stdout line `storyboard: skipped (not needed (12s is 20s or less))`, `(make-explainer is not installed beside make-motion (looked in <path>))` or `(no one to ask (non-interactive run))`, no file, exit 0. Exit 1: the brief breaks a rule; exit 2: usage or IO | `--out <plan.json>` (required), `--non-interactive` |
@@ -231,8 +231,7 @@ least one frame before the scene ends.
 
 **Chromium**: rendering uses Playwright's bundled Chromium, which gives the
 same output on every machine. If it isn't installed, rendering falls back to
-installed Google Chrome with a warning. **ffmpeg**: found via `$FFMPEG_PATH`,
-then `PATH`, then an optional `ffmpeg-static` install. It is never bundled.
+installed Google Chrome with a warning. **ffmpeg**: found via `$FFMPEG_PATH`, then `PATH`. It is never bundled; point `FFMPEG_PATH` at any build you trust.
 
 ## Security
 
@@ -253,6 +252,4 @@ dependencies, pinned by the lockfile, are anime.js v4 (MIT), Playwright
 (Apache-2.0), Vega, Vega-Lite and vega-interpreter (BSD-3-Clause), Ajv (MIT),
 lottie-web 5.13.0 (MIT; the page loads only its light SVG build),
 world-atlas 2.0.2 and us-atlas 3.0.1 (ISC; Natural Earth and US Census TopoJSON; the page fetches only the four files it names),
-the theme fonts in the synced `shared/fonts` (OFL-1.1), and, for the hand-drawn style, Caveat 700 (OFL-1.1, from `@fontsource/caveat` 5.3.0) and the Lucide icons (ISC, with some MIT icons derived from Feather), vendored under `template/sketch/` with their licence texts in `template/sketch/LICENSES`. The `@fontsource/inter` and
-`@fontsource/jetbrains-mono` npm packages are still pinned but no longer read: the
-default look now comes from `dusk`, and the `press` theme gets JetBrains Mono from `shared/fonts`.
+the theme fonts in the synced `shared/fonts` (OFL-1.1), and, for the hand-drawn style, Caveat 700 (OFL-1.1, from `@fontsource/caveat` 5.3.0) and the Lucide icons (ISC, with some MIT icons derived from Feather), vendored under `template/sketch/` with their licence texts in `template/sketch/LICENSES`. The default look comes from `dusk`, and the `press` theme gets JetBrains Mono from `shared/fonts`.

@@ -23,7 +23,7 @@ const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 
 let browserProbe; // one launch per test file; every test there needs the same answer
 const PROBES = {
-  ffmpeg: ({ skipStatic }) => findFfmpeg({ skipStatic }),
+  ffmpeg: () => findFfmpeg(),
   ffprobe: ({ ffmpeg }) => findFfprobe({ ffmpeg }) ?? Promise.reject(new Error('no ffprobe found')),
   browser: () => (browserProbe ??= launchBrowser({ quiet: true }).then((b) => b.close())),
 };
@@ -35,14 +35,14 @@ const PROBES = {
  * `PA_REQUIRE_RENDER=1 but <tool> is unavailable: <first line of the cause>` when PA_REQUIRE_RENDER=1.
  * `probes` replaces individual probes (each returns the tool or rejects); for tests of this helper.
  */
-export async function requireRender(t, { need = DEFAULT_NEED, skipStatic = false, probes = {} } = {}) {
+export async function requireRender(t, { need = DEFAULT_NEED, probes = {} } = {}) {
   const unknown = need.filter((tool) => !TOOLS.includes(tool));
   if (unknown.length) throw new Error(`requireRender: unknown tool ${unknown.join(', ')}; accepted: ${TOOLS.join(', ')}`);
   const probe = { ...PROBES, ...probes };
   const found = { ffmpeg: null, ffprobe: null };
   for (const tool of TOOLS.filter((x) => need.includes(x))) {
     try {
-      const got = await probe[tool]({ skipStatic, ffmpeg: found.ffmpeg });
+      const got = await probe[tool]({ ffmpeg: found.ffmpeg });
       if (tool !== 'browser') found[tool] = got;
     } catch (cause) {
       if (process.env.PA_REQUIRE_RENDER === '1') {

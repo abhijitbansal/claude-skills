@@ -1,18 +1,18 @@
 import { spawnSync } from 'node:child_process';
 import { accessSync, constants } from 'node:fs';
 import path from 'node:path';
-import { doctorCommand, npmInstallFfmpegStatic } from './doctor-hint.mjs';
+import { doctorCommand } from './doctor-hint.mjs';
 
 const HINT = 'ffmpeg not found. Install it (macOS: brew install ffmpeg; Windows: winget install Gyan.FFmpeg; Debian/Ubuntu: sudo apt-get install ffmpeg), '
-  + `or set FFMPEG_PATH, or run: ${npmInstallFfmpegStatic()} `
+  + 'or set FFMPEG_PATH to an ffmpeg you trust '
   + `(doctor: ${doctorCommand()}, id ffmpeg)`;
 
 const isExecutable = (p) => {
   try { accessSync(p, constants.X_OK); return true; } catch { return false; }
 };
 
-// $FFMPEG_PATH, then PATH, then an optionally installed ffmpeg-static.
-export async function findFfmpeg({ skipStatic = false } = {}) {
+// $FFMPEG_PATH, then PATH. No ffmpeg is bundled or fetched: an npm package's binary download would be unpinned and unhashed.
+export async function findFfmpeg() {
   const fromEnv = process.env.FFMPEG_PATH;
   if (fromEnv && isExecutable(fromEnv)) return fromEnv;
   if (fromEnv) process.stderr.write(`warning: FFMPEG_PATH is set to "${fromEnv}" but it is not executable; looking elsewhere\n`);
@@ -20,13 +20,6 @@ export async function findFfmpeg({ skipStatic = false } = {}) {
   if (!probe.error && probe.status === 0) {
     const which = spawnSync(process.platform === 'win32' ? 'where' : 'which', ['ffmpeg'], { encoding: 'utf8' });
     return which.status === 0 ? which.stdout.split('\n')[0].trim() : 'ffmpeg';
-  }
-  if (!skipStatic) {
-    try {
-      const mod = await import('ffmpeg-static');
-      const p = mod.default ?? mod;
-      if (typeof p === 'string' && isExecutable(p)) return p;
-    } catch { /* optional dependency not installed */ }
   }
   throw new Error(HINT);
 }

@@ -1,12 +1,13 @@
 name: audit-on-demand-deps
-# `npm audit` in a skill folder cannot see packages installed with `npm install --no-save`
-# (make-motion's voiceover: kokoro-js). This audits them, on the PRs that change their pins and
+# `npm audit` in a skill folder cannot see the packages installed on demand into <skill>/optional/<name>/
+# (make-motion's voiceover and cutout stacks). This audits their lockfiles, on the PRs that change them and
 # weekly, because new advisories land without any commit here.
 on:
   pull_request:
     paths:
       - 'plugins/portable-artifacts/skills/make-motion/package.json'
       - 'plugins/portable-artifacts/skills/make-motion/package-lock.json'
+      - 'plugins/portable-artifacts/skills/make-motion/optional/**'
       - 'plugins/portable-artifacts/shared/doctor.mjs'
       - 'scripts/audit-on-demand-deps.sh'
       - '.github/workflows/audit-on-demand-deps.yml'
@@ -23,5 +24,5 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: audit the on-demand voiceover install
+      - name: audit the optional voice and cutout lockfiles
         run: bash scripts/audit-on-demand-deps.sh

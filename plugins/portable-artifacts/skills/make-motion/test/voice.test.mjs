@@ -1,12 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  parseVoiceArgs, chunkText, sentenceTimes, sidecarPath, synthesize, phonemeLines, DEFAULT_VOICE, MODEL_CACHE_DIR, MAX_CHUNK_CHARS,
+  parseVoiceArgs, chunkText, sentenceTimes, sidecarPath, synthesize, phonemeLines, DEFAULT_VOICE, MODEL_ID, MODEL_CACHE_DIR, MAX_CHUNK_CHARS,
+  KOKORO_BASE_URL, KOKORO_FILES, KOKORO_DIR, ensureKokoroModel, loadModel,
 } from '../scripts/lib/voice.mjs';
 import { writeFileSync } from 'node:fs';
 
@@ -179,7 +181,7 @@ test('voice CLI: usage error exits 2 with the usage line', () => {
   assert.match(r.stderr, /usage: node scripts\/voice\.mjs/);
 });
 
-const haveModel = () => existsSync(MODEL_CACHE_DIR) && process.env.VOICE_TEST === '1';
+const haveModel = () => existsSync(path.join(KOKORO_DIR, 'onnx/model_quantized.onnx')) && existsSync(path.join(root, 'optional/voice/node_modules/kokoro-js')) && process.env.VOICE_TEST === '1';
 
 test('voice CLI: synthesises a short phrase to a 24 kHz wav (needs cached model + VOICE_TEST=1)', { skip: !haveModel() && 'model not cached or VOICE_TEST unset' }, () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'voice-'));
@@ -234,4 +236,79 @@ test('voice CLI: an output path under a regular file exits 1 cleanly (needs cach
   const r = run(['Hi.', '--out', path.join(dir, 'blocker', 'x.wav')]);
   assert.equal(r.status, 1, `status ${r.status} signal ${r.signal}\n${r.stderr}`);
   assert.equal(r.signal, null);
+});
+
+// ---- the Kokoro model is pinned to one commit and checked file by file ----------------------------------------------------
+
+const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
+const FILES = [{ file: 'config.json', body: Buffer.from('{}') }, { file: 'onnx/model_quantized.onnx', body: Buffer.from('onnx') }];
+const pinned = FILES.map(({ file, body }) => ({ file, sha256: sha256(body), bytes: body.length }));
+const BASE = 'https://example.invalid/r/';
+const tmpDir = () => mkdtempSync(path.join(tmpdir(), 'kokoro-pin-'));
+// A fetch that records each URL and answers the file's body, or override[file].
+const serve = (calls, override = {}) => async (url) => {
+  calls.push(url);
+  const file = url.slice(BASE.length);
+  return new Response(override[file] ?? FILES.find((f) => f.file === file).body);
+};
+
+test('the Kokoro pin: a commit-pinned base URL and four files, each with a sha256 and a size', () => {
+  assert.match(KOKORO_BASE_URL, /^https:\/\/huggingface\.co\/onnx-community\/Kokoro-82M-v1\.0-ONNX\/resolve\/[0-9a-f]{40}\/$/);
+  assert.deepEqual(KOKORO_FILES.map((f) => f.file), ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model_quantized.onnx']);
+  for (const { sha256: hash, bytes } of KOKORO_FILES) {
+    assert.match(hash, /^[0-9a-f]{64}$/);
+    assert.ok(Number.isInteger(bytes) && bytes > 0);
+  }
+  assert.equal(Object.isFrozen(KOKORO_FILES), true);
+  assert.equal(path.relative(root, KOKORO_DIR), path.join('.cache', 'models', 'onnx-community', 'Kokoro-82M-v1.0-ONNX'));
+  assert.equal(KOKORO_DIR, path.join(MODEL_CACHE_DIR, MODEL_ID));
+});
+
+test('ensureKokoroModel reuses a cached file only when its hash matches', async () => {
+  const dir = tmpDir();
+  writeFileSync(path.join(dir, 'config.json'), '{}');
+  const calls = [];
+  const opts = (fetchImpl) => ({ dir, base: BASE, files: pinned, fetchImpl });
+  assert.equal(await ensureKokoroModel(opts(serve(calls))), dir);
+  assert.deepEqual(calls, [`${BASE}onnx/model_quantized.onnx`]);
+  writeFileSync(path.join(dir, 'config.json'), '{"old":true}');
+  await ensureKokoroModel(opts(serve(calls)));
+  assert.equal(readFileSync(path.join(dir, 'config.json'), 'utf8'), '{}');
+});
+
+test('one bad file fails the load, names it, and keeps no copy of it', async () => {
+  const dir = tmpDir();
+  await assert.rejects(
+    () => ensureKokoroModel({ dir, base: BASE, files: pinned, fetchImpl: serve([], { 'onnx/model_quantized.onnx': 'evil' }) }),
+    /sha256 mismatch for the Kokoro voice model file onnx\/model_quantized\.onnx/,
+  );
+  assert.equal(existsSync(path.join(dir, 'onnx', 'model_quantized.onnx')), false);
+});
+
+test('offline first use names the URL and keeps nothing', async () => {
+  const dir = tmpDir();
+  await assert.rejects(
+    () => ensureKokoroModel({ dir, base: BASE, files: pinned, fetchImpl: async () => { throw new TypeError('fetch failed'); } }),
+    /Kokoro voice model file config\.json download failed: fetch failed \(https:\/\/example\.invalid\/r\/config\.json\)/,
+  );
+  assert.equal(existsSync(path.join(dir, 'config.json')), false);
+});
+
+test('loadModel points transformers at the verified folder and turns remote loading and its file cache off', async () => {
+  const env = { allowRemoteModels: true, useFSCache: true };
+  let args;
+  const stub = { env, KokoroTTS: { from_pretrained: async (...a) => { args = a; return 'tts'; } } };
+  assert.equal(await loadModel(stub, { root: '/r' }), 'tts');
+  assert.deepEqual(env, { allowRemoteModels: false, useFSCache: false, allowLocalModels: true, localModelPath: '/r' });
+  assert.deepEqual(args, [MODEL_ID, { dtype: 'q8', device: 'cpu' }]);
+});
+
+test('synthesises with fetch disabled once the pinned files are cached (needs optional/voice + VOICE_TEST=1)', { skip: !haveModel() && 'model, optional/voice or VOICE_TEST missing' }, () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'voice-'));
+  const noFetch = path.join(dir, 'no-fetch.mjs');
+  writeFileSync(noFetch, "globalThis.fetch = () => { throw new Error('network used'); };\n");
+  mkdirSync(dir, { recursive: true });
+  const r = spawnSync(process.execPath, ['--import', pathToFileURL(noFetch).href, CLI, 'Hello.', '--out', path.join(dir, 'nf.wav')], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stderr, /network used/);
 });

@@ -10,7 +10,7 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from './lib/spec.mjs';
-import { parseVoiceArgs, loadKokoro, loadModel, synthesize, sidecarPath, phonemeLines, USAGE, INSTALL_HINT } from './lib/voice.mjs';
+import { parseVoiceArgs, loadKokoro, ensureKokoroModel, loadModel, synthesize, sidecarPath, phonemeLines, USAGE, INSTALL_HINT } from './lib/voice.mjs';
 
 const EXIT_USAGE = 2;
 const EXIT_FAILURE = 1;
@@ -37,6 +37,7 @@ async function run(opts, tts, kokoro) {
 async function main() {
   const opts = parseVoiceArgs(process.argv.slice(2));
   const kokoro = await loadKokoro();
+  await ensureKokoroModel({ log: (l) => process.stderr.write(`voice: ${l}\n`) });
   const tts = await loadModel(kokoro);
   try {
     await run(opts, tts, kokoro);

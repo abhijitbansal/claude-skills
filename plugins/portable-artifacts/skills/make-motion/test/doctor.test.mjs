@@ -61,13 +61,9 @@ test('ffmpeg is reported required-missing when PATH is empty and FFMPEG_PATH uns
     t.skip('ffmpeg is not on this machine\'s PATH, so the real-PATH guardrail step cannot run');
     return;
   }
-  if (fs.existsSync(path.join(SKILL, 'node_modules/ffmpeg-static'))) {
-    t.skip('ffmpeg-static is installed in make-motion, so an empty PATH still finds an ffmpeg');
-    return;
-  }
   const env = { ...process.env, PATH: tmp('doctor-path-') };
   delete env.FFMPEG_PATH;
-  // node is run by absolute path, so an empty PATH is fine; ffmpeg-static is absent from node_modules.
+  // node is run by absolute path, so an empty PATH is fine.
   const f = JSON.parse(run(SKILL, ['--json'], env).stdout).missing.find((m) => m.id === 'ffmpeg');
   assert.ok(f && f.required === true);
 });
@@ -75,7 +71,7 @@ test('ffmpeg is reported required-missing when PATH is empty and FFMPEG_PATH uns
 test('--for voiceover asks for kokoro; plain does not; --for check is accepted and never asks for kokoro', () => {
   const ids = (args) => JSON.parse(run(SKILL, ['--json', ...args]).stdout).missing.map((m) => m.id);
   assert.equal(ids([]).includes('kokoro'), false);
-  const hasKokoro = fs.existsSync(path.join(SKILL, 'node_modules/kokoro-js'));
+  const hasKokoro = fs.existsSync(path.join(SKILL, 'optional/voice/node_modules/kokoro-js'));
   assert.equal(ids(['--for', 'voiceover']).includes('kokoro'), !hasKokoro);
   assert.notEqual(run(SKILL, ['--for', 'check']).status, 2);
   assert.equal(ids(['--for', 'check']).includes('kokoro'), false);
@@ -103,12 +99,12 @@ test('--for cutout asks for onnxruntime-node (optional, so exit 0), plain and th
   assert.equal(idsOf(requirementsFor(undefined)).includes('cutout'), false);
   assert.equal(idsOf(requirementsFor('voiceover')).includes('cutout'), false);
   const ids = (args) => JSON.parse(run(SKILL, ['--json', ...args]).stdout).missing.map((m) => m.id);
-  const hasOnnx = fs.existsSync(path.join(SKILL, 'node_modules/onnxruntime-node'));
+  const hasOnnx = fs.existsSync(path.join(SKILL, 'optional/cutout/node_modules/onnxruntime-node'));
   assert.equal(ids(['--for', 'cutout']).includes('cutout'), !hasOnnx);
   assert.equal(ids([]).includes('cutout'), false);
   const fresh = JSON.parse(run(freshCopy(), ['--json', '--for', 'cutout']).stdout).missing.find((m) => m.id === 'cutout');
   assert.ok(fresh, 'a copy with no node_modules reports cutout missing');
-  assert.match(fresh.fix.auto, /npm install onnxruntime-node@\d+\.\d+\.\d+ --no-save$/);
+  assert.match(fresh.fix.auto, /npm ci --prefix \S+optional\/cutout$/);
   assert.match(fresh.why, /MODNet/);
 });
 
@@ -117,14 +113,13 @@ test('install hints name the doctor with its real path and the missing item id',
   const doctor = quoteArg(path.join(SKILL, 'scripts/doctor.mjs'));
   const { INSTALL_HINT } = await lib('voice.mjs');
   assert.ok(INSTALL_HINT.includes(`node ${doctor} --for voiceover, id kokoro)`), INSTALL_HINT);
-  assert.ok(INSTALL_HINT.includes(`${quoteArg(SKILL.replace(/[\\/]$/, ''))} && npm install kokoro-js@1.2.1 --no-save`), INSTALL_HINT);
-  assert.doesNotMatch(INSTALL_HINT, /--prefix/);
+  assert.ok(INSTALL_HINT.includes(`npm ci --prefix ${quoteArg(path.join(SKILL, 'optional', 'voice'))}`), INSTALL_HINT);
   assert.doesNotMatch(INSTALL_HINT, /<skill-dir>/);
   const { findFfmpeg } = await lib('ffmpeg.mjs');
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
   process.env.PATH = tmp('doctor-nopath-'); delete process.env.FFMPEG_PATH;
   try {
-    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => e.message.includes(`node ${doctor}, id ffmpeg)`));
+    await assert.rejects(() => findFfmpeg(), (e) => e.message.includes(`node ${doctor}, id ffmpeg)`));
   } finally {
     process.env.PATH = saved.p;
     if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;
@@ -147,18 +142,6 @@ test('the browser hint names the doctor id and the make-motion prefix (playwrigh
   assert.equal(r.status, 0, r.stderr);
   const real = fs.realpathSync(dir);
   assert.ok(r.stdout.includes(`No browser available. Run: npx --no --prefix ${quoteArg(real)} playwright install chromium (doctor: node ${quoteArg(path.join(real, 'scripts/doctor.mjs'))}, id chromium)`), r.stdout);
-});
-
-test('the ffmpeg hint installs into make-motion', async () => {
-  const { findFfmpeg } = await import(pathToFileURL(path.join(SKILL, 'scripts/lib/ffmpeg.mjs')).href);
-  const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
-  process.env.PATH = tmp('doctor-nopath-'); delete process.env.FFMPEG_PATH;
-  try {
-    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => e.message.includes(`npm i ffmpeg-static --no-save --prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`));
-  } finally {
-    process.env.PATH = saved.p;
-    if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;
-  }
 });
 
 test('the doctor command in hints quotes a path with spaces, as the shared helper does', async () => {
@@ -201,13 +184,4 @@ test('builder_agent is an optional requirement in every target, and a missing ag
   fs.mkdirSync(path.join(home, '.codex/agents'));
   fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
   assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
-});
-
-// kokoro-js@1.2.1 pins @huggingface/transformers 3.x, which pins sharp ^0.34 (GHSA-f88m-g3jw-g9cj,
-// GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w; fixed in 0.35.5) and reaches global-agent 3.x -> roarr ->
-// sprintf-js (GHSA-hp3w-g68c-fv3c). The doctor installs kokoro from this folder so these overrides apply.
-test('package.json overrides keep the voiceover dependencies on patched sharp and global-agent', () => {
-  const pkg = JSON.parse(fs.readFileSync(path.join(SKILL, 'package.json'), 'utf8'));
-  assert.equal(pkg.overrides?.sharp, '0.35.5');
-  assert.equal(pkg.overrides?.['global-agent'], '4.1.3');
 });

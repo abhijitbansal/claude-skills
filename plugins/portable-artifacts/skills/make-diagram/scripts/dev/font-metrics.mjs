@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Dev only. Regenerates shared/fonts/metrics.json from the @fontsource .woff files
-// (devDependencies). Run from skills/make-diagram after `npm install`:
+// (devDependencies). Run from skills/make-diagram after `npm ci`:
 //   node scripts/dev/font-metrics.mjs
 // The output is committed; nothing at run time needs opentype.js.
 import fs from 'node:fs';

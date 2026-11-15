@@ -67,10 +67,10 @@ export function loudnessLimiter() {
 export const targets = ['check', 'voiceover', 'cutout'];
 // Optional in every target: the cheap-model agent file the SKILL.md may hand the build to.
 export const requirementsFor = (target) => (target === 'check'
-  ? [nodeVersion(20), nodeModules({ omitDev: false, restore: ['kokoro', 'cutout'] }), browser({ required: true }), builderAgent()]
+  ? [nodeVersion(20), nodeModules({ omitDev: false }), browser({ required: true }), builderAgent()]
   : [
     nodeVersion(20),
-    nodeModules({ omitDev: false, restore: ['kokoro', 'cutout'] }),
+    nodeModules({ omitDev: false }),
     ffmpeg(),
     browser({ required: true }),
     ...(target === 'voiceover' || target === ALL ? [kokoro()] : []),

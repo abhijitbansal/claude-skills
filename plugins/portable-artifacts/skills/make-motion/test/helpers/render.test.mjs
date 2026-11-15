@@ -29,8 +29,8 @@ function runRequireRender(env, optionsSource) {
   return spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env });
 }
 
-// skipStatic rules out an installed ffmpeg-static, so "no ffmpeg" really means none.
-const NO_FFMPEG = '{ skipStatic: true }';
+// PATH holds no ffmpeg and FFMPEG_PATH is unset
+const NO_FFMPEG = '{}';
 // The browser probe fails the way Playwright's does: a long message whose first line is the cause.
 // (PLAYWRIGHT_BROWSERS_PATH=/nonexistent is no use: launchBrowser then falls back to a system Chrome.)
 const NO_BROWSER = `{ probes: { browser: async () => { throw new Error("Executable doesn't exist at /x\\nlong install advice"); } } }`;
