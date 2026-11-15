@@ -2,9 +2,9 @@
 
 The engineering guide for **claude-skills**, for human contributors and AI
 coding agents (Claude Code, Cursor, Codex, …). [`CLAUDE.md`](./CLAUDE.md)
-points here and instructs Claude Code to read this file before dispatching
-subagents or opening a PR (it is not auto-loaded into context); other tools
-read it directly.
+imports this file (`@AGENTS.md`), so Claude Code loads it every session in this
+repo; other tools read it directly. Whether the import loads it in a given
+session is checked from the next session's context listing, not assumed.
 `CLAUDE.md` remains the source of truth for the **behavioral guidelines** (the
 `claude-skills:guidelines` block merged into other repos by
 `setup/merge_guidelines.py`) — this file covers **process**: orchestration,
@@ -132,9 +132,12 @@ Rules use **tiers**, not model names (names rot). The mapping is the only line
 to edit when the lineup changes:
 
 > **Current tier mapping (edit me, not the rules):** planner/orchestrator tier
-> = **Fable 5 / Opus** · executor tier = **Sonnet** · chore tier = **Haiku**.
-> Fable is the fast planner-tier default for fan-out orchestration; reserve
-> Opus for the hardest single planning/verification step.
+> = **Fable 5 / Opus** · reviewer tier = **Opus** · executor tier = **Sonnet** ·
+> chore tier = **Haiku** (**Sonnet** at low effort when the chore needs a little
+> judgment). Fable is the fast planner-tier default for fan-out orchestration;
+> reserve Opus at planner effort for the hardest single planning/verification
+> step. Nothing else in this file names a model; `subagent-dispatch` defers to
+> this line.
 
 - **Never dispatch with both knobs implicit.** An unset knob silently inherits
   the orchestrator's — top tier, high effort — which for mechanical work is
@@ -146,7 +149,8 @@ to edit when the lineup changes:
   |---|---|---|
   | Plan authoring · architecture · adversarial verify · judging | planner | high–xhigh (`max` for one hardest verify, never fleets) |
   | Skill/doc implementation · TDD | executor | medium–high |
-  | Breadth finders / reviewers | executor | medium |
+  | Breadth finders | executor | medium |
+  | Phase-gate review of an executor-authored diff, verifier fleets | reviewer | medium (`high` for an adversarial or final review) |
   | Inventory, grep sweeps, digests, file moves, git summaries, checklist generation | chore | low |
 - **Effort escalates before tier.** Bump effort one step first, then tier.
   Escalate when: (a) the *identical* diagnostic survives two materially
@@ -167,13 +171,34 @@ to edit when the lineup changes:
   `limit` or per file; small diffs may be read whole.
 - **Schema every data-returning dispatch** — parse-and-retry loops are pure
   token burn.
-- **Shell rules.** In Claude Code sessions with the worktree guard, follow,
-  and put in every dispatch prompt: one plain command per Bash call with
+- **Report delivery.** A subagent report is cut at about 3,000 to 4,000
+  characters (estimated from transcripts). Put in every prompt for an agent
+  whose report you need in full: write the full report to a named file, return
+  its path plus a summary of at most 2,500 characters, verdict first, ending
+  `END OF REPORT`; send it once. If a report never arrives, follow the Recovery
+  section of `core-workflow:subagent-report-truncation-delivery-contract`.
+- **Shell rules, every session** (macOS zsh, BSD userland): quote globs
+  (`'*.md'`), because zsh stops with `no matches found`; no `====` separator
+  lines (zsh reads `=` as a command); use the Edit tool instead of `sed -i`
+  (BSD `sed` needs a backup suffix and a failed chain writes nothing); no
+  `timeout` command, it is missing here; list a directory before opening a
+  guessed path. `grep` may be ugrep: run `grep -n 'word' <file>`, then Read with
+  an offset, and never use `.{0,N}` windows (ugrep stops on complexity).
+- **Shell rules with the worktree guard.** Follow these, and put them in every
+  dispatch prompt as COMMAND LIMITS: one plain command per Bash call with
   literal absolute paths; no `cd … &&`, pipes, `;`, shell variables, loops,
   heredocs, or paths outside the worktree except the session scratchpad;
-  scripts via the Write tool under `.scratch/`; remove your own scratch dir
-  with one plain `rm -rf <literal absolute path>` when the guard allows it,
-  never a variable path; no foreground `sleep` (use Monitor).
+  scripts via the Write tool under `.scratch/`; run noisy commands bare, with
+  no pipe into `head`, `tail` or `grep`. A subagent never runs `rm`: the
+  Blast Radius hold stops an `rm` for 10 minutes and a subagent cannot answer
+  it. It writes scratch under `.scratch/` or the session scratchpad by literal
+  path, leaves it in place, and lists it in its report; the attended
+  orchestrator removes it with one plain `rm -rf <literal absolute path>`,
+  never a variable path. No foreground `sleep` and no `timeout`: use Monitor
+  with an until-loop.
+- **Close what you start.** Stop an agent or teammate with `TaskStop` once its
+  result is read and no follow-up is planned. Commit on green only when the
+  dispatch prompt authorises it; otherwise the orchestrator commits.
 
 ---
 
@@ -183,8 +208,18 @@ Context: multiple contributors, **PR + CI is the gate** (no on-device testing
 step as in Cubby). Work batches onto a feature branch, opens a PR, merges once
 CI is green and review passes.
 
-- **Branch first — never commit work directly to `main`.** One branch per
-  logical unit of work (`feat/<slug>`, `fix/<slug>`, `docs/<slug>`).
+- **Branch first — never commit work directly to `main`.** One integration
+  branch and one PR per plan, wave or topic (`feat/<slug>`, `fix/<slug>`,
+  `docs/<slug>`); the phases are commits on it (`fix(phaseN):` for follow-ups).
+  Default to the session's current branch. On `main`, branch off and say so in
+  one line, without asking. A second branch only when the owner asks;
+  follow-ups go on the existing branch and PR, and sibling PRs are folded into
+  it and closed. Stack branches only when the owner picks that. In a session
+  worktree, rename a `worktree-*` branch to the prefix above before the first
+  commit.
+- **No finishing menu.** When `superpowers:finishing-a-development-branch`
+  asks how to integrate and the plan names a PR, push the branch and open the
+  PR; skip the merge/PR/keep menu.
 - **Reviewing or testing a PR: work on that PR's own branch.** Check it out
   (`gh pr checkout <n>`, or fetch `pull/<n>/head` and switch to it), test
   there, and put follow-up commits (learnings, fixes) on the same branch so
@@ -193,6 +228,13 @@ CI is green and review passes.
   superseding PR only when that branch cannot be pushed, and say why in the
   new PR. In a session worktree, push with
   `git push origin HEAD:<pr-branch>` rather than inventing a branch name.
+  For a contributor's PR:
+  - Reproduce each claimed bug with a failing test before you fix it, then
+    leave one PR comment naming the fix commit sha and what it changed.
+  - When several contributor PRs overlap, merge the oldest first and rebase
+    the rest before re-review.
+  - Close a duplicate PR with a comment that points at the surviving one;
+    never merge it.
 - **Commits are task-level and atomic** — conventional format
   (`feat`/`fix`/`refactor`/`docs`/`test`/`chore`), one logical change, each
   leaving the tree green (`bats tests/bats` + `shellcheck` where scripts
@@ -204,18 +246,103 @@ CI is green and review passes.
 - **Push feature branches** with `-u` once a unit of work is complete and has
   had the pre-push review (gates below), then open a PR. PR body: analyze the
   full commit history (`git diff main...HEAD`), draft a comprehensive summary,
-  include a test plan.
+  include a test plan. A bug-fix PR body opens with four lines: the symptom,
+  the root cause, the fix, and the test that failed before it.
 - **Pre-review gates, in order:** relevant tests green locally → a
   fresh-context reviewer (`/code-review` on the diff) **before the first
   push** → CI green on the PR, whose automated `claude-code-review` workflow
-  also reviews → merge (`--squash --delete-branch`) with no CRITICAL/HIGH
-  unfixed from either review. Each code fix ships with a regression test that
-  failed first (docs and prose fixes are exempt). MEDIUM/LOW may defer as
-  follow-up commits.
+  also reviews → merge (see Merging) with no CRITICAL/HIGH unfixed from either
+  review. Each code fix ships with a regression test that failed first (docs
+  and prose fixes are exempt). MEDIUM/LOW may defer as follow-up commits.
+- **Merging.** `main` needs the owner's approval, so the owner merges with one
+  plain command: `gh pr merge <N> --squash --admin`. An agent confirms CI is
+  green (`gh pr checks <N>`), then ends its report with that line, ready to
+  paste; it runs the merge itself only when the owner asks for it in that turn,
+  and then as the single plain command, never inside a pipe, `&&` chain or
+  `$(…)`, which skip the allow rule and reach the auto-mode classifier (it
+  denies `[Merge Without Review]`; see
+  `core-workflow:github-solo-branch-protection-codeowners`). Before merging a
+  parent PR with `--delete-branch`, retarget each open child PR
+  (`gh pr edit <child> --base main`): deleting the parent's branch closes the
+  child, and a closed PR's base cannot be changed.
+- **After the merge, verify the deploy.** A merge that touches `site/**` or
+  `docs/**` triggers `pages.yml` (while Pages is enabled; see its header). Run `gh run list --workflow pages.yml
+  --limit 3`; if no run started for the merge commit, start one with
+  `gh workflow run pages.yml`. Poll until it is green, then fetch the live page
+  and look for a marker from the change before saying it is deployed.
+- **Plugin versions.** The `plugin-version-guard` job in `test.yml` fails a PR
+  that touches `plugins/<name>/**` and leaves that plugin's
+  `.claude-plugin/plugin.json` `version` unchanged. Make one bump per plugin per
+  PR, and one `CHANGELOG.md` heading where the plugin keeps one (today only
+  `portable-artifacts`): one version bump per merged release, not per commit. A
+  change that ships nothing to users puts `[skip-plugin-bump]` in a commit
+  message, which skips the check for the whole PR.
 - **Site/inventory changes** that touch counts or the copy-button contract
   must pass the per-line-copy discipline in `CLAUDE.md`; verify rendered pages
   locally (Chrome MCP: navigate, inspect DOM, screenshot) before committing
-  when the change is visual.
+  when the change is visual. `scripts/site-preview.sh` stages `site/` and
+  `docs/` exactly as `pages.yml` does into `.scratch/_site`, serves it on a free
+  loopback port, checks the index page and `assets/site.css` for 200, and
+  prints each page URL; `scripts/site-preview.sh --stop` stops it.
+- **Local gate for the two mods** (`session-compass`, `test-board`). CI does
+  not run their TypeScript tests or type check, so run before you push, from
+  the repo root:
+
+  ```
+  claude plugin validate plugins/session-compass
+  claude --plugin-dir plugins/session-compass
+  npx -y -p typescript@5.6.3 tsc -p plugins/session-compass
+  claude plugin test plugins/session-compass
+  ```
+
+  and the same four with `plugins/test-board`. The `claude --plugin-dir` run
+  lays the gitignored `.claude-plugin/types` that `tsc` needs. Whether
+  `claude plugin test` runs unauthenticated on a CI runner is unconfirmed, so
+  there is no CI job for it yet.
+- **Test installs in a temp dir.** Run an installer (`adapters/install.sh`,
+  `plugins/portable-artifacts/bin/install.mjs`, `npx skills add`) against a
+  temporary directory or a fake `HOME`, never the repo checkout: a project-scope
+  install leaves `.agents/`, `.claude/skills/` and `skills-lock.json` that shadow
+  the plugin's skills for every later session here.
+
+---
+
+## Shipping a portable-artifacts change
+
+Before the PR for any change under `plugins/portable-artifacts/`. These are the
+steps no test already enforces; `sweep_counts.py --check`, the install-command
+guard and the copy-button lint cover the rest.
+
+- **Version and notes.** Bump `plugins/portable-artifacts/.claude-plugin/plugin.json`
+  once (`marketplace.json` carries no per-plugin version). Write the new
+  `CHANGELOG.md` heading as user-facing release notes with behaviour changes
+  first, then copy it into the `#whats-new` block of
+  `docs/features/portable-artifacts.html`, and update the plugin `README.md`
+  and `USAGE.md`.
+- **Shared code.** After editing `shared/`, run
+  `node plugins/portable-artifacts/bin/sync-shared.mjs`, then `--check`.
+- **Goldens** change only for an intended visual change, stated in the commit.
+  Never regenerate one to clear a red test.
+- **Gallery.** Rebuild each page under
+  `docs/features/showcase/portable-artifacts/gallery/` that the change affects,
+  from its source spec; set `SOURCE_DATE_EPOCH` so the stamped date is stable
+  and record the value in the PR body. Run `check.mjs` on each rebuilt page one
+  at a time (one browser at a time) and open the `--shots` PNGs. Hero images
+  and clips come from real files in the repo, never mock-ups.
+  `tests/pytest/test_portable_artifacts_page.py` checks the page. No script
+  lists gallery pages that lack a source spec; check by hand.
+- **A new skill** also needs its `test.yml` matrix row and `npm ci` loop entry,
+  its doctor requirements, and an icon in `shared/icons.mjs`; the full list is "Adding a sibling
+  skill" in `plugins/portable-artifacts/shared/README.md`.
+- **A release showcase** (feature clips, a promo, an explainer with the clips
+  embedded, a guide) follows one order: read the `CHANGELOG.md` entry for the
+  release; render one draft clip per capability, one at a time; render one
+  promo in viral mode (with voiceover only after `doctor --for voiceover` and
+  one ask); build the explainer in a folder where the relative `video` paths
+  resolve (`sections[n].video: file not found` otherwise); write the guide from
+  `USAGE.md`; copy the results into the gallery and run the page test; add the
+  site anchors; zip without `rm`; end the report with the steps only the owner
+  can do.
 
 ---
 

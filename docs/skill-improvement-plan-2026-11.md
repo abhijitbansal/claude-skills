@@ -1,6 +1,33 @@
 # Skill improvement plan (2026-11): session mining and deep review
 
-**Status: proposed, nothing executed.** This branch adds only this plan and its [register](skill-improvement-plan-2026-11-register.md). No skill, hook, setting or `CLAUDE.md` was changed. Sequence and owner decisions are below.
+**Status: executed on this branch (PR #57), in part.** The plan and its [register](skill-improvement-plan-2026-11-register.md) came first; six waves of lane work and one docs lane followed. The text below is the plan as proposed, kept as written, except the G-44 sentence, which was wrong. Read the Status block for what ran.
+
+### Status (2026-11-15)
+
+**How these figures were obtained.** The counts are lane-reported, from the orchestrator's implementation ledger (`.scratch/skill-plan-2026-11/implementation-ledger.md`, not committed). They were not re-verified. The ledger lists every item report that a lane marked partial or skipped; it does not list the done ones. It counts 333 item reports, of which 220 were reported done. An item can have several reports, because several lanes share some items, so reports are not items. What each lane ran is in its commit message (`git log origin/main..HEAD`). The authored tests, bats and pytest were run by the lanes that wrote them. Browser tests were written but, with the exceptions the commits state, not run: a serial browser pass is still owed, and its gates are only proven when each seeded failure is shown failing.
+
+**Not measured.** **D3: no eval was run with a model**, so no billed baseline exists and no pass rate changed. The before-picture is still recoverable from a checkout of `153711dd`. No live Claude Code session ran either mod, the `second-wind` watcher, a real Codex listing, a signed-out simulator, or a device.
+
+**Executed.** The ordered phases ran as lanes: repo safety and CI (Phase 0), the `core-workflow` hooks and command fixes, the small plugins and mods, `ios-dev` lessons, release, scaffold and site tooling (Phases 6 and 7), the `portable-artifacts` shared modules and the five skills (Phases 2 to 4), evals and docs (Phase 5), the routing gate and the 17 gated descriptions (Phase 1), and this docs lane. Eight plugin versions were bumped once each; `portable-artifacts` is 1.3.0 with a changelog block.
+
+**Partial or skipped, by area** (ids as in the register; the first group is the unfinished half of each):
+
+- **Repo setup, CI, contribute, adapters:** CAT-15, CAT-16, CAT-94, CAT-07, CAT-20, PA-42 (CI half), NEW-65 (block counts only). The docs lane closed the AGENTS.md halves of CAT-16 and NEW-10, the README, USAGE and catalog path for CAT-94, and wrote CAT-33 as a documented local gate; the CI job for the mods is not built.
+- **`core-workflow`:** G-34, NEW-17, NEW-22, NEW-10, G-09, NEW-39, PA-51, and CAT-108 (the hook is written, but only its `xcode-license` row is sure to fire; the other two rows may never reach the events the hook listens on, so it stays partial until a live session shows a hint after a hold or refusal). The bash-guard deny text in G-09 is not in this repo.
+- **Small plugins and mods:** CAT-84, CAT-88, CAT-91, CAT-38 partial; NEW-27 and W1R-M14 skipped. `claude plugin test` was denied by the auto-mode classifier, so neither mod's test suite was run in the lane that changed it (W1R-M13, W1R-M16).
+- **`ios-dev` lessons:** CAT-66, G-29, G-30, G-37, CAT-57, CAT-46, CAT-70, W1I-M05. The failed-save and rollback claims are labelled "observed in one app, not reproduced" where the lane's own experiment did not reproduce them (CAT-66's two-context test restored attributes in all six cases); no skill thesis was rewritten on that evidence.
+- **`ios-dev` release, scaffold, site, preview:** CAT-44, CAT-45, CAT-41, G-17, G-14, NEW-54, G-49, G-01, CAT-47, CAT-48, W1I-M12, W1I-M18. The iPad screenshot-size block in NEW-54 is unsourced (entered from memory of Apple's spec and labelled so); the FAIL severity of that gate is the owner's call.
+- **`make-diagram`:** PA-23, G-68, PA-22, PA-17, PA-21, NEW-73, PA-08; code and non-browser tests ran, the Play-tab and Explore-panel browser tests did not.
+- **`make-dashboard`:** PA-33, PA-30, G-61, PA-31, PA-34, PA-21, PA-59, PA-07. PA-07's shared default output is not implemented there: it still writes `dist/index.html`, because `serve`, the live server and the refresh contract share that folder.
+- **`make-motion`:** PA-40, PA-20, PA-42, PA-37, PA-41, G-69, G-74, PA-45, PA-08, PA-35. The `.impeccable` cache is untracked and ignored. The two fontsource deps stay (D12). The notification-stack golden sheet needs a browser (W2P-M10).
+- **`make-scene`:** PA-48, PA-21, PA-26, W3-M02 (the fragment browser test was never run).
+- **`make-explainer`:** PA-03, PA-21, G-07, G-08, NEW-69, G-65, PA-08, and PA-61 part 1 only (the `diff` section; the review preset and `gather pr` were not built).
+- **Evals and docs:** PA-55, PA-46, PA-37, PA-66, PA-58, PA-06, G-57, PA-11, PA-05, CAT-96; PA-65 skipped by design.
+- **Routing gate and descriptions:** PA-35, PA-26, CAT-47, CAT-48, CAT-70, CAT-21, NEW-39, CAT-83, CAT-89, CAT-90. The replays and live runs named in each item (the launchd probe, a live Linear, a signed-out simulator) were not done.
+
+**Deferred, not attempted** (104 ids in the lane plan, by reason): other repos or the user's own files (23 ids, e.g. CAT-04, CAT-09, G-13, G-52); owner only (17, e.g. CAT-34, CAT-40, G-72, PA-60, PA-65, CAT-100); needs a device or live session (7, e.g. CAT-107, CAT-77's pane anchoring, the G-01 probe); too large for this pass (PA-12, PA-49, PA-52, PA-53, PA-09 part 2, PA-48's beat highlight, PA-61's review preset); no action or watch (G-42, G-48, G-28, G-38, G-39, NEW-24, PA-44); needs a billed eval (PA-46's measurement, the PA-54 and PA-55 runs, PA-39's CI voice job); folded (G-71, G-40, CAT-82); contested and dropped by default (32 ids, e.g. G-59, NEW-23, PA-13, PA-25); refuted (NEW-42, NEW-44, G-32, G-60). The user-level files (`~/.claude/*`, `~/.agents`) were not touched here: CAT-104, the `CLAUDE.md` additions, `subagent-dispatch`, and the `rules/` edits are the owner's.
+
+**Owner decisions recorded.** D12: the owner chose the shipped defaults on 2026-11-15 (`docs/decisions-pending.md`). The four CAT-99 setup calls are parked there with defaults. The owner agreed to split `portable-artifacts` into its own repository after this PR, in a separate session; nothing here does the split. Skills counts did not move, because no `SKILL.md` was added.
 
 **Scope asked for:** all past sessions in all repos, including explainers and portable artifacts; what can become a skill; what improves the existing skills, especially portable artifacts; a deep review of the existing skills.
 
@@ -82,7 +109,7 @@ Two Workflow runs. Scripts built the corpus, so scraping used no model tokens. A
 | Cloud DNS go-live (NEW-38), browser-extension publish (NEW-55), live-acceptance suites (NEW-51), recorder-first testing (NEW-50), session forensics (NEW-29) | 1 or 2 sessions, or a runbook already exists | **No.** |
 | Angle review (NEW-42) | Refuted: the fan-out was `/code-review max`, not hand-rolled | **No.** |
 
-Promotions from private repos are limited. `record.sh` should return to `ios-dev:app-preview` (G-44), and two failed-save rules should move from an app's `AGENTS.md` into `ios-dev` (G-29, G-34). A public `ios-dev:swift-reviewer` agent is deferred until a run actually fails (G-47).
+Promotions from private repos are limited. `record.sh` is not ported back to `ios-dev:app-preview` (G-44, as the register narrowed it): it lives in a private repo, so CAT-54 uses it only as a reference and fixes its snippet from the `simctl` docs. Two failed-save rules move from an app's `AGENTS.md` into `ios-dev` (G-29, G-34). A public `ios-dev:swift-reviewer` agent is deferred until a run actually fails (G-47).
 
 ---
 
@@ -215,7 +242,7 @@ Each is parked with a default. The plan proceeds on the default except where it 
 | D9 | Simple English default (PA-63) | Default-on with a number-parity warning (G-63); opt-in | **Default-on with the warning**, reviewed after evals |
 | D10 | Delete untracked `.agents/`, `.claude/skills/`, `skills-lock.json`, `.scratch-placeholder/` (CAT-97) | Delete; gitignore | **Delete, on your confirmation.** Keep `.claude/worktrees/`. Gitignoring hides the shadowing. |
 | D11 | Split the two largest repo rulebooks (G-52) | Move process text to on-demand docs; leave | **Split one**, because the Cubby file is at 99.7% of its size ceiling |
-| D12 | Parked items in `docs/decisions-pending.md` (G-73) | As listed there | **Keep shipped defaults** |
+| D12 | Parked items in `docs/decisions-pending.md` (G-73) | As listed there | **Keep shipped defaults.** Chosen by the owner on 2026-11-15. |
 
 ---
 

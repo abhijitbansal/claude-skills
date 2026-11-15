@@ -106,11 +106,13 @@ The everyday glue, useful in any repo.
 | `github-repo-go-public-preflight-scan` | skill | Scan working tree AND full git history for secrets before flipping a GitHub repo private → public. |
 | `github-solo-branch-protection-codeowners` | skill | Branch protection on a solo-owner repo: others' PRs need approval, owner can still self-merge. |
 | `/explain-branch` | command | Invoke the branch explainer, diffing against a given base (default `main`); writes to `.scratch/branch-explainer/` and delivers it. |
+| `/cleanup-branches` | command | Inventory merged, stale and worktree-held branches with the merge proof for each, and hand over one delete line per branch. Never deletes on its own. |
 | `/team` | command | Multi-agent team orchestration helper. |
 | `/contribute-skill` | command | Scaffold a new skill into a plugin and open the PR (`--plugin` picks the destination). |
 | `image-parser` | agent | Vision subagent: OCR, screenshot comparison, "is the title cut off?" checks. |
 | `web-researcher` | agent | Docs/API lookup subagent: tight synthesis with sources, not raw page dumps. |
 | `shellcheck-on-edit` | hook | PostToolUse hook — lints any `.sh` file the agent edits. |
+| `skill-hint` | hook | PostToolUse and PostToolUseFailure hook — points the model at a lesson skill when its literal error text appears in a Bash result (three exact-string rows). |
 | `hook-merge-base-diff-command-regex-anchoring` | skill (mined) | Two-dot git diff against a moving ref leaks unrelated commits into a hook check; anchor command-matching regexes to statement position; fail-open sentinel writes. |
 | `claude-transcript-purge-accreting-stats-archive` | skill (mined) | Claude Code purges session transcripts after ~30 days — an "all-time" stats pipeline needs a committed, per-field-max-merged accreting archive, not live re-mining. |
 | `launchd-git-automation-self-heal` | skill (mined) | launchd git jobs die silently on a dirty tree, a missing clone, or a stale retry branch — bootstrap outside the script, hard-reset before pull, `checkout -B` for retries. |
@@ -193,7 +195,7 @@ SKILL.md is tool-agnostic — one script wires the same skills everywhere.
 
 | Mode | Target | What it does |
 | --- | --- | --- |
-| `codex` | `~/.codex/skills` | Symlinks every plugin skill. Skips cleanly if Codex isn't installed; `CODEX_SKILLS_DIR` overrides. |
+| `codex` | `~/.agents/skills` | Symlinks every plugin skill into the folder Codex reads (the same one `portable-artifacts/bin/install.mjs` uses). Skips cleanly if `~/.codex` is missing; `CODEX_SKILLS_DIR` overrides. Links an older run left in `~/.codex/skills` are not pruned. |
 | `copilot` | `~/.copilot/skills` | Same for Copilot CLI; `COPILOT_SKILLS_DIR` overrides. |
 | `agents-md` | any `AGENTS.md` | Maintains a marker-delimited index block — every skill's name, description, and path — for Hermes and anything AGENTS.md-aware. Idempotent. |
 | `all` | everything above | All three modes; prunes links it created for removed skills. |

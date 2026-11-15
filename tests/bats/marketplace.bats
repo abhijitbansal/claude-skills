@@ -30,3 +30,15 @@ for p in d['plugins']:
 "
   [ "$status" -eq 0 ]
 }
+
+@test "core-workflow description is identical in marketplace.json and plugin.json" {
+  run python3 -c "
+import json, os
+root = '${REPO_ROOT}'
+m = json.load(open(os.path.join(root, '.claude-plugin/marketplace.json')))
+entry = next(p for p in m['plugins'] if p['name'] == 'core-workflow')
+pj = json.load(open(os.path.join(root, 'plugins/core-workflow/.claude-plugin/plugin.json')))
+assert entry['description'] == pj['description'], (entry['description'], pj['description'])
+"
+  [ "$status" -eq 0 ]
+}
