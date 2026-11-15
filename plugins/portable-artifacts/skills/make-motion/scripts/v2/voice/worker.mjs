@@ -26,14 +26,16 @@ import { FRAME_SAMPLES, SAMPLE_RATE, framesOf, wordTimes } from './words.mjs';
 /** Silences are whole milliseconds, so a shot's length is exact at the sidecar's 1e-4 s (model audio is 600-sample frames). */
 export const SILENCE_QUANTUM_SAMPLES = SAMPLE_RATE / 1000;
 const SAMPLES_PER_MS = SAMPLE_RATE / 1000;
-/** Frames of each pad token a call keeps at least (2 frames = 50 ms). */
-export const PAD_KEEP_FRAMES = 2;
-/** The lead pad is never cut closer than this to the call's first word start (75 ms; measured onsets run up to 31 ms before it). */
-export const ONSET_MARGIN_SAMPLES = 75 * SAMPLES_PER_MS;
-/** Linear fade at a cut edge (5 ms), so a trim cannot click. */
+/**
+ * The lead pad is cut up to this long before the call's first word start (by the start rule). Measured onsets run at
+ * most 31 ms before that start (.scratch/voice/pad-onset.mjs, 18 calls), so 75 ms keeps every onset.
+ */
+export const LEAD_KEEP_MS = 75;
+const LEAD_KEEP_SAMPLES = LEAD_KEEP_MS * SAMPLES_PER_MS;
+/** Linear fade in at the cut (5 ms), so a trim cannot click. */
 export const FADE_SAMPLES = 5 * SAMPLES_PER_MS;
 /** The pad-trim settings as one value: part of the cache hash (synth.mjs voiceHash), since they shape every WAV and time. */
-export const TRIM = Object.freeze({ padKeepFrames: PAD_KEEP_FRAMES, onsetMarginSamples: ONSET_MARGIN_SAMPLES, fadeSamples: FADE_SAMPLES });
+export const TRIM = Object.freeze({ leadKeepSamples: LEAD_KEEP_SAMPLES, fadeSamples: FADE_SAMPLES });
 export const JOB_VERSION = 1;
 /** What is missing, in version 2 terms, then the same install command as version 1 (scripts/lib/voice.mjs). */
 export const INSTALL_HINT = `the optional voice package is not installed. Run: ${optionalInstall('kokoro')}`;
@@ -74,31 +76,27 @@ function checkFrames(shotId, frames, waveform) {
   }
 }
 
-// A copy of `samples` with a linear fade over FADE_SAMPLES at the front and/or the back.
-function faded(samples, { atFront, atBack }) {
+// A copy of `samples` with a linear fade in over FADE_SAMPLES.
+function fadedIn(samples) {
   const out = Float32Array.from(samples);
   const n = Math.min(FADE_SAMPLES, out.length);
-  for (let i = 0; i < n; i++) {
-    if (atFront) out[i] *= i / FADE_SAMPLES;
-    if (atBack) out[out.length - 1 - i] *= i / FADE_SAMPLES;
-  }
+  for (let i = 0; i < n; i++) out[i] *= i / FADE_SAMPLES;
   return out;
 }
 
 /**
- * One call's waveform with its pad tokens trimmed (team-lead ruling 1, Task 5; amended, see the report). Only the two
- * pad tokens (id 0 at each end) are cut, never a space or punctuation token, so the model's own pause at a comma or
- * full stop stays. The lead pad is cut up to ONSET_MARGIN_SAMPLES before `firstStart` (the call's first word start
- * by the start rule, in untrimmed samples), and never below PAD_KEEP_FRAMES: measured, the voice starts up to 145 ms
- * inside the lead pad, so a fixed 2-frame keep would clip onsets. The tail pad keeps PAD_KEEP_FRAMES. A cut edge gets
- * a FADE_SAMPLES linear fade. -> { samples, cutFront } (the samples removed in front, to shift word times by).
+ * One call's waveform with its lead pad trimmed (team-lead ruling on Task 5, measured rule). Only the lead pad token
+ * (id 0 at the front) is cut: up to LEAD_KEEP_MS before `firstStart` (the call's first word start by the start rule,
+ * in untrimmed samples), never past the pad's end and never negative, with a FADE_SAMPLES fade in when anything is
+ * cut. The voice starts up to 145 ms inside the lead pad (measured), so the cut follows the word, not a fixed length.
+ * The tail pad, and every space and punctuation token (the model's own pause at a comma or full stop), are left as
+ * they are. -> { samples, cutFront } (the samples removed in front, to shift word times by).
  */
 export function trimPads(waveform, frames, firstStart) {
-  const maxFront = Math.max(0, frames[0] - PAD_KEEP_FRAMES) * FRAME_SAMPLES;
-  const cutFront = Math.max(0, Math.min(firstStart - ONSET_MARGIN_SAMPLES, maxFront));
-  const cutBack = Math.max(0, frames.at(-1) - PAD_KEEP_FRAMES) * FRAME_SAMPLES;
-  const kept = waveform.subarray(cutFront, waveform.length - cutBack);
-  return { samples: faded(kept, { atFront: cutFront > 0, atBack: cutBack > 0 }), cutFront };
+  const padSamples = frames[0] * FRAME_SAMPLES;
+  const cutFront = Math.max(0, Math.min(firstStart - LEAD_KEEP_SAMPLES, padSamples));
+  const kept = waveform.subarray(cutFront);
+  return { samples: cutFront > 0 ? fadedIn(kept) : Float32Array.from(kept), cutFront };
 }
 
 // One speech call: the trimmed waveform and its say tokens' { start, end } in samples from the trimmed call's first

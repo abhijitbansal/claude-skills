@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { parseSay } from '../../engine/script/say.mjs';
 import { ACCEPTED_VOICES, STYLE_DIM, editCall, openKokoro, planShotCalls, prepareCall } from '../../scripts/v2/voice/kokoro.mjs';
 import {
-  FADE_SAMPLES, INSTALL_HINT, PAD_KEEP_FRAMES, SILENCE_QUANTUM_SAMPLES, TRIM, encodeWav, synthesiseShot, trimPads,
+  FADE_SAMPLES, INSTALL_HINT, LEAD_KEEP_MS, SILENCE_QUANTUM_SAMPLES, TRIM, encodeWav, synthesiseShot, trimPads,
 } from '../../scripts/v2/voice/worker.mjs';
 import { WORKER_PATH, synthesiseFilm, voiceHash } from '../../scripts/v2/voice/synth.mjs';
 import { readSidecar, sentencesOf, writeSidecar } from '../../scripts/v2/voice/sidecar.mjs';
@@ -69,8 +69,7 @@ test('voiceHash changes when a say, a shot id, the voice, the model hash, a lead
 test('voiceHash changes when a pad-trim setting changes, so a sidecar made before a trim change is never re-used', () => {
   const base = hashOf(FILM);
   assert.equal(hashOf(FILM, { trim: { ...TRIM } }), base, 'the default trim is the module constants');
-  assert.notEqual(hashOf(FILM, { trim: { ...TRIM, padKeepFrames: TRIM.padKeepFrames + 1 } }), base);
-  assert.notEqual(hashOf(FILM, { trim: { ...TRIM, onsetMarginSamples: TRIM.onsetMarginSamples + 24 } }), base);
+  assert.notEqual(hashOf(FILM, { trim: { ...TRIM, leadKeepSamples: TRIM.leadKeepSamples + 24 } }), base);
   assert.notEqual(hashOf(FILM, { trim: { ...TRIM, fadeSamples: TRIM.fadeSamples + 24 } }), base);
 });
 
@@ -339,6 +338,13 @@ test('prepareCall takes an IPA hint through hintPhonemes: a refused character is
   );
 });
 
+test('prepareCall speaks an IPA hint in NFC, as the validator checks it: c + U+0327 is spoken as ç', async () => {
+  const { tokens } = parseSay('a [ca](/ça/) b.');
+  const call = await prepareCall(tokens, [0, 1, 2], { phonemize: fakePhonemize, vocab: EMBEDDED_VOCAB });
+  assert.equal(call.kept, 'a ça b.');
+  assert.deepEqual(call.ids, [0, ...[...'a ça b.'].map((c) => EMBEDDED_VOCAB.get(c)), 0]);
+});
+
 test('editCall edits a merged run once: one shared span, stress promoted when any token of the run is emphasised', () => {
   // "$5 million" is spoken "5 million dollars": both say tokens share the union span with merged: true.
   const chars = [...'faiv milion dolaɹs.'];
@@ -480,44 +486,57 @@ const padSpeak = async ({ ids }) => {
   return { waveform: new Float32Array(frames * 600).fill(0.5), durations };
 };
 
-test('trimPads keeps the lead pad from 75 ms before the first word, keeps 2 frames of the tail pad, and fades both cuts', () => {
+test('trimPads cuts the lead pad up to LEAD_KEEP_MS before the first word, fades the cut in, and leaves the tail pad whole', () => {
   // Frames [20, 2, 2, 2, 2, 15] = 43 frames = 25800 samples. First word start (untrimmed) 9096 (raw 12000 minus the
-  // call-start lead max(0, -119 + 12 * 20) = 121 ms = 2904 samples).
-  // Lead cut: min(9096 - 1800, (20 - 2) * 600 = 10800) = 7296. Tail cut: (15 - 2) * 600 = 7800.
+  // call-start lead max(0, -119 + 12 * 20) = 121 ms = 2904 samples). Cut: 9096 - 75 ms (1800) = 7296, inside the
+  // 20-frame (12000-sample) pad. The tail pad is not cut.
+  assert.equal(LEAD_KEEP_MS, 75);
   const frames = [20, 2, 2, 2, 2, 15];
   const waveform = new Float32Array(43 * 600).fill(0.5);
   const { samples, cutFront } = trimPads(waveform, frames, 9096);
   assert.equal(cutFront, 7296);
-  assert.equal(samples.length, 25800 - 7296 - 7800);
+  assert.equal(samples.length, 25800 - 7296);
+  assert.equal(9096 - cutFront, 1800, 'the first word starts 75 ms into the trimmed call');
   assert.equal(samples[0], 0, 'fade in starts at silence');
-  assert.equal(samples.at(-1), 0, 'fade out ends at silence');
   assert.equal(samples[FADE_SAMPLES], 0.5, 'full level after the 5 ms fade');
-  assert.equal(samples.at(-1 - FADE_SAMPLES), 0.5);
   assert.ok(samples[FADE_SAMPLES / 2] > 0 && samples[FADE_SAMPLES / 2] < 0.5, 'the fade is a ramp');
+  assert.equal(samples.at(-1), 0.5, 'the tail is not cut, so it is not faded');
   assert.equal(waveform[0], 0.5, 'the model output is not changed in place');
 });
 
-test('trimPads never cuts more than the pad minus PAD_KEEP_FRAMES, never into the 75 ms before the first word, and leaves an uncut edge unfaded', () => {
-  assert.equal(PAD_KEEP_FRAMES, 2);
+test('trimPads never cuts past the pad\'s end, and does not cut (or fade) when the first word is within LEAD_KEEP_MS of the start', () => {
   const frames = [3, 2, 2, 2];
   const waveform = new Float32Array(9 * 600).fill(0.5);
   const late = trimPads(waveform, frames, 5000);
-  assert.equal(late.cutFront, 600, 'a 3-frame pad gives up at most 1 frame');
-  assert.equal(late.samples.length, 8 * 600, 'a 2-frame tail pad is kept whole');
-  assert.equal(late.samples.at(-1), 0.5, 'no cut at the tail, so no fade there');
-  const early = trimPads(waveform, frames, 1800);
-  assert.equal(early.cutFront, 0, 'a word 75 ms from the start: nothing in front is cut');
+  assert.equal(late.cutFront, 1800, 'at most the whole 3-frame pad, never into the first phoneme');
+  const early = trimPads(waveform, frames, 1000);
+  assert.equal(early.cutFront, 0, 'a pad shorter than the keep is not cut');
+  assert.equal(early.samples.length, 9 * 600);
   assert.equal(early.samples[0], 0.5, 'no cut in front, so no fade there');
 });
 
-test('a 20-frame lead and 15-frame tail pad call is trimmed and its word times shift by the samples cut in front', async () => {
+test('a 20-frame lead and 15-frame tail pad call is trimmed in front only and its word times shift by the samples cut', async () => {
   // "Wait." ids [0 w a i t . 0], frames [20, 2, 2, 2, 2, 2, 15] = 45 frames = 27000 samples.
   // Untrimmed: Wait raw 12000, lead 121 ms = 2904 -> 9096; followed by punctuation: end (cum[t] = 20 + 2 + 2 + 2 = 26,
-  // plus 2) * 600 = 16800. Cut front min(9096 - 1800, 10800) = 7296; cut back 13 * 600 = 7800.
-  // Call = 27000 - 7296 - 7800 = 11904 samples. Wait: 9096 - 7296 = 1800 = 0.075 s to 16800 - 7296 = 9504 = 0.396 s.
+  // plus 2) * 600 = 16800. Cut front 9096 - 1800 = 7296; the tail pad is kept.
+  // Call = 27000 - 7296 = 19704 samples. Wait: 9096 - 7296 = 1800 = 0.075 s to 16800 - 7296 = 9504 = 0.396 s.
   const shot = await synthesiseShot({ id: 's', say: 'Wait.' }, { ...shotDeps, speak: padSpeak });
-  assert.equal(shot.samples.length, 11904);
+  assert.equal(shot.samples.length, 19704);
   assert.deepEqual(shot.entry.sentences[0].words, [{ text: 'Wait.', start: 0.075, end: 0.396, emphasis: false, aside: false }]);
+});
+
+test('a skip planned by the real planCalls adds no samples and sits at the end of the call before it', async () => {
+  // "One. - . Two." -> tokens "One.", "-." (the lone "." joins the dash), "Two."; "-." ends a sentence and has nothing
+  // speakable, so planCalls makes it a skip. Each call [0 . . . . 0] is 22 frames = 13200 samples untrimmed, minus the
+  // 4800-sample lead cut (6600 - 1800) = 8400. The skip sits at 8400 = 0.35 s; total 16800.
+  const { tokens } = parseSay('One. - . Two.');
+  assert.deepEqual(tokens.map((t) => t.text), ['One.', '-.', 'Two.']);
+  const items = planCalls(tokens, { speed: 1, emphasisPause: 0, countIds: () => 6 });
+  assert.deepEqual(items.map((i) => i.kind), ['speech', 'skip', 'speech']);
+  const shot = await synthesiseShot({ id: 's', say: 'One. - . Two.' }, shotDeps);
+  const words = shot.entry.sentences.flatMap((s) => s.words);
+  assert.equal(shot.samples.length, 16800);
+  assert.deepEqual(words[1], { text: '-.', start: 0.35, end: 0.35, emphasis: false, aside: false });
 });
 
 test('every word lies inside its shot\'s WAV after trimming, across calls, silences and asides', async () => {

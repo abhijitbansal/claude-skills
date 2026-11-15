@@ -150,7 +150,7 @@ All paths are relative to `plugins/portable-artifacts/skills/make-motion/` unles
 **Interfaces:**
 - Spec: optional film field `voice`: `{ "name": "af_heart" }` (synthesise; any other name is an error listing the accepted one) or `{ "src": "vo.wav", "words": "vo.json" }` (the user's file, Task 8). Unknown keys rejected with a did-you-mean. Absent: silent film, estimated times, as today.
 - `buildTimeline(film, { fps, modes, words })`: `words` is the sidecar's `shots` list or undefined. With words, each shot's word times come from the sidecar (relative to the shot's start), its narration length is its last word's end, and the timeline's `timed` is `'measured'`; without, behaviour is byte-identical to today (`'estimated'`).
-- A shot whose `hold` is shorter than its measured narration: mechanical finding at `shots[i].hold` ("hold 2 s is shorter than the narration, 3.4 s").
+- (Dropped by ruling in Task 6: a finding for a `hold` shorter than the narration. The validator already rejects `hold` together with `say`, so a narrated shot's length always comes from its narration.)
 - Anchors are resolved against the timeline that is used. For a voiced film the anchor-outside-its-shot error is raised after the measured timeline is built (an anchor valid on estimated times can fall outside on measured ones, and the reverse); it is reported as an invalid film, exit 1, with the usual path form. State in the report where the check runs.
 - `make.mjs` stages become validate, voice (only when the film has `voice`), timeline, review, render. The report gains `voice: { cached, seconds, model } | null`, and `timed` reports what was used. A voice stage failure is exit 2 with the hint; nothing is rendered.
 
