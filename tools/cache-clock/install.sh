@@ -20,13 +20,13 @@ FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/
 # BEGIN SHA256 (generated: node tools/cache-clock/bin/checksums.mjs --write)
 SUMS='1acecfbc1bde5c37c350f7bcfa4d88bdea028c7dd06ec6fede2c9100c491fee4  report.mjs
 2911b54a5a81da269e31cde0651963d28dfd65f426e7c9e0d3c3d2b65c7bc567  lib/clock.mjs
-ef3013f723fbab700b164af42f26e1d24206899e2591be8b4c85892e6c25202d  lib/config.mjs
-b76440b4454d698e6bf72c16591f838c1654aab4cfcffc0543262e207ee1265b  lib/format.mjs
+13ed66afd118607dfe672c468b868a087a09428e619b502d186e2c809a13ccd3  lib/config.mjs
+a8922ba08307dd846e02df2a24a344651fc096d5b3ce7ad513c4c6aa934fc7a6  lib/format.mjs
 9ef37ae0ada40d427aac12b9e24736f60ed1a1015901b3052d24bb75bd343d86  lib/guard.mjs
 4a29370f5e6ef4abb3d1002a503a26729249178cffbd7e661d018b9525d2424c  lib/history.mjs
-99699dfbce7cc0a72a6eb9c9cedd91afe6a5b8a8097b8a79854bf4452c626c29  lib/keepwarm.mjs
+90b6c392b2f4eff2bdbbf94f390b09425e0eac472ab6ea6f2af234ba40848f63  lib/keepwarm.mjs
 817b122f5026b3e7c7bb79284120907f92a7f051f2afe62eeaf4ebc9ad7746b2  lib/usage.mjs
-85f2198d2c07178da313fa5b9111b98080bce9051c8f917e6e592484521a302f  lib/wiring.mjs
+5e5aaca8204e6dac6f7c84b0be4452a4338ef8011940f04e8a7c98561b7a2027  lib/wiring.mjs
 f65bff6539a71bbe20054aa169ab7a8cd8c38e1883c715738676d859349153bc  extension.mjs
 '
 # END SHA256

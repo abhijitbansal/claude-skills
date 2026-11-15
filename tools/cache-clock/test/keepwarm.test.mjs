@@ -159,17 +159,21 @@ const iso = (ms) => new Date(ms).toISOString();
 // A store in memory. `locked` makes another process hold the lock; the ledger is shared by whoever uses the store.
 const memoryStore = ({ locked = false } = {}) => {
   let w = null;
+  let n = 0;
+  let noteAt = null;
   const entries = new Map();
   return {
     load: () => w, save: (x) => { w = x; }, lock: () => !locked, unlock() {},
-    ledgerSend: (at, usd) => { entries.set(at, usd); },
-    ledgerCost: (at, usd) => { entries.set(at, usd); },
+    ledgerSend: (at, usd) => { n += 1; entries.set(n, { at, usd }); return n; },
+    ledgerCost: (id, usd) => { if (entries.has(id)) entries.set(id, { ...entries.get(id), usd }); },
+    ledgerNote: (at) => { noteAt = at; },
     ledger: (now) => {
-      const live = [...entries].filter(([at]) => at >= now - 24 * HOUR);
-      return { pings: live.length, usd: live.reduce((sum, [, usd]) => sum + usd, 0) };
+      const live = [...entries.values()].filter((e) => e.at >= now - 24 * HOUR);
+      return { pings: live.length, usd: live.reduce((sum, e) => sum + e.usd, 0), noteAt };
     },
   };
 };
+const ledgerOf = (store, now) => { const { pings, usd } = store.ledger(now); return { pings, usd: Math.round(usd * 1000) / 1000 }; };
 function rig({ config = {}, reply = () => "warm", send, store = memoryStore(), session = {} } = {}) {
   const r = { now: T0, timers: [], sent: 0, logs: [], clock: createClock(), session: { ...S, ...session }, config: { ...C, ...config } };
   const answer = () => { const call = normalizeUsage(pingUsage({ at: iso(r.now), read: reply(r.sent) === "warm" ? 200_000 : 10_000 }), r.now);
@@ -367,10 +371,10 @@ test("a settings change can shorten a running window but never extend it; off an
 });
 
 // A host's answer to a ping, as the wiring files it: clock first, then the scheduler.
-const pingReply = (r, { usageOnly = false, ttl = 300 } = {}) => {
-  const call = normalizeUsage(pingUsage({ at: iso(r.now), ttl }), r.now);
+const pingReply = (r, { usageOnly = false, ttl = 300, nanoAiu = 2e9 } = {}) => {
+  const call = normalizeUsage(pingUsage({ at: iso(r.now), ttl, nanoAiu }), r.now);
   const { kind } = r.clock.ingestPing(call);
-  r.kw.onPingUsage({ usd: call.nanoAiu / NANO_AIU_PER_USD, warm: kind === "warm" });
+  r.kw.onPingUsage({ usd: call.nanoAiu === null ? null : call.nanoAiu / NANO_AIU_PER_USD, warm: kind === "warm" });
   if (!usageOnly) r.kw.onIdle();
 };
 
@@ -406,13 +410,13 @@ test("a reply that does not move the expiry forward stops it as not-refreshing",
   assert.equal(r.kw.status().stopped, "not-refreshing");
 });
 
-test("a 60 s cache is pinged once and then given up on: the gap leaves no time to refresh it", async () => {
+test("a cache lifetime under 5 minutes stops keep-warm before any ping: it would cost more than it saves", async () => {
   const r = rig({ send: async () => { r.sent += 1; queueMicrotask(() => pingReply(r, { ttl: 60 })); } });
   r.clock.ingest(normalizeUsage(usage({ model: "claude-sonnet-5.5", at: iso(T0), ttl: 60, input: 200_000, read: 0, write: 200_000, output: 0 }), T0));
   r.kw.onUserTurn(T0);
   await r.run(10 * MIN, 1000);
-  assert.equal(r.sent, 1);
-  assert.equal(r.kw.status().stopped, "too-late");
+  assert.equal(r.sent, 0);
+  assert.equal(r.kw.status().stopped, "lifetime-too-short");
 });
 
 test("a window stops at its ping cap", async () => {
@@ -443,19 +447,16 @@ test("a rejected send whose usage still arrives is a ping, not a failure, and is
   assert.ok(!r.logs.some((l) => /ping failed/.test(l.text)));
 });
 
-test("a real message typed while a ping is in flight neither zeroes the spend nor restarts the window until the ping is done", async () => {
+test("a confirmed turn that reaches the scheduler while a ping is out is dropped, not deferred", async () => {
   let n = 0;
   const r = rig({ send: async () => { n += 1; r.sent += 1; if (n === 1) queueMicrotask(() => pingReply(r)); } }); r.turn();
   await r.run(8 * MIN);
   assert.deepEqual([r.kw.status().pings, r.kw.status().inFlight], [1, true]);
-  const spent = r.kw.status().usd;
   r.kw.onUserTurn(r.now);
-  const mid = r.kw.status();
-  assert.deepEqual([mid.pings, mid.usd, mid.msLeft], [1, spent, 3 * HOUR - 8 * MIN], "no restart, no reset while the ping is out");
   r.clock.ingestPing(normalizeUsage(pingUsage({ at: iso(r.now) }), r.now));
   r.kw.onPingUsage({ usd: 0.02, warm: true });
   const done = r.kw.status();
-  assert.deepEqual([done.pings, done.usd, done.msLeft], [0, 0, 3 * HOUR], "the real message's window starts when the ping is done");
+  assert.deepEqual([done.pings, Math.round(done.usd * 100), done.msLeft], [2, 4, 3 * HOUR - 8 * MIN], "the ping is booked on its own window, which nothing restarted");
 });
 
 test("a real turn clears the late-reply debt, so a later record is not booked as a late ping", async () => {
@@ -571,22 +572,24 @@ test("the 24-hour ledger stops pings when every window and budget has been reset
   assert.equal(store.ledger(r.now).pings, 0, "only the passage of time removes entries");
 });
 
-test("a ping out at shutdown is in the ledger at its estimate; measured usage replaces the estimate", async () => {
+test("a ping nobody answers is in the ledger at the cold-rewrite cost; measured usage replaces it, but never with less than the estimate", async () => {
   const store = memoryStore();
   const r = rig({ store, send: async () => { r.sent += 1; } }); r.turn();
   await r.run(4 * MIN);
-  assert.deepEqual(store.ledger(r.now), { pings: 1, usd: 0.02 });
+  assert.deepEqual(ledgerOf(store, r.now), { pings: 1, usd: 0.5 }, "unattributed: the whole 200k context rewritten at $2.50/M");
   r.kw.stop("shutdown");
-  assert.deepEqual(store.ledger(r.now), { pings: 1, usd: 0.02 }, "a ping nobody answered still counts, at the estimate");
-  const s2 = memoryStore();
-  const q = rig({ store: s2, send: async () => { q.sent += 1; queueMicrotask(() => {
-    const call = normalizeUsage(pingUsage({ at: iso(q.now), nanoAiu: 3e9 }), q.now);
-    q.clock.ingestPing(call);
-    q.kw.onPingUsage({ usd: call.nanoAiu / NANO_AIU_PER_USD, warm: true });
-    q.kw.onIdle();
-  }); } }); q.turn();
-  await q.run(4 * MIN);
-  assert.ok(Math.abs(s2.ledger(q.now).usd - 0.03) < 1e-12, "the measured $0.03 replaced the $0.02 estimate");
+  assert.deepEqual(ledgerOf(store, r.now), { pings: 1, usd: 0.5 }, "and it stays there through a shutdown");
+  for (const [nanoAiu, expected] of [[3e9, 0.03], [2e9, 0.02], [0, 0.02]]) {
+    const s2 = memoryStore();
+    const q = rig({ store: s2, send: async () => { q.sent += 1; queueMicrotask(() => pingReply(q, { nanoAiu })); } }); q.turn();
+    await q.run(4 * MIN);
+    assert.deepEqual(ledgerOf(s2, q.now), { pings: 1, usd: expected }, `measured ${nanoAiu}: the ledger holds max(estimate $0.02, measured)`);
+  }
+  const s3 = memoryStore();
+  const n = rig({ store: s3, send: async () => { n.sent += 1; queueMicrotask(() => pingReply(n, { nanoAiu: null })); } }); n.turn();
+  await n.run(4 * MIN);
+  assert.equal(n.kw.status().stopped, "unmeasured");
+  assert.deepEqual(ledgerOf(s3, n.now), { pings: 1, usd: 0.5 }, "a cost that was never reported keeps the cold-rewrite entry");
 });
 
 test("the window end is the earlier of the stored end and the start plus the current hours: lowering shortens a running window, raising never extends it", async () => {
@@ -621,7 +624,7 @@ test("a ping's usage that arrives after its idle is still added to spend, though
   r.clock.ingestPing(normalizeUsage(pingUsage({ at: iso(r.now) }), r.now));
   r.kw.onPingUsage({ usd: 0.02, warm: true });
   assert.deepEqual([r.kw.status().pings, r.kw.status().usd, r.kw.status().stopped], [1, 0.02, "unmeasured"]);
-  assert.deepEqual(store.ledger(r.now), { pings: 1, usd: 0.02 });
+  assert.deepEqual(ledgerOf(store, r.now), { pings: 1, usd: 0.02 });
 });
 
 test("turning keep-warm off while a ping is out clears the watchdog and prints nothing afterwards", async () => {
@@ -675,4 +678,66 @@ test("a cache lifetime that changes between pings recomputes the gap and is not 
   await r.run(40 * MIN);
   assert.ok(r.sent >= 3, `pings went on across the change (${r.sent})`);
   assert.equal(r.kw.status().stopped, null);
+});
+
+test("a failed, unanswered or unattributed send holds until a confirmed user turn that arrives after the stop", async () => {
+  const r = rig({ reply: () => "cold" }); r.turn();
+  await r.run(HOUR);
+  assert.equal(r.kw.status().stopped, "cold-reply");
+  await r.run(HOUR);
+  assert.equal(r.sent, 1, "nothing restarts it by itself");
+  r.turn();
+  assert.deepEqual([r.kw.status().state, r.kw.status().pings], ["on", 0], "a confirmed user turn after the stop starts a fresh window");
+});
+
+test("a lifetime reported under 5 minutes is refused before any ping, and the ping cap never assumes a gap under 4 minutes", () => {
+  const snap = (ttl) => { const c = createClock(); c.ingest(normalizeUsage(usage({ model: "claude-sonnet-5.5", ttl, input: 200_000, read: 0, write: 200_000, output: 0 }), T0)); return c.snapshot(T0, "claude-sonnet-5.5"); };
+  assert.deepEqual(planPing(base({ snapshot: snap(299) })), { skip: "lifetime-too-short" });
+  assert.deepEqual(planPing(base({ snapshot: snap(75) })), { skip: "lifetime-too-short" });
+  assert.deepEqual(planPing(base({ snapshot: snap(300) })), { at: T0 + 240_000 });
+});
+
+test("the daily-limit note is shown once per 24 hours, not on every turn", async () => {
+  const store = memoryStore();
+  store.ledgerSend(T0 + 20 * HOUR, 1.99);
+  const r = rig({ store });
+  r.turn(); r.turn(); r.turn();
+  const notes = () => r.logs.filter((l) => /daily limit/.test(l.text)).length;
+  assert.equal(notes(), 1);
+  r.now += 25 * HOUR;
+  r.turn(); r.turn();
+  assert.equal(notes(), 2, "a new day, a new note");
+  assert.equal(r.kw.status().stopped, "daily-limit", "and the stop itself is still there every time");
+});
+
+test("a ledger that cannot be read fails closed with one note that says how to reset it", async () => {
+  const unreadable = { ...memoryStore(), ledger: () => { throw new Error("the ping ledger /x/y.ledger cannot be read as a ledger; delete it to reset it"); } };
+  const r = rig({ store: unreadable }); r.turn();
+  await r.run(HOUR);
+  assert.equal(r.sent, 0);
+  assert.equal(r.kw.status().stopped, "ledger-failed");
+  assert.equal(r.logs.filter((l) => /delete it to reset it/.test(l.text)).length, 1);
+});
+
+test("the window file and the ledger are written only while the lock is still ours, checked live", async () => {
+  const base = memoryStore();
+  let locks = 0;
+  let saves = 0;
+  const store = { ...base, lock: () => { locks += 1; return locks <= 1; }, save: (w) => { saves += 1; base.save(w); } };
+  const r = rig({ store });
+  r.turn();
+  assert.equal(saves, 0, "the lock was lost before the first write, so nothing was written");
+  assert.equal(r.kw.status().state, "elsewhere");
+  await r.run(10 * MIN);
+  assert.equal(r.sent, 0);
+});
+
+test("with no stored window keep-warm waits for a confirmed user turn: no window is made from an earlier call", async () => {
+  const r = rig({ config: { keepWarmHours: 0 } });
+  r.clock.ingest(normalizeUsage(usage({ model: "claude-sonnet-5.5", at: iso(T0), ttl: 300, input: 200_000, read: 0, write: 200_000, output: 0 }), T0));
+  r.config = { ...r.config, keepWarmHours: 3 };
+  r.kw.configChanged();
+  assert.equal(r.kw.status().state, "waiting");
+  await r.run(10 * MIN);
+  assert.equal(r.sent, 0);
 });

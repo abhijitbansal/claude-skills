@@ -180,14 +180,16 @@ export function pidAlive(pid) {
 
 const isCount = (v) => Number.isInteger(v) && v >= 0;
 const LEDGER_KEEP_MS = 24 * 60 * 60 * 1000;
-const LEDGER_COMPACT_BYTES = 64 * 1024;
 
-/** One ledger line as { at, usd }, or null when it is not a valid send or cost. */
+/** One ledger line as { t, id?, at?, usd? }, or null when it is not a valid send, cost or note. */
 function parseLedgerLine(line) {
-  if (!line) return null;
   try {
-    const { t, at, usd } = JSON.parse(line);
-    return (t === "send" || t === "cost") && Number.isFinite(at) && Number.isFinite(usd) && usd >= 0 ? { at, usd } : null;
+    const { t, id, at, usd } = JSON.parse(line);
+    const amount = Number.isFinite(usd) && usd >= 0;
+    if (t === "send" && typeof id === "string" && Number.isFinite(at) && amount) return { t, id, at, usd };
+    if (t === "cost" && typeof id === "string" && amount) return { t, id, usd };
+    if (t === "note" && Number.isFinite(at)) return { t, at };
+    return null;
   } catch {
     return null;
   }
@@ -211,10 +213,11 @@ function validWindow(w) {
   };
 }
 
+/** Who holds a lock file: { pid, instance } (instance null for an old lock), or null when it is unreadable. */
 function lockHolder(file) {
   try {
-    const { pid } = JSON.parse(readFileSync(file, "utf8"));
-    return Number.isInteger(pid) ? pid : null;
+    const { pid, instance } = JSON.parse(readFileSync(file, "utf8"));
+    return Number.isInteger(pid) ? { pid, instance: typeof instance === "string" ? instance : null } : null;
   } catch {
     return null; // an unreadable lock has no live holder
   }
@@ -224,8 +227,9 @@ function lockHolder(file) {
  * Per-session keep-warm state under `<dir>/keepwarm/<sha256(sessionId)>.{json,lock}`.
  * `save` and `lock` can throw on a filesystem error; the scheduler decides what that means.
  */
-export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive = pidAlive, ledgerCompactBytes = LEDGER_COMPACT_BYTES } = {}) {
+export function createKeepWarmStore(dir, sessionId, { pid = process.pid, instance = randomUUID(), isAlive = pidAlive, beforeLedgerRename = null } = {}) {
   const valid = validSessionId(sessionId);
+  const isMine = (holder) => holder !== null && holder.pid === pid && holder.instance === instance;
 
   function load() {
     if (!valid) return null;
@@ -261,7 +265,7 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive
     mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
     const file = keepWarmFile(dir, sessionId, "lock");
     const mine = `${file}.${pid}.${randomUUID()}.tmp`;
-    writeFileSync(mine, JSON.stringify({ pid }) + "\n", { flag: "wx", mode: 0o600 });
+    writeFileSync(mine, JSON.stringify({ pid, instance }) + "\n", { flag: "wx", mode: 0o600 });
     try {
       try {
         linkSync(mine, file);
@@ -270,72 +274,110 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive
         if (err.code !== "EEXIST") throw err;
       }
       const holder = lockHolder(file);
-      if (holder === pid) return true;
-      if (holder !== null && isAlive(holder)) return false;
+      if (isMine(holder)) return true;
+      // Another instance in this very process counts as a live holder too: it is not us.
+      if (holder !== null && isAlive(holder.pid)) return false;
       renameSync(mine, file);
-      return lockHolder(file) === pid;
+      return isMine(lockHolder(file));
     } finally {
       rmSync(mine, { force: true });
     }
   }
 
   function unlock() {
-    if (valid && lockHolder(keepWarmFile(dir, sessionId, "lock")) === pid) rmSync(keepWarmFile(dir, sessionId, "lock"), { force: true });
+    if (valid && isMine(lockHolder(keepWarmFile(dir, sessionId, "lock")))) rmSync(keepWarmFile(dir, sessionId, "lock"), { force: true });
   }
 
-  // The ping ledger: one JSON line per send ("send": at, estimate) and per measured cost ("cost": at,
-  // usd), appended whole so processes sharing a session never overwrite each other. Only time removes
-  // entries: a new window, off and on, a reload or another process leave it alone.
+  // The ping ledger: one JSON line per send ("send": id, at, estimate), per measured cost ("cost": id,
+  // usd) and per daily-limit note ("note": at). Every append starts with a newline, so a write cut
+  // short ends at the next one instead of swallowing it. Only time removes entries: a new window, off
+  // and on, a reload or another process leave it alone; compaction runs only at start-up, under the lock.
   const ledgerFile = () => keepWarmFile(dir, sessionId, "ledger");
+  let ledgerSeq = 0;
   const ledgerAppend = (entry) => {
-    if (!valid) return;
     mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
-    appendFileSync(ledgerFile(), JSON.stringify(entry) + "\n", { mode: 0o600 });
+    appendFileSync(ledgerFile(), "\n" + JSON.stringify(entry), { mode: 0o600 });
   };
+  const ledgerUnreadable = (why) => new Error(`the ping ledger ${ledgerFile()} cannot be read as a ledger (${why}); delete it to reset it`);
 
-  /** The live ping entries as a Map of send time to dollars, last 24 hours before `now`. */
-  function ledgerEntries(now) {
-    const entries = new Map();
+  /** The ledger's sends (id to { at, usd }, costs applied) and the last note time. A file with no valid line fails closed. */
+  function readLedger() {
     let text = "";
     try {
       text = readFileSync(ledgerFile(), "utf8");
     } catch (err) {
-      if (err.code !== "ENOENT") throw err;
+      if (err.code === "ENOENT") return { sends: new Map(), noteAt: null };
+      throw ledgerUnreadable(err.message);
     }
-    for (const line of text.split("\n")) {
-      const entry = parseLedgerLine(line);
-      if (entry && entry.at >= now - LEDGER_KEEP_MS) entries.set(entry.at, entry.usd);
+    const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+    const parsed = lines.map(parseLedgerLine);
+    // The last line may be a write that was cut short; it is ignored, and the earlier entries stand.
+    if (parsed.length > 0 && parsed.at(-1) === null) parsed.pop();
+    if (parsed.length > 0 && parsed.every((entry) => entry === null)) throw ledgerUnreadable("no line in it is a ledger entry");
+    const sends = new Map();
+    let noteAt = null;
+    for (const entry of parsed) {
+      if (!entry) continue;
+      if (entry.t === "send") sends.set(entry.id, { at: entry.at, usd: entry.usd });
+      else if (entry.t === "cost" && sends.has(entry.id)) sends.set(entry.id, { ...sends.get(entry.id), usd: entry.usd });
+      else if (entry.t === "note") noteAt = Math.max(noteAt ?? entry.at, entry.at);
     }
-    return entries;
+    return { sends, noteAt };
   }
 
+  // An entry dated after `now` (a clock that moved back) counts as now: never hidden, never dropped.
+  // An entry dated in the future (the clock moved back) is still counted, and kept until it is itself 24 h old.
+  const alive = (at, now) => at >= now - LEDGER_KEEP_MS;
+
+  /** { pings, usd, noteAt } of the last 24 hours before `now`. Throws when the ledger cannot be read as one. */
   function ledger(now) {
-    if (!valid) return { pings: 0, usd: 0 };
-    const entries = ledgerEntries(now);
-    return { pings: entries.size, usd: [...entries.values()].reduce((sum, usd) => sum + usd, 0) };
+    if (!valid) return { pings: 0, usd: 0, noteAt: null };
+    const { sends, noteAt } = readLedger();
+    const live = [...sends.values()].filter((entry) => alive(entry.at, now));
+    return { pings: live.length, usd: live.reduce((sum, entry) => sum + entry.usd, 0), noteAt: noteAt === null ? null : Math.min(noteAt, now) };
   }
 
+  /** Records a send at its estimate and returns its id (null for a session with no id). */
   function ledgerSend(at, usd) {
-    ledgerAppend({ t: "send", at, usd });
-    if (!valid) return;
-    // Past a size, rewrite the file without the entries that are 24 hours old: the only removal there is.
-    if (statSync(ledgerFile()).size > ledgerCompactBytes) compactLedger(at);
+    if (!valid) return null;
+    ledgerSeq += 1;
+    const id = `${at}.${instance}.${ledgerSeq}`;
+    ledgerAppend({ t: "send", id, at, usd });
+    return id;
   }
 
-  const ledgerCost = (at, usd) => ledgerAppend({ t: "cost", at, usd });
+  const ledgerCost = (id, usd) => {
+    if (valid && id !== null && id !== undefined) ledgerAppend({ t: "cost", id, usd });
+  };
+  const ledgerNote = (at) => {
+    if (valid) ledgerAppend({ t: "note", at });
+  };
 
+  /** Drops the entries that are 24 hours old. Atomic, and it leaves the file alone if a write raced it. */
   function compactLedger(now) {
-    const kept = [...ledgerEntries(now)].map(([at, usd]) => JSON.stringify({ t: "send", at, usd }));
+    if (!valid) return;
+    let size;
+    try {
+      size = statSync(ledgerFile()).size;
+    } catch (err) {
+      if (err.code === "ENOENT") return;
+      throw err;
+    }
+    const { sends, noteAt } = readLedger();
+    const kept = [...sends].filter(([, entry]) => alive(entry.at, now)).map(([id, entry]) => ({ t: "send", id, at: entry.at, usd: entry.usd }));
+    if (noteAt !== null && alive(noteAt, now)) kept.push({ t: "note", at: noteAt });
     const tmp = `${ledgerFile()}.${pid}.${randomUUID()}.tmp`;
     try {
-      writeFileSync(tmp, kept.map((line) => line + "\n").join(""), { flag: "wx", mode: 0o600 });
+      writeFileSync(tmp, kept.map((entry) => "\n" + JSON.stringify(entry)).join(""), { flag: "wx", mode: 0o600 });
+      beforeLedgerRename?.();
+      if (statSync(ledgerFile()).size !== size) return;
       renameSync(tmp, ledgerFile());
     } finally {
       rmSync(tmp, { force: true });
     }
   }
 
-  return { load, save, lock, unlock, ledger, ledgerSend, ledgerCost };
+  return { load, save, lock, unlock, ledger, ledgerSend, ledgerCost, ledgerNote, compactLedger };
 }
 
 // Plain decimals only: Number() would also take 0x2, 1e-1 and Infinity.

@@ -70,7 +70,7 @@ export function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5
   };
   host.turn = async (text = "carry on", o = {}) => {
     await host.prompt(text);
-    host.emit("user.message", { content: text });
+    host.emit("user.message", { content: text, source: "user" });
     host.emit("assistant.turn_start", {});
     host.emit("assistant.usage", sonnet({ at: iso(host.now), ...o }));
     host.emit("session.idle", {});

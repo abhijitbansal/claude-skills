@@ -82,7 +82,7 @@ test("a ping's own prompt hook is never guarded, on a cache that has just gone c
 });
 
 // A user can type or paste the marker. Only our own in-flight ping is exempt; anything else is a prompt.
-test("a user prompt that carries the marker is an ordinary prompt: guarded, and once the user's message arrives it restarts the window", async () => {
+test("a user prompt that carries the marker is an ordinary prompt: guarded, but its message confirms no turn", async () => {
   for (const text of [PING_PROMPT, "[cache-clock:keepwarm] summarise the repo", "explain [cache-clock:keepwarm] to me"]) {
     const h = fakeHost({ config: KW, answer: "Don't send" });
     await goCold(h);
@@ -90,7 +90,7 @@ test("a user prompt that carries the marker is an ordinary prompt: guarded, and 
     assert.deepEqual([h.aborts, h.asked.length], [1, 1], text);
     h.emit("user.message", { content: text, source: "user" });
     await h.command("");
-    assert.match(lastLog(h), /keep-warm  on · 3h00m left/, `${text}: the user's message starts the window`);
+    assert.match(lastLog(h), /keep-warm  on \(3h\) · starts after your next message/, `${text}: a message that carries the marker is never a confirmed turn`);
   }
 });
 
@@ -126,7 +126,7 @@ test("a message typed while a ping runs does not take the ping's usage", async (
   await h.run(4 * MIN);
   assert.equal(h.sent.length, 1);
   h.emit("user.message", PING_MESSAGE);
-  h.emit("user.message", { content: "typed while the ping ran" });
+  h.emit("user.message", { content: "typed while the ping ran", source: "user" });
   h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
   h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 200_000, write: 0 }));
   h.emit("session.idle", {});
@@ -134,7 +134,7 @@ test("a message typed while a ping runs does not take the ping's usage", async (
   assert.match(lastLog(h), /session +2 model calls/);
   const ledger = createKeepWarmStore(h.dir, "s-1").ledger(h.now);
   assert.deepEqual([ledger.pings, Math.round(ledger.usd * 100)], [1, 2], "the ping's record was booked as the ping's, in the ledger");
-  assert.match(lastLog(h), /0 pings/, "and the typed message's window started once the ping was done");
+  assert.match(lastLog(h), /1 ping · \$0\.02/, "and on the window; the typed message did not restart it");
 });
 
 test("a ping's reply that arrives after the watchdog is still booked as a ping and its spend", async () => {
@@ -199,7 +199,7 @@ test("two processes on one session: only the lock holder pings", async () => {
   assert.deepEqual([h1.sent.length, h2.sent.length], [7, 0]);
 });
 
-// RF 4: the user types while a ping is in flight; their turn is real, and its window starts when the ping is done.
+// RF 4: the user types while a ping is in flight; a message that arrives while a ping is awaited confirms nothing.
 test("the user typing while a ping is in flight counts as a real turn", async () => {
   const h = fakeHost({ config: KW });
   h.autoReply = false;
@@ -211,13 +211,13 @@ test("the user typing while a ping is in flight counts as a real turn", async ()
   h.emit("assistant.turn_start", {});
   await h.prompt("one more thing");
   h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
-  h.emit("user.message", { content: "one more thing" });
+  h.emit("user.message", { content: "one more thing", source: "user" });
   h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 200_000, write: 0 }));
   h.emit("session.idle", {});
   await h.command("");
   assert.match(lastLog(h), /session +2 model calls/);
-  assert.match(lastLog(h), /0 pings · \$0/, "the window the user's message started is fresh once the ping is done");
-  assert.match(lastLog(h), /3h00m left/);
+  assert.match(lastLog(h), /1 ping · \$0\.02/, "the ping is booked on the window it was sent in");
+  assert.match(lastLog(h), /2h56m left/, "and the message typed while it was out did not restart that window");
 });
 
 // RF 5: a model switch to Auto during the window stops pings.
@@ -346,13 +346,16 @@ test("a corrupt config.json is never overwritten: a settings command refuses and
   }
 });
 
-test("keepwarm on starts a window from the last model call, and keepwarm off ends it", async () => {
+test("keepwarm on waits for the next confirmed message, and keepwarm off ends it", async () => {
   const h = fakeHost();
   await h.start();
   await h.turn();
   await h.command("keepwarm on");
   assert.equal(loadConfig(h.dir).keepWarmHours, 3);
   assert.match(lastLog(h), /keep-warm: 3h after your last message · budget \$0\.50 · payback stop on/);
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 0, "no window is invented from a message that came before it was on");
+  await h.turn("a message after it was turned on");
   await h.run(4 * MIN);
   assert.equal(h.sent.length, 1);
   await h.command("keepwarm off");
@@ -442,7 +445,7 @@ test("a user turn's idle does not end a ping that is still in flight", async () 
   await h.run(4 * MIN);
   assert.equal(keepWarm.status().inFlight, true);
   await h.prompt("typed meanwhile");
-  h.emit("user.message", { content: "typed meanwhile" });
+  h.emit("user.message", { content: "typed meanwhile", source: "user" });
   h.emit("assistant.turn_start", {});
   h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 200_000, write: 0 }));
   h.emit("session.idle", {});
@@ -489,7 +492,7 @@ test("a host that sends a ping's usage but no idle: the ping ends with its usage
 });
 
 // M5: the heads-up is suppressed only while keep-warm will really ping.
-test("when keep-warm cannot ping because another process holds the lock, the heads-up works as before", async () => {
+test("a process that does not hold the lock shows no heads-up beside the owner's pings", async () => {
   const alive = new Set([1, 2]);
   const h1 = fakeHost({ config: KW, alive });
   const h2 = fakeHost({ config: KW, dir: h1.dir, pid: 2, alive });
@@ -501,8 +504,8 @@ test("when keep-warm cannot ping because another process holds the lock, the hea
     await h1.run(10_000);
     await h2.run(10_000);
   }
-  assert.ok(h2.logs.some((l) => /goes cold in/.test(l.message)), "the process that cannot ping still warns");
-  assert.ok(!h1.logs.some((l) => /goes cold in/.test(l.message)), "the pinging process does not");
+  assert.ok(!h2.logs.some((l) => /goes cold in/.test(l.message)), "the other process pings, so this one shows no heads-up beside its pings");
+  assert.ok(!h1.logs.some((l) => /goes cold in/.test(l.message)), "and the pinging process does not either");
   await h2.command("");
   assert.match(lastLog(h2), /keep-warm  handled by another process of this session/);
 });
@@ -546,7 +549,7 @@ test("keepwarm on with an old last call says the window starts at the next messa
 });
 
 // L8: turning it on live and starting with it on are the same fresh start.
-test("turning keep-warm on live and starting a session with it already on give the same keep-warm state", async () => {
+test("turning keep-warm on live and starting a session with it already on give the same keep-warm state: waiting for a confirmed message", async () => {
   const live = fakeHost();
   await live.start();
   await live.turn();
@@ -559,7 +562,7 @@ test("turning keep-warm on live and starting a session with it already on give t
   await reloaded.command("");
   const keepWarmLine = (h) => lastLog(h).split("\n").find((l) => /^ {2}keep-warm/.test(l));
   assert.equal(keepWarmLine(reloaded), keepWarmLine(live));
-  assert.match(keepWarmLine(live), /on · 3h00m left · 0 pings · \$0/);
+  assert.match(keepWarmLine(live), /on \(3h\) · starts after your next message/, "no fresh window or budget without a confirmed user turn");
 });
 
 // S1: a window starts only on a confirmed real user turn, never on prompt-hook text.
@@ -668,7 +671,7 @@ test("two slow processes on one session: the lock holder's budget bounds both, a
   const kb = (await B.start()).keepWarm;
   await A.prompt("go");
   await B.prompt("go");
-  both((h) => h.emit("user.message", { content: "go" }));
+  both((h) => h.emit("user.message", { content: "go", source: "user" }));
   both((h) => h.emit("assistant.turn_start", {}));
   both((h) => h.emit("assistant.usage", sonnet({ at: iso(h.now) })));
   both((h) => h.emit("session.idle", {}));

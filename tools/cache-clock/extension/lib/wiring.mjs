@@ -226,7 +226,11 @@ export async function attach({
     if (vsCode && canAsk(state.session)) return quietly(() => askUser(message, [OK]));
     return say(message, vsCode ? { level: "error" } : options);
   };
-  const keepWarmWillPing = () => keepWarm?.status().willPing === true;
+  // A process that does not hold the session lock shows no heads-up either: the owner pings or says why not.
+  const keepWarmWillPing = () => {
+    const status = keepWarm?.status();
+    return status?.willPing === true || status?.passive === true;
+  };
   const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, getConfig, say, keepWarmWillPing });
   // While the selection is Auto, the model Copilot last resolved it to stands in for it.
   const effectiveSelection = () => state.selection?.modelId === "auto" && state.autoModel ? { ...state.selection, modelId: state.autoModel } : state.selection;
@@ -467,8 +471,10 @@ export async function attach({
       return;
     }
     state.hostReportsUserMessage = true;
-    // A message from the user, not from the system and not ours, is a confirmed real turn.
-    if ((event.data?.source ?? "user") === "user") confirmUserTurn();
+    // Only a message whose source is explicitly the user, that carries no ping text, and that arrives
+    // while no ping is awaited is a confirmed real turn. No source, or anything else, confirms nothing.
+    const explicitUser = event.data?.source === "user";
+    if (explicitUser && !carriesPingText(event.data) && !keepWarm.status().awaitingReply) confirmUserTurn();
   });
   state.session.on("assistant.turn_start", (event) => {
     if (event.agentId) return;
@@ -501,7 +507,9 @@ export async function attach({
     // A ping in flight, or one the watchdog gave up on that may still be answered.
     const { awaitingReply: awaiting, inFlight } = keepWarm.status();
     // A prompt typed since the last send makes a record that arrives after the ping gave up the user's.
-    const typedSince = state.promptSinceSend && !inFlight && state.turnSource !== "ping";
+    // A host that reports user.message tells its own ping apart by that message, so a prompt typed while
+    // the ping is in flight proves nothing there; a host that does not report it has only the prompt.
+    const typedSince = state.promptSinceSend && state.turnSource !== "ping" && (!inFlight || !state.hostReportsUserMessage);
     // A host that does not report user.message is told apart by the ping awaited. A message
     // typed after the ping's own message must not take the ping's record (pingOwed).
     if ((state.pingOwed && awaiting) || state.turnSource === "ping" || (awaiting && state.turnSource !== "user" && !typedSince)) {
@@ -511,6 +519,8 @@ export async function attach({
       scheduleHeadsUp();
       return;
     }
+    // Booked as a real call: the typed prompt it answers is spent.
+    if (typedSince) state.promptSinceSend = false;
     clock.ingest(call);
     replan();
   });
@@ -567,6 +577,9 @@ function buildKeepWarm({ state, snapshot, getConfig, now, timers, notify, onPlan
     onPlanChange,
   });
 }
+
+/** True when a user.message payload's text is, or wraps, our ping, whatever source it claims. */
+const carriesPingText = (data) => looksLikePingText(data?.content) || looksLikePingText(data?.transformedContent);
 
 function headsUpScheduler({ state, selection, clock, now, timers, getConfig, say, keepWarmWillPing }) {
   timers.clearTimeout(state.headsUpTimer);

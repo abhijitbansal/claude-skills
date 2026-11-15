@@ -232,7 +232,8 @@ test("the card says another process owns keep-warm, and every new stop reason ha
   const on = { ...DEFAULTS, keepWarmHours: 3 };
   assert.match(card(warm, tally, on, { state: "elsewhere", lastSkip: "locked" }), /keep-warm  handled by another process of this session/);
   for (const [reason, text] of [["daily-limit", /daily limit for this session/], ["model-changed", /selected model changed while a ping was out/],
-    ["compacted", /conversation was compacted while a ping was out/], ["ledger-failed", /ping ledger could not be written/]]) {
+    ["compacted", /conversation was compacted while a ping was out/], ["ledger-failed", /ping ledger could not be read or written.*delete the ledger file to reset it/],
+    ["lifetime-too-short", /cache lifetime is under 5 minutes/]]) {
     assert.match(keepWarmStopped(reason, { usd: 0.1, pings: 2 }), text, reason);
   }
 });

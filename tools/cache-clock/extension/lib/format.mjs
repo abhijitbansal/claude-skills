@@ -77,7 +77,8 @@ const STOP_TEXT = {
   "daily-limit": "the daily limit for this session's pings was reached",
   "model-changed": "the selected model changed while a ping was out",
   compacted: "the conversation was compacted while a ping was out",
-  "ledger-failed": "the ping ledger could not be written, so the daily limit cannot be enforced",
+  "ledger-failed": "the ping ledger could not be read or written, so the daily limit cannot be enforced; delete the ledger file to reset it",
+  "lifetime-too-short": "the reported cache lifetime is under 5 minutes, so pings would cost more than they save",
   unmeasured: "a ping's cost was not reported, so the budget cannot be enforced",
 };
 
