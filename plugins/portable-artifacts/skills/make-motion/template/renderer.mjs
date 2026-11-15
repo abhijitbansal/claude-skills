@@ -6,6 +6,7 @@ import { layerStyles, layerUnder, normalizeTransition } from './transitions.mjs'
 import { isGlTransition } from './gl-transitions.mjs';
 import { cameraTransform } from './camera.mjs';
 import { resolveAudio } from './audio.mjs';
+import { formatCounter } from './counter-format.mjs';
 import { flattenElements, isGroup } from './groups.mjs';
 import { gradeFilter, gradeId, GRADE_ELEMENT_TYPES } from './grade.mjs';
 import { loadCaptionTracks, captionLayer, applyCaption, paintCaption, captionSample, captionFontSize, captionMoments, CAPTION_WEIGHT } from './caption-layer.mjs';
@@ -299,7 +300,7 @@ function buildElement(el, look, frames) {
       break;
     case 'counter':
       textStyle(node, el, look);
-      part.format = (v) => `${el.prefix ?? ''}${v.toFixed(el.decimals ?? 0)}${el.suffix ?? ''}`;
+      part.format = (v) => formatCounter(v, el);
       break;
     case 'shape': {
       const s = makeShape(el, look);

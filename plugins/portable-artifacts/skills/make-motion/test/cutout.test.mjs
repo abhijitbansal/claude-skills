@@ -10,6 +10,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from '../scripts/lib/spec.mjs';
+import { modelsDir } from '../scripts/lib/model-cache.mjs';
 import {
   MODEL_URL, MODEL_SHA256, MODEL_BYTES, MODEL_FILE, MODEL_DIR, INSTALL_HINT, USAGE,
   MAX_FRAMES, parseCutoutArgs, extractArgs, modelSize, ensureModel, loadOnnx, fileKind,
@@ -46,7 +47,7 @@ test('the model constants: a commit-pinned https URL, a sha256, the byte size an
   assert.match(MODEL_SHA256, /^[0-9a-f]{64}$/);
   assert.equal(MODEL_FILE, 'modnet_photographic_portrait_matting.onnx');
   assert.ok(Number.isInteger(MODEL_BYTES) && MODEL_BYTES > 1e6);
-  assert.equal(path.relative(root, MODEL_DIR), path.join('.cache', 'models', 'modnet'));
+  assert.equal(MODEL_DIR, path.join(modelsDir(root), 'modnet'), 'a per-user folder that outlives a plugin update (test/cache-dir.test.mjs)');
 });
 
 test('when the weights are in the cache their bytes match MODEL_SHA256 and MODEL_BYTES', (t) => {
@@ -161,7 +162,7 @@ test('ensureModel names the URL and the fix when the download fails or is far bi
 test('loadOnnx turns a missing onnxruntime-node into a UsageError that carries the install command and the doctor id', async () => {
   const missing = async () => { throw Object.assign(new Error("Cannot find package 'onnxruntime-node' imported from x"), { code: 'ERR_MODULE_NOT_FOUND' }); };
   await assert.rejects(() => loadOnnx(missing), (e) => e instanceof UsageError && e.message === INSTALL_HINT);
-  assert.match(INSTALL_HINT, /npm install onnxruntime-node@\d+\.\d+\.\d+ --no-save/);
+  assert.match(INSTALL_HINT, /npm install (?:\S+@\S+ )*onnxruntime-node@\d+\.\d+\.\d+(?: \S+@\S+)* --no-save/, 'the doctor step, which also names an installed kokoro-js');
   assert.doesNotMatch(INSTALL_HINT, /--prefix/);
   assert.match(INSTALL_HINT, /doctor\.mjs.* --for cutout, id cutout\)/);
   assert.match(INSTALL_HINT, /25 MB/);

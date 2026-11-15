@@ -36,6 +36,24 @@ const params = {
   },
 };
 
+// Where the US map draws: the albersUsa projection has the lower 48, Alaska and Hawaii, and projects everything else to
+// nothing, so an arc with an end elsewhere would be missing with no error. Boxes a little wider than the land, so a coast or
+// a border city is never refused; the check is for a flow that is plainly abroad.
+const US_BOXES = [
+  { lon: [-125, -66], lat: [24, 50] }, // the lower 48
+  { lon: [-180, -129], lat: [51, 72] }, // Alaska
+  { lon: [-161, -154], lat: [18, 23] }, // Hawaii
+];
+const inUnitedStates = ({ lon, lat }) => US_BOXES.some((box) => lon >= box.lon[0] && lon <= box.lon[1] && lat >= box.lat[0] && lat <= box.lat[1]);
+
+function validate(p) {
+  if (kindOf(p) !== 'us') return [];
+  return p.flows.flatMap((flow, i) => ['from', 'to'].filter((end) => !inUnitedStates(flow[end])).map((end) => ({
+    path: `flows[${i}].${end}`,
+    message: `lon ${flow[end].lon}, lat ${flow[end].lat} is not inside the United States, which the US map draws (the lower 48, Alaska and Hawaii); set "map": "world" to draw a flow outside it, or move the end`,
+  })));
+}
+
 const MAP_IN = 0.6; // the map has faded in by this second; the first arc starts then
 const STEP_BARE = 0.5; // seconds between arcs
 const STEP_LABELLED = 1.2; // ... when the flows have captions, so each can be read while its arc is the newest
@@ -118,5 +136,6 @@ export default Object.freeze({
     const m = /^label-(\d+)$/.exec(part);
     return m ? `flows[${Number(m[1]) - 1}].label` : null;
   },
+  validate,
   expand,
 });

@@ -16,10 +16,9 @@ async function captureFrame(page, _k, sec) {
 const AUTO_CAP = 8;
 const WORKERS_HELP = `--workers must be an integer from 1 to ${MAX_WORKERS} or "auto"`;
 
-/** `--workers` text -> a count: undefined is 1, "auto" is max(1, min(8, cpus - 1)), else an integer 1-16. */
+/** `--workers` text -> a count: undefined and "auto" are max(1, min(8, cpus - 1)), else an integer 1-16. */
 export function parseWorkers(text, cpus = os.availableParallelism()) {
-  if (text === undefined) return 1;
-  if (text === 'auto') return Math.max(1, Math.min(AUTO_CAP, cpus - 1));
+  if (text === undefined || text === 'auto') return Math.max(1, Math.min(AUTO_CAP, cpus - 1));
   const n = /^\d+$/.test(text) ? Number(text) : NaN;
   if (!(n >= 1 && n <= MAX_WORKERS)) throw new UsageError(`${WORKERS_HELP} (got ${JSON.stringify(text)})`);
   return n;

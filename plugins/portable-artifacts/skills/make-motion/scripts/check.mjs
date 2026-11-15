@@ -76,9 +76,8 @@ import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { readyBudget, waitReady, boundPage, frameLimit } from './lib/ready.mjs';
 import { specHasVideo, prepareVideo } from './lib/video.mjs';
 import { themeData } from './lib/theme.mjs';
-import { isSketchScene, specHasSketch } from '../template/sketch/style.mjs';
-import { planScene, colourOf, THEME_TOKENS } from '../template/sketch/plan.mjs';
-import { planContext } from '../template/sketch/plan-context.mjs';
+import { colourOf, THEME_TOKENS } from '../template/sketch/plan.mjs';
+import { sketchPlans } from './lib/sketch-plans.mjs';
 import {
   CHECKED_TYPES, NO_PASSING_COLOUR, tweenSpans, inTween, auditTimes, backdropColors, contrastFindings, unjudgedContrast, textFloorFindings, readingFloorFindings, deadStretchProblems, unfinishedWriting, neverDrawn, handStillLeaving,
 } from './lib/audits.mjs';
@@ -133,14 +132,8 @@ const spansOf = ({ chain, camera, writes }, props) => ({
   camera: cameraTweens(camera, props),
 });
 
-// The stroke plan of each scene drawn by hand (null for the others), made as the page makes it: the same planScene, planContext
-// (seed, pace, the transition's startAfter) and icons (template/renderer.mjs loadSketch), so the spans below are the page's.
-// The icons are a megabyte, so a spec with no hand-drawn scene never loads them. `spec`: after withDefaults.
-export async function sketchPlans(spec) {
-  if (!specHasSketch(spec)) return spec.scenes.map(() => null);
-  const { default: icons } = await import('../template/sketch/lucide.mjs');
-  return spec.scenes.map((scene, sceneIndex) => (isSketchScene(spec, scene) ? planScene(scene, planContext(spec, scene, sceneIndex, { size: spec.size, icons })) : null));
-}
+// The stroke plan of each scene drawn by hand (null for the others), as the page makes it: scripts/lib/sketch-plans.mjs.
+export { sketchPlans };
 
 // `items` with `writes: { t0, t1 }` (scene seconds) on each one the plan draws. The paths are the plan's: sceneItems and the plan
 // both name an element scenes[i].elements[k] (.children[m]), which is also the page's data-path.
@@ -417,6 +410,18 @@ function frameZeroWarnings(scene, items, els, size, sketch = false) {
   return [{ path: 'scenes[0]', message: `scene "${scene.id}" shows nothing at ${at(0)}: the first frame, the video's thumbnail, is blank; ${why}. Show something at t = 0, or accept a blank thumbnail` }];
 }
 
+// The first scene's entrance starts within the first frame or two: something is on screen at (nearly) full opacity by
+// frame EARLY_FRAMES, so the blank thumbnail is a blink, not an opening. A fade from 0 over half a second is not this.
+const EARLY_FRAMES = 2;
+const EARLY_OPACITY = 0.5;
+async function shownWithinFirstFrames(page, spec) {
+  for (let frame = 1; frame <= EARLY_FRAMES; frame++) {
+    const els = await measureAt(page, frame / spec.fps, 0);
+    if (els.some((m) => isShown(m, spec.size) && m.opacity >= EARLY_OPACITY)) return true;
+  }
+  return false;
+}
+
 // A title whose `exit` preset was applied (withDefaults marks it `exitPreset`) left on purpose: it counts as present.
 function emptyEndProblems(scene, i, items, samples, size) {
   const last = samples[samples.length - 1];
@@ -535,7 +540,8 @@ async function inspect(browser, spec, server, prepare, written) {
   const itemsOf = spec.scenes.map((scene, i) => drawnItems(sceneItems(scene, i), plans[i])); // the non-group elements of each scene, indexed as the page measures them
   const blocksOf = written.scenes.map((scene) => new Set((scene.elements ?? []).filter(isBlock).map((el) => el.id))); // `hold` goes on these, not on their parts
   const frame0 = await measureAt(page, 0, 0);
-  const warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], frame0, spec.size, plans[0] !== null);
+  let warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], frame0, spec.size, plans[0] !== null);
+  if (warnings.length && plans[0] === null && await shownWithinFirstFrames(page, spec)) warnings = []; // a title that is up by frame 2 is not a blank opening
   const platform = isViral(spec) ? safeInsets(spec.size, spec.viral.safeZone) : null; // viral: the platform bands
   const band = [];
   const zone = spec.captions.length ? captionZone(spec.size, spec.format, platform) : null; // the caption rules need captions
@@ -587,7 +593,15 @@ async function prepareFrames(specPath, spec) {
 
 async function checkSpec(specPath, spec, { env, theme, prepare, written }) {
   // Without a page, a viral spec still gets the warnings its spec alone can show.
-  const skipped = (reason) => ({ status: 'skipped', reason, warnings: isViral(spec) ? [...specWarnings(spec), ...gapWarnings(spec, path.dirname(specPath))] : [] });
+  // The stroke plan of a hand-drawn scene needs no page either, so a voiced drawing that cannot fit its narration is a problem
+  // here too (the browser path reports the same `overruns`); the rest of the check did not run, and the warning says so.
+  const skipped = async (reason) => {
+    const warnings = isViral(spec) ? [...specWarnings(spec), ...gapWarnings(spec, path.dirname(specPath))] : [];
+    const problems = (await sketchPlans(spec)).flatMap((plan) => plan?.overruns ?? []);
+    if (!problems.length) return { status: 'skipped', reason, warnings };
+    const partial = { path: '(root)', message: `no browser (${reason}): only the drawing plan was checked; the audits that need a page did not run` };
+    return { status: 'failed', problems, warnings: [partial, ...warnings] };
+  };
   if (env.PA_NO_BROWSER === '1') return skipped('PA_NO_BROWSER=1');
   let browser;
   try {
@@ -705,7 +719,7 @@ export async function main(argv, { prepare } = {}) {
   } catch (e) {
     if (e instanceof UsageError || e instanceof SpecUsageError) {
       exitUsage(e, { json });
-      return 2;
+      return e.help === true ? 0 : 2; // --help is a usage line on stdout, not an error
     }
     report({ status: 'failed', crashed: true, problems: [{ path: '', message: `check crashed: ${crashLine(e)}` }] }, json); // never a stack trace
     return 1;

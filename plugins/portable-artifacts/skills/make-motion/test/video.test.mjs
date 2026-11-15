@@ -478,7 +478,7 @@ test('doctor: the frame cache passes under 2 GB and is listed past it, naming it
   assert.equal(await req.check(ctx), true);
   truncateSync(big, CACHE_LIMIT_BYTES);
   assert.equal(await req.check(ctx), false);
-  assert.equal(req.why(ctx), 'video frame cache is 2.0 GB; --fix cache clears it');
+  assert.equal(req.why(ctx), 'frame caches are 2.0 GB (decoded video frames and cutout mattes); --fix cache clears them');
 });
 
 test('doctor --fix cache deletes the frame cache even while it is under the limit', () => {

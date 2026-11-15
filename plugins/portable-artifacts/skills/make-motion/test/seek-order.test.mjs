@@ -39,6 +39,19 @@ const SPEC_STAGE = {
   ],
 };
 
+// Grain and vignette over a fade and a push: the one CI flake (two renders of this shape differed once, cause unknown, see
+// test/helpers/framemd5.mjs) had grain in the push window. The grain image is drawn per scene by renderer.mjs.
+const SPEC_GRAIN = {
+  size: [320, 180], fps: 30, texture: { grain: 0.05, vignette: true }, scenes: [
+    { id: 'a', duration: 1.2, background: '#10243a', elements: [
+      { id: 'g1', type: 'text', text: FIRST_MARK, x: 160, y: 60, fontSize: 22, fontWeight: 600, keyframes: [{ t: 0.2, opacity: 0 }, { t: 0.6, opacity: 1 }] },
+    ] },
+    { id: 'b', duration: 1.2, background: '#3a1f33', transition: { type: 'push', direction: 'down', duration: 0.6 }, elements: [
+      { id: 'g2', type: 'text', text: 'Second scene', x: 160, y: 120, fontSize: 22 },
+    ] },
+  ],
+};
+
 // 1080p at 30 fps, where a settling move is smallest: kinetic captions (pops) over a `slide` scene transition, a headline
 // scaling up, a line rotating level and an eased fade-and-rise. Checked in a window around the slide (frame 105 starts it).
 const SPEC_1080 = {
@@ -108,6 +121,7 @@ const CASES = [
   ['a headline easing onto its place (launch-title)', LAUNCH_TITLE, { to: MOTION_FRAMES }],
   ['a camera push-in (camera-push-in)', CAMERA_PUSH_IN, { to: MOTION_FRAMES }],
   ['push and slide scene transitions (transitions.json, 1.2 s to 4.5 s)', TRANSITIONS, { from: 10, to: 46, coldStep: 3 }],
+  ['grain and vignette over a fade and a push transition', SPEC_GRAIN, { fps: 30 }],
   ['kinetic captions over a slide transition, 1080p at 30 fps (frames 98-122)', SPEC_1080, { fps: 30, viewport: [1920, 1080], from: 98, to: 122, coldStep: 3 }],
 ];
 for (const [name, spec, { coldStep = 1, ...options }] of CASES) {

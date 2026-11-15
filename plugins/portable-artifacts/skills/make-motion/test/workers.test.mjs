@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { readSchema } from './helpers/schema-docs.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
@@ -21,7 +22,7 @@ const NEED_ALL = { need: ['browser', 'ffmpeg', 'ffprobe'] };
 const cli = (args, env = {}) => spawnSync(process.execPath, [RENDER, EXAMPLE, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 
 test('parseWorkers: 1-16 or auto; anything else is a usage error that lists the accepted values', () => {
-  assert.equal(parseWorkers(undefined), 1);
+  assert.equal(parseWorkers(undefined, 4), 3, 'no flag is auto (test/workers-default.test.mjs)');
   assert.equal(parseWorkers('1'), 1);
   assert.equal(parseWorkers('16'), 16);
   assert.equal(parseWorkers('auto', 10), 8, 'auto caps at 8');
@@ -117,7 +118,7 @@ test('captureInOrder: an onFrame error (the encoder) stops the run and is rethro
 });
 
 test('schema.md documents what --workers costs: the disk bound, memory per page, the 0-based worker index', () => {
-  const doc = readFileSync(path.join(root, 'references/schema.md'), 'utf8');
+  const doc = readSchema(root);
   assert.match(doc, /at most 2 × workers PNG files exist at once/);
   assert.match(doc, /memory grows with `--workers`/);
   assert.match(doc, /k counts from 0/);
@@ -213,6 +214,28 @@ test('render: a text that faded in before a page\'s first frame is drawn the sam
   const one = await renderHash(spec, ['--fps', '10', '--workers', '1']);
   const four = await renderHash(spec, ['--fps', '10', '--workers', '4']);
   assert.equal(four.sha256, one.sha256);
+});
+
+// Grain and vignette across a push transition: the shape of the one byte-identical flake (PA-42). If a page's grain image
+// depended on which frames it drew first, 1 and 4 workers would differ here.
+test('render: grain and vignette over a fade and a push give the same MP4 at 1 and 4 workers', async (t) => {
+  if (!await requireRender(t)) return;
+  const dir = mkdtempSync(path.join(tmpdir(), 'wk-'));
+  const spec = path.join(dir, 'm.json');
+  writeFileSync(spec, JSON.stringify({ size: [320, 180], fps: 30, texture: { grain: 0.05, vignette: true }, scenes: [
+    { id: 'a', duration: 1.2, background: '#10243a', elements: [{ id: 'g1', type: 'text', text: 'First scene', x: 160, y: 60, fontSize: 24, keyframes: [{ t: 0.2, opacity: 0 }, { t: 0.6, opacity: 1 }] }] },
+    { id: 'b', duration: 1.2, background: '#3a1f33', transition: { type: 'push', direction: 'down', duration: 0.6 }, elements: [{ id: 'g2', type: 'text', text: 'Second scene', x: 160, y: 120, fontSize: 24 }] }] }));
+  const one = await renderHash(spec, ['--fps', '10', '--workers', '1']);
+  const four = await renderHash(spec, ['--fps', '10', '--workers', '4']);
+  assert.equal(four.sha256, one.sha256);
+});
+
+// The default is auto (PA-40): a render with no --workers is the same MP4 as --workers 1.
+test('render: no --workers flag (auto) gives the same MP4 as --workers 1', async (t) => {
+  if (!await requireRender(t)) return;
+  const one = await renderHash(EXAMPLE, [...SMALL, '--workers', '1']);
+  const auto = await renderHash(EXAMPLE, SMALL);
+  assert.equal(auto.sha256, one.sha256);
 });
 
 // Its own clip (a length no other test uses, so its own frame cache folder: video.test.mjs deletes and rebuilds the

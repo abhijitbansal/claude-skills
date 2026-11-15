@@ -46,6 +46,7 @@ const CELL_COLUMNS = 4; // a text box is split into up to this many columns x CE
 const CELL_ROWS = 2;
 const MIN_CELL_PX = 24; // ... and no cell is narrower or shorter than this, so a small box has fewer
 const MAX_NAMED = 4; // elements a dead-stretch message names before 'and N more'
+const ADD_MOTION = 'add motion, such as a slow camera push-in';
 const HEX = /^#[0-9a-f]{6}$/i;
 const seconds = (n) => `${n.toFixed(2)}s`;
 const unitOf = (size) => Math.min(size[0], size[1]) / REFERENCE_SIDE;
@@ -432,7 +433,8 @@ export function deadStretchProblems(spec, steps, itemsOf = [], blocksOf = []) {
     const lacking = [...new Set(inside.flatMap((s) => s.els.flatMap((m, j) => (m.shown && !m.hold && itemsOf[scene]?.[j] ? [j] : []))))].sort((a, b) => a - b);
     const labels = [...new Set(lacking.map((j) => labelOf(itemsOf[scene][j], blocksOf[scene])))];
     const named = labels.slice(0, MAX_NAMED).join(', ') + (labels.length > MAX_NAMED ? `, and ${labels.length - MAX_NAMED} more` : '');
-    const advice = labels.length ? `add motion, or set "hold": true on ${named} if ${labels.length === 1 ? 'it is' : 'they are'} meant to sit still` : 'add motion';
+    // The push-in comes first: it is the cheapest motion (a scene `camera` zoom 1 to 1.05-1.15), and `hold` only says the stillness is on purpose.
+    const advice = labels.length ? `${ADD_MOTION}, or set "hold": true on ${named} if ${labels.length === 1 ? 'it is' : 'they are'} meant to sit still` : ADD_MOTION;
     return { path: `scenes[${scene}]`, message: `nothing changes from ${seconds(from)} to ${seconds(to)} (${(to - from).toFixed(1)}s); ${advice}` };
   });
 }

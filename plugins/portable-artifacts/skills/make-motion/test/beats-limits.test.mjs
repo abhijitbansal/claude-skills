@@ -2,6 +2,7 @@
 // the third review's own audio (test/helpers/beat-grooves.mjs) and on the helper synthesis (test/helpers/beat-signals.mjs).
 // The tempo estimator is not tuned here: these tests pin where each limit is and that its documented fix works.
 import { test } from 'node:test';
+import { readSchema } from './helpers/schema-docs.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -115,7 +116,7 @@ test('narration-like syllables can pass the default gate, and --min-confidence 0
 });
 
 test('schema.md and SKILL.md name every known limit with the flag that fixes it', () => {
-  const schema = readFileSync(path.join(root, 'references/schema.md'), 'utf8');
+  const schema = readSchema(root);
   const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
   for (const [name, text] of [['schema.md', schema], ['SKILL.md', skill]]) {
     for (const words of ['bossa', 'polka', '2/3', 'from about 115', '6/8', 'below 60', 'swing', 'ritardando', 'narration', 'heavy noise', '0.8 to 1.25 times', '--min-confidence 0.6', '--bpm', '--min-bpm', '--max-bpm']) {

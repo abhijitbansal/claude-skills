@@ -9,6 +9,7 @@ import { UsageError } from './lib/spec.mjs';
 import { launchBrowser } from './lib/browser.mjs';
 import { findFfmpeg, findFfprobe } from './lib/ffmpeg.mjs';
 import { probeVideo } from './lib/video.mjs';
+import { wantsHelp, printHelp } from './lib/help.mjs';
 import { USAGE, INSTALL_HINT, parseCutoutArgs, loadOnnx, ensureModel, openCanvasPage, cutoutImage, cutoutVideo, clipFps } from './lib/cutout.mjs';
 
 const EXIT_USAGE = 2;
@@ -29,6 +30,7 @@ async function cutOut(opts, tools) {
 // onnxruntime session aborts with "mutex lock failed" (SIGABRT), and so does process.exit(), so the exit code is set and
 // the event loop is left to drain (the same rule as voice.mjs).
 async function main() {
+  if (wantsHelp(process.argv.slice(2))) return printHelp(USAGE);
   const opts = parseCutoutArgs(process.argv.slice(2));
   if (!existsSync(opts.input)) throw new UsageError(`cannot read ${opts.input}: no such file`);
   const ort = await loadOnnx();

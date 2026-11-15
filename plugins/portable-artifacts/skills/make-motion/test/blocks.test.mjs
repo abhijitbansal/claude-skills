@@ -420,7 +420,7 @@ test('every block text is at least 40 px at 1080 on the short side, for the exam
 
 test('a duplicate block id is one error at the block id, not one per part', () => {
   const kpi = (extra) => block('kpi-counter', { label: 'Users', to: 5 }, { id: 'kpi', ...extra });
-  assert.deepEqual(errs(oneScene([kpi(), kpi({ y: 300 })])), ['scenes[0].elements[1].id: duplicate id "kpi" (first used at scenes[0].elements[0].id)']);
+  assert.deepEqual(errs(oneScene([kpi(), kpi({ y: 300 })])), ['scenes[0].elements[1].id: duplicate id "kpi" (first used at scenes[0].elements[0].id); scene ids and element ids share one namespace; rename one']);
 });
 
 test('blocks.mjs show prints caps in the type column and where a right-side lower-third goes', () => {

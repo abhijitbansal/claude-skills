@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { findFfmpeg, findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 import { launchBrowser } from '../../scripts/lib/browser.mjs';
+import { assertSameRender } from './framemd5.mjs';
 
 const RENDER = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts/render.mjs');
 const PINNED_BUILD_DATE = '1793318400'; // 30 Oct 2026 00:00 UTC: render.mjs stamps the build date into the MP4 comment tag
@@ -70,11 +71,15 @@ export async function renderHash(specPath, args = [], { env = {} } = {}) {
   return { sha256: createHash('sha256').update(readFileSync(out)).digest('hex'), out, stdout: r.stdout };
 }
 
-/** Renders twice through `renderHash`, asserts the two files are byte-identical and returns the hash. */
-export async function assertRendersIdentically(_t, specPath, args) {
+/**
+ * Renders twice through `renderHash`, asserts the two files are byte-identical and returns the hash. On a mismatch it
+ * dumps the per-frame MD5 of both renders to test/.out/framemd5 (CI uploads that folder) and names the first frame that
+ * differs: see helpers/framemd5.mjs.
+ */
+export async function assertRendersIdentically(t, specPath, args) {
   const first = await renderHash(specPath, args);
   const second = await renderHash(specPath, args);
-  assert.equal(second.sha256, first.sha256, 'two renders of the same spec and media must be byte-identical');
+  assertSameRender(first, second, { ffmpeg: await findFfmpeg(), label: `${t?.name ?? path.basename(specPath)} ${path.basename(specPath)} ${(args ?? []).join(' ')}`.trim() });
   return first.sha256;
 }
 
