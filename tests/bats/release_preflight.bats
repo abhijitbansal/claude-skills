@@ -124,11 +124,12 @@ SWIFT
   [[ "$output" == *"PASS: whatsnew"* ]]
 }
 
-@test "inapp-whatsnew PASSes when release.inapp_changelog_file is unset" {
+@test "inapp-whatsnew SKIPs (not PASS) when release.inapp_changelog_file is unset" {
   cd "${TMP}/app"
   run bash "${PREFLIGHT}" --mode testflight --next-version 1.3.0
   [ "$status" -eq 0 ]
-  [[ "$output" == *"PASS: inapp-whatsnew"* ]]
+  out_has "SKIP: inapp-whatsnew"
+  out_lacks "PASS: inapp-whatsnew"
 }
 
 @test "appstore mode FAILs when inapp_changelog_file configured but missing entry" {
@@ -330,4 +331,375 @@ PLIST
   [ "$status" -eq 1 ]
   [[ "$output" == *"FAIL: plist-conversion"* ]]
   [[ "$output" != *"FAIL: usage-strings"* ]]
+}
+
+# ---------------------------------------------------------------------------
+# CAT-44 / G-14 / NEW-54: gates must not pass vacuously.
+# ---------------------------------------------------------------------------
+
+commit_all() { git add -A && git -c user.email=t@t -c user.name=t commit -qm "$1"; }
+
+write_ent() {  # $1 path, then app-group ids
+  local f="$1"; shift
+  python3 - "${f}" "$@" <<'PY'
+import plistlib, sys
+with open(sys.argv[1], "wb") as out:
+    plistlib.dump({"com.apple.security.application-groups": sys.argv[2:]}, out, fmt=plistlib.FMT_XML)
+PY
+}
+
+# Drop the seeded .groups files and the env seam so only the producer can verify parity.
+use_producer_only() {
+  rm -f build/gen/*.entitlements.groups
+  unset PREFLIGHT_ENTITLEMENTS_DIR
+}
+
+@test "entitlement-parity producer reads checked-in .entitlements (declared path and by name)" {
+  cd "${TMP}/app"
+  use_producer_only
+  mkdir -p Demo Widget
+  write_ent Demo/Demo.entitlements group.com.example.demo
+  write_ent Widget/Widget.entitlements group.com.example.demo
+  printf '    entitlements:\n      path: Widget/Widget.entitlements\n' >> project.yml
+  commit_all producer
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 0 ]
+  out_has "PASS: entitlement-parity"
+}
+
+@test "entitlement-parity producer FAILs an extension whose checked-in group differs" {
+  cd "${TMP}/app"
+  use_producer_only
+  mkdir -p Demo Widget
+  write_ent Demo/Demo.entitlements group.com.example.demo
+  write_ent Widget/Widget.entitlements group.com.example.OTHER
+  printf '    entitlements:\n      path: Widget/Widget.entitlements\n' >> project.yml
+  commit_all producer
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  out_has "FAIL: entitlement-parity: DemoWidget"
+}
+
+@test "unverified entitlement-parity FAILs in appstore mode, WARNs in testflight" {
+  cd "${TMP}/app"
+  use_producer_only
+  commit_all noparity
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 1 ]
+  out_has "FAIL: entitlement-parity"
+  out_has "unverified"
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "WARN: entitlement-parity"
+  out_lacks "PASS: entitlement-parity"
+}
+
+@test "whatsnew gates print SKIP, never PASS, when --next-version is absent" {
+  cd "${TMP}/app"
+  printf '  inapp_changelog_file: Sources/Changelog.swift\n' >> .claude/app.yml
+  printf 'let x = 1\n' > Sources/Changelog.swift
+  commit_all inapp
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "SKIP: whatsnew"
+  out_has "SKIP: inapp-whatsnew"
+  out_lacks "PASS: whatsnew"
+  out_lacks "PASS: inapp-whatsnew"
+}
+
+@test "generated plist is read from project.yml info.path when build/ has none" {
+  cd "${TMP}/app"
+  unset PREFLIGHT_PLIST
+  rm -f build/gen/Demo-Info.plist
+  mkdir -p Demo
+  cat > Demo/Info.plist <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>NSCameraUsageDescription</key><string>Scan documents.</string>
+  <key>ITSAppUsesNonExemptEncryption</key><false/>
+</dict></plist>
+PLIST
+  python3 - <<'PY'
+p = "project.yml"
+s = open(p).read()
+s = s.replace("  Demo:\n    type: application\n    platform: iOS\n",
+              "  Demo:\n    type: application\n    platform: iOS\n    info:\n      path: Demo/Info.plist\n", 1)
+open(p, "w").write(s)
+PY
+  commit_all infopath
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 0 ]
+  out_has "PASS: usage-strings"
+  out_has "PASS: encryption-flag"
+}
+
+@test "no plist anywhere FAILs usage-strings in appstore mode, WARNs in testflight" {
+  cd "${TMP}/app"
+  unset PREFLIGHT_PLIST
+  rm -f build/gen/Demo-Info.plist
+  commit_all noplist
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 1 ]
+  out_has "FAIL: usage-strings"
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "WARN: usage-strings"
+}
+
+@test "empty required_capabilities with a capability in the plist FAILs appstore, WARNs testflight" {
+  cd "${TMP}/app"
+  python3 - "${PREFLIGHT_PLIST}" <<'PY'
+import plistlib, sys
+with open(sys.argv[1], 'rb') as f:
+    d = plistlib.load(f)
+d['UIRequiredDeviceCapabilities'] = ['arm64']
+with open(sys.argv[1], 'wb') as f:
+    plistlib.dump(d, f)
+PY
+  commit_all caps
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 1 ]
+  out_has "FAIL: capabilities"
+  out_has "arm64"
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "WARN: capabilities"
+}
+
+@test "empty required_capabilities and no capability in the plist PASSes capabilities" {
+  cd "${TMP}/app"
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 0 ]
+  out_has "PASS: capabilities"
+}
+
+@test "nfc-entitlement inspects every .entitlements file, not just the first" {
+  cd "${TMP}/app"
+  unset PREFLIGHT_ENTITLEMENTS_FILE
+  mkdir -p A B C D
+  for d in A B C; do
+    cat > "${d}/${d}.entitlements" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>com.apple.developer.nfc.readersession.formats</key>
+  <array><string>TAG</string></array>
+</dict></plist>
+PLIST
+  done
+  cat > D/D.entitlements <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<plist version="1.0"><dict>
+  <key>com.apple.developer.nfc.readersession.formats</key>
+  <array><string>NDEF</string></array>
+</dict></plist>
+PLIST
+  commit_all nfc
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  out_has "FAIL: nfc-entitlement"
+  out_has "D/D.entitlements"
+}
+
+@test "missing TARGETED_DEVICE_FAMILY is treated as universal and checks iPad orientations" {
+  cd "${TMP}/app"
+  sed -i.bak '/TARGETED_DEVICE_FAMILY/d' project.yml
+  rm -f project.yml.bak
+  commit_all family
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  out_has "FAIL: ipad-orientation"
+}
+
+@test "runtime-trap scans the target's project.yml sources, not a hard-coded Sources dir" {
+  cd "${TMP}/app"
+  mkdir -p App Other
+  cat > App/DemoApp.swift <<'SWIFT'
+@main struct DemoApp: App {
+    init() {
+        EmbeddingIndex.shared.backfill()
+    }
+}
+SWIFT
+  cat > Other/Elsewhere.swift <<'SWIFT'
+@main struct Elsewhere: App {
+    init() {
+        EmbeddingIndex.shared.backfill()
+    }
+}
+SWIFT
+  python3 - <<'PY'
+p = "project.yml"
+s = open(p).read()
+s = s.replace("  Demo:\n    type: application\n    platform: iOS\n",
+              "  Demo:\n    type: application\n    platform: iOS\n    sources:\n      - App\n", 1)
+open(p, "w").write(s)
+PY
+  commit_all sources
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "WARN: runtime-trap"
+  out_has "App/DemoApp.swift"
+  out_lacks "Other/Elsewhere.swift"
+}
+
+@test "project_info.py reads sources as list, path map and inline list, ignoring nested excludes" {
+  cd "${TMP}/app"
+  INFO="${BATS_TEST_DIRNAME}/../../plugins/ios-dev/skills/release/scripts/project_info.py"
+  cat > project.yml <<'YML'
+name: Demo
+targets:
+  Demo:
+    type: application
+    sources:
+      - path: App
+        excludes:
+          - "**/Skip"
+      - Shared
+  Other:
+    sources: [A, "B C"]
+YML
+  run python3 "${INFO}" sources Demo
+  [ "$status" -eq 0 ]
+  [ "$output" = $'App\nShared' ]
+  run python3 "${INFO}" sources Other
+  [ "$status" -eq 0 ]
+  [ "$output" = $'A\nB C' ]
+  run python3 "${INFO}" sources Missing
+  [ "$status" -eq 1 ]
+}
+
+@test "project_info.py rejects unknown flags and a valueless --file with exit 2 and the accepted flags" {
+  cd "${TMP}/app"
+  INFO="${BATS_TEST_DIRNAME}/../../plugins/ios-dev/skills/release/scripts/project_info.py"
+  printf 'name: Demo\ntargets:\n  Demo:\n    type: application\n' > project.yml
+  run python3 "${INFO}" groups Demo --bogus
+  [ "$status" -eq 2 ]
+  out_has "unknown argument: --bogus"
+  out_has "--file"
+  run python3 "${INFO}" groups Demo --file
+  [ "$status" -eq 2 ]
+  out_has "--file needs a value"
+  out_lacks "Traceback"
+  run python3 "${INFO}" sources Demo --file project.yml
+  [ "$status" -eq 1 ]
+}
+
+make_appiconset() {  # $1 dir; light file $2 (rgb|rgba); dark/tinted are always rgba
+  local d="$1"
+  mkdir -p "${d}"
+  if [[ "$2" == "rgba" ]]; then make_png_rgba "${d}/light-1024.png" 1024 1024; else make_png "${d}/light-1024.png" 1024 1024; fi
+  make_png_rgba "${d}/dark-1024.png" 1024 1024
+  make_png_rgba "${d}/tinted-1024.png" 1024 1024
+  cat > "${d}/Contents.json" <<'JSON'
+{
+  "images" : [
+    { "filename" : "light-1024.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" },
+    { "appearances" : [ { "appearance" : "luminosity", "value" : "dark" } ],
+      "filename" : "dark-1024.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" },
+    { "appearances" : [ { "appearance" : "luminosity", "value" : "tinted" } ],
+      "filename" : "tinted-1024.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+}
+
+@test "icon-opaque FAILs when the light 1024 icon has an alpha channel" {
+  cd "${TMP}/app"
+  make_appiconset Demo/Assets.xcassets/AppIcon.appiconset rgba
+  commit_all icon
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 1 ]
+  out_has "FAIL: icon-opaque"
+  out_has "light-1024.png"
+  out_has "noneSkipLast"
+}
+
+@test "icon-opaque PASSes an opaque light icon and never checks dark or tinted variants" {
+  cd "${TMP}/app"
+  make_appiconset Demo/Assets.xcassets/AppIcon.appiconset rgb
+  commit_all icon
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "PASS: icon-opaque"
+}
+
+@test "icon-opaque WARNs, never passes, when no appiconset is found" {
+  cd "${TMP}/app"
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "WARN: icon-opaque"
+  out_lacks "PASS: icon-opaque"
+}
+
+@test "screenshot-sizes FAILs an off-spec PNG in appstore mode and names the file" {
+  cd "${TMP}/app"
+  mkdir -p marketing/screenshots/6.9
+  make_png marketing/screenshots/6.9/good.png 1290 2796
+  make_png marketing/screenshots/6.9/stretched.png 1290 2700
+  commit_all shots
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 1 ]
+  out_has "FAIL: screenshot-sizes"
+  out_has "stretched.png"
+  out_has "1290x2700"
+  out_lacks "good.png"
+}
+
+@test "screenshot-sizes PASSes known-good sizes in both orientations" {
+  cd "${TMP}/app"
+  mkdir -p marketing/screenshots
+  make_png marketing/screenshots/a.png 1290 2796
+  make_png marketing/screenshots/b.png 2796 1290
+  make_png marketing/screenshots/c.png 1320 2868
+  commit_all shots
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 0 ]
+  out_has "PASS: screenshot-sizes"
+}
+
+@test "screenshot-sizes reads JPEG sizes and FAILs an unreadable image instead of skipping it" {
+  cd "${TMP}/app"
+  mkdir -p marketing/screenshots
+  python3 - marketing/screenshots/ok.jpg 1290 2796 <<'PY'
+import struct, sys
+path, w, h = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+sof = struct.pack(">BHHB", 8, h, w, 3) + b"\x01\x11\x00\x02\x11\x00\x03\x11\x00"
+with open(path, "wb") as f:
+    f.write(b"\xff\xd8" + b"\xff\xc0" + struct.pack(">H", len(sof) + 2) + sof + b"\xff\xd9")
+PY
+  commit_all jpeg
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 0 ]
+  out_has "PASS: screenshot-sizes"
+  printf 'not an image\n' > marketing/screenshots/broken.png
+  commit_all broken
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 1 ]
+  out_has "FAIL: screenshot-sizes"
+  out_has "broken.png"
+}
+
+@test "screenshot-sizes SKIPs when there is no screenshots dir, and in testflight mode" {
+  cd "${TMP}/app"
+  run bash "${PREFLIGHT}" --mode appstore --next-version 1.2.0
+  [ "$status" -eq 0 ]
+  out_has "SKIP: screenshot-sizes"
+  mkdir -p marketing/screenshots
+  make_png marketing/screenshots/bad.png 100 100
+  commit_all shots
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "SKIP: screenshot-sizes"
+}
+
+@test "whatsnew-config WARNs when a WhatsNew json exists but release.whatsnew_file is unset" {
+  cd "${TMP}/app"
+  sed -i.bak '/whatsnew_file/d' .claude/app.yml
+  rm -f .claude/app.yml.bak
+  commit_all cfg
+  run bash "${PREFLIGHT}" --mode testflight
+  [ "$status" -eq 0 ]
+  out_has "WARN: whatsnew-config"
+  out_has "Sources/WhatsNew.json"
 }

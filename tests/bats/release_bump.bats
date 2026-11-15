@@ -37,6 +37,21 @@ teardown() { rm -rf "${TMP}"; }
   grep -q 'MARKETING_VERSION: "1.2.0"' project.yml
 }
 
+@test "--print shows the next version and build without touching project.yml" {
+  cd "${TMP}/app"
+  run bash "${BUMP}" --print minor
+  [ "$status" -eq 0 ]
+  [ "$output" = "version=1.3.0 build=35" ]
+  grep -q 'MARKETING_VERSION: "1.2.0"' project.yml
+  grep -q 'CURRENT_PROJECT_VERSION: "34"' project.yml
+}
+
+@test "--print with no kind exits 2" {
+  cd "${TMP}/app"
+  run bash "${BUMP}" --print
+  [ "$status" -eq 2 ]
+}
+
 @test "missing project.yml fails mentioning project.yml" {
   cd "${TMP}"
   run bash "${BUMP}" patch

@@ -30,13 +30,17 @@ Connect" export lines) are usually red herrings that don't actually block.
 3. Validate against the real ASC pipeline:
 
    ```bash
+   export API_PRIVATE_KEYS_DIR="${API_PRIVATE_KEYS_DIR:-${HOME}/.app-store-connect}"
    xcrun altool --validate-app -f App.ipa -t ios \
      --apiKey "$KEY_ID" --apiIssuer "$ISSUER_ID"
    ```
 
-   altool auto-finds the `.p8` at
-   `~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8` (also `./private_keys`,
-   `~/private_keys`, `~/.private_keys`).
+   `KEY_ID` and `ISSUER_ID` come from `~/.app-store-connect/config` (the `release`
+   skill's Stage 0 files). Without the `API_PRIVATE_KEYS_DIR` export, altool
+   searches only its default directories, `~/.appstoreconnect/private_keys/`
+   (also `./private_keys`, `~/private_keys`, `~/.private_keys`), for
+   `AuthKey_<KEY_ID>.p8`, and misses the key `release` keeps in
+   `~/.app-store-connect/`.
 4. The output contains the exact ITMS error codes + descriptions ASC used to
    reject the upload.
 

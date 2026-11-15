@@ -12,7 +12,8 @@ Drive the stages exactly as the skill defines them, and:
    `--force` on your own. Report WARN gates too (especially `runtime-trap`,
    which names the skill with the fix).
 2. **Never** perform the stage-6 upload without my literal `upload`
-   confirmation, and never push tags without my explicit yes.
+   confirmation (pass `--confirm-upload` to `release.sh` only after it), and
+   never push tags without my explicit yes.
 3. If `.claude/app.yml` is missing or fails validation, run `/ios-init`
    (or `--migrate`) first.
 4. At the end, summarize: version/build shipped, gates that warned, tag

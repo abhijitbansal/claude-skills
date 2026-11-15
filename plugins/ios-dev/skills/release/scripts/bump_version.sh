@@ -3,10 +3,14 @@
 # place versions live (never agvtool, never the pbxproj).
 set -euo pipefail
 
+# --print: show what the bump would produce without writing project.yml (Stage 1
+# needs the planned version for preflight's --next-version before Stage 2 bumps).
+PRINT_ONLY=0
+if [[ "${1:-}" == "--print" ]]; then PRINT_ONLY=1; shift; fi
 KIND="${1:-}"
 case "${KIND}" in
   major|minor|patch|build) ;;
-  *) echo "usage: bump_version.sh {major|minor|patch|build}" >&2; exit 2 ;;
+  *) echo "usage: bump_version.sh [--print] {major|minor|patch|build}" >&2; exit 2 ;;
 esac
 [[ -f project.yml ]] || { echo "no project.yml here — version bumps happen in project.yml only" >&2; exit 1; }
 
@@ -31,6 +35,11 @@ case "${KIND}" in
 esac
 new_mv="${maj}.${min}.${pat}"
 new_build=$((build + 1))
+
+if [[ ${PRINT_ONLY} -eq 1 ]]; then
+  echo "version=${new_mv} build=${new_build}"
+  exit 0
+fi
 
 sed -i.bak -E "s/(MARKETING_VERSION:[[:space:]]*\"?)[0-9.]+(\"?)/\1${new_mv}\2/" project.yml
 sed -i.bak -E "s/(CURRENT_PROJECT_VERSION:[[:space:]]*\"?)[0-9]+(\"?)/\1${new_build}\2/" project.yml
