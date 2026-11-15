@@ -71,7 +71,7 @@ export function createClock() {
       return {
         model: model ?? "unknown", displayName: last?.displayName ?? model ?? "unknown selection",
         state: "unknown", reason: !model ? "selection-unavailable" : model === "auto" ? "auto" : !unqualified ? "qualified-selection" : "model-switch",
-        expiresAt: null, msLeft: null, ttlSec: null, lastCallAt: context.at, maxPromptTokens: null,
+        expiresAt: null, msLeft: null, ttlSec: null, lastCallAt: context.at, startAt: null, maxPromptTokens: null,
         contextTokens, prices: priced ?? null, coldUsd: costs?.coldUsd ?? null,
         warmUsd: costs?.warmUsd ?? null, extraUsd: costs?.extraUsd ?? null,
       };
@@ -88,6 +88,7 @@ export function createClock() {
       msLeft: expiresAt === null ? null : expiresAt - now,
       ttlSec: last.ttlSec,
       lastCallAt: last.at,
+      startAt: last.startAt,
       maxPromptTokens: last.maxPromptTokens,
       prices: last.prices,
       contextTokens: costs?.contextTokens ?? last.inputTokens + last.outputTokens,

@@ -4,10 +4,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createClock } from "./clock.mjs";
-import { configDir, createKeepWarmStore, loadConfig, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
+import { configDir, createKeepWarmStore, loadConfig, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
 import { NOT_A_PROMPT, decide } from "./guard.mjs";
-import { PING_DISPLAY, PING_PROMPT, createKeepWarm, isPingMessage, isPingText, keepWarmEstimate } from "./keepwarm.mjs";
+import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, isPingPrompt, keepWarmEstimate } from "./keepwarm.mjs";
 import { NANO_AIU_PER_USD, isMainInteraction, normalizeUsage } from "./usage.mjs";
 
 // The heads-up comes at most a fifth of the ttl before expiry.
@@ -36,8 +36,8 @@ function seed(clock, readHistory, session, select, resolveAuto) {
     return false; // no log yet (new session) or unreadable: the clock starts at the next call
   }
   let busy = false;
-  // True from a root keep-warm user message until the next root user message.
-  let pingTurn = false;
+  // Ties each usage record to the user message whose turn it belongs to.
+  const ledger = createPingLedger();
   for (const line of text.split("\n")) {
     let event;
     try {
@@ -52,7 +52,7 @@ function seed(clock, readHistory, session, select, resolveAuto) {
       busy = event.data?.sessionWasActive === true || event.data?.continuePendingWork === true;
     }
     if (!event.agentId && event.type === "assistant.turn_start") busy = true;
-    if (!event.agentId && event.type === "user.message") pingTurn = isPingMessage(event.data);
+    if (!event.agentId && event.type === "user.message") ledger.onMessage(event.data);
     // `session.idle` is ephemeral and never persisted: a finished turn ends with
     // `assistant.turn_end`, and a closed session with `session.shutdown`.
     if (!event.agentId && (event.type === "session.idle" || event.type === "assistant.turn_end" || event.type === "session.shutdown")) busy = false;
@@ -63,7 +63,7 @@ function seed(clock, readHistory, session, select, resolveAuto) {
     if (event.type !== "session.usage_record") continue;
     const call = mainCall({ ...event, data: event.data?.usage });
     if (!call) continue;
-    if (pingTurn) clock.ingestPing(call);
+    if (ledger.onUsage()) clock.ingestPing(call);
     else clock.ingest(call);
   }
   return busy;
@@ -130,6 +130,8 @@ export async function attach({
     selection: null, selectionRevision: 0, autoModel: null, unknownWarnedFor: null,
     // Who started the turn now running: "ping" (ours), "user", or null when unknown.
     turnSource: null, openRequests: new Set(),
+    // A ping message was seen and its usage record has not arrived yet.
+    pingOwed: false,
   };
   // Built once the session id is known; every use before then is a no-op.
   let keepWarm = null;
@@ -216,8 +218,9 @@ export async function attach({
   };
 
   async function onPrompt(input) {
-    // Our own keep-warm ping fires this hook too: never guard it, never count it as the user.
-    if (isPingText(input?.prompt)) return undefined;
+    // Our own keep-warm ping may fire this hook: never guard it, never count it as the user.
+    // The text alone proves nothing, since a user can type it; it must match a ping we just sent.
+    if (keepWarm?.status().inFlight && isPingPrompt(input?.prompt)) return undefined;
     if (NOT_A_PROMPT.test(String(input?.prompt ?? "").trimStart())) return undefined;
     // A real prompt restarts the keep-warm window, whatever the guard decides next.
     quietly(() => keepWarm?.onUserTurn(now()));
@@ -333,7 +336,9 @@ export async function attach({
   });
   state.session.on("user.message", (event) => {
     if (event.agentId) return;
-    state.turnSource = isPingMessage(event.data) ? "ping" : "user";
+    const ping = isPingMessage(event.data);
+    state.turnSource = ping ? "ping" : "user";
+    if (ping) state.pingOwed = true;
   });
   state.session.on("assistant.turn_start", (event) => {
     if (event.agentId) return;
@@ -344,6 +349,7 @@ export async function attach({
     if (event.agentId) return;
     state.busy = false;
     state.turnSource = null;
+    state.pingOwed = false;
     // A heads-up skipped because a turn was running gets another chance now.
     scheduleHeadsUp();
     keepWarm.onIdle();
@@ -352,8 +358,10 @@ export async function attach({
     const call = mainCall(event);
     if (!call) return;
     const inFlight = keepWarm.status().inFlight;
-    // A host that does not report user.message is told apart by the ping in flight.
-    if (state.turnSource === "ping" || (inFlight && state.turnSource !== "user")) {
+    // A host that does not report user.message is told apart by the ping in flight. A message
+    // typed after the ping's own message must not take the ping's record (pingOwed).
+    if ((state.pingOwed && inFlight) || state.turnSource === "ping" || (inFlight && state.turnSource !== "user")) {
+      state.pingOwed = false;
       fileKeepWarmPing(call, inFlight);
       scheduleHeadsUp();
       return;
@@ -444,6 +452,7 @@ const CANCEL = "Cancel";
 /** Saves a settings patch and tells the scheduler; returns the saved settings, or null after showing the failure. */
 function saveSettings({ patch, dir, show, scheduleHeadsUp, keepWarm }) {
   const next = { ...loadConfig(dir), ...patch };
+  // saveConfig throws rather than overwrite a file it cannot read, or write an invalid value.
   try {
     saveConfig(dir, next);
   } catch (err) {
@@ -465,7 +474,8 @@ function savedLine(next, patch) {
 async function confirmKeepWarm(ctx, patch) {
   const hours = patch.keepWarmHours;
   const snap = ctx.snapshot();
-  const quote = keepWarmQuote(snap, hours, keepWarmEstimate(snap, hours));
+  // The budget and payback stops end a long window early, so the quote counts only the pings they allow.
+  const quote = keepWarmQuote(snap, hours, keepWarmEstimate(snap, hours, loadConfig(ctx.dir)));
   const answer = await ctx.askUser(quote, [TURN_ON, CANCEL]);
   // A host that cannot ask gets the estimate and the saved setting in one reply.
   if (answer !== UNASKED && answer !== TURN_ON) return ctx.show("cache-clock: keep-warm unchanged.");
@@ -480,6 +490,9 @@ async function runCommand(ctx) {
   if (parsed.kind === "status") return show(card(snapshot(), clock.tally(), loadConfig(dir), keepWarm?.status()));
   if (parsed.kind === "help") return show(HELP);
   if (parsed.kind === "error") return show(`cache-clock: ${parsed.message}. Try /cache-clock help.`, { level: "error" });
+  // A settings file that cannot be read as settings is never overwritten, and nothing is asked about it.
+  const { problem, unusable } = loadConfigResult(dir);
+  if (unusable) return show(`cache-clock: not saved: ${problem}. Fix or delete ${join(dir, "config.json")} first.`, { level: "error" });
   if (parsed.kind === "confirm") return confirmKeepWarm(ctx, parsed.patch);
   const next = saveSettings({ ...ctx, patch: parsed.patch });
   return next ? show(savedLine(next, parsed.patch)) : undefined;

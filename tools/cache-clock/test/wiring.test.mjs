@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { attach } from "../extension/lib/wiring.mjs";
@@ -1011,22 +1011,69 @@ test("no heads-up line while keep-warm is on", async () => {
   assert.ok(h.logs.every((l) => !/goes cold in/.test(l.message)));
 });
 
-test("a ping's own prompt hook is never guarded", async () => {
-  const h = fakeHost({ answer: "Don't send" });
-  await goCold(h);
+test("a ping's own prompt hook is never guarded, on a cache that has just gone cold", async () => {
+  const h = fakeHost({ config: KW, answer: "Don't send" });
+  h.autoReply = false;
+  await h.start();
+  await h.turn();
+  // The ping goes out at 240 s and gets no reply; the cache expires at 300 s; the watchdog fires at 360 s.
+  await h.run(5 * MIN + 10_000);
+  assert.equal(h.sent.length, 1);
   assert.equal(await h.prompt(PING_PROMPT), undefined);
-  assert.equal(h.aborts, 0);
-  assert.equal(h.asked.length, 0);
+  assert.deepEqual([h.aborts, h.asked.length], [0, 0]);
+});
+
+// A user can type or paste the marker. Only our own in-flight ping is exempt; anything else is a prompt.
+test("a user prompt that carries the marker is an ordinary prompt: guarded, and it restarts the window", async () => {
+  for (const text of [PING_PROMPT, "[cache-clock:keepwarm] summarise the repo", "explain [cache-clock:keepwarm] to me"]) {
+    const h = fakeHost({ config: KW, answer: "Don't send" });
+    await goCold(h);
+    assert.deepEqual(await h.prompt(text), { suppressOutput: true }, text);
+    assert.deepEqual([h.aborts, h.asked.length], [1, 1], text);
+    await h.command("");
+    assert.match(lastLog(h), /keep-warm  on · 3h00m left/, `${text}: a real prompt restarts the window`);
+  }
 });
 
 test("a ping whose prompt reaches the hook does not restart the window", async () => {
   const h = fakeHost({ config: KW });
+  h.autoReply = false;
   await h.start();
   await h.turn();
-  await h.run(30 * MIN);
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 1);
   assert.equal(await h.prompt(PING_PROMPT), undefined);
   await h.command("");
-  assert.match(lastLog(h), /2h30m left/, "only a real prompt restarts the window");
+  assert.match(lastLog(h), /2h56m left/, "only a real prompt restarts the window");
+});
+
+test("a resumed session books a pasted marker as a real prompt", async () => {
+  for (const content of ["[cache-clock:keepwarm] summarise the repo", "explain [cache-clock:keepwarm] to me"]) {
+    const h = fakeHost({ config: KW });
+    h.now = T0 + 4 * MIN;
+    h.history = [record("session.usage_record", T0, { usage: sonnet() }), record("user.message", T0 + 4 * MIN, { content }),
+      record("session.usage_record", T0 + 4 * MIN, { usage: sonnet({ at: iso(T0 + 4 * MIN), input: 201_000, read: 200_000, write: 1000 }) })].join("\n");
+    await h.start();
+    await h.command("");
+    assert.match(lastLog(h), /session +2 model calls/, content);
+  }
+});
+
+test("a message typed while a ping runs does not take the ping's usage", async () => {
+  const h = fakeHost({ config: KW });
+  h.autoReply = false;
+  await h.start();
+  await h.turn();
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 1);
+  h.emit("user.message", PING_MESSAGE);
+  h.emit("user.message", { content: "typed while the ping ran" });
+  h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+  h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 200_000, write: 0 }));
+  h.emit("session.idle", {});
+  await h.command("");
+  assert.match(lastLog(h), /session +2 model calls/);
+  assert.match(lastLog(h), /1 ping · \$0\.02/);
 });
 
 test("a resumed session seeds pings as pings", async () => {
@@ -1154,7 +1201,8 @@ test("/cache-clock keepwarm 8 asks with the estimated cost first", async () => {
   await yes.start();
   yes.emit("assistant.usage", sonnet({ at: iso(T0) }));
   await yes.command("keepwarm 8");
-  assert.match(yes.asked[0].message, /about 120 pings, about \$2\.40/);
+  // Payback ends 8 hours of pings after 24 (24 x $0.02 = the $0.48 a cold rewrite costs), so the quote says 24, not 120.
+  assert.match(yes.asked[0].message, /about 24 pings, about \$0\.48/);
   assert.deepEqual(yes.asked[0].options, ["Turn on", "Cancel"]);
   assert.equal(loadConfig(yes.dir).keepWarmHours, 8);
   assert.match(lastLog(yes), /keep-warm: 8h after your last message/);
@@ -1172,7 +1220,40 @@ test("a host that cannot ask saves a long keep-warm window and prints the estima
   h.emit("assistant.usage", sonnet({ at: iso(T0) }));
   await h.command("keepwarm 8");
   assert.equal(loadConfig(h.dir).keepWarmHours, 8);
-  assert.match(lastLog(h), /about 120 pings, about \$2\.40.*keep-warm: 8h after your last message/s);
+  assert.match(lastLog(h), /about 24 pings, about \$0\.48.*keep-warm: 8h after your last message/s);
+});
+
+test("no keep-warm window above 6 hours is saved unless the user turns it on", async () => {
+  for (const answer of ["Cancel", null, "Turn off", ""]) {
+    const h = fakeHost({ config: KW, answer });
+    await h.start();
+    h.emit("assistant.usage", sonnet({ at: iso(T0) }));
+    await h.command("keepwarm 8");
+    assert.equal(h.asked.length, 1, `answer ${JSON.stringify(answer)}`);
+    assert.equal(loadConfig(h.dir).keepWarmHours, 3, `answer ${JSON.stringify(answer)} left the setting alone`);
+    assert.match(lastLog(h), /unchanged/);
+  }
+  const edge = fakeHost({ config: KW, answer: "Cancel" });
+  await edge.start();
+  await edge.command("keepwarm 6");
+  assert.deepEqual([edge.asked.length, loadConfig(edge.dir).keepWarmHours], [0, 6], "6 hours is saved without a question");
+  await edge.command("keepwarm 12");
+  assert.deepEqual([edge.asked.length, loadConfig(edge.dir).keepWarmHours], [1, 6], "12 hours asks, and Cancel keeps the 6");
+});
+
+test("a corrupt config.json is never overwritten: a settings command refuses and says why", async () => {
+  for (const text of ["{not json", "[1]", "null"]) {
+    const h = fakeHost({ answer: "Turn on" });
+    await h.start();
+    writeFileSync(join(h.dir, "config.json"), text);
+    for (const cmd of ["guard warn", "min 0.5", "keepwarm on", "keepwarm 8"]) {
+      await h.command(cmd);
+      assert.match(lastLog(h), /not saved: config\.json/, `${text} / ${cmd}`);
+      assert.equal(h.logs.at(-1).level, "error");
+      assert.equal(readFileSync(join(h.dir, "config.json"), "utf8"), text, `${text} / ${cmd} left the file alone`);
+    }
+    assert.equal(h.asked.length, 0, "no question is asked about a setting that cannot be saved");
+  }
 });
 
 test("keepwarm on starts a window from the last model call, and keepwarm off ends it", async () => {

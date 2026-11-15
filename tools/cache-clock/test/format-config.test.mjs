@@ -180,6 +180,70 @@ test("loadConfigResult reports unparseable and non-object files, and keeps valid
   assert.deepEqual(loadConfig(dir), mixed.config);
 });
 
+test("numbers are plain decimals: no hex, no exponent, no signs", () => {
+  for (const bad of ["min 0x2", "min 1e-1", "min +1", "min -0", "headsup 0x10", "keepwarm budget 1e0", "keepwarm budget 0x1", "keepwarm 1e1", "keepwarm 0x3", "keepwarm +3"]) {
+    assert.equal(parseCommand(bad).kind, "error", bad);
+  }
+  assert.deepEqual(parseCommand("min 0.25"), { kind: "set", patch: { minUsd: 0.25 } });
+  assert.deepEqual(parseCommand("min $1"), { kind: "set", patch: { minUsd: 1 } });
+});
+
+test("keepwarm range edges, confirmation threshold and extra arguments", () => {
+  assert.deepEqual(parseCommand("keepwarm 12"), { kind: "confirm", patch: { keepWarmHours: 12 } });
+  assert.deepEqual(parseCommand("keepwarm 6.5"), { kind: "confirm", patch: { keepWarmHours: 6.5 } });
+  assert.deepEqual(parseCommand("keepwarm 0"), { kind: "set", patch: { keepWarmHours: 0 } });
+  assert.deepEqual(parseCommand("keepwarm 6.0"), { kind: "set", patch: { keepWarmHours: 6 } });
+  assert.deepEqual(parseCommand("keepwarm budget 5"), { kind: "set", patch: { keepWarmMaxUsd: 5 } });
+  assert.deepEqual(parseCommand("keepwarm budget 0"), { kind: "set", patch: { keepWarmMaxUsd: 0 } });
+  assert.deepEqual(parseCommand("keepwarm payback on"), { kind: "set", patch: { keepWarmPayback: true } });
+  for (const bad of ["keepwarm", "keepwarm -1", "keepwarm 12.5", "keepwarm 13", "keepwarm budget", "keepwarm budget 5.01", "keepwarm budget -1",
+    "keepwarm payback", "keepwarm on now", "keepwarm off 1", "keepwarm 6 7", "keepwarm budget 1 2", "keepwarm payback on now", "keepwarm maybe"]) {
+    assert.equal(parseCommand(bad).kind, "error", bad);
+  }
+});
+
+test("saveConfig round-trips the keep-warm keys", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  const cfg = { ...DEFAULTS, keepWarmHours: 6, keepWarmMaxUsd: 2.5, keepWarmPayback: false };
+  saveConfig(dir, cfg);
+  assert.deepEqual(loadConfig(dir), cfg);
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")), cfg);
+});
+
+test("saveConfig keeps unknown keys and throws on an invalid value instead of replacing it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ colour: "red", mode: "warn", keepWarmHours: 2 }));
+  saveConfig(dir, { ...loadConfig(dir), minUsd: 0.2 });
+  assert.deepEqual(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")), { ...DEFAULTS, mode: "warn", keepWarmHours: 2, minUsd: 0.2, colour: "red" });
+  const before = readFileSync(join(dir, "config.json"), "utf8");
+  for (const [bad, rule] of [[{ keepWarmHours: 20 }, /keepWarmHours must be hours from 0 to 12/], [{ mode: "nuke" }, /mode must be one of/],
+    [{ minUsd: -1 }, /minUsd must be a dollar amount/], [{ keepWarmPayback: "yes" }, /keepWarmPayback must be true or false/],
+    [{ keepWarmMaxUsd: 6 }, /keepWarmMaxUsd must be dollars from 0 to 5/]]) {
+    assert.throws(() => saveConfig(dir, { ...DEFAULTS, ...bad }), rule);
+  }
+  assert.equal(readFileSync(join(dir, "config.json"), "utf8"), before, "a refused save writes nothing");
+});
+
+test("saveConfig will not overwrite a file that is not a settings object", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  for (const text of ["{not json", "[1]", "null"]) {
+    writeFileSync(join(dir, "config.json"), text);
+    assert.throws(() => saveConfig(dir, { ...DEFAULTS }), /config\.json/, text);
+    assert.equal(readFileSync(join(dir, "config.json"), "utf8"), text);
+  }
+});
+
+test("loadConfigResult marks a file that cannot be read as settings, but not a file with a bad value", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  assert.equal(loadConfigResult(dir).unusable, false, "no file");
+  for (const text of ["{not json", "[1]", "null"]) {
+    writeFileSync(join(dir, "config.json"), text);
+    assert.equal(loadConfigResult(dir).unusable, true, text);
+  }
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ minUsd: -1, colour: 1 }));
+  assert.equal(loadConfigResult(dir).unusable, false);
+});
+
 test("help explains what the clock does, what a cold send triggers, every command and the report", () => {
   for (const want of [
     /prompt cache/i, /Send anyway/, /Don't send/, /refuse/i,

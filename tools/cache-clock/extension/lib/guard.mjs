@@ -3,8 +3,6 @@
 //   warn   — send it, print the cold-rewrite price
 //   refuse — drop it once; the next send in the same cold episode goes through
 
-import { isPingText } from "./keepwarm.mjs";
-
 export const MODES = ["refuse", "warn", "off"];
 
 /** An expired cache, or a switch to a model with the current conversation context. */
@@ -17,8 +15,6 @@ export const episodeKey = (snap) => snap.reason === "model-switch"
 export const NOT_A_PROMPT = /^(\/[A-Za-z][\w-]*(\s|$)|!)/;
 
 export function decide({ snap, prompt, config, refusedKey = null, busy = false }) {
-  // The extension's own keep-warm ping must never be refused or warned about.
-  if (isPingText(prompt)) return { action: "allow" };
   if (NOT_A_PROMPT.test(String(prompt ?? "").trimStart())) return { action: "allow" };
   if (config.mode === "off" || !snap) return { action: "allow" };
   if (snap.reason && snap.extraUsd === null) return { action: "warn" };

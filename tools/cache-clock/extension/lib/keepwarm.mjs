@@ -8,17 +8,47 @@ export const PING_MARKER = "[cache-clock:keepwarm]";
 export const PING_PROMPT = `${PING_MARKER} Reply with exactly: .`;
 export const PING_DISPLAY = "cache-clock keep-warm";
 
-/** True when the text opens with the marker. A prompt that merely mentions it is a real prompt. */
-export const isPingText = (text) => String(text ?? "").trimStart().startsWith(PING_MARKER);
+/**
+ * True only for the exact ping prompt. A user can type or paste the marker, so the marker alone
+ * proves nothing: callers also require their own ping to be in flight before they trust this.
+ */
+export const isPingPrompt = (text) => text === PING_PROMPT;
 
 /**
- * True for a `user.message` payload that carries a ping: the marker opens its content or its
- * transformed content, or it is the system-sourced display text.
+ * True for a `user.message` payload that is one of our pings: its content or transformed content
+ * is the exact ping prompt, or it is the system-sourced display text. A message from any other
+ * source (a user) never is, whatever it says.
  */
 export function isPingMessage(data) {
   if (!data || typeof data !== "object") return false;
-  if (isPingText(data.content) || isPingText(data.transformedContent)) return true;
-  return data.source === "system" && data.content === PING_DISPLAY;
+  const source = data.source ?? null;
+  if (source !== null && source !== "system") return false;
+  if (data.content === PING_PROMPT || data.transformedContent === PING_PROMPT) return true;
+  return source === "system" && data.content === PING_DISPLAY;
+}
+
+/**
+ * Tells which usage records of a session log belong to pings, by the order of its user messages:
+ * a ping has one record, and a message typed while it ran must not take it. Feed every root user
+ * message to `onMessage` and every main-conversation usage record to `onUsage`, in log order.
+ */
+export function createPingLedger() {
+  const turns = []; // oldest first: { ping, used }
+  return {
+    onMessage(data) {
+      turns.push({ ping: isPingMessage(data), used: false });
+    },
+    /** True when this record is a ping's. */
+    onUsage() {
+      // A real turn that has had its records and has a newer message behind it is over.
+      while (turns.length > 1 && !turns[0].ping && turns[0].used) turns.shift();
+      const turn = turns[0];
+      if (!turn) return false;
+      turn.used = true;
+      if (turn.ping) turns.shift();
+      return turn.ping;
+    },
+  };
 }
 
 // A ping fires this share of the cache lifetime before expiry, within these bounds.
@@ -36,13 +66,15 @@ const isAmount = (v) => typeof v === "number" && Number.isFinite(v);
 /** How long before expiry a ping fires: 20% of the cache lifetime, within 30 s and 6 min. */
 export const leadMs = (lifetimeMs) => Math.min(LEAD_MAX_MS, Math.max(LEAD_MIN_MS, LEAD_SHARE * lifetimeMs));
 
-/** Cache lifetime in ms: the reported ttl, else the span of the last call's own expiry. */
-const lifetimeOf = (snapshot) => (snapshot.ttlSec ? snapshot.ttlSec * 1000 : snapshot.expiresAt - snapshot.lastCallAt);
+/** Cache lifetime in ms: the reported ttl, else the span from the request start to its expiry. */
+const lifetimeOf = (snapshot) => (snapshot.ttlSec ? snapshot.ttlSec * 1000 : snapshot.expiresAt - snapshot.startAt);
 
 /** The first reason not to ping before any timing is computed, or null. Order matters. */
 function sessionSkip({ snapshot, config, window, session }) {
   if (!(config.keepWarmHours > 0)) return "off";
   if (!window) return "no-window";
+  // A window end that is not a number would make every later comparison false.
+  if (!isAmount(window.endsAt)) return "invalid";
   // Auto runs before the warm check: an unresolved Auto snapshot is also "unknown".
   if (session.selectedModel === "auto") return "auto";
   if (!snapshot || snapshot.state !== "warm") return "not-warm";
@@ -55,6 +87,8 @@ function sessionSkip({ snapshot, config, window, session }) {
 
 /** The first reason not to send the next ping once its time and price are known, or null. */
 function priceSkip({ snapshot, config, spend }) {
+  // Without a numeric budget and spend, "over budget" is never true: refuse rather than ping unbounded.
+  if (!isAmount(config.keepWarmMaxUsd) || !isAmount(spend.usd)) return "invalid";
   if (!isAmount(snapshot.warmUsd) || !isAmount(snapshot.extraUsd)) return "unpriced";
   const after = spend.usd + snapshot.warmUsd;
   if (after > config.keepWarmMaxUsd + USD_EPSILON) return "budget";
@@ -70,7 +104,9 @@ function priceSkip({ snapshot, config, spend }) {
 export function planPing({ snapshot, config, window, spend, session, now }) {
   const early = sessionSkip({ snapshot, config, window, session });
   if (early) return { skip: early };
-  const at = Math.max(now, snapshot.expiresAt - leadMs(lifetimeOf(snapshot)));
+  const lifetime = lifetimeOf(snapshot);
+  if (!(lifetime > 0)) return { skip: "invalid" };
+  const at = Math.max(now, snapshot.expiresAt - leadMs(lifetime));
   if (at > window.endsAt) return { skip: "window-ended" };
   const priced = priceSkip({ snapshot, config, spend });
   return priced ? { skip: priced } : { at };
@@ -303,10 +339,25 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
   return { start, onUserTurn, onPingUsage, onIdle, onBusy, reschedule, configChanged, stop, status };
 }
 
-/** Rough pings and dollars for `hours` of keep-warm at the snapshot's prices, or null if unknown. */
-export function keepWarmEstimate(snapshot, hours) {
+/** Pings the budget and the payback stop allow at the snapshot's price; Infinity when no cap applies. */
+function affordablePings(snapshot, caps) {
+  if (!caps || !(snapshot.warmUsd > 0)) return Infinity;
+  const limits = [];
+  if (isAmount(caps.keepWarmMaxUsd)) limits.push(caps.keepWarmMaxUsd);
+  if (caps.keepWarmPayback && isAmount(snapshot.extraUsd)) limits.push(snapshot.extraUsd);
+  return Math.min(Infinity, ...limits.map((usd) => Math.floor((usd + USD_EPSILON) / snapshot.warmUsd)));
+}
+
+/**
+ * Rough pings and dollars for `hours` of keep-warm at the snapshot's prices, or null if unknown or
+ * if the cache is too short to ping. `caps` ({ keepWarmMaxUsd, keepWarmPayback }) stops the
+ * estimate where the budget and payback stops would, so a long window is not overstated.
+ */
+export function keepWarmEstimate(snapshot, hours, caps = null) {
   if (!snapshot || !snapshot.ttlSec || !isAmount(snapshot.warmUsd)) return null;
   const lifetime = snapshot.ttlSec * 1000;
-  const pings = Math.floor((hours * HOUR_MS) / (lifetime - leadMs(lifetime)));
+  const interval = lifetime - leadMs(lifetime);
+  if (!(interval > 0)) return null;
+  const pings = Math.min(Math.floor((hours * HOUR_MS) / interval), affordablePings(snapshot, caps));
   return { pings, usd: pings * snapshot.warmUsd };
 }

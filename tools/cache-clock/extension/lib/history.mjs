@@ -3,7 +3,7 @@
 
 import { classifyCall, extraUsd, isMainInteraction, lostTokens, normalizeUsage } from "./usage.mjs";
 import { tokens, usd } from "./format.mjs";
-import { isPingMessage } from "./keepwarm.mjs";
+import { createPingLedger } from "./keepwarm.mjs";
 
 const NANO_AIU_PER_USD = 1e11;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -16,8 +16,8 @@ export function parseSessionLog(text) {
   let lastAt = null;
   // Calls in different epochs are never compared: a compaction rewrote the context in between.
   const epochs = new Map();
-  // True from a root keep-warm user message until the next root user message.
-  let pingTurn = false;
+  // Ties each root usage record to the user message whose turn it belongs to.
+  const ledger = createPingLedger();
   for (const line of String(text).split("\n")) {
     if (!line.trim()) continue;
     let event;
@@ -36,12 +36,12 @@ export function parseSessionLog(text) {
     if (event.type === "session.usage_checkpoint") checkpoint = event.data ?? null;
     const agentKey = event.agentId ?? "main";
     if (event.type === "session.compaction_complete" && event.data?.success !== false) epochs.set(agentKey, (epochs.get(agentKey) ?? 0) + 1);
-    if (event.type === "user.message" && agentKey === "main") pingTurn = isPingMessage(event.data);
+    if (event.type === "user.message" && agentKey === "main") ledger.onMessage(event.data);
     if (event.type !== "session.usage_record") continue;
     const raw = event.data?.usage;
     const call = normalizeUsage(raw, event.timestamp);
     if (!call) continue;
-    const ping = agentKey === "main" && pingTurn && isMainInteraction(call);
+    const ping = agentKey === "main" && isMainInteraction(call) && ledger.onUsage();
     calls.push({ agentKey, call, ping, epoch: epochs.get(agentKey) ?? 0, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
   }
   return { calls, checkpoint, badLines, lastAt };

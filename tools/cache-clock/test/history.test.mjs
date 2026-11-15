@@ -186,6 +186,29 @@ test("pings are left out of calls and cold counts, and their cost is shown as ke
   assert.match(formatReport(sum), /keep-warm: 1 ping\(s\), \$0\.02/);
 });
 
+test("a pasted marker at the start or in the middle of a real prompt is a real call, not a ping", () => {
+  const msg = (content) => JSON.stringify({ type: "user.message", timestamp: iso(T0), data: { content } });
+  const s = { model: "claude-sonnet-5.5", ttl: 300 };
+  for (const content of ["[cache-clock:keepwarm] summarise the repo", "explain [cache-clock:keepwarm] to me"]) {
+    const log = [record(T0, { ...s, input: 100_000, read: 0, write: 100_000 }), msg(content), record(T0 + MIN, { ...s, input: 101_000, read: 100_000, write: 1000 })].join("\n");
+    const sum = summarize([{ id: "p", ...parseSessionLog(log) }]);
+    assert.deepEqual([sum.models[0].calls, sum.pings], [2, 0], content);
+  }
+});
+
+test("a user message between the ping message and the ping's record does not turn the ping into a real call", () => {
+  const msg = (o) => JSON.stringify({ type: "user.message", timestamp: iso(T0), data: o });
+  const s = { model: "claude-sonnet-5.5", ttl: 300 };
+  const log = [record(T0, { ...s, input: 100_000, read: 0, write: 100_000 }),
+    msg({ content: "cache-clock keep-warm", transformedContent: "[cache-clock:keepwarm] Reply with exactly: .", source: "system" }),
+    msg({ content: "typed while the ping ran" }),
+    record(T0 + 4 * MIN, { ...s, input: 100_000, read: 100_000, write: 0, nanoAiu: 2e9 }),
+    record(T0 + 5 * MIN, { ...s, input: 101_000, read: 100_000, write: 1000 })].join("\n");
+  const sum = summarize([{ id: "order", ...parseSessionLog(log) }]);
+  assert.deepEqual([sum.models[0].calls, sum.pings], [2, 1]);
+  assert.ok(Math.abs(sum.keepWarmUsd - 0.02) < 1e-12);
+});
+
 test("report CLI reads a session-state directory and prints JSON", () => {
   const root = mkdtempSync(join(tmpdir(), "cc-report-"));
   mkdirSync(join(root, "sess-1"));

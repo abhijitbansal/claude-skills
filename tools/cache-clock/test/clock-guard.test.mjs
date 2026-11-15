@@ -30,6 +30,13 @@ test("the snapshot carries the last call's prompt limit", () => {
   assert.equal(c.snapshot(T0).maxPromptTokens, 128_000);
 });
 
+test("the snapshot carries the last call's request start", () => {
+  const c = createClock();
+  c.ingest(normalizeUsage({ ...usage({ at: at(T0), ttl: 300 }), duration: 4000 }, T0));
+  assert.equal(c.snapshot(T0).startAt, T0 - 4000);
+  assert.equal(c.snapshot(T0, "auto").startAt, null, "an unknown snapshot has no start");
+});
+
 test("snapshot reports cold after expiry", () => {
   const c = createClock();
   feed(c, { at: T0, ttl: 300 });
@@ -146,8 +153,10 @@ test("after one refusal any prompt in the same cold episode goes through", () =>
 });
 const coldSnap = { model: "claude-sonnet-5.5", state: "cold", expiresAt: T0, extraUsd: 0.48 };
 
-test("decide never guards a ping, even on a cold cache", () => {
-  assert.equal(decide({ snap: coldSnap, prompt: PING_PROMPT, config: cfg }).action, "allow");
+test("decide guards a prompt that carries the keep-warm marker: the exemption is the caller's, for its own in-flight ping", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: PING_PROMPT, config: cfg }).action, "refuse");
+  assert.equal(decide({ snap: coldSnap, prompt: "[cache-clock:keepwarm] please summarise", config: cfg }).action, "refuse");
+  assert.equal(decide({ snap: coldSnap, prompt: "explain [cache-clock:keepwarm] to me", config: cfg }).action, "refuse");
 });
 
 test("decide allows slash commands, warm caches and cheap cold sends", () => {

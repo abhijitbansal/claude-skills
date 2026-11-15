@@ -49,33 +49,60 @@ function problemsIn(raw) {
   return [...bad, ...unknown];
 }
 
-/** Reads config.json without writing it: { config, problem }, problem null when nothing is wrong. */
-export function loadConfigResult(dir) {
-  let raw;
+/**
+ * The parsed config.json: { raw, error }. A missing file is { raw: null, error: null };
+ * a file that cannot be read as a settings object has an `error` sentence and no `raw`.
+ */
+function readRaw(dir) {
+  let parsed;
   try {
-    raw = JSON.parse(readFileSync(join(dir, FILE), "utf8"));
+    parsed = JSON.parse(readFileSync(join(dir, FILE), "utf8"));
   } catch (err) {
-    const problem = err.code === "ENOENT" ? null
-      : err instanceof SyntaxError ? `config.json is not valid JSON (${err.message})`
-        : `config.json could not be read (${err.message})`;
-    return { config: { ...DEFAULTS }, problem };
+    if (err.code === "ENOENT") return { raw: null, error: null };
+    const error = err instanceof SyntaxError ? `config.json is not valid JSON (${err.message})` : `config.json could not be read (${err.message})`;
+    return { raw: null, error };
   }
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
-    return { config: { ...DEFAULTS }, problem: "config.json must hold a JSON object" };
-  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { raw: null, error: "config.json must hold a JSON object" };
+  return { raw: parsed, error: null };
+}
+
+/**
+ * Reads config.json without writing it: { config, problem, unusable }. `problem` is null when
+ * nothing is wrong. `unusable` means the file itself cannot be read as settings, so a save would
+ * destroy it; a bad value for one key is a problem but not unusable.
+ */
+export function loadConfigResult(dir) {
+  const { raw, error } = readRaw(dir);
+  if (error) return { config: { ...DEFAULTS }, problem: error, unusable: true };
+  if (!raw) return { config: { ...DEFAULTS }, problem: null, unusable: false };
   const found = problemsIn(raw);
-  return { config: validated(raw), problem: found.length ? found.join("; ") : null };
+  return { config: validated(raw), problem: found.length ? found.join("; ") : null, unusable: false };
 }
 
 export function loadConfig(dir) {
   return loadConfigResult(dir).config;
 }
 
+/**
+ * Writes the settings: each known key from `config` (the default when absent), then the file's
+ * unknown keys untouched. Callers validate first: an invalid value for a known key throws, and so
+ * does a file that is not a settings object, rather than replacing either with a default.
+ */
 export function saveConfig(dir, config) {
+  const invalid = KEYS.filter((key) => config?.[key] !== undefined && !RULES[key].ok(config[key]));
+  if (invalid.length) throw new Error(invalid.map((key) => `config.json: ${key} must be ${RULES[key].rule}`).join("; "));
+  const { raw, error } = readRaw(dir);
+  if (error) throw new Error(`${error}; not overwritten`);
+  const known = Object.fromEntries(KEYS.map((key) => [key, config?.[key] === undefined ? DEFAULTS[key] : config[key]]));
+  const unknown = Object.fromEntries(Object.entries(raw ?? {}).filter(([key]) => !KEYS.includes(key)));
   mkdirSync(dir, { recursive: true });
   const tmp = join(dir, `${FILE}.${process.pid}.tmp`);
-  writeFileSync(tmp, JSON.stringify(validated(config), null, 2) + "\n");
-  renameSync(tmp, join(dir, FILE));
+  try {
+    writeFileSync(tmp, JSON.stringify({ ...known, ...unknown }, null, 2) + "\n");
+    renameSync(tmp, join(dir, FILE));
+  } finally {
+    rmSync(tmp, { force: true });
+  }
 }
 
 // The last refused cold episode per session, so a resend from a new process
@@ -219,9 +246,13 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive
   return { load, save, lock, unlock };
 }
 
+// Plain decimals only: Number() would also take 0x2, 1e-1 and Infinity.
+const PLAIN_DECIMAL = /^\$?\d+(\.\d+)?$/;
+
 function amount(text) {
+  if (!PLAIN_DECIMAL.test(String(text ?? ""))) return null;
   const v = Number(String(text).replace(/^\$/, ""));
-  return text !== undefined && text !== "" && isAmount(v) ? v : null;
+  return isAmount(v) ? v : null;
 }
 
 const KEEPWARM_USAGE = `keepwarm takes on, off, hours from 0 to ${KEEPWARM_MAX_HOURS}, budget <dollars 0 to ${KEEPWARM_MAX_USD}>, or payback on|off`;

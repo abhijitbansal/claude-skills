@@ -14,6 +14,9 @@ export const COLD_READ_SHARE = 0.9;
 // A reported expiry further than this from its call is not believed.
 const MAX_TTL_MS = 24 * 60 * 60 * 1000;
 
+// A request longer than this is a unit or clock error: count from the event time instead.
+const MAX_DURATION_MS = 30 * 60 * 1000;
+
 const TYPE_KEYS = { input: "input", cache_read: "read", cache_write: "write", output: "output" };
 
 /** Dollars per token by type, or null when read or write pricing is missing. */
@@ -53,7 +56,8 @@ export function normalizeUsage(data, timestamp) {
   const ttl = Number.isFinite(data.cacheTtlSeconds) && data.cacheTtlSeconds > 0 ? data.cacheTtlSeconds : null;
   const at = toMs(timestamp) ?? Date.now();
   // The event is stamped when the reply ends; the cache clock starts when the request began.
-  const durationMs = num(data.duration);
+  const reported = num(data.duration);
+  const durationMs = reported <= MAX_DURATION_MS ? reported : 0;
   const startAt = at - durationMs;
   const nanoAiu = data.copilotUsage?.totalNanoAiu;
   return {
@@ -69,7 +73,7 @@ export function normalizeUsage(data, timestamp) {
     expiresAt: plausibleExpiry(toMs(data.cacheExpiresAt), startAt),
     ttlSec: ttl,
     prices: pricesFrom(data.copilotUsage?.tokenDetails),
-    nanoAiu: Number.isFinite(nanoAiu) ? nanoAiu : null,
+    nanoAiu: Number.isFinite(nanoAiu) && nanoAiu >= 0 ? nanoAiu : null,
     maxPromptTokens: num(data.maxPromptTokens) || null,
     initiator: data.initiator ?? null,
     interactionType: data.interactionType ?? null,

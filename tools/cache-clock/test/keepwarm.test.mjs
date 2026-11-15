@@ -1,16 +1,34 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isPingText, isPingMessage, PING_DISPLAY, PING_PROMPT, leadMs, planPing, keepWarmEstimate, createKeepWarm } from "../extension/lib/keepwarm.mjs";
+import { isPingPrompt, isPingMessage, createPingLedger, PING_DISPLAY, PING_PROMPT, leadMs, planPing, keepWarmEstimate, createKeepWarm } from "../extension/lib/keepwarm.mjs";
 import { createClock } from "../extension/lib/clock.mjs";
 import { normalizeUsage, NANO_AIU_PER_USD } from "../extension/lib/usage.mjs";
 import { usage, pingUsage, T0, MIN } from "./fixtures.mjs";
 
-test("ping text and ping messages are recognised by the marker", () => {
-  assert.ok(isPingText("  [cache-clock:keepwarm] Reply with exactly: ."));
-  assert.ok(!isPingText("explain [cache-clock:keepwarm] to me"));
+test("only the exact ping prompt and ping messages are recognised, not a pasted marker", () => {
+  assert.ok(isPingPrompt(PING_PROMPT));
+  assert.ok(!isPingPrompt("[cache-clock:keepwarm] summarise the repo"), "marker at the start of a real prompt");
+  assert.ok(!isPingPrompt("explain [cache-clock:keepwarm] to me"), "marker in the middle");
+  assert.ok(!isPingPrompt(` ${PING_PROMPT}`), "not even a padded copy");
+  assert.ok(!isPingPrompt(undefined));
   assert.ok(isPingMessage({ content: PING_DISPLAY, transformedContent: PING_PROMPT }));
+  assert.ok(isPingMessage({ content: PING_PROMPT }));
   assert.ok(isPingMessage({ content: PING_DISPLAY, source: "system" }));
   assert.ok(!isPingMessage({ content: PING_DISPLAY, source: "user" }));
+  assert.ok(!isPingMessage({ content: PING_PROMPT, source: "user" }), "a user-sourced message is never a ping");
+  assert.ok(!isPingMessage({ content: "[cache-clock:keepwarm] summarise the repo" }));
+  assert.ok(!isPingMessage({ content: "explain [cache-clock:keepwarm] to me", transformedContent: "ctx explain [cache-clock:keepwarm] to me" }));
+  assert.ok(!isPingMessage({ content: PING_DISPLAY }), "the display text alone, with no system source, is not enough");
+});
+
+test("the ledger ties each usage record to the turn it belongs to, by message order", () => {
+  const ping = { content: PING_DISPLAY, transformedContent: PING_PROMPT, source: "system" };
+  const real = { content: "carry on" };
+  const run = (steps) => { const l = createPingLedger(); return steps.map((s) => (s === "ping" || s === "real" ? l.onMessage(s === "ping" ? ping : real) : l.onUsage())).filter((x) => typeof x === "boolean"); };
+  assert.deepEqual(run(["real", "u", "u", "ping", "u", "real", "u"]), [false, false, true, false]);
+  assert.deepEqual(run(["ping", "real", "u", "u"]), [true, false], "a message typed while the ping ran does not steal its record");
+  assert.deepEqual(run(["u"]), [false], "a record with no message before it is a real call");
+  assert.deepEqual(run(["ping", "u", "u"]), [true, false], "a ping has one record; a second is not a ping");
 });
 
 const HOUR = 60 * MIN;
@@ -41,12 +59,52 @@ test("planPing names every skip reason", () => {
   ]) assert.deepEqual(planPing(base(o)), { skip }, skip);
 });
 
+test("planPing boundaries: context at exactly 85% still pings, one token over does not", () => {
+  const snap = (contextTokens) => ({ ...sonnetSnap(), contextTokens, maxPromptTokens: 200_000 });
+  assert.deepEqual(planPing(base({ snapshot: snap(170_000) })), { at: T0 + 240_000 });
+  assert.deepEqual(planPing(base({ snapshot: snap(170_001) })), { skip: "context-full" });
+});
+
+test("planPing boundaries: spend that lands exactly on the budget is allowed, a cent over is not", () => {
+  const noPayback = { ...C, keepWarmPayback: false };
+  assert.deepEqual(planPing(base({ config: noPayback, spend: { usd: 0.48, pings: 24 } })), { at: T0 + 240_000 });
+  assert.deepEqual(planPing(base({ config: noPayback, spend: { usd: 0.49, pings: 24 } })), { skip: "budget" });
+  assert.deepEqual(planPing(base({ config: { ...noPayback, keepWarmMaxUsd: 0 } })), { skip: "budget" }, "a zero budget never pings");
+});
+
+test("planPing refuses numbers it cannot compare instead of letting a NaN fall through", () => {
+  for (const [o, why] of [
+    [{ config: { ...C, keepWarmMaxUsd: Number.NaN } }, "NaN budget"], [{ config: { ...C, keepWarmMaxUsd: undefined } }, "missing budget"],
+    [{ spend: { usd: Number.NaN, pings: 0 } }, "NaN spend"], [{ spend: { usd: undefined, pings: 0 } }, "missing spend"],
+    [{ window: { endsAt: Number.NaN } }, "NaN window end"], [{ window: {} }, "missing window end"],
+    [{ snapshot: { ...sonnetSnap(), ttlSec: null, startAt: undefined } }, "no cache lifetime to size the lead from"],
+  ]) assert.deepEqual(planPing(base(o)), { skip: "invalid" }, why);
+});
+
+test("the lifetime fallback counts the reported expiry from the request start", () => {
+  // No ttl: the lifetime is expiry minus the request start (304 s), so the lead is 60.8 s.
+  const snapshot = { ...sonnetSnap(), ttlSec: null, startAt: T0 - 4000, expiresAt: T0 + 300_000 };
+  assert.deepEqual(planPing(base({ snapshot })), { at: T0 + 300_000 - 60_800 });
+});
+
 test("keepWarmEstimate counts pings and their cost for a window", () => {
   const e = keepWarmEstimate(sonnetSnap(), 8);
   assert.equal(e.pings, 120);
   assert.ok(Math.abs(e.usd - 2.4) < 1e-9);
   assert.equal(keepWarmEstimate({ ...sonnetSnap(), ttlSec: null }, 8), null);
   assert.equal(keepWarmEstimate(null, 8), null, "no model call yet");
+});
+
+test("keepWarmEstimate stops where the budget and payback stop would, and has no answer for a ttl it cannot ping", () => {
+  const capped = keepWarmEstimate(sonnetSnap(), 8, C);
+  assert.deepEqual([capped.pings, Math.round(capped.usd * 100)], [24, 48], "payback ends it first at 200k tokens");
+  const budget = keepWarmEstimate(sonnetSnap(), 8, { ...C, keepWarmPayback: false, keepWarmMaxUsd: 0.1 });
+  assert.deepEqual([budget.pings, Math.round(budget.usd * 100)], [5, 10]);
+  const short = keepWarmEstimate(sonnetSnap(), 1, C);
+  assert.equal(short.pings, 15, "a short window is the limit when it is shorter than the caps");
+  assert.equal(keepWarmEstimate(sonnetSnap(), 8, { ...C, keepWarmMaxUsd: 0 }).pings, 0);
+  assert.equal(keepWarmEstimate({ ...sonnetSnap(), ttlSec: 20 }, 8), null, "a 20 s cache leaves no room for a ping interval");
+  assert.equal(keepWarmEstimate({ ...sonnetSnap(), warmUsd: 0 }, 1, C).pings, 15, "a free ping is limited by the window only");
 });
 
 const flush = () => new Promise((resolve) => setImmediate(resolve));
