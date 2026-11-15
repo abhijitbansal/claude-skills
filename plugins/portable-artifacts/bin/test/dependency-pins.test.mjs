@@ -348,16 +348,16 @@ const BUILT_URL = /['"`](https?:\/\/([^/'"`$\s]+)[^'"`\n]*?)(?:\$\{|['"`]\s*\+)/
 /** A direct network call. Downloads go through ensurePinnedFile (scripts/lib/pinned-file.mjs, the one file allowed to fetch). */
 export const networkCallViolations = (source, where) => [...source.matchAll(NETWORK_CALL)].map((m) => `${where}: ${m[0]} (a network call outside pinned-file.mjs)`);
 
-const COMMENTS = /\/\*[\s\S]*?\*\/|(^|[^:])\/\/.*$/gm;
 const MODEL_FILES = /\bensureModelFiles\b/g;
 
 /**
  * ensureModelFiles (scripts/v2/voice/model.mjs, a seam for the tests) downloads whatever table it is given. Outside test files its
  * name may appear only in its own definition and in a call whose first argument is VOICE_MODEL: no other table, alias, import or
- * re-export. Comments are ignored.
+ * re-export. The whole text is scanned, comments and strings included: stripping comments with a pattern can hide code after a
+ * string that holds two slashes or a glob, so a mention in a comment fails closed instead.
  */
 export function modelFilesViolations(source, where) {
-  const code = source.replace(COMMENTS, '$1');
+  const code = source;
   return [...code.matchAll(MODEL_FILES)]
     .filter((m) => !code.slice(0, m.index).endsWith('function ') && !/^\s*\(\s*VOICE_MODEL\s*[,)]/.test(code.slice(m.index + m[0].length)))
     .map((m) => `${where}: ${code.slice(m.index, m.index + 60).split('\n')[0]} (ensureModelFiles on a table other than VOICE_MODEL)`);
@@ -676,9 +676,10 @@ test('guardrail proof: the Hugging Face rules match hf.co, any subdomain and any
 test('guardrail proof: modelFilesViolations passes only the VOICE_MODEL call and flags any other table, alias, import or re-export', () => {
   const count = (source) => modelFilesViolations(source, 'x').length;
   const good = ['export async function ensureModelFiles(model, { dir }) {', 'return ensureModelFiles(VOICE_MODEL, { ...options, dir });', 'ensureModelFiles( VOICE_MODEL, opts)', 'ensureModelFiles(\n  VOICE_MODEL,\n  opts)',
-    '// ensureModelFiles(other, opts) is only for tests', '/* ensureModelFiles(other, opts) */', 'const x = 1;'];
+    'const x = 1;'];
   for (const source of good) assert.equal(count(source), 0, source);
-  const bad = ['ensureModelFiles(other, opts)', 'ensureModelFiles({ ...VOICE_MODEL, base: u }, opts)', 'ensureModelFiles(VOICE_MODELS, opts)', 'ensureModelFiles(customTable, { dir })', 'const run = ensureModelFiles;',
+  const bad = ['// ensureModelFiles(other, opts) is only for tests', '/* ensureModelFiles(other, opts) */', "const a = '//'; ensureModelFiles(other, {});", "const g = '**/*.json'; ensureModelFiles(other, {}); /* x */",
+'ensureModelFiles(other, opts)', 'ensureModelFiles({ ...VOICE_MODEL, base: u }, opts)', 'ensureModelFiles(VOICE_MODELS, opts)', 'ensureModelFiles(customTable, { dir })', 'const run = ensureModelFiles;',
     "import { ensureModelFiles } from './model.mjs';", 'export { ensureModelFiles };', 'ensureModelFiles.call(null, other, opts)', 'ensureModelFiles ()', 'await ensureModelFiles(model)'];
   for (const source of bad) assert.equal(count(source), 1, source);
   assert.equal(count('x = ensureModelFiles(a, b); y = ensureModelFiles(VOICE_MODEL, c);'), 1, 'one bad call among good ones');
