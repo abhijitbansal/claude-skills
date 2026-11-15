@@ -2,6 +2,7 @@
 // and an eased fly-to. update() reports what is still moving so the loop can go idle.
 import { Spherical, Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { arrowOwner } from './keys.js';
 
 const AUTO_ROTATE_SPEED = 0.8;
 const DAMPING = 0.08;
@@ -26,8 +27,9 @@ export function minDistanceFor(overview, nearestFocus = Infinity) {
  * `nearestFocus` is the distance of the closest authored focus view (Infinity for none): zooming stops short of it, not of the overview.
  * `reducedMotion()` is read live: no auto-rotate, and fly-to cuts instead of easing.
  * `onInput(reason)` fires for anything that should wake the loop.
+ * `isTouring()` says whether the tour is open: then Left and Right are the tour's (they step beats), not the camera's.
  */
-export function createControls({ camera, dom, target, polarMax, polarMin = 0, distance, nearestFocus = Infinity, reducedMotion, onInput }) {
+export function createControls({ camera, dom, target, polarMax, polarMin = 0, distance, nearestFocus = Infinity, reducedMotion, onInput, isTouring = () => false }) {
   const controls = new OrbitControls(camera, dom);
   controls.enableDamping = true;
   controls.dampingFactor = DAMPING;
@@ -55,10 +57,12 @@ export function createControls({ camera, dom, target, polarMax, polarMin = 0, di
     if (controls.enableZoom) settle('wheel'); // a wheel the page keeps (embedded) is not the viewer taking the camera
   };
   const onKey = (event) => {
-    // Only the arrows are ours: the tour listens for Space and the arrows on the document, so other keys
-    // must neither stop the drift nor be swallowed. Arrows are consumed here (the tour's use them off-canvas).
+    // Only the camera's arrows are ours: the tour listens for Space and the arrows on the host, so other keys must
+    // neither stop the drift nor be swallowed. Left and Right while the tour is open step its beats, canvas focus
+    // or not, so they pass through to the chrome untouched; the other arrows (and all of them with no tour) orbit.
     const step = ARROWS[event.key];
     if (!step || event.altKey || event.ctrlKey || event.metaKey) return;
+    if (arrowOwner(event.key, { touring: isTouring() }) !== 'camera') return;
     settle('key');
     event.preventDefault();
     event.stopPropagation();

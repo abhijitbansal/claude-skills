@@ -28,8 +28,9 @@ export const orderOf = (values, temporal) => {
 };
 
 /**
- * Ascending order, as Vega-Lite sorts a colour scale's domain and a heatmap's band axes (sort: true in the compiled
- * chart, a plain `<` on text): so colour i here is the 2D chart's colour i, and its stack and donut follow it.
+ * Ascending order, as Vega-Lite sorts a colour role's domain by default (a plain `<` on text): so colour i here is
+ * the 2D chart's colour i, and a stack follows it. A donut's colour and a heatmap's nominal axes are the exceptions:
+ * make-dashboard draws those with sort: null, in query order (orderOf).
  */
 export const sortedOf = (values) => [...new Set(values)].sort();
 
@@ -83,7 +84,8 @@ export function readChart({ chart, result }, lib) {
   if (errors.length > 0) return { errors: errors.slice(0, 1) };
 
   const groupRole = roles.color !== undefined ? 'color' : chart.kind === 'donut' ? 'x' : null;
-  const groupNames = groupRole === null ? [] : sortedOf(points.map((p) => p[groupRole]));
+  const groupValues = groupRole === null ? [] : points.map((p) => p[groupRole]);
+  const groupNames = chart.kind === 'donut' ? orderOf(groupValues, false) : sortedOf(groupValues); // a donut's colour keeps row order
   if (groupNames.length > LIMITS.groups) {
     return { errors: [{ path: 'lift.chart', message: `${roles[groupRole]} has ${groupNames.length} values; a lift takes at most ${LIMITS.groups} groups; fold the rest into "Other" in SQL` }] };
   }
@@ -100,6 +102,7 @@ export function readChart({ chart, result }, lib) {
     roles,
     points,
     xTemporal: roles.x !== undefined && !numeric('x') && temporal('x'),
+    yTemporal: roles.y !== undefined && !numeric('y') && temporal('y'),
     groupNames,
     table: { columns: plotted, rows: result.rows.map((row) => cells.map((cell) => cell(row))) },
   };

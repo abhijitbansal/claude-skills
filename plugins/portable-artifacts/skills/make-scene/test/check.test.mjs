@@ -186,7 +186,7 @@ test('without playwright installed the check skips and exits 0', async (t) => {
   fs.mkdirSync(path.join(dir, 'scripts/lib'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'shared'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'scripts/lib/png.mjs', 'scripts/lib/canvas-shot.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs']) {
+  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'scripts/lib/png.mjs', 'scripts/lib/canvas-shot.mjs', 'scripts/lib/shots.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs', 'shared/output.mjs']) {
     fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
   }
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/check.mjs'), await goodPage(t)], { encoding: 'utf8', env: { ...process.env, PA_NO_BROWSER: '' } });
@@ -203,10 +203,56 @@ test('usage errors exit 2 and list what is accepted', (t) => {
   assert.equal(run(['a.html', 'b.html']).status, 2);
   const unknown = run(['--bogus']);
   assert.equal(unknown.status, 2);
-  assert.match(unknown.stderr, /Unknown option '--bogus'; usage: node scripts\/check\.mjs <page\.html> \[--json\]/);
+  assert.match(unknown.stderr, /Unknown option '--bogus'; usage: node scripts\/check\.mjs <page\.html> \[--shots <dir>\] \[--json\]/);
   const missing = run([path.join(tempDir(t), 'nope.html')]);
   assert.equal(missing.status, 2);
   assert.match(missing.stderr, /cannot read/);
   const json = JSON.parse(run(['--json']).stdout);
   assert.equal(json.ok, false);
+});
+
+// ---- --shots (PA-21) -------------------------------------------------------------------------------------------------
+// Browser-gated: run serially by the orchestrator (one headless browser at a time).
+
+test('--shots writes a still per width and scheme, and a frame per beat, and checks the dark scheme too', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const dir = path.join(tempDir(t, 'scene-shots-'), 'shots');
+  const page = await goodPage(t);
+  const slug = path.basename(page, '.html');
+  const r = run([page, '--shots', dir]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const names = fs.readdirSync(dir).sort();
+  assert.deepEqual(names, [
+    `${slug}-1440-dark.png`, `${slug}-1440-light-beat-01.png`, `${slug}-1440-light-beat-02.png`, `${slug}-1440-light.png`,
+    `${slug}-390-dark.png`, `${slug}-390-light.png`,
+  ].sort());
+  for (const name of names) assert.equal(fs.readFileSync(path.join(dir, name)).subarray(1, 4).toString(), 'PNG', `${name} is a PNG`);
+  assert.match(r.stdout, /^check: ok \(2 viewports, 2 beats\)\nshots: 6 PNGs, open each one and look:\n/);
+  // the two beats look at different things: their frames differ
+  assert.notDeepEqual(fs.readFileSync(path.join(dir, `${slug}-1440-light-beat-01.png`)), fs.readFileSync(path.join(dir, `${slug}-1440-light-beat-02.png`)));
+});
+
+test('--shots --json lists the paths it wrote', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const dir = path.join(tempDir(t, 'scene-shots-'), 'shots');
+  const r = run([await goodPage(t, {}), '--json', '--shots', dir]);
+  const body = JSON.parse(r.stdout);
+  assert.equal(body.ok, true);
+  assert.equal(body.shots.length, 4, 'no tour: a still per width and scheme');
+  assert.ok(body.shots.every((f) => fs.existsSync(f)));
+});
+
+test('--shots with no browser skips, writes nothing, and says so (no browser needed)', async (t) => {
+  const dir = path.join(tempDir(t, 'scene-shots-'), 'shots');
+  const r = run([await goodPage(t, {}), '--shots', dir], { PA_NO_BROWSER: '1' });
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^check: skipped \(no browser: PA_NO_BROWSER=1/);
+  assert.match(r.stdout, /\nshots: none written; look at the page yourself before reporting it checked\n$/);
+  assert.equal(fs.existsSync(dir), false, 'no folder was made');
+});
+
+test('--shots with no folder is a usage error', async (t) => {
+  const r = run([await goodPage(t, {}), '--shots', ''], { PA_NO_BROWSER: '1' });
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--shots needs a folder/);
 });

@@ -4,7 +4,8 @@ import { notAvailable } from './recommend.mjs';
 const CHARS_PER_TOKEN = 4;
 const BYTES_PER_KB = 1024;
 const HEAVY_NOTE = 'may be slow on phones';
-const COLUMNS = ['world', 'fit', 'switch tokens', 'page size', 'render', 'command'];
+const COLUMNS = ['world', 'fit', 'switch tokens', 'page size', 'render'];
+const COMMANDS_HEADING = 'to switch, run one of these (the same build; only --world changes):';
 // A leading '-' is quoted too, so an argument can never read as an option.
 const SAFE_ARG = /^[\w@%+=:,./][\w@%+=:,./-]*$/;
 
@@ -16,13 +17,19 @@ function flagArgs({ out, theme, allowOutside } = {}) {
   return [out && `--out ${shellArg(out)}`, theme && `--theme ${shellArg(theme)}`, allowOutside && '--allow-outside'].filter(Boolean).map((a) => ` ${a}`).join('');
 }
 
-function row(alt, { current, pageBytes, skillDir, specPath, flags }) {
+function row(alt, { current, pageBytes }) {
   const isCurrent = alt.world === current;
-  if (!alt.eligible) return [alt.world, alt.unavailable === undefined ? notAvailable(alt.needs) : `not available: ${alt.unavailable}`, '0', '—', '—', ''];
+  if (!alt.eligible) return [alt.world, alt.unavailable === undefined ? notAvailable(alt.needs) : `not available: ${alt.unavailable}`, '0', '—', '—'];
   const size = isCurrent ? kb(pageBytes) : `~${kb(alt.estBytes)}`;
   const render = alt.weight === 'heavy' ? `heavy; ${HEAVY_NOTE}` : alt.weight;
-  const command = isCurrent ? '' : `node ${shellArg(`${skillDir}/scripts/build.mjs`)} ${shellArg(specPath)} --world ${alt.world}${flagArgs(flags)}`;
-  return [isCurrent ? `${alt.world} (current)` : alt.world, alt.reason ?? 'fits', '0', size, render, command];
+  return [isCurrent ? `${alt.world} (current)` : alt.world, alt.reason ?? 'fits', '0', size, render];
+}
+
+// One switch command, wrapped with shell line continuations so no line carries the script path, the spec path and the
+// flags together (with absolute paths that was one line of 300 to 550 characters). Paste it as it is: the lines are one command.
+function commandLines(alt, { skillDir, specPath, flags }) {
+  const parts = [`node ${shellArg(`${skillDir}/scripts/build.mjs`)}`, `${shellArg(specPath)} --world ${alt.world}`, flagArgs(flags).trim()].filter(Boolean);
+  return [`  ${alt.world}:`, ...parts.map((part, i) => `    ${part}${i < parts.length - 1 ? ' \\' : ''}`)];
 }
 
 /**
@@ -31,10 +38,12 @@ function row(alt, { current, pageBytes, skillDir, specPath, flags }) {
  */
 export function costTable({ specText, current, pageBytes, skillDir, specPath = 'scene.json', flags, alternatives }) {
   const tokens = Math.ceil(specText.length / CHARS_PER_TOKEN);
-  const rows = alternatives.map((a) => row(a, { current, pageBytes, skillDir, specPath, flags }));
+  const rows = alternatives.map((a) => row(a, { current, pageBytes }));
   const widths = COLUMNS.map((c, i) => Math.max(c.length, ...rows.map((r) => r[i].length)));
   const line = (cells) => cells.map((c, i) => c.padEnd(widths[i])).join(' | ').trimEnd();
   // A lift offers no other worlds: just the authoring estimate, no empty table.
   const table = rows.length === 0 ? [] : [line(COLUMNS), widths.map((w) => '-'.repeat(w)).join('-+-'), ...rows.map(line)];
-  return [`spec authoring ≈ ${tokens} tokens (estimated)`, ...table].join('\n');
+  const switchable = alternatives.filter((a) => a.eligible && a.world !== current);
+  const commands = switchable.length === 0 ? [] : ['', COMMANDS_HEADING, ...switchable.flatMap((a) => commandLines(a, { skillDir, specPath, flags }))];
+  return [`spec authoring ≈ ${tokens} tokens (estimated)`, ...table, ...commands].join('\n');
 }

@@ -1,6 +1,7 @@
 // The chrome around a scene: toolbar (Explore, Tour, Full screen, PNG), tooltip, legend, Explore panel,
 // tour transport, text labels and the keyboard shortcuts. createChrome() builds the DOM before the 3D view
 // mounts (the view needs to find the [data-scene-controls] elements); bind(api) wires it to the view.
+import { escapeAction } from '../keys.js';
 import { readPalette, watchTheme } from '../theme.js';
 import { h, isActivatable, isTypingTarget } from './dom.js';
 import { createExplore } from './explore.js';
@@ -33,7 +34,7 @@ export function createChrome(host, graph, opts = {}) {
 
   const status = h('p', { class: 'sc-status', role: 'status', hidden: true });
   const exploreButton = button('Explore', { 'aria-keyshortcuts': 'E', title: 'Explore every group and item (E)' });
-  const tourButton = beats.length > 0 ? button('Tour', { 'aria-keyshortcuts': 'P', title: 'Play the guided tour (P)' }) : null;
+  const tourButton = beats.length > 0 ? button('Tour', { 'aria-keyshortcuts': 'P', title: 'Play the guided tour (P opens it paused; Space plays)' }) : null;
   const fullButton = button('Full screen', { 'aria-keyshortcuts': 'F', title: 'Full screen (F)' });
   const pngButton = button('PNG', { 'aria-label': 'Save a PNG of this view', title: 'Save a PNG of this view' });
   pngButton.removeAttribute('aria-pressed');
@@ -107,7 +108,9 @@ export function createChrome(host, graph, opts = {}) {
   };
 
   exploreButton.addEventListener('click', () => explore.toggle());
-  tourButton?.addEventListener('click', () => (transport.isShown() ? closeTour() : openTour()));
+  // The button's title says "Play": it starts the tour, as autoplay does (and, like autoplay, not under reduced motion,
+  // where the tour opens paused for the viewer to step). The P key only opens it; Space plays and pauses.
+  tourButton?.addEventListener('click', () => (transport.isShown() ? closeTour() : openTour(!reduced())));
   fullButton.addEventListener('click', () => fullscreen.toggle());
   pngButton.addEventListener('click', () => {
     say('');
@@ -119,6 +122,7 @@ export function createChrome(host, graph, opts = {}) {
     if (host.dataset.sceneState === FALLBACK_STATE || isTypingTarget(event.target)) return;
     const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
     const touring = transport?.isShown() === true;
+    const escape = key === 'Escape' ? escapeAction({ exploreOpen: explore.isOpen(), fullscreenOn: fullscreen.isOn(), touring }) : null;
     if (key === 'e') explore.toggle();
     else if (key === 'f') fullscreen.toggle();
     else if (key === 'p' && transport) openTour();
@@ -127,9 +131,12 @@ export function createChrome(host, graph, opts = {}) {
       else openTour(true);
     } else if (key === 'ArrowRight' && touring) tour.next();
     else if (key === 'ArrowLeft' && touring) tour.prev();
-    else if (key === 'Escape' && (explore.isOpen() || fullscreen.isOn())) {
-      explore.close();
-      fullscreen.exit();
+    else if (key === 'Escape' && escape !== null) {
+      if (escape === 'tour') closeTour();
+      else {
+        explore.close();
+        fullscreen.exit();
+      }
     } else return;
     event.preventDefault();
   }

@@ -4,7 +4,7 @@
 // its orbit position for time 0: centre + r * (cos phase, 0, sin phase); the
 // runtime advances phase by speed * time. Links are arcs between star centres.
 import { emptyGraph, finalizeGraph, tableFallback } from '../lib/graph.mjs';
-import { compareT, groupIndex, groupsFrom, itemsFrom, groupColour, displayValue } from '../lib/palette.mjs';
+import { compareT, groupIndex, groupsFrom, itemsFrom, groupColour, displayValue, namedTimes } from '../lib/palette.mjs';
 import { InternalError } from '../lib/internal-error.mjs';
 import { ringSlots } from '../lib/ring.mjs';
 import { seedFrom } from '../../shared/art.mjs';
@@ -149,6 +149,8 @@ export function build({ rows, links = [] }, spec = {}) {
   rows.forEach((r) => {
     if (typeof r.label === 'string' && r.label !== '' && !views.has(r.label)) views.set(r.label, views.get(r.group));
   });
+  // t only ranks a star's planets here, so a t value a beat names flies to the star of its first row.
+  for (const { key, indexes } of namedTimes(rows, spec)) if (!views.has(key) && views.has(rows[indexes[0]].group)) views.set(key, views.get(rows[indexes[0]].group));
   g.focus = Object.fromEntries(views);
   g.fallback = {
     ...tableFallback(rows),

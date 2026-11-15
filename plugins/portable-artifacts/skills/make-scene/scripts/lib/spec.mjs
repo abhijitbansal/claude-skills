@@ -4,13 +4,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
-import { formatAjvErrors } from '../../shared/errors.mjs';
+import { formatAjvErrors, makeResult } from '../../shared/errors.mjs';
 import { UsageError } from '../../shared/cli.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { SCHEMA, ROWS_SCHEMA, LINKS_SCHEMA, LIMITS } from './schema.mjs';
 import { q, suggestion, checkLength } from './checks.mjs';
 import { checkRows, checkLinks, checkWorld } from './row-checks.mjs';
 import { readSource, resolveLocal, focusKeys, DataError } from './rows.mjs';
+import { sceneWarnings } from './warnings.mjs';
 
 export { UsageError };
 
@@ -123,7 +124,7 @@ function loadSource(errors, spec, dir, allowOutside) {
   return loadedErrors.length ? null : { ...source, base, linksBase: `${at}.links` };
 }
 
-function checkTour(errors, spec, keys) {
+function checkTour(errors, spec, keys, noun = 'group or label') {
   const tour = spec.tour ?? [];
   if (tour.length > LIMITS.beats) errors.push({ path: 'tour', message: `${tour.length} beats; the limit is ${LIMITS.beats}; merge or drop beats` });
   const candidates = keys ? [...keys] : [];
@@ -133,7 +134,7 @@ function checkTour(errors, spec, keys) {
     checkLength(errors, beat, 'caption', p, LIMITS.caption);
     if (!keys) return; // a lift's focus names diagram nodes, checked by the sibling; a failed load has nothing to resolve against
     beat.focus.forEach((f, j) => {
-      if (!keys.has(f.toLowerCase())) errors.push({ path: `${p}.focus[${j}]`, message: `${q(f)} is not a group or label; ${suggestion(f.toLowerCase(), candidates)}` });
+      if (!keys.has(f.toLowerCase())) errors.push({ path: `${p}.focus[${j}]`, message: `${q(f)} is not a ${noun}; ${suggestion(f.toLowerCase(), candidates)}` });
     });
   });
 }
@@ -144,7 +145,7 @@ function checkDataScene(errors, spec, dir, allowOutside) {
   const groups = checkRows(errors, source.rows, source.base);
   checkLinks(errors, spec.links ?? [], 'links', groups);
   if (source.linksBase) checkLinks(errors, source.links, source.linksBase, groups);
-  const data = { rows: source.rows, links: [...source.links, ...(spec.links ?? [])] };
+  const data = { rows: source.rows, links: [...source.links, ...(spec.links ?? [])], base: source.base };
   checkWorld(errors, spec.world, data);
   return data;
 }
@@ -152,7 +153,8 @@ function checkDataScene(errors, spec, dir, allowOutside) {
 /**
  * Validate a parsed scene spec. `dir` is the spec's folder (default: the
  * working directory); data and lift paths must stay inside it unless
- * `allowOutside`. Resolves to { ok, errors: [{ path, message }] }.
+ * `allowOutside`. Resolves to { ok, errors: [{ path, message }] }, plus `warnings` (advice that never changes `ok`)
+ * when a spec without errors has any.
  */
 export async function validateSpec(spec, { dir = process.cwd(), allowOutside = false } = {}) {
   if (!validateSchema(spec)) return { ok: false, errors: formatAjvErrors(validateSchema.errors) };
@@ -161,17 +163,25 @@ export async function validateSpec(spec, { dir = process.cwd(), allowOutside = f
   checkLength(errors, spec, 'title', '', LIMITS.title);
   checkLength(errors, spec, 'subtitle', '', LIMITS.subtitle);
   let keys = null; // what tour focus may name; null when the data did not load or the scene is a lift
+  let noun = 'group or label';
+  let data = null; // { rows, links, base } of a data scene that loaded: what the warnings read
   if ((spec.data === undefined) === (spec.lift === undefined)) {
     errors.push({ path: spec.data === undefined ? 'data' : 'lift', message: 'exactly one of data or lift; remove one, or add the missing one' });
   } else if (spec.data !== undefined) {
     const loaded = checkDataScene(errors, spec, dir, allowOutside);
-    if (loaded) keys = focusKeys(loaded.rows);
+    if (loaded) {
+      data = loaded;
+      keys = focusKeys(loaded.rows);
+      if (loaded.rows.some((r) => r.t !== undefined)) noun = 'group, label or t value';
+    }
   } else {
     const before = errors.length;
     checkLiftShape(errors, spec, dir, allowOutside);
     const kind = spec.lift.diagram !== undefined ? 'diagram' : 'dashboard';
     if (errors.length === before && liftChecks.has(kind)) errors.push(...await liftChecks.get(kind)(spec, { dir, allowOutside }));
   }
-  checkTour(errors, spec, keys);
-  return { ok: errors.length === 0, errors };
+  checkTour(errors, spec, keys, noun);
+  // Warnings are advice, worked out only for a spec that has no errors; they never change `ok`.
+  if (errors.length > 0) return makeResult(errors);
+  return makeResult(errors, sceneWarnings(spec, data ?? undefined));
 }
