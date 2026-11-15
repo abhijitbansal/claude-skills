@@ -50,7 +50,7 @@ After you've reviewed the plan from Flow 1 and want execution.
 
 1. **Edit `.claude/linear.yml`:** change `autonomy: review-only` → `autonomy: allowed`. Commit this (it's a deliberate policy change for the repo).
 
-2. **Re-label and re-pick:** in Linear, ensure `agent-ready` is still on the issue, then in Claude Code:
+2. **Re-label and re-pick:** in `review-only` mode `/linear-pick` removes `agent-ready` after posting the plan, so add `agent-ready` back in Linear (a human re-adds it once the plan is accepted), then in Claude Code:
    ```
    /linear-pick TEAM-123
    ```
@@ -164,7 +164,7 @@ When `/linear-pick` self-blocked (verify failed, diff too large, ambiguous spec,
 
 3. **Decide:** retry from the existing branch or start fresh?
    - **Retry:** keep the branch, push fixes, run `/linear-sync` to update Linear.
-   - **Start fresh:** delete the branch (`git branch -D agent/TEAM-123-...` + `git push origin --delete agent/TEAM-123-...`), remove `agent-blocked` in Linear, re-add `agent-ready`, re-run `/linear-pick TEAM-123`.
+   - **Start fresh:** delete the branch (`git branch -D agent/TEAM-123-...` + `git push origin --delete agent/TEAM-123-...`), remove `agent-blocked` in Linear, re-add `agent-ready`, re-run `/linear-pick TEAM-123`. A block-and-exit moves the issue back to Todo when no PR was opened, so the pick gate accepts it; if the issue is still In Progress (a PR is open, or the block came from an older version), set it to Todo by hand first, because `/linear-pick` refuses anything past Todo and `--force` does not override that.
 
 ---
 

@@ -452,6 +452,24 @@ test('run-eval: --agent needs a non-empty name', () => {
   assert.equal(hostLaunched, false, 'no host executable may be launched');
 });
 
+test('run-eval: an unknown flag exits 2 with a message that lists the accepted flags, no stack trace', () => {
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'claude', '--bogus']);
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /--bogus/);
+  assert.match(r.stderr, /usage: node eval\/run-eval\.mjs/);
+  assert.match(r.stderr, /\[--timeout sec\]/);
+  assert.doesNotMatch(r.stderr, /ERR_PARSE_ARGS|at parseArgs|node:internal/);
+  assert.equal(hostLaunched, false, 'no host executable may be launched');
+});
+
+test('run-eval: --help prints usage on stdout and exits 0 before any host runs', () => {
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--help']);
+  assert.equal(r.status, 0);
+  assert.match(r.stdout, /usage: node eval\/run-eval\.mjs/);
+  assert.equal(r.stderr, '');
+  assert.equal(hostLaunched, false, 'no host executable may be launched');
+});
+
 test('the fake host executables really are what runs: a valid --agent reaches the host check', () => {
   const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'copilot', '--agent', 'artifact-builder']);
   assert.equal(r.status, 2);

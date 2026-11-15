@@ -9,7 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { SKILLS, LOCAL_MODEL_GATED_SKILLS, buildPrompt, expandCmd, loadPrompts, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { values: opts } = parseArgs({
+let opts;
+try {
+  ({ values: opts } = parseArgs({
   options: {
     skill: { type: 'string' },
     host: { type: 'string' },
@@ -22,12 +24,25 @@ const { values: opts } = parseArgs({
     out: { type: 'string' },
     'allow-local-models': { type: 'boolean', default: false },
     'abort-no-spec': { type: 'string' },
+    help: { type: 'boolean', short: 'h', default: false },
   },
-});
+  }));
+} catch (e) {
+  usage(e.message);
+}
+
+function usageText() {
+  return `usage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--agent name] [--set name] [--limit n] [--only id,id] [--timeout sec] [--abort-no-spec sec] [--allow-local-models] [--out dir] [--help]\n`;
+}
 
 function usage(msg) {
-  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--agent name] [--set name] [--limit n] [--only id,id] [--timeout sec] [--abort-no-spec sec] [--allow-local-models] [--out dir]\n`);
+  process.stderr.write(`${msg}\n${usageText()}`);
   process.exit(2);
+}
+
+if (opts.help) {
+  process.stdout.write(usageText());
+  process.exit(0);
 }
 
 const skillCfg = SKILLS[opts.skill];

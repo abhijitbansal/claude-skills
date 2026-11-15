@@ -56,14 +56,18 @@ either doesn't exist or lives somewhere unreachable.
 
   ```bash
   cd "$W" && git fetch origin && git checkout -f main && \
-    git reset --hard origin/main && git clean -fdx && exec "$W/script.sh"
+    git reset --hard origin/main && git clean -fd && exec "$W/script.sh"
   ```
 
   Chain with `&&`, never `;` before the `exec`: after a failed fetch or reset a
   `;` still runs the script, against a clone in an unknown state. `reset --hard`
   leaves untracked files behind (a leftover `generated.json` wedges the next
-  run), so `git clean -fdx` finishes the job; it also deletes ignored files, so
-  keep nothing you need in a dedicated clone's ignored paths.
+  run), so `git clean -fd` finishes the job. It keeps ignored files, so a
+  `.env`, credentials or a cache kept in the clone survive every run. Make it
+  `git clean -fdx` only when the clone is dedicated and ignored build output is
+  what wedges the job: `-x` also deletes ignored files, which is unrecoverable
+  for a `.env` or local credentials. Copy-paste readers: the snippet above is
+  the safe default; `-x` is the opt-in.
 
   This does two jobs at once: it self-heals any dirty state left by a prior
   failed run (fixes death mode 1), and it guarantees each run executes the

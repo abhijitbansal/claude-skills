@@ -154,8 +154,12 @@ committed. A test checks `music.wav` byte for byte against the helper.
 
 ## Bar and budget
 
-- **Bar.** A gate in a committed summary passes when at least `ceil(0.9 × n)` prompts are valid and the median
-  validate runs is 2 or fewer (scene: 90% valid). Valid means the harness's own `validate` and output step passed; the `feature`
+- **Bar.** Each committed summary states its own bar in its Gate section, and the bars differ, so read the summary
+  rather than assuming one rule. As recorded: diagram and explainer, at least 7 of 8 valid with median validate runs
+  2 or fewer; dashboard v2, at least 9 of 10 valid with median 1; routing (motion gate), at least 8 of 10 valid and
+  built; scene, at least 90% valid; motion gates 1 and 2, `ceil(0.9 × n)` valid (13 of 14, 9 of 10) with median
+  validate runs 2 or fewer on the 10-prompt set. For a new billed run the default is 90% valid, `ceil(0.9 × n)`, and a median of 2 or fewer; state
+  the bar in the summary before the run. Valid means the harness's own `validate` and output step passed; the `feature`
   column says whether the prompt's feature is in the spec, and `check` whether the page passes its browser check.
   Neither judges whether the text or the picture is good.
 - **Budget.** One prompt is one host session. State the prompt count and the host before a billed run, run each prompt once

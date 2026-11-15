@@ -133,8 +133,9 @@ If the number is greater than `LINEAR_PM_MAX_PR_LINES` → Step 9 with reason "d
 ### Step 9: Block-and-exit (called from Steps 7, 8 and 10 on failure)
 1. Add `agent-blocked` label and remove `agent-ready` (don't strip other labels).
 2. Comment: `🤖 Blocked — <reason>` (include a short error excerpt, max ~30 lines). Skip it when the latest comment is the same `🤖 Blocked` text.
-3. Leave the branch as-is — user inspects manually.
-4. Run Step 13, then stop.
+3. If Step 6 moved the issue to `In Progress` and no PR was opened for `<branch>`, move it back to `Todo` (status ID via `mcp__claude_ai_Linear__list_issue_statuses`). Step 2 refuses any issue past Todo, so without this a human who clears `agent-blocked` and re-adds `agent-ready` could never re-run `/linear-pick`. If a PR is already open, leave the status alone: the recovery is to push fixes and run `/linear-sync`.
+4. Leave the branch as-is — user inspects manually.
+5. Run Step 13, then stop.
 
 ### Step 10: Push and open PR
 ```bash

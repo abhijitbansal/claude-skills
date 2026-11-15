@@ -100,7 +100,7 @@ not exercised. An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**:
 dashboard 10/10, motion 5/10 under today's scorer (the summary counted six valid, one of them an edit that left the seed untouched; four more prompts were stopped by the
 account's usage limit; the five that ran all built a page)
 ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)).
-A local model through Ollama (gemma4) built a dashboard 10/10 after a SKILL.md fix but only 4/10 to 7/10 on motion and 0/8 on explainer (on motion the cause found was the model ending its turn before it wrote the spec);
+A local model through Ollama (gemma4) built a dashboard 10/10 after a SKILL.md fix (a 2026-10-12 rerun gave 7/10 and 6/10) but only 4/10 to 7/10 on motion and 0/8 on explainer (on motion the cause found was the model ending its turn before it wrote the spec);
 the eval refuses those two without `--allow-local-models`.
 **Gemini CLI**: its install paths were checked against its documentation on
 2026-10-15 and not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku in Claude Code, median 1.5 validate runs, median 40 s)

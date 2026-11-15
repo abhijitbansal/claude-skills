@@ -39,7 +39,7 @@ thinking table in the `claude-api` skill before you copy a setting; as of its
 | Opus 5.5 | Runs adaptive; `{type: "disabled"}` is a 400 at every effort level | Set `output_config.effort` to `low` (the default is `medium`) |
 | Opus 5, Haiku 5.5 | Runs adaptive; `disabled` is accepted only at effort `high` or below | Lower `output_config.effort`, or `disabled` at `high` or below |
 | Sonnet 5.5 | Runs adaptive; `{type: "disabled"}` is a 400 | Lower effort, or `thinking: {type: "between_tools"}` (effort `high` or below, no other field) |
-| Sonnet 5, Sonnet 4.6 | Sonnet 5 runs adaptive; Sonnet 4.6 needs it set explicitly | Lower effort; `disabled` is accepted |
+| Sonnet 5, Sonnet 4.6 | Sonnet 5 runs adaptive; Sonnet 4.6 runs without thinking unless `{type: "adaptive"}` is set | Lower effort; on Sonnet 5 `disabled` is accepted; on Sonnet 4.6 omit `thinking` |
 | Fable 5 family | Thinking is always on | Lower effort only |
 
 Structured output already prevents prose leaking into the JSON, so there is
@@ -56,20 +56,27 @@ no correctness downside to cutting thinking on a schema-constrained task.
   the cheaper model's savings are wiped out by the thinking-token multiplier.
 
 ```python
+MODEL = "<model-id>"   # from config; ids are in the claude-api skill
+# 5.x models (the rows of the table above that run adaptive thinking by default)
+IS_5X = MODEL.startswith(("claude-opus-5", "claude-sonnet-5", "claude-haiku-5",
+                          "claude-fable-5", "claude-mythos-5"))
+
 output_config = {"format": {"type": "json_schema", "schema": SCHEMA}}
-output_config["effort"] = config.effort or "low"   # the lever on 5.x models
+if IS_5X:
+    output_config["effort"] = config.effort or "low"   # the lever on 5.x models
+# Opus 4.8 / 4.7 and Sonnet 4.6: no effort is set here; thinking is controlled below.
 
 kwargs = {
-    "model": "<model-id>",   # from config; ids are in the claude-api skill
+    "model": MODEL,
     "max_tokens": 16000,     # non-streaming: stay near 16000 or the SDK demands streaming
     "system": ...,
     "messages": [...],
     "output_config": output_config,
 }
-if config.model_omits_thinking_means_off:   # only Opus 4.8 / 4.7 style models
-    pass                                    # leave the key out entirely
-elif config.thinking == "adaptive":
+if config.thinking == "adaptive":           # an explicit request always wins, on every model
     kwargs["thinking"] = {"type": "adaptive"}
+# Otherwise leave the key out: that means "no thinking" on Opus 4.8 / 4.7 and
+# Sonnet 4.6, and "adaptive at the effort set above" on the 5.x models.
 ```
 
 A larger `max_tokens` (up to 128K) needs streaming: use the SDK's `.stream()`
@@ -87,7 +94,11 @@ with `.get_final_message()` instead of a plain `.create()`.
   returned JSON — a large gap between the two is thinking spend, not JSON
   spend.
 - Not re-measured on the current models: the per-model table above comes from
-  the `claude-api` skill's reference, not from a new run.
+  the `claude-api` skill's reference, not from a new run. Each row was checked
+  against that skill's thinking table (cache dated 2026-11-03) on 2026-11-15,
+  including the Fable row ("thinking is always on", lower effort only) and the
+  Opus 5.5 default effort (`medium`); no billed call was made, so the table is
+  documented behavior, not a measurement.
 
 ## Related skills
 
