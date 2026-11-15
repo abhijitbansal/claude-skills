@@ -8,9 +8,14 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ### Behaviour changes to know about
 
-- **The voiceover and cutout installs move to `optional/voice` and `optional/cutout`** and are installed by `npm ci`
-  from committed lockfiles (`doctor --fix kokoro`, `doctor --fix cutout`). An old install in the skill's `node_modules`
-  is ignored: run `doctor --fix kokoro` or `--fix cutout` once, and `--fix node_modules` removes the old copy. Each
+- **The voiceover and cutout installs move to `optional/voice` and `optional/cutout`** and are installed by `npm ci
+  --ignore-scripts` from committed lockfiles (`doctor --fix kokoro`, `doctor --fix cutout`). An old install in the
+  skill's `node_modules` is ignored: run `doctor --fix kokoro` or `--fix cutout` once, and `--fix node_modules` removes
+  the old copy. Install scripts are skipped on purpose: the locked `onnxruntime-node` (1.21.0 under kokoro-js, 1.31.1
+  for cutouts) has a postinstall that, on Linux x64 only, downloads CUDA libraries (a GitHub release, then NuGet) with no
+  hash; the CPU binaries ship inside the npm tarball, which the lockfile's integrity covers, and neither feature uses a
+  GPU. The loader also refuses to load when a direct dependency of an optional folder would resolve outside that folder
+  (a partial install with an old unlocked copy above it). Each
   folder carries its own `overrides`, which are the ones the skill's `package.json` used to hold for these installs:
   `sharp` 0.35.5 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w; kokoro-js 1.2.1 reaches sharp ^0.34
   through `@huggingface/transformers` 3.x) and `global-agent` 4.1.3 (global-agent 3.x pulls in roarr and sprintf-js,

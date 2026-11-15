@@ -7,46 +7,15 @@
 // and the phonemes Kokoro spoke for it.
 // Prints three lines: the wav path, "<seconds> s, <voice>", and the sidecar path.
 // With --phonemes, a "<sentence><TAB><phonemes>" line per sentence follows, to check how a word is read.
-import { mkdirSync } from 'node:fs';
-import path from 'node:path';
+// The first synthesis downloads and checks the pinned Kokoro model files (about 92 MB); --list-voices does not.
 import { UsageError } from './lib/spec.mjs';
-import { parseVoiceArgs, loadKokoro, ensureKokoroModel, loadModel, synthesize, sidecarPath, phonemeLines, USAGE, INSTALL_HINT } from './lib/voice.mjs';
+import { USAGE, INSTALL_HINT } from './lib/voice.mjs';
+import { runVoiceCli } from './lib/voice-cli.mjs';
 
 const EXIT_USAGE = 2;
 const EXIT_FAILURE = 1;
 
-function listVoices(tts) {
-  for (const [name, info] of Object.entries(tts.voices ?? {})) {
-    process.stdout.write(`${name}\t${info.language ?? ''}\t${info.gender ?? ''}\t${info.overallGrade ?? ''}\n`);
-  }
-}
-
-async function run(opts, tts, kokoro) {
-  if (opts.listVoices) { listVoices(tts); return; }
-  if (!Object.hasOwn(tts.voices ?? {}, opts.voice)) throw new UsageError(`unknown voice "${opts.voice}"; run --list-voices`);
-  const out = path.resolve(opts.out);
-  mkdirSync(path.dirname(out), { recursive: true });
-  const { seconds, sentences } = await synthesize(tts, kokoro, { ...opts, out });
-  process.stdout.write(`${out}\n${seconds.toFixed(2)} s, ${opts.voice}\n${sidecarPath(out)}\n`);
-  if (opts.phonemes) process.stdout.write(phonemeLines(sentences));
-}
-
-// The model session is always disposed before the process ends, on success and on failure:
-// exiting with a live onnxruntime session aborts with "mutex lock failed" (SIGABRT), and so does
-// process.exit(), so the exit code is set and the event loop is left to drain.
-async function main() {
-  const opts = parseVoiceArgs(process.argv.slice(2));
-  const kokoro = await loadKokoro();
-  await ensureKokoroModel({ log: (l) => process.stderr.write(`voice: ${l}\n`) });
-  const tts = await loadModel(kokoro);
-  try {
-    await run(opts, tts, kokoro);
-  } finally {
-    await tts.model.dispose();
-  }
-}
-
-main().catch((e) => {
+runVoiceCli(process.argv.slice(2)).catch((e) => {
   process.stderr.write(`${e.message}\n`);
   const usage = e instanceof UsageError;
   if (usage && e.message !== USAGE && e.message !== INSTALL_HINT) process.stderr.write(`${USAGE}\n`);

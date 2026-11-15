@@ -1,7 +1,7 @@
 // Builds the cheap-model "artifact-builder" agent definition for hosts that support custom agents,
 // and writes it. Claude Code and Gemini get no agent file.
 // It lives in shared/ so every skill folder carries it: bin/install.mjs imports it, and
-// `doctor --fix builder_agent` runs it as a CLI, which is how an `npx skills add` install
+// `doctor --fix builder_agent` runs it as a CLI, which is how an install made with the skills CLI
 // (skill folders only, no bin/) gets the agent file.
 //   node agents.mjs write <copilot|codex> <agents-dir>     writes the file, keeps an existing one
 import fs from 'node:fs';

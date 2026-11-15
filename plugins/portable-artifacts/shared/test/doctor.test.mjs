@@ -67,7 +67,7 @@ test('runFixes runs only requested auto fixes and refuses sudo and unknown ids',
   const run = (cmd, args, o) => { ran.push([cmd, ...args].join(' ')); cwds.push(o.cwd); return { status: 0 }; };
   const reqs = [ffmpeg(), kokoro()];
   const res = await runFixes(['kokoro', 'ffmpeg', 'nope'], reqs, ctx({ platform: 'linux' }), run);
-  assert.deepEqual(ran, ['npm ci --prefix /s/make-motion/optional/voice']);
+  assert.deepEqual(ran, ['npm ci --ignore-scripts --prefix /s/make-motion/optional/voice']);
   assert.deepEqual(cwds, [undefined], 'kokoro installs with --prefix into its own folder, no cwd');
   assert.equal(res.find((r) => r.id === 'ffmpeg').refused, 'needs sudo');
   assert.match(res.find((r) => r.id === 'ffmpeg').manual, /sudo apt-get install ffmpeg/);
@@ -447,7 +447,7 @@ test('N2: the shown sister command includes cd <root>; ran includes it; win32 us
 test('N3: doctorMain with injected ctx/run never reaches spawnSync; --fix uses the recorder', async () => {
   const calls = [];
   const r = await runMain(['--fix', 'kokoro', '--json'], { ...mainOpts(), requirementsFor: () => [kokoro()] }, { run: (c, a) => { calls.push([c, ...a].join(' ')); return { status: 0 }; } });
-  assert.deepEqual(calls, ['npm ci --prefix /s/make-motion/optional/voice']);
+  assert.deepEqual(calls, ['npm ci --ignore-scripts --prefix /s/make-motion/optional/voice']);
   assert.equal(JSON.parse(r.out)[0].id, 'kokoro');
 });
 
@@ -818,15 +818,16 @@ const jsonFiles = (files) => (p) => { if (!(p in files)) throw new Error('ENOENT
 
 test('kokoro and cutout install with npm ci from their own locked folder', async () => {
   const r = await diagnose([kokoro(), cutout()], ctx({ platform: 'linux' }));
-  assert.deepEqual(r.missing.map((m) => m.fix.auto), [`npm ci --prefix ${VOICE}`, `npm ci --prefix ${CUT}`]);
+  assert.deepEqual(r.missing.map((m) => m.fix.auto), [`npm ci --ignore-scripts --prefix ${VOICE}`, `npm ci --ignore-scripts --prefix ${CUT}`]);
   assert.equal(r.ok, true, 'both are opt-in');
   assert.match(r.missing[1].size, /25 MB/, 'the size names the model download');
 });
 
 test('OPTIONAL names the folder and package of each, and optionalInstallArgv is npm ci into that folder', () => {
   assert.deepEqual(OPTIONAL, { kokoro: { dir: 'voice', pkg: 'kokoro-js' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } });
-  assert.deepEqual(optionalInstallArgv(ctx(), 'kokoro'), ['npm', 'ci', '--prefix', VOICE]);
-  assert.deepEqual(optionalInstallArgv(ctx(), 'cutout'), ['npm', 'ci', '--prefix', CUT]);
+  // --ignore-scripts: onnxruntime-node's postinstall downloads Linux x64 CUDA binaries unhashed; the CPU binaries ship in the tarball.
+  assert.deepEqual(optionalInstallArgv(ctx(), 'kokoro'), ['npm', 'ci', '--ignore-scripts', '--prefix', VOICE]);
+  assert.deepEqual(optionalInstallArgv(ctx(), 'cutout'), ['npm', 'ci', '--ignore-scripts', '--prefix', CUT]);
 });
 
 test('the optional installs say where they come from, that the model downloads once, and that npm ci in the skill folder leaves them alone', async () => {
@@ -872,15 +873,15 @@ test('a pinned package that is not installed, or whose file cannot be read, is n
 test('offline: a failed npm ci reports that command and runs nothing else', async () => {
   const ran = [];
   const res = await runFixes(['kokoro'], [kokoro()], ctx({ platform: 'linux' }), (c, a) => { ran.push([c, ...a].join(' ')); return { status: 1 }; });
-  assert.deepEqual(ran, [`npm ci --prefix ${VOICE}`]);
+  assert.deepEqual(ran, [`npm ci --ignore-scripts --prefix ${VOICE}`]);
   assert.equal(res[0].ok, false);
-  assert.equal(res[0].manual, `npm ci --prefix ${VOICE}`);
+  assert.equal(res[0].manual, `npm ci --ignore-scripts --prefix ${VOICE}`);
 });
 
 test('win32: one npm ci with the backslash folder quoted', async () => {
   const skillDir = 'C:\\Users\\a b\\make-motion';
   const r = await diagnose([kokoro()], ctx({ platform: 'win32', skillDir }));
-  assert.equal(r.missing[0].fix.auto, 'npm ci --prefix "C:\\Users\\a b\\make-motion\\optional\\voice"');
+  assert.equal(r.missing[0].fix.auto, 'npm ci --ignore-scripts --prefix "C:\\Users\\a b\\make-motion\\optional\\voice"');
   const installed = 'C:\\Users\\a b\\make-motion\\optional\\voice\\node_modules\\kokoro-js';
   assert.deepEqual((await diagnose([kokoro()], ctx({ platform: 'win32', skillDir, exists: (p) => p === installed }))).missing, []);
 });
@@ -890,7 +891,7 @@ test('--fix kokoro,cutout runs one npm ci per folder, after node_modules', async
   const reqs = [cutout(), kokoro(), nodeModules()];
   const res = await runFixes(['kokoro', 'cutout', 'node_modules'], reqs, ctx({ platform: 'linux', exists: () => ran.length > 0 }), (c, a) => { ran.push([c, ...a].join(' ')); return { status: 0 }; });
   assert.deepEqual(res.map((r) => r.ok), [true, true, true]);
-  assert.deepEqual(ran, ['npm ci --omit=dev --prefix /s/make-motion', `npm ci --prefix ${VOICE}`, `npm ci --prefix ${CUT}`]);
+  assert.deepEqual(ran, ['npm ci --omit=dev --prefix /s/make-motion', `npm ci --ignore-scripts --prefix ${VOICE}`, `npm ci --ignore-scripts --prefix ${CUT}`]);
 });
 
 test('the make-motion node_modules reinstall names no optional install', async () => {

@@ -10,6 +10,7 @@ import {
   parseVoiceArgs, chunkText, sentenceTimes, sidecarPath, synthesize, phonemeLines, DEFAULT_VOICE, MODEL_ID, MODEL_CACHE_DIR, MAX_CHUNK_CHARS,
   KOKORO_BASE_URL, KOKORO_FILES, KOKORO_DIR, ensureKokoroModel, loadModel,
 } from '../scripts/lib/voice.mjs';
+import { runVoiceCli } from '../scripts/lib/voice-cli.mjs';
 import { writeFileSync } from 'node:fs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -294,13 +295,76 @@ test('offline first use names the URL and keeps nothing', async () => {
   assert.equal(existsSync(path.join(dir, 'config.json')), false);
 });
 
-test('loadModel points transformers at the verified folder and turns remote loading and its file cache off', async () => {
+// A kokoro stub whose from_pretrained records its arguments and the env it saw.
+function stubKokoro(seen = {}) {
   const env = { allowRemoteModels: true, useFSCache: true };
-  let args;
-  const stub = { env, KokoroTTS: { from_pretrained: async (...a) => { args = a; return 'tts'; } } };
-  assert.equal(await loadModel(stub, { root: '/r' }), 'tts');
-  assert.deepEqual(env, { allowRemoteModels: false, useFSCache: false, allowLocalModels: true, localModelPath: '/r' });
-  assert.deepEqual(args, [MODEL_ID, { dtype: 'q8', device: 'cpu' }]);
+  return { env, KokoroTTS: { from_pretrained: async (...args) => { seen.args = args; seen.env = { ...env }; return 'tts'; } } };
+}
+
+test('loadModel verifies the files, then points transformers at the verified folder with remote loading and its file cache off', async () => {
+  const root = tmpDir();
+  const calls = [];
+  const seen = {};
+  const stub = stubKokoro(seen);
+  assert.equal(await loadModel(stub, { root, base: BASE, files: pinned, fetchImpl: serve(calls) }), 'tts');
+  assert.deepEqual(calls, pinned.map((f) => `${BASE}${f.file}`), 'every pinned file was fetched and checked once');
+  assert.deepEqual(stub.env, { allowRemoteModels: false, useFSCache: false, allowLocalModels: true, localModelPath: root });
+  assert.deepEqual(seen.args, [MODEL_ID, { dtype: 'q8', device: 'cpu' }]);
+  assert.equal(readFileSync(path.join(root, MODEL_ID, 'config.json'), 'utf8'), '{}');
+});
+
+test('loadModel cannot reach transformers with a file that fails its hash: it rejects first, and the model is never loaded', async () => {
+  const root = tmpDir();
+  const seen = {};
+  const stub = stubKokoro(seen);
+  await assert.rejects(
+    () => loadModel(stub, { root, base: BASE, files: pinned, fetchImpl: serve([], { 'onnx/model_quantized.onnx': 'evil' }) }),
+    /sha256 mismatch for the Kokoro voice model file onnx\/model_quantized\.onnx/,
+  );
+  assert.equal(seen.args, undefined, 'from_pretrained was never called');
+  assert.equal(stub.env.allowRemoteModels, true, 'env was left alone');
+});
+
+test('loadModel fetches nothing when every file is cached and good', async () => {
+  const root = tmpDir();
+  const dir = path.join(root, MODEL_ID);
+  for (const { file, body } of FILES) { mkdirSync(path.dirname(path.join(dir, file)), { recursive: true }); writeFileSync(path.join(dir, file), body); }
+  const calls = [];
+  await loadModel(stubKokoro(), { root, base: BASE, files: pinned, fetchImpl: serve(calls) });
+  assert.deepEqual(calls, []);
+});
+
+// ---- the CLI body: --list-voices never needs the model ---------------------------------------------------------------------
+
+const VOICES = { af_heart: { language: 'en-us', gender: 'Female', overallGrade: 'A' }, bm_george: { language: 'en-gb', gender: 'Male', overallGrade: 'C' } };
+class StubTts { get voices() { return VOICES; } }
+
+test('--list-voices prints the voices without loading or downloading the model', async () => {
+  const out = [];
+  const deps = {
+    loadKokoro: async () => ({ KokoroTTS: StubTts }),
+    loadModel: async () => { throw new Error('the model must not load for --list-voices'); },
+    write: (s) => out.push(s),
+  };
+  await runVoiceCli(['--list-voices'], deps);
+  assert.deepEqual(out, ['af_heart\ten-us\tFemale\tA\n', 'bm_george\ten-gb\tMale\tC\n']);
+});
+
+test('a synthesis run loads the model once, with the log line going to the caller, then disposes it', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'voice-cli-'));
+  const out = path.join(dir, 'a.wav');
+  const loaded = [];
+  let disposed = 0;
+  const tts = { voices: VOICES, model: { dispose: async () => { disposed++; } }, stream: async function* () { yield { text: 'Hi.', phonemes: 'h', audio: { audio: new Float32Array(24000) } }; } };
+  const deps = {
+    loadKokoro: async () => ({ KokoroTTS: StubTts, TextSplitterStream: StubSplitterStream, RawAudio: StubRawAudio }),
+    loadModel: async (kokoro, opts) => { loaded.push(opts); return tts; },
+    write: () => {},
+  };
+  await runVoiceCli(['Hi.', '--out', out], deps);
+  assert.equal(loaded.length, 1);
+  assert.equal(typeof loaded[0].log, 'function');
+  assert.equal(disposed, 1);
 });
 
 test('synthesises with fetch disabled once the pinned files are cached (needs optional/voice + VOICE_TEST=1)', { skip: !haveModel() && 'model, optional/voice or VOICE_TEST missing' }, () => {

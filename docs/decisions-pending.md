@@ -60,13 +60,11 @@ goldens and the two docs if you pick another.
 bundled `shared/fonts/` (which still carries JetBrains Mono for the `press`
 theme). The deps only cost install size; nothing imports them.
 
-- **A (default, shipped):** keep both in `package.json` and
-  `package-lock.json`. Installs stay byte-identical to before the branch; no
-  network install was needed to land it.
-- **B (recommended):** remove both and regenerate `package-lock.json` in a
-  follow-up that can run a network `npm install`. Smaller installs; nothing
-  in the skill reads them.
+- **A (was the default):** keep both in `package.json` and
+  `package-lock.json`. Installs stay byte-identical to before the branch.
+- **B (recommended):** remove both and regenerate `package-lock.json`.
+  Smaller installs; nothing in the skill reads them.
 
-To pick B: drop the two lines from `skills/make-motion/package.json`, run
-`npm install` in `skills/make-motion`, commit the lockfile, and drop the
-"still pinned" note from the Inter row of the plugin README's font table.
+**Resolved 2026-11-15: B.** The security pins change (docs/superpowers/plans/2026-11-15-pa2-security-pins.md, Task 1)
+removed both packages from `skills/make-motion/package.json` and its lockfile, and the Inter row from the plugin
+README's licence table.

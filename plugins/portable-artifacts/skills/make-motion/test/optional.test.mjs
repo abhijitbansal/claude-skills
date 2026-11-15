@@ -27,6 +27,9 @@ const stubVoiceStack = (voiceDir) => {
   stubPkg(voiceDir, 'kokoro-js', 'export class KokoroTTS {} export class TextSplitterStream {}');
   stubPkg(voiceDir, '@huggingface/transformers', 'export const env = {}; export class RawAudio {}');
 };
+const VOICE_DEPS = { 'kokoro-js': '1.2.1', '@huggingface/transformers': '3.8.1' };
+const writeManifest = (dir, dependencies) => writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'make-motion-voice', dependencies }));
+const manifestOf = (dependencies) => () => JSON.stringify({ dependencies });
 const notFound = (pkg) => Object.assign(new Error(`Cannot find package '${pkg}' imported from x`), { code: 'ERR_MODULE_NOT_FOUND' });
 
 test('loads through a file URL when the path has a space and a #', async () => {
@@ -34,6 +37,7 @@ test('loads through a file URL when the path has a space and a #', async () => {
   const voiceDir = path.join(root, 'voice');
   mkdirSync(voiceDir, { recursive: true });
   cpSync(REAL_VOICE_ENTRY, path.join(voiceDir, 'index.mjs'));
+  writeManifest(voiceDir, VOICE_DEPS);
   stubVoiceStack(voiceDir);
   const mod = await loadKokoro({ root });
   assert.equal(typeof mod.KokoroTTS, 'function');
@@ -50,8 +54,20 @@ test('the loader never falls back to the skill\'s own node_modules', async () =>
   await assert.rejects(() => loadKokoro({ root: path.join(skill, 'optional') }), (e) => e instanceof UsageError && e.message === INSTALL_HINT);
 });
 
+test('a direct dependency that would load from outside the optional folder is refused, naming the stray path', async () => {
+  const skill = path.join(tmp('optional-stray-'), 'make-motion');
+  const voiceDir = path.join(skill, 'optional', 'voice');
+  mkdirSync(voiceDir, { recursive: true });
+  cpSync(REAL_VOICE_ENTRY, path.join(voiceDir, 'index.mjs'));
+  writeManifest(voiceDir, VOICE_DEPS);
+  stubPkg(voiceDir, 'kokoro-js', 'export class KokoroTTS {} export class TextSplitterStream {}'); // a partial install: transformers is missing here
+  stubPkg(skill, '@huggingface/transformers', 'export const env = {}; export class RawAudio {}'); // ...but an old unlocked copy sits above
+  const stray = path.join(skill, 'node_modules', '@huggingface', 'transformers');
+  await assert.rejects(() => loadKokoro({ root: path.join(skill, 'optional') }), (e) => e instanceof UsageError && e.message.includes(stray) && e.message.includes('@huggingface/transformers'));
+});
+
 test('the voice install hint is npm ci into optional/voice and names doctor id kokoro', () => {
-  assert.ok(INSTALL_HINT.includes(`npm ci --prefix ${quoteArg(path.join(SKILL, 'optional', 'voice'))}`), INSTALL_HINT);
+  assert.ok(INSTALL_HINT.includes(`npm ci --ignore-scripts --prefix ${quoteArg(path.join(SKILL, 'optional', 'voice'))}`), INSTALL_HINT);
   assert.doesNotMatch(INSTALL_HINT, /npm install/);
   assert.match(INSTALL_HINT, /--for voiceover, id kokoro\)/);
 });
@@ -65,14 +81,36 @@ test('importOptional probes <root>/<name>/node_modules/<pkg>/package.json and im
   const probed = [];
   const urls = [];
   const exists = (p) => { probed.push(p); return true; };
-  const mod = await importOptional({ name: 'cutout', pkg: 'onnxruntime-node', hint: 'HINT', root: '/r', importer: async (u) => { urls.push(u); return { ok: 1 }; }, exists });
+  const readFile = manifestOf({ 'onnxruntime-node': '1.31.1' });
+  const mod = await importOptional({ name: 'cutout', pkg: 'onnxruntime-node', hint: 'HINT', root: '/r', importer: async (u) => { urls.push(u); return { ok: 1 }; }, exists, readFile });
   assert.deepEqual(mod, { ok: 1 });
-  assert.deepEqual(probed, [path.join('/r', 'cutout', 'node_modules', 'onnxruntime-node', 'package.json')]);
+  assert.ok(probed.includes(path.join('/r', 'cutout', 'node_modules', 'onnxruntime-node', 'package.json')));
   assert.deepEqual(urls, [optionalEntryUrl('cutout', '/r')]);
 });
 
+test('importOptional checks every direct dependency of the folder: one found only above it is refused with its path, one found nowhere is the hint', async () => {
+  const folder = path.join('/r', 'voice');
+  const importer = async () => { throw new Error('must not import'); };
+  const readFile = manifestOf({ a: '1.0.0', b: '1.0.0' });
+  const inside = (dep) => path.join(folder, 'node_modules', dep, 'package.json');
+  const above = path.join('/r', 'node_modules', 'b', 'package.json');
+  const stray = importOptional({ name: 'voice', pkg: 'a', hint: 'HINT', root: '/r', importer, readFile, exists: (p) => p === inside('a') || p === above });
+  await assert.rejects(() => stray, (e) => e instanceof UsageError && e.message.includes(path.dirname(above)) && /b is missing from/.test(e.message));
+  const nowhere = importOptional({ name: 'voice', pkg: 'a', hint: 'HINT', root: '/r', importer, readFile, exists: (p) => p === inside('a') });
+  await assert.rejects(() => nowhere, (e) => e instanceof UsageError && e.message === 'HINT');
+});
+
+test('importOptional: an unreadable package.json is an error that names the file, not a silent skip of the check', async () => {
+  const readFile = () => { throw new Error('ENOENT: no such file'); };
+  await assert.rejects(
+    () => importOptional({ name: 'voice', pkg: 'kokoro-js', hint: 'HINT', root: '/r', importer: async () => ({}), exists: () => true, readFile }),
+    (e) => !(e instanceof UsageError) && e.message.includes(path.join('/r', 'voice', 'package.json')),
+  );
+});
+
 test('importOptional: ERR_MODULE_NOT_FOUND naming the package is the hint; any other failure passes through', async () => {
-  const call = (importer) => importOptional({ name: 'voice', pkg: 'kokoro-js', hint: 'HINT', root: '/r', importer, exists: () => true });
+  const readFile = manifestOf({ 'kokoro-js': '1.2.1' });
+  const call = (importer) => importOptional({ name: 'voice', pkg: 'kokoro-js', hint: 'HINT', root: '/r', importer, exists: () => true, readFile });
   await assert.rejects(() => call(async () => { throw notFound('kokoro-js'); }), (e) => e instanceof UsageError && e.message === 'HINT');
   await assert.rejects(() => call(async () => { throw notFound('sharp'); }), (e) => !(e instanceof UsageError) && /sharp/.test(e.message));
   await assert.rejects(() => call(async () => { throw new Error('boom'); }), /boom/);

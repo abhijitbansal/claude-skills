@@ -377,7 +377,10 @@ function staleOverrides(ctx, scope = 'all', dir = ctx.skillDir) {
 // `npm ci` in the skill folder leaves them alone, and installing one never removes the other.
 export const OPTIONAL = { kokoro: { dir: 'voice', pkg: 'kokoro-js' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } };
 
-export const optionalInstallArgv = (ctx, id) => ['npm', 'ci', '--prefix', pp(ctx).join(ctx.skillDir, 'optional', OPTIONAL[id].dir)];
+// --ignore-scripts: the locked onnxruntime-node (1.21.0 under kokoro-js, 1.31.1 for cutout) has a postinstall that, on Linux x64
+// only, downloads CUDA provider libraries (a GitHub release, then NuGet) with no hash. The CPU binaries ship in the npm tarball,
+// which the lockfile's integrity covers, and neither skill uses a GPU.
+export const optionalInstallArgv = (ctx, id) => ['npm', 'ci', '--ignore-scripts', '--prefix', pp(ctx).join(ctx.skillDir, 'optional', OPTIONAL[id].dir)];
 
 // Names in { ...dependencies, ...overrides } of <dir>/package.json whose installed version is present and differs from an
 // exact pin. An install made before a pin landed keeps the old version until `npm ci` reruns. Unreadable files count as not stale.
@@ -466,7 +469,7 @@ export function builderAgent() {
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
     check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
     // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
-    // exists (user level; an existing file is kept). That works for an `npx skills add` install,
+    // exists (user level; an existing file is kept). That works for an install made with the skills CLI,
     // which has no bin/. The manual line offers that same writer first, then the installer (project-level install).
     // The program is this process's own Node, not "node" from PATH: it may not be on PATH, and on Windows
     // cmd.exe would look in the current (project) folder first.

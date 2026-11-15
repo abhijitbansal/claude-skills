@@ -1,5 +1,5 @@
 // Voiceover synthesis with Kokoro (kokoro-js, Apache-2.0), run locally on the CPU.
-// kokoro-js is installed on demand (`doctor --fix kokoro`: npm ci from optional/voice's lockfile, ~250 MB), never by the
+// kokoro-js is installed on demand (`doctor --fix kokoro`: a locked install of optional/voice with install scripts skipped, ~250 MB), never by the
 // skill's own `npm ci`, and loaded from that folder (optional.mjs).
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -122,10 +122,12 @@ export async function ensureKokoroModel({ dir = KOKORO_DIR, base = KOKORO_BASE_U
   return dir;
 }
 
-// Points transformers.js at the verified folder and turns off remote loading and its file cache, so only bytes that
-// ensureKokoroModel checked can reach the model (getModelFile tries the FS cache, then localModelPath, then remote).
-// The folder survives `npm ci`, which wipes node_modules.
-export function loadModel(kokoro, { root = MODEL_CACHE_DIR } = {}) {
+// Verifies the model files (ensureKokoroModel, downloading what is absent or damaged), then points transformers.js at that
+// folder and turns off remote loading and its file cache, so only bytes that were just checked can reach the model
+// (getModelFile tries the FS cache, then localModelPath, then remote). There is no way to load the model without the check.
+// `download` ({ base, files, fetchImpl, log }) is passed to ensureKokoroModel. The folder survives `npm ci`, which wipes node_modules.
+export async function loadModel(kokoro, { root = MODEL_CACHE_DIR, ...download } = {}) {
+  await ensureKokoroModel({ dir: path.join(root, MODEL_ID), ...download });
   const { env } = kokoro;
   env.localModelPath = root;
   env.allowLocalModels = true;

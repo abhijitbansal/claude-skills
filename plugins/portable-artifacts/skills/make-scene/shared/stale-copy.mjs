@@ -2,7 +2,7 @@
 // The incident shape: a session runs ~/.claude/plugins/cache/<marketplace>/portable-artifacts/<old>/skills/<skill>/scripts/…
 // while ~/.claude/plugins/installed_plugins.json points at a newer folder, so the page comes out of the old code
 // (or the old copy has no node_modules). The check compares paths only: silent outside the plugin cache (a repo
-// checkout, `npx skills add`), and silent whenever installed_plugins.json is missing, unreadable or has no usable entry.
+// checkout, the skills CLI), and silent whenever installed_plugins.json is missing, unreadable or has no usable entry.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

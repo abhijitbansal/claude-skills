@@ -162,7 +162,7 @@ test('loadOnnx turns a missing onnxruntime-node into a UsageError that carries t
   const missing = async () => { throw Object.assign(new Error("Cannot find package 'onnxruntime-node' imported from x"), { code: 'ERR_MODULE_NOT_FOUND' }); };
   const exists = () => true;
   await assert.rejects(() => loadOnnx({ importer: missing, exists }), (e) => e instanceof UsageError && e.message === INSTALL_HINT);
-  assert.match(INSTALL_HINT, /npm ci --prefix \S*optional[\\/]cutout/);
+  assert.match(INSTALL_HINT, /npm ci --ignore-scripts --prefix \S*optional[\\/]cutout/);
   assert.doesNotMatch(INSTALL_HINT, /npm install/);
   assert.match(INSTALL_HINT, /doctor\.mjs.* --for cutout, id cutout\)/);
   assert.match(INSTALL_HINT, /25 MB/);

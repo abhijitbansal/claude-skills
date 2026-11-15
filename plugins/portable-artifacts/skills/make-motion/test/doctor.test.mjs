@@ -104,7 +104,7 @@ test('--for cutout asks for onnxruntime-node (optional, so exit 0), plain and th
   assert.equal(ids([]).includes('cutout'), false);
   const fresh = JSON.parse(run(freshCopy(), ['--json', '--for', 'cutout']).stdout).missing.find((m) => m.id === 'cutout');
   assert.ok(fresh, 'a copy with no node_modules reports cutout missing');
-  assert.match(fresh.fix.auto, /npm ci --prefix \S+optional\/cutout$/);
+  assert.match(fresh.fix.auto, /npm ci --ignore-scripts --prefix \S+optional\/cutout$/);
   assert.match(fresh.why, /MODNet/);
 });
 
@@ -113,7 +113,7 @@ test('install hints name the doctor with its real path and the missing item id',
   const doctor = quoteArg(path.join(SKILL, 'scripts/doctor.mjs'));
   const { INSTALL_HINT } = await lib('voice.mjs');
   assert.ok(INSTALL_HINT.includes(`node ${doctor} --for voiceover, id kokoro)`), INSTALL_HINT);
-  assert.ok(INSTALL_HINT.includes(`npm ci --prefix ${quoteArg(path.join(SKILL, 'optional', 'voice'))}`), INSTALL_HINT);
+  assert.ok(INSTALL_HINT.includes(`npm ci --ignore-scripts --prefix ${quoteArg(path.join(SKILL, 'optional', 'voice'))}`), INSTALL_HINT);
   assert.doesNotMatch(INSTALL_HINT, /<skill-dir>/);
   const { findFfmpeg } = await lib('ffmpeg.mjs');
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };

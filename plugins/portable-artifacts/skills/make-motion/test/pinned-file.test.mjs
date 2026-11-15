@@ -66,5 +66,28 @@ test('logs one line before a download and none when the file is already good', a
   const o = { ...opts(dir, answer(BYTES)), log: (l) => lines.push(l) };
   await ensurePinnedFile(o);
   await ensurePinnedFile(o);
-  assert.deepEqual(lines, ['downloading the test file (0 MB, once) from https://example.invalid/f.bin']);
+  assert.deepEqual(lines, ['downloading the test file (1 KB, once) from https://example.invalid/f.bin']);
+});
+
+test('the size in the log line is KB under 1 MB and MB from there up', async () => {
+  const sizes = async (bytes) => {
+    const lines = [];
+    await ensurePinnedFile({ ...opts(tmp('pinned-file-'), answer(BYTES)), bytes, log: (l) => lines.push(l) });
+    return /\((.*?), once\)/.exec(lines[0])[1];
+  };
+  assert.equal(await sizes(44), '1 KB');
+  assert.equal(await sizes(500_000), '500 KB');
+  assert.equal(await sizes(25_888_640), '26 MB');
+});
+
+test('a response with no body is a labelled error, and nothing is kept', async () => {
+  const dir = tmp('pinned-file-');
+  const o = opts(dir, async () => new Response(null, { status: 200 }));
+  await assert.rejects(() => ensurePinnedFile(o), /test file download failed: the response from https:\/\/example\.invalid\/f\.bin has no body; rerun later/);
+  assert.equal(existsSync(o.file), false);
+});
+
+test('the partial file is created exclusively, so a planted file or link at that name is never written through', () => {
+  const source = readFileSync(new URL('../scripts/lib/pinned-file.mjs', import.meta.url), 'utf8');
+  assert.match(source, /writeFileSync\(partial, body, \{ flag: 'wx' \}\)/);
 });

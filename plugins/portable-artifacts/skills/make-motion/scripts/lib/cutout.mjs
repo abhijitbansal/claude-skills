@@ -1,5 +1,5 @@
 // Cutouts: a person lifted out of a photo or a clip with MODNet (Apache-2.0) on onnxruntime-node (MIT), run locally on the CPU.
-// onnxruntime-node is installed on demand (`doctor --fix cutout`: npm ci from optional/cutout's lockfile), never by the skill's
+// onnxruntime-node is installed on demand (`doctor --fix cutout`: a locked install of optional/cutout with install scripts skipped), never by the skill's
 // own `npm ci`, and loaded from that folder (optional.mjs); the weights download once, on first use,
 // into <skill>/.cache/models/modnet/ and are checked against MODEL_SHA256 before every use. The image is decoded, shrunk,
 // enlarged and re-encoded on a Playwright page canvas (no sharp); only the matte comes from the model.
