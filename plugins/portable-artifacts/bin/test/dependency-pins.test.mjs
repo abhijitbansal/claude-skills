@@ -14,7 +14,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const PLUGIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const REPO = path.resolve(PLUGIN, '../..');
@@ -308,6 +308,32 @@ export function downloadViolations(source, where) {
   return found;
 }
 
+const HUGGING_FACE_URL = /https?:\/\/huggingface\.co[^\s'"`)<>]*/g;
+const RESOLVE_COMMIT = /\/resolve\/[0-9a-f]{40}\//;
+const HEX_64 = /^[0-9a-f]{64}$/;
+
+/** Every huggingface.co URL literal names a 40-hex commit right after /resolve/ (never a branch such as main). */
+export const huggingFaceCommitViolations = (source, where) => [...source.matchAll(HUGGING_FACE_URL)]
+  .filter((m) => !RESOLVE_COMMIT.test(m[0]))
+  .map((m) => `${where}: ${m[0]} (a Hugging Face URL with no 40-hex commit after /resolve/)`);
+
+/**
+ * A pinned model table (`{ id, commit, base, files: [{ path, bytes, sha256 }] }`): a 40-hex commit that its base URL ends with, and for
+ * every file a path, a positive integer byte count and a 64-hex SHA-256.
+ */
+export function voiceModelViolations(model, where) {
+  const found = [];
+  if (!COMMIT.test(model.commit ?? '')) found.push(`${where}: commit ${model.commit} is not 40 hex`);
+  if (!String(model.base ?? '').endsWith(`/resolve/${model.commit}/`)) found.push(`${where}: base ${model.base} does not end with /resolve/<commit>/`);
+  if (!Array.isArray(model.files) || model.files.length === 0) found.push(`${where}: no files`);
+  for (const file of model.files ?? []) {
+    if (typeof file.path !== 'string' || file.path === '') found.push(`${where}: a file with no path`);
+    if (!Number.isInteger(file.bytes) || file.bytes <= 0) found.push(`${where}: ${file.path} has no byte count`);
+    if (!HEX_64.test(file.sha256 ?? '')) found.push(`${where}: ${file.path} has no 64-hex sha256`);
+  }
+  return found;
+}
+
 const NETWORK_CALL = /\bfetch\s*\(|\bhttps?\s*\.\s*(?:get|request)\s*\(/g;
 const BUILT_URL = /['"`](https?:\/\/([^/'"`$\s]+)[^'"`\n]*?)(?:\$\{|['"`]\s*\+)/g;
 
@@ -363,6 +389,8 @@ const code = [
 const binCode = filesIn(path.join(PLUGIN, 'bin'), (name) => /\.(?:mjs|js|cjs)$/.test(name)); // downloads only: the installer is not an install command
 const PINNED_FILE = path.join(SKILLS, 'make-motion', 'scripts', 'lib', 'pinned-file.mjs');
 const motionScripts = walk(path.join(SKILLS, 'make-motion', 'scripts'), isScript);
+const voiceCode = walk(path.join(SKILLS, 'make-motion', 'scripts', 'v2', 'voice'), isScript);
+const { VOICE_MODEL } = await import(pathToFileURL(path.join(SKILLS, 'make-motion', 'scripts', 'v2', 'voice', 'model.mjs')).href);
 
 // An HTML page's commands sit inside tags and entities: scan what a reader sees, with <code> shown as backticks.
 const ENTITIES = { '&lt;': '<', '&gt;': '>', '&amp;': '&', '&quot;': '"', '&#39;': "'" };
@@ -422,10 +450,17 @@ test('every model or binary download is pinned and has a sha256 after it, and no
   assert.deepEqual([...collect(code, downloadViolations), ...collect(binCode, downloadViolations), ...collect(code, urlBuildViolations)], []);
 });
 
-test('make-motion makes no network call outside pinned-file.mjs, and ensurePinnedFile has only its two reviewed callers', () => {
+test('make-motion makes no network call outside pinned-file.mjs, and ensurePinnedFile has only its three reviewed callers', () => {
   assert.deepEqual(collect(motionScripts.filter((file) => file !== PINNED_FILE), networkCallViolations), []);
   const callers = motionScripts.filter((file) => file !== PINNED_FILE && fs.readFileSync(file, 'utf8').includes('ensurePinnedFile(')).map((file) => path.basename(file));
-  assert.deepEqual(callers.sort(), ['cutout.mjs', 'voice.mjs'], 'a new caller needs a review of its URL table and its hashes');
+  // model.mjs (scripts/v2/voice) was reviewed with the timestamped Kokoro pin: one commit, a byte count and a SHA-256 per file.
+  assert.deepEqual(callers.sort(), ['cutout.mjs', 'model.mjs', 'voice.mjs'], 'a new caller needs a review of its URL table and its hashes');
+});
+
+test('every Hugging Face URL under scripts/v2/voice names a 40-hex commit, and every pinned voice file has a byte count and a 64-hex SHA-256', () => {
+  assert.ok(voiceCode.map(rel).includes('plugins/portable-artifacts/skills/make-motion/scripts/v2/voice/model.mjs'), `voice code: ${voiceCode.map(rel).join(', ')}`);
+  assert.deepEqual(collect(voiceCode, huggingFaceCommitViolations), []);
+  assert.deepEqual(voiceModelViolations(VOICE_MODEL, 'VOICE_MODEL'), []);
 });
 
 // ---- guardrail proofs: each checker fires on a bad fixture ---------------------------------------------------------------
@@ -557,4 +592,26 @@ test('guardrail proof: networkCallViolations and urlBuildViolations catch a dire
   assert.equal(built('url: `${base}${file}`'), 0, 'a table entry passed through ensurePinnedFile');
   assert.equal(built("const u = 'https://huggingface.co/o/m/resolve/" + 'a'.repeat(40) + "/f.bin';"), 0, 'a whole literal');
   assert.equal(built('const local = `http://127.0.0.1:${port}/x`;'), 0, 'not a download host');
+});
+
+test('guardrail proof: huggingFaceCommitViolations flags a branch, a short or missing commit and a non-resolve URL; voiceModelViolations flags a bad commit, base, byte count and hash', () => {
+  const commit = 'a'.repeat(40);
+  const count = (source) => huggingFaceCommitViolations(source, 'x').length;
+  assert.equal(count(`const B = 'https://huggingface.co/o/m/resolve/${commit}/';`), 0, 'a 40-hex commit');
+  assert.equal(count("const B = 'https://huggingface.co/o/m/resolve/main/';"), 1, 'a branch');
+  assert.equal(count(`const B = 'https://huggingface.co/o/m/resolve/${'a'.repeat(39)}/';`), 1, 'a short commit');
+  assert.equal(count(`const B = 'https://huggingface.co/o/m/resolve/${'A'.repeat(40)}/';`), 1, 'upper case is not the pinned form');
+  assert.equal(count(`const B = 'https://huggingface.co/o/m/blob/${commit}/f.bin';`), 1, 'a page URL, not /resolve/');
+  assert.equal(count("const B = 'https://huggingface.co/o/m';"), 1, 'no ref at all');
+  assert.equal(count("// see https://example.com/resolve/main/f"), 0, 'another host');
+  const good = { commit, base: `https://huggingface.co/o/m/resolve/${commit}/`, files: [{ path: 'f.bin', bytes: 10, sha256: 'b'.repeat(64) }] };
+  assert.deepEqual(voiceModelViolations(good, 'm'), []);
+  const bad = (change) => voiceModelViolations({ ...good, ...change }, 'm').length;
+  assert.equal(bad({ commit: 'main' }), 2, 'a branch as the commit, and a base that no longer ends with it');
+  assert.equal(bad({ base: 'https://huggingface.co/o/m/resolve/main/' }), 1);
+  assert.equal(bad({ files: [] }), 1, 'no files');
+  assert.equal(bad({ files: [{ path: 'f.bin', sha256: 'b'.repeat(64) }] }), 1, 'no byte count');
+  assert.equal(bad({ files: [{ path: 'f.bin', bytes: 0, sha256: 'b'.repeat(64) }] }), 1, 'a zero byte count');
+  assert.equal(bad({ files: [{ path: 'f.bin', bytes: 10, sha256: 'b'.repeat(63) }] }), 1, 'a short hash');
+  assert.equal(bad({ files: [{ path: 'f.bin', bytes: 10 }] }), 1, 'no hash');
 });

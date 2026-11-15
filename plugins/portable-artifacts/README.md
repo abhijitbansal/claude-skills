@@ -321,6 +321,8 @@ Everything this plugin depends on is open source:
 | [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js` 1.2.1, installed on demand into `optional/voice` from its lockfile) | Apache-2.0 |
 | [MODNet](https://github.com/ZHKKKe/MODNet) portrait matting weights (about 25 MB, downloaded on first use of `cutout.mjs` from Hugging Face `Xenova/modnet`, pinned to one commit and a SHA-256) | Apache-2.0 |
 | Kokoro-82M ONNX weights (about 90 MB, downloaded on first voiceover from Hugging Face onnx-community/Kokoro-82M-v1.0-ONNX, pinned to one commit and a SHA-256 per file) | Apache-2.0 |
+| Kokoro-82M ONNX timestamped weights and the `af_heart` voice file (about 93 MB, downloaded on first version 2 voiceover from Hugging Face onnx-community/Kokoro-82M-v1.0-ONNX-timestamped, pinned to one commit and a SHA-256 per file; word times are read from the model) | Apache-2.0 |
+| [eSpeak NG](https://github.com/espeak-ng/espeak-ng) through [`phonemizer`](https://www.npmjs.com/package/phonemizer) 1.2.1 (turns narration text into phonemes for the version 2 voiceover; installed on demand into `optional/voice` from its lockfile, never redistributed with this plugin) | GPL-3.0-or-later for eSpeak NG, by our reading of upstream; `phonemizer` itself declares Apache-2.0 |
 | [onnxruntime-node](https://github.com/microsoft/onnxruntime) 1.31.1 (installed on demand into `optional/cutout` from its lockfile, runs MODNet) | MIT |
 
 Not used, by design: Remotion and GSAP (free to use, but not under OSI
