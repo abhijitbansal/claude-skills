@@ -229,3 +229,43 @@ def test_wire_dry_run_exits_clean_and_writes_nothing(tmp_path):
     out = buf.getvalue()
     assert "Backup path:" in out
     assert "DRY RUN" in out
+
+
+def _stale_shim(home):
+    shim = home / ".claude" / "prompt-craft" / "statusline.sh"
+    shim.write_text("#!/usr/bin/env bash\n# OLD-SHIM-LEXICAL-GLOB\n")
+    return shim
+
+
+def test_rewire_refreshes_an_outdated_shim_without_touching_settings(tmp_path):
+    """An already-wired install keeps the old shim unless wire() refreshes it."""
+    home = _home(tmp_path, json.dumps({"statusLine": {"type": "command", "command": "echo BASE"}}))
+    ws.wire(home, str(PLUGIN))
+    shim = _stale_shim(home)
+    settings_before = (home / ".claude" / "settings.json").read_text()
+    backups_before = sorted((home / ".claude").glob("settings.json.bak.*"))
+
+    r = ws.wire(home, str(PLUGIN))
+
+    assert r["wired"] is False
+    assert r["shim_refreshed"] is True
+    assert "OLD-SHIM-LEXICAL-GLOB" not in shim.read_text()
+    assert shim.read_text() == (PLUGIN / "hooks" / "statusline_shim.sh").read_text()
+    assert os.stat(shim).st_mode & 0o777 == 0o755
+    assert (home / ".claude" / "settings.json").read_text() == settings_before
+    assert sorted((home / ".claude").glob("settings.json.bak.*")) == backups_before
+
+
+def test_rewire_with_current_shim_reports_no_refresh(tmp_path):
+    home = _home(tmp_path, json.dumps({}))
+    ws.wire(home, str(PLUGIN))
+    assert ws.wire(home, str(PLUGIN))["shim_refreshed"] is False
+
+
+def test_rewire_dry_run_leaves_an_outdated_shim_alone(tmp_path):
+    home = _home(tmp_path, json.dumps({}))
+    ws.wire(home, str(PLUGIN))
+    shim = _stale_shim(home)
+    r = ws.wire(home, str(PLUGIN), dry_run=True)
+    assert r["shim_refreshed"] is False
+    assert "OLD-SHIM-LEXICAL-GLOB" in shim.read_text()

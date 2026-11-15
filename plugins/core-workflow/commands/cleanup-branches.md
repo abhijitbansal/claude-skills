@@ -25,9 +25,16 @@ Run each as its own plain command, from the repo root:
    branches.
 4. `git worktree list --porcelain` — every worktree and the branch it holds.
 5. `git branch --merged origin/<base>` — branches fully merged by ancestry.
-6. `gh pr list --state merged --limit 200 --json number,headRefName,mergedAt`
+6. `gh pr list --state merged --limit 200 --json number,headRefName,headRefOid,mergedAt`
    — branches whose PR merged. This is the proof for squash and rebase merges,
-   which ancestry cannot see.
+   which ancestry cannot see. A matching branch name alone is not proof: a
+   name can be reused, or take new commits after its PR merged. Count it as
+   `squash PR #N` only when the tip of that copy of the branch (local
+   `git rev-parse <branch>`, remote `git rev-parse origin/<branch>`) equals the
+   PR's `headRefOid`, or when `git log --after=<mergedAt> --oneline
+   origin/<base>..<branch>` (swap in `origin/<branch>` for the remote copy) is
+   empty. If neither holds, that copy has commits the PR never merged: the proof
+   is `NONE`. Judge the local and remote copies separately.
 7. For a branch with no merged PR and no ancestry proof,
    `git diff --stat origin/<base> <branch>`. An empty diff means its content is
    already in the base. Anything else is unmerged work.
@@ -35,7 +42,8 @@ Run each as its own plain command, from the repo root:
 ## Step 2 — One table
 
 Print a single table, one row per branch, columns: `branch`, `where` (local,
-remote, both), `proof` (`ancestor`, `squash PR #N`, `empty diff`, or `NONE`),
+remote, both), `proof` (`ancestor`, `squash PR #N` with the tip check from Step 1.6 passed,
+`empty diff`, or `NONE`),
 `worktree` (path or `-`), `last commit`. Sort `NONE` rows last.
 
 Mark each row **eligible** only if the proof is not `NONE` and all of these hold:

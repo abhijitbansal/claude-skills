@@ -9,6 +9,15 @@
 # the tool result; an `if` filter only sees the tool input, so the match is done
 # here on the payload read from stdin.
 #
+# UNVERIFIED in a live session: only the xcode-license row (a real non-zero exit
+# of a command that ran) is sure to reach this hook. The Blast Radius and
+# worktree-guard rows come from a PreToolUse hold or deny, so the Bash tool never
+# runs and neither PostToolUse nor PostToolUseFailure is expected to fire. Those
+# two rows stay as cheap insurance until one live session shows the hint after a
+# hold or refusal; if none does, move them to a hook event that sees denials or
+# drop them. The bats cases feed the payload directly and prove the matching
+# only, not the event delivery.
+#
 # Suppression: when the command text itself contains the matched string (a grep
 # or cat over a skill file), the hit is a quote, not a symptom, and stays silent.
 set -uo pipefail

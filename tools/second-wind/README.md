@@ -246,12 +246,17 @@ New keys vs earlier versions: `agent` (top-level + per-repo) and inline
 ## How limit detection works
 
 The watcher captures the tail of each pane and scans it against a list of
-regexes. Built-in patterns cover the formats Claude Code currently emits:
+regexes. Built-in patterns cover these wordings:
 
 - `Claude AI usage limit reached|<unix-epoch>` (headless/print mode)
 - `5-hour limit reached ∙ resets 3am` (interactive UI)
-- `You've hit your session limit · resets 3:45pm` (also `usage` / `weekly`)
+- `You've hit your session limit · resets 3:45pm`. This wording is copied from
+  a Claude Code transcript, not a captured tmux pane. The `usage` and `weekly`
+  variants are inferred from it and unconfirmed.
 - `You've hit your usage limit… resets at 8pm` / `usage limit reached… try again at 6:15pm`
+
+The tests use these strings as written, not real captured panes. Compare them
+with a real limit pane before relying on them.
 
 The bare words "usage limit" are not enough to match: prose that only
 mentions a limit does not pause a session. Dated resets (for example

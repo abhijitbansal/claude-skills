@@ -83,6 +83,18 @@ test('pattern uses the schema description when it has one', () => {
   assert.deepEqual(format(bare), [{ path: 'generatedBy.model', message: 'must match pattern "^x$"' }]);
 });
 
+test('a meaning-style description on an unanchored pattern is not read as a character set', () => {
+  // NON_SPACE ('\\S') only checks that some visible character exists; "the page heading" is what the field is for.
+  const err = { keyword: 'pattern', instancePath: '/title', params: { pattern: '\\S' }, message: 'must match pattern "\\S"', parentSchema: { type: 'string', pattern: '\\S', description: 'the page heading' } };
+  assert.deepEqual(format(err), [{ path: 'title', message: 'must match pattern "\\S"' }]);
+});
+
+test('required on a character-set field says what it may contain, not what it means', () => {
+  const props = { model: { type: 'string', pattern: '^[a-z]+$', description: 'letters a to z' }, title: { type: 'string', description: 'the page heading' } };
+  assert.equal(format(missing('', 'model', props))[0].message, 'required (string containing only letters a to z)');
+  assert.equal(format(missing('', 'title', props))[0].message, 'required (string): the page heading', 'a meaning description keeps its wording');
+});
+
 test('the provenance field schema carries a description that reads as a sentence', () => {
   const field = GENERATED_BY_SCHEMA.properties.model;
   assert.match(field.description, /letters, digits, spaces/);

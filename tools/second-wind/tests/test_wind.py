@@ -3432,7 +3432,8 @@ class WatcherStaleMessageAndState(unittest.TestCase):
                                   self.statef + ".legacy"), \
                 mock.patch.object(wind, "session_exists", lambda n: True), \
                 mock.patch.object(wind, "capture_pane",
-                                  lambda n, l: pane_text), \
+                                  lambda n, l: pane_text()
+                                  if callable(pane_text) else pane_text), \
                 mock.patch.object(wind, "send_text",
                                   lambda n, t: self.sent.append((n, t))), \
                 mock.patch.object(wind, "notify", lambda *a, **k: None), \
@@ -3442,6 +3443,54 @@ class WatcherStaleMessageAndState(unittest.TestCase):
     def _read_state(self):
         with open(self.statef) as f:
             return json.load(f)
+
+    # The same clock-time line carries no date, so a lingering message and a
+    # new one on the next day hash alike. What tells them apart is whether
+    # the line left the pane or another copy appeared below it.
+    TIME_LINE = "You've hit your session limit · resets 3pm"
+
+    def _seed_handled(self, **extra):
+        digest = wind.find_limit(self.TIME_LINE, PATTERNS)[1]
+        entry = {"hash": digest, "until": time.time() + 3600, **extra}
+        with open(self.statef, "w") as f:
+            json.dump({"handled": {"wind-x": entry}}, f)
+
+    def test_next_day_repeat_after_line_left_the_pane_is_a_new_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled()
+            pane = {"text": "working...\nall quiet"}
+            self._run(lambda: pane["text"],
+                      [lambda: pane.update(text=self.TIME_LINE)])
+            state = self._read_state()
+            self.assertEqual(state.get("paused"), ["wind-x"],
+                             "line vanished then returned: a new limit")
+            self.assertEqual(state["handled"]["wind-x"]["n"], 1)
+
+    def test_lingering_handled_line_stays_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled()
+            self._run(self.TIME_LINE, [lambda: None, lambda: None])
+            state = self._read_state()
+            self.assertNotIn("paused", state)
+            self.assertIn("wind-x", state["handled"])
+
+    def test_second_copy_of_handled_line_is_a_new_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled(n=1)
+            text = f"{self.TIME_LINE}\nresumed, working...\n{self.TIME_LINE}"
+            self._run(text, [])
+            self.assertEqual(self._read_state().get("paused"), ["wind-x"])
+            self.assertEqual(self._read_state()["handled"]["wind-x"]["n"], 2)
+
+    def test_limit_digests_counts_each_copy_once(self):
+        text = f"{self.TIME_LINE}\nx\n{self.TIME_LINE}"
+        digests = wind.limit_digests(text, PATTERNS)
+        self.assertEqual(len(digests), 2)
+        self.assertEqual(digests[0], digests[1])
+        self.assertEqual(wind.limit_digests("all quiet", PATTERNS), [])
 
     def test_find_limit_returns_stable_digest_of_matched_message(self):
         a = wind.find_limit("noise\nYou've hit your session limit · resets 3pm",

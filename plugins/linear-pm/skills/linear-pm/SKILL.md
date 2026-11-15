@@ -32,7 +32,7 @@ Uses Linear's built-in workflow — no custom states required.
 - `In Progress` — agent or human is working
 - `In Review` — PR open, awaiting review
 - `Done` — PR merged (set manually for now)
-- `Cancelled` — won't do
+- `Canceled` — won't do (Linear's default spelling; some workspaces use `Cancelled`)
 
 ## Branch naming
 

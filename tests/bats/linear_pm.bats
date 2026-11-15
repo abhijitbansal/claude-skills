@@ -199,6 +199,14 @@ init_repo() {  # $1 = dir
   grep -q 'parse-issue-key.sh" "\$BRANCH" "\$LINEAR_PM_TEAM"' "$f"
 }
 
+@test "linear-sync Done guard covers both Canceled spellings and the completed or canceled status type" {
+  local f="${REPO_ROOT}/plugins/linear-pm/commands/linear-sync.md"
+  grep -q "Canceled" "$f"
+  grep -q "Cancelled" "$f"
+  grep -qi "status type" "$f"
+  grep -q "completed" "$f"
+}
+
 @test "linear-pm skill documents the MCP tool availability check and the 50-char slug" {
   local f="${REPO_ROOT}/plugins/linear-pm/skills/linear-pm/SKILL.md"
   grep -q "Linear MCP tools" "$f"

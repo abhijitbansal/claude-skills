@@ -32,15 +32,28 @@ PATTERNS = {
     "github-token": r"\bgh[pousr]_[A-Za-z0-9]{36,}",
     "github-pat": r"\bgithub_pat_[A-Za-z0-9_]{22,}",
     "anthropic-key": r"\bsk-ant-[A-Za-z0-9_-]{20,}",
-    "api-key": r"\bsk-[A-Za-z0-9]{32,}",
+    "api-key": r"\bsk-[A-Za-z0-9_-]{32,}",
     "slack-token": r"\bxox[abprs]-[A-Za-z0-9-]{10,}",
     "aws-access-key": r"\bAKIA[0-9A-Z]{16}\b",
     "private-key": r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+    "bearer-token": r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]{16,}",
+    "url-credentials": r"://[^/\s:@]+:[^@\s/]+@",
 }
 # Key names that end like a secret (GITHUB_TOKEN, authToken, ANTHROPIC_API_KEY);
 # a suffix match keeps counts such as MAX_THINKING_TOKENS out.
-SECRET_KEY_NAME = re.compile(r"(?i)(token|secret|passw(or)?d|api[_-]?key|credentials?)$")
+SECRET_KEY_NAME = re.compile(
+    r"(?i)(token|secret|passw(or)?d|(api|access|private|secret)[_-]?key|credentials?)$")
+# Looser suffixes (OPENAI_KEY, GITHUB_PAT, SERVICE_AUTH) also match harmless
+# names, so they only count when the value looks like a credential: one
+# unbroken run of 12+ characters that is not a variable reference or a path.
+LOOSE_SECRET_KEY_NAME = re.compile(r"(?i)(key|pat|auth|authorization)$")
+CREDENTIAL_LIKE_VALUE = re.compile(r"^[^\s$/\\]{12,}$")
 hits = []
+
+def is_secret_key(name, value):
+    if SECRET_KEY_NAME.search(name):
+        return True
+    return bool(LOOSE_SECRET_KEY_NAME.search(name) and CREDENTIAL_LIKE_VALUE.match(value))
 
 def scan_text(where, text):
     for name, pat in PATTERNS.items():
@@ -51,7 +64,7 @@ def scan_tree(label, node, path=""):
     if isinstance(node, dict):
         for k, v in node.items():
             p = f"{path}.{k}" if path else k
-            if isinstance(v, str) and v and SECRET_KEY_NAME.search(k):
+            if isinstance(v, str) and v and is_secret_key(k, v):
                 hits.append(f"{label} {p} (secret-like key name)")
             scan_tree(label, v, p)
     elif isinstance(node, list):

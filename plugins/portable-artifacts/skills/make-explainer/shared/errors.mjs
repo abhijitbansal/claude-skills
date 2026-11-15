@@ -71,10 +71,16 @@ function expectedType(schema) {
   return items ? `array of ${items}` : types.join(' or ');
 }
 
+// A whole-string pattern (^...$) lists the characters a value may hold, so the schema's description of such a
+// field is a character set. An unanchored pattern (such as '\\S') is only a presence test, and its description
+// says what the field is for.
+const isWholeStringPattern = (p) => typeof p === 'string' && p.startsWith('^') && p.endsWith('$');
+
 // "required" stays the leading word; the type and the schema's own description say what to put there.
 function requiredMessage(schema) {
   const type = expectedType(schema);
   const description = typeof schema?.description === 'string' ? schema.description.trim() : '';
+  if (description && isWholeStringPattern(schema?.pattern)) return `required (${type ?? 'value'} containing only ${description})`;
   return `required${type ? ` (${type})` : ''}${description ? `: ${description}` : ''}`;
 }
 
@@ -106,7 +112,8 @@ function formatOne(e) {
       return { path: pathJoin(path, e.params.missingProperty), message: requiredMessage(e.parentSchema?.properties?.[e.params.missingProperty]), isRequired: true };
     case 'pattern': {
       const description = e.parentSchema?.description;
-      return { path, message: typeof description === 'string' && description ? `must contain only ${description}` : (e.message ?? 'must match pattern') };
+      const isCharacterSet = typeof description === 'string' && description && isWholeStringPattern(e.params?.pattern ?? e.parentSchema?.pattern);
+      return { path, message: isCharacterSet ? `must contain only ${description}` : (e.message ?? 'must match pattern') };
     }
     case 'enum': {
       const allowed = e.params.allowedValues;

@@ -42,7 +42,7 @@ One line above the prompt: `repo · worktree (branch) · Goal · Now · N artifa
   Press an entry to copy it (URL for artifacts and PRs, path for files and documents,
   the commit sha as the Bash tool reports it, branch name for pushes).
 - **All sessions** tab: the other recorded sessions, most recently active first, up to
-  50. Press a row to copy `claude --resume <id>`.
+  50. Press a row to copy `cd <worktree> && claude --resume <id>`.
 
 ### `compass_status` tool
 

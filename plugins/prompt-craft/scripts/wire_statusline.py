@@ -106,24 +106,45 @@ def _is_self_reference(command, home):
     return str(_shim_path(home)) in command
 
 
+def _refresh_shim(home, plugin_root):
+    # type: (object, str) -> bool
+    """Overwrite the installed shim with the plugin template when they differ.
+    True if the file changed; a missing template or shim is left alone."""
+    template = _shim_template(plugin_root)
+    shim = _shim_path(home)
+    if not template.is_file() or not shim.is_file():
+        return False
+    if shim.read_bytes() == template.read_bytes():
+        return False
+    shutil.copyfile(str(template), str(shim))
+    os.chmod(str(shim), 0o755)
+    return True
+
+
 def wire(home, plugin_root, dry_run=False):
     # type: (object, str, bool) -> dict
     """Point settings.json statusLine.command at the shim, saving the prior command.
 
-    Returns {"before": str, "after": str, "wired": bool}.
-    wired=False means already wired (no-op) or dry_run.
+    Returns {"before": str, "after": str, "wired": bool, "shim_refreshed": bool}.
+    wired=False means already wired or dry_run; an already-wired install still
+    gets an outdated shim file refreshed (shim_refreshed=True).
     Raises ValueError if settings.json exists but is not valid JSON (aborts, no write).
     """
     settings = _load_settings(home)  # raises ValueError on bad JSON
     shim_cmd = _shim_command(home)
     current = _current_command(settings)  # raises ValueError on a bad shape
 
-    # Idempotency: detect already-wired BEFORE touching sidecar.
+    # Idempotency: detect already-wired BEFORE touching sidecar. settings.json
+    # and the sidecar stay untouched, but an outdated shim file is refreshed
+    # so fixes to the template reach installs that were wired earlier.
     if current == shim_cmd:
-        return {"before": current, "after": current, "wired": False}
+        refreshed = False if dry_run else _refresh_shim(home, plugin_root)
+        return {"before": current, "after": current, "wired": False,
+                "shim_refreshed": refreshed}
 
     if dry_run:
-        return {"before": current, "after": shim_cmd, "wired": False}
+        return {"before": current, "after": shim_cmd, "wired": False,
+                "shim_refreshed": False}
 
     _pc_dir(home).mkdir(parents=True, exist_ok=True)
     try:
@@ -150,7 +171,8 @@ def wire(home, plugin_root, dry_run=False):
     settings["statusLine"]["type"] = "command"
     settings["statusLine"]["command"] = shim_cmd
     atomic_write_json(sp, settings, mode=0o600, sort_keys=False)
-    return {"before": current, "after": shim_cmd, "wired": True}
+    return {"before": current, "after": shim_cmd, "wired": True,
+            "shim_refreshed": False}
 
 
 def unwire(home):
@@ -218,6 +240,8 @@ def main(argv=None):
             ptr = _backup_pointer(args.home)
             if ptr.exists():
                 print("backup: %s" % ptr.read_text().strip())
+        elif r["shim_refreshed"]:
+            print("(already wired — shim refreshed from the plugin template)")
         elif not args.dry_run:
             print("(already wired — no-op)")
         if args.dry_run:

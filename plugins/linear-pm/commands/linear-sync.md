@@ -32,7 +32,7 @@ Backfill Linear state for work started by hand.
    PR_URL=$(gh pr view "$BRANCH" --json url,state -q 'select(.state=="OPEN") | .url' 2>/dev/null || true)
    ```
 
-6. **Done guard (before any change).** If `ISSUE_STATUS` is `Done` or `Cancelled`, never move it back to In Progress or In Review. Stop, print "`<key>` is already `<status>`; not moving it backwards.", and only continue if the user explicitly confirms the move.
+6. **Done guard (before any change).** Treat the issue as finished when its status type is `completed` or `canceled` (use the type field from `get_issue` when it carries one), or when the status name, compared without case, is `Done`, `Canceled` or `Cancelled` (Linear's default is the US spelling `Canceled`; a workspace may rename these). If so, never move it back to In Progress or In Review. Stop, print "`<key>` is already `<status>`; not moving it backwards.", and only continue if the user explicitly confirms the move.
 
 7. **Determine desired state:**
    - OPEN PR exists → status `In Review`, comment `🤖 PR opened — $PR_URL` (only if no prior such comment for this PR).
@@ -49,7 +49,7 @@ Backfill Linear state for work started by hand.
 
 ## Side effects
 
-- May change Linear status (Todo → In Progress, or → In Review), but never out of Done or Cancelled without confirmation.
+- May change Linear status (Todo → In Progress, or → In Review), but never out of a finished status (Done, Canceled or Cancelled) without confirmation.
 - May post one comment.
 - May remove `agent-ready` label.
 - Never modifies code, never pushes.
@@ -61,6 +61,6 @@ Backfill Linear state for work started by hand.
 | On default branch | Stop, "nothing to sync". |
 | No issue key in branch | Stop with guidance. |
 | Issue in different project | Stop, point at config mismatch. |
-| Issue already Done or Cancelled | Stop, never move it backwards without confirmation. |
+| Issue already finished (Done, Canceled or Cancelled; status type `completed` or `canceled`) | Stop, never move it backwards without confirmation. |
 | Branch's PR is merged or closed | Treat as no open PR. |
 | Comment-grep can't decide if duplicate | Default to NOT posting (idempotency wins). |

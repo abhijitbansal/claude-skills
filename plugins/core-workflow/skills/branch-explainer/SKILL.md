@@ -14,8 +14,9 @@ evidence.
 ## Short answer first
 
 When the user asks "what was wrong", "how did we fix it" or "what did this
-branch do" in plain words, open the reply with three parts, before any tool
-call or action, and keep each to one or two sentences:
+branch do" in plain words, make the first thing in your reply three parts, and keep
+each to one or two sentences. Do the minimal reads that ground them first
+(`git log` and `git diff` for the branch); never answer from memory or a guess:
 
 1. **Symptom** — what the user saw, in their terms.
 2. **Root cause** — the mechanism, not the first suspicion.

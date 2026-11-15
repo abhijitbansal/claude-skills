@@ -38,7 +38,10 @@ link_skills() {
   done
   local d
   while IFS= read -r d; do
-    safe_symlink "${d}" "${dest}/$(basename "${d}")"
+    # A real dir from another installer (portable-artifacts, npx skills) is
+    # skipped with a warning; one collision must not stop the rest linking.
+    safe_symlink "${d}" "${dest}/$(basename "${d}")" \
+      || warn "skipped $(basename "${d}"): ${dest}/$(basename "${d}") is not ours"
   done < <(skill_dirs)
 }
 

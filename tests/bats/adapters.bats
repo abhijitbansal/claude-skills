@@ -41,6 +41,19 @@ teardown() { rm -rf "${TMP}"; }
   [ -L "${HOME}/.agents/skills/foreign" ]     # foreign link untouched
 }
 
+@test "codex mode warns and skips a real directory already in ~/.agents/skills" {
+  # portable-artifacts' installer (or npx skills) can leave a real dir with a
+  # repo skill's name; the rest of the skills must still link and exit 0.
+  mkdir -p "${HOME}/.codex" "${HOME}/.agents/skills/make-dashboard"
+  echo "other tool's copy" > "${HOME}/.agents/skills/make-dashboard/SKILL.md"
+  run bash "${INSTALL}" codex
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"make-dashboard"* ]] || false
+  [ -d "${HOME}/.agents/skills/make-dashboard" ] && [ ! -L "${HOME}/.agents/skills/make-dashboard" ]
+  grep -q "other tool's copy" "${HOME}/.agents/skills/make-dashboard/SKILL.md"
+  [ -L "${HOME}/.agents/skills/second-wind" ]   # sorts after the collision
+}
+
 @test "copilot mode honors COPILOT_SKILLS_DIR override" {
   export COPILOT_SKILLS_DIR="${TMP}/custom-skills"
   mkdir -p "${COPILOT_SKILLS_DIR}"

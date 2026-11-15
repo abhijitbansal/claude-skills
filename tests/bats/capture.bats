@@ -53,6 +53,49 @@ teardown() { rm -rf "${TMP}"; }
   grep -q MAX_THINKING_TOKENS "${CLAUDE_SKILLS_HOME}/templates/user-settings.json"
 }
 
+# Seed one env key and expect the capture to stop without writing or echoing it.
+expect_capture_stops_on_env() {
+  local name="$1" value="$2"
+  jq -n --arg n "${name}" --arg v "${value}" '{env: {($n): $v}}' > "${HOME}/.claude/settings.json"
+  run bash "${BATS_TEST_DIRNAME}/../../setup/capture.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"${name}"* ]] || false
+  [[ "$output" != *"${value}"* ]] || false
+  [ ! -f "${CLAUDE_SKILLS_HOME}/templates/user-settings.json" ]
+}
+
+@test "capture.sh stops on credential key names that do not end in token or secret" {
+  expect_capture_stops_on_env AWS_SECRET_ACCESS_KEY "wJalrXUtnFEMIK7MDENGbPxRfiCYzzzzzz"
+  expect_capture_stops_on_env GITHUB_PAT "abcdefghijklmnop1234"
+  expect_capture_stops_on_env OPENAI_KEY "abcdefghijklmnop1234"
+  expect_capture_stops_on_env SERVICE_AUTH "abcdefghijklmnop1234"
+}
+
+@test "capture.sh stops on a hyphenated sk- key value" {
+  expect_capture_stops_on_env SOME_SETTING "sk-proj-$(printf 'a%.0s' {1..40})"
+}
+
+@test "capture.sh stops on a Bearer token inside a hook command" {
+  tok="$(printf 'b%.0s' {1..24})"
+  printf '{"hooks": {"PostToolUse": [{"hooks": [{"type": "command", "command": "curl -H \\"Authorization: Bearer %s\\" https://x.invalid"}]}]}}\n' "${tok}" > "${HOME}/.claude/settings.json"
+  run bash "${BATS_TEST_DIRNAME}/../../setup/capture.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"bearer-token"* ]] || false
+  [[ "$output" != *"${tok}"* ]] || false
+  [ ! -f "${CLAUDE_SKILLS_HOME}/templates/user-settings.json" ]
+}
+
+@test "capture.sh stops on credentials embedded in a URL value" {
+  expect_capture_stops_on_env DATABASE_URL "postgres://appuser:hunter2pass@db.invalid/app"
+}
+
+@test "capture.sh keeps plain URL, key-count and path-like settings" {
+  printf '{"env": {"ANTHROPIC_BASE_URL": "https://api.example.invalid/v1", "KEYBOARD_LAYOUT": "us", "SSH_AUTH_SOCK_HINT": "x"}}\n' > "${HOME}/.claude/settings.json"
+  run bash "${BATS_TEST_DIRNAME}/../../setup/capture.sh"
+  [ "$status" -eq 0 ]
+  grep -q ANTHROPIC_BASE_URL "${CLAUDE_SKILLS_HOME}/templates/user-settings.json"
+}
+
 @test "capture.sh normalises HOME and keeps only allowlisted settings keys" {
   cat > "${HOME}/.claude/settings.json" <<EOF
 {

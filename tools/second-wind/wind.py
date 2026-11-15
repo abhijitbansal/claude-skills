@@ -1123,19 +1123,32 @@ def message_digest(matched):
     return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
 
 
+def _limit_matches(text, patterns):
+    """Every usage-limit match in `text`, top to bottom, one per start
+    position (two patterns hitting the same line count once)."""
+    by_start = {}
+    for pat in patterns:
+        for m in pat.finditer(text):
+            by_start.setdefault(m.start(), m)
+    return [by_start[s] for s in sorted(by_start)]
+
+
+def limit_digests(text, patterns):
+    """Digest of each limit message in `text`, top to bottom. The watcher
+    compares copies of a handled message: a clock-time line has no date, so
+    the same words on another day hash alike."""
+    return [message_digest(m.group(0)) for m in _limit_matches(text, patterns)]
+
+
 def find_limit(text, patterns, now=None):
     """Return (reset datetime, message digest) for the bottom-most
     usage-limit message in `text`, or None. Bottom-most, because a handled
     message from an earlier limit can linger above a new one in the pane;
     the first match would hide the new limit from the watcher."""
-    last = None
-    for pat in patterns:
-        for m in pat.finditer(text):
-            if last is None or m.start() > last.start():
-                last = m
-    if last is None:
+    matches = _limit_matches(text, patterns)
+    if not matches:
         return None
-    m = last
+    m = matches[-1]
     digest = message_digest(m.group(0))
     groups = m.groupdict()
     if groups.get("epoch"):
@@ -2019,18 +2032,27 @@ def cmd_watch(cfg, args):
                 if now_ts < cooldown.get(name, 0):
                     continue
                 text = capture_pane(name, cfg["capture_lines"])
+                copies = limit_digests(text, patterns)
+                entry = handled.get(name)
+                if entry and entry.get("hash") not in copies:
+                    # The handled line left the pane, so the same words
+                    # later (a clock time has no date) are a new limit.
+                    del handled[name]
+                    entry = None
                 found = find_limit(text, patterns)
                 if not found:
                     continue
                 reset, digest = found
                 if reset.timestamp() < now_ts - 120:
                     continue  # stale message from a previous limit
-                if handled.get(name, {}).get("hash") == digest:
+                if (entry and entry.get("hash") == digest
+                        and copies.count(digest) <= entry.get("n", 1)):
                     continue  # the message we already paused for and resumed
                 paused.add(name)
                 ts = reset.timestamp()
                 handled[name] = {"hash": digest,
-                                 "until": ts + HANDLED_TTL_SECONDS}
+                                 "until": ts + HANDLED_TTL_SECONDS,
+                                 "n": copies.count(digest)}
                 # One account-level clock: keep the latest reset time seen.
                 if not reset_at or ts > reset_at:
                     reset_at = ts
