@@ -46,6 +46,7 @@ function buildTag(params) {
 
 export const tag = Object.freeze({
   name: 'tag',
+  summary: 'A small coloured label in capitals.',
   supports: styledBy('tag'),
   build: buildTag,
 });

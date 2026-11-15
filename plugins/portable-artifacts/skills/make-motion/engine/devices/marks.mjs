@@ -199,9 +199,9 @@ function buildBracket(params) {
   return markNode({ id, d: polyline(points), look, unit, at, name: 'bracket', fallbackColour: 'ink' });
 }
 
-const device = (name, build) => Object.freeze({ name, supports: styledBy(name), build });
+const device = (name, build, summary) => Object.freeze({ name, summary, supports: styledBy(name), build });
 
-export const underline = device('underline', buildUnderline);
-export const circle = device('circle', buildCircle);
-export const arrow = device('arrow', buildArrow);
-export const bracket = device('bracket', buildBracket);
+export const underline = device('underline', buildUnderline, 'A hand-drawn line that draws on under a phrase or a region.');
+export const circle = device('circle', buildCircle, 'A hand-drawn loop that draws on around a word, a number or a region.');
+export const arrow = device('arrow', buildArrow, 'An arrow that draws on and points at its target.');
+export const bracket = device('bracket', buildBracket, 'A bracket that draws on beside a block of text or a region.');

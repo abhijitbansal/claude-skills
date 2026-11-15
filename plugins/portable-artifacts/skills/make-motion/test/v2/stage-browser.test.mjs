@@ -117,7 +117,8 @@ const serve = async (t, film, opts = {}) => {
   return s;
 };
 const picFilm = (src = 'assets/pic.png') => ({ fps: FPS, shots: [{ id: 'p', show: 'pic', src, hold: 1 }] });
-const pixelAt = (a, x, y) => a.page.evaluate(([px, py]) => Array.from(document.getElementById('stage').getContext('2d').getImageData(px, py, 1, 1).data), [x, y]);
+// Pixels are read from window.__source, the 2D frame before the post pass: the visible canvas has grain on it.
+const pixelAt = (a, x, y) => a.page.evaluate(([px, py]) => Array.from(window.__source.getContext('2d').getImageData(px, py, 1, 1).data), [x, y]);
 const seekAndPixel = async (a, frame, x, y) => { await a.page.evaluate((i) => window.__seek(i), frame); return pixelAt(a, x, y); };
 
 // ---- brief tests ----
@@ -146,9 +147,10 @@ test('a request with a foreign Host header is refused', async (t) => {
 
 // ---- the page ----
 
-test('the page reports its size, frame count and 2d post pass', async (t) => {
+test('the page reports its size, frame count and which post pass it runs', async (t) => {
   const a = await stageFor(t, FILM); if (!a) return;
-  assert.deepEqual(a.info, { frameCount: LAST_FRAME, fps: FPS, size: [1920, 1080], post: '2d' });
+  assert.match(a.info.post, /^(webgl2|2d)$/);
+  assert.deepEqual(a.info, { frameCount: LAST_FRAME, fps: FPS, size: [1920, 1080], post: a.info.post });
 });
 
 test('frames differ over time and the frame is not blank', async (t) => {
@@ -270,7 +272,7 @@ test('blend multiply lets the ink below show through; without blend the same rec
   const a = await stageFor(t, film); if (!a) return;
   await a.page.evaluate(() => window.__seek(0));
   const count = (x) => a.page.evaluate((left) => {
-    const { data } = document.getElementById('stage').getContext('2d').getImageData(left, 60, 500, 500);
+    const { data } = window.__source.getContext('2d').getImageData(left, 60, 500, 500);
     let dark = 0, yellow = 0;
     for (let i = 0; i < data.length; i += 4) {
       if (data[i] + data[i + 1] + data[i + 2] < 90) dark++;

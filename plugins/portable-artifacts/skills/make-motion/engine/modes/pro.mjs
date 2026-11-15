@@ -2,6 +2,7 @@
 // wpm: speaking pace; tail: seconds of room after the last word; maxStillSeconds: longest a frame may sit still.
 export const pro = {
   name: 'pro',
+  summary: 'Professional explainers: 16:9, a calm pace of 150 words a minute, a picture may sit still for 6 s.',
   defaultLook: 'desk',
   defaultFormat: '16:9',
   wpm: 150,

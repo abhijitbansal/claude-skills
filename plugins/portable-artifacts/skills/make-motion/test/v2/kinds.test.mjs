@@ -19,6 +19,7 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm, shotContext, resolveLook } from '../../engine/graph/film.mjs';
 import { gridX } from '../../engine/looks/index.mjs';
 import { annotate } from '../../engine/page/bounds.mjs';
+import { countSteps } from '../../engine/kinds/number.mjs';
 import { FORMATS, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 import { validateFilm, SpecError } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
@@ -172,7 +173,7 @@ test('a slide moves everything but the field', () => {
   const canvas = { w: 1920, h: 1080 };
   const field = (x) => Object.freeze({ ...fakeSampled('field', x), depth: 1 });
   const to = [field(-20), fakeSampled('b', 500)];
-  const out = registries.cuts.get('slide').apply({ from: [field(-10), fakeSampled('a', 100)], to, p: 0.5, canvas });
+  const out = registries.cuts.get('slide').apply({ from: [field(-20), fakeSampled('a', 100)], to, p: 0.5, canvas });
   assert.deepEqual(out.map((n) => n.id), ['field', 'a', 'b']);
   assert.equal(out[0], to[0], 'the incoming field, unmoved');
   near(out[1].x, 100 - 0.5 * 1920);
@@ -507,13 +508,14 @@ test('a pushed region sits on the composition centre, as far as the field allows
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { mid: [0.4, 0.4, 0.2, 0.2] }, on: [{ at: 1, do: 'underline', target: 'region:mid' }] };
   const { boxes, canvas } = expandShot(shot, 'desk', '16:9');
   const f = filmFor([shot], 'desk', '16:9');
-  const pic = f.sampleAt(2).find((n) => n.id === 'c.image');
+  const pic = f.sampleAt(1).find((n) => n.id === 'c.image'); // the landing time; the drift moves on after it
   const rest = expandShot(shot, 'desk', '16:9').nodes.find((n) => n.id === 'c.image');
   const [bx, by, bw, bh] = boxes['region:mid'];
   // the region centre moves with the picture group: rest offset scaled by the camera zoom
   const zoom = pic.scale / (rest.props.scale ?? 1);
   const rx = pic.x + (bx + bw / 2 - rest.props.x) * zoom, ry = pic.y + (by + bh / 2 - rest.props.y) * zoom;
-  assert.ok(Math.abs(rx - canvas.w / 2) < 4 && Math.abs(ry - canvas.h / 2) < 4, `region at ${rx}, ${ry}`);
+  // the drift's pan at the landing time is allowed for, so the region sits on the centre to well under a pixel
+  assert.ok(Math.abs(rx - canvas.w / 2) < 0.5 && Math.abs(ry - canvas.h / 2) < 0.5, `region at ${rx}, ${ry}`);
 });
 
 test('a highlight on a region is a hand-drawn marker frame with the rest of the picture dimmed in desk', () => {
@@ -684,7 +686,11 @@ test('match interpolates a shared node at p 0.5 and fades the others', () => {
   assert.deepEqual(shared.bbox, [400, 100, 15, 15]);
   const [fromCopy, toCopy] = shared.children;
   near(fromCopy.rotate, 20); near(toCopy.rotate, 20);
-  near(fromCopy.opacity + toCopy.opacity, 0.75, 'opacity interpolated');
+  // coverage, not a sum: the outgoing copy keeps the full interpolated opacity underneath and only the incoming one
+  // fades in over it, so the pair never reads thinner than either end
+  near(fromCopy.opacity, 0.75, 'outgoing copy at the interpolated opacity');
+  near(toCopy.opacity, 0.75 * 0.5, 'incoming copy fading in over it (smoothstep 0.5 at mid-cut)');
+  assert.ok(shared.children.indexOf(fromCopy) < shared.children.indexOf(toCopy), 'outgoing underneath');
   // each copy's box is mapped onto the interpolated box: centre (407.5, 107.5), size 15
   near(fromCopy.scale, 1.5); near(toCopy.scale, 2 * 0.75);
   near(out.find((n) => n.id === 'o').opacity, 0, 'outgoing others are gone after 40%');
@@ -836,4 +842,140 @@ test('a punch at 0 keeps both of its keys at t 0, so the shot opens on the peak'
   const peak = registries.looks.get('pop').devices.punch.scale;
   near(f.sampleShot(0, 0).find((n) => n.id === 'a.text').scale, peak, 'the jump survives the merge');
   near(f.sampleShot(0, 1).find((n) => n.id === 'a.text').scale, 1, 'and settles');
+});
+
+// ---- code review fixes ----
+
+test('a match passes an identical node through unchanged, and the field never dips', () => {
+  const canvas = { w: 1920, h: 1080 };
+  const field = Object.freeze({ ...fakeSampled('field', -20), depth: 1 });
+  const same = fakeSampled('same', 40);
+  const out = registries.cuts.get('match').apply({ from: [field, same, fakeSampled('h', 10)], to: [field, same, fakeSampled('h', 300)], p: 0.5, canvas });
+  assert.equal(out.find((n) => n.id === 'field'), field, 'the shared field passes through');
+  assert.equal(out.find((n) => n.id === 'same'), same, 'an identical node passes through');
+  // a real desk match: at every frame of the cut the field is one node, fully opaque, where the incoming shot has it
+  const s = [{ ...THREE[0], hero: 'h' }, { ...THREE[0], id: 'b', say: 'One file. No server.', cut: 'match', hero: 'h' }];
+  const f = filmFor(s, 'desk');
+  const second = buildTimeline(filmOf(s, 'desk'), { fps: FPS }).shots[1];
+  for (let i = 0; i <= 15; i++) {
+    const local = i / FPS;
+    const fields = f.sampleAt(second.start + local).filter((n) => n.id === 'field');
+    const plain = f.sampleShot(1, local)[0];
+    assert.equal(fields.length, 1, `frame ${i}: one field`);
+    assert.equal(fields[0].type, 'field');
+    assert.equal(fields[0].opacity, 1, `frame ${i}: the field is fully opaque`);
+    assert.ok(Math.abs(fields[0].x - plain.x) < 1 && Math.abs(fields[0].scale - plain.scale) < 1e-3, `frame ${i}: where the incoming shot has it`);
+  }
+});
+
+test('a slide out of a pushed-in shot eases the field from its outgoing state to the incoming one', () => {
+  const canvas = { w: 1920, h: 1080 };
+  const pushed = Object.freeze({ ...fakeSampled('field', -300), depth: 1, scale: 1.4 });
+  const rest = Object.freeze({ ...fakeSampled('field', -100), depth: 1, scale: 1 });
+  const out = registries.cuts.get('slide').apply({ from: [pushed], to: [rest], p: 0.5, canvas });
+  const e = ease('inOutCubic')(0.5);
+  near(out[0].x, -300 + (-100 + 300) * e, 'x eases');
+  near(out[0].scale, 1.4 + (1 - 1.4) * e, 'scale eases');
+});
+
+test('layout follows the look composition, not its emphasis system', () => {
+  const desk = registries.looks.get('desk');
+  if (!registries.looks.has('desk-centred-test')) registries.looks.add('desk-centred-test', Object.freeze({ ...desk, name: 'desk-centred-test', composition: 'centred' }));
+  const film = { version: 2, mode: 'pro', look: 'desk-centred-test', format: '16:9', fps: FPS, seed: 1, shots: [{ id: 'a', show: 'statement', say: 'One file. No server.' }] };
+  const { nodes, canvas } = expandIn(film);
+  const text = textNode(nodes);
+  const line = text.props.layout.lines[0];
+  near(text.props.x + line.x + line.width / 2, canvas.w / 2, 'a centred composition centres the statement');
+  assert.equal(nodes.filter((n) => n.props.under).length, 0, 'no emphasis here, so no highlight');
+});
+
+test('a kind that needs a device the look does not style fails naming the look and the device', () => {
+  const desk = registries.looks.get('desk');
+  if (!registries.looks.has('bare-test')) registries.looks.add('bare-test', Object.freeze({ ...desk, name: 'bare-test', devices: {} }));
+  const film = { version: 2, mode: 'pro', look: 'bare-test', format: '16:9', fps: FPS, seed: 1, shots: [{ id: 'c', show: 'clipping', src: 'shot.png', hold: 2 }] };
+  assert.throws(() => expandIn(film), /look "bare-test".*"cutout"|"cutout".*look "bare-test"/);
+});
+
+test('the count lands on a hyphenated number, on the figure rather than a lone "one", and past a year', () => {
+  const land = (say, value) => {
+    const r = expandShot({ id: 'n', show: 'number', say, value, suffix: '%', label: 'x' });
+    const digits = textNode(r.nodes, 'n.value.digits');
+    return { at: shownAt(digits.wordTracks[digits.props.steps.at(-1).words[0]].opacity), words: r.timing.words };
+  };
+  const hyphen = land('We saved forty-one percent.', 41);
+  near(hyphen.at, hyphen.words[2].start, '"forty-one"');
+  const lone = land('No one knows, but 41 percent.', 41);
+  near(lone.at, lone.words[4].start, '"41", not "one"');
+  const year = land('In 2024, forty one percent.', 41);
+  near(year.at, year.words[2].start, '"forty", not "2024"');
+});
+
+test('on-screen words align to spoken words by longest common subsequence', () => {
+  const times = (say, text) => {
+    const { nodes, timing } = expandShot({ id: 'a', show: 'statement', say, text });
+    return { at: textNode(nodes).wordTracks.map((w) => lastKey(w.opacity).t), spoken: (i) => timing.words[i].start };
+  };
+  const repeated = times('The cat saw the dog and the bird.', 'The dog and the bird');
+  // "The dog and the bird" matches spoken the(3) dog(4) and(5) the(6) bird(7), not the first "The"
+  [3, 4, 5, 6, 7].forEach((s, i) => near(repeated.at[i], repeated.spoken(s), `repeated word ${i}`));
+  const review = times('Forty one percent of the budget.', 'The cost: 41 percent of the budget');
+  // The and cost precede every match, so they land with the next matched word (41 = forty)
+  [0, 0, 0, 2, 3, 4, 5].forEach((s, i) => near(review.at[i], review.spoken(s), `review word ${i}`));
+  const digits = times('Seven days, twelve hours, ninety nine minutes.', '7 days, 12 hours, 99 minutes');
+  [0, 1, 2, 3, 4, 6].forEach((s, i) => near(digits.at[i], digits.spoken(s), `digit word ${i}`));
+  const percent = times('Up forty percent.', 'Up 40 %');
+  [0, 1, 2].forEach((s, i) => near(percent.at[i], percent.spoken(s), `percent word ${i}`));
+});
+
+test('the validator checks clipping regions, close-up timing, image targets after a switch and reserved hero ids', () => {
+  const check = (shot, mode = 'pro') => validateFilm({ version: 2, mode, shots: [shot] }, { specDir }).errors;
+  const clip = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3 };
+  const zero = check({ ...clip, regions: { q: [0.1, 0.1, 0, 0.2] } });
+  assert.equal(zero[0].path, 'shots[0].regions.q');
+  assert.match(zero[0].message, /w and h must be above 0/);
+  const past = check({ ...clip, regions: { q: [0.8, 0.1, 0.3, 0.2] } });
+  assert.equal(past[0].path, 'shots[0].regions.q');
+  assert.match(past[0].message, /x \+ w/);
+  const regions = { a: [0.1, 0.1, 0.2, 0.2], b: [0.5, 0.5, 0.2, 0.2] };
+  const together = check({ ...clip, regions, on: [{ at: 1, do: 'underline', target: 'region:a' }, { at: 1, do: 'underline', target: 'region:b' }] }, 'viral');
+  assert.equal(together[0].path, 'shots[0].on[1].at');
+  assert.match(together[0].message, /same time/);
+  const image = check({ ...clip, regions, on: [{ at: 1, do: 'underline', target: 'region:a' }, { at: 2, do: 'arrow', target: 'image' }] }, 'viral');
+  assert.equal(image[0].path, 'shots[0].on[1].target');
+  assert.match(image[0].message, /target the region/);
+  assert.deepEqual(check({ ...clip, regions, on: [{ at: 1, do: 'underline', target: 'region:a' }, { at: 1, do: 'circle', target: 'region:b' }] }).filter((e) => /same time/.test(e.message)), [], 'desk pushes, so no rule');
+  const hero = check({ id: 'a', show: 'statement', say: 'Hi.', hero: 'field' });
+  assert.equal(hero[0].path, 'shots[0].hero');
+  assert.match(hero[0].message, /reserved/);
+});
+
+test('the count shows at most 24 values, a centred count centres every value, -$5 reads right, and huge values are refused', () => {
+  const steps = countSteps({ value: 9999, decimals: 0, start: 0, land: 1, rate: 60, curve: ease('outCubic') });
+  assert.ok(steps.length <= 24, `${steps.length} values`);
+  const { nodes } = expandShot({ id: 'n', show: 'number', say: 'Four hundred fifty nine rows.', value: 1459, label: 'rows' }, 'pop', '9:16');
+  const digits = textNode(nodes, 'n.value.digits');
+  const words = digits.props.layout.lines[0].words;
+  const centreOf = (step) => { const first = words[step.words[0]], last = words[step.words.at(-1)]; return (first.x + last.x + last.width) / 2; };
+  const final = centreOf(digits.props.steps.at(-1));
+  for (const step of digits.props.steps) near(centreOf(step), final, `step ${step.text} centred`);
+  const negative = expandShot({ id: 'n', show: 'number', hold: 2, value: -5, prefix: '$', label: 'x' });
+  assert.equal(textNode(negative.nodes, 'n.value.prefix').props.layout.lines[0].words.map((w) => w.text).join(''), '-$');
+  assert.equal(textNode(negative.nodes, 'n.value.digits').props.steps.at(-1).text, '5');
+  const huge = validateFilm({ version: 2, shots: [{ id: 'n', show: 'number', hold: 2, value: 1e15, label: 'x' }] }, { specDir });
+  assert.equal(huge.errors[0].path, 'shots[0].value');
+});
+
+test('pop close-ups: a punch on a region keeps its keys, an early event shortens the entrance, the caption never appears after the switch', () => {
+  const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, caption: 'The query', regions: { q: [0.6, 0.2, 0.3, 0.2] },
+    on: [{ at: 0.2, do: 'underline', target: 'region:q' }, { at: 1, do: 'punch', target: 'region:q' }] };
+  const { nodes, camera, ctx } = expandShot(shot, 'pop', '9:16');
+  const punch = ctx.look.devices.punch.scale;
+  assert.ok(camera.flat().some((k) => k.zoom === punch && Math.abs(k.t - 1) < 1e-6), 'the punch at 1 s keeps its keys');
+  const pic = nodes.find((n) => n.id === 'c.image');
+  const lastIn = 0.2 - 1 / FPS;
+  near(sample(pic.tracks.opacity, lastIn), 1, 'the entrance ends one frame before the switch');
+  assert.ok(sample(pic.tracks.opacity, lastIn / 2) > 0, 'and is not collapsed to nothing');
+  near(sample(pic.tracks.opacity, 0.2), 0, 'gone on the switch');
+  const caption = textNode(nodes, 'c.caption');
+  for (const t of [0.2, 0.3, 0.5, 1, 2]) near(sample(caption.tracks.opacity, t), 0, `no caption at ${t}`);
 });

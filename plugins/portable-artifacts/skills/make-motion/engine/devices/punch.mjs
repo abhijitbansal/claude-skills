@@ -29,6 +29,7 @@ function buildPunch(params) {
 
 export const punch = Object.freeze({
   name: 'punch',
+  summary: 'An instant camera scale-up on a word, then a quick settle.',
   supports: (look) => styledBy('punch')(look) || look.cuts.includes('punch') || SPRING_EASE.test(look.moves.emphasize.ease),
   build: buildPunch,
 });

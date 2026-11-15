@@ -92,4 +92,4 @@ export function paint(ctx, fieldPlan, t) {
   blitCached(ctx, cache, fieldPlan, buildHalftone);
 }
 
-registries.fields.add('halftone', { plan, paint });
+registries.fields.add('halftone', { summary: 'Dots on a rotated grid over a flat colour, shrinking along a falloff line across the frame.', plan, paint });

@@ -82,6 +82,19 @@ export function expandFree(shot, ctx) {
 }
 
 registries.kinds.add('free', {
+  summary: 'Raw scene nodes (paths, text, images, groups) with keyframed tracks and a camera, for anything the designed kinds do not cover.',
+  example: {
+    id: 'bar',
+    show: 'free',
+    hold: 2,
+    background: '#f3eee3',
+    nodes: [{
+      type: 'path',
+      id: 'bar',
+      props: { d: 'M300 500H1620V580H300Z', fill: '#15130f' },
+      tracks: { reveal: { keys: [{ t: 0, v: 0 }, { t: 0.8, v: 1, ease: 'outCubic' }] } },
+    }],
+  },
   schema: {
     properties: {
       nodes: { type: 'array' },

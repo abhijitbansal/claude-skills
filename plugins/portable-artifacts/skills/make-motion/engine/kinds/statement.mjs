@@ -1,6 +1,7 @@
-// The `statement` kind: a line of type as the whole frame, its words arriving as they are spoken. `desk` sets it flush
-// left on column 2 with its ink centred at 44% of the height and highlights emphasised runs; `pop` centres it in caps
-// and recolours and pulses emphasised words. An optional kicker sits above it. Pure and DOM-free.
+// The `statement` kind: a line of type as the whole frame, its words arriving as they are spoken. An editorial
+// composition (desk) sets it flush left on column 2 with its ink centred at 44% of the height; a centred one (pop)
+// centres it on the composition. Emphasis follows the look's emphasis system: a highlight behind each emphasised run
+// (desk), or a recolour and pulse of each emphasised word (pop). An optional kicker sits above it. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
@@ -8,9 +9,11 @@ import { layoutText } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan,
-  typeset, compositionRect, fieldNode, wordTimes, enterTracks, pulseScale, wipeIn, rectPath, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
+  CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
+  isEditorial, requireDevice, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale, wipeIn, rectPath,
+  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
 } from './shared.mjs';
+import { wordTimes } from './words.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
@@ -28,8 +31,7 @@ const HALF = 2;
 function sourceText(shot, look) {
   const text = shot.text ?? (shot.say === undefined ? undefined : parseSay(shot.say).plain);
   if (typeof text !== 'string' || wordsOf(text).length === 0) throw new Error(`statement: shot "${shot.id}" needs text or say`);
-  const set = typeset(text);
-  return look.caps.display ? set.toUpperCase() : set;
+  return setCase(look, 'display', text);
 }
 
 // The kicker's height above the text's cap line, so the text is fitted with room for it.
@@ -38,7 +40,7 @@ const kickerRoom = (look, unit) => (KICKER.gap + look.scale[KICKER.step - 1] * C
 // Where the text goes and at what size: { layout, font, x, y, span }.
 function compose(text, shot, ctx) {
   const { look, canvas, unit } = ctx;
-  const desk = look.emphasis === 'highlight';
+  const desk = isEditorial(look);
   const plan = desk ? DESK : POP;
   // pop on 9:16 composes in the platform safe zone: its width, centred on its centre
   const rect = compositionRect(ctx);
@@ -57,10 +59,7 @@ function compose(text, shot, ctx) {
 const placedWords = (layout) => layout.lines.flatMap((line) => line.words.map((word) => ({ line, word })));
 
 // One word's box in canvas pixels: cap line to just under the baseline.
-function wordBox(at, { line, word }, size) {
-  const baseline = at.y + line.y;
-  return [at.x + line.x + word.x, baseline - CAP_HEIGHT * size, word.width, (CAP_HEIGHT + WORD_DESCENT) * size];
-}
+const wordBox = (at, { line, word }, size) => capBox(at.x + line.x + word.x, at.y + line.y, word.width, size);
 
 // Word tracks: the entrance on each word's time (none for a matched hero), and in a recolour look the emphasis.
 function wordTracksFor(words, times, ctx, matched) {
@@ -93,8 +92,10 @@ function highlights(shot, ctx, placed, times) {
   if (look.emphasis !== 'highlight') return [];
   const { layout, font } = placed;
   const at = placed;
+  const runs = emphasisRuns(layout, times, timing);
+  if (runs.length > 0) requireDevice(look, 'highlight', 'statement');
   const device = registries.devices.get('highlight');
-  return emphasisRuns(layout, times, timing).flatMap(({ line, first, last }, k) => {
+  return runs.flatMap(({ line, first, last }, k) => {
     const a = line.words.find((w) => w.index === first), b = line.words.find((w) => w.index === last);
     const left = at.x + line.x + a.x;
     const box = [left, at.y + line.y - HIGHLIGHT_TOP * font.size, at.x + line.x + b.x + b.width - left, HIGHLIGHT_HEIGHT * font.size];
@@ -102,13 +103,13 @@ function highlights(shot, ctx, placed, times) {
   });
 }
 
-// The kicker line and, in a look with a hairline (desk), the rule over it. Both land with the first word.
+// The kicker line and, in an editorial composition (desk), the hairline over it. Both land with the first word.
 function kickerNodes(shot, ctx, placed, landAt) {
   if (shot.kicker === undefined) return [];
   const { look, unit, measure } = ctx;
   const font = fontFor(look, 'label', sizeAt(look, KICKER.step, unit), unit);
-  const text = look.caps.label ? typeset(shot.kicker).toUpperCase() : typeset(shot.kicker);
-  const desk = look.emphasis === 'highlight';
+  const text = setCase(look, 'label', shot.kicker);
+  const desk = isEditorial(look);
   const layout = layoutText({ text, font, maxWidth: desk ? NO_WRAP : placed.span.w, align: desk ? 'left' : 'center', measure });
   const capLine = placed.y + placed.layout.lines[0].y - CAP_HEIGHT * placed.font.size;
   const baseline = capLine - KICKER.gap * unit;
@@ -167,6 +168,8 @@ function statementTargets(shot) {
 }
 
 registries.kinds.add('statement', {
+  summary: 'A line of type as the whole frame, its words arriving as they are spoken; *starred* words are emphasised. An optional kicker sits above it.',
+  example: { id: 'hook', show: 'statement', say: 'Most dashboards cannot tell you *where a number came from*.', kicker: 'The problem' },
   schema: {
     properties: {
       text: { type: 'string', minLength: 1, maxLength: TEXT_MAX },
@@ -178,5 +181,6 @@ registries.kinds.add('statement', {
   heroTarget: 'text',
   targets: statementTargets,
   ids: (shot) => [heroId(shot, 'text')],
+  validate: heroProblems,
   expand: expandStatement,
 });

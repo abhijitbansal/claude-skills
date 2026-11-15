@@ -11,6 +11,7 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { resolveAnchor, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
+import { REGION_PREFIX } from '../../engine/kinds/shared.mjs';
 
 export const FILM_VERSION = 2;
 export const MODES = Object.freeze(['pro', 'viral']);
@@ -275,9 +276,8 @@ const supportsLook = (device, look) => typeof device.supports !== 'function' || 
 
 // A kind may draw some devices itself when they aim at one of its regions (kind.regionDevices, e.g. clipping draws a
 // region highlight as a frame): those are allowed in any look, on a region: target only.
-const REGION_TARGET = 'region:';
 const kindDrawsIt = (item, kind) => Array.isArray(kind?.regionDevices) && kind.regionDevices.includes(item.do)
-  && typeof item.target === 'string' && item.target.startsWith(REGION_TARGET);
+  && typeof item.target === 'string' && item.target.startsWith(REGION_PREFIX);
 
 function checkDevice(item, at, ctx, kind) {
   if (typeof item.do !== 'string' || item.do === '') return [];
@@ -391,6 +391,18 @@ function checkSrcFields(shot, base, kind, specDir) {
   });
 }
 
+// A kind's own rules (kind.validate(shot, { look, at }) -> [{ path, message }] with paths relative to the shot, such as
+// "regions.q" or "on.1.at"), run on a shot whose shape is already valid. `at` resolves an anchor in the shot, or is
+// null when the shot's length is not known.
+function checkKindRules(shot, base, ctx, { kind, entry, shapeIsValid }) {
+  if (!shapeIsValid || typeof kind?.validate !== 'function') return [];
+  const at = entry === null ? null : (ref) => resolveAnchor(ref, entry);
+  return kind.validate(shot, { look: ctx.look, at }).map(({ path: rel, message }) => ({
+    path: String(rel).split('.').reduce((acc, part) => pathJoin(acc, /^\d+$/.test(part) ? Number(part) : part), base),
+    message,
+  }));
+}
+
 function checkShot(shot, index, ctx, seen) {
   const base = pathJoin('shots', index);
   const resolved = resolveKind(shot, base, ctx.regs);
@@ -408,6 +420,7 @@ function checkShot(shot, index, ctx, seen) {
     ...checkCut(shot, index, base, ctx),
     ...checkOn(shot, base, ctx, { entry, targets, kindName: resolved.name, kind: resolved.kind }),
     ...checkSrcFields(shot, base, resolved.kind, ctx.specDir),
+    ...checkKindRules(bounded, base, ctx, { kind: resolved.kind, entry, shapeIsValid: shape.length === 0 }),
   ];
 }
 

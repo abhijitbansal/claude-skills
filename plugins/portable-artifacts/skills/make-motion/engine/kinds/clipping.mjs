@@ -1,20 +1,24 @@
-// The `clipping` kind: a document or screenshot shown as a physical object. `desk` lays the picture (a `cutout`) on a
-// `card` 48 units larger on every side, turns the pair -2 degrees and raises it in from below; `pop` shows the cutout
-// alone, upright, popping in (inside the platform safe zone on 9:16). A device aimed at `region:<name>` lands on that
-// part of the drawn picture (through every rotation on the way); a `highlight` there is a marker frame with the rest
-// of the picture dimmed (region-mark.mjs). The camera pushes in on the first such region, landing as the event does,
-// close enough that the region fills 62% of the width. Pure and DOM-free.
+// The `clipping` kind: a document or screenshot shown as a physical object. An editorial composition (desk) lays the
+// picture (a `cutout`) on a taped `card` 48 units larger on every side when the look styles one, turns the pair -2
+// degrees and raises it in from below; a centred one (pop) shows the cutout alone, upright, popping in (inside the
+// platform safe zone on 9:16). A device aimed at `region:<name>` lands on that part of the drawn picture (through every
+// rotation on the way; circle, underline and arrow use the axis-aligned box of the turned region). Where the camera
+// moves (desk) a region event pushes in until the region fills 62% of the width, and a `highlight` there is a marker
+// frame with the rest of the picture dimmed (region-mark.mjs); where it is locked (pop) the shot cuts to a close-up of
+// the region instead (close-ups.mjs). Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
-import { track } from '../time/track.mjs';
+import { track, sample } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { landing } from '../devices/shared.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { regionMark } from './region-mark.mjs';
 import { closeUpPlan, closeUps } from './close-ups.mjs';
+import { clippingProblems } from './clipping-rules.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, typeset, compositionRect, fieldNode, enterTracks,
-  defaultCamera, pushLayer, onDevices, placeDevices, deviceCamera, unionBox,
+  CAP_HEIGHT, HERO_SCHEMA, REGION_PREFIX, sizeAt, fontFor, heroId, isWide, arrivesMatched, setCase, inkBox, regionOf,
+  isEditorial, cutsToCloseUp, requireDevice, compositionRect, fieldNode, enterTracks, defaultCamera, pushLayer, onDevices,
+  placeDevices, deviceCamera,
 } from './shared.mjs';
 
 const CAPTION_MAX = 80;
@@ -23,15 +27,15 @@ const SHARE = 0.62; // on 16:9: the picture's longer side, of the canvas short s
 const TALL_WIDTH = 0.92; // on other formats: the picture's width, of the available width
 const TALL_HEIGHT = 0.6; // ...and its height at most this share of the available height
 const CARD_PAD = 48; // units the card reaches past the picture on every side
-const RISE = 80; // units the desk picture rises in from
-const DESK_TURN = -2; // degrees
-const CENTRE = Object.freeze({ deskWide: [0.54, 0.52], deskTall: [0.5, 0.46] }); // pop: the composition centre
+const RISE = 80; // units the editorial picture rises in from
+const EDITORIAL_TURN = -2; // degrees
+const CENTRE = Object.freeze({ wide: [0.54, 0.52], tall: [0.5, 0.46] }); // editorial; centred uses the composition centre
 const CAPTION = Object.freeze({ step: 1, gap: 24, lag: 0.2, outEase: 'outCubic' });
-const REGION_PREFIX = 'region:';
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const HALF = 2;
 
-const isDesk = (look) => look.emphasis === 'highlight';
+// The look lays the picture on a taped card (desk's paper collage).
+const hasCard = (look) => look.devices?.card?.edge === 'taped';
 
 // A point in the picture group's local space carried to canvas pixels: turned by `turn` degrees about the centre.
 function toCanvas(centre, turn, [x, y]) {
@@ -46,56 +50,58 @@ function turnedBox(centre, turn, [x, y, w, h]) {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
 }
 
-function checkRegions(shot) {
-  for (const [name, [x, y, w, h]] of Object.entries(shot.regions ?? {})) {
-    if (x + w > 1 + 1e-9 || y + h > 1 + 1e-9) throw new Error(`clipping: shot "${shot.id}": region "${name}" runs past the image (x + w and y + h must be at most 1)`);
-  }
-}
-
-// The card (desk) and the cutout, built settled (at 0) about the picture's centre.
+// The card (when the look has one) and the cutout, built settled (at 0) about the picture's centre.
 function pictureParts(shot, ctx, { w, h, hero }) {
   const { look, unit, seed } = ctx;
+  requireDevice(look, 'cutout', 'clipping');
   const image = node('image', `${hero}.photo`, { src: shot.src, w, h });
   const devices = registries.devices;
   const base = { at: 0, look, unit, seed };
   const pad = CARD_PAD * unit;
-  const card = isDesk(look) ? devices.get('card').build({ ...base, id: `${hero}.card`, box: [-w / HALF - pad, -h / HALF - pad, w + HALF * pad, h + HALF * pad] }).nodes : [];
+  const card = hasCard(look) ? devices.get('card').build({ ...base, id: `${hero}.card`, box: [-w / HALF - pad, -h / HALF - pad, w + HALF * pad, h + HALF * pad] }).nodes : [];
   const cutout = devices.get('cutout').build({ ...base, id: `${hero}.cutout`, box: [-w / HALF, -h / HALF, w, h], image }).nodes;
   return [...card, ...cutout];
 }
 
-// The whole picture's opacity: in over the enter move from the shot start (none for a matched hero), and gone on the
-// exact frame of `hideAt` when pop cuts to a close-up.
-function pictureOpacity(move, matched, hideAt) {
-  const keys = matched ? [{ t: 0, v: 1 }] : [{ t: 0, v: 0 }, { t: move.dur, v: 1, ease: move.ease }];
-  if (hideAt === undefined) return track(keys);
-  const shown = keys.filter((k) => k.t < hideAt);
-  return track([...(shown.length > 0 ? shown : [{ t: 0, v: 0 }]), { t: hideAt, v: shown.length > 0 && hideAt >= keys.at(-1).t ? 1 : 0 }, { t: hideAt, v: 0 }]);
+// When the whole picture's entrance ends: the enter move, shortened to end one frame before a close-up switch that
+// falls inside it; 0 (no entrance, shown from the start) when the switch leaves no frame for one.
+function entranceEnd(move, hideAt, fps) {
+  if (hideAt === undefined || hideAt - 1 / fps >= move.dur) return move.dur;
+  return Math.max(0, hideAt - 1 / fps);
 }
 
-// The picture group at `centre`: the parts and any region marks, turned -2 degrees in desk, entering from below
-// (desk) or popping in (pop) over the enter move from the shot start; a matched hero has no entrance.
+// `tr` (its keys eased with `easeName`) until `hideAt`, then hidden on that exact frame; unchanged without `hideAt`.
+function hiddenFrom(tr, hideAt, easeName) {
+  if (hideAt === undefined) return tr;
+  const before = tr.points.filter((p) => p.t < hideAt).map((p, i) => ({ t: p.t, v: p.v, ...(i > 0 ? { ease: easeName } : {}) }));
+  const keys = before.length > 0 ? before : [{ t: 0, v: 0 }];
+  return track([...keys, { t: hideAt, v: sample(tr, hideAt) }, { t: hideAt, v: 0 }]);
+}
+
+// The picture group at `centre`: the parts and any region marks, turned -2 degrees in an editorial composition and
+// entering from below, or popping in when centred, over the enter move from the shot start (a matched hero has no
+// entrance); gone on the frame of `hideAt` when the shot cuts to a close-up.
 function pictureGroup(shot, ctx, { hero, centre, children, hideAt }) {
-  const { look, unit } = ctx;
-  const desk = isDesk(look);
-  const move = look.moves.enter;
-  const rest = move.dur;
-  const matched = arrivesMatched(shot, ctx);
-  const tracks = { opacity: pictureOpacity(move, matched, hideAt) };
-  if (!matched) {
-    if (desk) tracks.y = landing(rest, move, centre[1] + RISE * unit, centre[1]);
-    if (move.scale !== undefined) tracks.scale = landing(rest, move, move.scale, 1);
-  }
-  const props = { x: centre[0], y: centre[1], ...(desk ? { rotate: DESK_TURN } : {}) };
+  const { look, unit, fps } = ctx;
+  const editorial = isEditorial(look);
+  const end = entranceEnd(look.moves.enter, hideAt, fps);
+  const move = { ...look.moves.enter, dur: end };
+  const enters = !arrivesMatched(shot, ctx) && end > 0;
+  const tracks = { opacity: hiddenFrom(enters ? landing(end, move, 0, 1) : track([{ t: 0, v: 1 }]), hideAt, move.ease) };
+  if (enters && editorial) tracks.y = landing(end, move, centre[1] + RISE * unit, centre[1]);
+  if (enters && move.scale !== undefined) tracks.scale = landing(end, move, move.scale, 1);
+  const props = { x: centre[0], y: centre[1], ...(editorial ? { rotate: EDITORIAL_TURN } : {}) };
   return node('group', hero, props, { tracks, children });
 }
 
 const turnOf = (group, childId) => (group.props.rotate ?? 0) + (group.children.find((n) => n.id === childId)?.props.rotate ?? 0);
 
-// The caption fades in after the picture; when the camera pushes in (`push`, its two keys) it fades out on the way,
-// since the push would carry it off the bottom of the frame.
-function captionOpacity(look, push) {
+// The caption fades in after the picture. When the camera pushes in (`push`, its two keys) it fades out on the way,
+// since the push would carry it off the bottom of the frame; when the shot cuts to a close-up (`hideAt`) it goes on
+// that frame, and never fades in after it.
+function captionOpacity(look, { push, hideAt }) {
   const enter = landing(look.moves.enter.dur + CAPTION.lag, look.moves.enter, 0, 1);
+  if (hideAt !== undefined) return hiddenFrom(enter, hideAt, look.moves.enter.ease);
   if (push === null) return enter;
   const [from, to] = push;
   const shown = enter.points.at(-1).t;
@@ -106,35 +112,31 @@ function captionOpacity(look, push) {
   ]);
 }
 
-function captionNode(shot, ctx, { group, hero, w, h, centre, push }) {
+function captionNode(shot, ctx, { group, hero, w, h, centre, leaves }) {
   if (shot.caption === undefined) return null;
   const { look, unit, measure } = ctx;
-  const desk = isDesk(look);
-  const reach = desk ? CARD_PAD * unit : look.keyline * unit;
-  const corner = toCanvas(centre, turnOf(group, desk ? `${hero}.card` : `${hero}.cutout`), [-w / HALF - reach, h / HALF + reach]);
+  const card = hasCard(look);
+  const reach = card ? CARD_PAD * unit : look.keyline * unit;
+  const corner = toCanvas(centre, turnOf(group, card ? `${hero}.card` : `${hero}.cutout`), [-w / HALF - reach, h / HALF + reach]);
   const font = fontFor(look, 'label', sizeAt(look, CAPTION.step, unit), unit);
-  const layout = layoutText({ text: look.caps.label ? typeset(shot.caption).toUpperCase() : typeset(shot.caption), font, maxWidth: w + HALF * reach, measure });
+  const layout = layoutText({ text: setCase(look, 'label', shot.caption), font, maxWidth: w + HALF * reach, measure });
   const x = corner[0];
   const y = corner[1] + CAPTION.gap * unit - (layout.lines[0].y - CAP_HEIGHT * font.size);
-  const tracks = { ...enterTracks(look, unit, look.moves.enter.dur + CAPTION.lag, { y }), opacity: captionOpacity(look, push) };
+  const tracks = { ...enterTracks(look, unit, look.moves.enter.dur + CAPTION.lag, { y }), opacity: captionOpacity(look, leaves) };
   const text = node('text', `${shot.id}.caption`, { x, y, layout, font, fill: look.palette.ink2 }, { tracks });
-  const box = unionBox(layout.lines.map((l) => [x + l.x, y + l.y - CAP_HEIGHT * font.size, l.width, (CAP_HEIGHT + WORD_DESCENT) * font.size]));
-  return { text, box };
+  return { text, box: inkBox(x, y, layout) };
 }
 
 function centreOf(ctx) {
   const { look, canvas } = ctx;
-  if (!isDesk(look)) {
+  if (!isEditorial(look)) {
     const rect = compositionRect(ctx);
     return [rect.cx, rect.cy];
   }
-  const [fx, fy] = isWide(canvas) ? CENTRE.deskWide : CENTRE.deskTall;
+  const [fx, fy] = isWide(canvas) ? CENTRE.wide : CENTRE.tall;
   return [fx * canvas.w, fy * canvas.h];
 }
 
-// The picture's drawn size: on 16:9 its longer side is SHARE of the canvas short side; elsewhere its width is
-// TALL_WIDTH of the available width (the platform safe zone for pop on 9:16, else inside the margins), its height at most
-// TALL_HEIGHT of the available height.
 // The space a picture fits in: the platform safe zone for pop on 9:16, else the canvas inside the margins.
 function availableArea(ctx) {
   const { look, canvas, unit } = ctx;
@@ -143,6 +145,8 @@ function availableArea(ctx) {
   return { w: gridSpan(look, canvas, 1, look.grid.columns).w, h: canvas.h - 2 * look.grid.margin * unit };
 }
 
+// The picture's drawn size: on 16:9 its longer side is SHARE of the canvas short side; elsewhere its width is
+// TALL_WIDTH of the available width, its height at most TALL_HEIGHT of the available height.
 function pictureSize(ctx, picture) {
   const { canvas } = ctx;
   if (isWide(canvas)) {
@@ -154,13 +158,14 @@ function pictureSize(ctx, picture) {
   return { w: picture.width * fit, h: picture.height * fit };
 }
 
-const isRegionHighlight = (item) => item.do === 'highlight' && typeof item.target === 'string' && item.target.startsWith(REGION_PREFIX);
+const isRegionEvent = (item) => regionOf(item.target) !== null;
+const isRegionHighlight = (item) => item.do === 'highlight' && isRegionEvent(item);
 
 // One group per region highlight, turned like the cutout, holding its frame and overlay in the picture's own space.
 function regionMarks(shot, ctx, { w, h, tilt, local }) {
   return (shot.on ?? []).flatMap((item, j) => {
     if (!isRegionHighlight(item)) return [];
-    const region = shot.regions?.[item.target.slice(REGION_PREFIX.length)];
+    const region = shot.regions?.[regionOf(item.target)];
     if (!region) throw new Error(`clipping: shot "${shot.id}": on[${j}] target "${item.target}" names no region`);
     const id = `${shot.id}.on${j}`;
     const children = regionMark({ id, region: local(region), picture: [-w / HALF, -h / HALF, w, h], at: ctx.at(item.at), look: ctx.look, unit: ctx.unit, seed: ctx.seed });
@@ -168,36 +173,34 @@ function regionMarks(shot, ctx, { w, h, tilt, local }) {
   });
 }
 
-const isRegionEvent = (item) => typeof item.target === 'string' && item.target.startsWith(REGION_PREFIX);
-
 function expandClipping(shot, ctx) {
   const { look, unit, timing } = ctx;
-  checkRegions(shot);
-  const desk = isDesk(look);
+  const problems = clippingProblems(shot);
+  if (problems.length > 0) throw new Error(`clipping: shot "${shot.id}": ${problems.map((e) => `${e.path}: ${e.message}`).join('; ')}`);
+  const closeUp = cutsToCloseUp(look);
   const picture = ctx.asset(shot.src);
   const { w, h } = pictureSize(ctx, picture);
   const hero = heroId(shot, 'image');
   const centre = centreOf(ctx);
   const parts = pictureParts(shot, ctx, { w, h, hero });
   const tilt = parts.find((n) => n.id === `${hero}.cutout`)?.props.rotate ?? 0;
-  const turn = (desk ? DESK_TURN : 0) + tilt;
+  const turn = (isEditorial(look) ? EDITORIAL_TURN : 0) + tilt;
   const local = ([fx, fy, fw, fh]) => [fx * w - w / HALF, fy * h - h / HALF, fw * w, fh * h];
-  // desk pushes the camera in on a region; pop cuts to a close-up of it instead (close-ups.mjs)
-  const plan = desk ? null : closeUpPlan(shot, ctx);
+  // A moving camera pushes in on a region; a locked one cuts to a close-up of it instead (close-ups.mjs).
+  const plan = closeUp ? closeUpPlan(shot, ctx) : null;
+  if (plan && plan.cuts.length > 0) requireDevice(look, 'punch', 'clipping');
   const hideAt = plan?.cuts[0]?.at;
-  const marks = desk ? regionMarks(shot, ctx, { w, h, tilt, local }) : [];
+  const marks = closeUp ? [] : regionMarks(shot, ctx, { w, h, tilt, local });
   const group = pictureGroup(shot, ctx, { hero, centre, children: [...parts, ...marks], hideAt });
   const inPicture = Object.fromEntries(Object.entries(shot.regions ?? {}).map(([name, region]) => [`${REGION_PREFIX}${name}`, turnedBox(centre, turn, local(region))]));
   const close = plan ? closeUps(shot, ctx, { picture, area: availableArea(ctx), centre, plan }) : { nodes: [], camera: [], boxes: {} };
   const pictureBoxes = { image: turnedBox(centre, turn, local([0, 0, 1, 1])), ...inPicture, ...close.boxes };
-  // The camera pushes in on the first event aimed at a region, landing as the event does (desk only).
-  const pushed = desk ? (shot.on ?? []).find(isRegionEvent) : undefined;
+  // The camera pushes in on the first event aimed at a region, landing as the event does (moving cameras only).
+  const pushed = closeUp ? undefined : (shot.on ?? []).find(isRegionEvent);
   const push = pushed && pictureBoxes[pushed.target] ? pushLayer(ctx, pictureBoxes[pushed.target], ctx.at(pushed.at)) : null;
-  // The caption goes with the whole picture: out during a desk push, cut on the frame pop switches to a close-up.
-  const leaves = hideAt === undefined ? push : [{ t: hideAt }, { t: hideAt }];
-  const caption = captionNode(shot, ctx, { group, hero, w, h, centre, push: leaves });
+  const caption = captionNode(shot, ctx, { group, hero, w, h, centre, leaves: { push, hideAt } });
   const boxes = caption ? { ...pictureBoxes, caption: caption.box } : pictureBoxes;
-  const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'image', skip: desk ? isRegionHighlight : isRegionEvent });
+  const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'image', skip: closeUp ? isRegionEvent : isRegionHighlight });
   return {
     nodes: placeDevices([fieldNode(shot, ctx), group, ...close.nodes, ...(caption ? [caption.text] : [])], devices),
     camera: [...defaultCamera(look, timing, unit), ...(push ? [push] : []), ...close.camera, ...deviceCamera(devices)],
@@ -210,6 +213,16 @@ function expandClipping(shot, ctx) {
 const FRACTION = { type: 'number', minimum: 0, maximum: 1 };
 
 registries.kinds.add('clipping', {
+  summary: 'A screenshot or picture shown as a clipping, with an optional caption; named regions of it can be pushed in on and marked with `on` events.',
+  example: {
+    id: 'query',
+    show: 'clipping',
+    src: 'assets/screenshot.png',
+    say: 'This one shows the query behind every chart.',
+    caption: 'The query',
+    regions: { query: [0.55, 0.2, 0.35, 0.2] },
+    on: [{ at: 'word:query', do: 'circle', target: 'region:query' }],
+  },
   schema: {
     required: ['src'],
     properties: {
@@ -234,5 +247,6 @@ registries.kinds.add('clipping', {
   ids: (shot) => [heroId(shot, 'image')],
   // A highlight on a region is drawn by this kind (region-mark.mjs, close-ups.mjs), in any look.
   regionDevices: ['highlight'],
+  validate: clippingProblems,
   expand: expandClipping,
 });

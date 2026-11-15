@@ -16,6 +16,7 @@ function tracking(sizeUnits, role = 'display') {
 
 export const pop = {
   name: 'pop',
+  summary: 'Short-form caption collage: a near-black field, one heavy condensed grotesque in capitals, an acid accent and springy pops. The look of mode viral.',
   modes: ['viral'],
   fonts: {
     display: { family: 'Archivo', weight: 900, width: 'extra-condensed' },
@@ -32,6 +33,8 @@ export const pop = {
   wordsPerLine: { text: 12 },
   // Halftone dots in the palette's `rule` grey over the flat paper: texture without touching ink contrast.
   field: { field: 'halftone', params: { color: 'rule', strength: 1 } },
+  // how shots lay out: flush left on grid columns (editorial) or on the centre of the composition (centred)
+  composition: 'centred',
   emphasis: 'recolor-scale',
   moves: {
     enter: { ease: 'spring(260,16)', dur: 0.28, scale: 0.6 },

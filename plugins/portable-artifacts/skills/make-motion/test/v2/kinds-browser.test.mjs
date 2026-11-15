@@ -51,7 +51,7 @@ const shotsFor = (look) => ({
 
 // Distinct RGBA values on the stage canvas, and how many pixels sit within INK_TOLERANCE of `ink`.
 const pixelStats = (page, ink) => page.evaluate(([hex, tolerance]) => {
-  const canvas = document.getElementById('stage');
+  const canvas = window.__source; // the 2D frame before the post pass
   const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
   const want = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
   const seen = new Set();
@@ -96,7 +96,7 @@ test('a field node paints its seeded texture inside its transform', async (t) =>
   t.after(() => a.close());
   await a.hashFrame(0);
   const corner = await a.page.evaluate(() => {
-    const ctx = document.getElementById('stage').getContext('2d');
+    const ctx = window.__source.getContext('2d');
     return [Array.from(ctx.getImageData(50, 20, 1, 1).data), Array.from(ctx.getImageData(300, 200, 1, 1).data)];
   });
   assert.deepEqual(corner[0], [0, 0, 0, 255], 'outside the field: the background');
@@ -118,7 +118,7 @@ test('an image node with clip draws only that part of the picture', async (t) =>
   t.after(() => a.close());
   await a.hashFrame(0);
   const [light, blue] = await a.page.evaluate(() => {
-    const ctx = document.getElementById('stage').getContext('2d');
+    const ctx = window.__source.getContext('2d');
     return [Array.from(ctx.getImageData(150, 190, 1, 1).data), Array.from(ctx.getImageData(350, 110, 1, 1).data)];
   });
   assert.ok(light[0] > 200 && light[2] > 200, `the light stripe fills its whole box: ${light}`);

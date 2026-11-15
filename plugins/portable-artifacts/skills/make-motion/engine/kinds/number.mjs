@@ -1,19 +1,20 @@
 // The `number` kind: one hero figure that counts up to its value, landing on the spoken figure, with a label and an
 // optional delta. The figure is one text node whose words are the digits of every step of the count, each in a fixed
 // numeral advance and shown by a stepped opacity track, so the count never jitters and needs no special drawing.
-// `desk` sets it flush left on column 2 over a hairline and a label; `pop` centres it over a label tag. Pure and
-// DOM-free.
+// An editorial composition (desk) sets it flush left on column 2 over a hairline and a label; a centred one (pop)
+// centres it over a label tag. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
-import { track } from '../time/track.mjs';
 import { ease } from '../time/ease.mjs';
 import { layoutText, numeralAdvance } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { entrance, colourOf, polyline } from '../devices/shared.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, typeset, compositionRect, fieldNode, enterTracks, pulseScale, wipeIn,
-  rectPath, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
+  CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, typeset, setCase, inkBox, shownFrom,
+  isEditorial, requireDevice, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale, wipeIn, rectPath,
+  defaultCamera, onDevices, placeDevices, deviceCamera,
 } from './shared.mjs';
+import { NUMBER_WORDS, ONES, TENS } from './words.mjs';
 
 const AFFIX_MAX = 8;
 const LABEL_MAX = 60;
@@ -37,11 +38,12 @@ const NO_WRAP = 1e6;
 const HALF = 2;
 const DIGIT = /\d/;
 const THOUSANDS = /\B(?=(\d{3})+(?!\d))/g;
-const NUMBER_WORDS = new Set([
-  'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
-  'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty', 'thirty', 'forty', 'fifty', 'sixty',
-  'seventy', 'eighty', 'ninety', 'hundred', 'thousand', 'million', 'billion', 'percent',
-]);
+const VALUE_LIMIT = 1e15; // larger figures lose integer precision and no layout holds them
+// Words that start a spoken number by themselves; "one" and "a" start one only before a number word or unit.
+const COUNT_WORDS = new Set([...ONES.filter((w) => w !== 'one'), ...TENS.filter(Boolean)]);
+const WEAK_STARTS = new Set(['one', 'a']);
+const NOT_DIGIT = /\D/g;
+const NOT_LETTER = /[^a-z]/g;
 
 // ---- the count ----
 
@@ -52,10 +54,32 @@ export function formatValue(value, decimals) {
   return `${sign}${whole.replace(THOUSANDS, ',')}${fraction === undefined ? '' : `.${fraction}`}`;
 }
 
-/** When the count lands: the first spoken word holding a digit or a number word, else COUNT_FALLBACK of the shot. */
-export function countLanding(timing) {
-  const spoken = timing.words.find((w) => DIGIT.test(w.text) || NUMBER_WORDS.has(w.text.toLowerCase().replace(/[^a-z]/g, '')));
-  return spoken ? spoken.start : COUNT_FALLBACK * timing.duration;
+// A spoken word's lower-case letter parts, split on hyphens ("forty-one" -> forty, one).
+const parts = (word) => word.text.toLowerCase().split('-').map((part) => part.replace(NOT_LETTER, '')).filter(Boolean);
+const isNumberWord = (word) => word !== undefined && parts(word).some((part) => NUMBER_WORDS.has(part));
+
+// Does a spoken number start at word i? A count word does; "one" or "a" only before a number word or unit, or when
+// hyphenated to one ("one-hundred").
+function startsNumber(words, i) {
+  const [lead, ...rest] = parts(words[i]);
+  if (lead === undefined) return false;
+  if (WEAK_STARTS.has(lead)) return rest.some((part) => NUMBER_WORDS.has(part)) || isNumberWord(words[i + 1]);
+  return COUNT_WORDS.has(lead) || rest.some((part) => COUNT_WORDS.has(part));
+}
+
+/**
+ * When the count lands, on the best spoken match for the figure: a word whose digits equal the value's digits first,
+ * then the first spoken number (so "in 2024, forty one percent" lands on "forty"), then any word with a digit, else
+ * COUNT_FALLBACK of the shot.
+ */
+export function countLanding(timing, value, decimals) {
+  const words = timing.words;
+  const target = formatValue(Math.abs(value), decimals).replace(NOT_DIGIT, '');
+  const exact = words.find((w) => DIGIT.test(w.text) && w.text.replace(NOT_DIGIT, '') === target);
+  const spelt = words.find((_, i) => startsNumber(words, i));
+  const anyDigit = words.find((w) => DIGIT.test(w.text));
+  const best = exact ?? spelt ?? anyDigit;
+  return best ? best.start : COUNT_FALLBACK * timing.duration;
 }
 
 // A value part way through the count, cut toward zero at `decimals` so it never shows the final value early.
@@ -65,11 +89,12 @@ function partial(value, share, decimals) {
 }
 
 // The texts the count shows and when each appears, eased by the look's count ease from `start` to `land` (the final
-// value exactly on `land`): `rate` steps a second, at most MAX_COUNT_STEPS, a step equal to the one before it merged
-// into it. Each step shows from its time until the next one's, so exactly one is visible at any moment.
-function countSteps({ value, decimals, start, land, rate, curve }) {
+// value exactly on `land`): `rate` steps a second and at most MAX_COUNT_STEPS values in all (the start value and the
+// final one included), a step equal to the one before it merged into it. Each step shows from its time until the next
+// one's, so exactly one is visible at any moment.
+export function countSteps({ value, decimals, start, land, rate, curve }) {
   // floor, not ceil: the steps never come faster than `rate` (STEP_EPSILON keeps 0.6 s * 30 from flooring to 17)
-  const frames = Math.min(MAX_COUNT_STEPS, Math.max(1, Math.floor((land - start) * rate + STEP_EPSILON)));
+  const frames = Math.min(MAX_COUNT_STEPS - 1, Math.max(1, Math.floor((land - start) * rate + STEP_EPSILON)));
   const final = formatValue(value, decimals);
   const steps = [];
   for (let k = 0; k <= frames; k++) {
@@ -80,15 +105,9 @@ function countSteps({ value, decimals, start, land, rate, curve }) {
   return steps;
 }
 
-// A stepped 0/1 track: shown from `from` until `to` (forever when `to` is undefined).
-function shownBetween(from, to) {
-  const keys = from === 0 ? [{ t: 0, v: 1 }] : [{ t: 0, v: 0 }, { t: from, v: 0 }, { t: from, v: 1 }];
-  if (to !== undefined) keys.push({ t: to, v: 1 }, { t: to, v: 0 });
-  return { opacity: track(keys) };
-}
-
 // One text node holding every step's digits: each digit centred in a fixed advance, separators at their own width.
-function digitsLayout(steps, font, measure) {
+// In a centred composition every step is centred on the final value's ink centre, so the count grows from the middle.
+function digitsLayout(steps, font, measure, centred) {
   const tracking = (font.tracking ?? 0) * font.size;
   const advance = numeralAdvance(measure, font) + tracking;
   const words = [], wordTracks = [], meta = [];
@@ -100,11 +119,12 @@ function digitsLayout(steps, font, measure) {
       const cell = DIGIT.test(ch) ? advance : glyph + tracking;
       indexes.push(words.length);
       words.push({ text: ch, index: words.length, x: x + (cell - glyph) / HALF, width: glyph });
-      wordTracks.push(shownBetween(step.t, steps[k + 1]?.t));
+      wordTracks.push({ opacity: shownFrom(step.t, steps[k + 1]?.t) });
       x += cell;
     }
     meta.push({ text: step.text, t: step.t, words: indexes, width: x });
   });
+  if (centred) centreSteps(words, meta);
   const { ascent, descent } = measure('0', font);
   const width = meta.at(-1).width;
   const layout = { size: font.size, width, height: ascent + descent, lines: [{ x: 0, y: ascent, width, words }], overflow: false };
@@ -113,6 +133,16 @@ function digitsLayout(steps, font, measure) {
   const final = meta.at(-1).words.map((i) => words[i]);
   const inkLeft = final[0].x;
   return { layout, wordTracks, steps: meta, advance, ascent, inkLeft, inkWidth: final.at(-1).x + final.at(-1).width - inkLeft };
+}
+
+// Shift each step's words so its ink is centred where the final value's ink is.
+function centreSteps(words, meta) {
+  const centre = (step) => (words[step.words[0]].x + words[step.words.at(-1)].x + words[step.words.at(-1)].width) / HALF;
+  const target = centre(meta.at(-1));
+  for (const step of meta.slice(0, -1)) {
+    const shift = target - centre(step);
+    for (const i of step.words) words[i] = { ...words[i], x: words[i].x + shift };
+  }
 }
 
 // ---- composition ----
@@ -127,14 +157,11 @@ function affix(text, font, measure) {
 // says so (its digits layout has overflow: true), as a statement that cannot fit does.
 function figureAt(shot, ctx, { maxWidth, minSize, maxSize, steps }) {
   const { look, unit, measure } = ctx;
-  const caps = (s) => {
-    if (s === undefined) return s;
-    return look.caps.display ? typeset(s).toUpperCase() : typeset(s);
-  };
+  const caps = (s) => (s === undefined ? s : setCase(look, 'display', s));
   const at = (size) => {
     const font = fontFor(look, 'display', size, unit);
     const small = fontFor(look, 'display', AFFIX_SHARE * size, unit);
-    const digits = digitsLayout(steps, font, measure);
+    const digits = digitsLayout(steps, font, measure, !isEditorial(look));
     const prefix = affix(caps(shot.prefix), small, measure), suffix = affix(caps(shot.suffix), small, measure);
     const gap = AFFIX_GAP * size;
     const preW = prefix ? prefix.width + gap : 0, sufW = suffix ? suffix.width + gap : 0;
@@ -169,8 +196,6 @@ function figureGroup(shot, ctx, fig, { left, baseline, tracks }) {
   return { group, hero, box: [left, capTop, fig.total, CAP_HEIGHT * fig.size] };
 }
 
-const textBox = (x, y, layout) => unionBox(layout.lines.map((l) => [x + l.x, y + l.y - CAP_HEIGHT * layout.size, l.width, (CAP_HEIGHT + WORD_DESCENT) * layout.size]));
-
 // A tag built twice when it must be placed by its size: first to measure, then at place(w, h, baseline), where
 // `baseline` is how far its text baseline sits below its top (read from the tag's own text node).
 function placedTag(ctx, id, text, at, place) {
@@ -197,7 +222,7 @@ function deskParts(shot, ctx, steps, times) {
   const layout = layoutText({ text: typeset(shot.label), font, maxWidth: span.w, measure });
   // The baseline sits at DESK.baseline of the height unless the hairline, label and delta under it would then pass the
   // bottom margin (a long label on a short format): then the whole stack rises just enough.
-  const labelHeight = layout.lines.at(-1).y - layout.lines[0].y + (CAP_HEIGHT + WORD_DESCENT) * font.size;
+  const labelHeight = inkBox(0, 0, layout)[3];
   const deltaHeight = shot.delta === undefined ? 0 : DESK.deltaDrop * unit + tagHeight(ctx, shot.delta);
   const below = (DESK.ruleGap + DESK.rule + DESK.labelGap) * unit + labelHeight + deltaHeight;
   const baseline = Math.min(DESK.baseline * canvas.h, canvas.h - look.grid.margin * unit - below);
@@ -209,9 +234,10 @@ function deskParts(shot, ctx, steps, times) {
   const y = ruleY + (DESK.rule + DESK.labelGap) * unit - (layout.lines[0].y - CAP_HEIGHT * font.size);
   const labelAt = times.land + look.moves.enter.dur;
   const label = node('text', `${shot.id}.label`, { x: left, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, labelAt, { y }) });
-  const boxes = { value: figure.box, label: textBox(left, y, layout) };
+  const boxes = { value: figure.box, label: inkBox(left, y, layout) };
   const nodes = [figure.group, rule, label];
   if (shot.delta === undefined) return { nodes, boxes, hero: figure.hero };
+  requireDevice(look, 'tag', 'number');
   const delta = deskDelta(shot, ctx, { left, y, line: layout.lines.at(-1), below: boxes.label, ruleBox, at: labelAt + DELTA_LAG });
   return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };
 }
@@ -245,7 +271,7 @@ function deskDelta(shot, ctx, { left, y, line, below, ruleBox, at }) {
 function plainTag(ctx, id, text, { cx, top, maxWidth, at, fromStep, toStep }) {
   const { look, unit, measure } = ctx;
   const style = look.devices.tag ?? {};
-  const shown = look.caps.label ? typeset(text).toUpperCase() : typeset(text);
+  const shown = setCase(look, 'label', text);
   const padded = (size, width) => width + HALF * TAG.padX * size;
   const oneLine = (size) => layoutText({ text: shown, font: fontFor(look, 'label', size, unit), maxWidth: NO_WRAP, measure });
   let size = sizeAt(look, toStep, unit);
@@ -267,11 +293,11 @@ function plainTag(ctx, id, text, { cx, top, maxWidth, at, fromStep, toStep }) {
 function popDelta(shot, ctx, { cx, width, top, at }) {
   const { look, unit, measure } = ctx;
   const font = fontFor(look, 'label', sizeAt(look, POP.deltaStep, unit), unit);
-  const layout = layoutText({ text: look.caps.label ? typeset(shot.delta).toUpperCase() : typeset(shot.delta), font, maxWidth: width, align: 'center', measure });
+  const layout = layoutText({ text: setCase(look, 'label', shot.delta), font, maxWidth: width, align: 'center', measure });
   const x = cx - width / HALF;
   const y = top - (layout.lines[0].y - CAP_HEIGHT * font.size);
   const text = node('text', `${shot.id}.delta`, { x, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, at) });
-  return { nodes: [text], box: textBox(x, y, layout) };
+  return { nodes: [text], box: inkBox(x, y, layout) };
 }
 
 // pop: a hero numeral fitted to columns 1 to 12 (inside the platform safe zone on 9:16) between scale step 5 and
@@ -302,15 +328,17 @@ function popParts(shot, ctx, steps, times) {
   return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };
 }
 
-function expandNumber(shot, ctx) {
+function expandNumber(given, ctx) {
   const { look, timing, unit, fps } = ctx;
-  const land = countLanding(timing);
+  // A negative value with a prefix reads "-$5": the minus goes in front of the prefix and the figure counts its size.
+  const shot = given.value < 0 && given.prefix !== undefined ? { ...given, value: -given.value, prefix: `-${given.prefix}` } : given;
+  const land = countLanding(timing, shot.value, shot.decimals ?? 0);
   const start = Math.max(0, land - look.moves.count.dur);
   // The count changes at the look's own rhythm: a hand look (desk) on its 12 fps step, a crisp one (pop) every frame.
   const rate = look.moves.draw.step ?? fps;
   const steps = countSteps({ value: shot.value, decimals: shot.decimals ?? 0, start, land, rate, curve: ease(look.moves.count.ease) });
   const times = { land, start, matched: arrivesMatched(shot, ctx) };
-  const parts = look.emphasis === 'highlight' ? deskParts(shot, ctx, steps, times) : popParts(shot, ctx, steps, times);
+  const parts = isEditorial(look) ? deskParts(shot, ctx, steps, times) : popParts(shot, ctx, steps, times);
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'value' });
   return {
     nodes: placeDevices([fieldNode(shot, ctx), ...parts.nodes], devices),
@@ -322,10 +350,12 @@ function expandNumber(shot, ctx) {
 }
 
 registries.kinds.add('number', {
+  summary: 'One big figure that counts up to its value, with a label under it and an optional change badge.',
+  example: { id: 'rows', show: 'number', say: 'Four hundred fifty nine rows. One file.', value: 459, suffix: 'rows', label: 'in one file', delta: '+12%' },
   schema: {
     required: ['value', 'label'],
     properties: {
-      value: { type: 'number' },
+      value: { type: 'number', exclusiveMinimum: -VALUE_LIMIT, exclusiveMaximum: VALUE_LIMIT },
       prefix: { type: 'string', minLength: 1, maxLength: AFFIX_MAX },
       suffix: { type: 'string', minLength: 1, maxLength: AFFIX_MAX },
       decimals: { type: 'integer', minimum: 0, maximum: DECIMALS_MAX },
@@ -338,5 +368,6 @@ registries.kinds.add('number', {
   heroTarget: 'value',
   targets: (shot) => ['value', 'label', ...(shot.delta === undefined ? [] : ['delta'])],
   ids: (shot) => [heroId(shot, 'value')],
+  validate: heroProblems,
   expand: expandNumber,
 });

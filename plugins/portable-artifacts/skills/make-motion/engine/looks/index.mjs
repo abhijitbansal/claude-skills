@@ -32,6 +32,7 @@ import { pop } from './pop.mjs';
  * @property {{ display: number, text: number }} maxLines
  * @property {{ text: number }} wordsPerLine
  * @property {{ field: string, params: object }} field  a name in registries.fields and its params
+ * @property {'editorial' | 'centred'} composition  how shots lay out: flush left on grid columns, or centred
  * @property {'highlight' | 'recolor-scale'} emphasis
  * @property {{ enter: Move, exit: Move, emphasize: Move, draw: Move, count: Move }} moves
  * @property {number} wordStagger  seconds between words that have no spoken time; 0 means words follow their spoken times

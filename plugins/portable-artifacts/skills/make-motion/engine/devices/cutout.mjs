@@ -48,6 +48,7 @@ function buildCutout(params) {
 
 export const cutout = Object.freeze({
   name: 'cutout',
+  summary: 'A picture placed as a physical object, with a keyline and a contact shadow.',
   supports: styledBy('cutout'),
   build: buildCutout,
 });

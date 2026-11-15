@@ -5,14 +5,17 @@
 // Every cut returns `from` unchanged at p <= 0 and `to` unchanged at p >= 1. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { ease } from '../time/ease.mjs';
+import { stateKey } from '../graph/sample.mjs';
 
 const HALF = 2;
 const SLIDE = Object.freeze({ dur: 0.4, ease: 'inOutCubic' });
 const PUNCH = Object.freeze({ dur: 0.2, ease: 'outExpo', zoom: 1.15 });
 const MATCH = Object.freeze({ dur: 0.5, ease: 'inOutCubic', outgoingShare: 0.4 });
-// A shared node's two copies cross over in the middle of the match: smoothstep between these points of the eased p.
+// A shared node's incoming copy fades in over its outgoing one between these points of the eased p; the outgoing copy
+// stays at full strength until the incoming one is fully in, then leaves, so the pair never reads thinner than either.
 const CROSS_FROM = 0.25;
 const CROSS_TO = 0.75;
+const SAME_PLACE = 1e-9;
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
 const lerp = (a, b, e) => a + (b - a) * e;
@@ -23,9 +26,10 @@ const smoothstep = (lo, hi, v) => {
 };
 
 // The endpoints are the plain frames; `blend` only ever sees 0 < p < 1.
-function defineCut(dur, blend) {
+function defineCut(dur, blend, summary) {
   return Object.freeze({
     dur,
+    summary,
     apply({ from, to, p, canvas, look }) {
       if (!Array.isArray(from) || !Array.isArray(to)) throw new Error('cut.apply needs from and to sampled frames');
       if (!Number.isFinite(p)) throw new Error(`cut.apply: p must be a finite number, got ${p}`);
@@ -37,16 +41,28 @@ function defineCut(dur, blend) {
 }
 
 const shifted = (nodes, dx) => nodes.map((n) => Object.freeze({ ...n, x: n.x + dx }));
+const samePlace = (a, b) => ['x', 'y', 'scale', 'rotate'].every((k) => Math.abs(a[k] - b[k]) < SAME_PLACE);
 
 // A shared background (a node behind the picture plane, depth > 0, whose id both frames hold: the film's one field)
-// stays where the incoming frame has it; only the rest slides, so the cut happens over one continuous surface.
+// is never redrawn twice: it is where the incoming frame has it, eased there from where the outgoing frame left it
+// when the two differ (a shot that ended pushed in), so the surface neither dips nor snaps.
+function backgroundNode(from, to, e) {
+  if (from === undefined || samePlace(from, to)) return to;
+  return Object.freeze({ ...to, x: lerp(from.x, to.x, e), y: lerp(from.y, to.y, e), scale: lerp(from.scale, to.scale, e), rotate: lerp(from.rotate, to.rotate, e) });
+}
+
+const backgroundIds = (from, to) => {
+  const outgoing = new Set(from.map((n) => n.id));
+  return new Set(to.filter((n) => n.depth > 0 && outgoing.has(n.id)).map((n) => n.id));
+};
+
+// Only the shot slides: the shared background stays (see backgroundNode()), so the cut happens over one surface.
 function slide({ from, to, p, canvas }) {
   const e = ease(SLIDE.ease)(p);
-  const outgoing = new Set(from.map((n) => n.id));
-  const isBackground = (n) => n.depth > 0 && outgoing.has(n.id);
-  const background = new Set(to.filter(isBackground).map((n) => n.id));
+  const outgoing = new Map(from.map((n) => [n.id, n]));
+  const background = backgroundIds(from, to);
   return [
-    ...to.filter((n) => background.has(n.id)),
+    ...to.filter((n) => background.has(n.id)).map((n) => backgroundNode(outgoing.get(n.id), n, e)),
     ...shifted(from.filter((n) => !background.has(n.id)), -e * canvas.w),
     ...shifted(to.filter((n) => !background.has(n.id)), (1 - e) * canvas.w),
   ];
@@ -87,9 +103,10 @@ function morph(a, b, e) {
   const size = lerp(pa.size, pb.size, e);
   const opacity = lerp(a.opacity, b.opacity, e);
   const cross = smoothstep(CROSS_FROM, CROSS_TO, e);
+  const leave = smoothstep(CROSS_TO, 1, e);
   const turn = b.rotate - a.rotate;
   const copies = [
-    carry(a, { c0: pa.centre, c1: centre, k: size / pa.size, turn: turn * e, opacity: opacity * (1 - cross), id: `${a.id}.from` }),
+    carry(a, { c0: pa.centre, c1: centre, k: size / pa.size, turn: turn * e, opacity: opacity * (1 - leave), id: `${a.id}.from` }),
     carry(b, { c0: pb.centre, c1: centre, k: size / pb.size, turn: -turn * (1 - e), opacity: opacity * cross, id: `${b.id}.to` }),
   ];
   // A group at the identity holding both copies: one node with the shared id, drawn on top of the frame.
@@ -104,9 +121,12 @@ function morph(a, b, e) {
 
 const faded = (n, factor) => Object.freeze({ ...n, opacity: n.opacity * factor, visible: n.opacity * factor > 0 });
 
+// The same node in the same state in both frames (its bbox aside) passes through untouched.
+const identical = (a, b) => stateKey({ ...a, bbox: undefined }) === stateKey({ ...b, bbox: undefined });
+
 // Drawing order: the shared background the incoming frame starts with (shared nodes behind the picture plane, depth
-// > 0, such as the field), then the outgoing nodes fading out, then the rest of the incoming frame in its own order,
-// shared nodes morphing in place.
+// > 0, such as the field: see backgroundNode()), then the outgoing nodes fading out, then the rest of the incoming frame
+// in its own order, a node identical in both passing through and any other shared node morphing in place.
 function match({ from, to, p }) {
   const e = ease(MATCH.ease)(p);
   const outgoing = new Map(from.map((n) => [n.id, n]));
@@ -115,7 +135,12 @@ function match({ from, to, p }) {
   const into = clamp01((p - MATCH.outgoingShare) / (1 - MATCH.outgoingShare));
   const lead = to.findIndex((n) => !shared.has(n.id) || !(n.depth > 0));
   const split = lead < 0 ? to.length : lead;
-  const blend = (n) => (shared.has(n.id) ? morph(outgoing.get(n.id), n, e) : faded(n, into));
+  const blend = (n) => {
+    if (!shared.has(n.id)) return faded(n, into);
+    const a = outgoing.get(n.id);
+    if (identical(a, n)) return n;
+    return n.depth > 0 ? backgroundNode(a, n, e) : morph(a, n, e);
+  };
   return [
     ...to.slice(0, split).map(blend),
     ...from.filter((n) => !shared.has(n.id)).map((n) => faded(n, out)),
@@ -124,10 +149,10 @@ function match({ from, to, p }) {
 }
 
 export const CUTS = Object.freeze({
-  cut: defineCut(0, ({ to }) => to),
-  slide: defineCut(SLIDE.dur, slide),
-  punch: defineCut(PUNCH.dur, punch),
-  match: defineCut(MATCH.dur, match),
+  cut: defineCut(0, ({ to }) => to, 'A hard cut: the next shot replaces the last on its first frame.'),
+  slide: defineCut(SLIDE.dur, slide, 'The last shot slides out to the left and the next slides in from the right over 0.4 s.'),
+  punch: defineCut(PUNCH.dur, punch, 'The next shot lands zoomed in and settles to full size over 0.2 s.'),
+  match: defineCut(MATCH.dur, match, 'Carries the node both shots share (see "hero") across in 0.5 s while the rest fades.'),
 });
 
 for (const [name, cut] of Object.entries(CUTS)) {

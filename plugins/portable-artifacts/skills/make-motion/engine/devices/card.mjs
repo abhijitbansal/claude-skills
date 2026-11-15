@@ -72,6 +72,7 @@ function buildCard(params) {
 
 export const card = Object.freeze({
   name: 'card',
+  summary: 'A sheet of paper that carries a quote, a figure or a picture.',
   supports: styledBy('card'),
   build: buildCard,
 });

@@ -19,6 +19,7 @@ function tracking(sizeUnits, role = 'display') {
 
 export const desk = {
   name: 'desk',
+  summary: 'Editorial paper collage: warm paper, a display serif, a highlighter and hand marks that step at 12 fps. The look of mode pro.',
   modes: ['pro'],
   fonts: {
     display: { family: 'Fraunces', weight: 600, width: 'normal' },
@@ -34,6 +35,8 @@ export const desk = {
   maxLines: { display: 4, text: 3 },
   wordsPerLine: { text: 12 },
   field: { field: 'paper', params: {} },
+  // how shots lay out: flush left on grid columns (editorial) or on the centre of the composition (centred)
+  composition: 'editorial',
   emphasis: 'highlight',
   moves: {
     enter: { ease: 'outCubic', dur: 0.5, dist: 24 },

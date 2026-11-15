@@ -289,8 +289,16 @@ test('each mode names a default look that serves it', () => {
 });
 
 test('mode values are the brief values', () => {
-  assert.deepEqual({ ...registries.modes.get('pro') }, { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, maxStillSeconds: 6, captions: false });
-  assert.deepEqual({ ...registries.modes.get('viral') }, { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, maxStillSeconds: 3, captions: true });
+  // Compared field by field: a mode also carries `summary`, the one-line text make.mjs --list prints.
+  const brief = {
+    pro: { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, maxStillSeconds: 6, captions: false },
+    viral: { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, maxStillSeconds: 3, captions: true },
+  };
+  for (const [name, values] of Object.entries(brief)) {
+    const mode = registries.modes.get(name);
+    for (const [field, want] of Object.entries(values)) assert.equal(mode[field], want, `${name}.${field}`);
+    assert.equal(typeof mode.summary, 'string', `${name} has a summary`);
+  }
 });
 
 test('registering twice is harmless: a second evaluation of the index does not throw', async () => {
@@ -346,4 +354,10 @@ test('the validator reads each look cuts: punch is pop only, match is desk only'
 test('an unknown look still lists the real ones', () => {
   const r = validate({ version: 2, look: 'dsk', shots: shots(undefined) });
   assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop)' }]);
+});
+
+test('every look names its composition: desk is editorial, pop is centred', () => {
+  assert.equal(registries.looks.get('desk').composition, 'editorial');
+  assert.equal(registries.looks.get('pop').composition, 'centred');
+  for (const name of registries.looks.names()) assert.ok(['editorial', 'centred'].includes(registries.looks.get(name).composition), name);
 });

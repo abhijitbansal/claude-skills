@@ -2,6 +2,7 @@
 // wpm: speaking pace; tail: seconds of room after the last word; maxStillSeconds: longest a frame may sit still.
 export const viral = {
   name: 'viral',
+  summary: 'Short-form vertical video: 9:16, a fast pace of 175 words a minute, captions on, a picture may sit still for 3 s.',
   defaultLook: 'pop',
   defaultFormat: '9:16',
   wpm: 175,

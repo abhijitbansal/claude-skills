@@ -5,24 +5,20 @@
 // Devices on a region are drawn against its close-up, starting on the cut. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
-import { track } from '../time/track.mjs';
-import { buildDevice } from './shared.mjs';
+import { REGION_PREFIX, regionOf, shownFrom, buildDevice } from './shared.mjs';
 import { regionMark, markDuration } from './region-mark.mjs';
 
-const REGION_PREFIX = 'region:';
 const WIDTH_SHARE = 0.92; // of the available width
 const HEIGHT_SHARE = 0.7; // of the available height, at most
 const CLEARANCE = 16; // units between the cut-out's shadow and a device placed against it
 const HALF = 2;
-
-const regionOf = (item) => (typeof item.target === 'string' && item.target.startsWith(REGION_PREFIX) ? item.target.slice(REGION_PREFIX.length) : null);
 
 /**
  * The close-ups a shot cuts to, in time order: one per region event whose region differs from the one on screen.
  * Each is { region, at, until } (until undefined for the last); events carry { item, j, at, region }.
  */
 export function closeUpPlan(shot, ctx) {
-  const events = (shot.on ?? []).map((item, j) => ({ item, j, at: ctx.at(item.at), region: regionOf(item) }))
+  const events = (shot.on ?? []).map((item, j) => ({ item, j, at: ctx.at(item.at), region: regionOf(item.target) }))
     .filter((e) => e.region !== null)
     .sort((a, b) => a.at - b.at || a.j - b.j);
   const cuts = [];
@@ -34,29 +30,25 @@ export function closeUpPlan(shot, ctx) {
   return { cuts, events };
 }
 
-// Shown from `at` until `until`, hidden before and after, switching on exact frames.
-function shownBetween(at, until) {
-  const keys = at === 0 ? [{ t: 0, v: 1 }] : [{ t: 0, v: 0 }, { t: at, v: 0 }, { t: at, v: 1 }];
-  if (until !== undefined) keys.push({ t: until, v: 1 }, { t: until, v: 0 });
-  return track(keys);
-}
-
 // The close-up's size: WIDTH_SHARE of the available width, or HEIGHT_SHARE of its height, whichever binds.
 function fitted(clip, area) {
   const fit = Math.min((WIDTH_SHARE * area.w) / clip[2], (HEIGHT_SHARE * area.h) / clip[3]);
   return { w: clip[2] * fit, h: clip[3] * fit };
 }
 
-// A device on a close-up starts drawing on the cut: it lands one draw later than its event, or later still for a
-// region frame, which draws its four sides in turn. It is placed against the cut-out as drawn, keyline and hard
-// shadow included (`reach` past the picture), so an underline or a frame never runs into the shadow.
+// A device on a close-up: { nodes, camera }. A drawn device starts drawing on the cut: it lands one draw later than its
+// event, or later still for a region frame, which draws its four sides in turn; a punch keeps its own time and camera
+// keys. It is placed against the cut-out as drawn, keyline and hard shadow included (`reach` past the picture), so an
+// underline or a frame never runs into the shadow.
 function closeUpDevice(shot, ctx, e, box, reach) {
   const around = [box[0] - reach, box[1] - reach, box[2] + HALF * reach, box[3] + HALF * reach];
   if (e.item.do === 'highlight') {
     const at = e.at + markDuration(ctx.look);
-    return regionMark({ id: `${shot.id}.on${e.j}`, region: around, picture: around, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, dim: false });
+    return { nodes: regionMark({ id: `${shot.id}.on${e.j}`, region: around, picture: around, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, dim: false }), camera: [] };
   }
-  return buildDevice(shot, ctx, { item: e.item, j: e.j, box: around, at: e.at + ctx.look.moves.draw.dur }).nodes;
+  const at = e.item.do === 'punch' ? e.at : e.at + ctx.look.moves.draw.dur;
+  const built = buildDevice(shot, ctx, { item: e.item, j: e.j, box: around, at });
+  return { nodes: built.nodes, camera: built.camera ?? [] };
 }
 
 /**
@@ -79,9 +71,10 @@ export function closeUps(shot, ctx, { picture, area, centre, plan }) {
     const image = node('image', `${id}.photo`, { src: shot.src, w, h, clip });
     const cutout = registries.devices.get('cutout').build({ id: `${id}.cutout`, box, at: 0, look, unit, seed, image }).nodes;
     const mine = plan.events.filter((e) => e.region === cut.region && e.at >= cut.at && (cut.until === undefined || e.at < cut.until));
-    const devices = mine.flatMap((e) => closeUpDevice(shot, ctx, e, box, reach));
+    const devices = mine.map((e) => closeUpDevice(shot, ctx, e, box, reach));
     camera.push(registries.devices.get('punch').build({ id: `${id}.punch`, box, at: cut.at, look, unit, seed }).camera);
-    return node('group', id, {}, { tracks: { opacity: shownBetween(cut.at, cut.until) }, children: [...cutout, ...devices] });
+    camera.push(...devices.map((d) => d.camera).filter((keys) => keys.length > 0));
+    return node('group', id, {}, { tracks: { opacity: shownFrom(cut.at, cut.until) }, children: [...cutout, ...devices.flatMap((d) => d.nodes)] });
   });
   return { nodes, camera, boxes };
 }

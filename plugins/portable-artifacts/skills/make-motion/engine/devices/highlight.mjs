@@ -54,6 +54,7 @@ function buildHighlight(params) {
 
 export const highlight = Object.freeze({
   name: 'highlight',
+  summary: 'A marker swipe that wipes in behind a phrase.',
   supports: styledBy('highlight'),
   build: buildHighlight,
 });

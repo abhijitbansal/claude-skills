@@ -1,5 +1,5 @@
 // Helpers shared by the designed shot kinds (statement, number, clipping): type sizes and fonts from the look, the
-// field every shot draws first, word timing against the narration, entrances, the default camera, the camera push,
+// field every shot draws first, composition and look checks, entrances, the default camera, the camera push,
 // and the devices a shot's `on` events place. Pure and DOM-free; layout runs on ctx.measure.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
@@ -15,13 +15,14 @@ export const WORD_DESCENT = 0.12;
 export const HERO_SCHEMA = Object.freeze({ type: 'string', pattern: '^[a-z][a-z0-9-]*$' });
 
 export const FIELD_ID = 'field';
+/** Ids the kinds use for nodes of their own, which a shot's `hero` may not take. */
+export const RESERVED_IDS = Object.freeze([FIELD_ID]);
+/** The prefix of a target that names one of a clipping's regions. */
+export const REGION_PREFIX = 'region:';
 const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
-const NO_SAY_START = 0.2; // seconds: with no narration the first word lands here...
-const NO_SAY_STAGGER = 0.09; // ...and each next word this much later
 const PUSH = Object.freeze({ share: 0.62, min: 1.2, max: 3.2, dur: 0.9 }); // the region fills `share` of the width
 const PUSH_OVERSHOOT = 1.2; // a spring ease can carry the push this far past its target; the pan limit allows for it
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
-const NON_WORD_RE = /[^\p{L}\p{N}]/gu;
 const FORCE_MARK = '|';
 const APOSTROPHE_RE = /(\p{L})'(?=\p{L})/gu;
 const HALF = 2;
@@ -69,6 +70,31 @@ export const arrivesMatched = (shot, ctx) => ctx.timing.index > 0 && shot.cut ==
 /** On-screen text as a typesetter sets it: an apostrophe inside a word becomes the typographic one (can't -> can, U+2019, t). */
 export const typeset = (text) => text.replace(APOSTROPHE_RE, '$1\u2019');
 
+/** Typeset text in the case the look sets `role` in (look.caps.display or look.caps.label). */
+export const setCase = (look, role, text) => (look.caps[role] ? typeset(text).toUpperCase() : typeset(text));
+
+/** The region name a target names (`region:<name>`), or null. */
+export const regionOf = (target) => (typeof target === 'string' && target.startsWith(REGION_PREFIX) ? target.slice(REGION_PREFIX.length) : null);
+
+/** The look lays shots out flush left on grid columns (editorial) rather than on the composition centre (centred). */
+export const isEditorial = (look) => look.composition === 'editorial';
+
+/** A locked camera (pop) cuts to a region close-up where a moving one (desk) pushes in. */
+export const cutsToCloseUp = (look) => look.camera.style === 'locked';
+
+/** Throws, naming the kind, the device and the look, when `look` does not style a device the kind needs. */
+export function requireDevice(look, name, kind) {
+  if (!registries.devices.get(name).supports(look)) {
+    throw new Error(`${kind}: look "${look.name}" does not style device "${name}", which this kind needs; add a devices.${name} entry to the look`);
+  }
+}
+
+/** Problems with a shot's `hero` (as validator errors relative to the shot): ids the kinds reserve are refused. */
+export function heroProblems(shot) {
+  if (!RESERVED_IDS.includes(shot.hero)) return [];
+  return [{ path: 'hero', message: `${JSON.stringify(shot.hero)} is reserved for the film's own nodes; choose another hero id` }];
+}
+
 /** The words of a text as layoutText splits them (a `|` forces a break and is not a word). */
 export function wordsOf(text) {
   return text.split(/\s+/).filter((raw) => raw !== '' && raw !== FORCE_MARK).map((raw) => (raw.endsWith(FORCE_MARK) ? raw.slice(0, -FORCE_MARK.length) : raw));
@@ -86,6 +112,14 @@ export function fitDisplay(opts, { min, max, maxHeight, maxLines }, look, unit) 
   if (settled === first) return { layout, font: { ...opts.font, size: layout.size, tracking: first } };
   const again = fit(settled, layout.size);
   return { layout: again, font: { ...opts.font, size: again.size, tracking: settled } };
+}
+
+/** A box from the cap line to just under the baseline, for type of `size` starting at x on `baseline`. */
+export const capBox = (x, baseline, width, size) => [x, baseline - CAP_HEIGHT * size, width, (CAP_HEIGHT + WORD_DESCENT) * size];
+
+/** The canvas box of a laid-out text at (x, y): each line from its cap line to just under its baseline. */
+export function inkBox(x, y, layout) {
+  return unionBox(layout.lines.map((l) => capBox(x + l.x, y + l.y, l.width, layout.size)));
 }
 
 /** The ink block of a layout in its own space: first cap line to last baseline. */
@@ -115,27 +149,11 @@ export function fieldNode(shot, ctx) {
 
 // ---- timing ----
 
-const letters = (text) => text.replace(NON_WORD_RE, '').toLowerCase();
-
-/**
- * When each on-screen word lands: on the start of the spoken word it matches (in order, by letters and digits); an
- * unmatched word lands with the nearest earlier matched word (the first spoken word when none is earlier). With no
- * narration words stagger NO_SAY_STAGGER apart from NO_SAY_START. Each entry is { at, spoken } with `spoken` the
- * index of the matched spoken word or null.
- */
-export function wordTimes(texts, timing) {
-  const spoken = timing.words;
-  if (spoken.length === 0) return texts.map((_, i) => ({ at: Math.min(timing.duration, NO_SAY_START + NO_SAY_STAGGER * i), spoken: null }));
-  let next = 0;
-  let last = null;
-  return texts.map((text) => {
-    const want = letters(text);
-    const j = want === '' ? -1 : spoken.findIndex((word, k) => k >= next && letters(word.text) === want);
-    if (j < 0) return { at: spoken[last ?? 0].start, spoken: null };
-    next = j + 1;
-    last = j;
-    return { at: spoken[j].start, spoken: j };
-  });
+/** Stepped visibility: hidden, shown on the exact frame of `at`, hidden again from `until` (never, when undefined). */
+export function shownFrom(at, until) {
+  const keys = at === 0 ? [{ t: 0, v: 1 }] : [{ t: 0, v: 0 }, { t: at, v: 0 }, { t: at, v: 1 }];
+  if (until !== undefined) keys.push({ t: until, v: 1 }, { t: until, v: 0 });
+  return track(keys);
 }
 
 // ---- entrances ----
@@ -166,12 +184,22 @@ export const rectPath = (w, h) => `M0 0H${w}V${h}H0Z`;
 
 // ---- camera ----
 
+const drifts = (look) => look.camera.style === 'desk' && look.camera.drift > 0;
+
 /** The look's resting camera as layers of keys: desk drifts half a drift either way, alternating by shot. */
 export function defaultCamera(look, timing, unit) {
-  if (look.camera.style !== 'desk' || !(look.camera.drift > 0)) return [];
+  if (!drifts(look)) return [];
   const half = (look.camera.drift * unit) / HALF;
   const dir = timing.index % HALF === 0 ? 1 : -1;
   return [[{ t: 0, x: -half * dir }, { t: timing.duration, x: half * dir }]];
+}
+
+// The drift's camera x at shot time t (linear, as defaultCamera keys it).
+function driftAt(look, timing, unit, t) {
+  if (!drifts(look)) return 0;
+  const half = (look.camera.drift * unit) / HALF;
+  const dir = timing.index % HALF === 0 ? 1 : -1;
+  return -half * dir + (HALF * half * dir * t) / timing.duration;
 }
 
 // The largest pan at full push that keeps the depth-1 field over the canvas. At push progress f (0 to the ease's
@@ -190,15 +218,16 @@ const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * A camera layer for a deliberate close-up on `box` (canvas pixels): the zoom that makes the box PUSH.share of the
  * composition width (clamped to PUSH.min..PUSH.max), panned so the box centre sits on the composition centre (as far
  * as the field allows), easing with the look's enter ease over PUSH.dur and landing on `at`. A node at depth 0 moves
- * to c + (x - c) zoom - pan, so pan = c + (boxCentre - c) zoom - target.
+ * to c + (x - c) zoom - pan, so pan = c + (boxCentre - c) zoom - target; the drift's own pan at the landing time is
+ * taken off, since the camera adds the layers.
  */
 export function pushLayer(ctx, box, at) {
-  const { look, canvas, unit } = ctx;
+  const { look, canvas, unit, timing } = ctx;
   const rect = compositionRect(ctx);
   const zoom = clampTo((PUSH.share * rect.w) / box[2], PUSH.min, PUSH.max);
   const drift = (look.camera.drift * unit) / HALF;
   const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
-  const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx);
+  const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx) - driftAt(look, timing, unit, at);
   const y = pan(canvas.h / HALF, box[1] + box[3] / HALF, rect.cy);
   return [
     { t: Math.max(0, at - PUSH.dur), x: 0, y: 0, zoom: 1 },

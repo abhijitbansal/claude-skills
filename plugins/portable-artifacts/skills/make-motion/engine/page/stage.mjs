@@ -1,8 +1,9 @@
 // The render page's stage. It loads the film from /film.json, loads the fonts the film and its look need, builds the
 // film (every shot expanded once through its kind, cuts and cameras applied: engine/graph/film.mjs), then answers
 // seeks: __seek(i) draws frame i, __snapshot(i) reports its laid-out nodes, __stateKey(i) a stable key of its state.
-// window.__ready resolves once the page can be seeked. The WebGL post pass is a later task: this stage draws straight
-// onto the visible canvas and reports post: '2d'.
+// window.__ready resolves once the page can be seeked. A frame is drawn in 2D into an offscreen canvas (window.__source,
+// the picture before the post pass) and the visible canvas shows it through the post pass (post.mjs): WebGL2 when the
+// browser has it, else a 2D copy with a noise tile. __ready reports which as post: 'webgl2' | '2d'.
 import { buildFilm, resolveLook } from '../graph/film.mjs';
 import { stateKey } from '../graph/sample.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '/v1/formats.mjs';
@@ -10,8 +11,15 @@ import { drawFrame, resetContext } from './draw.mjs';
 import { annotate } from './bounds.mjs';
 import { createMeasure } from './text-style.mjs';
 import { facesFor, loadFaces } from './fonts-shared.mjs';
+import { createPost, grainPhase } from './post.mjs';
 
-const POST_PASS = '2d';
+// The face the review sheets stamp their tiles with; the sheet code reads window.__stampFamily.
+const STAMP_FAMILY = 'JetBrains Mono';
+const DEFAULT_SEED = 1;
+// Fields whose paint reads the time (engine/fields/mesh.mjs: the blobs sway), so their frames differ though the sampled
+// tree is the same. The other fields are painted once and cached.
+const ANIMATED_FIELDS = new Set(['mesh']);
+const hasAnimatedField = (nodes) => nodes.some((n) => (n.type === 'field' && ANIMATED_FIELDS.has(n.props.field)) || hasAnimatedField(n.children));
 
 async function fetchJson(url) {
   const res = await fetch(url);
@@ -36,6 +44,48 @@ async function loadAssets(srcs) {
   return new Map(srcs.map((src, n) => [src, bitmaps[n]]));
 }
 
+// The keys that say whether two frames look alike, over `frameState(i)`. drawKey: the sampled state, plus the frame itself
+// when a field on screen is painted from the time (the sampled state alone does not say such a field moved). captureKey:
+// what frame i looks like once the post pass has run, the 2D key plus the grain pattern when there is grain.
+function frameKeys({ frameState, fps, grainNow }) {
+  const drawKey = (i) => {
+    const state = frameState(i);
+    return hasAnimatedField(state.sampled) ? `${stateKey(state)}|frame${i}` : stateKey(state);
+  };
+  const captureKey = (i) => (grainNow() > 0 ? `${drawKey(i)}|grain${grainPhase(i / fps)}` : drawKey(i));
+  return { drawKey, captureKey };
+}
+
+// For frames from..to: does each equal the one before it? `key` is one of the keys above.
+const heldFlags = (key) => (from, to) => {
+  let previous = from > 0 ? key(from - 1) : null;
+  return Array.from({ length: to - from + 1 }, (_, j) => {
+    const current = key(from + j);
+    const same = current === previous;
+    previous = current;
+    return same;
+  });
+};
+
+// The page's API: what the render, the review and the tests call.
+function installApi({ fps, draw, post, source, measure, frameState, keys, setGrain }) {
+  window.__seek = (i) => {
+    draw(i);
+    post.render(source, i / fps);
+  };
+  window.__source = source; // the frame before the post pass, for tests
+  window.__setPost = (next) => { // new strengths for the next __seek, for tests
+    post.setStrengths(next);
+    if (next.grain !== undefined) setGrain(next.grain);
+  };
+  window.__stampFamily = STAMP_FAMILY;
+  window.__measure = measure; // the layout measure, for tests
+  window.__snapshot = (i) => annotate(frameState(i).sampled);
+  window.__stateKey = keys.captureKey;
+  // withGrain: compared by __stateKey (what is captured), else by the 2D state alone.
+  window.__heldFlags = (from, to, withGrain) => heldFlags(withGrain ? keys.captureKey : keys.drawKey)(from, to);
+}
+
 async function init() {
   const { film, timeline, assets: srcs } = await fetchJson('/film.json');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
@@ -44,30 +94,32 @@ async function init() {
   const element = document.getElementById('stage');
   element.width = w;
   element.height = h;
-  const ctx = element.getContext('2d');
+  const source = new OffscreenCanvas(w, h);
+  const ctx = source.getContext('2d');
+  const look = resolveLook(film);
+  const post = createPost(element, { ...look.post, seed: film.seed ?? DEFAULT_SEED });
   // The designed kinds take their type from the look, so the look's fonts load with any the film names itself.
-  await loadFaces(facesFor({ film, fonts: resolveLook(film).fonts }));
+  await loadFaces(facesFor({ film, fonts: look.fonts, stamp: { family: STAMP_FAMILY } }));
   const assets = await loadAssets(srcs);
   const measure = createMeasure(document.createElement('canvas').getContext('2d'));
   const built = buildFilm({ film, timeline, measure, assets, canvas, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE) });
   const { fps, frameCount } = timeline;
+  let grain = look.post.grain; // what the post pass is using now (a test may change it)
 
   const frameState = (i) => {
     if (!Number.isInteger(i) || i < 0 || i > frameCount) throw new Error(`frame must be an integer in 0..${frameCount}, got ${i}`);
     return built.frameAt(i / fps);
   };
-
-  window.__seek = (i) => {
+  const draw = (i) => {
     const { background, sampled } = frameState(i);
     resetContext(ctx); // a seek that threw halfway must not leave its clip, alpha or save stack to the next one
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, w, h);
     drawFrame(ctx, sampled, { assets, canvas, time: i / fps });
   };
-  window.__measure = measure; // the layout measure, for tests
-  window.__snapshot = (i) => annotate(frameState(i).sampled);
-  window.__stateKey = (i) => stateKey(frameState(i));
-  return { frameCount, fps, size: [w, h], post: POST_PASS };
+  const keys = frameKeys({ frameState, fps, grainNow: () => grain });
+  installApi({ fps, draw, post, source, measure, frameState, keys, setGrain: (value) => { grain = value; } });
+  return { frameCount, fps, size: [w, h], post: post.kind };
 }
 
 window.__ready = init();
