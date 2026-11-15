@@ -1,0 +1,395 @@
+{
+ "about": "narration with phoneme characters outside the vocab, and a spaced dash: kokoro-js 1.2.1 phonemes, recorded phonemizer calls, q8 af_heart durations",
+ "generatedBy": "node .scratch/voice/make-dropped-fixture.mjs .scratch/voice-spike/rt .scratch/voice-spike/dl model plugins/portable-artifacts/skills/make-motion/test/v2/fixtures/voice/dropped.json",
+ "entries": [
+  {
+   "say": "Shipped (finally) today.",
+   "text": "Shipped (finally) today.",
+   "phonemes": "ʃˈɪpt «fˈaɪnəli» tədˈeɪ.",
+   "spikeMatches": true,
+   "tokenTexts": [
+    "Shipped",
+    "(finally)",
+    "today."
+   ],
+   "phonemize": [
+    {
+     "input": "Shipped",
+     "lang": "en-us",
+     "output": [
+      "ʃˈɪpt"
+     ]
+    },
+    {
+     "input": "finally",
+     "lang": "en-us",
+     "output": [
+      "fˈaɪnəli"
+     ]
+    },
+    {
+     "input": "today",
+     "lang": "en-us",
+     "output": [
+      "tədˈeɪ"
+     ]
+    },
+    {
+     "input": "Shipped",
+     "lang": "en-us",
+     "output": [
+      "ʃˈɪpt"
+     ]
+    },
+    {
+     "input": "finally",
+     "lang": "en-us",
+     "output": [
+      "fˈaɪnəli"
+     ]
+    },
+    {
+     "input": "today",
+     "lang": "en-us",
+     "output": [
+      "tədˈeɪ"
+     ]
+    }
+   ],
+   "kept": "ʃˈɪpt fˈaɪnəli tədˈeɪ.",
+   "durations": [
+    15.851388931274414,
+    1.9730318784713745,
+    1.6157851219177246,
+    1.9970884323120117,
+    1.997753381729126,
+    1.9836020469665527,
+    2.0025389194488525,
+    1.771944522857666,
+    2.00150465965271,
+    1.7330682277679443,
+    1.3665859699249268,
+    1.8723742961883545,
+    1.9676802158355713,
+    2.116441488265991,
+    2.0234427452087402,
+    2.0063276290893555,
+    1.541250228881836,
+    1.9950485229492188,
+    1.9981555938720703,
+    3.025942087173462,
+    3.949521541595459,
+    12.655113220214844,
+    6.6793365478515625,
+    1.001856803894043
+   ],
+   "sampleCount": 47400
+  },
+  {
+   "say": "The bottle, the little kitten.",
+   "text": "The bottle, the little kitten.",
+   "phonemes": "ðə bˈɑːɾəl, ðə lˈɪɾəl kˈɪʔn̩.",
+   "spikeMatches": true,
+   "tokenTexts": [
+    "The",
+    "bottle,",
+    "the",
+    "little",
+    "kitten."
+   ],
+   "phonemize": [
+    {
+     "input": "The bottle",
+     "lang": "en-us",
+     "output": [
+      "ðə bˈɑːɾəl"
+     ]
+    },
+    {
+     "input": "the little kitten",
+     "lang": "en-us",
+     "output": [
+      "ðə lˈɪɾəl kˈɪʔn̩"
+     ]
+    },
+    {
+     "input": "The",
+     "lang": "en-us",
+     "output": [
+      "ðˈə"
+     ]
+    },
+    {
+     "input": "bottle",
+     "lang": "en-us",
+     "output": [
+      "bˈɑːɾəl"
+     ]
+    },
+    {
+     "input": "the",
+     "lang": "en-us",
+     "output": [
+      "ðˈə"
+     ]
+    },
+    {
+     "input": "little",
+     "lang": "en-us",
+     "output": [
+      "lˈɪɾəl"
+     ]
+    },
+    {
+     "input": "kitten",
+     "lang": "en-us",
+     "output": [
+      "kˈɪʔn̩"
+     ]
+    }
+   ],
+   "kept": "ðə bˈɑːɾəl, ðə lˈɪɾəl kˈɪʔn.",
+   "durations": [
+    13.710719108581543,
+    1.186720371246338,
+    1.6005983352661133,
+    2.000286102294922,
+    2.0002150535583496,
+    3.150672674179077,
+    1.9503991603851318,
+    2.000288724899292,
+    2.058411121368408,
+    2.894275665283203,
+    2.763970136642456,
+    1.120922327041626,
+    1.201096534729004,
+    1.0029953718185425,
+    1.0116026401519775,
+    1.0391807556152344,
+    1.0026745796203613,
+    1.0077050924301147,
+    1.01523756980896,
+    1.0164090394973755,
+    1.0768029689788818,
+    1.5062847137451172,
+    1.9992783069610596,
+    1.998974084854126,
+    2.0917701721191406,
+    2.925264358520508,
+    3.6193342208862305,
+    13.15886402130127,
+    6.848282814025879,
+    1.0021460056304932
+   ],
+   "sampleCount": 49200
+  },
+  {
+   "say": "A button, written in certain words, still counts.",
+   "text": "A button, written in certain words, still counts.",
+   "phonemes": "ɐ bˈʌʔn̩, ɹˈɪʔn̩ ɪn sˈɜːʔn̩ wˈɜːdz, stˈɪl kˈaʊnts.",
+   "spikeMatches": true,
+   "tokenTexts": [
+    "A",
+    "button,",
+    "written",
+    "in",
+    "certain",
+    "words,",
+    "still",
+    "counts."
+   ],
+   "phonemize": [
+    {
+     "input": "A button",
+     "lang": "en-us",
+     "output": [
+      "ɐ bˈʌʔn̩"
+     ]
+    },
+    {
+     "input": "written in certain words",
+     "lang": "en-us",
+     "output": [
+      "ɹˈɪʔn̩ ɪn sˈɜːʔn̩ wˈɜːdz"
+     ]
+    },
+    {
+     "input": "still counts",
+     "lang": "en-us",
+     "output": [
+      "stˈɪl kˈaʊnts"
+     ]
+    },
+    {
+     "input": "A",
+     "lang": "en-us",
+     "output": [
+      "ˈeɪ"
+     ]
+    },
+    {
+     "input": "button",
+     "lang": "en-us",
+     "output": [
+      "bˈʌʔn̩"
+     ]
+    },
+    {
+     "input": "written",
+     "lang": "en-us",
+     "output": [
+      "ɹˈɪʔn̩"
+     ]
+    },
+    {
+     "input": "in",
+     "lang": "en-us",
+     "output": [
+      "ˈɪn"
+     ]
+    },
+    {
+     "input": "certain",
+     "lang": "en-us",
+     "output": [
+      "sˈɜːʔn̩"
+     ]
+    },
+    {
+     "input": "words",
+     "lang": "en-us",
+     "output": [
+      "wˈɜːdz"
+     ]
+    },
+    {
+     "input": "still",
+     "lang": "en-us",
+     "output": [
+      "stˈɪl"
+     ]
+    },
+    {
+     "input": "counts",
+     "lang": "en-us",
+     "output": [
+      "kˈaʊnts"
+     ]
+    }
+   ],
+   "kept": "ɐ bˈʌʔn, ɹˈɪʔn ɪn sˈɜːʔn wˈɜːdz, stˈɪl kˈaʊnts.",
+   "durations": [
+    13.773597717285156,
+    2.0008978843688965,
+    2.0351662635803223,
+    1.997006893157959,
+    2.3561363220214844,
+    3.084439754486084,
+    3.581176280975342,
+    3.438612461090088,
+    1.5067789554595947,
+    1.943681001663208,
+    1.0292983055114746,
+    1.1888706684112549,
+    2.004300594329834,
+    2.025631904602051,
+    1.1908037662506104,
+    1.2835843563079834,
+    1.5317966938018799,
+    1.9777369499206543,
+    2.216615676879883,
+    1.5042762756347656,
+    1.7434427738189697,
+    1.108601689338684,
+    1.9970531463623047,
+    2.0222978591918945,
+    1.7415812015533447,
+    1.991999626159668,
+    1.0866889953613281,
+    2.1120810508728027,
+    3.096440076828003,
+    2.9770333766937256,
+    2.4758412837982178,
+    6.5188798904418945,
+    2.916491746902466,
+    2.2599456310272217,
+    2.00390362739563,
+    1.1269694566726685,
+    1.4321482181549072,
+    1.9837265014648438,
+    2.000088930130005,
+    2.1521613597869873,
+    2.017117738723755,
+    2.9426701068878174,
+    2.217578172683716,
+    1.9490078687667847,
+    1.8653216361999512,
+    1.920237421989441,
+    13.126880645751953,
+    5.709279537200928,
+    1.0007293224334717
+   ],
+   "sampleCount": 77400
+  },
+  {
+   "say": "Wait — what?",
+   "text": "Wait — what?",
+   "phonemes": "wˈeɪt — wˈʌt?",
+   "spikeMatches": true,
+   "tokenTexts": [
+    "Wait",
+    "—",
+    "what?"
+   ],
+   "phonemize": [
+    {
+     "input": "Wait",
+     "lang": "en-us",
+     "output": [
+      "wˈeɪt"
+     ]
+    },
+    {
+     "input": "what",
+     "lang": "en-us",
+     "output": [
+      "wˈʌt"
+     ]
+    },
+    {
+     "input": "Wait",
+     "lang": "en-us",
+     "output": [
+      "wˈeɪt"
+     ]
+    },
+    {
+     "input": "what",
+     "lang": "en-us",
+     "output": [
+      "wˈʌt"
+     ]
+    }
+   ],
+   "kept": "wˈeɪt — wˈʌt?",
+   "durations": [
+    17.991853713989258,
+    2.0097098350524902,
+    2.000732898712158,
+    1.998764991760254,
+    2.0198304653167725,
+    1.360027551651001,
+    1.1017515659332275,
+    1.020719051361084,
+    1.8765110969543457,
+    1.99092698097229,
+    3.6791868209838867,
+    3.546834707260132,
+    13.09581470489502,
+    7.000226974487305,
+    1.0025742053985596
+   ],
+   "sampleCount": 37200
+  }
+ ]
+}
