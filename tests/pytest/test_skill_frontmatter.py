@@ -10,6 +10,12 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 SKILLS = sorted(ROOT.glob("plugins/*/skills/*/SKILL.md"))
+# Commands and agents carry the same frontmatter and are listed to the model the
+# same way, so they are held to the same parse rules. They have no `name` key
+# that must match a directory, so the name assertion is skill-only.
+COMMANDS = sorted(ROOT.glob("plugins/*/commands/*.md"))
+AGENTS = sorted(ROOT.glob("plugins/*/agents/*.md"))
+DESCRIBED = SKILLS + COMMANDS + AGENTS
 INDICATOR = re.compile(r"""^["'&*!%@`{\[|>]""")
 
 
@@ -19,13 +25,26 @@ def frontmatter(path):
     return m.group(1).splitlines()
 
 
-@pytest.mark.parametrize("path", SKILLS, ids=lambda p: f"{p.parts[-4]}/{p.parts[-2]}")
+def _id(path):
+    stem = path.parts[-2] if path.name == "SKILL.md" else f"{path.parts[-2]}/{path.stem}"
+    return f"{path.parts[-4] if path.name == 'SKILL.md' else path.parts[-3]}/{stem}"
+
+
+@pytest.mark.parametrize("path", DESCRIBED, ids=_id)
 def test_frontmatter_is_strict_yaml_safe(path):
+    # Skills are checked on every key. Commands and agents are checked on
+    # `description` only: their `argument-hint: [a, b]` flow sequences are valid
+    # YAML (the registry parser tolerates them), but an unquoted description with
+    # ": " is not, and it drops the entry from the listing.
+    strict_keys = None if path.name == "SKILL.md" else {"description"}
     keys = {}
     for line in frontmatter(path):
         kv = re.match(r"^([a-z][a-z0-9_-]*): (.+)$", line)
         assert kv, f"not a single-line key: value: {line!r}"
         key, value = kv.groups()
+        if strict_keys is not None and key not in strict_keys:
+            keys[key] = value
+            continue
         if value.startswith('"'):
             parsed = json.loads(value)  # raises on bad escaping
             assert isinstance(parsed, str)
@@ -34,9 +53,15 @@ def test_frontmatter_is_strict_yaml_safe(path):
             assert " #" not in value, f"{key}: plain value contains ' #' (quote it)"
             assert not INDICATOR.match(value), f"{key}: plain value starts with a YAML indicator"
         keys[key] = value
-    assert keys.get("name") == path.parent.name
+    if path.name == "SKILL.md":
+        assert keys.get("name") == path.parent.name
     assert "description" in keys
 
 
 def test_found_skills():
     assert len(SKILLS) > 50
+
+
+def test_found_commands_and_agents():
+    assert len(COMMANDS) >= 15
+    assert len(AGENTS) >= 2

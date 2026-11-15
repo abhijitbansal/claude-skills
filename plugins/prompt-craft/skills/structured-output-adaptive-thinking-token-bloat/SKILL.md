@@ -1,6 +1,6 @@
 ---
 name: structured-output-adaptive-thinking-token-bloat
-description: A Claude API call using output_config.format (json_schema structured outputs) with thinking:{type:"adaptive"} burns most of its output budget on thinking (observed ~21k of ~24k tokens) without improving JSON quality, making the run up to ~5x more expensive than the same call with thinking omitted — use when calling the Messages API with a json_schema output format for extraction, ranking, classification, or summarization tasks, or when a schema-constrained call's usage.output_tokens is far larger than the returned JSON.
+description: A Claude API call using output_config.format (json_schema structured outputs) with adaptive thinking can spend most of its output budget on thinking (observed ~21k of ~24k tokens) without improving the JSON; one such run cost $0.39 against about $0.12 for a thinking-omitted run on another model. Use when calling the Messages API with a json_schema output format for extraction, ranking, classification or summarization, or when a schema-constrained call's usage.output_tokens is far larger than the returned JSON.
 ---
 
 # Structured Output + Adaptive Thinking: A Hidden Cost Multiplier
@@ -14,53 +14,66 @@ than the size of the returned JSON.
 
 ## Root cause
 
-`thinking: {type: "adaptive"}` was left on for a schema-constrained call. The
-schema already fully determines the response shape, so most of what the
-model spends thinking tokens on is reasoning about *form* the schema already
-fixed — not improving the actual content. Observed (single run, 2026-07-12):
-**~21k of ~24k output tokens were thinking, vs ~3k for the JSON itself.** The
-measured cost ratio was 3.25x ($0.39 with thinking on vs ~$0.12 with thinking
-off), but that comparison changed both the model and the thinking setting
+Adaptive thinking was on for a schema-constrained call. The schema already
+fully determines the response shape, so most of what the model spends thinking
+tokens on is reasoning about *form* the schema already fixed — not improving
+the actual content. Observed (single run, 2026-07-12): **~21k of ~24k output
+tokens were thinking, vs ~3k for the JSON itself.** That run cost $0.39,
+against ~$0.12 for the same task with the `thinking` key omitted (a 3.25x
+ratio), but the comparison changed both the model and the thinking setting
 (Sonnet 4.6 thinking-on vs Opus 4.8 thinking-off), so the ratio is confounded
-by the model change and is not a clean thinking-only figure.
+and is not a clean thinking-only figure.
 
 Cost on these calls is dominated by `output_tokens`; with thinking off,
 output tokens ≈ the JSON itself.
 
-## Fix
+## Fix: the lever depends on the model
 
-For `json_schema`-constrained tasks, **default adaptive thinking OFF** and
-make it opt-in/configurable rather than opt-out:
+"Omit `thinking`" only means "no thinking" on the old models. Check the
+thinking table in the `claude-api` skill before you copy a setting; as of its
+2026-11-03 cache:
 
-- Omit the `thinking` parameter entirely by default — the models tested on
-  2026-07-12 accepted omission. Structured output already prevents prose leak
-  even with thinking off, so there is no correctness downside to leaving it out.
-  Re-verify "omit thinking" on current models via the claude-api reference
-  before generalizing.
-- Only set `thinking: {type: "adaptive"}` when the task needs genuine
-  reasoning over ambiguous input (e.g., judgment calls, multi-step inference)
-  — not merely to get well-formatted output. The schema already guarantees
-  the format.
-- Counter-intuitive payoff: thinking-off on a *better* model (Opus) can be
-  simultaneously cheaper and higher quality than thinking-on on a cheaper
-  model (Sonnet), because the cheaper model's savings are wiped out by the
-  thinking-token multiplier.
+| Model | What omitting `thinking` does | How to cut thinking spend |
+|---|---|---|
+| Opus 4.8, Opus 4.7 | No thinking (the measured case) | Omit `thinking` |
+| Opus 5.5 | Runs adaptive; `{type: "disabled"}` is a 400 at every effort level | Set `output_config.effort` to `low` (the default is `medium`) |
+| Opus 5, Haiku 5.5 | Runs adaptive; `disabled` is accepted only at effort `high` or below | Lower `output_config.effort`, or `disabled` at `high` or below |
+| Sonnet 5.5 | Runs adaptive; `{type: "disabled"}` is a 400 | Lower effort, or `thinking: {type: "between_tools"}` (effort `high` or below, no other field) |
+| Sonnet 5, Sonnet 4.6 | Sonnet 5 runs adaptive; Sonnet 4.6 needs it set explicitly | Lower effort; `disabled` is accepted |
+| Fable 5 family | Thinking is always on | Lower effort only |
+
+Structured output already prevents prose leaking into the JSON, so there is
+no correctness downside to cutting thinking on a schema-constrained task.
+
+- Only keep thinking on when the task needs genuine reasoning over ambiguous
+  input (judgment calls, multi-step inference), not merely to get
+  well-formatted output. The schema already guarantees the format.
+- Measure on a sample: compare `usage.output_tokens` before and after, and
+  check the JSON quality. The measurement above is for one model; a current
+  model needs its own call.
+- Counter-intuitive payoff: a *better* model with thinking cut can be both
+  cheaper and higher quality than a cheaper model with thinking on, because
+  the cheaper model's savings are wiped out by the thinking-token multiplier.
 
 ```python
 output_config = {"format": {"type": "json_schema", "schema": SCHEMA}}
-if config.effort:
-    output_config["effort"] = config.effort
+output_config["effort"] = config.effort or "low"   # the lever on 5.x models
 
 kwargs = {
-    "model": "<model-id>",   # from config; check the claude-api reference for current ids
-    "max_tokens": 32000,
+    "model": "<model-id>",   # from config; ids are in the claude-api skill
+    "max_tokens": 16000,     # non-streaming: stay near 16000 or the SDK demands streaming
     "system": ...,
     "messages": [...],
     "output_config": output_config,
 }
-if config.thinking == "adaptive":   # default is "off" -> key omitted entirely
+if config.model_omits_thinking_means_off:   # only Opus 4.8 / 4.7 style models
+    pass                                    # leave the key out entirely
+elif config.thinking == "adaptive":
     kwargs["thinking"] = {"type": "adaptive"}
 ```
+
+A larger `max_tokens` (up to 128K) needs streaming: use the SDK's `.stream()`
+with `.get_final_message()` instead of a plain `.create()`.
 
 ## Evidence
 
@@ -73,10 +86,12 @@ if config.thinking == "adaptive":   # default is "off" -> key omitted entirely
 - Diagnostic: compare `usage.output_tokens` against the byte size of the
   returned JSON — a large gap between the two is thinking spend, not JSON
   spend.
+- Not re-measured on the current models: the per-model table above comes from
+  the `claude-api` skill's reference, not from a new run.
 
 ## Related skills
 
-None identified in this catalog at authoring time — this is provider-level
-Anthropic API cost guidance, orthogonal to prompt-craft's Claude Code
-ask-sharpening lenses. Link bidirectionally to any future skill covering
-Claude API usage, cost, or SDK reference.
+- `claude-api` — the model ids, thinking and effort table, streaming rules and
+  structured-output parameters this skill's table is read from.
+- Provider-level Anthropic API cost guidance, orthogonal to prompt-craft's
+  Claude Code ask-sharpening lenses.

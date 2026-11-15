@@ -1,14 +1,14 @@
 ---
 name: launchd-git-automation-self-heal
-description: "A launchd (or cron) job that pulls a git clone, generates/commits/pushes, and repeats on a schedule dies silently for weeks — \"local changes would be overwritten\" from `git pull --ff-only` after a prior run left dirty tracked files, a bootstrap block that never runs because the script it lives in only exists inside the clone it's supposed to create, or \"branch already exists\" on retrying a `git checkout -b` after a prior push-then-fail. Use when writing or reviewing any launchd plist/script pair (or cron job) that does git pull → generate → commit → push from a long-lived clone, or when auditing `set -euo pipefail` automation for what the NEXT run sees after THIS run dies mid-script."
+description: "A launchd (or cron) job that pulls a git clone, generates, commits and pushes on a schedule dies silently for weeks: \"local changes would be overwritten\" from git pull --ff-only after a prior run left dirty tracked files, a bootstrap block that never runs because it lives in the script it is meant to create, or \"branch already exists\" on retrying git checkout -b after a push-then-fail. Use when writing or reviewing a launchd plist and script pair, or a cron job, that does git pull, generate, commit, push from a long-lived clone, or when auditing set -euo pipefail automation for what the NEXT run sees after THIS run dies mid-script."
 ---
 
-# launchd Git Automation in a Persistent Clone: Three Silent Death Modes
+# launchd Git Automation in a Persistent Clone: Four Silent Death Modes
 
 ## Symptom
 
 A persistent automation clone that "just pulls and runs" on a launchd/cron
-schedule (weekly stats, digest, publish jobs) dies silently in one of three
+schedule (weekly stats, digest, publish jobs) dies silently in one of four
 ways — and because nobody watches launchd logs, it stays dead for weeks:
 
 1. **Dirty-clone wedge:** a failed run leaves modified tracked files behind
@@ -24,6 +24,10 @@ ways — and because nobody watches launchd logs, it stays dead for weeks:
    "branch already exists" when a prior attempt pushed the branch but failed
    later in the pipeline (e.g. `gh pr create` hit a network error). Retrying
    the same week can never succeed.
+4. **Missed run:** the Mac was powered off or crashed at the fire time, so the
+   run never happened. launchd runs a calendar job it missed while the Mac
+   slept once the Mac wakes, but not one missed while it was off. Nothing
+   reports the gap, and the next fire is a whole period away.
 
 None of these show up as a crash you'd notice interactively — they only show
 up as "the weekly digest didn't run again" three weeks later.
@@ -52,8 +56,14 @@ either doesn't exist or lives somewhere unreachable.
 
   ```bash
   cd "$W" && git fetch origin && git checkout -f main && \
-    git reset --hard origin/main; exec "$W/script.sh"
+    git reset --hard origin/main && git clean -fdx && exec "$W/script.sh"
   ```
+
+  Chain with `&&`, never `;` before the `exec`: after a failed fetch or reset a
+  `;` still runs the script, against a clone in an unknown state. `reset --hard`
+  leaves untracked files behind (a leftover `generated.json` wedges the next
+  run), so `git clean -fdx` finishes the job; it also deletes ignored files, so
+  keep nothing you need in a dedicated clone's ignored paths.
 
   This does two jobs at once: it self-heals any dirty state left by a prior
   failed run (fixes death mode 1), and it guarantees each run executes the
@@ -67,10 +77,25 @@ either doesn't exist or lives somewhere unreachable.
 - **Mirror the same fetch/checkout -f/reset sequence inside the script too**
   (belt and braces for manual/local runs of the same script).
 
-- **Use `git checkout -B`, not `-b`, for the work branch** — `-B` resets the
-  branch if it already exists instead of erroring, making retries idempotent.
-  Delete the branch after the PR opens (`git branch -D "$BRANCH"`) so the
-  next run starts clean regardless of outcome (fixes death mode 3).
+- **Give every attempt its own work branch, and ask GitHub before creating a
+  PR** (fixes death mode 3). `git checkout -B` only helps when the earlier
+  attempt never pushed: after a push-then-fail it resets the branch and the
+  next push is rejected as non-fast-forward, and `git branch -D` on the branch
+  you are standing on aborts. Suffix the branch with the run time
+  (`work-branch-<week>-<timestamp>`), or run `gh pr view <branch>` first and
+  stop when a PR for that week already exists; do not retry with
+  `--force-with-lease`. Check out `main` before deleting the work branch, and
+  delete it after the PR opens so the next run starts clean.
+
+- **Catch up a missed run** (death mode 4). Add `RunAtLoad` to the plist so the
+  job also fires at login or boot, and make the script idempotent: it exits 0
+  at once when this period's run already succeeded (a stamp file, or the PR
+  that already exists for the week), so firing twice is harmless. To see what
+  happened, read the last exit code from `launchctl print gui/$(id -u)/<label>`,
+  the tail of the job's log, and the last PR with `gh pr list`. To recover by
+  hand, name the missed window explicitly (a date range, not "this week"), start
+  the job with `launchctl kickstart gui/$(id -u)/<label>`, retry the merge call
+  if it failed, and keep watching until the PR is merged.
 
 - Keep the other operational bits that make unattended scheduled git jobs
   reliable: wrap the whole command in `caffeinate -i` (a battery-powered
@@ -82,7 +107,7 @@ either doesn't exist or lives somewhere unreachable.
 
 When reviewing shell automation that combines `set -e` with persistent state
 across runs, ask explicitly: **"what does the next scheduled run see after
-this run dies at each line?"** Each of the three death modes above answers
+this run dies at each line?"** Each of the four death modes above answers
 that question with "a wedge, not a retry."
 
 ## Evidence

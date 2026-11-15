@@ -1,6 +1,6 @@
 ---
 name: async-enrichment-silent-loss-outcome-states
-description: "A background AI/ML enrichment step (VLM naming, on-device classification, autocomplete) runs and produces a real result, but the user sees nothing — no spinner ever appeared, no suggestion shows up, and there is no way to tell \"the model hasn't finished yet\" apart from \"it ran and a higher-confidence rule silently outvoted it,\" because a correct confidence-merge (e.g. OCR 0.69 beats VLM 0.65) just drops the losing result instead of surfacing it, making a working pipeline look completely dead. The degenerate form ships even more easily: the step returns *successfully* with an empty or whitespace-only string, which then gets cached, rendered as blank space, and logged as a success — a card headed \"AI-generated\" above no text at all, with nothing in the diagnostics to say why. Use when adding any async, sometimes-lossy AI/ML enrichment layered on top of a deterministic primary path (autocomplete, background transcription/classification, LLM-assisted field-filling), or when a generation step's output reaches a cache or a renderer without a non-blank check at the boundary — model every terminal state as a distinct visible UI state before shipping. Also covers a transient Vision/ML failure or task cancellation on one page that silently falls back to a lower-quality recogniser whose non-empty text passes the never-cache-empty guard and is cached permanently."
+description: "A background AI/ML enrichment step (VLM naming, on-device classification, autocomplete) runs and produces a result, but the user sees nothing: no spinner, no suggestion, and no way to tell \"not finished yet\" from \"it ran and a higher-confidence rule silently outvoted it\". Also covers a step that returns an empty or whitespace-only string that gets cached and rendered as a blank \"AI-generated\" card, and a transient Vision/ML failure on one page that falls back to a weaker recogniser whose non-empty text is cached permanently. Use when adding any async, sometimes-lossy AI/ML enrichment on top of a deterministic path, or when generation output reaches a cache or renderer without a non-blank check. Model every terminal state as a visible UI state."
 ---
 
 # Async AI Enrichment: Every Outcome Needs a Distinct, Visible UI State
@@ -119,11 +119,6 @@ Fix:
 5. Version-bump cache keys on pipeline changes and sweep old suffixes at
    launch.
 
-Evidence (a private document-scanner app, 6 sessions): paddle-ocr worktree `4918f6eb` (error
-swallowed, fell back to document-API lines) and `27e2731c` (cancellation
-asymmetry), main checkout `19b46702` (review flagged the permanent cache
-write in the document-structure recognizer).
-
 ## Evidence
 
 - Fix 1, Cubby session 0018: a correct merge (OCR 0.69 beat VLM 0.65) silently
@@ -133,6 +128,10 @@ write in the document-structure recognizer).
   stored as a valid summary and rendered an "AI-generated" card with no text;
   shipped a blank-rejecting boundary, a cache that refuses blanks, and its own
   error copy.
+- Fix 3, a private document-scanner app (6 sessions): paddle-ocr worktree
+  `4918f6eb` (error swallowed, fell back to document-API lines) and `27e2731c`
+  (cancellation asymmetry), main checkout `19b46702` (review flagged the
+  permanent cache write in the document-structure recognizer).
 
 ## Related skills
 
