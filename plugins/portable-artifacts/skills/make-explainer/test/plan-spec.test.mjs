@@ -32,7 +32,18 @@ const review = (patch = {}) => ({ type: 'review', items: [{ point: 'The storage 
 // A plan with answerable items needs a verdict (it holds the Export buttons): the helper ends every plan with one
 // unless the test placed its own. The rule itself is tested on specs built without the helper.
 const withVerdict = (sections) => (sections.some((s) => s.type === 'verdict') ? sections : [...sections, verdict()]);
-const plan = (sections, extra = {}) => ({ title: 'Plan mode for the explainer', preset: 'plan', key: 'plan-mode', sections: withVerdict(sections), ...extra });
+// A plan needs the plan itself (a steps, cards, table, files or text section) besides its questions. The helper adds a
+// text section just before the trailing verdict when the test brought none, so paths in front of it keep their index.
+const EXPLAINING = new Set(['steps', 'cards', 'table', 'files', 'text']);
+const withExplainer = (sections) => {
+  if (sections.some((s) => EXPLAINING.has(s.type))) return sections;
+  const at = sections.at(-1)?.type === 'verdict' ? sections.length - 1 : sections.length;
+  return [...sections.slice(0, at), { type: 'text', text: 'What gets built.' }, ...sections.slice(at)];
+};
+const plan = (sections, extra = {}) => ({ title: 'Plan mode for the explainer', preset: 'plan', key: 'plan-mode', sections: withVerdict(withExplainer(sections)), ...extra });
+// The same plan without the helper's explainer, for the tests of the rule itself.
+const body = { type: 'text', text: 'What gets built.' };
+const thin = (sections, extra = {}) => ({ title: 'Plan mode for the explainer', preset: 'plan', key: 'plan-mode', sections: withVerdict(sections), ...extra });
 
 // ---- the minimal valid plan ---------------------------------------------------------------------
 
@@ -130,8 +141,8 @@ test('a review item needs point and why', async () => {
 
 test('verdict has no required fields and a closed shape', async () => {
   assert.deepEqual(await errorsOf(plan([decision(), verdict()])), []);
-  assert.deepEqual(await errorsOf(plan([decision(), verdict({ txt: 'x' })])), [
-    { path: 'sections[1].txt', message: 'unknown property; did you mean "text"?' },
+  assert.deepEqual(await errorsOf(thin([decision(), body, verdict({ txt: 'x' })])), [
+    { path: 'sections[2].txt', message: 'unknown property; did you mean "text"?' },
   ]);
 });
 
@@ -197,10 +208,10 @@ test('ids are unique across decision, approval and question', async () => {
 });
 
 test('at most one verdict', async () => {
-  const errors = await errorsOf(plan([decision(), verdict(), verdict()]));
+  const errors = await errorsOf(thin([decision(), body, verdict(), verdict()]));
   assert.deepEqual(errors, [
-    { path: 'sections[1]', message: 'the verdict must be the last section; move it to the end' },
-    { path: 'sections[2]', message: 'only one verdict per page; the first is at sections[1]; remove this one' },
+    { path: 'sections[2]', message: 'the verdict must be the last section; move it to the end' },
+    { path: 'sections[3]', message: 'only one verdict per page; the first is at sections[2]; remove this one' },
   ]);
 });
 
@@ -230,8 +241,8 @@ test('a review target must not be the review itself', async () => {
 test('answerable items need a verdict section, in any preset', async () => {
   const msg = 'a plan with decisions, approvals or questions needs a verdict section (it holds the Export buttons); add one as the last section';
   for (const one of [decision(), approval(), question()]) {
-    assert.deepEqual(await errorsOf({ title: 'T', key: 'plan-t', sections: [one] }), [{ path: 'sections', message: msg }], one.type);
-    assert.deepEqual(await errorsOf({ title: 'T', preset: 'plan', key: 'plan-t', sections: [one] }), [{ path: 'sections', message: msg }], one.type);
+    assert.deepEqual(await errorsOf({ title: 'T', key: 'plan-t', sections: [body, one] }), [{ path: 'sections', message: msg }], one.type);
+    assert.deepEqual(await errorsOf({ title: 'T', preset: 'plan', key: 'plan-t', sections: [body, one] }), [{ path: 'sections', message: msg }], one.type);
   }
   assert.deepEqual(await errorsOf({ title: 'T', sections: [{ type: 'text', text: 'x' }, review({ items: [{ point: 'p', why: 'w.' }] })] }), [], 'a review alone needs none');
 });
@@ -257,7 +268,7 @@ test('a plan needs at least one decision, approval or question', async () => {
 });
 
 test('plan types are accepted outside the plan preset', async () => {
-  assert.deepEqual(await errorsOf({ title: 'T', key: 'plan-t', sections: [decision(), verdict()] }), []);
+  assert.deepEqual(await errorsOf({ title: 'T', key: 'plan-t', sections: [body, decision(), verdict()] }), []);
 });
 
 // ---- root key -------------------------------------------------------------------------------------
@@ -265,7 +276,7 @@ test('plan types are accepted outside the plan preset', async () => {
 test('key: required with preset plan or any decision, approval or question; otherwise optional; validated by pattern and length', async () => {
   assert.deepEqual(await errorsOf({ title: 'T', sections: [{ type: 'text', text: 'x' }] , key: 'release-2.1' }), []);
   assert.deepEqual((await errorsOf(plan([decision()], { key: undefined }))).map((e) => e.path), ['key'], 'required for preset plan');
-  const keyless = await errorsOf({ title: 'Cache plan', sections: [question(), verdict()] });
+  const keyless = await errorsOf({ title: 'Cache plan', sections: [body, question(), verdict()] });
   assert.deepEqual(keyless.map((e) => e.path), ['key'], 'required for any answerable item, whatever the preset');
   assert.match(keyless[0].message, /add "key": "plan-cache-plan"/);
   assert.deepEqual(await errorsOf(plan([decision()], { key: 'Bad Key' })), [
@@ -369,4 +380,36 @@ test('scaffold: plan has a starter (exit 0, preset plan)', () => {
 
 test('slides: untitled plan sections are named after their type', () => {
   assert.deepEqual(['decision', 'approval', 'question', 'verdict', 'review'].map((type) => slideTitle({ type })), ['Decision', 'Approval', 'Open question', 'Verdict', 'Review these first']);
+});
+
+// ---- a plan needs the plan itself (PA-64, G-64) -------------------------------------------------------
+
+const NO_PLAN_ERROR = 'a plan needs the plan itself, not only questions: add at least one steps, cards, table, files or text section that says what gets built';
+
+test('a plan with only decisions, approvals, questions and a verdict is an error, not a warning', async () => {
+  const r = await validateSpec(thin([tldr, decision(), approval(), question(), verdict()]), { dir: FIXTURES });
+  assert.equal(r.ok, false);
+  assert.deepEqual(r.errors, [{ path: 'sections', message: NO_PLAN_ERROR }]);
+  assert.deepEqual(r.warnings.filter((w) => w.path === 'sections'), [], 'the late-explanation warning does not repeat it');
+});
+
+test('one steps, cards, table, files or text section anywhere clears the error; a late one still warns', async () => {
+  const items = { steps: steps.items, cards: [{ title: 'A', text: 'What A is.' }], files: [{ path: 'a.js', change: 'added' }] };
+  const make = {
+    steps: () => steps,
+    cards: () => ({ type: 'cards', items: items.cards }),
+    table: () => ({ type: 'table', columns: ['a'], rows: [['b']] }),
+    files: () => ({ type: 'files', items: items.files }),
+    text: () => body,
+  };
+  for (const [type, build] of Object.entries(make)) {
+    const r = await validateSpec(thin([decision(), build(), verdict()]), { dir: FIXTURES });
+    assert.deepEqual(r.errors, [], type);
+    assert.deepEqual(r.warnings.filter((w) => w.path === 'sections').map((w) => w.message), [THIN_PLAN_WARNING], `${type} after the question warns`);
+  }
+});
+
+test('a plan page with no decision at all still fails on its own rule, not on this one', async () => {
+  const errors = await errorsOf(thin([body, verdict()]));
+  assert.deepEqual(errors, [{ path: 'sections', message: 'a plan needs at least one decision, approval or question' }]);
 });

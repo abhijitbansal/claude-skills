@@ -16,6 +16,7 @@ const plan = {
   sections: [
     { type: 'decision', id: 'storage', question: 'Where do answers live?', options: [{ label: 'Browser storage' }, { label: 'A save server' }], recommended: 'Browser storage', why: 'Nothing to run.' },
     { type: 'approval', id: 'budget', item: 'Approve the budget', why: 'It is small.' },
+    { type: 'text', text: 'The cache plan, in one line.' },
     { type: 'verdict' },
   ],
 };

@@ -899,3 +899,20 @@ test('poster file slides: paths and stats take the deck\'s projection scale, not
   assert.ok(sizes.every((px) => px > 13), `sizes ${sizes}`);
   await context.close();
 });
+
+// ---- poster: content slides are pinned to the top (G-65); written without a browser run -----------------
+
+test('poster: the heading sits at one height on every content slide, and the title leaves the ghost numeral\'s column free', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { url } = buildSpec(KINDS('poster'), { name: 'poster-pinned' });
+  const { page, context } = await openPage(url, { width: 1280, height: 720 });
+  const m = await page.evaluate(() => [...document.querySelectorAll('.slide:not(.slide-cover):not(.slide-has-art)')].map((slide) => {
+    const top = slide.getBoundingClientRect().top;
+    const title = slide.querySelector('.slide-title');
+    return title ? { y: Math.round(title.getBoundingClientRect().top - top), pad: parseFloat(getComputedStyle(title).paddingRight) } : null;
+  }).filter(Boolean));
+  assert.ok(m.length >= 3, 'several content slides');
+  assert.ok(Math.max(...m.map((s) => s.y)) - Math.min(...m.map((s) => s.y)) <= 2, `heading offsets ${m.map((s) => s.y)}`);
+  assert.ok(m.every((s) => s.pad >= 88), `the title reserves room beside the numeral: ${m.map((s) => s.pad)}`);
+  await context.close();
+});

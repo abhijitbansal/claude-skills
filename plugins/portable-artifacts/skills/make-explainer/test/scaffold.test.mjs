@@ -181,7 +181,7 @@ test('checklist: one group per top-level folder of changed files, key from the b
     const spec = scaffold('checklist', { facts: factsOf(repo), dir });
     assert.equal(spec.title, 'feat/login: manual test checklist');
     const [check] = section(spec, 'checklist');
-    assert.equal(check.key, 'feat-login');
+    assert.equal(check.key, `${path.basename(repo.dir).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')}-feat-login`);
     assert.match(check.intro, /^TODO:.*What's in this branch/);
     assert.match(check.intro, /features/);
     assert.match(check.intro, /review fixes/);
@@ -451,6 +451,24 @@ test('checklist keys: valid, never shared by different branches, and stable for 
   } finally { done(); }
 });
 
+test('checklist keys start with the repository name, so two repos on one branch name never share ticks', () => {
+  const { dir, done } = sandbox();
+  const key = (facts) => section(scaffold('checklist', { facts: { commits: [], files: [], tests: [], ...facts }, dir }), 'checklist')[0].key;
+  try {
+    assert.equal(key({ repo: 'Alpha', branch: 'feat/login' }), 'alpha-feat-login');
+    assert.notEqual(key({ repo: 'alpha', branch: 'main' }), key({ repo: 'beta', branch: 'main' }));
+    assert.equal(key({ branch: 'feat/login' }), 'feat-login', 'no repo in the facts, branch alone');
+    const long = key({ repo: 'alpha', branch: `${'b'.repeat(90)}-one` });
+    const long2 = key({ repo: 'alpha', branch: `${'b'.repeat(90)}-two` });
+    assert.notEqual(long, long2, 'hashed past the limit, never shared');
+    for (const k of [long, long2, key({ repo: '機能', branch: '機能/ログイン' })]) {
+      assert.match(k, KEY_PATTERN);
+      assert.ok(k.length <= LIMITS.checklistKey, k);
+    }
+    assert.match(key({ repo: 'alpha', branch: 'feat/login' }), /^alpha-/);
+  } finally { done(); }
+});
+
 test('a copied file is noted like a rename', () => {
   const { dir, done } = sandbox();
   try {
@@ -516,4 +534,52 @@ test('scaffold --out with an empty path or a directory is a one-line usage error
     assert.equal(blocked.status, 2);
     assert.equal(blocked.stderr.trim().split('\n').length, 1);
   } finally { s.done(); }
+});
+
+test('scaffold --out refuses a file that exists (exit 2, names --force, file untouched); --force overwrites it', () => {
+  const s = sandbox();
+  try {
+    const file = path.join(s.dir, 'explainer.json');
+    fs.writeFileSync(file, '{"title":"already filled in"}\n');
+    const refused = node('scaffold.mjs', ['concept', '--out', file]);
+    assert.equal(refused.status, 2);
+    assert.match(refused.stderr, /already exists/);
+    assert.match(refused.stderr, /--force/);
+    assert.match(refused.stderr, /edit it instead/);
+    assert.equal(refused.stderr.trim().split('\n').length, 1);
+    assert.equal(fs.readFileSync(file, 'utf8'), '{"title":"already filled in"}\n');
+    const forced = node('scaffold.mjs', ['concept', '--out', file, '--force']);
+    assert.equal(forced.status, 0, forced.stderr);
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), scaffold('concept', { dir: s.dir }));
+  } finally { s.done(); }
+});
+
+test('--force without --out is accepted and changes nothing; gather --out still overwrites a facts file', () => {
+  const s = sandbox();
+  const repo = featureRepo();
+  try {
+    assert.equal(node('scaffold.mjs', ['concept', '--force']).status, 0);
+    const facts = path.join(s.dir, 'facts.json');
+    fs.writeFileSync(facts, '{}');
+    const again = node('gather.mjs', ['git', '--repo', repo.dir, '--out', facts]);
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(JSON.parse(fs.readFileSync(facts, 'utf8')).branch, 'feat/login');
+  } finally { repo.cleanup(); s.done(); }
+});
+
+test('every preset seeds a generatedBy skeleton: three TODO fields that validate rejects, and that pass once filled', async () => {
+  const { dir, done } = sandbox();
+  try {
+    for (const preset of PRESET_NAMES) {
+      const spec = scaffold(preset, { dir });
+      assert.deepEqual(Object.keys(spec.generatedBy), ['model', 'effort', 'agent'], preset);
+      for (const value of Object.values(spec.generatedBy)) {
+        assert.match(value, /^TODO: /, preset);
+        assert.ok([...value].length <= 60, `${preset}: ${value} fits the 60 character field limit`);
+      }
+      const raw = await validateSpec(spec, { dir });
+      assert.deepEqual(raw.errors.filter((e) => e.path.startsWith('generatedBy')).map((e) => e.path), ['generatedBy.model', 'generatedBy.effort', 'generatedBy.agent'], preset);
+      assert.deepEqual((await validateSpec(fillTodos(spec), { dir })).errors, [], preset);
+    }
+  } finally { done(); }
 });

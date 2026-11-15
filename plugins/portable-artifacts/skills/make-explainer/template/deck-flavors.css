@@ -105,6 +105,13 @@
 /* ---- poster: condensed caps, an oversized outlined numeral, hard rules, crop marks, the lime block ------ */
 :root[data-flavor="poster"] .slide:not(.slide-has-art) .slide-inner { border-top: 1px solid var(--text); padding-top: var(--sp-4); }
 :root[data-flavor="poster"] .slide-title { font-size: clamp(2.2rem, 1rem + 4vw, 4.8rem); line-height: 0.9; letter-spacing: 0.004em; }
+/* A content slide is pinned to the top, so its rule and heading sit at one height from slide to slide instead of
+   moving with the amount of content (the base margin: auto centres it). The title leaves the ghost numeral's column
+   free: the numeral is 12rem at most and hidden below 900px, so the title's end padding is 1.1 times its size. */
+:root[data-flavor="poster"] .slide:not(.slide-has-art):not(.slide-cover) .slide-inner { margin-block: 0 auto; }
+@media (min-width: 901px) {
+  :root[data-flavor="poster"] .slide:not(.slide-has-art):not(.slide-cover) .slide-title { padding-inline-end: clamp(5.5rem, 1.1rem + 9.9vw, 13.2rem); }
+}
 :root[data-flavor="poster"] .slide:not(.slide-has-art)::before { top: 40px; right: 40px; font-size: clamp(5rem, 1rem + 9vw, 12rem); letter-spacing: -0.01em; color: transparent; -webkit-text-stroke: 1px color-mix(in srgb, var(--text) 40%, transparent); }
 /* crop marks at the four corners of every slide: a bordered box masked down to its corners */
 :root[data-flavor="poster"] .slide:not(.slide-has-art)::after { content: ""; position: absolute; inset: 14px 14px 64px; z-index: -1; pointer-events: none; border: 1px solid var(--text);

@@ -5,15 +5,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { UsageError } from '../../shared/cli.mjs';
 
-export function emit(text, outFile) {
+// `overwrite: false` refuses a file that already exists (scaffold: a filled-in spec must not be replaced by a
+// TODO skeleton); gather keeps the default, since its facts file is rewritten on every run.
+export function emit(text, outFile, { overwrite = true } = {}) {
   if (outFile === undefined) {
     process.stdout.write(text);
     return;
   }
   if (outFile.trim() === '') throw new UsageError('--out needs a file path, for example --out facts.json');
   try {
-    if (fs.statSync(outFile, { throwIfNoEntry: false })?.isDirectory()) {
+    const existing = fs.statSync(outFile, { throwIfNoEntry: false });
+    if (existing?.isDirectory()) {
       throw new UsageError(`--out must be a file, not a directory: ${outFile}`);
+    }
+    if (existing && !overwrite) {
+      throw new UsageError(`${outFile} already exists; edit it instead, or pass --force to replace it with a fresh skeleton`);
     }
     fs.mkdirSync(path.dirname(path.resolve(outFile)), { recursive: true });
     fs.writeFileSync(outFile, text, 'utf8');

@@ -12,6 +12,7 @@ import { quoteArg } from '../../shared/doctor.mjs';
 import { specTheme } from './default-theme.mjs';
 import { itemKey } from './render/checklist.mjs';
 import { readDiagramSpec, reportDiagramErrors, underPageTheme } from './diagram-source.mjs';
+import { wideDiagramWarnings } from './diagram-fit.mjs';
 import { readSceneSpec, reportSceneErrors, sceneNetworkError, MAX_SCENE_SECTIONS } from './scene-source.mjs';
 import { chartMode, loadChartSource, INLINE_CHART_FIELDS } from './chart-source.mjs';
 import { LIMITS } from './schema.mjs';
@@ -118,8 +119,20 @@ registerCheck('diagram', async ({ section, path: at, dir, spec }) => {
     warning: true,
   }];
   const result = await api.validateSpec(underPageTheme(source.spec, spec));
-  return [...reportDiagramErrors(result.errors, where, source.file), ...warnings];
+  const errors = reportDiagramErrors(result.errors, where, source.file);
+  return [...errors, ...warnings, ...(errors.length === 0 ? await wideWarnings(api, underPageTheme(source.spec, spec), where) : [])];
 });
+
+// A drawing wider than the page column at its floor scale scrolls inside its frame: say so (diagram-fit.mjs). Drawn
+// only for a diagram that already validates; a failure here is the build's to report, not a warning's.
+async function wideWarnings(api, diagramSpec, where) {
+  try {
+    const { width } = await api.buildDiagram(diagramSpec);
+    return wideDiagramWarnings(width, where);
+  } catch {
+    return [];
+  }
+}
 
 // scene: at most MAX_SCENE_SECTIONS per page (each holds a WebGL context); the embedded spec (inline, or a file in
 // the spec folder) must pass make-scene's own validation under the page's theme, with its errors re-pathed under the

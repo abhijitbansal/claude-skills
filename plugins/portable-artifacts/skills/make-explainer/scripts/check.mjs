@@ -1,24 +1,34 @@
 #!/usr/bin/env node
-// node scripts/check.mjs <page.html> [--json]
+// node scripts/check.mjs <page.html> [--json] [--shots <dir>]
 // Opens a built page at 1280, 390 and 1800 px and fails on console errors or warnings, a page that scrolls
 // sideways, elements wider than the page (outside a scrolling region), content clipped sideways inside a
 // slide (a slide hides what overflows it, so the page-level checks cannot see that), a deck that cannot
 // reach its last slide with the arrow keys or whose counter disagrees, a number-plus-unit token that wraps
 // across two lines, a KPI value wider than its tile (a page with a Simple English toggle is measured a second
 // time at each width with the toggle pressed; those problems say "(simple)"), a diagram whose viewer did not mount,
-// and a Present overlay that cannot be clicked, will not open or will not close on Esc. One probe that
-// crashes is reported as such and the rest of the viewport still runs.
+// and a Present overlay that cannot be clicked, will not open or will not close on Esc, a diagram that scrolls
+// sideways with its cue line hidden, and (over loopback http, once) a checklist whose ticks are not saved under
+// pa-checklist:<key>, do not survive a reload, or are not cleared by Reset. At 390 px a deck slide whose table
+// scrolls vertically inside its frame is a warning (printed, never a failure). One probe that crashes is reported
+// as such and the rest of the viewport still runs.
+// --shots <dir> then writes one PNG per viewport (390, 1280) and colour scheme (light, dark) into <dir> through
+// shared/shot.mjs and prints each path: open them and look before you report.
 // exit 0 ok or skipped (no browser), 1 problems, 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchBrowser, BrowserUnavailable } from './lib/browser.mjs';
 import { skipHint } from './lib/doctor-hint.mjs';
+import { takeShots } from './lib/shots.mjs';
+import { probe as probePersistence, servedPage } from './lib/persistence-probe.mjs';
+import { tableScrollProbe, diagramCueProbe, tableScrollMessage, diagramCueMessage, PHONE_MAX_WIDTH } from './lib/viewport-probes.mjs';
+import { startServer } from '../shared/shot.mjs';
+import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
 import { nowrapProblems, overflowProblems } from '../shared/nowrap-probe.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
 
-const USAGE = 'node scripts/check.mjs <page.html> [--json]';
-const OPTIONS = { json: { type: 'boolean' } };
+const USAGE = 'node scripts/check.mjs <page.html> [--json] [--shots <dir>]';
+const OPTIONS = { json: { type: 'boolean' }, shots: { type: 'string' } };
 const VIEWPORTS = [{ width: 1280, height: 900 }, { width: 390, height: 780 }, { width: 1800, height: 1000 }];
 const READY_MS = 5000;
 const ACTION_MS = 5000; // default timeout for every page action and navigation
@@ -120,6 +130,15 @@ async function checkNumbers(page, label, problems) {
   }
 }
 
+// Regions that scroll on their own are exempt from the overflow probe, so each gets its own rule: a diagram that
+// scrolls sideways must show its cue line (a failure), and at phone width a deck slide whose table scrolls vertically
+// is a warning (nothing marks the hidden rows).
+async function checkRegions(page, viewport, label, problems, warnings) {
+  for (const found of await page.evaluate(diagramCueProbe)) problems.push(diagramCueMessage(found, label));
+  if (viewport.width > PHONE_MAX_WIDTH || !await page.evaluate(deckState)) return;
+  for (const found of await page.evaluate(tableScrollProbe)) warnings.push(tableScrollMessage(found, label));
+}
+
 // Is the centre of this element's box taken by something that is not the element or part of it?
 const isCovered = (locator) => locator.evaluate((el) => {
   el.scrollIntoView({ block: 'center', inline: 'center' });
@@ -198,8 +217,9 @@ async function showSimple(page, label, problems) {
 async function checkViewport(browser, url, viewport, simple = false) {
   const label = simple ? `${viewport.width}px (simple)` : `${viewport.width}px`;
   const problems = [];
-  const tally = { slides: 0, presented: 0, hasSimple: false };
-  const result = () => ({ problems, slides: tally.slides, presented: tally.presented, hasSimple: tally.hasSimple });
+  const warnings = [];
+  const tally = { slides: 0, presented: 0, hasSimple: false, checklists: 0 };
+  const result = () => ({ problems, warnings, slides: tally.slides, presented: tally.presented, hasSimple: tally.hasSimple, checklists: tally.checklists });
   const context = await browser.newContext({ viewport, reducedMotion: 'reduce' });
   try {
     const page = await context.newPage();
@@ -218,6 +238,8 @@ async function checkViewport(browser, url, viewport, simple = false) {
       return result();
     }
     tally.hasSimple = await page.locator('[data-simple-toggle]').count() > 0;
+    // A deck keeps every slide but the current one inert, so the saving probe (which clicks a tick box) skips decks.
+    tally.checklists = await page.evaluate(() => (document.querySelector('[data-deck]') ? 0 : document.querySelectorAll('[data-checklist]').length));
     if (simple && !(tally.hasSimple && await showSimple(page, label, problems))) return result();
     let ok = await probe(page, label, problems, 'layout', async () => {
       const fit = await page.evaluate(pageFits);
@@ -229,6 +251,7 @@ async function checkViewport(browser, url, viewport, simple = false) {
       for (const { slide, what, width } of found.clipped) problems.push(`${label}: slide ${slide}: ${what} is ${width}px wide and is clipped by the slide`);
     });
     if (ok) ok = await probe(page, label, problems, 'one-line numbers', () => checkNumbers(page, label, problems));
+    if (ok) ok = await probe(page, label, problems, 'scrolling regions', () => checkRegions(page, viewport, label, problems, warnings));
     if (ok && await page.evaluate(deckState).catch(() => null)) ok = await probe(page, label, problems, 'deck', () => checkDeck(page, label, problems, tally));
     // Diagrams do not change with the toggle: the simple pass leaves their overlays to the normal pass.
     if (ok && !simple) await probe(page, label, problems, 'diagram overlay', () => checkOverlays(page, label, problems, tally));
@@ -241,8 +264,32 @@ async function checkViewport(browser, url, viewport, simple = false) {
   }
 }
 
+// The checklist probe: a fresh browser context against the page served over loopback http (file:// storage is not
+// reliable across a reload, so a file:// probe would fail for reasons that say nothing about the page).
+async function checkPersistence(browser, file) {
+  const label = '1280px (http)';
+  const problems = [];
+  const { root, name } = servedPage(file);
+  let server;
+  let context;
+  try {
+    server = await startServer(root);
+    context = await browser.newContext({ viewport: VIEWPORTS[0], reducedMotion: 'reduce' });
+    const page = await context.newPage();
+    page.setDefaultTimeout(ACTION_MS);
+    page.setDefaultNavigationTimeout(ACTION_MS);
+    await probePersistence(page, `${server.origin}/${encodeURIComponent(name)}`, problems, label);
+  } catch (e) {
+    problems.push(`${label}: checklist saving check crashed: ${firstLine(e)}`);
+  } finally {
+    await context?.close().catch(() => {});
+    await server?.close().catch(() => {});
+  }
+  return problems;
+}
+
 /**
- * Check one built page. Returns { status: 'ok' | 'failed' | 'skipped', viewports, slides, presented, problems, reason? }.
+ * Check one built page. Returns { status: 'ok' | 'failed' | 'skipped', viewports, slides, presented, problems, warnings, reason? }.
  * `timeoutMs` is a wall-clock cap: past it the browser is closed and the result is a failure.
  */
 export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_MS } = {}) {
@@ -253,7 +300,7 @@ export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_
       browser = await launchBrowser(env);
     } catch (e) {
       if (!(e instanceof BrowserUnavailable)) throw e;
-      return { status: 'skipped', viewports: 0, slides: 0, presented: 0, problems: [], reason: firstLine(e) };
+      return { status: 'skipped', viewports: 0, slides: 0, presented: 0, problems: [], warnings: [], reason: firstLine(e) };
     }
     try {
       const url = pathToFileURL(file).href;
@@ -264,9 +311,11 @@ export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_
         results.push(normal);
         if (normal.hasSimple && !expired) results.push(await checkViewport(browser, url, viewport, true));
       }
-      const problems = results.flatMap((r) => r.problems);
+      const saving = Math.max(0, ...results.map((r) => r.checklists)) > 0 && !expired ? await checkPersistence(browser, file) : [];
+      const problems = [...results.flatMap((r) => r.problems), ...saving];
       return {
         status: problems.length ? 'failed' : 'ok',
+        warnings: results.flatMap((r) => r.warnings),
         viewports: VIEWPORTS.length,
         slides: Math.max(0, ...results.map((r) => r.slides)),
         presented: Math.max(0, ...results.map((r) => r.presented)),
@@ -284,7 +333,7 @@ export async function checkPage(file, { env = process.env, timeoutMs = WATCHDOG_
     expired = true;
     work.catch(() => {}); // the closed browser rejects whatever was in flight
     const seconds = Number((timeoutMs / 1000).toFixed(3));
-    return { status: 'failed', viewports: 0, slides: 0, presented: 0, problems: [`check: timed out after ${seconds} s`], timedOut: true };
+    return { status: 'failed', viewports: 0, slides: 0, presented: 0, problems: [`check: timed out after ${seconds} s`], warnings: [], timedOut: true };
   } finally {
     clearTimeout(timer);
     await browser?.close().catch(() => {});
@@ -299,14 +348,20 @@ function okLine(result) {
 }
 
 function report(result, json) {
+  const warnings = result.warnings ?? [];
   if (json) {
     const errors = result.problems.map((message) => ({ path: '', message }));
     const base = { ok: result.status !== 'failed' };
     const body = result.status === 'skipped' ? { ...base, skipped: true, reason: result.reason, hint: skipHint(result.reason) }
       : result.status === 'ok' ? { ...base, viewports: result.viewports, slides: result.slides, presented: result.presented }
         : { ...base, errors, problems: result.problems };
-    process.stdout.write(`${JSON.stringify(body)}\n`);
-  } else if (result.status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint(result.reason)})\n`);
+    const withWarnings = warnings.length > 0 ? { ...body, warnings } : body;
+    process.stdout.write(`${JSON.stringify(result.shots ? { ...withWarnings, shots: result.shots, ...(result.shotsError ? { shotsError: result.shotsError } : {}) } : withWarnings)}\n`);
+    return;
+  }
+  // On stderr: stdout stays the verdict (the one ok line, or the problems and their tally).
+  for (const w of warnings) process.stderr.write(`warning: ${w}\n`);
+  if (result.status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint(result.reason)})\n`);
   else if (result.status === 'ok') process.stdout.write(okLine(result));
   else {
     // The timeout line already reads as a verdict; every other failure gets a tally.
@@ -333,9 +388,19 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     const file = path.resolve(positionals[0]);
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new UsageError(`cannot read ${positionals[0]}`);
     const timeoutMs = timeoutFromEnv(process.env);
+    if (values.shots !== undefined && values.shots.trim() === '') throw new UsageError(`--shots needs a folder path; usage: ${USAGE}`);
+    warnIfStaleCopy();
     const result = await checkPage(file, { timeoutMs });
-    report(result, json);
-    process.exitCode = result.status === 'failed' ? 1 : 0;
+    let code = result.status === 'failed' ? 1 : 0;
+    // A skipped check (no browser) takes no screenshots either; a failed one still does: the page is what you need to look at.
+    const shots = values.shots !== undefined && result.status !== 'skipped' ? takeShots(file, path.resolve(values.shots)) : null;
+    report(shots ? { ...result, shots: shots.paths, shotsError: shots.message } : result, json);
+    if (!json && shots) {
+      for (const p of shots.paths) process.stdout.write(`${p}\n`);
+      if (shots.message) process.stderr.write(`shots: ${shots.message}\n`);
+    } else if (!json && values.shots !== undefined) process.stdout.write('shots: skipped (the check was skipped)\n');
+    if (shots && shots.status !== 0) code = Math.max(code, shots.status);
+    process.exitCode = code;
   } catch (e) {
     if (e instanceof UsageError) exitUsage(e, { json });
     else {

@@ -40,6 +40,8 @@ function count(errors, arr, base, field, [min, max], fix = 'cut some or split th
 
 // A page with questions to answer saves and exports its answers under the plan's key, so such a spec needs one.
 const ANSWERABLE_TYPES = new Set(['decision', 'approval', 'question']);
+// A plan explains what gets built: one of these must come before the first answerable item, and one must exist at all.
+const EXPLAINING_TYPES = new Set(['steps', 'cards', 'table', 'files', 'text']);
 
 export function checkTop(spec, errors) {
   length(errors, spec, 'title', '', LIMITS.title);
@@ -153,7 +155,29 @@ function checkChecklist(s, at, errors, keys) {
   if (keys.has(s.key)) errors.push({ path: keyAt, message: `duplicate checklist key ${q(s.key)}; first used at ${keys.get(s.key)}; rename one so their ticks stay apart` });
   else keys.set(s.key, keyAt);
   count(errors, s.groups, at, 'groups', [1, Infinity]);
-  s.groups.forEach((g, gi) => count(errors, g.items, pathJoin(pathJoin(at, 'groups'), gi), 'items', [1, Infinity]));
+  s.groups.forEach((g, gi) => {
+    const groupAt = pathJoin(pathJoin(at, 'groups'), gi);
+    count(errors, g.items, groupAt, 'items', [1, Infinity]);
+    length(errors, g, 'intro', groupAt, LIMITS.checkGroupIntro);
+    g.items.forEach((it, ii) => checkChecklistItem(it, pathJoin(pathJoin(groupAt, 'items'), ii), errors));
+  });
+}
+
+// An item's free tags are short labels, its steps and expected result are short sentences.
+function checkChecklistItem(it, at, errors) {
+  length(errors, it, 'expect', at, LIMITS.checkExpect);
+  const tags = it.tags ?? [];
+  count(errors, tags, at, 'tags', LIMITS.checkTags, 'keep the tags that help a tester filter');
+  tags.forEach((t, i) => {
+    const n = [...t].length;
+    if (n > LIMITS.checkTag) errors.push({ path: pathJoin(pathJoin(at, 'tags'), i), message: `tag is ${n} characters; the limit is ${LIMITS.checkTag} — shorten it` });
+  });
+  const steps = it.steps ?? [];
+  count(errors, steps, at, 'steps', LIMITS.checkSteps, 'keep the steps a tester needs or split the item');
+  steps.forEach((t, i) => {
+    const n = [...t].length;
+    if (n > LIMITS.checkStep) errors.push({ path: pathJoin(pathJoin(at, 'steps'), i), message: `step is ${n} characters; the limit is ${LIMITS.checkStep} — shorten it` });
+  });
 }
 
 function checkSection(s, i, errors, state) {
@@ -183,6 +207,11 @@ function checkSection(s, i, errors, state) {
     case 'code':
       if (codeLines(s.code) > LIMITS.codeLines) {
         errors.push({ path: pathJoin(at, 'code'), message: `code is ${codeLines(s.code)} lines; the limit is ${LIMITS.codeLines} — shorten it or split it` });
+      }
+      break;
+    case 'diff':
+      if (codeLines(s.diff) > LIMITS.diffLines) {
+        errors.push({ path: pathJoin(at, 'diff'), message: `diff is ${codeLines(s.diff)} lines; the limit is ${LIMITS.diffLines} — show the hunks that matter or split it` });
       }
       break;
     case 'checklist': checkChecklist(s, at, errors, state.checklistKeys); break;
@@ -274,19 +303,32 @@ export function checkSections(spec, errors) {
   if (spec.preset === 'plan' && !answerable) {
     errors.push({ path: 'sections', message: 'a plan needs at least one decision, approval or question' });
   }
+  // A plan that only asks has nothing for the reviewer to judge: it needs a section that says what gets built.
+  if (answerable && !spec.sections.some((s) => EXPLAINING_TYPES.has(s.type))) {
+    errors.push({ path: 'sections', message: 'a plan needs the plan itself, not only questions: add at least one steps, cards, table, files or text section that says what gets built' });
+  }
   // The verdict holds the Export buttons: without it the answers cannot leave the page.
   if (answerable && state.verdictAt === undefined) {
     errors.push({ path: 'sections', message: 'a plan with decisions, approvals or questions needs a verdict section (it holds the Export buttons); add one as the last section' });
   }
 }
 
-// A plan explains what gets built before it asks anything: one of these must come before the first answerable item.
-const EXPLAINING_TYPES = new Set(['steps', 'cards', 'table', 'files', 'text']);
-
 function warnThinPlan(spec, warnings) {
   const firstAsk = spec.sections.findIndex((s) => PLAN_ITEM_TYPES.has(s.type));
   if (firstAsk === -1 || spec.sections.slice(0, firstAsk).some((s) => EXPLAINING_TYPES.has(s.type))) return;
+  // No explaining section anywhere is an error (checkSections); the warning is for one that comes too late.
+  if (!spec.sections.some((s) => EXPLAINING_TYPES.has(s.type))) return;
   warnings.push({ path: 'sections', message: 'a plan asks before it explains: add steps, cards, table, files or text sections that say what gets built before the first decision, approval or question' });
+}
+
+/**
+ * The page footer names who made the page, so a spec that does not say is worth a nudge: -> [{ path, message }].
+ * Run by `validate.mjs` (the step an agent runs before it builds), not by validateSpec: a build can still be given
+ * --model, --effort and --agent, and a hand-written spec may leave the footer as "not reported" on purpose.
+ */
+export function provenanceWarnings(spec) {
+  if (spec.generatedBy !== undefined) return [];
+  return [{ path: 'generatedBy', message: 'add generatedBy {"model": "<your model id>", "effort": "<your effort level>", "agent": "<your host>"} so the page footer says who made it; leave a field out only if you cannot know it (build --model, --effort and --agent also set them)' }];
 }
 
 /** Advice that never blocks a build: -> [{ path, message }]. */

@@ -176,3 +176,80 @@ test('guardrail proof: a 0.8.0 page whose KPI values wrap only in a wide window 
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^1800px: a number-plus-unit token wraps across lines: "39 ms"\ncheck: 1 problem\n$/);
 });
+
+// ---- the checklist saving probe (PA-03) ------------------------------------------------------------
+// Written without a browser run: the orchestrator's serial browser pass runs them.
+
+test('a checklist page passes the saving probe: tick, reload, still ticked, Reset empties the entry', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const result = await checkPage(buildFile(exampleFile('checklist')).file);
+  assert.deepEqual(result.problems, []);
+  assert.equal(result.status, 'ok');
+});
+
+test('guardrail proof: a page whose script saves ticks under another key fails the probe and names the entry it expected', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const built = buildFile(exampleFile('checklist'));
+  assert.ok(built.html.includes("'pa-checklist:'"), 'the runtime builds the entry name from this prefix');
+  const broken = path.join(path.dirname(built.file), 'broken-key.html');
+  fs.writeFileSync(broken, built.html.replace("'pa-checklist:'", "'pa-checklst:'"));
+  const result = await checkPage(broken);
+  assert.equal(result.status, 'failed');
+  assert.ok(result.problems.some((p) => /^1280px \(http\): checklist 1: ticking an item saved nothing under "pa-checklist:/.test(p)), result.problems.join('\n'));
+});
+
+test('a page with no checklist runs no saving probe', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const result = await checkPage(buildFile(exampleFile('concept')).file);
+  assert.deepEqual(result.problems.filter((p) => /\(http\)/.test(p)), []);
+});
+
+// ---- --shots (PA-21) -------------------------------------------------------------------------------
+
+test('--shots writes a PNG per width and colour scheme into the folder and prints each path', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { file } = buildFile(exampleFile('checklist'));
+  const out = path.join(scratchDir(), 'shots-out');
+  const r = cli([file, '--shots', out]);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const names = fs.readdirSync(out).sort();
+  assert.equal(names.length, 4, names.join(', '));
+  for (const width of [390, 1280]) for (const scheme of ['light', 'dark']) assert.ok(names.some((n) => n.endsWith(`-${width}-${scheme}.png`)), `${width} ${scheme}`);
+  for (const n of names) assert.ok(r.stdout.includes(path.join(out, n)) || r.stdout.includes(n), `${n} is printed`);
+  const json = JSON.parse(cli([file, '--shots', out, '--json']).stdout.split('\n')[0]);
+  assert.equal(json.shots.length, 4);
+});
+
+test('--shots with a blank folder is a usage error, and a skipped check takes no shots and says so', () => {
+  const { file } = buildFile(exampleFile('concept'));
+  const blank = cli([file, '--shots', ' ']);
+  assert.equal(blank.status, 2);
+  assert.match(blank.stdout + blank.stderr, /--shots needs a folder path/);
+  const skipped = cli([file, '--shots', path.join(scratchDir(), 'never')], { PA_NO_BROWSER: '1' });
+  assert.equal(skipped.status, 0, skipped.stdout + skipped.stderr);
+  assert.match(skipped.stdout, /^shots: skipped \(the check was skipped\)\n$/m);
+  assert.ok(!fs.existsSync(path.join(scratchDir(), 'never')));
+});
+
+// ---- scrolling regions (G-07, G-08) ----------------------------------------------------------------
+
+test('a deck slide whose table scrolls vertically at 390 px is a warning, not a failure', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const rows = Array.from({ length: 8 }, (_, i) => [`Item ${i + 1}`, `${(i + 1) * 100} a month`]);
+  const built = buildSpec({ title: 'Table deck', mode: 'slides', sections: [{ type: 'table', title: 'The costs', columns: ['Item', 'Cost'], rows }] });
+  const result = await checkPage(built.file);
+  assert.equal(result.status, 'ok', result.problems.join('\n'));
+  assert.ok((result.warnings ?? []).some((w) => /^390px: slide \d+: its table needs \d+ px of vertical scrolling/.test(w)), JSON.stringify(result.warnings));
+  assert.ok(!(result.warnings ?? []).some((w) => /^1280px/.test(w)), 'only at phone width');
+});
+
+test('a diagram that scrolls sideways with its cue line removed fails; with the cue showing it passes', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const row = { title: 'Search path', type: 'flow', direction: 'right', nodes: Array.from({ length: 9 }, (_, i) => ({ id: `n${i}`, label: `Stage number ${i + 1}` })), edges: Array.from({ length: 8 }, (_, i) => ({ from: `n${i}`, to: `n${i + 1}` })) };
+  const built = buildSpec({ title: 'Wide', sections: [{ type: 'text', text: 'Intro.' }, { type: 'diagram', title: 'The path', diagram: row }] });
+  const ok = await checkPage(built.file);
+  assert.deepEqual(ok.problems, []);
+  const cueless = withExtra(built, '<script>document.querySelectorAll("[data-dg-cue]").forEach(function (c) { c.remove(); });</script>', 'no-cue');
+  const failed = await checkPage(cueless);
+  assert.ok(failed.problems.some((p) => /^390px: diagram 1 scrolls sideways .* but shows no cue/.test(p)), failed.problems.join('\n'));
+});

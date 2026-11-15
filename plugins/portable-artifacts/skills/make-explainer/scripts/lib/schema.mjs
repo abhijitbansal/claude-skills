@@ -35,8 +35,16 @@ export const LIMITS = Object.freeze({
   files: [1, 200],
   compareColumns: [2, 3],
   codeLines: 120,
+  diffLines: 200,
   chartRows: 500,
   checklistKey: 80,
+  // A checklist item's free tags (short labels), sub-steps and expected result; a group's intro.
+  checkTags: [0, 4],
+  checkTag: 24,
+  checkSteps: [0, 12],
+  checkStep: 300,
+  checkExpect: 300,
+  checkGroupIntro: 600,
   planOptions: [2, 5],
   // What the answers file carries back (answers.mjs bounds it): an item's id, the question it asks, an option's label.
   planId: 80,
@@ -126,11 +134,16 @@ export const SECTION_SCHEMAS = {
   }),
   callout: section('callout', ['tone', 'title', 'text'], { tone: { enum: CALLOUT_TONES }, text }),
   code: section('code', ['code'], { code: text, language: text, caption: text }),
+  diff: section('diff', ['diff'], { diff: text, file: text, caption: text }),
   details: section('details', ['summary', 'text'], { summary: text, text }),
   checklist: section('checklist', ['key', 'groups'], {
     key: text,
     groups: items(
-      { title: text, items: items({ text, tag: { enum: CHECK_TAGS }, note: text }, ['text']) },
+      {
+        title: text,
+        intro: text,
+        items: items({ text, tag: { enum: CHECK_TAGS }, tags: list(text), note: text, steps: list(text), expect: text }, ['text']),
+      },
       ['title', 'items'],
     ),
     intro: text,

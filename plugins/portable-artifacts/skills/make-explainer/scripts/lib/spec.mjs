@@ -4,18 +4,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
-import { UsageError, exitUsage } from '../../shared/cli.mjs';
-import { jsonSyntaxError, JsonSyntaxError } from './json-error.mjs';
+import { jsonSyntaxError } from './json-error.mjs';
+import { UsageError, JsonSyntaxError, exitSpecUsage } from './usage-exit.mjs';
 import { ROOT_SCHEMA, SECTION_SCHEMAS, TYPE_SCHEMA, NON_SPACE } from './schema.mjs';
 import { checkTop, checkIds, checkSections, warnSections } from './semantic.mjs';
 import { collectStrings } from './walk.mjs';
-import { lintText, lintPlaceholders } from './lint.mjs';
-import { warnBudget } from './budget.mjs';
+import { lintText, lintPlaceholders, rawMarkdownWarnings, labelTitleWarnings } from './lint.mjs';
+import { warnBudget, capWarnings } from './budget.mjs';
 import { slideBudget, slideSimpleWarnings } from './slides.mjs';
 import { checksFor } from './checks.mjs';
 import { simpleErrors, simpleWarnings } from './simple.mjs';
 
-export { UsageError, JsonSyntaxError };
+export { UsageError, JsonSyntaxError, exitSpecUsage };
 
 const ajv = new Ajv({ allErrors: true, strict: true, verbose: true, allowUnionTypes: true });
 const validateRoot = ajv.compile(ROOT_SCHEMA);
@@ -35,19 +35,6 @@ export function loadSpec(file) {
   } catch (e) {
     throw jsonSyntaxError(file, text, e);
   }
-}
-
-/**
- * Report a UsageError the way exitUsage does (exit 2; JSON on stdout when asked, text on stderr), except that a
- * JSON syntax error also shows its offending line and caret: the shared helper prints only a message's first line.
- */
-export function exitSpecUsage(error, { json = false } = {}) {
-  if (!(error instanceof JsonSyntaxError)) return exitUsage(error, { json });
-  const message = `${error.message}\n${error.snippet}`;
-  if (json) process.stdout.write(`${JSON.stringify({ ok: false, errors: [{ path: '', message }] })}\n`);
-  else process.stderr.write(`${message}\n`);
-  process.exitCode = 2;
-  return undefined;
 }
 
 // Ajv's pattern message would print the raw regex; ours says what to fix.
@@ -103,6 +90,18 @@ export function lintSpec(spec) {
   return { errors };
 }
 
+// Warnings from the prose strings: markdown this page would print as typed, and a section title that is only a label.
+// A table cell is data, so the markdown rule skips it.
+export function lintWarnings(spec) {
+  const out = [];
+  for (const { path: at, text, prose } of collectStrings(spec)) {
+    if (!prose) continue;
+    if (!isTableCell(spec, at)) out.push(...rawMarkdownWarnings(text, at));
+    if (/^sections\[\d+\]\.title$/.test(at)) out.push(...labelTitleWarnings(text, at));
+  }
+  return out;
+}
+
 // Every check registered for a section's type. A check returns { path, message } errors;
 // an item marked `warning: true` is a warning instead.
 async function registryResults(spec, dir) {
@@ -118,12 +117,25 @@ async function registryResults(spec, dir) {
   return { errors, warnings };
 }
 
+const capKey = (w) => `${w.path}\0${w.message}`;
+const STRICT_NOTE = ' (an error under --strict)';
+
+// The budget warnings split in two: the caps become errors (once, not also as warnings), the rest stay warnings.
+function strictCaps(spec, warnings) {
+  const caps = new Set(capWarnings(spec).map(capKey));
+  return {
+    errors: warnings.filter((w) => caps.has(capKey(w))).map((w) => ({ path: w.path, message: `${w.message}${STRICT_NOTE}` })),
+    warnings: warnings.filter((w) => !caps.has(capKey(w))),
+  };
+}
+
 /**
  * Validate a parsed spec. `dir` is the spec's folder (file references resolve
  * against it; default: the current directory).
- * -> { ok, errors, warnings }, each [{ path, message }]. Warnings never fail.
+ * `strict` (the --strict flag) turns the section-length and page-length caps from warnings into errors; every other
+ * warning stays one. -> { ok, errors, warnings }, each [{ path, message }]. Warnings never fail.
  */
-export async function validateSpec(spec, { dir = process.cwd() } = {}) {
+export async function validateSpec(spec, { dir = process.cwd(), strict = false } = {}) {
   const structural = schemaErrors(spec);
   if (structural.length > 0) return { ok: false, errors: structural, warnings: [] };
   const errors = [];
@@ -138,5 +150,7 @@ export async function validateSpec(spec, { dir = process.cwd() } = {}) {
   const registry = await registryResults(spec, dir);
   errors.push(...registry.errors);
   const slideSimple = deck ? slideSimpleWarnings(spec) : [];
-  return { ok: errors.length === 0, errors, warnings: [...warnBudget(spec), ...warnSections(spec), ...simpleWarnings(spec), ...slideSimple, ...registry.warnings] };
+  const budget = strict ? strictCaps(spec, warnBudget(spec)) : { errors: [], warnings: warnBudget(spec) };
+  errors.push(...budget.errors);
+  return { ok: errors.length === 0, errors, warnings: [...budget.warnings, ...lintWarnings(spec), ...warnSections(spec), ...simpleWarnings(spec), ...slideSimple, ...registry.warnings] };
 }
