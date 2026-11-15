@@ -165,6 +165,49 @@ test("a ping with no reply for 2 minutes counts as a failed send", async () => {
   assert.ok(r.logs.some((l) => /keep-warm ping failed/.test(l.text)));
 });
 
+test("a ping reply that arrives after the watchdog still counts as spend, once", async () => {
+  const r = rig({ send: async () => { r.sent += 1; } }); r.turn();
+  await r.run(6 * MIN + 10_000);
+  assert.deepEqual([r.kw.status().inFlight, r.kw.status().awaitingReply], [false, true]);
+  r.kw.onPingUsage({ usd: 0.02, warm: true });
+  const s = r.kw.status();
+  assert.deepEqual([s.pings, s.usd, s.awaitingReply], [1, 0.02, false]);
+  r.kw.onPingUsage({ usd: 0.02, warm: true });
+  assert.equal(r.kw.status().pings, 1, "nothing is owed any more, so a second record is not a ping's");
+});
+
+test("a late reply counts against the budget, and a late cold reply stops it", async () => {
+  const r = rig({ send: async () => { r.sent += 1; }, config: { keepWarmPayback: false, keepWarmMaxUsd: 0.02 } }); r.turn();
+  await r.run(6 * MIN + 10_000);
+  r.kw.onPingUsage({ usd: 0.02, warm: true });
+  r.clock.ingestPing(normalizeUsage(pingUsage({ at: iso(r.now) }), r.now));
+  r.kw.reschedule();
+  assert.equal(r.kw.status().stopped, "budget", "the late $0.02 uses the whole budget");
+  const c = rig({ send: async () => { c.sent += 1; } }); c.turn();
+  await c.run(6 * MIN + 10_000);
+  c.kw.onPingUsage({ usd: 0.02, warm: false });
+  assert.equal(c.kw.status().stopped, "cold-reply");
+});
+
+test("a late reply after the window already stopped is booked, without a second stop note", async () => {
+  const r = rig({ send: async () => { r.sent += 1; } }); r.turn();
+  await r.run(6 * MIN + 10_000);
+  r.kw.stop("budget");
+  const notes = r.logs.length;
+  r.kw.onPingUsage({ usd: 0.02, warm: false });
+  r.kw.onPingUsage({ usd: 0.02, warm: true });
+  assert.deepEqual([r.kw.status().pings, r.kw.status().usd, r.kw.status().stopped, r.logs.length], [1, 0.02, "budget", notes]);
+});
+
+test("a late reply is only expected for ten minutes", async () => {
+  const r = rig({ send: async () => { r.sent += 1; } }); r.turn();
+  await r.run(6 * MIN + 10_000);
+  await r.run(11 * MIN);
+  assert.equal(r.kw.status().awaitingReply, false);
+  r.kw.onPingUsage({ usd: 0.02, warm: true });
+  assert.equal(r.kw.status().pings, 0);
+});
+
 test("an unmeasured ping stops it, because the budget cannot be enforced", async () => {
   const q = rig({ send: async () => { q.sent += 1; queueMicrotask(() => { q.kw.onPingUsage({ usd: null, warm: true }); q.kw.onIdle(); }); } }); q.turn();
   await q.run(HOUR);

@@ -1,6 +1,7 @@
 #!/bin/sh
 # Cache Clock installer — puts the extension in Copilot's user extensions dir, or a project's.
-# Usage: curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh
+# Usage: curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/<REF>/tools/cache-clock/install.sh | sh
+#        (<REF> is the tag named by REF below; the one-line install works once that tag exists)
 #        curl -fsSL …/install.sh | sh -s -- --project    into this repo's .github/extensions (VS Code)
 #        sh tools/cache-clock/install.sh            from a checkout: link (updates follow git pull)
 #        sh tools/cache-clock/install.sh --copy     copy instead of link
@@ -9,12 +10,33 @@
 # Env:   COPILOT_HOME (default ~/.copilot), CACHE_CLOCK_BASE_URL (download source)
 set -eu
 
-BASE_URL="${CACHE_CLOCK_BASE_URL:-https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/extension}"
+# The release tag the one-line install downloads from, so a push to main changes nothing for it.
+# The only place the tag is spelled; the README's curl lines name it too, and a test checks they agree.
+REF="cache-clock-v1.1.0"
+BASE_URL="${CACHE_CLOCK_BASE_URL:-https://raw.githubusercontent.com/abhijitbansal/claude-skills/$REF/tools/cache-clock/extension}"
 # Every file the extension ships; a test keeps this list in step with extension/.
 # extension.mjs comes last, so an interrupted download never looks like an extension.
 FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/keepwarm.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
+# BEGIN SHA256 (generated: node tools/cache-clock/bin/checksums.mjs --write)
+SUMS='1acecfbc1bde5c37c350f7bcfa4d88bdea028c7dd06ec6fede2c9100c491fee4  report.mjs
+a81adfc3051d668926ae2338e0f58f4db76dab0bf083e0883a9a542d2c80a3d1  lib/clock.mjs
+d230fd0a6d0923adac5e6faceca8693e7240ce383d4dfea8fd5be162b62f2339  lib/config.mjs
+8fc6f5fb005176ebb24e78c42f07e2e25f452e29e80098713f139a253376ca07  lib/format.mjs
+9ef37ae0ada40d427aac12b9e24736f60ed1a1015901b3052d24bb75bd343d86  lib/guard.mjs
+4a29370f5e6ef4abb3d1002a503a26729249178cffbd7e661d018b9525d2424c  lib/history.mjs
+03baed64701fce3601d013237b566d884acfc850f7d904689e01898f1a94eec4  lib/keepwarm.mjs
+817b122f5026b3e7c7bb79284120907f92a7f051f2afe62eeaf4ebc9ad7746b2  lib/usage.mjs
+1924d28004863d94e54f17d1690a3f5fd456e6c46056a8fbc611aefdba5e81bf  lib/wiring.mjs
+f65bff6539a71bbe20054aa169ab7a8cd8c38e1883c715738676d859349153bc  extension.mjs
+'
+# END SHA256
 MODE="link"
 PROJECT=""
+
+# Prints the SHA-256 (hex) of the file in $1.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | awk '{print $1}'
+}
 
 # A checkout only when this script is a real file next to extension/. Piped (curl | sh),
 # $0 is the shell, and an extension/ folder in the current directory must not count.
@@ -84,6 +106,10 @@ else
     printf 'cache-clock: the one-line install needs curl\n' >&2
     exit 1
   fi
+  if ! command -v sha256sum >/dev/null 2>&1 && ! command -v shasum >/dev/null 2>&1; then
+    printf 'cache-clock: the one-line install needs sha256sum or shasum\n' >&2
+    exit 1
+  fi
   MODE="download"
   STAGE="$(mktemp -d "$DEST_DIR/.cache-clock.XXXXXX")"
   OLD="$DEST_DIR/.cache-clock.old.$$"
@@ -92,6 +118,16 @@ else
   for f in $FILES; do
     if ! curl -fsSL --create-dirs "$BASE_URL/$f" -o "$STAGE/$f"; then
       printf 'cache-clock: download failed: %s/%s\n' "$BASE_URL" "$f" >&2
+      exit 1
+    fi
+    # Nothing is installed from a file that is not the one this script was published with.
+    want=$(printf '%s\n' "$SUMS" | awk -v f="$f" '$2 == f { print $1 }')
+    if [ -z "$want" ]; then
+      printf 'cache-clock: no checksum listed for %s\n' "$f" >&2
+      exit 1
+    fi
+    if [ "$(sha256_of "$STAGE/$f")" != "$want" ]; then
+      printf 'cache-clock: checksum mismatch: %s\n' "$f" >&2
       exit 1
     fi
   done

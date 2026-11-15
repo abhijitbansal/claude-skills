@@ -20,11 +20,19 @@ and a [17-second video](../../docs/features/showcase/cache-clock/video.mp4).
 One line, no clone and no Node needed (the extension runs inside Copilot's own runtime):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh
 ```
 
 That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` moves
 `~/.copilot`). Install once per machine; every Copilot session loads it.
+
+The one-line install is pinned to a release tag, not to `main`, and checks a SHA-256 for
+every file it downloads against the list inside the script. A file that does not match
+stops the install and leaves nothing behind. The piped install
+works once the tag `cache-clock-v1.1.0` exists; the owner creates it on the merge commit,
+and until then every curl line here answers 404. Install from a clone (below) meanwhile.
+After any edit under `extension/`, run `node tools/cache-clock/bin/checksums.mjs --write`;
+the tests fail on a stale list.
 
 - **Copilot CLI:** start a new `copilot` session. Copilot asks once whether the extension
   may "register hooks": allow it (option 2 remembers it for that repo). Then run
@@ -33,7 +41,7 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
   `~/.copilot/extensions`. Install it into each repo you use it in, from that repo:
 
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh -s -- --project
+  curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh -s -- --project
   ```
 
   That copies it into `<git root>/.github/extensions/cache-clock`; commit it to share it
@@ -96,20 +104,29 @@ expired exactly when Copilot said it would. The question form was checked live o
     /cache-clock guard off       no guard
     /cache-clock min 0.25        guard only cold sends whose extra cost is at least $0.25 (default $0.10)
     /cache-clock headsup 5       warn up to 5 minutes before expiry (off to disable)
+    /cache-clock keepwarm on     keep warm 3 hours after your last message
+    /cache-clock keepwarm 6      0 to 12 hours; above 6 shows the estimated cost first
+    /cache-clock keepwarm off
+    /cache-clock keepwarm budget 0.50   stop after $0.50 of pings in one window, 0 to 5
+    /cache-clock keepwarm payback off   keep pinging after pings cost more than one cold rewrite
 
 Settings live in `~/.copilot/cache-clock/config.json` and apply to every session
 (`CACHE_CLOCK_HOME` moves that directory). The heads-up has its own switch: it keeps
-running under `guard off` until you set `headsup off`.
+running under `guard off` until you set `headsup off`. A settings command never
+overwrites a `config.json` it cannot read as settings (bad JSON, or not an object): it
+says so and saves nothing. Keys it does not know are kept as they are, and a bad value is
+reported once and replaced by its default while the file stays untouched.
 
-Historical card, captured before model-switch accounting was added:
+Sample card from `format.mjs` with sample numbers, not a live capture:
 
 ```
 cache-clock · Claude Sonnet 5.5
   cache      warm, 1m17s left (ttl 5m00s)
   context    37.2k tokens
   next send  warm $0.003 · cold $0.08 (25× per token)
-  session    5 model calls · 0 cold after idle · 0 prefix breaks · $0 extra paid
+  session    5 model calls · 0 cold after idle · 0 prefix breaks · 0 switch rewrites · $0 estimated extra
   guard      ask before a cold send above $0.10 · heads-up 5m before expiry
+  keep-warm  on · 2h44m left · 2 pings · $0.007
 ```
 
 ## How it works
@@ -118,7 +135,12 @@ cache-clock · Claude Sonnet 5.5
   `cacheReadTokens`, `cacheWriteTokens`, `cacheExpiresAt`, `cacheTtlSeconds` and
   per-token prices. Cache Clock keeps cache observations per model and the latest
   conversation context separately. TTL, expiry and prices come from Copilot; context
-  size and possible rewrite cost are estimates, not cache-reuse guarantees.
+  size and possible rewrite cost are estimates, not cache-reuse guarantees. Expiry counts
+  from the **start** of the request (the event time minus its `duration`, when Copilot
+  reports one up to 30 minutes; a reported expiry is kept as is). That is a small visible
+  change for everyone, even with keep-warm off: a call that took 4 s and reported no
+  expiry now expires 4 s earlier than before, and a send that started before the old
+  expiry but finished after it counts as a prefix break, not as idle time.
 - **Selected model.** At startup, before a prompt, and on status, a bounded (250 ms)
   `session.rpc.model.getCurrent()` lookup resolves the selection. Main-agent
   `session.model_change` and `session.model_deselected` events keep it current between
@@ -182,6 +204,51 @@ $2.25/M (list $2.50) and Luna's $0.1125/M (list $0.125), auto's 10% off.
 
 Separate sessions share the cached system-prompt prefix: a brand-new session's first
 call read 10,157 tokens from cache. The conversation itself is per session.
+
+## Keep-warm
+
+**Off until you turn it on, and it costs money.** Tested against a fake Copilot host only.
+A live check is pending; this section changes with its result.
+
+- **What a ping is.** A tiny message sent into your session shortly before the cache would
+  expire, so your next message reads the conversation at the warm price. The prompt is
+  `[cache-clock:keepwarm] Reply with exactly: .`, shown as `cache-clock keep-warm`. It goes
+  out through `session.rpc.send` (`source: "system"`, `mode: "enqueue"`, `billable: false`)
+  when the host has it, else `session.send`, which has no billable flag. A ping refreshes
+  the clock but is not a model call: it stays out of the card's tally, the guard and the
+  report's statistics, and its cost shows as keep-warm spend. The guard never stops it,
+  but only your own in-flight ping is exempt: text you type or paste that carries the
+  marker is an ordinary prompt and is guarded.
+- **Turning it on.** `/cache-clock keepwarm on` keeps warm for 3 hours after your last real
+  message. `keepwarm <hours>` takes 0 to 12; above 6 it shows the estimated cost and asks
+  first. Each real message restarts the window.
+- **When it stops, by itself.** Payback (pings have cost as much as the cold rewrite they
+  avoid, which `keepwarm payback off` turns off), the budget (`keepwarm budget`, $0.50 by
+  default, 0 to 5) and the window end. Also a ping that comes back cold, two failed sends
+  in a row, and a ping whose cost was not reported. Each stop is logged with the spend.
+- **When it holds off.** A turn is running, a question is open, the context is above 85%
+  of the model's prompt limit, you switched model, or the selection is Auto.
+- **Spend.** Read from the ping's own usage event, `copilotUsage.totalNanoAiu` (nano-AIU
+  ÷ 1e11 = dollars). A ping that gets no reply for 2 minutes counts as a failed send; if
+  its usage event still arrives within 10 minutes, its cost is added to the total and
+  counts against the budget and payback.
+- **Reloads and two processes.** The window, its spend and any stop are stored in
+  `~/.copilot/cache-clock/keepwarm/<sha256 of the session id>.json`, so a reloaded
+  extension resumes them instead of starting a fresh budget. A `.lock` file beside it lets
+  only one process per session ping; a crashed holder's lock is taken over.
+- **Estimated cost, 200,000-token context.** Estimated from list prices, not measured on a
+  bill:
+
+  | Model | Cache lifetime | One ping | One cold rewrite (extra cost) | Pings in 3 h | 3 h of pings | Break-even idle time |
+  |---|---|---|---|---|---|---|
+  | Sonnet 5.5 | 5 min | about $0.020 | about $0.48 | 45 | about $0.90 | about 96 min |
+  | Luna | 30 min | about $0.002 | about $0.023 | 8 | about $0.016 | about 4.8 h |
+
+  Keep-warm saves money when the idle gap is shorter than the break-even time and loses
+  money after it. With payback on (the default), Sonnet stops after 24 pings at this size,
+  and the budget is $0.50, so the 3-hour figure above needs `payback off` and a higher budget.
+
+Tested against a fake Copilot host only. A live check is pending; this section changes with its result.
 
 ## Report: what cold sends already cost you
 
@@ -253,10 +320,13 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 
 ## Limits
 
-- **No keep-warm yet.** cache-tax pings to hold the cache during a break. An extension
-  can only ping with `session.send`, which adds a user and an assistant turn to your
-  conversation each time; the transcript-free fork lives on the server API, not the
-  extension's session. Whether pings pay off depends on your own tax: run the report.
+- **Keep-warm adds a turn per ping.** An extension can only ping through the session, so
+  the host may show each ping as a short turn in your conversation; the transcript-free
+  fork lives on the server API, not the extension's session. Whether pings pay off depends
+  on your own idle gaps: see the cost table above, and run the report.
+- **Keep-warm trusts the next usage event.** A ping's cost and whether it kept the cache
+  warm come from the usage event that follows it. A ping that goes unreported counts as a
+  failed send, and an unreported cost stops keep-warm because the budget cannot be enforced.
 - **Auto routes per prompt.** Copilot reports each pick as `session.auto_mode_resolved`
   (`chosenModel`). While the selection is `auto`, Cache Clock prices and guards the
   next send as the last model Auto resolved to since you chose Auto, using that model's
@@ -301,8 +371,14 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 ## Tests
 
 ```sh
-cd tools/cache-clock && node --test "test/*.test.mjs"
+node --test "tools/cache-clock/test/*.test.mjs"
 ```
+
+That is the command CI runs, from the repository root. The shared fake Copilot host lives
+in `test/helpers/fake-host.mjs`; the wiring tests are split by topic across
+`wiring*.test.mjs`. Keep-warm has its own planner and scheduler tests (`keepwarm.test.mjs`),
+a store and lock test (`keepwarm-store.test.mjs`), and wiring tests against the fake host
+(`wiring-keepwarm.test.mjs`); none of them sends a billed request.
 
 The tests drive the extension through a fake Copilot session and a fake clock: the
 cold-send question and every answer (send, don't send, dismissed, timed out, host

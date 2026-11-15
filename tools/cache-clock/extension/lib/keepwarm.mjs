@@ -115,6 +115,8 @@ export function planPing({ snapshot, config, window, spend, session, now }) {
 export const RETRY_MS = 15_000;
 export const IN_FLIGHT_TIMEOUT_MS = 120_000;
 export const MAX_FAILED_SENDS = 2;
+// A ping the watchdog gave up on may still be answered; its cost counts if it is, within this time.
+export const LATE_REPLY_MS = 10 * 60_000;
 // A timer that wakes this much early still sends; one that finds the plan further out re-plans.
 const FIRE_TOLERANCE_MS = 1000;
 // Stops that mean something is wrong, not just that the window is over.
@@ -135,6 +137,9 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
   let inFlight = false;
   let sendId = 0;
   let failures = 0;
+  // Pings the watchdog gave up on, and until when a reply to them is still believed.
+  let lateOwed = 0;
+  let lateUntil = 0;
   let lastSkip = null;
   let saveWarned = false;
   let lockWarned = false;
@@ -217,7 +222,7 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     sendId += 1;
     const id = sendId;
     clearTimer(watchdog);
-    watchdog = setTimer(() => failed(id, new Error(`no reply in ${IN_FLIGHT_TIMEOUT_MS / 1000}s`)), IN_FLIGHT_TIMEOUT_MS);
+    watchdog = setTimer(() => failed(id, new Error(`no reply in ${IN_FLIGHT_TIMEOUT_MS / 1000}s`), true), IN_FLIGHT_TIMEOUT_MS);
     try {
       Promise.resolve(send()).catch((err) => failed(id, err));
     } catch (err) {
@@ -225,12 +230,19 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     }
   }
 
-  /** One failed send, from a rejection or the watchdog. Stale ids (already answered or stopped) are ignored. */
-  function failed(id, err) {
+  /**
+   * One failed send, from a rejection or the watchdog (`timedOut`). Stale ids (already answered or
+   * stopped) are ignored. A timed-out ping may still have been sent, so its late reply is expected.
+   */
+  function failed(id, err, timedOut = false) {
     if (!inFlight || id !== sendId) return;
     clearTimer(watchdog);
     watchdog = null;
     inFlight = false;
+    if (timedOut) {
+      lateOwed += 1;
+      lateUntil = now() + LATE_REPLY_MS;
+    }
     failures += 1;
     log(`cache-clock: keep-warm ping failed (${err?.message ?? err}).`, "info");
     if (failures >= MAX_FAILED_SENDS) stop("send-failed");
@@ -299,17 +311,25 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     reschedule();
   }
 
+  const lateReplyOpen = () => lateOwed > 0 && now() < lateUntil;
+
   function onPingUsage({ usd, warm }) {
-    if (!inFlight || closed) return;
+    if (closed) return;
+    // A ping in flight owns the record; otherwise it may be the late reply of a timed-out ping.
+    const late = !inFlight && lateReplyOpen();
+    if (!inFlight && !late) return;
+    if (late) lateOwed -= 1;
     if (usd === null || usd === undefined) {
-      stop("unmeasured");
+      if (!late) stop("unmeasured");
       return;
     }
     const base = window ?? { startedAt: now(), endsAt: now(), usd: 0, pings: 0, stopped: null };
     window = { ...base, usd: base.usd + usd, pings: base.pings + 1 };
-    failures = 0;
+    if (!late) failures = 0;
     persist();
-    if (!warm) stop("cold-reply");
+    // A late reply is booked even when the window already stopped, but never stops it twice.
+    if (!warm && !window.stopped) stop("cold-reply");
+    else if (late) reschedule();
   }
 
   function onIdle() {
@@ -327,7 +347,10 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
 
   function status() {
     const hours = read().config.keepWarmHours;
-    const base = { msLeft: window ? Math.max(0, window.endsAt - now()) : 0, ...spend(), lastSkip, stopped: window?.stopped ?? null, inFlight };
+    const base = {
+      msLeft: window ? Math.max(0, window.endsAt - now()) : 0, ...spend(), lastSkip, stopped: window?.stopped ?? null,
+      inFlight, awaitingReply: inFlight || lateReplyOpen(),
+    };
     if (!(hours > 0)) return { ...base, state: "off" };
     if (!window) return { ...base, state: "waiting" };
     if (window.stopped) return { ...base, state: "stopped" };

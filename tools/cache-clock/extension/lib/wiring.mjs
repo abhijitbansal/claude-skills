@@ -1,10 +1,10 @@
 // Connects the pure clock and guard to a Copilot session. `joinSession`, the
 // clock and the timers are injected so tests can drive it without Copilot.
 
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { createClock } from "./clock.mjs";
-import { configDir, createKeepWarmStore, loadConfig, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
+import { configDir, createKeepWarmStore, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
 import { NOT_A_PROMPT, decide } from "./guard.mjs";
 import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, isPingPrompt, keepWarmEstimate } from "./keepwarm.mjs";
@@ -23,17 +23,50 @@ const mainCall = (event) => {
 /** A failed compaction leaves the context as it was. */
 const compacted = (event) => event.data?.success !== false;
 
-const readSessionLog = (session) => readFileSync(join(session.workspacePath, "events.jsonl"), "utf8");
+// A session log can reach hundreds of megabytes; only its tail is needed to seed the clock.
+export const MAX_HISTORY_BYTES = 8 * 1024 * 1024;
+
+/**
+ * The text of `file`, or its last `maxBytes` when it is larger: { text, truncated }. A cut file
+ * starts mid-line, so everything up to and including the first newline is dropped.
+ */
+export function readTail(file, maxBytes) {
+  const size = statSync(file).size;
+  if (size <= maxBytes) return { text: readFileSync(file, "utf8"), truncated: false };
+  const fd = openSync(file, "r");
+  try {
+    const buffer = Buffer.alloc(maxBytes);
+    let filled = 0;
+    // readSync may return fewer bytes than asked.
+    while (filled < maxBytes) {
+      const got = readSync(fd, buffer, filled, maxBytes - filled, size - maxBytes + filled);
+      if (got === 0) break;
+      filled += got;
+    }
+    const text = buffer.toString("utf8", 0, filled);
+    const firstLine = text.indexOf("\n");
+    return { text: firstLine === -1 ? "" : text.slice(firstLine + 1), truncated: true };
+  } finally {
+    closeSync(fd);
+  }
+}
+
+const readSessionLog = (session) => readTail(join(session.workspacePath, "events.jsonl"), MAX_HISTORY_BYTES);
 
 // `assistant.usage` is ephemeral and not replayed on resume, and getEvents()
 // leaves out `session.usage_record`. The session's own events.jsonl keeps every
 // record with prices, so a resumed session starts with a known clock.
-function seed(clock, readHistory, session, select, resolveAuto) {
+function seed(clock, readHistory, session, select, resolveAuto, { onTruncated, onUnreadable }) {
   let text;
   try {
-    text = readHistory(session);
-  } catch {
-    return false; // no log yet (new session) or unreadable: the clock starts at the next call
+    // A string (test fakes) or { text, truncated } from readTail.
+    const history = readHistory(session);
+    text = typeof history === "string" ? history : history.text;
+    if (history?.truncated) onTruncated();
+  } catch (err) {
+    // A new session has no log yet, which is normal; anything else is worth saying.
+    if (err?.code !== "ENOENT") onUnreadable(err);
+    return false; // the clock starts at the next call
   }
   let busy = false;
   // Ties each usage record to the user message whose turn it belongs to.
@@ -69,12 +102,19 @@ function seed(clock, readHistory, session, select, resolveAuto) {
   return busy;
 }
 
-/** Calls fn, swallowing sync throws and async rejections: the host may be gone. */
-function quietly(fn) {
+const messageOf = (err) => err?.message ?? String(err);
+
+/**
+ * Calls fn so that a failure never escapes into the host: a sync throw or an async rejection goes
+ * to `onError(err)`. Without a handler it is dropped, which only the log itself may do: a
+ * failing log cannot report its own failure.
+ */
+function quietly(fn, onError = null) {
+  const report = (err) => onError?.(err);
   try {
-    Promise.resolve(fn()).catch(() => {});
-  } catch {
-    // nothing to do
+    Promise.resolve(fn()).catch(report);
+  } catch (err) {
+    report(err);
   }
 }
 
@@ -98,8 +138,11 @@ const DISMISSED_NOTE = "cache-clock: the question was dismissed or cancelled, so
 
 const canAsk = (session) => Boolean(session?.capabilities?.ui?.elicitation) && typeof session?.ui?.select === "function";
 
-/** Asks an in-chat question. UNASKED when the host cannot ask or the call fails; EXPIRED on timeout; null when dismissed. */
-async function ask(session, timers, message, options) {
+/**
+ * Asks an in-chat question. UNASKED when the host cannot ask or the call fails (`onError` hears of
+ * a failure); EXPIRED on timeout; null when dismissed.
+ */
+async function ask(session, timers, message, options, onError = null) {
   if (!canAsk(session)) return UNASKED;
   let timer;
   try {
@@ -108,7 +151,8 @@ async function ask(session, timers, message, options) {
       timer?.unref?.();
     });
     return await Promise.race([session.ui.select(message, options), timeout]);
-  } catch {
+  } catch (err) {
+    onError?.(err);
     return UNASKED;
   } finally {
     timers.clearTimeout(timer);
@@ -140,14 +184,30 @@ export async function attach({
   // In VS Code only error-level messages reach the chat.
   const warnLevel = vsCode ? { level: "error" } : { level: "warning" };
   const rescheduleKeepWarm = () => keepWarm?.reschedule();
+  // A failure worth knowing about once, not on every prompt. Dropped until a session can log it.
+  const logged = new Set();
+  const logOnce = (key, text, options) => {
+    if (!state.session || logged.has(key)) return;
+    logged.add(key);
+    say(text, options);
+  };
+  const askUser = (message, options) => ask(state.session, timers, message, options, (err) => {
+    logOnce("ask", `cache-clock: could not show the question (${messageOf(err)}); used the refuse-once note instead.`);
+  });
+  // Every config read goes through here, so a broken file is reported once and the defaults apply.
+  const getConfig = () => {
+    const { config, problem } = loadConfigResult(dir);
+    if (problem) logOnce(`config:${problem}`, `cache-clock: ${problem}; using defaults for those settings. The file was left as it is.`, warnLevel);
+    return config;
+  };
   // Command output: a card with OK in VS Code, where a plain log line never reaches the chat.
   // Not awaited, so the command returns while the card waits for OK.
   const show = (message, options) => {
-    if (vsCode && canAsk(state.session)) return quietly(() => ask(state.session, timers, message, [OK]));
+    if (vsCode && canAsk(state.session)) return quietly(() => askUser(message, [OK]));
     return say(message, vsCode ? { level: "error" } : options);
   };
   const keepWarmIsOn = () => keepWarm?.status().state === "on";
-  const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, dir, say, keepWarmIsOn });
+  const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, getConfig, say, keepWarmIsOn });
   // While the selection is Auto, the model Copilot last resolved it to stands in for it.
   const effectiveSelection = () => state.selection?.modelId === "auto" && state.autoModel ? { ...state.selection, modelId: state.autoModel } : state.selection;
   const snapshot = () => clock.snapshot(now(), effectiveSelection());
@@ -212,9 +272,19 @@ export async function attach({
       say("cache-clock: a turn started while the question was open; leaving the queued send untouched.", warnLevel);
       return undefined;
     }
-    // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks.
-    quietly(() => state.session.abort());
-    return { suppressOutput: true };
+    // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks. A send that
+    // could not be stopped goes out, so the hook must not claim it was held.
+    return abortSend() ? { suppressOutput: true } : undefined;
+  };
+  const abortSend = () => {
+    const report = (err) => say(`cache-clock: could not stop the send (${messageOf(err)}); it may have gone out.`, warnLevel);
+    try {
+      Promise.resolve(state.session.abort()).catch(report);
+      return true;
+    } catch (err) {
+      report(err);
+      return false;
+    }
   };
 
   async function onPrompt(input) {
@@ -223,7 +293,9 @@ export async function attach({
     if (keepWarm?.status().inFlight && isPingPrompt(input?.prompt)) return undefined;
     if (NOT_A_PROMPT.test(String(input?.prompt ?? "").trimStart())) return undefined;
     // A real prompt restarts the keep-warm window, whatever the guard decides next.
-    quietly(() => keepWarm?.onUserTurn(now()));
+    quietly(() => keepWarm?.onUserTurn(now()), (err) => {
+      logOnce("keepwarm-turn", `cache-clock: keep-warm could not restart its window (${messageOf(err)}).`);
+    });
     // Share the whole check, including asynchronous selection resolution.
     if (state.pendingPrompt) {
       const result = await state.pendingPrompt;
@@ -253,17 +325,21 @@ export async function attach({
     try {
       await refreshSelection();
       snap = snapshot();
-      verdict = decide({ snap, prompt: input?.prompt, config: loadConfig(dir), refusedKey: state.refusedKey, busy: state.busy });
+      verdict = decide({ snap, prompt: input?.prompt, config: getConfig(), refusedKey: state.refusedKey, busy: state.busy });
       if (verdict.action === "refuse") question = coldQuestion(snap);
-    } catch {
-      return undefined; // never block the user's message on our own failure
+    } catch (err) {
+      // Never block the user's message on our own failure, but say that the guard did not run.
+      logOnce("check", `cache-clock: could not check this send (${messageOf(err)}); sending without a guard.`);
+      return undefined;
     }
     if (verdict.action === "warn" && !alreadyWarnedUnknown(snap)) say(coldWarn(snap), warnLevel);
     if (verdict.action !== "refuse") return undefined;
     state.refusedKey = verdict.key;
-    quietly(() => saveRefusal(dir, state.session?.sessionId, verdict.key, now()));
+    quietly(() => saveRefusal(dir, state.session?.sessionId, verdict.key, now()), (err) => {
+      logOnce("refusal", `cache-clock: could not save the refusal memory (${messageOf(err)}); a resumed session may ask again.`);
+    });
     const revision = state.selectionRevision;
-    const answer = await ask(state.session, timers, question, [SEND, HOLD]);
+    const answer = await askUser(question, [SEND, HOLD]);
     if (answer === SEND) {
       await refreshSelection();
       if (revision !== state.selectionRevision) {
@@ -271,18 +347,21 @@ export async function attach({
         return settle(HOLD);
       }
     }
-    if (answer === UNASKED) say(refusal(snap), warnLevel);
-    if (answer === EXPIRED) say(EXPIRED_NOTE, warnLevel);
-    if (answer === null) say(DISMISSED_NOTE, warnLevel);
-    return settle(answer);
+    const result = settle(answer);
+    // Say the send was held only when it was: a failed abort lets it through.
+    if (result?.suppressOutput) {
+      if (answer === UNASKED) say(refusal(snap), warnLevel);
+      if (answer === EXPIRED) say(EXPIRED_NOTE, warnLevel);
+      if (answer === null) say(DISMISSED_NOTE, warnLevel);
+    }
+    return result;
   }
 
   const onCommand = async (context) => {
     const { kind } = parseCommand(context?.args);
     // The status card and the keep-warm cost estimate both need the live selection.
     if (kind === "status" || kind === "confirm") await refreshSelection();
-    const askUser = (message, options) => ask(state.session, timers, message, options);
-    return runCommand({ context, clock, snapshot, dir, show, scheduleHeadsUp, keepWarm, askUser });
+    return runCommand({ context, clock, snapshot, dir, getConfig, show, scheduleHeadsUp, keepWarm, askUser });
   };
 
   state.session = await joinSession({
@@ -290,11 +369,14 @@ export async function attach({
     hooks: { onUserPromptSubmitted: onPrompt },
   });
 
-  state.busy = seed(clock, readHistory, state.session, select, resolveAuto);
+  state.busy = seed(clock, readHistory, state.session, select, resolveAuto, {
+    onTruncated: () => logOnce("history", `cache-clock: the session log is larger than ${MAX_HISTORY_BYTES / 1024 / 1024} MiB; read only its last ${MAX_HISTORY_BYTES / 1024 / 1024} MiB, so older calls are not in this session's tally.`),
+    onUnreadable: (err) => logOnce("history-read", `cache-clock: could not read the session log (${messageOf(err)}); the clock starts at the next model call.`),
+  });
   state.refusedKey = loadRefusal(dir, state.session.sessionId, now());
   // Started only now, so a resumed session's clock is already in place when it first plans.
   keepWarm = buildKeepWarm({
-    state, snapshot, dir, now, timers, say, warnLevel,
+    state, snapshot, getConfig, now, timers, say, warnLevel,
     infoLevel: vsCode ? { level: "error" } : { ephemeral: true },
     store: keepWarmStore(dir, state.session.sessionId),
   });
@@ -303,9 +385,9 @@ export async function attach({
   scheduleHeadsUp();
 
   /** A ping's usage refreshes the clock but is not a model call; the scheduler gets its cost if it sent it. */
-  const fileKeepWarmPing = (call, inFlight) => {
+  const fileKeepWarmPing = (call, awaiting) => {
     const { kind } = clock.ingestPing(call);
-    if (!inFlight) return;
+    if (!awaiting) return;
     keepWarm.onPingUsage({ usd: call.nanoAiu === null ? null : call.nanoAiu / NANO_AIU_PER_USD, warm: kind === "warm" });
   };
   const trackRequest = (event, opened) => {
@@ -357,12 +439,13 @@ export async function attach({
   state.session.on("assistant.usage", (event) => {
     const call = mainCall(event);
     if (!call) return;
-    const inFlight = keepWarm.status().inFlight;
-    // A host that does not report user.message is told apart by the ping in flight. A message
+    // A ping in flight, or one the watchdog gave up on that may still be answered.
+    const awaiting = keepWarm.status().awaitingReply;
+    // A host that does not report user.message is told apart by the ping awaited. A message
     // typed after the ping's own message must not take the ping's record (pingOwed).
-    if ((state.pingOwed && inFlight) || state.turnSource === "ping" || (inFlight && state.turnSource !== "user")) {
+    if ((state.pingOwed && awaiting) || state.turnSource === "ping" || (awaiting && state.turnSource !== "user")) {
       state.pingOwed = false;
-      fileKeepWarmPing(call, inFlight);
+      fileKeepWarmPing(call, awaiting);
       scheduleHeadsUp();
       return;
     }
@@ -389,7 +472,7 @@ export async function attach({
 }
 
 /** The keep-warm scheduler wired to this session's host, config and clock. */
-function buildKeepWarm({ state, snapshot, dir, now, timers, say, warnLevel, infoLevel, store }) {
+function buildKeepWarm({ state, snapshot, getConfig, now, timers, say, warnLevel, infoLevel, store }) {
   const send = () => {
     state.turnSource = null;
     const options = { prompt: PING_PROMPT, displayPrompt: PING_DISPLAY, source: "system", mode: "enqueue" };
@@ -403,7 +486,7 @@ function buildKeepWarm({ state, snapshot, dir, now, timers, say, warnLevel, info
     now,
     read: () => ({
       snapshot: snapshot(),
-      config: loadConfig(dir),
+      config: getConfig(),
       session: {
         busy: state.busy,
         pendingPrompt: Boolean(state.pendingPrompt),
@@ -421,12 +504,12 @@ function buildKeepWarm({ state, snapshot, dir, now, timers, say, warnLevel, info
   });
 }
 
-function headsUpScheduler({ state, selection, clock, now, timers, dir, say, keepWarmIsOn }) {
+function headsUpScheduler({ state, selection, clock, now, timers, getConfig, say, keepWarmIsOn }) {
   timers.clearTimeout(state.headsUpTimer);
   state.headsUpTimer = null;
   // Pings keep the cache warm, and a heads-up would fire next to every one of them.
   if (keepWarmIsOn()) return;
-  const config = loadConfig(dir);
+  const config = getConfig();
   const snap = clock.snapshot(now(), selection());
   if (config.headsUpMin <= 0 || snap?.state !== "warm") return;
   const key = `${snap.model}@${snap.expiresAt}`;
@@ -438,7 +521,7 @@ function headsUpScheduler({ state, selection, clock, now, timers, dir, say, keep
     const live = clock.snapshot(now(), selection());
     // Mid-turn the next model call refreshes the cache on its own.
     if (state.busy || live?.state !== "warm" || live.extraUsd === null) return;
-    if (live.extraUsd < loadConfig(dir).minUsd) return;
+    if (live.extraUsd < getConfig().minUsd) return;
     state.headsUpShown = key;
     say(headsUp(live), { ephemeral: true });
   }, Math.max(0, snap.msLeft - leadMs));
@@ -450,8 +533,8 @@ const TURN_ON = "Turn on";
 const CANCEL = "Cancel";
 
 /** Saves a settings patch and tells the scheduler; returns the saved settings, or null after showing the failure. */
-function saveSettings({ patch, dir, show, scheduleHeadsUp, keepWarm }) {
-  const next = { ...loadConfig(dir), ...patch };
+function saveSettings({ patch, dir, getConfig, show, scheduleHeadsUp, keepWarm }) {
+  const next = { ...getConfig(), ...patch };
   // saveConfig throws rather than overwrite a file it cannot read, or write an invalid value.
   try {
     saveConfig(dir, next);
@@ -475,7 +558,7 @@ async function confirmKeepWarm(ctx, patch) {
   const hours = patch.keepWarmHours;
   const snap = ctx.snapshot();
   // The budget and payback stops end a long window early, so the quote counts only the pings they allow.
-  const quote = keepWarmQuote(snap, hours, keepWarmEstimate(snap, hours, loadConfig(ctx.dir)));
+  const quote = keepWarmQuote(snap, hours, keepWarmEstimate(snap, hours, ctx.getConfig()));
   const answer = await ctx.askUser(quote, [TURN_ON, CANCEL]);
   // A host that cannot ask gets the estimate and the saved setting in one reply.
   if (answer !== UNASKED && answer !== TURN_ON) return ctx.show("cache-clock: keep-warm unchanged.");
@@ -485,9 +568,9 @@ async function confirmKeepWarm(ctx, patch) {
 }
 
 async function runCommand(ctx) {
-  const { context, clock, snapshot, dir, show, keepWarm } = ctx;
+  const { context, clock, snapshot, dir, getConfig, show, keepWarm } = ctx;
   const parsed = parseCommand(context?.args);
-  if (parsed.kind === "status") return show(card(snapshot(), clock.tally(), loadConfig(dir), keepWarm?.status()));
+  if (parsed.kind === "status") return show(card(snapshot(), clock.tally(), getConfig(), keepWarm?.status()));
   if (parsed.kind === "help") return show(HELP);
   if (parsed.kind === "error") return show(`cache-clock: ${parsed.message}. Try /cache-clock help.`, { level: "error" });
   // A settings file that cannot be read as settings is never overwritten, and nothing is asked about it.
