@@ -6,7 +6,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, 
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { VOICE_MODEL, ensureVoiceModel, voiceModelDir } from '../../scripts/v2/voice/model.mjs';
+import { VOICE_MODEL, ensureModelFiles, ensureVoiceModel, voiceModelDir } from '../../scripts/v2/voice/model.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const COMMIT = 'dd4401a9add81ac692d20e240d22ec9dda82cc29';
@@ -83,7 +83,7 @@ test('ensureVoiceModel downloads every missing file, verifies it and returns the
   try {
     const { fetchImpl, asked } = fakeFetch(servedFor(standIn));
     const lines = [];
-    const got = await ensureVoiceModel({ dir, model: standIn, fetchImpl, log: (l) => lines.push(l) });
+    const got = await ensureModelFiles(standIn, { dir, fetchImpl, log: (l) => lines.push(l) });
     assert.equal(got, dir);
     assert.deepEqual(asked, standIn.files.map((f) => `${BASE}${f.path}`));
     for (const [p, bytes] of Object.entries(GOOD)) assert.deepEqual(readFileSync(path.join(dir, p)), bytes);
@@ -96,7 +96,7 @@ test('ensureVoiceModel with every file present and correct never calls fetchImpl
   try {
     placeFiles(dir, GOOD);
     const { fetchImpl, asked } = fakeFetch({});
-    assert.equal(await ensureVoiceModel({ dir, model: standIn, fetchImpl }), dir);
+    assert.equal(await ensureModelFiles(standIn, { dir, fetchImpl }), dir);
     assert.deepEqual(asked, []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
@@ -106,7 +106,7 @@ test('ensureVoiceModel fetches only the file that is missing or wrong', async ()
   try {
     placeFiles(dir, { 'a.json': GOOD['a.json'], 'sub/m.bin': Buffer.from('tampered') });
     const { fetchImpl, asked } = fakeFetch(servedFor(standIn));
-    await ensureVoiceModel({ dir, model: standIn, fetchImpl });
+    await ensureModelFiles(standIn, { dir, fetchImpl });
     assert.deepEqual(asked, [`${BASE}sub/m.bin`]);
     assert.deepEqual(readFileSync(path.join(dir, 'sub/m.bin')), GOOD['sub/m.bin']);
   } finally { rmSync(dir, { recursive: true, force: true }); }
@@ -116,7 +116,7 @@ test('wrong bytes for one file: ensureVoiceModel rejects naming that file and le
   const dir = scratch();
   try {
     const { fetchImpl } = fakeFetch(servedFor(standIn, { 'sub/m.bin': Buffer.from('not the model') }));
-    await assert.rejects(ensureVoiceModel({ dir, model: standIn, fetchImpl }), (e) => {
+    await assert.rejects(ensureModelFiles(standIn, { dir, fetchImpl }), (e) => {
       assert.match(e.message, /sub\/m\.bin/);
       assert.match(e.message, /sha256 mismatch/);
       return true;
@@ -135,6 +135,41 @@ test('the real table: wrong bytes for its first file are refused by name and not
     assert.deepEqual(asked, [`${VOICE_MODEL.base}config.json`], 'it stops at the first bad file');
     assert.deepEqual(filesUnder(dir), []);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('ensureVoiceModel takes no table of its own: a model option, or any unknown option, is refused before a byte is fetched', async () => {
+  const dir = scratch();
+  try {
+    const { fetchImpl, asked } = fakeFetch(servedFor(standIn));
+    await assert.rejects(ensureVoiceModel({ dir, model: standIn, fetchImpl }), /unknown option.*model/);
+    await assert.rejects(ensureVoiceModel({ dir, fetchImpl, bsae: 'x' }), /unknown option.*bsae/);
+    assert.deepEqual(asked, [], 'nothing was fetched');
+    assert.deepEqual(filesUnder(dir), []);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// The set of name@version entries a lockfile pins (the root entry excluded; a package locked at several paths counts once).
+const lockLabel = (key) => key.slice(key.lastIndexOf('node_modules/') + 'node_modules/'.length);
+const lockPackageSet = (lock) => [...new Set(Object.entries(lock.packages).filter(([key]) => key !== '').map(([key, entry]) => `${entry.name ?? lockLabel(key)}@${entry.version}`))].sort();
+const readVoiceLock = () => JSON.parse(readFileSync(path.join(SKILL_ROOT, 'optional', 'voice', 'package-lock.json'), 'utf8'));
+const lockFixture = () => JSON.parse(readFileSync(path.join(SKILL_ROOT, 'test', 'v2', 'fixtures', 'voice', 'lock-packages.json'), 'utf8'));
+
+test('optional/voice/package-lock.json pins exactly the committed set of name@version packages (a transitive bump is a reviewed change)', () => {
+  assert.deepEqual(lockPackageSet(readVoiceLock()), lockFixture(), 'regenerate lock-packages.json only after reviewing the new or changed packages');
+});
+
+test('guardrail proof: the lockfile comparison fires on a bumped, added or dropped package', () => {
+  const lock = readVoiceLock();
+  const fixture = lockFixture();
+  assert.deepEqual(lockPackageSet(lock), fixture, 'the unmodified copy matches');
+  const keys = Object.keys(lock.packages).filter((key) => key !== '' && lock.packages[key].version !== undefined);
+  const edit = (change) => lockPackageSet({ packages: change(structuredClone(lock.packages)) });
+  const bumped = edit((packages) => { packages[keys[0]].version = '99.0.0'; return packages; });
+  assert.notDeepEqual(bumped, fixture, 'one version bumped');
+  const added = edit((packages) => ({ ...packages, 'node_modules/extra-package': { version: '1.0.0' } }));
+  assert.notDeepEqual(added, fixture, 'one package added');
+  const dropped = edit((packages) => { delete packages[keys[0]]; return packages; });
+  assert.notDeepEqual(dropped, fixture, 'one package dropped');
 });
 
 test('optional/voice lists onnxruntime-node and phonemizer as direct dependencies at exactly the locked versions', () => {

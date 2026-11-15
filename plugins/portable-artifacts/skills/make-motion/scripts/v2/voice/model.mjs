@@ -30,13 +30,25 @@ export const VOICE_MODEL = Object.freeze({
 export const voiceModelDir = (root = SKILL_ROOT) => path.join(root, ...CACHE_PARTS, VOICE_MODEL.id);
 
 /**
- * The folder of the verified model files, fetching only the files that are absent or whose SHA-256 differs (ensurePinnedFile).
- * `model` replaces the pin in tests; `log` receives one line before each download. A refused file rejects naming that file.
- * -> dir.
+ * Test seam, not part of the API: downloads and verifies the files of any table. Only tests call it with a table other than
+ * VOICE_MODEL (a standing rule in bin/test/dependency-pins.test.mjs fails any other caller outside test files).
+ * `log` receives one line before each download. A refused file rejects naming that file. -> dir.
  */
-export async function ensureVoiceModel({ dir = voiceModelDir(), model = VOICE_MODEL, fetchImpl, log = () => {} } = {}) {
+export async function ensureModelFiles(model, { dir, fetchImpl, log = () => {} }) {
   for (const { path: file, bytes, sha256 } of model.files) {
     await ensurePinnedFile({ url: `${model.base}${file}`, sha256, bytes, file: path.join(dir, file), label: `voice model file ${file}`, fetchImpl, log });
   }
   return dir;
+}
+
+const ENSURE_OPTIONS = new Set(['dir', 'fetchImpl', 'log']);
+
+/**
+ * The folder of the verified model files of VOICE_MODEL, fetching only the files that are absent or whose SHA-256 differs.
+ * It accepts `dir`, `fetchImpl` and `log` and refuses any other option, so no caller can swap in a table of its own. -> dir.
+ */
+export function ensureVoiceModel(options = {}) {
+  const unknown = Object.keys(options).filter((key) => !ENSURE_OPTIONS.has(key));
+  if (unknown.length > 0) return Promise.reject(new TypeError(`ensureVoiceModel: unknown option ${unknown.join(', ')} (accepted: ${[...ENSURE_OPTIONS].join(', ')})`));
+  return ensureModelFiles(VOICE_MODEL, { ...options, dir: options.dir ?? voiceModelDir() });
 }
