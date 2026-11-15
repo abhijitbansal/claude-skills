@@ -68,3 +68,37 @@ theme). The deps only cost install size; nothing imports them.
 **Resolved 2026-11-15: B.** The security pins change (docs/superpowers/plans/2026-11-15-pa2-security-pins.md, Task 1)
 removed both packages from `skills/make-motion/package.json` and its lockfile, and the Inter row from the plugin
 README's licence table.
+
+## make-motion 2: look findings left after the gate (branch worktree-New-Motion, 2026-11-15)
+
+The look gate closed on the owner's choice of one targeted fix pass and no fourth review
+(`docs/superpowers/plans/2026-11-15-pa2-gate-report.md`). These were left; each has a default the work proceeds on.
+
+- **Motion smear on slide and punch cuts.** Two builds read as echoes, not blur.
+  - **A (default, shipped):** off in `desk` and `pop`, opt-in by look data; films use hard cuts.
+  - **B:** build a real blur in the WebGL post pass (velocity along the cut direction) in the showreel plan.
+- **`pop` stack lines of unequal size ("NO ACCOUNT." smaller than its neighbours, wider gap in "NO CLOUD.").** Review 1
+  disliked three equal centred lines; reviews 2 and 3 disliked the unequal ones.
+  - **A (default, shipped):** each line fitted to the safe width, flush left.
+  - **B:** one size for the block, ragged right, with only the emphasised line larger.
+- **`desk` push slices content at the frame edge** (a "459" tile reads "59", faint under the paper scrim).
+  - **A (default, shipped):** paper scrim at 0.8 over everything outside the region.
+  - **B:** an author field for the push window, as `crop` is for the establishing window.
+- **Statement shots share one layout in both looks; no end card or lockup.** Default: left for the showreel plan,
+  with the remaining shot kinds and looks.
+- **Sheet labels and slug text are about 5 px tall at phone size in `desk`.** Default: accepted as furniture; nothing
+  essential is set in them.
+
+## Parked from the same branch (2026-11-15)
+
+- **Docs site typography lint findings** ("single font", "flat type hierarchy" on feature pages) come from the shared
+  stylesheet. Default: untouched; fix once in the stylesheet in the visual refresh of the other skills.
+- **Unpinned `npx skills`, `npx playwright install chromium` and `npm install -g cartoon-wrap` in docs.** Default:
+  allowed in docs only by the dependency rule tests; pin if the owner wants docs commands reproducible.
+- **Workflow actions pinned to tags, not commit SHAs.** Default: left; SHA pinning is a repo-wide choice.
+- **session-compass: old stored goals are not re-stripped of control characters on display**, and the hover reveal is
+  not built (`/compass more` expands instead). Default: left.
+- **make-motion 2 cut-outs with alpha (people) are not supported yet.** Default: later plan, with the optional
+  cut-out package.
+- **cache-clock keep-warm ceiling is per session and resets if the ledger file is deleted.** Default: documented;
+  a machine-wide ceiling would need a shared ledger.
