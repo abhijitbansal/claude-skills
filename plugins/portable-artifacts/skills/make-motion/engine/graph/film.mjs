@@ -41,8 +41,12 @@ function shotAsset(shot, kind, assets) {
   };
 }
 
-/** The ctx a kind's expand(shot, ctx) gets for shot `index`. `assets` maps a src to its picture (anything with a size). */
-export function shotContext({ film, index, timeline, canvas, measure, assets = new Map(), look = resolveLook(film) }) {
+/**
+ * The ctx a kind's expand(shot, ctx) gets for shot `index`. `assets` maps a src to its picture (anything with a size).
+ * `viralInsets` is the platform safe zone for this canvas (template/formats.mjs safeInsets with VIRAL_SAFE_ZONE),
+ * which a viral look composes inside on 9:16; null leaves every look on the canvas.
+ */
+export function shotContext({ film, index, timeline, canvas, measure, assets = new Map(), look = resolveLook(film), viralInsets = null }) {
   const shot = film.shots[index];
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
@@ -57,6 +61,7 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
     measure,
     seed: film.seed ?? DEFAULT_SEED,
     fps: timeline.fps,
+    viralInsets,
     asset: shotAsset(shot, kind, assets),
   };
 }
@@ -122,11 +127,11 @@ function heroBox(n, rest) {
 
 // ---- shots ----
 
-function expandOne({ film, timeline, index, canvas, measure, assets, look }) {
+function expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets }) {
   const shot = film.shots[index];
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
-  const out = kind.expand(shot, shotContext({ film, index, timeline, canvas, measure, assets, look }));
+  const out = kind.expand(shot, shotContext({ film, index, timeline, canvas, measure, assets, look, viralInsets }));
   if (!out || !Array.isArray(out.nodes)) throw new Error(`kind "${shot.show}" must return { nodes: [...] } for shot "${shot.id}"`);
   const heroNode = out.hero === undefined ? undefined : out.nodes.find((n) => n.id === out.hero);
   const box = kind.heroTarget === undefined ? undefined : out.boxes?.[kind.heroTarget];
@@ -145,18 +150,19 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look }) {
 
 /**
  * @param {{ film: object, timeline: object, measure: Function, assets?: Map<string, { width: number, height: number }>,
- *   canvas: { w: number, h: number } }} opts the film (defaults resolved here: mode, look, seed, accent), its timeline
- *   (buildTimeline), the text measure, the pictures by src, and the canvas size of the film's format
+ *   canvas: { w: number, h: number }, viralInsets?: { top, right, bottom, left } }} opts the film (defaults resolved here: mode, look, seed, accent), its timeline
+ *   (buildTimeline), the text measure, the pictures by src, the canvas size of the film's format and the platform safe
+ *   zone (see shotContext)
  * @returns {{ duration: number, frameCount: number, look: object, frameAt(t): { background: string, sampled: object[] },
  *   sampleAt(t): object[], sampleShot(index, t): object[] }}
  */
-export function buildFilm({ film, timeline, measure, assets = new Map(), canvas }) {
+export function buildFilm({ film, timeline, measure, assets = new Map(), canvas, viralInsets = null }) {
   if (!film || !Array.isArray(film.shots)) throw new Error('buildFilm: film must have a shots array');
   if (!timeline || timeline.shots?.length !== film.shots.length) throw new Error('buildFilm: timeline must have one entry per shot (see buildTimeline)');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
   if (!(canvas?.w > 0 && canvas?.h > 0)) throw new Error('buildFilm: canvas must be { w, h }');
   const look = resolveLook(film);
-  const shots = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look }));
+  const shots = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets }));
 
   // One shot alone at its local time t: sampled, camera applied, the hero carrying its box.
   const sampleShot = (index, t) => {

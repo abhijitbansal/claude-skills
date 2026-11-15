@@ -5,7 +5,7 @@
 // onto the visible canvas and reports post: '2d'.
 import { buildFilm, resolveLook } from '../graph/film.mjs';
 import { stateKey } from '../graph/sample.mjs';
-import { canvasSize } from '/v1/formats.mjs';
+import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '/v1/formats.mjs';
 import { drawFrame, resetContext } from './draw.mjs';
 import { annotate } from './bounds.mjs';
 import { createMeasure } from './text-style.mjs';
@@ -49,7 +49,7 @@ async function init() {
   await loadFaces(facesFor({ film, fonts: resolveLook(film).fonts }));
   const assets = await loadAssets(srcs);
   const measure = createMeasure(document.createElement('canvas').getContext('2d'));
-  const built = buildFilm({ film, timeline, measure, assets, canvas });
+  const built = buildFilm({ film, timeline, measure, assets, canvas, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE) });
   const { fps, frameCount } = timeline;
 
   const frameState = (i) => {

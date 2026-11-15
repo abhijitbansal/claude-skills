@@ -16,11 +16,9 @@ export const HERO_SCHEMA = Object.freeze({ type: 'string', pattern: '^[a-z][a-z0
 
 export const FIELD_ID = 'field';
 const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
-const FIELD_SEED_STRIDE = 1000; // field seed = film seed * stride + shot index
 const NO_SAY_START = 0.2; // seconds: with no narration the first word lands here...
 const NO_SAY_STAGGER = 0.09; // ...and each next word this much later
-const PUSH_ZOOM = 1.25;
-const PUSH_DUR = 0.8; // seconds
+const PUSH = Object.freeze({ share: 0.62, min: 1.2, max: 3.2, dur: 0.9 }); // the region fills `share` of the width
 const PUSH_OVERSHOOT = 1.2; // a spring ease can carry the push this far past its target; the pan limit allows for it
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
 const NON_WORD_RE = /[^\p{L}\p{N}]/gu;
@@ -45,6 +43,25 @@ export const heroId = (shot, role) => shot.hero ?? `${shot.id}.${role}`;
 
 /** A 16:9 canvas is wide; 9:16, 1:1 and 4:5 are not. */
 export const isWide = (canvas) => canvas.w > canvas.h;
+
+// A 9:16 canvas, where a viral look composes inside the platform safe zone.
+const PORTRAIT_916 = 16 / 9;
+const RATIO_EPSILON = 0.01;
+const isPortrait916 = (canvas) => Math.abs(canvas.h / canvas.w - PORTRAIT_916) < RATIO_EPSILON;
+
+/**
+ * The rectangle a shot composes in: on 9:16 a viral look (pop) keeps inside the platform safe zone ctx.viralInsets
+ * (template/formats.mjs safeInsets with VIRAL_SAFE_ZONE, passed in by the caller); every other case uses the canvas.
+ * { left, top, w, h, cx, cy, safe } where `safe` says the rectangle is the safe zone.
+ */
+export function compositionRect(ctx) {
+  const { canvas, look, viralInsets } = ctx;
+  if (!viralInsets || !look.modes.includes('viral') || !isPortrait916(canvas)) {
+    return { left: 0, top: 0, w: canvas.w, h: canvas.h, cx: canvas.w / HALF, cy: canvas.h / HALF, safe: false };
+  }
+  const w = canvas.w - viralInsets.left - viralInsets.right, h = canvas.h - viralInsets.top - viralInsets.bottom;
+  return { left: viralInsets.left, top: viralInsets.top, w, h, cx: viralInsets.left + w / HALF, cy: viralInsets.top + h / HALF, safe: true };
+}
 
 /** A shot that arrives on a match cut keeps its hero on screen from the first frame: no entrance. */
 export const arrivesMatched = (shot, ctx) => ctx.timing.index > 0 && shot.cut === 'match';
@@ -79,9 +96,9 @@ export function inkSpan(layout) {
 // ---- the field ----
 
 /**
- * The look's field as the shot's first node: depth 1, 6% past every edge, seeded by the film seed and shot index.
- * Every shot's field has the id FIELD_ID, so a match cut carries the paper across (cross-fading one sheet into the
- * next) instead of dipping to the flat background.
+ * The look's field as the shot's first node: depth 1, 6% past every edge, seeded by the film seed alone. Every shot
+ * of a film has the same field (id FIELD_ID, the same props, so the same plan): one surface per film, and the cuts
+ * happen over a continuous desk or halftone (a slide leaves it in place; a match keeps it).
  */
 export function fieldNode(shot, ctx) {
   const { canvas, look, unit } = ctx;
@@ -90,7 +107,7 @@ export function fieldNode(shot, ctx) {
   return node('field', FIELD_ID, {
     x: (canvas.w - w) / HALF, y: (canvas.h - h) / HALF, w, h, unit,
     field: look.field.field, params: look.field.params, palette: look.palette,
-    seed: ctx.seed * FIELD_SEED_STRIDE + ctx.timing.index,
+    seed: ctx.seed,
   }, { depth: 1 });
 }
 
@@ -155,25 +172,35 @@ export function defaultCamera(look, timing, unit) {
   return [[{ t: 0, x: -half * dir }, { t: timing.duration, x: half * dir }]];
 }
 
-// The largest pan at full push that keeps the depth-1 field over the canvas: it pans half the camera and zooms
-// 1 + (zoom - 1) / 2 about the centre, and reaches FIELD_BLEED past each edge. The drift's own pan is allowed for.
-function panLimit(size, drift) {
-  const fieldZoom = 1 + (PUSH_ZOOM - 1) / HALF;
+// The largest pan at full push that keeps the depth-1 field over the canvas. At push progress f (0 to the ease's
+// overshoot F) the field pans f * pan / 2 and zooms 1 + (zoom - 1) f / 2 about the centre, and it reaches
+// FIELD_BLEED past each edge: |pan| <= (2 bleed - drift) / F + (zoom - 1)(centre + bleed) - drift keeps it covered.
+function panLimit(size, zoom, drift) {
   const centre = size / HALF;
   const bleed = FIELD_BLEED * size;
-  return HALF * bleed / PUSH_OVERSHOOT + HALF * ((centre + bleed) * fieldZoom - centre - bleed) - drift;
+  return (HALF * bleed - drift) / PUSH_OVERSHOOT + (zoom - 1) * (centre + bleed) - drift;
 }
 
 const clampAbs = (v, limit) => Math.min(limit, Math.max(-limit, v));
+const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-/** A camera layer that pushes to PUSH_ZOOM centred on `box` (as far as the field allows), landing on `at`. */
-export function pushLayer(look, canvas, unit, box, at) {
+/**
+ * A camera layer for a deliberate close-up on `box` (canvas pixels): the zoom that makes the box PUSH.share of the
+ * composition width (clamped to PUSH.min..PUSH.max), panned so the box centre sits on the composition centre (as far
+ * as the field allows), easing with the look's enter ease over PUSH.dur and landing on `at`. A node at depth 0 moves
+ * to c + (x - c) zoom - pan, so pan = c + (boxCentre - c) zoom - target.
+ */
+export function pushLayer(ctx, box, at) {
+  const { look, canvas, unit } = ctx;
+  const rect = compositionRect(ctx);
+  const zoom = clampTo((PUSH.share * rect.w) / box[2], PUSH.min, PUSH.max);
   const drift = (look.camera.drift * unit) / HALF;
-  const dx = (box[0] + box[2] / HALF - canvas.w / HALF) * PUSH_ZOOM;
-  const dy = (box[1] + box[3] / HALF - canvas.h / HALF) * PUSH_ZOOM;
+  const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
+  const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx);
+  const y = pan(canvas.h / HALF, box[1] + box[3] / HALF, rect.cy);
   return [
-    { t: Math.max(0, at - PUSH_DUR), x: 0, y: 0, zoom: 1 },
-    { t: at, x: clampAbs(dx, panLimit(canvas.w, drift)), y: clampAbs(dy, panLimit(canvas.h, drift)), zoom: PUSH_ZOOM, ease: look.moves.enter.ease },
+    { t: Math.max(0, at - PUSH.dur), x: 0, y: 0, zoom: 1 },
+    { t: at, x: clampAbs(x, panLimit(canvas.w, zoom, drift)), y: clampAbs(y, panLimit(canvas.h, zoom, drift)), zoom, ease: look.moves.enter.ease },
   ];
 }
 
@@ -194,10 +221,12 @@ function extrasFor(name, box, ctx) {
 /**
  * Build each `on` event's device: { nodes, before, camera } per event, where `before` is the id of the node the
  * device must be drawn under (a highlight on a text target) or null to draw it on top. `behind` maps a target to the
- * text node it sits on; `defaultTarget` is used when an event names none.
+ * text node it sits on; `defaultTarget` is used when an event names none; `skip(item)` leaves an event to the kind
+ * (its id stays `<shot>.on<j>` by its place in `on`).
  */
-export function onDevices(shot, ctx, { boxes, defaultTarget, behind = {} }) {
-  return (shot.on ?? []).map((item, j) => {
+export function onDevices(shot, ctx, { boxes, defaultTarget, behind = {}, skip = () => false }) {
+  return (shot.on ?? []).flatMap((item, j) => {
+    if (skip(item)) return [];
     const target = item.target ?? defaultTarget;
     const box = boxes[target];
     if (!box) throw new Error(`shot "${shot.id}": on[${j}] target "${target}" has no box (have: ${Object.keys(boxes).join(', ')})`);
@@ -207,7 +236,7 @@ export function onDevices(shot, ctx, { boxes, defaultTarget, behind = {} }) {
       id: `${shot.id}.on${j}`, box, at: ctx.at(item.at), look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, ...extra,
     });
     const under = item.do === 'highlight' ? behind[target] ?? null : null;
-    return { nodes: built.nodes, before: under, camera: built.camera, target, at: ctx.at(item.at) };
+    return [{ nodes: built.nodes, before: under, camera: built.camera, target, at: ctx.at(item.at) }];
   });
 }
 

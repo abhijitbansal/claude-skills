@@ -19,7 +19,7 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm, shotContext, resolveLook } from '../../engine/graph/film.mjs';
 import { gridX } from '../../engine/looks/index.mjs';
 import { annotate } from '../../engine/page/bounds.mjs';
-import { FORMATS, safeInsets } from '../../template/formats.mjs';
+import { FORMATS, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 import { validateFilm, SpecError } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 
@@ -28,6 +28,8 @@ const EPS = 1e-6;
 const measure = (text, font) => ({ width: [...text].length * font.size * 0.55, ascent: font.size * 0.8, descent: font.size * 0.2 });
 const IMAGES = new Map([['shot.png', { width: 1600, height: 1000 }]]);
 const canvasOf = (format) => ({ w: FORMATS[format].size[0], h: FORMATS[format].size[1] });
+// The platform safe zone as the stage passes it (template/formats.mjs safeInsets with the viral zone).
+const viralOf = (canvas) => safeInsets([canvas.w, canvas.h], VIRAL_SAFE_ZONE);
 const modeOf = (look) => (look === 'pop' ? 'viral' : 'pro');
 
 const filmOf = (shots, look = 'desk', format = '16:9', extra = {}) => ({ version: 2, mode: modeOf(look), look, format, fps: FPS, seed: 1, shots, ...extra });
@@ -36,14 +38,14 @@ const filmOf = (shots, look = 'desk', format = '16:9', extra = {}) => ({ version
 function expandIn(film, index = 0) {
   const timeline = buildTimeline(film, { fps: FPS });
   const canvas = canvasOf(film.format);
-  const ctx = shotContext({ film, index, timeline, canvas, measure, assets: IMAGES });
+  const ctx = shotContext({ film, index, timeline, canvas, measure, assets: IMAGES, viralInsets: viralOf(canvas) });
   const shot = film.shots[index];
   return { ...registries.kinds.get(shot.show).expand(shot, ctx), timing: timeline.shots[index], ctx, canvas };
 }
 const expandShot = (shot, look = 'desk', format = '16:9') => expandIn(filmOf([shot], look, format));
 const filmFor = (shots, look = 'desk', format = '16:9', extra = {}) => {
   const film = filmOf(shots, look, format, extra);
-  return buildFilm({ film, timeline: buildTimeline(film, { fps: FPS }), measure, assets: IMAGES, canvas: canvasOf(format) });
+  return buildFilm({ film, timeline: buildTimeline(film, { fps: FPS }), measure, assets: IMAGES, canvas: canvasOf(format), viralInsets: viralOf(canvasOf(format)) });
 };
 
 const all = (nodes) => nodes.flatMap((n) => [n, ...all(n.children)]);
@@ -63,6 +65,9 @@ function landsOn(n, name, at, msg) {
   const early = n.step === undefined ? EPS : 1 / n.step + EPS;
   assert.ok(sample(tr, at - early, n.step) < 1, `${msg}: not full more than ${early} s before`);
 }
+// The width of a rectangle path written as M0 0H<w>V<h>H0Z.
+const ruleWidth = (n) => Number(/H([\d.]+)/.exec(n.props.d)[1]);
+const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 // A sampled node whose whole subtree is text or groups: its box can be computed without the page.
 const isTextOnly = (n) => (n.type === 'text' || n.type === 'group') && n.children.every(isTextOnly);
 // The first time a stepped 0/1 opacity track reads 1 (the time of its first key with v 1).
@@ -150,8 +155,28 @@ test('every shot draws the look field first, at depth 1, 6% past every edge', ()
       assert.ok(field.props.y <= -0.06 * canvas.h + 1 && field.props.y + field.props.h >= canvas.h * 1.06 - 1);
     }
   }
-  const film = filmOf([shots[0], { ...shots[0], id: 'b' }]);
-  assert.notEqual(expandIn(film, 0).nodes[0].props.seed, expandIn(film, 1).nodes[0].props.seed, 'seeded per shot index');
+});
+
+test('one surface per film: every shot has the same field, seeded by the film seed alone', () => {
+  const film = filmOf([{ id: 'a', show: 'statement', say: 'One file.' }, { id: 'n', show: 'number', value: 3, label: 'x', hold: 2 },
+    { id: 'c', show: 'clipping', src: 'shot.png', hold: 2 }], 'desk', '16:9', { seed: 42 });
+  const fields = [0, 1, 2].map((i) => expandIn(film, i).nodes[0]);
+  for (const f of fields) {
+    assert.equal(f.id, 'field');
+    assert.equal(f.props.seed, 42);
+    assert.deepEqual(f.props, fields[0].props, 'the same plan in every shot');
+  }
+});
+
+test('a slide moves everything but the field', () => {
+  const canvas = { w: 1920, h: 1080 };
+  const field = (x) => Object.freeze({ ...fakeSampled('field', x), depth: 1 });
+  const to = [field(-20), fakeSampled('b', 500)];
+  const out = registries.cuts.get('slide').apply({ from: [field(-10), fakeSampled('a', 100)], to, p: 0.5, canvas });
+  assert.deepEqual(out.map((n) => n.id), ['field', 'a', 'b']);
+  assert.equal(out[0], to[0], 'the incoming field, unmoved');
+  near(out[1].x, 100 - 0.5 * 1920);
+  near(out[2].x, 500 + 0.5 * 1920);
 });
 
 // ---- statement ----
@@ -221,7 +246,12 @@ test('pop statement is centred caps; an emphasised word turns accent and pulses 
   const words = text.props.layout.lines.flatMap((l) => l.words.map((w) => w.text));
   assert.deepEqual(words, ['IT', 'IS', 'LYING', 'TO', 'YOU.']);
   assert.ok(text.props.font.size >= look.scale[3] && text.props.font.size <= look.scale[4]);
-  near(text.props.x + text.props.layout.lines[0].x + text.props.layout.lines[0].width / 2, canvas.w / 2, 'centred');
+  const safe = viralOf(canvas);
+  const safeW = canvas.w - safe.left - safe.right;
+  near(text.props.x + text.props.layout.lines[0].x + text.props.layout.lines[0].width / 2, safe.left + safeW / 2, 'centred on the safe zone');
+  assert.ok(text.props.layout.width <= safeW + EPS, 'fitted to the safe width');
+  const ink = (text.props.y + text.props.layout.lines[0].y - 0.7 * text.props.font.size + text.props.y + text.props.layout.lines.at(-1).y) / 2;
+  near(ink, (safe.top + canvas.h - safe.bottom) / 2, 'ink centred on the safe zone vertically');
   const { fill, scale } = text.wordTracks[2];
   const start = timing.words[2].start;
   assert.equal(sample(fill, start), look.palette.ink);
@@ -314,42 +344,81 @@ test('number formats decimals and thousands, and puts the suffix on the cap line
   assert.ok(prefix.props.x < digits.props.x && suffix.props.x > digits.props.x);
 });
 
-test('desk number: figure on column 2 at 56%, hairline 28 under, label 24 under that in ink2, delta tag beside it', () => {
-  const { nodes, ctx, canvas, boxes } = expandShot({ id: 'n', show: 'number', hold: 3, value: 459, suffix: 'rows', label: 'in one file, no server', delta: '+12%' });
-  const look = ctx.look;
-  const fig = nodes.find((n) => n.id === 'n.value');
-  const digits = textNode(fig.children, 'n.value.digits');
-  const baseline = fig.props.y + digits.props.y + digits.props.layout.lines[0].y;
-  near(baseline, 0.56 * canvas.h, 'baseline');
-  const firstInk = digits.props.layout.lines[0].words[digits.props.steps.at(-1).words[0]].x;
-  near(fig.props.x + digits.props.x + firstInk, gridX(look, canvas, 2), 'the final value is flush left by its ink');
-  assert.equal(digits.props.font.size, look.scale[4]);
-  const rule = nodes.find((n) => n.id === 'n.rule');
-  near(rule.props.y, baseline + 28, 'hairline');
-  const label = textNode(nodes, 'n.label');
-  assert.equal(label.props.fill, look.palette.ink2);
-  assert.equal(label.props.font.family, look.fonts.text.family);
-  near(label.props.y + label.props.layout.lines[0].y - 0.7 * label.props.font.size, baseline + 28 + 2 + 24, 'label cap top');
-  assert.ok(boxes.delta[0] > label.props.x + label.props.layout.lines[0].width, 'delta right of the first line');
+test('desk number: a hero numeral fitted to columns 2 to 9, baseline at 60%, hairline the figure width, label at step 3, delta on its baseline', () => {
+  for (const [format, toColumn] of [['16:9', 9], ['9:16', 11]]) {
+    const { nodes, ctx, canvas, boxes } = expandShot({ id: 'n', show: 'number', hold: 3, value: 1459, suffix: 'K', label: 'rows in one file', delta: '+12%' }, 'desk', format);
+    const look = ctx.look;
+    const fig = nodes.find((n) => n.id === 'n.value');
+    const digits = textNode(fig.children, 'n.value.digits');
+    const baseline = fig.props.y + digits.props.y + digits.props.layout.lines[0].y;
+    near(baseline, 0.6 * canvas.h, `${format} baseline`);
+    const size = digits.props.font.size;
+    assert.ok(size >= look.scale[4] && size <= 560, `${format} size ${size}`);
+    const span = gridX(look, canvas, toColumn + 1) - look.grid.gutter - gridX(look, canvas, 2);
+    assert.ok(boxes.value[2] <= span + EPS, `${format} inside the span`);
+    assert.ok(size === 560 || boxes.value[2] > 0.97 * span, `${format} fills the span unless capped: ${boxes.value[2]} of ${span}`);
+    near(boxes.value[0], gridX(look, canvas, 2), `${format} flush left by its ink`);
+    const rule = nodes.find((n) => n.id === 'n.rule');
+    near(rule.props.y, baseline + 28, 'hairline 28 under');
+    near(rule.props.x, boxes.value[0]);
+    near(ruleWidth(rule), boxes.value[2], 'the hairline spans exactly the figure');
+    const label = textNode(nodes, 'n.label');
+    assert.equal(label.props.font.size, look.scale[2]);
+    assert.equal(label.props.fill, look.palette.ink2);
+    near(label.props.y + label.props.layout.lines[0].y - 0.7 * label.props.font.size, baseline + 28 + 2 + 24, 'label cap top');
+    const last = label.props.layout.lines.at(-1);
+    const tag = nodes.find((n) => n.id === 'n.delta');
+    const tagText = tag.children.find((n) => n.type === 'text');
+    const labelBottom = boxes.label[1] + boxes.label[3];
+    if (boxes.delta[1] < labelBottom) {
+      near(tag.props.y + tagText.props.y + tagText.props.layout.lines[0].y, label.props.y + last.y, `${format} delta on the label baseline`);
+      near(boxes.delta[0], label.props.x + last.x + last.width + 32, `${format} delta 32 units after the label`);
+    } else {
+      assert.equal(format, '9:16', 'only a narrow format drops the delta under the label');
+      near(boxes.delta[0], label.props.x, 'under the label, flush left');
+    }
+    assert.ok(!overlaps(boxes.delta, [rule.props.x, rule.props.y, ruleWidth(rule), 2]), 'delta clear of the hairline');
+  }
 });
 
-test('a long figure is fitted down to stay inside column 11', () => {
-  const { boxes, ctx, canvas } = expandShot({ id: 'n', show: 'number', hold: 2, value: 123456789, suffix: 'rows', label: 'x' }, 'desk', '9:16');
-  assert.ok(boxes.value[0] + boxes.value[2] <= gridX(ctx.look, canvas, 12) - ctx.look.grid.gutter + EPS);
+test('a figure too long for the span stops at scale step 5 and says it overflows', () => {
+  const { nodes, ctx } = expandShot({ id: 'n', show: 'number', hold: 2, value: 123456789, suffix: 'rows', label: 'x' }, 'desk', '9:16');
+  const digits = textNode(nodes, 'n.value.digits');
+  assert.equal(digits.props.font.size, ctx.look.scale[4]);
+  assert.equal(digits.props.layout.overflow, true);
 });
 
-test('pop number: centred figure pops in as the count starts and pulses when it lands; label and delta below', () => {
-  const { nodes, ctx, canvas, boxes, timing } = expandShot({ id: 'n', show: 'number', say: 'We are forty one percent faster.', value: 41, suffix: '%', label: 'faster', delta: 'vs last year' }, 'pop', '9:16');
+test('pop number: fitted inside the 9:16 safe zone and centred on it; label tag at step 3, delta at step 2', () => {
+  const { nodes, ctx, boxes, timing, canvas } = expandShot({ id: 'n', show: 'number', say: 'We are forty one percent faster.', value: 41, suffix: '%', label: 'faster', delta: 'vs last year' }, 'pop', '9:16');
   const look = ctx.look;
+  const safe = viralOf(canvas);
+  const safeW = canvas.w - safe.left - safe.right;
+  const cx = safe.left + safeW / 2, cy = (safe.top + canvas.h - safe.bottom) / 2;
   const fig = nodes.find((n) => n.id === 'n.value');
-  near(boxes.value[0] + boxes.value[2] / 2, canvas.w / 2, 'centred');
+  near(boxes.value[0] + boxes.value[2] / 2, cx, 'figure centred on the safe zone');
+  assert.ok(boxes.value[2] <= safeW + EPS && boxes.value[2] > 0.97 * safeW, `fills the safe width: ${boxes.value[2]} of ${safeW}`);
+  assert.ok(textNode(fig.children, 'n.value.digits').props.font.size <= 760);
+  const top = boxes.value[1], bottom = boxes.delta[1] + boxes.delta[3];
+  near((top + bottom) / 2, cy, 'the block centred on the safe zone');
   const land = timing.words[2].start;
   near(sample(fig.tracks.scale, land + look.moves.emphasize.dur), look.moves.emphasize.scale, 'pulse on landing');
   assert.equal(sample(fig.tracks.scale, Math.max(0, land - look.moves.count.dur)), look.moves.enter.scale);
   assert.ok(boxes.label[1] >= boxes.value[1] + boxes.value[3], 'label under the figure');
-  near(boxes.label[0] + boxes.label[2] / 2, canvas.w / 2, 'label tag centred');
+  near(boxes.label[0] + boxes.label[2] / 2, cx, 'label tag centred');
+  assert.equal(textNode(nodes, 'n.label.text').props.font.size, look.scale[2]);
+  assert.equal(nodes.find((n) => n.id === 'n.label').children.find((n) => n.type === 'path').props.fill, look.palette.accent);
   assert.ok(boxes.delta[1] >= boxes.label[1] + boxes.label[3]);
-  assert.equal(textNode(nodes, 'n.delta').props.fill, look.palette.ink2);
+  const delta = textNode(nodes, 'n.delta');
+  assert.equal(delta.props.fill, look.palette.ink2);
+  assert.equal(delta.props.font.size, look.scale[1]);
+});
+
+test('pop number on 16:9 fits columns 1 to 12 up to 760 units, centred on the canvas', () => {
+  const { nodes, ctx, canvas, boxes } = expandShot({ id: 'n', show: 'number', hold: 2, value: 7, label: 'x' }, 'pop', '16:9');
+  const size = textNode(nodes, 'n.value.digits').props.font.size;
+  assert.equal(size, 760, 'a short figure is capped at 760');
+  near(boxes.value[0] + boxes.value[2] / 2, canvas.w / 2);
+  assert.ok(boxes.value[2] <= gridX(ctx.look, canvas, 13) - gridX(ctx.look, canvas, 1) + EPS);
 });
 
 // ---- clipping ----
@@ -373,17 +442,27 @@ test('desk clipping: cutout on a card 48 units larger, rotated -2 degrees, 62% o
   assert.ok(textNode(nodes, 'c.caption'));
 });
 
-test('pop clipping: cutout only, upright, centred, popping in', () => {
+test('pop clipping: cutout only, upright, centred on the safe zone at 92% of its width, popping in', () => {
   const { nodes, canvas, hero, ctx } = expandShot({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3 }, 'pop', '9:16');
+  const safe = viralOf(canvas);
+  const safeW = canvas.w - safe.left - safe.right;
   const pic = nodes.find((n) => n.id === hero);
   assert.equal(pic.props.rotate ?? 0, 0);
-  assert.equal(pic.props.x, canvas.w / 2);
-  assert.equal(pic.props.y, canvas.h / 2);
+  near(pic.props.x, safe.left + safeW / 2);
+  near(pic.props.y, (safe.top + canvas.h - safe.bottom) / 2);
+  near(all([pic]).find((n) => n.type === 'image').props.w, 0.92 * safeW, 'width');
   assert.ok(!all([pic]).some((n) => n.id.includes('card')));
   near(sample(pic.tracks.scale, 0), ctx.look.moves.enter.scale);
 });
 
-// Hand computation for one case: pop at 16:9 has no rotation anywhere, so a region is a plain scaled rectangle.
+test('desk clipping on vertical formats is 92% of the width inside the margins', () => {
+  for (const format of ['9:16', '4:5', '1:1']) {
+    const { nodes, ctx, canvas, hero } = expandShot({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3 }, 'desk', format);
+    const available = gridX(ctx.look, canvas, 13) - gridX(ctx.look, canvas, 1);
+    near(all([nodes.find((n) => n.id === hero)]).find((n) => n.type === 'image').props.w, 0.92 * available, format);
+  }
+});
+
 test('a region box is the region inside the drawn picture, through its rotation', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { query: [0.25, 0.5, 0.5, 0.25] } };
   const pop = expandShot(shot, 'pop');
@@ -405,18 +484,69 @@ test('a region box is the region inside the drawn picture, through its rotation'
   desk.boxes['region:query'].forEach((v, i) => near(v, want[i], `desk ${i}`));
 });
 
-test('a device on a region goes over the picture and the camera pushes to 1.25 on it, landing at the event', () => {
+test('a mark on a region goes over the picture, and the camera pushes until the region fills 62% of the width', () => {
+  const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
+    on: [{ at: 'word:query', do: 'circle', target: 'region:query' }] };
+  for (const [look, format] of [['desk', '16:9'], ['pop', '9:16'], ['desk', '9:16']]) {
+    const { nodes, camera, timing, ctx, boxes, canvas } = expandShot(shot, look, format);
+    const ids = nodes.map((n) => n.id);
+    if (look === 'desk') assert.ok(ids.indexOf('c.on0') > ids.indexOf('c.image'), 'mark drawn over the picture');
+    const push = camera.find((layer) => layer.some((k) => k.zoom !== undefined));
+    const at = timing.words[4].start;
+    const safe = viralOf(canvas);
+    const width = look === 'pop' ? canvas.w - safe.left - safe.right : canvas.w;
+    const want = Math.min(3.2, Math.max(1.2, (0.62 * width) / boxes['region:query'][2]));
+    near(push.at(-1).t, at, `${look} ${format} lands on the event`);
+    near(push.at(-1).zoom, want, `${look} ${format} zoom`);
+    assert.equal(push.at(-1).ease, ctx.look.moves.enter.ease);
+    near(push[0].t, at - 0.9, 'over 0.9 s');
+  }
+  const still = expandShot({ ...shot, on: [{ at: 'word:query', do: 'circle', target: 'image' }] });
+  assert.ok(!still.camera.some((layer) => layer.some((k) => k.zoom !== undefined)), 'no region target, no push');
+});
+
+test('a pushed region sits on the composition centre, as far as the field allows', () => {
+  const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { mid: [0.4, 0.4, 0.2, 0.2] }, on: [{ at: 1, do: 'underline', target: 'region:mid' }] };
+  for (const [look, format] of [['desk', '16:9'], ['pop', '9:16']]) {
+    const { boxes, canvas } = expandShot(shot, look, format);
+    const f = filmFor([shot], look, format);
+    const safe = viralOf(canvas);
+    const centre = look === 'pop' ? [safe.left + (canvas.w - safe.left - safe.right) / 2, (safe.top + canvas.h - safe.bottom) / 2] : [canvas.w / 2, canvas.h / 2];
+    const pic = f.sampleAt(2).find((n) => n.id === 'c.image');
+    const rest = expandShot(shot, look, format).nodes.find((n) => n.id === 'c.image');
+    const [bx, by, bw, bh] = boxes['region:mid'];
+    // the region centre moves with the picture group: rest offset scaled by the camera zoom
+    const zoom = pic.scale / (rest.props.scale ?? 1);
+    const rx = pic.x + (bx + bw / 2 - rest.props.x) * zoom, ry = pic.y + (by + bh / 2 - rest.props.y) * zoom;
+    assert.ok(Math.abs(rx - centre[0]) < 4 && Math.abs(ry - centre[1]) < 4, `${look} ${format}: region at ${rx}, ${ry}, centre ${centre}`);
+  }
+});
+
+test('a highlight on a region is a marker frame with the rest of the picture dimmed: hand-drawn in desk, ruled in pop', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
     on: [{ at: 'word:query', do: 'highlight', target: 'region:query' }] };
-  const { nodes, camera, timing, ctx } = expandShot(shot, 'desk');
-  const ids = nodes.map((n) => n.id);
-  assert.ok(ids.indexOf('c.on0') > ids.indexOf('c.image'), 'highlight drawn over the picture');
-  const push = camera.find((layer) => layer.some((k) => k.zoom !== undefined));
-  const at = timing.words[4].start;
-  near(push.at(-1).t, at, 'lands on the event');
-  assert.equal(push.at(-1).zoom, 1.25);
-  assert.equal(push.at(-1).ease, ctx.look.moves.enter.ease);
-  near(push[0].t, at - 0.8, 'eases over 0.8 s');
+  for (const [look, width, cap] of [['desk', 12, 'round'], ['pop', 10, 'square']]) {
+    const { nodes, timing, ctx } = expandShot(shot, look);
+    const at = timing.words[4].start;
+    const pic = nodes.find((n) => n.id === 'c.image');
+    assert.ok(!all(nodes).some((n) => n.props.under), `${look}: no filled band`);
+    const sides = all([pic]).filter((n) => /^c\.on0\.side\d$/.test(n.id));
+    assert.equal(sides.length, 4, `${look}: four strokes inside the picture`);
+    for (const s of sides) {
+      assert.equal(s.props.stroke, ctx.look.palette.accent);
+      assert.equal(s.props.strokeWidth, width);
+      assert.equal(s.props.lineCap, cap);
+      assert.equal(s.props.blend, undefined);
+    }
+    const lands = sides.map((s) => lastKey(s.tracks.draw).t);
+    assert.deepEqual([...lands].sort((a, b) => a - b), lands, `${look}: drawn on in order`);
+    landsOn(sides[3], 'draw', at, `${look}: the frame closes on the event`);
+    const dim = all([pic]).find((n) => n.id === 'c.on0.dim');
+    assert.equal(dim.props.fill, ctx.look.palette.ink);
+    assert.equal(dim.props.d.match(/M/g).length, 2, 'the region is cut out of the overlay');
+    near(sample(dim.tracks.opacity, 0), 0);
+    near(sample(dim.tracks.opacity, at), 0.32, 'dims with the frame');
+  }
 });
 
 test('the push never shows the edge of the field', () => {
@@ -568,7 +698,8 @@ test('every kind stays inside the safe area on every format once its entrances h
       for (const shot of look === 'pop' ? [popStatement, ...shots.slice(1)] : shots) {
         const { boxes, canvas, nodes, timing } = expandShot(shot, look, format);
         if (shot.show === 'statement') assert.equal(textNode(nodes).props.layout.overflow, false, `${look} ${format} fits`);
-        const insets = safeInsets([canvas.w, canvas.h]);
+        // pop on 9:16 composes inside the platform safe zone; everything else inside the plain safe margin
+        const insets = look === 'pop' && format === '9:16' ? viralOf(canvas) : safeInsets([canvas.w, canvas.h]);
         for (const [target, box] of Object.entries(boxes)) inside(box, insets, canvas, `${look} ${format} ${shot.show} ${target}`);
         // Every all-text node as drawn once landed (kicker, label, caption, the figure group). Nodes with paths (the
         // card, tags, hairlines) need the page to measure and are covered by their target boxes above.
@@ -610,17 +741,7 @@ test('a match keeps the shared field first, under the outgoing frame, and the he
   assert.deepEqual(out.map((n) => n.id), ['field', 'old', 'h', 'new']);
 });
 
-test('the desk delta tag sits on the label baseline', () => {
-  const { nodes } = expandShot({ id: 'n', show: 'number', hold: 3, value: 459, label: 'in one file', delta: '+12%' });
-  const label = textNode(nodes, 'n.label');
-  const tag = nodes.find((n) => n.id === 'n.delta');
-  const tagText = tag.children.find((n) => n.type === 'text');
-  near(tag.props.y + tagText.props.y + tagText.props.layout.lines[0].y, label.props.y + label.props.layout.lines[0].y, 'shared baseline');
-  const rule = nodes.find((n) => n.id === 'n.rule');
-  const ruleRight = rule.props.x + Number(/H([\d.]+)/.exec(rule.props.d)[1]);
-  const { boxes } = expandShot({ id: 'n', show: 'number', hold: 3, value: 459, label: 'in one file', delta: '+12%' });
-  assert.ok(ruleRight <= boxes.delta[0] - 24 + EPS, 'the hairline stops short of the tag');
-});
+
 
 // ---- the count's rhythm and the device notes from the review ----
 

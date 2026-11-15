@@ -1,0 +1,65 @@
+// What a `highlight` aimed at a clipping region draws. A filled marker band disappears over a dark picture, so a region
+// highlight is a marker frame around the region, drawn on side by side, with the rest of the picture dimmed by an
+// ink overlay that has the region cut out of it. A hand look (desk) draws the frame as four wobbly pen strokes that
+// overshoot the corners, stepped at its hand rate; a crisp look (pop) draws a ruled, square-cornered frame. Built from
+// plain nodes in the picture's own space (the caller puts them in a group turned like the picture). Pure, DOM-free.
+import { node } from '../graph/node.mjs';
+import { landing, isHand, colourOf, deviceRng, spread, smoothPath, polyline } from '../devices/shared.mjs';
+
+const HAND = Object.freeze({ width: 12, overshoot: 7, wobble: 2.5, pad: 10, cap: 'round' }); // units
+const CRISP = Object.freeze({ width: 10, overshoot: 0, wobble: 0, pad: 10, cap: 'square' }); // units
+const DIM = 0.32; // opacity of the ink overlay outside the region
+const DIM_EASE = 'outCubic';
+const DRAW_SHARE = 2; // the frame takes this many of the look's draw moves, a quarter of it per side
+const SIDES = 4;
+const STROKE_POINTS = 4; // points along a hand stroke, ends included
+
+// One hand stroke from a to b: it runs `overshoot` past both corners and its points sit off the line by a seeded wobble.
+function handStroke(a, b, spec, unit, rng) {
+  const dx = b[0] - a[0], dy = b[1] - a[1], length = Math.hypot(dx, dy);
+  const along = [dx / length, dy / length], normal = [-along[1], along[0]];
+  const over = spec.overshoot * unit;
+  const start = [a[0] - along[0] * over, a[1] - along[1] * over];
+  const span = length + 2 * over;
+  const points = Array.from({ length: STROKE_POINTS }, (_, i) => {
+    const f = i / (STROKE_POINTS - 1), off = spread(rng, spec.wobble) * unit;
+    return [start[0] + along[0] * span * f + normal[0] * off, start[1] + along[1] * span * f + normal[1] * off];
+  });
+  return smoothPath(points);
+}
+
+// The overlay: the picture rectangle clockwise with the region counter-clockwise inside it, so the region is a hole
+// under the nonzero fill rule the draw layer uses (the same hole an even-odd fill would leave).
+function dimPath([px, py, pw, ph], [x, y, w, h]) {
+  const outer = [[px, py], [px + pw, py], [px + pw, py + ph], [px, py + ph]];
+  const inner = [[x, y], [x, y + h], [x + w, y + h], [x + w, y]];
+  return `${polyline(outer, true)}${polyline(inner, true)}`;
+}
+
+/**
+ * The nodes of a region highlight: [dim overlay, side0..side3], every coordinate in the picture's own space.
+ * @param {{ id: string, region: number[], picture: number[], at: number, look: object, unit: number, seed: number }} p
+ *   region and picture are [x, y, w, h]; the frame closes, and the overlay reaches DIM, on `at`.
+ */
+export function regionMark({ id, region, picture, at, look, unit, seed }) {
+  const hand = isHand(look);
+  const spec = hand ? HAND : CRISP;
+  const pad = spec.pad * unit;
+  const [x, y, w, h] = region;
+  const corners = [[x - pad, y - pad], [x + w + pad, y - pad], [x + w + pad, y + h + pad], [x - pad, y + h + pad]];
+  const start = Math.max(0, at - DRAW_SHARE * look.moves.draw.dur);
+  const seg = (at - start) / SIDES;
+  const step = hand ? look.moves.draw.step : undefined;
+  const rng = deviceRng(seed, id, 'region-mark');
+  const sides = corners.map((a, i) => {
+    const b = corners[(i + 1) % SIDES];
+    const d = hand ? handStroke(a, b, spec, unit, rng) : polyline([a, b]);
+    const draw = landing(start + seg * (i + 1), { ease: look.moves.draw.ease, dur: seg }, 0, 1, step);
+    const props = { d, stroke: colourOf(look, 'accent'), strokeWidth: spec.width * unit, lineCap: spec.cap };
+    return node('path', `${id}.side${i}`, props, { tracks: { draw }, step });
+  });
+  const dim = node('path', `${id}.dim`, { d: dimPath(picture, region), fill: colourOf(look, 'ink') }, {
+    tracks: { opacity: landing(at, { ease: DIM_EASE, dur: at - start }, 0, DIM) },
+  });
+  return [dim, ...sides];
+}

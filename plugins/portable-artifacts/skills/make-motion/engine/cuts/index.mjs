@@ -38,9 +38,18 @@ function defineCut(dur, blend) {
 
 const shifted = (nodes, dx) => nodes.map((n) => Object.freeze({ ...n, x: n.x + dx }));
 
+// A shared background (a node behind the picture plane, depth > 0, whose id both frames hold: the film's one field)
+// stays where the incoming frame has it; only the rest slides, so the cut happens over one continuous surface.
 function slide({ from, to, p, canvas }) {
   const e = ease(SLIDE.ease)(p);
-  return [...shifted(from, -e * canvas.w), ...shifted(to, (1 - e) * canvas.w)];
+  const outgoing = new Set(from.map((n) => n.id));
+  const isBackground = (n) => n.depth > 0 && outgoing.has(n.id);
+  const background = new Set(to.filter(isBackground).map((n) => n.id));
+  return [
+    ...to.filter((n) => background.has(n.id)),
+    ...shifted(from.filter((n) => !background.has(n.id)), -e * canvas.w),
+    ...shifted(to.filter((n) => !background.has(n.id)), (1 - e) * canvas.w),
+  ];
 }
 
 function punch({ to, p, canvas }) {

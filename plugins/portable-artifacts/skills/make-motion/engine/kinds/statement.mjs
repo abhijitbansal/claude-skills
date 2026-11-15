@@ -9,13 +9,13 @@ import { gridSpan } from '../looks/index.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan,
-  typeset, fieldNode, wordTimes, enterTracks, pulseScale, wipeIn, rectPath, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
+  typeset, compositionRect, fieldNode, wordTimes, enterTracks, pulseScale, wipeIn, rectPath, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
 } from './shared.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
 const DESK = Object.freeze({ centre: 0.44, fromStep: 3, toStep: 5 });
-const POP = Object.freeze({ centre: 0.5, fromStep: 4, toStep: 5 });
+const POP = Object.freeze({ fromStep: 4, toStep: 5 });
 const FIRST_COLUMN = 2;
 const KICKER = Object.freeze({ step: 1, gap: 28, ruleGap: 12, rule: 2, ruleLength: 96 });
 // The highlighter band behind a run, in em of the text: from this far above the baseline, this tall.
@@ -40,11 +40,13 @@ function compose(text, shot, ctx) {
   const { look, canvas, unit } = ctx;
   const desk = look.emphasis === 'highlight';
   const plan = desk ? DESK : POP;
-  const span = gridSpan(look, canvas, FIRST_COLUMN, desk && isWide(canvas) ? 9 : 11);
-  const margin = look.grid.margin * unit;
+  // pop on 9:16 composes in the platform safe zone: its width, centred on its centre
+  const rect = compositionRect(ctx);
+  const span = rect.safe ? { x: rect.left, w: rect.w } : gridSpan(look, canvas, FIRST_COLUMN, desk && isWide(canvas) ? 9 : 11);
+  const margin = rect.safe ? 0 : look.grid.margin * unit;
   const above = shot.kicker === undefined ? 0 : kickerRoom(look, unit);
-  const centre = plan.centre * canvas.h;
-  const maxHeight = HALF * Math.min(centre - margin - above, canvas.h - centre - margin);
+  const centre = desk ? plan.centre * canvas.h : rect.cy;
+  const maxHeight = HALF * Math.min(centre - rect.top - margin - above, rect.top + rect.h - centre - margin);
   const min = sizeAt(look, plan.fromStep, unit), max = sizeAt(look, plan.toStep, unit);
   const opts = { text, font: fontFor(look, 'display', max, unit), maxWidth: span.w, align: desk ? 'left' : 'center', measure: ctx.measure, optical: true };
   const { layout, font } = fitDisplay(opts, { min, max, maxHeight, maxLines: look.maxLines.display }, look, unit);

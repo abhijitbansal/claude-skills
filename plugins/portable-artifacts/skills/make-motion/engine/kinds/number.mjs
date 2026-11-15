@@ -8,9 +8,10 @@ import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { ease } from '../time/ease.mjs';
 import { layoutText, numeralAdvance } from '../text/layout.mjs';
-import { gridX, gridSpan } from '../looks/index.mjs';
+import { gridSpan } from '../looks/index.mjs';
+import { entrance, colourOf, polyline } from '../devices/shared.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, arrivesMatched, typeset, fieldNode, enterTracks, pulseScale, wipeIn,
+  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, typeset, compositionRect, fieldNode, enterTracks, pulseScale, wipeIn,
   rectPath, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
 } from './shared.mjs';
 
@@ -19,16 +20,19 @@ const LABEL_MAX = 60;
 const DELTA_MAX = 24;
 const DECIMALS_MAX = 3;
 const FIGURE_STEP = 5;
-const LABEL_STEP = 2;
 const AFFIX_SHARE = 0.45; // prefix and suffix size, of the figure size
 const AFFIX_GAP = 0.04; // em of the figure between the figure and a prefix or suffix
 const COUNT_FALLBACK = 0.6; // of the shot: when the count lands with no spoken number
 const MAX_COUNT_STEPS = 24; // distinct values a count may show on its way up
 const STEP_EPSILON = 1e-6;
-const DESK = Object.freeze({ baseline: 0.56, ruleGap: 28, rule: 2, labelGap: 24, labelTo: 8, deltaGap: 24, deltaDrop: 16 });
-const POP = Object.freeze({ tagGap: 40, deltaGap: 16 });
+// desk figure: up to 560 units across columns 2 to 9 (2 to 11 when not wide), baseline at 60%; label at step 3
+const DESK = Object.freeze({ max: 560, toWide: 9, toTall: 11, baseline: 0.6, ruleGap: 28, rule: 2, labelGap: 24, labelStep: 3, deltaGap: 32, deltaDrop: 16 });
+// pop figure: up to 760 units across columns 1 to 12; label tag at step 3 (step 2 at the least), delta at step 2
+const POP = Object.freeze({ max: 760, tagGap: 40, tagStep: 3, tagFromStep: 2, deltaGap: 16, deltaStep: 2 });
+const TAG = Object.freeze({ padX: 0.32, padY: 0.2 }); // em of the tag's own size
+const FIT_EPSILON = 1e-6;
 const DELTA_LAG = 0.15; // seconds after the label lands
-const FIT_TRIES = 4;
+const FIT_TRIES = 6;
 const NO_WRAP = 1e6;
 const HALF = 2;
 const DIGIT = /\d/;
@@ -118,26 +122,30 @@ function affix(text, font, measure) {
   return layoutText({ text, font, maxWidth: NO_WRAP, measure });
 }
 
-// The figure at its size: digits, prefix and suffix, fitted down until the whole row is at most `maxWidth`.
-function figureAt(shot, ctx, { maxWidth, steps }) {
+// The figure at the largest size in [minSize, maxSize] whose row (prefix, digits, suffix) is at most `maxWidth`: it
+// starts at maxSize and scales down in proportion until it fits. A row still too wide at minSize keeps that size and
+// says so (its digits layout has overflow: true), as a statement that cannot fit does.
+function figureAt(shot, ctx, { maxWidth, minSize, maxSize, steps }) {
   const { look, unit, measure } = ctx;
   const caps = (s) => {
     if (s === undefined) return s;
     return look.caps.display ? typeset(s).toUpperCase() : typeset(s);
   };
-  let size = sizeAt(look, FIGURE_STEP, unit);
-  for (let i = 0; i < FIT_TRIES; i++) {
+  const at = (size) => {
     const font = fontFor(look, 'display', size, unit);
     const small = fontFor(look, 'display', AFFIX_SHARE * size, unit);
     const digits = digitsLayout(steps, font, measure);
     const prefix = affix(caps(shot.prefix), small, measure), suffix = affix(caps(shot.suffix), small, measure);
     const gap = AFFIX_GAP * size;
     const preW = prefix ? prefix.width + gap : 0, sufW = suffix ? suffix.width + gap : 0;
-    const total = preW + digits.inkWidth + sufW;
-    if (total <= maxWidth || i === FIT_TRIES - 1) return { size, font, small, digits, prefix, suffix, preW, total };
-    size = Math.floor((size * maxWidth) / total);
+    return { size, font, small, digits, prefix, suffix, preW, total: preW + digits.inkWidth + sufW };
+  };
+  let fig = at(Math.floor(maxSize));
+  for (let i = 0; i < FIT_TRIES && fig.total > maxWidth + FIT_EPSILON && fig.size > minSize; i++) {
+    fig = at(Math.max(Math.ceil(minSize), Math.min(fig.size - 1, Math.floor((fig.size * maxWidth) / fig.total))));
   }
-  throw new Error('unreachable');
+  if (fig.total <= maxWidth + FIT_EPSILON) return fig;
+  return { ...fig, digits: { ...fig.digits, layout: { ...fig.digits.layout, overflow: true } } };
 }
 
 // The figure as a group centred on its ink box at (left, baseline): prefix and suffix on the cap line.
@@ -177,37 +185,53 @@ function placedTag(ctx, id, text, at, place) {
 
 // ---- desk ----
 
+// desk: a hero numeral flush left on column 2, fitted to columns 2 to 9 (2 to 11 on vertical formats) between scale
+// step 5 and DESK.max units, its baseline at DESK.baseline; a hairline exactly the figure's width; the label at step 3
+// under it; the delta tag on the label's baseline just after it.
 function deskParts(shot, ctx, steps, times) {
   const { look, canvas, unit, measure } = ctx;
-  const left = gridX(look, canvas, 2);
-  const fig = figureAt(shot, ctx, { maxWidth: gridX(look, canvas, 12) - look.grid.gutter * unit - left, steps });
-  const baseline = DESK.baseline * canvas.h;
+  const span = gridSpan(look, canvas, 2, isWide(canvas) ? DESK.toWide : DESK.toTall);
+  const left = span.x;
+  const fig = figureAt(shot, ctx, { maxWidth: span.w, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize: DESK.max * unit, steps });
+  const font = fontFor(look, 'text', sizeAt(look, DESK.labelStep, unit), unit);
+  const layout = layoutText({ text: typeset(shot.label), font, maxWidth: span.w, measure });
+  // The baseline sits at DESK.baseline of the height unless the hairline, label and delta under it would then pass the
+  // bottom margin (a long label on a short format): then the whole stack rises just enough.
+  const labelHeight = layout.lines.at(-1).y - layout.lines[0].y + (CAP_HEIGHT + WORD_DESCENT) * font.size;
+  const deltaHeight = shot.delta === undefined ? 0 : DESK.deltaDrop * unit + tagHeight(ctx, shot.delta);
+  const below = (DESK.ruleGap + DESK.rule + DESK.labelGap) * unit + labelHeight + deltaHeight;
+  const baseline = Math.min(DESK.baseline * canvas.h, canvas.h - look.grid.margin * unit - below);
   const fade = times.matched ? {} : { opacity: enterTracks(look, unit, times.start + look.moves.enter.dur).opacity };
   const figure = figureGroup(shot, ctx, fig, { left, baseline, tracks: fade });
-  const span = gridSpan(look, canvas, 2, DESK.labelTo);
   const ruleY = baseline + DESK.ruleGap * unit;
-  const font = fontFor(look, 'text', sizeAt(look, LABEL_STEP, unit), unit);
-  const layout = layoutText({ text: typeset(shot.label), font, maxWidth: span.w, measure });
+  const ruleBox = [left, ruleY, fig.total, DESK.rule * unit];
+  const rule = node('path', `${shot.id}.rule`, { x: left, y: ruleY, d: rectPath(fig.total, DESK.rule * unit), fill: look.palette.rule }, { tracks: wipeIn(look, times.land + look.moves.draw.dur) });
   const y = ruleY + (DESK.rule + DESK.labelGap) * unit - (layout.lines[0].y - CAP_HEIGHT * font.size);
   const labelAt = times.land + look.moves.enter.dur;
   const label = node('text', `${shot.id}.label`, { x: left, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, labelAt, { y }) });
   const boxes = { value: figure.box, label: textBox(left, y, layout) };
-  const delta = shot.delta === undefined ? null : deskDelta(shot, ctx, { left, y, line: layout.lines[0], below: boxes.label, at: labelAt + DELTA_LAG });
-  // The hairline spans columns 2 to 8, stopping short of a delta tag that rises into it.
-  const ruleEnd = delta && delta.box[1] < ruleY + DESK.rule * unit + DESK.labelGap * unit ? Math.min(left + span.w, delta.box[0] - DESK.deltaGap * unit) : left + span.w;
-  const rule = node('path', `${shot.id}.rule`, { x: left, y: ruleY, d: rectPath(ruleEnd - left, DESK.rule * unit), fill: look.palette.rule }, { tracks: wipeIn(look, times.land + look.moves.draw.dur) });
-  const nodes = [figure.group, rule, label, ...(delta ? delta.nodes : [])];
-  return { nodes, boxes: delta ? { ...boxes, delta: delta.box } : boxes, hero: figure.hero };
+  const nodes = [figure.group, rule, label];
+  if (shot.delta === undefined) return { nodes, boxes, hero: figure.hero };
+  const delta = deskDelta(shot, ctx, { left, y, line: layout.lines.at(-1), below: boxes.label, ruleBox, at: labelAt + DELTA_LAG });
+  return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };
 }
 
-// The delta tag beside the label's first line, its text on the label's baseline; under the label when the line
-// leaves no room before the right margin.
-function deskDelta(shot, ctx, { left, y, line, below, at }) {
+// The height of the tag device's plate for `text` (it sizes itself from its text).
+function tagHeight(ctx, text) {
+  const params = { id: 'probe', text: typeset(text), at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, box: [0, 0, 1, 1] };
+  return registries.devices.get('tag').build(params).boxes.tag[3];
+}
+
+const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+
+// The delta tag DESK.deltaGap after the label's last line, its text on that line's baseline; under the label when
+// that would pass the right margin or touch the hairline.
+function deskDelta(shot, ctx, { left, y, line, below, ruleBox, at }) {
   const { look, canvas, unit } = ctx;
   const right = canvas.w - look.grid.margin * unit;
   const tag = placedTag(ctx, `${shot.id}.delta`, typeset(shot.delta), at, (w, h, tagBaseline) => {
-    const beside = left + line.x + line.width + DESK.deltaGap * unit;
-    if (beside + w <= right) return [beside, y + line.y - tagBaseline];
+    const beside = [left + line.x + line.width + DESK.deltaGap * unit, y + line.y - tagBaseline, w, h];
+    if (beside[0] + w <= right && !overlaps(beside, ruleBox)) return beside;
     return [left, below[1] + below[3] + DESK.deltaDrop * unit];
   });
   return { nodes: tag.nodes, box: tag.boxes.tag };
@@ -215,48 +239,66 @@ function deskDelta(shot, ctx, { left, y, line, below, at }) {
 
 // ---- pop ----
 
-// The label as a tag when it fits the measure, else as centred caps label text.
-function popLabel(shot, ctx, { span, top, at }) {
+// A tag built from plain nodes at a chosen scale step (the tag device sets every tag at step 2): the look's tag fill
+// behind label caps in the look's tag text colour, at `toStep`, set smaller (down to `fromStep`) and then wrapped
+// when it is wider than `maxWidth`. Centred on `cx` with its top at `top`; it enters as an object device does.
+function plainTag(ctx, id, text, { cx, top, maxWidth, at, fromStep, toStep }) {
   const { look, unit, measure } = ctx;
-  const tag = placedTag(ctx, `${shot.id}.label`, typeset(shot.label), at, (w) => [span.x + (span.w - w) / HALF, top]);
-  if (tag.boxes.tag[2] <= span.w) return { nodes: tag.nodes, box: tag.boxes.tag };
-  const font = fontFor(look, 'label', sizeAt(look, LABEL_STEP, unit), unit);
-  const layout = layoutText({ text: look.caps.label ? typeset(shot.label).toUpperCase() : typeset(shot.label), font, maxWidth: span.w, align: 'center', measure });
-  const y = top - (layout.lines[0].y - CAP_HEIGHT * font.size);
-  const text = node('text', `${shot.id}.label`, { x: span.x, y, layout, font, fill: look.palette.ink }, { tracks: enterTracks(look, unit, at) });
-  return { nodes: [text], box: textBox(span.x, y, layout) };
+  const style = look.devices.tag ?? {};
+  const shown = look.caps.label ? typeset(text).toUpperCase() : typeset(text);
+  const padded = (size, width) => width + HALF * TAG.padX * size;
+  const oneLine = (size) => layoutText({ text: shown, font: fontFor(look, 'label', size, unit), maxWidth: NO_WRAP, measure });
+  let size = sizeAt(look, toStep, unit);
+  const first = padded(size, oneLine(size).width);
+  if (first > maxWidth) size = Math.max(sizeAt(look, fromStep, unit), Math.floor((size * maxWidth) / first));
+  const font = fontFor(look, 'label', size, unit);
+  const layout = layoutText({ text: shown, font, maxWidth: maxWidth - HALF * TAG.padX * size, align: 'center', measure });
+  const w = padded(size, layout.width), h = layout.height + HALF * TAG.padY * size;
+  const inset = Math.min(...layout.lines.map((l) => l.x)); // centred lines sit this far into the measure
+  const corners = [[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]];
+  const plate = node('path', `${id}.plate`, { d: polyline(corners, true), fill: colourOf(look, style.fill ?? 'ink') });
+  const label = node('text', `${id}.text`, {
+    x: -w / HALF + TAG.padX * size - inset, y: -h / HALF + TAG.padY * size, layout, font, fill: colourOf(look, style.text ?? 'paper'),
+  });
+  const group = entrance({ id, at, look, unit, cx, cy: top + h / HALF, children: [plate, label] });
+  return { nodes: [group], box: [cx - w / HALF, top, w, h] };
 }
 
-function popDelta(shot, ctx, { span, top, at }) {
+function popDelta(shot, ctx, { cx, width, top, at }) {
   const { look, unit, measure } = ctx;
-  const font = fontFor(look, 'label', sizeAt(look, LABEL_STEP, unit), unit);
-  const layout = layoutText({ text: look.caps.label ? typeset(shot.delta).toUpperCase() : typeset(shot.delta), font, maxWidth: span.w, align: 'center', measure });
+  const font = fontFor(look, 'label', sizeAt(look, POP.deltaStep, unit), unit);
+  const layout = layoutText({ text: look.caps.label ? typeset(shot.delta).toUpperCase() : typeset(shot.delta), font, maxWidth: width, align: 'center', measure });
+  const x = cx - width / HALF;
   const y = top - (layout.lines[0].y - CAP_HEIGHT * font.size);
-  const text = node('text', `${shot.id}.delta`, { x: span.x, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, at) });
-  return { nodes: [text], box: textBox(span.x, y, layout) };
+  const text = node('text', `${shot.id}.delta`, { x, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, at) });
+  return { nodes: [text], box: textBox(x, y, layout) };
 }
 
+// pop: a hero numeral fitted to columns 1 to 12 (inside the platform safe zone on 9:16) between scale step 5 and
+// POP.max units; the label tag at step 3 and the delta at step 2 below it; the block centred on the composition.
 function popParts(shot, ctx, steps, times) {
   const { look, canvas, unit } = ctx;
-  const span = gridSpan(look, canvas, 2, 11);
-  const fig = figureAt(shot, ctx, { maxWidth: span.w, steps });
+  const rect = compositionRect(ctx);
+  const width = Math.min(gridSpan(look, canvas, 1, look.grid.columns).w, rect.w);
+  const fig = figureAt(shot, ctx, { maxWidth: width, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize: POP.max * unit, steps });
   const labelAt = times.land + look.moves.enter.dur;
+  const tagAt = (top) => ({ cx: rect.cx, top, maxWidth: width, at: labelAt, fromStep: POP.tagFromStep, toStep: POP.tagStep });
   // Measure the parts under the figure first, so figure, label and delta are centred together.
-  const probeLabel = popLabel(shot, ctx, { span, top: 0, at: labelAt });
-  const probeDelta = shot.delta === undefined ? null : popDelta(shot, ctx, { span, top: 0, at: labelAt + DELTA_LAG });
+  const probeLabel = plainTag(ctx, `${shot.id}.label`, shot.label, tagAt(0));
+  const probeDelta = shot.delta === undefined ? null : popDelta(shot, ctx, { cx: rect.cx, width, top: 0, at: labelAt + DELTA_LAG });
   const below = POP.tagGap * unit + probeLabel.box[3] + (probeDelta ? POP.deltaGap * unit + probeDelta.box[3] : 0);
-  const capTop = (canvas.h - CAP_HEIGHT * fig.size - below) / HALF;
+  const capTop = rect.cy - (CAP_HEIGHT * fig.size + below) / HALF;
   const baseline = capTop + CAP_HEIGHT * fig.size;
   const enterAt = times.start + look.moves.enter.dur;
   const tracks = times.matched
     ? { scale: pulseScale(look, { pulse: times.land }) }
     : { opacity: enterTracks(look, unit, enterAt).opacity, scale: pulseScale(look, { enterAt, pulse: times.land }) };
-  const figure = figureGroup(shot, ctx, fig, { left: canvas.w / HALF - fig.total / HALF, baseline, tracks });
-  const label = popLabel(shot, ctx, { span, top: baseline + POP.tagGap * unit, at: labelAt });
+  const figure = figureGroup(shot, ctx, fig, { left: rect.cx - fig.total / HALF, baseline, tracks });
+  const label = plainTag(ctx, `${shot.id}.label`, shot.label, tagAt(baseline + POP.tagGap * unit));
   const boxes = { value: figure.box, label: label.box };
   const nodes = [figure.group, ...label.nodes];
   if (!probeDelta) return { nodes, boxes, hero: figure.hero };
-  const delta = popDelta(shot, ctx, { span, top: label.box[1] + label.box[3] + POP.deltaGap * unit, at: labelAt + DELTA_LAG });
+  const delta = popDelta(shot, ctx, { cx: rect.cx, width, top: label.box[1] + label.box[3] + POP.deltaGap * unit, at: labelAt + DELTA_LAG });
   return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };
 }
 
