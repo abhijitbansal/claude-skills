@@ -178,8 +178,12 @@ step_dotfiles() {
     local src="${REPO_ROOT}/${src_rel}"
     [[ -f "${src}" ]] || { warn "missing template ${src}; skipping"; return 0; }
     if [[ -f "${dst}" ]] && ! cmp -s "${src}" "${dst}"; then
-      cp "${dst}" "${dst}.bak.${timestamp}"
-      info "backed up ${dst}"
+      if [[ "${DRY_RUN}" -eq 1 ]]; then
+        info "would back up ${dst}"
+      else
+        cp "${dst}" "${dst}.bak.${timestamp}"
+        info "backed up ${dst}"
+      fi
     fi
     [[ "${DRY_RUN}" -eq 1 ]] || cp "${src}" "${dst}"
     info "installed ${dst}"
@@ -229,7 +233,9 @@ step_local_plugins() {
   [[ -f "${manifest}" ]] || { warn "no ${manifest}; skipping"; return 0; }
   local existing
   existing="$(claude plugin marketplace list 2>/dev/null || true)"
-  if printf '%s\n' "${existing}" | grep -qwF "claude-skills"; then
+  # Match the marketplace name line exactly ("❯ claude-skills"); a word match
+  # also hits another marketplace's "Source: GitHub (someone/claude-skills)".
+  if printf '%s\n' "${existing}" | sed -E 's/^[[:space:]]*(❯[[:space:]]*)?//; s/[[:space:]]+$//' | grep -qxF "claude-skills"; then
     info "self marketplace: update"
     [[ "${DRY_RUN}" -eq 1 ]] || claude plugin marketplace update claude-skills || warn "marketplace update failed"
   else

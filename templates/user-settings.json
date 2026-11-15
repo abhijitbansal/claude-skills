@@ -86,8 +86,7 @@
     "qodo-skills@claude-plugins-official": true,
     "linear@claude-plugins-official": true,
     "llm-wiki@claude-code-skills": true,
-    "caveman@caveman": true,
-    "visual-explainer@visual-explainer-marketplace": true
+    "caveman@caveman": true
   },
   "extraKnownMarketplaces": {
     "claude-code-skills": {
@@ -100,12 +99,6 @@
       "source": {
         "source": "github",
         "repo": "JuliusBrussee/caveman"
-      }
-    },
-    "visual-explainer-marketplace": {
-      "source": {
-        "source": "github",
-        "repo": "nicobailon/visual-explainer"
       }
     }
   },

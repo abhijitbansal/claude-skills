@@ -16,29 +16,29 @@ teardown() { rm -rf "${TMP}"; }
   run bash "${INSTALL}" codex
   [ "$status" -eq 0 ]
   [[ "$output" == *"no ~/.codex"* ]]
-  [ ! -d "${HOME}/.codex/skills" ]
+  [ ! -d "${HOME}/.agents/skills" ]
 }
 
 @test "codex mode symlinks every plugin skill" {
   mkdir -p "${HOME}/.codex"
   run bash "${INSTALL}" codex
   [ "$status" -eq 0 ]
-  [ -L "${HOME}/.codex/skills/commit" ]
-  [ -L "${HOME}/.codex/skills/linear-pm" ]
-  [ -L "${HOME}/.codex/skills/second-wind" ]
-  [ ! -e "${HOME}/.codex/skills/_lib" ]
+  [ -L "${HOME}/.agents/skills/commit" ]
+  [ -L "${HOME}/.agents/skills/linear-pm" ]
+  [ -L "${HOME}/.agents/skills/second-wind" ]
+  [ ! -e "${HOME}/.agents/skills/_lib" ]
 }
 
 @test "codex mode is idempotent and prunes stale links" {
-  mkdir -p "${HOME}/.codex/skills"
-  ln -s "$(cd "${CLAUDE_SKILLS_HOME}" && pwd)/plugins/gone/skills/gone" "${HOME}/.codex/skills/gone"
-  ln -s "/elsewhere/foreign" "${HOME}/.codex/skills/foreign"
+  mkdir -p "${HOME}/.codex" "${HOME}/.agents/skills"
+  ln -s "$(cd "${CLAUDE_SKILLS_HOME}" && pwd)/plugins/gone/skills/gone" "${HOME}/.agents/skills/gone"
+  ln -s "/elsewhere/foreign" "${HOME}/.agents/skills/foreign"
   run bash "${INSTALL}" codex
   [ "$status" -eq 0 ]
   run bash "${INSTALL}" codex
   [ "$status" -eq 0 ]
-  [ ! -L "${HOME}/.codex/skills/gone" ]      # stale repo link pruned
-  [ -L "${HOME}/.codex/skills/foreign" ]     # foreign link untouched
+  [ ! -L "${HOME}/.agents/skills/gone" ]      # stale repo link pruned
+  [ -L "${HOME}/.agents/skills/foreign" ]     # foreign link untouched
 }
 
 @test "copilot mode honors COPILOT_SKILLS_DIR override" {

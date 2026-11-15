@@ -43,7 +43,9 @@ link_skills() {
 }
 
 mode_codex() {
-  local dest="${CODEX_SKILLS_DIR:-${HOME}/.codex/skills}"
+  # Codex reads user skills from ~/.agents/skills (same target as
+  # plugins/portable-artifacts/bin/install.mjs), not ~/.codex/skills.
+  local dest="${CODEX_SKILLS_DIR:-${HOME}/.agents/skills}"
   if [[ -z "${CODEX_SKILLS_DIR:-}" && ! -d "${HOME}/.codex" ]]; then
     info "no ~/.codex — Codex not installed; skipping"
     return 0

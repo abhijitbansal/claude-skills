@@ -33,3 +33,39 @@ teardown() { rm -rf "${TMP}"; }
   [ -f "${CLAUDE_SKILLS_HOME}/templates/home-CLAUDE.md" ]
   [ -f "${CLAUDE_SKILLS_HOME}/templates/user-settings.json" ]
 }
+
+@test "capture.sh stops on a seeded token, names the hit, and writes nothing" {
+  fake="ghp_$(printf 'a%.0s' {1..36})"
+  printf '{"env": {"GITHUB_TOKEN": "%s"}, "effortLevel": "max"}\n' "${fake}" > "${HOME}/.claude/settings.json"
+  run bash "${BATS_TEST_DIRNAME}/../../setup/capture.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"env.GITHUB_TOKEN"* ]] || false
+  [[ "$output" == *"github-token"* ]] || false
+  [[ "$output" != *"${fake}"* ]] || false
+  [ ! -f "${CLAUDE_SKILLS_HOME}/templates/user-settings.json" ]
+  [ ! -f "${CLAUDE_SKILLS_HOME}/templates/home-CLAUDE.md" ]
+}
+
+@test "capture.sh does not flag token-count settings such as MAX_THINKING_TOKENS" {
+  printf '{"env": {"MAX_THINKING_TOKENS": "32000", "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "64000"}}\n' > "${HOME}/.claude/settings.json"
+  run bash "${BATS_TEST_DIRNAME}/../../setup/capture.sh"
+  [ "$status" -eq 0 ]
+  grep -q MAX_THINKING_TOKENS "${CLAUDE_SKILLS_HOME}/templates/user-settings.json"
+}
+
+@test "capture.sh normalises HOME and keeps only allowlisted settings keys" {
+  cat > "${HOME}/.claude/settings.json" <<EOF
+{
+  "statusLine": {"type": "command", "command": "bash ${HOME}/.claude/hooks/status.sh"},
+  "apiKeyHelper": "${HOME}/bin/print-key",
+  "effortLevel": "max"
+}
+EOF
+  run bash "${BATS_TEST_DIRNAME}/../../setup/capture.sh"
+  [ "$status" -eq 0 ]
+  out="${CLAUDE_SKILLS_HOME}/templates/user-settings.json"
+  grep -qF 'bash $HOME/.claude/hooks/status.sh' "${out}"
+  ! grep -qF "${HOME}" "${out}" || false
+  ! grep -q apiKeyHelper "${out}" || false
+  grep -q '"effortLevel": "max"' "${out}"
+}
