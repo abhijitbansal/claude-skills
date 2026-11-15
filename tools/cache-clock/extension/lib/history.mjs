@@ -3,7 +3,7 @@
 
 import { classifyCall, extraUsd, isMainInteraction, lostTokens, normalizeUsage } from "./usage.mjs";
 import { tokens, usd } from "./format.mjs";
-import { createPingLedger, looksLikePing } from "./keepwarm.mjs";
+import { createPingLedger } from "./keepwarm.mjs";
 
 const NANO_AIU_PER_USD = 1e11;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -41,7 +41,7 @@ export function parseSessionLog(text) {
     const raw = event.data?.usage;
     const call = normalizeUsage(raw, event.timestamp);
     if (!call) continue;
-    const ping = agentKey === "main" && isMainInteraction(call) && ledger.onUsage(looksLikePing(call));
+    const ping = agentKey === "main" && isMainInteraction(call) && ledger.onUsage();
     calls.push({ agentKey, call, ping, epoch: epochs.get(agentKey) ?? 0, nanoAiu: raw.copilotUsage?.totalNanoAiu ?? 0 });
   }
   return { calls, checkpoint, badLines, lastAt };

@@ -110,6 +110,7 @@ expired exactly when Copilot said it would. The question form was checked live o
     /cache-clock keepwarm off
     /cache-clock keepwarm budget 0.50   stop after $0.50 of pings in one window, 0 to 5
     /cache-clock keepwarm payback off   keep pinging after pings cost more than one cold rewrite
+    /cache-clock keepwarm daily 2.00    most the pings of one session may cost in any 24 hours, 0.10 to 20
 
 Settings live in `~/.copilot/cache-clock/config.json` and apply to every session
 (`CACHE_CLOCK_HOME` moves that directory). The heads-up has its own switch: it keeps
@@ -220,50 +221,75 @@ A live check is pending; this section changes with its result (see "Live check" 
   report's statistics, and its cost shows as keep-warm spend. While a ping is in flight, the
   prompt hook treats text that contains the marker (or equals the display text) as the ping,
   because the host may hand the hook either; at any other time the same text is an ordinary
-  prompt that you typed or pasted, and it is guarded and restarts the window like any other.
+  prompt that you typed or pasted, and it is guarded like any other.
+- **A window starts only on a confirmed real user turn.** That is a `user.message` event whose
+  source is the user (not the system, not our ping), or, on a host that sends no `user.message`,
+  a `turn_start` that our own send does not explain (no ping out, none sent within the last cache
+  lifetime). Prompt-hook text alone never starts or restarts a window, whatever it says. A confirmed
+  turn that arrives while a ping is out starts its window when the ping is done; nothing is ever
+  reset by a ping. On a host with no `user.message` that keeps pinging, the window therefore
+  restarts only after pinging has stopped or the session has been idle for a cache lifetime.
 - **Turning it on.** `/cache-clock keepwarm on` keeps warm for 3 hours after your last real
   message. `keepwarm <hours>` takes 0 to 12. Above 6 it shows the estimated cost and asks
   first; where the host cannot ask, or the question fails, nothing is saved and the reply says
   to repeat it as `/cache-clock keepwarm <hours> yes` (that form is accepted only above 6
-  hours). Each real message restarts the window, except while a ping is out: then its window
-  starts when the ping is done, so a window is never reset by a ping.
+  hours). Turning it off keeps the stored window as it is: turning it on again resumes that same
+  window, and a stopped window (budget, failure, daily limit) stays stopped until a confirmed user turn.
 - **The setting is global; the window is not.** The setting is saved for every session. Each
   open session gets its own window, its own budget and its own pings, so two open sessions
-  cost twice. The card, the help and the confirmation all say so.
+  cost twice. The card, the help and the confirmation all say so. Only one process per session
+  keeps keep-warm state (the one holding the session's lock); another process of the same session
+  shows "handled by another process" on its card, plans nothing, starts no window and sends nothing.
+  If the holder dies, the next process to look takes over its stored window and ledger as they are,
+  not a new window or budget.
 - **When it stops, by itself, for the rest of the window.** Each stop is one line with the
-  spend; the next real message starts a new window. The stops are: payback (pings have cost
+  spend; a confirmed user turn starts a new window. The stops are: payback (pings have cost
   as much as the cold rewrite they avoid; `keepwarm payback off` turns this one off), the
-  budget (`keepwarm budget`, $0.50 by default, 0 to 5), the window end, and the ping limit
-  for the window. Anything keep-warm cannot measure or recognise also stops it: a ping that
-  came back cold, a reply that did not move the cache expiry forward, a ping's turn that ended
-  with no usage for it, a send that failed or got no reply in 2 minutes (it may have gone out,
-  so it is not retried), and a cache with under 15 seconds left (too late for a ping to land).
-- **Hard limits that do not depend on cost.** Pings are never closer together than the cache
-  lifetime minus the lead (at least 60 s), and a window never sends more than
-  ceil(window length / that gap) + 1 pings. The budget check uses the larger of the estimate
-  and the cost of the last ping that was measured.
+  budget (`keepwarm budget`, $0.50 by default, 0 to 5), the window end, the ping limit for the
+  window, and the daily limit (below). Anything keep-warm cannot measure or recognise also stops it:
+  a ping that came back cold, a reply that did not move the cache expiry forward, a ping's turn that
+  ended with no usage for it, a send that failed or got no reply in 2 minutes (it may have gone out,
+  so it is not retried), a cache with under 15 seconds left, a model change or a compaction while a
+  ping was out, and a ledger that cannot be written.
+- **Hard limits that do not depend on cost, events or windows.** Pings are never closer together
+  than the cache lifetime minus the lead (at least 60 s), and a window never sends more than
+  ceil(window length / that gap) + 1 pings. The window's end is the earlier of its stored end and its
+  start plus the current `keepWarmHours`, read at every plan: lowering the hours (here or in the
+  file) shortens a running window; raising them applies from the next window. The budget check uses
+  the larger of the estimate and the cost of the last ping that was measured.
+- **The daily ledger: what bounds a session whatever the host sends.** Every ping is written to a
+  per-session ledger in the shared store at send time (at its estimate; the measured cost replaces
+  it when usage arrives, and a ping nobody answered stays at the estimate). Before any send, keep-warm
+  refuses when the session's pings in the last 24 hours reach twice the ping cap of a 12-hour window
+  for the current lifetime (362 at a 5-minute cache), or when their cost plus the next ping would pass
+  `keepWarmDailyMaxUsd` (default $2.00; `/cache-clock keepwarm daily 2.00`, 0.10 to 20). It stops
+  with `daily-limit`. Only the passage of time removes entries: a new window, off and on, a reload or
+  another process do not.
 - **When it holds off (it does not stop; it waits).** A turn is running, or you just submitted
-  a prompt whose turn has not started; a question card is open (after one cache lifetime the log
-  and the card say keep-warm is waiting on an open question); the context is above 85% of the
-  model's prompt limit; the selected model is not the one that was warmed; the selection is Auto;
-  the model's price is unknown; another process holds this session's lock; the cache is cold or
-  its state unknown. The card shows the last reason in words.
-- **Heads-up.** The heads-up before expiry stays quiet only while keep-warm will really ping.
-  When keep-warm is on but cannot ping (any hold above, or stopped), the heads-up works as before.
+  a prompt whose turn has not started (it looks again when that flag expires); a question card is open
+  (after one cache lifetime the log, and in VS Code a card, say keep-warm is waiting on an open
+  question); the context is above 85% of the model's prompt limit; the selected model is not the one
+  that was warmed; the selection is Auto; the model's price is unknown; another process holds this
+  session's lock; the cache is cold or its state unknown. The card shows the last reason in words.
+- **Heads-up.** The heads-up before expiry stays quiet only while a ping is really planned or out.
+  When keep-warm is on but nothing will ping (any hold above, a stop, a question open), the heads-up
+  works as before.
 - **Spend.** Read from the ping's own usage event, `copilotUsage.totalNanoAiu` (nano-AIU
   ÷ 1e11 = dollars); every model call inside the ping's turn counts, and the ping itself once.
-  A ping whose usage still arrives within 10 minutes of the 2-minute watchdog has its cost added
-  to the total. A ping whose cost is not reported stops keep-warm.
+  A ping whose usage still arrives within 10 minutes of the 2-minute watchdog, or after its idle,
+  has its cost added to the total. A ping whose cost is not reported stops keep-warm. A usage record
+  that arrives after a prompt was typed since the last send is booked as a call, not a late ping.
 - **Reloads and two processes.** The window, its spend, the time of the last send and any stop
   are stored in `~/.copilot/cache-clock/keepwarm/<sha256 of the session id>.json`, so a reloaded
   extension resumes them instead of starting a fresh budget. A `.lock` file beside it lets only
   one process per session ping. It is created whole (a hard link to a finished file), a crashed
   holder's lock is replaced by renaming a finished file over it, and the pid is confirmed again
-  before every ping. Turning keep-warm off forgets the stored window, so turning it on later,
-  live or in a new session, starts the same fresh window from your last real message (or waits for
-  your next one if that was longer ago than the window).
-- **Notes.** In VS Code a stop note is a plain note in its log, not an error box; the card shows
-  the state.
+  before every ping. A session started with keep-warm on and no stored window derives one from your
+  last real message, exactly as turning it on live does (or waits for your next message if that was
+  longer ago than the window).
+- **Notes.** Stop notes and the stalled-question note reach VS Code's chat as a card where the host
+  can ask; where it cannot they are warnings in its log, never error boxes. The card shows the state
+  either way.
 - **Estimated cost, 200,000-token context.** Computed from `keepWarmEstimate` with the list
   prices in `test/fixtures.mjs`, not measured on a bill:
 

@@ -196,7 +196,7 @@ test("a pasted marker at the start or in the middle of a real prompt is a real c
   }
 });
 
-test("a user message between the ping message and the ping's record does not turn the ping into a real call", () => {
+test("a user message between the ping message and the ping's record: the record is booked as a call, never as a ping", () => {
   const msg = (o) => JSON.stringify({ type: "user.message", timestamp: iso(T0), data: o });
   const s = { model: "claude-sonnet-5.5", ttl: 300 };
   const log = [record(T0, { ...s, input: 100_000, read: 0, write: 100_000 }),
@@ -205,8 +205,7 @@ test("a user message between the ping message and the ping's record does not tur
     record(T0 + 4 * MIN, { ...s, input: 100_000, read: 100_000, write: 0, output: 0, nanoAiu: 2e9 }),
     record(T0 + 5 * MIN, { ...s, input: 101_000, read: 100_000, write: 1000 })].join("\n");
   const sum = summarize([{ id: "order", ...parseSessionLog(log) }]);
-  assert.deepEqual([sum.models[0].calls, sum.pings], [2, 1]);
-  assert.ok(Math.abs(sum.keepWarmUsd - 0.02) < 1e-12);
+  assert.deepEqual([sum.models[0].calls, sum.pings], [3, 0], "a record is the ping's only if it comes before any later user message");
 });
 
 test("a ping message with no usage does not make the next user call a ping", () => {
@@ -218,6 +217,17 @@ test("a ping message with no usage does not make the next user call a ping", () 
     record(T0 + 4 * MIN, { ...s, input: 101_000, read: 100_000, write: 1000, output: 400 })].join("\n");
   const sum = summarize([{ id: "no-usage", ...parseSessionLog(log) }]);
   assert.deepEqual([sum.models[0].calls, sum.pings], [2, 0], "the user's call is a call");
+});
+
+test("the first record after a ping message is the ping's whatever its size, and only that one", () => {
+  const msg = (o) => JSON.stringify({ type: "user.message", timestamp: iso(T0), data: o });
+  const s = { model: "claude-sonnet-5.5", ttl: 300 };
+  const log = [record(T0, { ...s, input: 100_000, read: 0, write: 100_000 }),
+    msg({ content: "cache-clock keep-warm", transformedContent: "[cache-clock:keepwarm] Reply with exactly: .", source: "system" }),
+    record(T0 + 4 * MIN, { ...s, input: 100_000, read: 100_000, write: 0, output: 900, nanoAiu: 2e9 }),
+    record(T0 + 5 * MIN, { ...s, input: 101_000, read: 100_000, write: 1000, output: 5 })].join("\n");
+  const sum = summarize([{ id: "size", ...parseSessionLog(log) }]);
+  assert.deepEqual([sum.models[0].calls, sum.pings], [2, 1], "a 900-token ping is a ping and a later 5-token record is a call");
 });
 
 test("report CLI reads a session-state directory and prints JSON", () => {

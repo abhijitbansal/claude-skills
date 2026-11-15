@@ -74,6 +74,10 @@ const STOP_TEXT = {
   "not-refreshing": "a ping did not move the cache expiry forward, so pinging is not keeping this cache warm",
   "ping-cap": "the ping limit for this window was reached",
   "too-late": "the cache was about to expire before a ping could refresh it",
+  "daily-limit": "the daily limit for this session's pings was reached",
+  "model-changed": "the selected model changed while a ping was out",
+  compacted: "the conversation was compacted while a ping was out",
+  "ledger-failed": "the ping ledger could not be written, so the daily limit cannot be enforced",
   unmeasured: "a ping's cost was not reported, so the budget cannot be enforced",
 };
 
@@ -100,7 +104,7 @@ const GLOBAL_NOTE = "the setting is global: every open session runs its own wind
 /** The reply after the keep-warm settings were saved. */
 export function keepWarmSaved(config) {
   if (!(config.keepWarmHours > 0)) return `${NAME}: keep-warm: off (saved for all sessions)`;
-  return `${NAME}: keep-warm: ${config.keepWarmHours}h after your last message · budget ${usd(config.keepWarmMaxUsd)} · payback stop ${config.keepWarmPayback ? "on" : "off"} (saved for all sessions; each open session runs its own window and budget)`;
+  return `${NAME}: keep-warm: ${config.keepWarmHours}h after your last message · budget ${usd(config.keepWarmMaxUsd)} · payback stop ${config.keepWarmPayback ? "on" : "off"} · daily limit ${usd(config.keepWarmDailyMaxUsd)} (saved for all sessions; each open session runs its own window and budget)`;
 }
 
 /** The cost question shown before a long keep-warm window is saved. `estimate` is keepWarmEstimate's result. */
@@ -119,6 +123,7 @@ function keepWarmLine(config, keepWarm) {
     const idle = lastSkip ? ` · last skip: ${lastSkip}${why}` : "";
     return `on · ${duration(msLeft)} left · ${pings(count)} · ${usd(spent)}${idle}${waitingOnQuestion ? " · waiting on an open question" : ""}`;
   }
+  if (state === "elsewhere") return "handled by another process of this session (it keeps the window and the budget)";
   if (state === "stopped") return `stopped (${stopped}) · ${pings(count)} · ${usd(spent)}`;
   return `on (${config.keepWarmHours}h) · starts after your next message`;
 }
@@ -200,6 +205,7 @@ export const HELP = [
   "  /cache-clock keepwarm off",
   "  /cache-clock keepwarm budget 0.50   stop after $0.50 of pings in one window, 0 to 5",
   "  /cache-clock keepwarm payback off   keep pinging after pings cost more than one cold rewrite",
+  "  /cache-clock keepwarm daily 2.00    most the pings of one session may cost in any 24 hours, 0.10 to 20",
   "  /cache-clock help            this text",
   "",
   "What cold sends already cost you, across every saved session:",

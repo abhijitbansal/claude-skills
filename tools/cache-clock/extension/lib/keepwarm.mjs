@@ -40,38 +40,23 @@ export function isPingMessage(data) {
   return source === "system" && data.content === PING_DISPLAY;
 }
 
-// The ping asks for one character back, so its record has almost no output. A record with more
-// is a real call, whatever message order says.
-export const PING_MAX_OUTPUT_TOKENS = 30;
-export const looksLikePing = (call) => call.outputTokens <= PING_MAX_OUTPUT_TOKENS;
-
 /**
- * Tells which usage records of a session log belong to pings, by the order of its user messages
- * and the size of the record: a ping has one small record, a message typed while it ran must not
- * take it, and a ping message that never got a record must not claim the next user call.
- * Feed every root user message to `onMessage` and every main-conversation usage record to
- * `onUsage(looksLikePing(call))`, in log order.
+ * Tells which usage records of a session log belong to pings, by the order of events alone: a
+ * record is a ping's only if it is the first root record after the ping message and before any
+ * later user message. A ping message that never got a record claims nothing. Feed every root user
+ * message to `onMessage` and every main-conversation usage record to `onUsage`, in log order.
  */
 export function createPingLedger() {
-  const turns = []; // oldest first: { ping, used }
+  let armed = false; // a ping message was seen, with no record and no later user message since
   return {
     onMessage(data) {
-      turns.push({ ping: isPingMessage(data), used: false });
+      armed = isPingMessage(data);
     },
     /** True when this record is a ping's. */
-    onUsage(pingSized) {
-      // A real turn that has had its records and has a newer message behind it is over.
-      while (turns.length > 1 && !turns[0].ping && turns[0].used) turns.shift();
-      if (pingSized) {
-        const at = turns.findIndex((turn) => turn.ping);
-        if (at >= 0) {
-          turns.splice(at, 1);
-          return true;
-        }
-      }
-      const real = turns.find((turn) => !turn.ping);
-      if (real) real.used = true;
-      return false;
+    onUsage() {
+      const ping = armed;
+      armed = false;
+      return ping;
     },
   };
 }
@@ -89,6 +74,9 @@ export const MIN_GAP_FLOOR_MS = 60_000;
 // With less than this left on the cache, a ping cannot land before it expires.
 export const TOO_LATE_MS = 15_000;
 const HOUR_MS = 3_600_000;
+// The daily ping cap is this many times the cap of a 12 hour window, for the current cache lifetime.
+const DAILY_CAP_WINDOWS = 2;
+const DAILY_CAP_BASE_HOURS = 12;
 
 const isAmount = (v) => typeof v === "number" && Number.isFinite(v);
 const messageOf = (err) => err?.message ?? String(err);
@@ -120,9 +108,10 @@ function sessionSkip({ snapshot, config, window, session }) {
 }
 
 /** The first reason not to send the next ping once its time and price are known, or null. */
-function priceSkip({ snapshot, config, spend }) {
-  // Without a numeric budget and spend, "over budget" is never true: refuse rather than ping unbounded.
+function priceSkip({ snapshot, config, spend, daily, gap }) {
+  // Without a numeric budget, spend and ledger, "over budget" is never true: refuse rather than ping unbounded.
   if (!isAmount(config.keepWarmMaxUsd) || !isAmount(spend.usd)) return "invalid";
+  if (!isAmount(config.keepWarmDailyMaxUsd) || !isAmount(daily?.pings) || !isAmount(daily?.usd)) return "invalid";
   if (!isAmount(snapshot.warmUsd) || !isAmount(snapshot.extraUsd)) return "unpriced";
   // A ping that cost more than the estimate says what the next one will cost.
   const perPing = Math.max(snapshot.warmUsd, isAmount(spend.lastUsd) ? spend.lastUsd : 0);
@@ -130,15 +119,19 @@ function priceSkip({ snapshot, config, spend }) {
   if (after > config.keepWarmMaxUsd + USD_EPSILON) return "budget";
   // Pings must stay cheaper than the one cold rewrite they exist to avoid.
   if (config.keepWarmPayback && after > snapshot.extraUsd + USD_EPSILON) return "payback";
+  // The backstop no window, setting or event can reset: the last 24 hours of this session's pings.
+  const dailyCap = DAILY_CAP_WINDOWS * (Math.ceil((DAILY_CAP_BASE_HOURS * HOUR_MS) / gap) + 1);
+  if (daily.pings >= dailyCap || daily.usd + perPing > config.keepWarmDailyMaxUsd + USD_EPSILON) return "daily-limit";
   return null;
 }
 
 /**
  * Decides whether and when to send the next keep-warm ping.
  * Returns { at } (ms) or { skip } naming the first reason not to. Limits that do not depend on
- * cost: a minimum gap since the last send, no ping with under 15 s left, and a cap on pings per window.
+ * cost: a minimum gap since the last send, no ping with under 15 s left, a cap on pings per window,
+ * and `daily` ({ pings, usd } of the last 24 hours, from the ledger) against the daily limits.
  */
-export function planPing({ snapshot, config, window, spend, session, now }) {
+export function planPing({ snapshot, config, window, spend, daily, session, now }) {
   const early = sessionSkip({ snapshot, config, window, session });
   if (early) return { skip: early };
   const lifetime = lifetimeOf(snapshot);
@@ -150,7 +143,7 @@ export function planPing({ snapshot, config, window, spend, session, now }) {
   if (at > window.endsAt) return { skip: "window-ended" };
   const cap = isAmount(window.startedAt) ? Math.ceil((window.endsAt - window.startedAt) / gap) + 1 : Infinity;
   if (spend.pings >= cap) return { skip: "ping-cap" };
-  const priced = priceSkip({ snapshot, config, spend });
+  const priced = priceSkip({ snapshot, config, spend, daily, gap });
   return priced ? { skip: priced } : { at };
 }
 
@@ -163,94 +156,186 @@ export const LATE_REPLY_MS = 10 * 60_000;
 const TAIL_MS = IN_FLIGHT_TIMEOUT_MS;
 // A timer that wakes this much early still sends; one that finds the plan further out re-plans.
 const FIRE_TOLERANCE_MS = 1000;
+// A process that does not hold the session lock looks again this often, so a dead holder is replaced.
+const OWNER_RETRY_MS = 60_000;
 // With no known cache lifetime, an open question is called a stall after this long.
 const QUESTION_STALL_FALLBACK_MS = 5 * 60_000;
+// A ping sent less than a cache lifetime ago explains a turn start that nobody typed.
+const RECENT_FALLBACK_MS = 5 * 60_000;
 // Stops that mean something is wrong, not just that the window is over.
-const WARN_STOPS = new Set(["cold-reply", "send-failed", "unmeasured", "not-refreshing"]);
+const WARN_STOPS = new Set(["cold-reply", "send-failed", "unmeasured", "not-refreshing", "ledger-failed", "model-changed", "compacted"]);
 // Planner skips that end the window, and the stop reason each is recorded as.
 const SKIP_STOPS = {
   payback: "payback", budget: "budget", "window-ended": "window-end", "too-late": "too-late", "ping-cap": "ping-cap",
+  "daily-limit": "daily-limit",
 };
+
+/** The window's end under the current hours: lowering the hours shortens a running window, raising never extends it. */
+const windowEnd = (w, hours) => (isAmount(w?.startedAt) ? Math.min(w.endsAt, w.startedAt + hours * HOUR_MS) : w?.endsAt);
 
 /**
  * The keep-warm scheduler. Everything outside is injected: `send()` sends one ping,
- * `read()` returns { snapshot, config, session }, `store` keeps the window and the lock,
- * `now`, `setTimer`, `clearTimer` and `log(text, "info" | "warn")` are the host's, and
- * `onPlanChange()` hears when whether it will ping has changed. It holds at most one plan timer;
- * every re-plan starts from a fresh `read()`.
+ * `read()` returns { snapshot, config, session }, `store` keeps the window, the lock and the ping
+ * ledger, `now`, `setTimer`, `clearTimer` and `log(text, "info" | "warn")` are the host's, and
+ * `onPlanChange()` hears when whether it will ping has changed.
+ *
+ * Only the process that holds the session's lock keeps any state: another process plans nothing,
+ * starts no window and sends nothing, and a process that takes over a dead holder's lock adopts the
+ * stored window and ledger as they are. It holds at most one plan timer; every re-plan starts from
+ * a fresh `read()`. A window starts only through `onUserTurn`, which callers invoke for a confirmed
+ * real user turn and for nothing else.
  */
 export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, log, onPlanChange = null }) {
   let window = null;
+  let owner = false;
   let timer = null;
+  // What the plan timer is for: "ping" (a ping is planned), "retry" (look for the lock again),
+  // "pending" (a submitted prompt's flag expires) or "stall" (an open question is called a stall).
+  let timerKind = null;
   let watchdog = null;
-  // The ping that is out: { id, expiryBefore, rejected }. Ends with its usage, a failure or a stop.
+  // The ping that is out: { id, sentAt, expiryBefore, ttlBefore, rejected }. Ends with its usage, a failure or a stop.
   let flight = null;
   let sendId = 0;
   let failures = 0;
-  // Pings the watchdog gave up on, and until when a reply to them is still believed.
-  let lateOwed = 0;
+  // Send times of pings the watchdog gave up on, and until when a reply to them is still believed.
+  let lateQueue = [];
   let lateUntil = 0;
-  // Until when further calls inside the answered ping's turn still count toward its spend.
+  // The latest ping whose turn may still add calls: { at, usd }, and until when.
+  let lastPing = null;
   let tailUntil = 0;
-  // A real message typed while a ping was out: its window starts when the ping is done.
+  // A confirmed real turn that arrived while a ping was out: its window starts when the ping is done.
   let pendingTurnAt = null;
   let lastSkip = null;
-  // Until when a refused lock is not retried: a replan in between keeps saying why it is idle.
-  let lockedUntil = 0;
   let questionSince = null;
   let stalled = false;
-  let saveWarned = false;
-  let lockWarned = false;
+  const warned = new Set();
   let holdsLock = false;
   let closed = false;
 
+  const hoursOn = () => read().config.keepWarmHours > 0;
   const spend = () => ({ usd: window?.usd ?? 0, pings: window?.pings ?? 0, lastUsd: window?.lastPingUsd ?? null });
-  const planNow = ({ snapshot, config, session }) => planPing({ snapshot, config, window, spend: spend(), session, now: now() });
   const changed = () => onPlanChange?.();
-  const lateReplyOpen = () => lateOwed > 0 && now() < lateUntil;
+  const lateReplyOpen = () => lateQueue.length > 0 && now() < lateUntil;
   const tailOpen = () => now() < tailUntil;
-  const clearAll = () => {
+  const warnOnce = (key, text) => {
+    if (warned.has(key)) return;
+    warned.add(key);
+    log(text, "info");
+  };
+
+  // The ledger lives in the store; a store with none (a test double) gets one in memory.
+  const memoryLedger = new Map();
+  const ledgerSend = (at, usd) => (store.ledgerSend ? store.ledgerSend(at, usd) : memoryLedger.set(at, usd));
+  const ledgerCost = (at, usd) => {
+    try {
+      if (store.ledgerCost) store.ledgerCost(at, usd);
+      else memoryLedger.set(at, usd);
+    } catch (err) {
+      warnOnce("ledger-cost", `cache-clock: could not record a ping's cost in the keep-warm ledger (${err.message}); it stays at its estimate.`);
+    }
+  };
+  /** { pings, usd } of the last 24 hours, or null when the ledger cannot be read (the planner then refuses). */
+  function dailySummary() {
+    try {
+      if (store.ledger) return store.ledger(now());
+      const live = [...memoryLedger].filter(([at]) => at >= now() - 24 * HOUR_MS);
+      return { pings: live.length, usd: live.reduce((sum, [, usd]) => sum + usd, 0) };
+    } catch (err) {
+      warnOnce("ledger-read", `cache-clock: could not read the keep-warm ledger (${err.message}); not pinging.`);
+      return null;
+    }
+  }
+
+  const planNow = ({ snapshot, config, session }) => planPing({
+    snapshot, config, session, now: now(), spend: spend(), daily: dailySummary(),
+    window: window && { ...window, endsAt: windowEnd(window, config.keepWarmHours) },
+  });
+
+  const clearPlanTimer = () => {
     clearTimer(timer);
-    clearTimer(watchdog);
     timer = null;
+    timerKind = null;
+  };
+  const setPlanTimer = (at, kind) => {
+    clearTimer(timer);
+    timer = setTimer(onTimer, Math.max(0, at - now()));
+    timerKind = kind;
+  };
+  const clearAll = () => {
+    clearPlanTimer();
+    clearTimer(watchdog);
     watchdog = null;
   };
 
-  /** Writes the window; a failing store is reported once and keep-warm carries on from memory. */
+  /** Writes the window (the owner only); a failing store is reported once and keep-warm carries on from memory. */
   function persist() {
-    if (!window || !(read().config.keepWarmHours > 0)) return;
+    if (!owner || !window || window.placeholder || !hoursOn()) return;
     try {
       store.save(window);
     } catch (err) {
-      if (saveWarned) return;
-      saveWarned = true;
-      log(`cache-clock: could not save the keep-warm window (${err.message}); a reload may restart its budget.`, "info");
+      warnOnce("save", `cache-clock: could not save the keep-warm window (${err.message}); a reload may restart its budget.`);
     }
   }
 
-  /** Drops the window and its stored copy: turning keep-warm off is a fresh start, not a pause. */
-  function forget() {
+  const verifyOwner = () => {
+    try {
+      return store.lock() === true;
+    } catch (err) {
+      warnOnce("lock", `cache-clock: could not take the keep-warm lock (${err.message}); not pinging.`);
+      return false;
+    }
+  };
+
+  /** A window derived from the last real message, when it is still running and none is stored. */
+  function adoptLastCall() {
+    const { snapshot, config } = read();
+    const startedAt = snapshot?.lastRealCallAt ?? null;
+    if (startedAt === null) return;
+    const endsAt = startedAt + config.keepWarmHours * HOUR_MS;
+    if (endsAt <= now()) return; // too old: the window starts at the next message
+    window = { startedAt, endsAt, usd: 0, pings: 0, stopped: null };
+    persist();
+  }
+
+  /**
+   * True when this process holds the session lock. Taking it over also adopts what the previous holder
+   * stored (its window and its ledger), as they are; with none stored a window comes from the last real message.
+   */
+  function ensureOwner() {
+    if (owner) return true;
+    if (!hoursOn() || !verifyOwner()) return false;
+    owner = true;
+    holdsLock = true;
     window = null;
     try {
-      store.clear?.();
+      window = store.load();
     } catch (err) {
-      log(`cache-clock: could not clear the stored keep-warm window (${err.message}).`, "info");
+      log(`cache-clock: could not read the keep-warm window (${err.message}); starting a new one.`, "info");
     }
+    if (!window) adoptLastCall();
+    return true;
   }
 
-  const arm = (at) => {
-    clearTimer(timer);
-    timer = setTimer(onTimer, Math.max(0, at - now()));
-  };
+  function releaseOwnership() {
+    clearAll();
+    owner = false;
+    holdsLock = false;
+    window = null;
+    flight = null;
+    sendId += 1;
+  }
 
   function startWindow(at) {
     const hours = read().config.keepWarmHours;
-    window = { startedAt: at, endsAt: at + Math.max(0, hours) * HOUR_MS, usd: 0, pings: 0, stopped: null, lastSendAt: null, lastPingUsd: null };
+    window = {
+      startedAt: at, endsAt: at + Math.max(0, hours) * HOUR_MS, usd: 0, pings: 0, stopped: null,
+      lastSendAt: null, lastPingUsd: null, ...(hours > 0 ? {} : { placeholder: true }),
+    };
     failures = 0;
     persist();
   }
 
-  /** Starts the window a real message deferred while a ping was out; true when it did. */
+  /** Starts the window a confirmed turn deferred while a ping was out; true when it did. */
   function applyPendingTurn() {
     if (pendingTurnAt === null) return false;
     const at = pendingTurnAt;
@@ -271,7 +356,7 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     const lifetime = snapshot ? lifetimeOf(snapshot) : Number.NaN;
     const due = questionSince + (lifetime > 0 ? lifetime : QUESTION_STALL_FALLBACK_MS);
     if (now() < due) {
-      if (timer === null) arm(due);
+      if (timer === null) setPlanTimer(due, "stall");
       return;
     }
     stalled = true;
@@ -279,42 +364,38 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
   }
 
   function reschedule() {
-    clearTimer(timer);
-    timer = null;
-    if (closed || flight || window?.stopped) return;
+    clearPlanTimer();
+    if (closed) return;
+    if (hoursOn() && !ensureOwner()) {
+      lastSkip = "locked";
+      setPlanTimer(now() + OWNER_RETRY_MS, "retry");
+      changed();
+      return;
+    }
+    if (flight || window?.stopped) return;
     const fresh = read();
     const plan = planNow(fresh);
     lastSkip = "at" in plan ? null : plan.skip;
     trackQuestion(fresh);
-    if ("at" in plan && now() < lockedUntil) {
-      lastSkip = "locked";
-      arm(Math.max(plan.at, lockedUntil));
-    } else if ("at" in plan) arm(plan.at);
+    if ("at" in plan) setPlanTimer(plan.at, "ping");
     else if (SKIP_STOPS[plan.skip]) {
       stop(SKIP_STOPS[plan.skip]);
       return;
+    } else if (plan.skip === "busy" && !fresh.session.busy && fresh.session.pendingUntil > now()) {
+      // Only a submitted prompt that has not started holds it: look again when that flag expires.
+      setPlanTimer(fresh.session.pendingUntil, "pending");
     }
     changed();
   }
 
-  function tryLock() {
-    try {
-      const held = store.lock() === true;
-      holdsLock = holdsLock || held;
-      if (held) lockedUntil = 0;
-      return held;
-    } catch (err) {
-      if (!lockWarned) {
-        lockWarned = true;
-        log(`cache-clock: could not take the keep-warm lock (${err.message}); not pinging.`, "info");
-      }
-      return false;
-    }
-  }
-
   function onTimer() {
     timer = null;
+    timerKind = null;
     if (closed) return;
+    if (!owner) {
+      reschedule();
+      return;
+    }
     const fresh = read();
     const plan = planNow(fresh);
     if (!("at" in plan) || plan.at - now() > FIRE_TOLERANCE_MS) {
@@ -325,26 +406,35 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     const sent = window.lastSendAt;
     const gap = minGapMs(lifetimeOf(fresh.snapshot));
     if (isAmount(sent) && now() < sent + gap) {
-      arm(sent + gap);
+      setPlanTimer(sent + gap, "ping");
       return;
     }
-    if (!tryLock()) {
-      lastSkip = "locked";
-      lockedUntil = now() + leadMs(lifetimeOf(fresh.snapshot));
-      arm(lockedUntil);
-      changed();
+    // The pid is confirmed again before every ping: a process that lost the lock stops here.
+    if (!verifyOwner()) {
+      releaseOwnership();
+      reschedule();
       return;
     }
-    fire(fresh.snapshot.expiresAt);
+    fire(fresh.snapshot);
   }
 
-  /** Sends one ping. The attempt is on record before the send, whether or not it rejects. */
-  function fire(expiryBefore) {
+  /** Sends one ping. It is in the ledger, and the attempt on record, before the send, whether or not it rejects. */
+  function fire(snapshot) {
+    const sentAt = now();
+    const estimate = Math.max(snapshot.warmUsd, window.lastPingUsd ?? 0);
+    try {
+      ledgerSend(sentAt, estimate);
+    } catch (err) {
+      log(`cache-clock: could not write the keep-warm ledger (${err.message}).`, "info");
+      stop("ledger-failed");
+      return;
+    }
     sendId += 1;
     const id = sendId;
-    flight = { id, expiryBefore, rejected: null };
+    flight = { id, sentAt, expiryBefore: snapshot.expiresAt, ttlBefore: snapshot.ttlSec, rejected: null };
+    lastPing = { at: sentAt, usd: 0 };
     tailUntil = 0;
-    window = { ...window, lastSendAt: now() };
+    window = { ...window, lastSendAt: sentAt };
     persist();
     clearTimer(watchdog);
     watchdog = setTimer(() => failed(id), IN_FLIGHT_TIMEOUT_MS);
@@ -360,15 +450,20 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     changed();
   }
 
+  /** A ping nobody answered may still be answered later: its reply is expected, and counted, for a while. */
+  function openLate(sentAt) {
+    lateQueue.push(sentAt);
+    lateUntil = now() + LATE_REPLY_MS;
+  }
+
   /** The watchdog: no usage came for the ping in time. A late reply, if one comes, is still counted. */
   function failed(id) {
     if (!flight || flight.id !== id) return;
     const reason = flight.rejected ?? `no reply in ${IN_FLIGHT_TIMEOUT_MS / 1000}s`;
+    openLate(flight.sentAt);
     clearTimer(watchdog);
     watchdog = null;
     flight = null;
-    lateOwed += 1;
-    lateUntil = now() + LATE_REPLY_MS;
     failures += 1;
     log(`cache-clock: keep-warm ping failed (${reason}).`, "info");
     if (failures >= MAX_FAILED_SENDS) {
@@ -403,38 +498,22 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
       persist();
     }
     log(keepWarmStopped(reason, spend()), WARN_STOPS.has(reason) ? "warn" : "info");
-    // A real message typed while the ping was out starts its own, fresh window now.
+    // A confirmed turn typed while the ping was out starts its own, fresh window now.
     if (applyPendingTurn()) reschedule();
     else changed();
   }
 
-  /** A window derived from the last real message, when it is still running: the same fresh start live or on load. */
-  function adoptLastCall() {
-    const { snapshot, config } = read();
-    const startedAt = snapshot?.lastRealCallAt ?? null;
-    if (startedAt === null) return;
-    const endsAt = startedAt + config.keepWarmHours * HOUR_MS;
-    if (endsAt <= now()) return; // too old: the window starts at the next message
-    window = { startedAt, endsAt, usd: 0, pings: 0, stopped: null };
-    persist();
-  }
-
   function start() {
-    if (read().config.keepWarmHours > 0) {
-      try {
-        window = store.load();
-      } catch (err) {
-        log(`cache-clock: could not read the keep-warm window (${err.message}); starting a new one.`, "info");
-      }
-      if (!window) adoptLastCall();
-    }
+    if (hoursOn()) ensureOwner();
     reschedule();
   }
 
+  /** A confirmed real user turn: the only thing that starts or restarts a window. */
   function onUserTurn(at) {
     if (closed) return;
+    if (hoursOn() && !ensureOwner()) return;
     // A real message ends any claim on a timed-out ping's late reply.
-    lateOwed = 0;
+    lateQueue = [];
     tailUntil = 0;
     // While a ping is out nothing is reset or restarted: its window starts once the ping is done.
     if (flight) {
@@ -445,22 +524,27 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     reschedule();
   }
 
-  /** A window that has pinged, stopped or sent keeps its record; a bare one is derived afresh. */
-  const hasHistory = () => window && (window.pings > 0 || window.stopped || isAmount(window.lastSendAt));
-
   function configChanged() {
     if (closed) return;
-    const { config } = read();
-    if (!(config.keepWarmHours > 0)) {
-      clearTimer(timer);
-      timer = null;
-      lateOwed = 0;
+    if (!hoursOn()) {
+      // Off: nothing is planned, nothing is printed afterwards, and the stored window stays as it is.
+      clearPlanTimer();
+      clearTimer(watchdog);
+      watchdog = null;
+      flight = null;
+      sendId += 1;
+      lateQueue = [];
       tailUntil = 0;
-      if (window) forget();
+      pendingTurnAt = null;
       return;
     }
-    if (hasHistory()) {
-      window = { ...window, endsAt: window.startedAt + config.keepWarmHours * HOUR_MS };
+    if (!ensureOwner()) {
+      reschedule();
+      return;
+    }
+    if (window && !window.placeholder) {
+      // A window that started keeps its start, its spend and any stop; the hours can only shorten it.
+      window = { ...window, endsAt: windowEnd(window, read().config.keepWarmHours) };
       persist();
     } else {
       window = null;
@@ -469,30 +553,43 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     reschedule();
   }
 
-  const expiryMoved = () => {
-    const after = read().snapshot?.expiresAt;
-    return isAmount(after) && isAmount(flight.expiryBefore) && after > flight.expiryBefore;
-  };
+  /**
+   * Did the ping's reply move the cache expiry forward? Under an unchanged lifetime the expiry must
+   * be later than before; when the lifetime changed, the new expiry must be at least half a new
+   * lifetime past the send.
+   */
+  function expiryMoved() {
+    const snapshot = read().snapshot;
+    const after = snapshot?.expiresAt;
+    if (!isAmount(after) || !isAmount(flight.expiryBefore)) return false;
+    const ttlAfter = snapshot.ttlSec;
+    const lifetimeChanged = isAmount(ttlAfter) && isAmount(flight.ttlBefore) && ttlAfter !== flight.ttlBefore;
+    return lifetimeChanged ? after - flight.sentAt >= 0.5 * ttlAfter * 1000 : after > flight.expiryBefore;
+  }
 
-  /** Adds a ping's cost to the window: the first record of a ping counts it, later ones in its turn only add cost. */
-  function bookPing(phase, usd) {
+  /** Adds a ping's cost to the window and the ledger: the first record of a ping counts it, later ones in its turn only add cost. */
+  function bookPing(phase, usd, sentAt) {
     const base = window ?? { startedAt: now(), endsAt: now(), usd: 0, pings: 0, stopped: null };
     const tail = phase === "tail";
-    return { ...base, usd: base.usd + usd, pings: base.pings + (tail ? 0 : 1), lastPingUsd: tail ? (base.lastPingUsd ?? 0) + usd : usd };
+    if (tail) lastPing = { at: lastPing.at, usd: lastPing.usd + usd };
+    else if (phase === "flight") lastPing = { at: sentAt, usd };
+    const pingUsd = tail ? lastPing.usd : usd;
+    ledgerCost(sentAt, pingUsd);
+    return { ...base, usd: base.usd + usd, pings: base.pings + (tail ? 0 : 1), lastPingUsd: pingUsd };
   }
 
   function onPingUsage({ usd, warm }) {
-    if (closed) return;
+    if (closed || !owner || !hoursOn()) return;
     // A ping in flight owns the record; then the late reply of a timed-out ping; then the rest of an answered ping's turn.
     const phase = flight ? "flight" : lateReplyOpen() ? "late" : tailOpen() ? "tail" : null;
     if (!phase) return;
-    if (phase === "late") lateOwed -= 1;
+    const sentAt = phase === "flight" ? flight.sentAt : phase === "tail" ? lastPing.at : lateQueue.shift();
     if (usd === null || usd === undefined) {
       if (phase === "flight") stop("unmeasured");
       return;
     }
     const refreshed = phase !== "flight" || expiryMoved();
-    window = bookPing(phase, usd);
+    window = bookPing(phase, usd, sentAt);
     persist();
     if (phase === "flight") {
       // A host that sends usage but no idle: the ping ends with its usage.
@@ -517,7 +614,13 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
   /** `own`: this idle ends the ping's own turn, not a user's. A ping's turn that ends with no usage is unmeasured. */
   function onIdle(own = true) {
     if (closed) return;
+    if (!owner) {
+      reschedule();
+      return;
+    }
     if (flight && own) {
+      // Its usage may still arrive after the idle: it is then counted, though keep-warm has stopped.
+      openLate(flight.sentAt);
       stop("unmeasured");
       return;
     }
@@ -525,34 +628,52 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     reschedule();
   }
 
+  /** The model or the context changed: a ping that was out is stopped with its own reason, its reply still counted. */
+  function onContextChange(reason) {
+    if (closed || !owner) return;
+    if (flight) {
+      openLate(flight.sentAt);
+      stop(reason);
+      return;
+    }
+    reschedule();
+  }
+
   function onBusy() {
-    clearTimer(timer);
-    timer = null;
+    if (timerKind === "ping") clearPlanTimer();
   }
 
   function status() {
     const hours = read().config.keepWarmHours;
-    const ranOut = Boolean(window) && !window.stopped && now() > window.endsAt;
-    const state = !(hours > 0) ? "off" : !window ? "waiting" : window.stopped || ranOut ? "stopped" : "on";
+    const recent = read().snapshot;
+    const recentLifetime = recent && lifetimeOf(recent) > 0 ? lifetimeOf(recent) : RECENT_FALLBACK_MS;
+    const end = window ? windowEnd(window, hours) : null;
+    const ranOut = Boolean(window) && !window.stopped && now() > end;
+    let state = "off";
+    if (hours > 0) state = !owner ? "elsewhere" : !window || window.placeholder ? "waiting" : window.stopped || ranOut ? "stopped" : "on";
     const { usd, pings } = spend();
     return {
       state,
-      msLeft: window && !ranOut ? Math.max(0, window.endsAt - now()) : 0,
+      msLeft: window && !ranOut && (state === "on" || state === "stopped") ? Math.max(0, end - now()) : 0,
       usd,
       pings,
       lastSkip,
       // The window ran out while no timer was armed: say so without waiting for a re-plan.
-      stopped: window?.stopped ?? (ranOut ? "window-end" : null),
+      stopped: window?.stopped ?? (ranOut && state === "stopped" ? "window-end" : null),
       inFlight: flight !== null,
       awaitingReply: flight !== null || lateReplyOpen() || tailOpen(),
+      // A ping went out within a cache lifetime: a turn that starts now may be its own.
+      pingRecent: flight !== null || (isAmount(window?.lastSendAt) && now() - window.lastSendAt < recentLifetime),
       armed: timer !== null,
       waitingOnQuestion: stalled,
-      // Whether the heads-up should stay quiet: keep-warm is on and a ping is really coming.
-      willPing: state === "on" && lastSkip !== "locked" && (flight !== null || timer !== null || lastSkip === "busy"),
+      // Another process of this session holds the lock and keeps the window.
+      passive: state === "elsewhere",
+      // Whether the heads-up should stay quiet: keep-warm is on and a ping is really planned or out.
+      willPing: state === "on" && (flight !== null || timerKind === "ping"),
     };
   }
 
-  return { start, onUserTurn, onPingUsage, onIdle, onBusy, reschedule, configChanged, stop, status };
+  return { start, onUserTurn, onPingUsage, onIdle, onBusy, onContextChange, reschedule, configChanged, stop, status };
 }
 
 /** Pings the budget and the payback stop allow at the snapshot's price; Infinity when no cap applies. */

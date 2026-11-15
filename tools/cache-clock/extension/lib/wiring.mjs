@@ -7,7 +7,7 @@ import { createClock } from "./clock.mjs";
 import { configDir, createKeepWarmStore, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
 import { NOT_A_PROMPT, decide } from "./guard.mjs";
-import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, keepWarmEstimate, looksLikePing, looksLikePingText } from "./keepwarm.mjs";
+import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, keepWarmEstimate, looksLikePingText } from "./keepwarm.mjs";
 import { NANO_AIU_PER_USD, isMainInteraction, normalizeUsage } from "./usage.mjs";
 
 // The heads-up comes at most a fifth of the ttl before expiry.
@@ -56,7 +56,7 @@ const readSessionLog = (session) => readTail(join(session.workspacePath, "events
 // `assistant.usage` is ephemeral and not replayed on resume, and getEvents()
 // leaves out `session.usage_record`. The session's own events.jsonl keeps every
 // record with prices, so a resumed session starts with a known clock.
-function seed(clock, readHistory, session, select, resolveAuto, { onTruncated, onUnreadable }) {
+function seed(clock, readHistory, session, select, resolveAuto, { onTruncated, onUnreadable, onUserMessage }) {
   let text;
   try {
     // A string (test fakes) or { text, truncated } from readTail.
@@ -85,7 +85,10 @@ function seed(clock, readHistory, session, select, resolveAuto, { onTruncated, o
       busy = event.data?.sessionWasActive === true || event.data?.continuePendingWork === true;
     }
     if (!event.agentId && event.type === "assistant.turn_start") busy = true;
-    if (!event.agentId && event.type === "user.message") ledger.onMessage(event.data);
+    if (!event.agentId && event.type === "user.message") {
+      ledger.onMessage(event.data);
+      if (!isPingMessage(event.data)) onUserMessage();
+    }
     // `session.idle` is ephemeral and never persisted: a finished turn ends with
     // `assistant.turn_end`, and a closed session with `session.shutdown`.
     if (!event.agentId && (event.type === "session.idle" || event.type === "assistant.turn_end" || event.type === "session.shutdown")) busy = false;
@@ -96,7 +99,7 @@ function seed(clock, readHistory, session, select, resolveAuto, { onTruncated, o
     if (event.type !== "session.usage_record") continue;
     const call = mainCall({ ...event, data: event.data?.usage });
     if (!call) continue;
-    if (ledger.onUsage(looksLikePing(call))) clock.ingestPing(call);
+    if (ledger.onUsage()) clock.ingestPing(call);
     else clock.ingest(call);
   }
   return busy;
@@ -184,6 +187,10 @@ export async function attach({
     ownTurn: false,
     // Until when a submitted prompt, whose turn has not started yet, counts as busy.
     promptPendingUntil: 0,
+    // The host sends user.message for real turns: then a turn_start is never taken for a user's.
+    hostReportsUserMessage: false,
+    // A prompt reached the hook since our last send: a record that follows is the user's, not a late ping's.
+    promptSinceSend: false,
   };
   // Built once the session id is known; every use before then is a no-op.
   let keepWarm = null;
@@ -305,17 +312,18 @@ export async function attach({
   };
 
   async function onPrompt(input) {
-    // Our own keep-warm ping may fire this hook: never guard it, never count it as the user.
-    // The text alone proves nothing, since a user can type it: it counts only while a ping we sent is
-    // out, and then loosely, because the host may pass the display text or a transformed prompt.
-    if (keepWarm?.status().inFlight && looksLikePingText(input?.prompt)) return undefined;
-    if (NOT_A_PROMPT.test(String(input?.prompt ?? "").trimStart())) return undefined;
-    // From this moment a turn is about to start, on every host, before any timer is armed.
+    const text = String(input?.prompt ?? "");
+    const kw = keepWarm?.status();
+    // Our own keep-warm ping may fire this hook: never guard it, never count it as the user. The text
+    // alone proves nothing, since a user can type it: it counts only while a ping we sent is out, and
+    // then loosely, because the host may pass the display text or a transformed prompt. In a process
+    // that does not hold the session lock the ping is the other process's, so it always counts there.
+    if (looksLikePingText(text) && (kw?.inFlight || kw?.passive)) return undefined;
+    if (NOT_A_PROMPT.test(text.trimStart())) return undefined;
+    // From this moment a turn is about to start, on every host, before any timer is armed. Hook text
+    // never starts or restarts a keep-warm window: only a confirmed user turn does (confirmUserTurn).
     state.promptPendingUntil = now() + PROMPT_PENDING_MS;
-    // A real prompt restarts the keep-warm window, whatever the guard decides next.
-    quietly(() => keepWarm?.onUserTurn(now()), (err) => {
-      logOnce("keepwarm-turn", `cache-clock: keep-warm could not restart its window (${messageOf(err)}).`);
-    });
+    state.promptSinceSend = true;
     // Share the whole check, including asynchronous selection resolution.
     if (state.pendingPrompt) {
       const result = await state.pendingPrompt;
@@ -392,13 +400,18 @@ export async function attach({
   state.busy = seed(clock, readHistory, state.session, select, resolveAuto, {
     onTruncated: () => logOnce("history", `cache-clock: the session log is larger than ${MAX_HISTORY_BYTES / 1024 / 1024} MiB; read only its last ${MAX_HISTORY_BYTES / 1024 / 1024} MiB, so older calls are not in this session's tally.`),
     onUnreadable: (err) => logOnce("history-read", `cache-clock: could not read the session log (${messageOf(err)}); the clock starts at the next model call.`),
+    onUserMessage: () => { state.hostReportsUserMessage = true; },
   });
   state.refusedKey = loadRefusal(dir, state.session.sessionId, now());
   // Started only now, so a resumed session's clock is already in place when it first plans.
+  // In VS Code the chat shows only error boxes and question cards, so a keep-warm note (a stop, or a
+  // stalled question) reaches it as a card; where nothing can ask, it is a plain note in the log.
+  const notifyKeepWarm = (text, severity) => {
+    if (vsCode && canAsk(state.session)) show(text);
+    else say(text, severity === "warn" ? KEEPWARM_WARN : (vsCode ? undefined : { ephemeral: true }));
+  };
   keepWarm = buildKeepWarm({
-    state, snapshot, getConfig, now, timers, say,
-    // Plain notes: in VS Code they go to its log, not an error box in the chat.
-    infoLevel: vsCode ? undefined : { ephemeral: true },
+    state, snapshot, getConfig, now, timers, notify: notifyKeepWarm,
     onPlanChange: () => scheduleHeadsUp(),
     store: keepWarmStore(dir, state.session.sessionId),
   });
@@ -412,6 +425,15 @@ export async function attach({
     if (!awaiting) return;
     keepWarm.onPingUsage({ usd: call.nanoAiu === null ? null : call.nanoAiu / NANO_AIU_PER_USD, warm: kind === "warm" });
   };
+  /** A confirmed real user turn: the only thing that starts or restarts a keep-warm window. */
+  const confirmUserTurn = () => quietly(() => keepWarm.onUserTurn(now()), (err) => {
+    logOnce("keepwarm-turn", `cache-clock: keep-warm could not start its window (${messageOf(err)}).`);
+  });
+  /** The selected model or the conversation changed: a ping that is out stops with its own reason. */
+  const contextChanged = (reason) => {
+    keepWarm.onContextChange(reason);
+    scheduleHeadsUp();
+  };
   const trackRequest = (event, opened) => {
     const id = event.data?.requestId;
     if (event.agentId || id === undefined) return;
@@ -423,12 +445,12 @@ export async function attach({
   state.session.on("session.model_change", (event) => {
     if (event.agentId) return;
     select(event.data, true);
-    replan();
+    contextChanged("model-changed");
   });
   state.session.on("session.model_deselected", (event) => {
     if (event.agentId) return;
     select(null, true);
-    replan();
+    contextChanged("model-changed");
   });
   state.session.on("session.auto_mode_resolved", (event) => {
     // Not a selection change: Auto may resolve for the very send a question is open on.
@@ -442,13 +464,22 @@ export async function attach({
     if (ping) {
       state.pingOwed = true;
       state.ownTurn = true;
+      return;
     }
+    state.hostReportsUserMessage = true;
+    // A message from the user, not from the system and not ours, is a confirmed real turn.
+    if ((event.data?.source ?? "user") === "user") confirmUserTurn();
   });
   state.session.on("assistant.turn_start", (event) => {
     if (event.agentId) return;
     state.busy = true;
     // The user's turn has started; a ping's turn starting says nothing about a prompt still queued.
     if (state.turnSource !== "ping") state.promptPendingUntil = 0;
+    // A host that reports no user.message: a turn that is not our own send's is the user's turn.
+    if (!state.hostReportsUserMessage) {
+      const sent = keepWarm.status();
+      if (!sent.awaitingReply && !sent.pingRecent && !sent.passive) confirmUserTurn();
+    }
     keepWarm.onBusy();
   });
   state.session.on("session.idle", (event) => {
@@ -468,10 +499,12 @@ export async function attach({
     const call = mainCall(event);
     if (!call) return;
     // A ping in flight, or one the watchdog gave up on that may still be answered.
-    const awaiting = keepWarm.status().awaitingReply;
+    const { awaitingReply: awaiting, inFlight } = keepWarm.status();
+    // A prompt typed since the last send makes a record that arrives after the ping gave up the user's.
+    const typedSince = state.promptSinceSend && !inFlight && state.turnSource !== "ping";
     // A host that does not report user.message is told apart by the ping awaited. A message
     // typed after the ping's own message must not take the ping's record (pingOwed).
-    if ((state.pingOwed && awaiting) || state.turnSource === "ping" || (awaiting && state.turnSource !== "user")) {
+    if ((state.pingOwed && awaiting) || state.turnSource === "ping" || (awaiting && state.turnSource !== "user" && !typedSince)) {
       state.pingOwed = false;
       state.ownTurn = true;
       fileKeepWarmPing(call, awaiting);
@@ -484,7 +517,7 @@ export async function attach({
   state.session.on("session.compaction_complete", (event) => {
     if (event.agentId || !compacted(event)) return;
     clock.invalidate();
-    replan();
+    contextChanged("compacted");
   });
   state.session.on("session.shutdown", (event) => {
     if (!event.agentId) keepWarm.stop("shutdown");
@@ -500,9 +533,10 @@ export async function attach({
 }
 
 /** The keep-warm scheduler wired to this session's host, config and clock. */
-function buildKeepWarm({ state, snapshot, getConfig, now, timers, say, infoLevel, onPlanChange, store }) {
+function buildKeepWarm({ state, snapshot, getConfig, now, timers, notify, onPlanChange, store }) {
   const send = () => {
     state.turnSource = null;
+    state.promptSinceSend = false;
     const options = { prompt: PING_PROMPT, displayPrompt: PING_DISPLAY, source: "system", mode: "enqueue" };
     const { rpc } = state.session;
     // The rpc form can mark the request non-billable; the plain form has no such flag.
@@ -518,6 +552,7 @@ function buildKeepWarm({ state, snapshot, getConfig, now, timers, say, infoLevel
       session: {
         busy: state.busy,
         pendingPrompt: Boolean(state.pendingPrompt) || now() < state.promptPendingUntil,
+        pendingUntil: state.promptPendingUntil,
         questionOpen: state.openRequests.size > 0,
         selectedModel: state.selection?.modelId ?? null,
       },
@@ -528,7 +563,7 @@ function buildKeepWarm({ state, snapshot, getConfig, now, timers, say, infoLevel
       return timer;
     },
     clearTimer: (timer) => timers.clearTimeout(timer),
-    log: (text, severity) => say(text, severity === "warn" ? KEEPWARM_WARN : infoLevel),
+    log: notify,
     onPlanChange,
   });
 }
@@ -557,7 +592,7 @@ function headsUpScheduler({ state, selection, clock, now, timers, getConfig, say
   state.headsUpTimer?.unref?.();
 }
 
-const KEEPWARM_KEYS = ["keepWarmHours", "keepWarmMaxUsd", "keepWarmPayback"];
+const KEEPWARM_KEYS = ["keepWarmHours", "keepWarmMaxUsd", "keepWarmPayback", "keepWarmDailyMaxUsd"];
 const TURN_ON = "Turn on";
 const CANCEL = "Cancel";
 

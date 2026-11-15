@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { loadConfig } from "../extension/lib/config.mjs";
+import { createKeepWarmStore, loadConfig } from "../extension/lib/config.mjs";
 import { PING_DISPLAY, PING_PROMPT } from "../extension/lib/keepwarm.mjs";
 import { usage, pingUsage, T0, MIN } from "./fixtures.mjs";
 import { fakeHost, sonnet, iso, goCold, flush } from "./helpers/fake-host.mjs";
@@ -82,14 +82,15 @@ test("a ping's own prompt hook is never guarded, on a cache that has just gone c
 });
 
 // A user can type or paste the marker. Only our own in-flight ping is exempt; anything else is a prompt.
-test("a user prompt that carries the marker is an ordinary prompt: guarded, and it restarts the window", async () => {
+test("a user prompt that carries the marker is an ordinary prompt: guarded, and once the user's message arrives it restarts the window", async () => {
   for (const text of [PING_PROMPT, "[cache-clock:keepwarm] summarise the repo", "explain [cache-clock:keepwarm] to me"]) {
     const h = fakeHost({ config: KW, answer: "Don't send" });
     await goCold(h);
     assert.deepEqual(await h.prompt(text), { suppressOutput: true }, text);
     assert.deepEqual([h.aborts, h.asked.length], [1, 1], text);
+    h.emit("user.message", { content: text, source: "user" });
     await h.command("");
-    assert.match(lastLog(h), /keep-warm  on · 3h00m left/, `${text}: a real prompt restarts the window`);
+    assert.match(lastLog(h), /keep-warm  on · 3h00m left/, `${text}: the user's message starts the window`);
   }
 });
 
@@ -131,7 +132,9 @@ test("a message typed while a ping runs does not take the ping's usage", async (
   h.emit("session.idle", {});
   await h.command("");
   assert.match(lastLog(h), /session +2 model calls/);
-  assert.match(lastLog(h), /1 ping · \$0\.02/);
+  const ledger = createKeepWarmStore(h.dir, "s-1").ledger(h.now);
+  assert.deepEqual([ledger.pings, Math.round(ledger.usd * 100)], [1, 2], "the ping's record was booked as the ping's, in the ledger");
+  assert.match(lastLog(h), /0 pings/, "and the typed message's window started once the ping was done");
 });
 
 test("a ping's reply that arrives after the watchdog is still booked as a ping and its spend", async () => {
@@ -501,7 +504,7 @@ test("when keep-warm cannot ping because another process holds the lock, the hea
   assert.ok(h2.logs.some((l) => /goes cold in/.test(l.message)), "the process that cannot ping still warns");
   assert.ok(!h1.logs.some((l) => /goes cold in/.test(l.message)), "the pinging process does not");
   await h2.command("");
-  assert.match(lastLog(h2), /last skip: locked \(another process holds this session's keep-warm lock\)/);
+  assert.match(lastLog(h2), /keep-warm  handled by another process of this session/);
 });
 
 test("when keep-warm has stopped, the heads-up works again", async () => {
@@ -531,16 +534,6 @@ test("an open question that blocks pinging is said in the log and on the card, o
 // L7: plain notes in VS Code, and an honest message for an old window.
 const VS_CODE = { VSCODE_CANVAS_DATA_DIR: "/tmp/agentHostCanvasData/x" };
 
-test("in VS Code a keep-warm stop note is a plain note, not an error box", async () => {
-  const h = fakeHost({ env: VS_CODE, config: { ...KW, keepWarmMaxUsd: 0.04, keepWarmPayback: false } });
-  await h.start();
-  await h.turn();
-  await h.run(30 * MIN);
-  const note = h.logs.find((l) => /keep-warm stopped/.test(l.message));
-  assert.ok(note, "the stop was logged");
-  assert.notEqual(note.level, "error");
-});
-
 test("keepwarm on with an old last call says the window starts at the next message", async () => {
   const h = fakeHost();
   await h.start();
@@ -567,4 +560,232 @@ test("turning keep-warm on live and starting a session with it already on give t
   const keepWarmLine = (h) => lastLog(h).split("\n").find((l) => /^ {2}keep-warm/.test(l));
   assert.equal(keepWarmLine(reloaded), keepWarmLine(live));
   assert.match(keepWarmLine(live), /on · 3h00m left · 0 pings · \$0/);
+});
+
+// S1: a window starts only on a confirmed real user turn, never on prompt-hook text.
+for (const [label, text] of [["empty", ""], ["undefined", undefined], ["without the marker", "Reply with exactly: ."]]) {
+  test(`a slow ping turn whose hook text is ${label} never resets the window, the spend or the count`, async () => {
+    const h = fakeHost({ config: KW });
+    h.autoReply = false;
+    let pending = null;
+    h.session.rpc.send = async (params) => {
+      h.sent.push(params);
+      pending = (async () => {
+        await h.prompt(text);
+        h.emit("user.message", PING_MESSAGE);
+        h.emit("assistant.turn_start", {});
+        // The ping's turn takes 40 s, longer than the 30 s a submitted prompt counts as pending.
+        h.timerApi.setTimeout(() => {
+          h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+          h.emit("session.idle", {});
+        }, 40_000);
+      })();
+    };
+    await h.start();
+    await h.turn();
+    await h.run(12 * HOUR, 5000);
+    await pending;
+    assert.equal(h.sent.length, 24, "payback stops it at 24, as if the hook text had not been there");
+    await h.command("");
+    assert.match(lastLog(h), /stopped \(payback\) · 24 pings · \$0\.48/);
+  });
+}
+
+test("a hook prompt alone never starts a window; the user's message event does", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: iso(T0) }));
+  await h.prompt("a typed prompt");
+  await h.command("");
+  assert.match(lastLog(h), /keep-warm  on \(3h\) · starts after your next message/, "the hook text started nothing");
+  h.emit("user.message", { content: "a typed prompt", source: "user" });
+  await h.command("");
+  assert.match(lastLog(h), /keep-warm  on · 3h00m left/);
+  h.emit("user.message", { content: "system text", source: "system" });
+  h.now += 10 * MIN;
+  h.emit("user.message", { content: "from a system source", source: "system" });
+  await h.command("");
+  assert.match(lastLog(h), /keep-warm  on · 2h50m left/, "a message that is not the user's does not restart it");
+});
+
+test("a host with no user.message confirms a turn by a turn_start that is not our own send", async () => {
+  const h = fakeHost({ config: KW, emitUserMessage: false });
+  await h.start();
+  h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", sonnet({ at: iso(T0) }));
+  h.emit("session.idle", {});
+  await h.command("");
+  assert.match(lastLog(h), /keep-warm  on · 3h00m left/, "a first turn with no ping out starts the window");
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 1);
+  h.autoReply = false;
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 2);
+  h.emit("assistant.turn_start", {});
+  await h.command("");
+  assert.match(lastLog(h), /keep-warm  on · 2h52m left/, "a turn_start while our ping is out or just sent is not a user turn");
+});
+
+// M1: a user prompt typed during an unanswered ping, whose turn runs after the watchdog, is a real call.
+test("on a host with no user.message, a prompt typed during an unanswered ping is booked as a call when its turn runs after the watchdog", async () => {
+  const h = fakeHost({ config: KW, emitUserMessage: false });
+  h.autoReply = false;
+  await h.start();
+  h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", sonnet({ at: iso(T0) }));
+  h.emit("session.idle", {});
+  await h.run(4 * MIN + 10_000);
+  assert.equal(h.sent.length, 1);
+  await h.prompt("real message");
+  await h.run(2 * MIN + 10_000);
+  h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 190_000, write: 10_000, output: 400 }));
+  h.emit("session.idle", {});
+  await h.command("");
+  assert.match(lastLog(h), /session +2 model calls/);
+});
+
+// S3: only the lock holder keeps keep-warm state.
+test("two slow processes on one session: the lock holder's budget bounds both, and a new holder adopts it", async () => {
+  const A = fakeHost({ config: KW, pid: 1, alive: new Set([1, 2]) });
+  const B = fakeHost({ config: KW, dir: A.dir, pid: 2, alive: A.alive });
+  for (const h of [A, B]) h.autoReply = false;
+  const both = (fn) => { fn(A); fn(B); };
+  const sent = [];
+  const send = async (params) => {
+    sent.push(params);
+    await A.prompt(PING_PROMPT);
+    await B.prompt(PING_PROMPT);
+    both((h) => h.emit("user.message", PING_MESSAGE));
+    both((h) => h.emit("assistant.turn_start", {}));
+    A.timerApi.setTimeout(() => {
+      both((h) => h.emit("assistant.usage", pingUsage({ at: iso(h.now) })));
+      both((h) => h.emit("session.idle", {}));
+    }, 40_000);
+  };
+  A.session.rpc.send = B.session.rpc.send = send;
+  const ka = (await A.start()).keepWarm;
+  const kb = (await B.start()).keepWarm;
+  await A.prompt("go");
+  await B.prompt("go");
+  both((h) => h.emit("user.message", { content: "go" }));
+  both((h) => h.emit("assistant.turn_start", {}));
+  both((h) => h.emit("assistant.usage", sonnet({ at: iso(h.now) })));
+  both((h) => h.emit("session.idle", {}));
+  const step = async (ms) => { for (const end = A.now + ms; A.now < end;) { A.advance(5000); B.advance(5000); await flush(); } };
+  await step(60 * MIN);
+  assert.equal(kb.status().state, "elsewhere", "B keeps no window of its own");
+  assert.equal(kb.status().pings, 0);
+  const atDeath = sent.length;
+  assert.equal(atDeath, 13, "only A pinged (a 40 s ping turn stretches each gap to 280 s)");
+  A.alive.delete(1);
+  A.hostGone();
+  await step(6 * HOUR);
+  // B adopted A's window, spend and count, so payback ended the pair at 24 booked pings. A ping that was
+  // out when A died is in the ledger at its estimate but in no window, so at most one more went out.
+  assert.ok(sent.length === 24 || sent.length === 25, `24 booked pings, plus at most the one A died with: ${sent.length}`);
+  assert.equal(kb.status().stopped, "payback");
+  assert.equal(kb.status().pings, 24);
+  assert.equal(createKeepWarmStore(A.dir, "s-1").ledger(A.now).pings, sent.length, "the ledger counted every send");
+  assert.ok(ka.status().pings <= 15);
+});
+
+test("a process without the lock does not run the cold-send guard on ping text, and still guards real prompts", async () => {
+  const alive = new Set([1, 2]);
+  const A = fakeHost({ config: KW, pid: 1, alive });
+  const B = fakeHost({ config: KW, dir: A.dir, pid: 2, alive, answer: "Don't send" });
+  await A.start();
+  await goCold(B);
+  assert.equal(await B.prompt(PING_PROMPT), undefined);
+  assert.equal(await B.prompt(PING_DISPLAY), undefined);
+  assert.deepEqual([B.aborts, B.asked.length], [0, 0], "that text is the other process's ping");
+  assert.deepEqual(await B.prompt("a real question"), { suppressOutput: true }, "a real prompt is still guarded");
+});
+
+// N2: the window end follows the current hours.
+test("lowering keepWarmHours in the config file shortens a running window", async () => {
+  const h = fakeHost({ config: { ...KW, keepWarmHours: 12, keepWarmMaxUsd: 5, keepWarmPayback: false } });
+  await h.start();
+  await h.turn();
+  await h.run(10 * MIN);
+  const cfg = JSON.parse(readFileSync(join(h.dir, "config.json"), "utf8"));
+  writeFileSync(join(h.dir, "config.json"), JSON.stringify({ ...cfg, keepWarmHours: 1 }));
+  await h.run(3 * HOUR);
+  assert.ok(h.sent.length <= 15, `one hour allows 15 pings, not ${h.sent.length}`);
+  await h.command("");
+  assert.match(lastLog(h), /stopped \(window-end\)/);
+});
+
+// N3: the heads-up is never suppressed while nothing will ping.
+test("an open question blocks pinging, so the heads-up works", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  h.emit("user_input.requested", { requestId: "q1" });
+  await h.run(5 * MIN);
+  assert.equal(h.sent.length, 0);
+  assert.ok(h.logs.some((l) => /goes cold in/.test(l.message)), "the user is warned that the cache is about to go cold");
+});
+
+// M7: in VS Code the stop and stall notes reach the chat as a card, the one non-error channel there.
+test("in VS Code a keep-warm stop note and the question-stall note reach the chat as a card", async () => {
+  const h = fakeHost({ env: VS_CODE, answer: "OK", config: { ...KW, keepWarmMaxUsd: 0.04, keepWarmPayback: false } });
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  assert.ok(h.asked.some((q) => /keep-warm stopped: the keep-warm budget is spent/.test(q.message)), "the stop note is a card");
+  assert.ok(h.logs.every((l) => !/keep-warm stopped/.test(l.message)), "and not an error box");
+  const q = fakeHost({ env: VS_CODE, answer: "OK", config: KW });
+  await q.start();
+  await q.turn();
+  q.emit("elicitation.requested", { requestId: "r1" });
+  await q.run(20 * MIN);
+  assert.equal(q.asked.filter((x) => /waiting on an open question/.test(x.message)).length, 1, "the stall note is one card");
+});
+
+test("in VS Code with no way to ask, a keep-warm stop note is a warning in the log, never an error box", async () => {
+  const h = fakeHost({ env: VS_CODE, config: { ...KW, keepWarmMaxUsd: 0.04, keepWarmPayback: false } });
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  const note = h.logs.find((l) => /keep-warm stopped/.test(l.message));
+  assert.ok(note);
+  assert.notEqual(note.level, "error");
+});
+
+// A model change or compaction while a ping is out stops it with its own reason.
+test("a model change or a compaction while a ping is out stops keep-warm with its own reason", async () => {
+  const change = fakeHost({ config: KW });
+  change.autoReply = false;
+  const k1 = (await change.start()).keepWarm;
+  await change.turn();
+  await change.run(4 * MIN + 10_000);
+  change.emit("session.model_change", { newModel: "gpt-6-luna" });
+  assert.equal(k1.status().stopped, "model-changed");
+  const compact = fakeHost({ config: KW });
+  compact.autoReply = false;
+  const k2 = (await compact.start()).keepWarm;
+  await compact.turn();
+  await compact.run(4 * MIN + 10_000);
+  compact.emit("session.compaction_complete", { success: true });
+  assert.equal(k2.status().stopped, "compacted");
+});
+
+// S2 through the wiring: nothing the host sends can take a session past its daily limit.
+test("whatever the host sends, a session's pings stay inside the daily limit", async () => {
+  const h = fakeHost({ config: { ...KW, keepWarmMaxUsd: 5, keepWarmPayback: false, keepWarmDailyMaxUsd: 0.1 } });
+  await h.start();
+  await h.turn();
+  await h.run(3 * HOUR);
+  assert.equal(h.sent.length, 5, "$0.02 a ping: the sixth would pass $0.10 in 24 hours");
+  await h.turn();
+  await h.run(3 * HOUR);
+  assert.equal(h.sent.length, 5, "a new message starts a new window, not a new day");
+  await h.command("keepwarm off");
+  await h.command("keepwarm on");
+  await h.turn();
+  await h.run(3 * HOUR);
+  assert.equal(h.sent.length, 5, "off and on again does not either");
+  await h.command("");
+  assert.match(lastLog(h), /stopped \(daily-limit\)/);
 });

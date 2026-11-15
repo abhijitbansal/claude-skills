@@ -1,7 +1,7 @@
 // Settings shared by every session: guard mode, cost threshold, heads-up lead time,
 // and the keep-warm window, budget and payback stop.
 
-import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -9,12 +9,16 @@ import { MODES } from "./guard.mjs";
 
 export const DEFAULTS = Object.freeze({
   mode: "refuse", minUsd: 0.1, headsUpMin: 5, keepWarmHours: 0, keepWarmMaxUsd: 0.5, keepWarmPayback: true,
+  keepWarmDailyMaxUsd: 2,
 });
 
 export const KEEPWARM_ON_HOURS = 3;
 export const KEEPWARM_MAX_HOURS = 12;
 export const KEEPWARM_CONFIRM_ABOVE_HOURS = 6;
 export const KEEPWARM_MAX_USD = 5;
+// The most a session may spend on pings in any 24 hours, whatever its windows and budgets do.
+export const KEEPWARM_DAILY_MIN_USD = 0.1;
+export const KEEPWARM_DAILY_MAX_USD = 20;
 
 const FILE = "config.json";
 
@@ -33,6 +37,10 @@ const RULES = {
   keepWarmHours: { rule: `hours from 0 to ${KEEPWARM_MAX_HOURS}`, ok: (v) => isAmount(v) && v <= KEEPWARM_MAX_HOURS },
   keepWarmMaxUsd: { rule: `dollars from 0 to ${KEEPWARM_MAX_USD}`, ok: (v) => isAmount(v) && v <= KEEPWARM_MAX_USD },
   keepWarmPayback: { rule: "true or false", ok: (v) => typeof v === "boolean" },
+  keepWarmDailyMaxUsd: {
+    rule: `dollars from ${KEEPWARM_DAILY_MIN_USD.toFixed(2)} to ${KEEPWARM_DAILY_MAX_USD}`,
+    ok: (v) => isAmount(v) && v >= KEEPWARM_DAILY_MIN_USD && v <= KEEPWARM_DAILY_MAX_USD,
+  },
 };
 const KEYS = Object.keys(RULES);
 
@@ -171,6 +179,20 @@ export function pidAlive(pid) {
 }
 
 const isCount = (v) => Number.isInteger(v) && v >= 0;
+const LEDGER_KEEP_MS = 24 * 60 * 60 * 1000;
+const LEDGER_COMPACT_BYTES = 64 * 1024;
+
+/** One ledger line as { at, usd }, or null when it is not a valid send or cost. */
+function parseLedgerLine(line) {
+  if (!line) return null;
+  try {
+    const { t, at, usd } = JSON.parse(line);
+    return (t === "send" || t === "cost") && Number.isFinite(at) && Number.isFinite(usd) && usd >= 0 ? { at, usd } : null;
+  } catch {
+    return null;
+  }
+}
+
 const isOptionalAmount = (v) => v === undefined || v === null || (Number.isFinite(v) && v >= 0);
 
 /** The stored window with only its known fields, or null when any field is invalid. */
@@ -202,7 +224,7 @@ function lockHolder(file) {
  * Per-session keep-warm state under `<dir>/keepwarm/<sha256(sessionId)>.{json,lock}`.
  * `save` and `lock` can throw on a filesystem error; the scheduler decides what that means.
  */
-export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive = pidAlive } = {}) {
+export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive = pidAlive, ledgerCompactBytes = LEDGER_COMPACT_BYTES } = {}) {
   const valid = validSessionId(sessionId);
 
   function load() {
@@ -261,12 +283,59 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive
     if (valid && lockHolder(keepWarmFile(dir, sessionId, "lock")) === pid) rmSync(keepWarmFile(dir, sessionId, "lock"), { force: true });
   }
 
-  /** Forgets the stored window, as when keep-warm is turned off: the next on is a fresh start. */
-  function clear() {
-    if (valid) rmSync(keepWarmFile(dir, sessionId, "json"), { force: true });
+  // The ping ledger: one JSON line per send ("send": at, estimate) and per measured cost ("cost": at,
+  // usd), appended whole so processes sharing a session never overwrite each other. Only time removes
+  // entries: a new window, off and on, a reload or another process leave it alone.
+  const ledgerFile = () => keepWarmFile(dir, sessionId, "ledger");
+  const ledgerAppend = (entry) => {
+    if (!valid) return;
+    mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
+    appendFileSync(ledgerFile(), JSON.stringify(entry) + "\n", { mode: 0o600 });
+  };
+
+  /** The live ping entries as a Map of send time to dollars, last 24 hours before `now`. */
+  function ledgerEntries(now) {
+    const entries = new Map();
+    let text = "";
+    try {
+      text = readFileSync(ledgerFile(), "utf8");
+    } catch (err) {
+      if (err.code !== "ENOENT") throw err;
+    }
+    for (const line of text.split("\n")) {
+      const entry = parseLedgerLine(line);
+      if (entry && entry.at >= now - LEDGER_KEEP_MS) entries.set(entry.at, entry.usd);
+    }
+    return entries;
   }
 
-  return { load, save, lock, unlock, clear };
+  function ledger(now) {
+    if (!valid) return { pings: 0, usd: 0 };
+    const entries = ledgerEntries(now);
+    return { pings: entries.size, usd: [...entries.values()].reduce((sum, usd) => sum + usd, 0) };
+  }
+
+  function ledgerSend(at, usd) {
+    ledgerAppend({ t: "send", at, usd });
+    if (!valid) return;
+    // Past a size, rewrite the file without the entries that are 24 hours old: the only removal there is.
+    if (statSync(ledgerFile()).size > ledgerCompactBytes) compactLedger(at);
+  }
+
+  const ledgerCost = (at, usd) => ledgerAppend({ t: "cost", at, usd });
+
+  function compactLedger(now) {
+    const kept = [...ledgerEntries(now)].map(([at, usd]) => JSON.stringify({ t: "send", at, usd }));
+    const tmp = `${ledgerFile()}.${pid}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(tmp, kept.map((line) => line + "\n").join(""), { flag: "wx", mode: 0o600 });
+      renameSync(tmp, ledgerFile());
+    } finally {
+      rmSync(tmp, { force: true });
+    }
+  }
+
+  return { load, save, lock, unlock, ledger, ledgerSend, ledgerCost };
 }
 
 // Plain decimals only: Number() would also take 0x2, 1e-1 and Infinity.
@@ -278,7 +347,7 @@ function amount(text) {
   return isAmount(v) ? v : null;
 }
 
-const KEEPWARM_USAGE = `keepwarm takes on, off, hours from 0 to ${KEEPWARM_MAX_HOURS}, budget <dollars 0 to ${KEEPWARM_MAX_USD}>, or payback on|off`;
+const KEEPWARM_USAGE = `keepwarm takes on, off, hours from 0 to ${KEEPWARM_MAX_HOURS}, budget <dollars 0 to ${KEEPWARM_MAX_USD}>, daily <dollars>, or payback on|off`;
 const hoursPatch = (keepWarmHours) => ({ kind: "set", patch: { keepWarmHours } });
 
 /** `keepwarm` forms: on | off | <hours> | budget <usd> | payback on|off. `rest` is what follows the verb. */
@@ -289,6 +358,12 @@ function parseKeepWarm(rest) {
     return extra.length || v === null || v > KEEPWARM_MAX_USD
       ? { kind: "error", message: `keepwarm budget takes dollars from 0 to ${KEEPWARM_MAX_USD}, e.g. 0.50` }
       : { kind: "set", patch: { keepWarmMaxUsd: v } };
+  }
+  if (first === "daily") {
+    const v = amount(second);
+    return extra.length || v === null || v < KEEPWARM_DAILY_MIN_USD || v > KEEPWARM_DAILY_MAX_USD
+      ? { kind: "error", message: `keepwarm daily takes dollars from ${KEEPWARM_DAILY_MIN_USD.toFixed(2)} to ${KEEPWARM_DAILY_MAX_USD}, e.g. 2.00` }
+      : { kind: "set", patch: { keepWarmDailyMaxUsd: v } };
   }
   if (first === "payback") {
     return extra.length || !["on", "off"].includes(second)

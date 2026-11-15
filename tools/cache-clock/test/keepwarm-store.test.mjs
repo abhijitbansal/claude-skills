@@ -88,18 +88,6 @@ test("the window keeps the time of the last send and the cost of the last ping, 
   assert.equal(s.load(), null, "so is a negative ping cost");
 });
 
-test("clear removes the stored window and nothing else, and is safe to repeat", (t) => {
-  const dir = sandbox(t);
-  const s = createKeepWarmStore(dir, "s-1", { pid: 1, isAlive: () => true });
-  s.save(W);
-  assert.equal(s.lock(), true);
-  s.clear();
-  s.clear();
-  assert.equal(s.load(), null);
-  assert.equal(s.lock(), true, "the lock is left alone");
-  createKeepWarmStore(dir, null).clear();
-});
-
 test("two processes racing to take over a stale lock: one holds it after each confirms again, and no temp files are left", (t) => {
   const dir = sandbox(t);
   mkdirSync(join(dir, "keepwarm"), { recursive: true });
@@ -121,4 +109,56 @@ test("a lock file is never seen empty: it appears whole or not at all", (t) => {
   assert.equal(s.lock(), true);
   assert.deepEqual(JSON.parse(readFileSync(lockFile(dir, "s-1"), "utf8")), { pid: 42 });
   assert.deepEqual(readdirSync(join(dir, "keepwarm")).filter((f) => f.includes(".tmp")), []);
+});
+
+const MINUTE = 60_000;
+const ledgerFile = (dir, id) => join(dir, "keepwarm", `${createHash("sha256").update(id).digest("hex")}.ledger`);
+
+test("the ping ledger records each send at its estimate, replaces it with the measured cost, and sums the last 24 hours", (t) => {
+  const dir = sandbox(t);
+  const s = createKeepWarmStore(dir, "s-1");
+  s.ledgerSend(NOW, 0.02);
+  s.ledgerSend(NOW + 4 * MINUTE, 0.02);
+  s.ledgerCost(NOW, 0.03);
+  const sum = s.ledger(NOW + 5 * MINUTE);
+  assert.equal(sum.pings, 2);
+  assert.ok(Math.abs(sum.usd - 0.05) < 1e-12, "the first ping counts at its measured cost, the second at its estimate");
+  assert.equal(s.ledger(NOW + 24 * HOUR + MINUTE).pings, 1, "an entry leaves the ledger only when it is 24 hours old");
+  assert.equal(s.ledger(NOW + 25 * HOUR).pings, 0);
+});
+
+test("the ledger is shared by processes and by a new window, a reload or a cleared window file", (t) => {
+  const dir = sandbox(t);
+  const a = createKeepWarmStore(dir, "s-1", { pid: 1, isAlive: () => true });
+  const b = createKeepWarmStore(dir, "s-1", { pid: 2, isAlive: () => true });
+  a.ledgerSend(NOW, 0.02);
+  b.ledgerSend(NOW + MINUTE, 0.02);
+  a.save(W);
+  rmSync(join(dir, "keepwarm", `${createHash("sha256").update("s-1").digest("hex")}.json`));
+  const reopened = createKeepWarmStore(dir, "s-1");
+  assert.equal(reopened.ledger(NOW + 2 * MINUTE).pings, 2, "nothing but time removes an entry");
+  assert.equal(createKeepWarmStore(dir, "s-2").ledger(NOW).pings, 0, "another session has its own ledger");
+});
+
+test("a malformed ledger line is skipped, and a session with no id has no ledger", (t) => {
+  const dir = sandbox(t);
+  const s = createKeepWarmStore(dir, "s-1");
+  s.ledgerSend(NOW, 0.02);
+  writeFileSync(ledgerFile(dir, "s-1"), "garbage\n{\"t\":\"send\",\"at\":\"x\"}\n{\"t\":\"send\",\"at\":" + NOW + ",\"usd\":0.02}\n", { flag: "a" });
+  assert.equal(s.ledger(NOW + MINUTE).pings, 1);
+  const none = createKeepWarmStore(dir, null);
+  none.ledgerSend(NOW, 1);
+  none.ledgerCost(NOW, 1);
+  assert.deepEqual(none.ledger(NOW), { pings: 0, usd: 0 });
+});
+
+test("compacting the ledger drops only entries older than 24 hours", (t) => {
+  const dir = sandbox(t);
+  const s = createKeepWarmStore(dir, "s-1", { ledgerCompactBytes: 300 });
+  for (let i = 0; i < 12; i += 1) s.ledgerSend(NOW + i * MINUTE, 0.01);
+  s.ledgerSend(NOW + 30 * HOUR, 0.01);
+  s.ledgerSend(NOW + 30 * HOUR + MINUTE, 0.01);
+  assert.equal(s.ledger(NOW + 30 * HOUR + 2 * MINUTE).pings, 2, "the 12 old entries are gone");
+  assert.ok(readFileSync(ledgerFile(dir, "s-1"), "utf8").split("\n").filter(Boolean).length <= 3, "and the file shrank");
+  assert.equal(s.ledger(NOW + 55 * HOUR).pings, 0);
 });

@@ -116,8 +116,8 @@ test("every stop reason has its own line, and the new ones say what happened", (
 });
 
 test("saved and quote lines say what was saved and what it may cost", () => {
-  assert.equal(keepWarmSaved({ ...DEFAULTS, keepWarmHours: 3 }), "cache-clock: keep-warm: 3h after your last message · budget $0.50 · payback stop on (saved for all sessions; each open session runs its own window and budget)");
-  assert.equal(keepWarmSaved({ ...DEFAULTS, keepWarmHours: 8, keepWarmPayback: false, keepWarmMaxUsd: 2 }), "cache-clock: keep-warm: 8h after your last message · budget $2.00 · payback stop off (saved for all sessions; each open session runs its own window and budget)");
+  assert.equal(keepWarmSaved({ ...DEFAULTS, keepWarmHours: 3 }), "cache-clock: keep-warm: 3h after your last message · budget $0.50 · payback stop on · daily limit $2.00 (saved for all sessions; each open session runs its own window and budget)");
+  assert.equal(keepWarmSaved({ ...DEFAULTS, keepWarmHours: 8, keepWarmPayback: false, keepWarmMaxUsd: 2 }), "cache-clock: keep-warm: 8h after your last message · budget $2.00 · payback stop off · daily limit $2.00 (saved for all sessions; each open session runs its own window and budget)");
   assert.equal(keepWarmSaved(DEFAULTS), "cache-clock: keep-warm: off (saved for all sessions)");
   assert.equal(keepWarmQuote(snap, 8, { pings: 120, usd: 2.4 }),
     "cache-clock: keep-warm for 8h on Claude Sonnet 5.5 (200.0k tokens) sends about 120 pings, about $2.40 at the last reported prices; the budget and payback stop end it sooner. This setting is global, so every open session gets its own window and budget; this estimate is for one session. Turn it on?");
@@ -201,6 +201,40 @@ test("loadConfigResult reports unparseable and non-object files, and keeps valid
   assert.deepEqual(mixed.config, { ...DEFAULTS, mode: "warn" });
   assert.equal(mixed.problem, "config.json: minUsd must be a dollar amount of 0 or more");
   assert.deepEqual(loadConfig(dir), mixed.config);
+});
+
+test("keepwarm daily sets the 24-hour spend limit, 0.10 to 20 dollars", () => {
+  assert.deepEqual(parseCommand("keepwarm daily 1.50"), { kind: "set", patch: { keepWarmDailyMaxUsd: 1.5 } });
+  assert.deepEqual(parseCommand("keepwarm daily $0.10"), { kind: "set", patch: { keepWarmDailyMaxUsd: 0.1 } });
+  assert.deepEqual(parseCommand("keepwarm daily 20"), { kind: "set", patch: { keepWarmDailyMaxUsd: 20 } });
+  for (const bad of ["keepwarm daily", "keepwarm daily 0.09", "keepwarm daily 20.01", "keepwarm daily 1 2", "keepwarm daily 1e1", "keepwarm daily 0x2", "keepwarm daily -1"]) {
+    const r = parseCommand(bad);
+    assert.equal(r.kind, "error", bad);
+    assert.match(r.message, /daily takes dollars from 0\.10 to 20/, bad);
+  }
+  assert.equal(DEFAULTS.keepWarmDailyMaxUsd, 2);
+});
+
+test("the daily limit is validated like the other settings, and saved and loaded with them", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  writeFileSync(join(dir, "config.json"), JSON.stringify({ keepWarmDailyMaxUsd: 0.05 }));
+  const bad = loadConfigResult(dir);
+  assert.equal(bad.config.keepWarmDailyMaxUsd, 2);
+  assert.match(bad.problem, /keepWarmDailyMaxUsd must be dollars from 0\.10 to 20/);
+  saveConfig(dir, { ...DEFAULTS, keepWarmDailyMaxUsd: 5 });
+  assert.equal(loadConfig(dir).keepWarmDailyMaxUsd, 5);
+  assert.throws(() => saveConfig(dir, { ...DEFAULTS, keepWarmDailyMaxUsd: 21 }), /keepWarmDailyMaxUsd must be dollars from 0\.10 to 20/);
+});
+
+test("the card says another process owns keep-warm, and every new stop reason has its own line", () => {
+  const tally = { calls: 3, coldIdle: 0, coldBreak: 0, extraUsd: 0 };
+  const warm = { ...snap, state: "warm", msLeft: 192_000 };
+  const on = { ...DEFAULTS, keepWarmHours: 3 };
+  assert.match(card(warm, tally, on, { state: "elsewhere", lastSkip: "locked" }), /keep-warm  handled by another process of this session/);
+  for (const [reason, text] of [["daily-limit", /daily limit for this session/], ["model-changed", /selected model changed while a ping was out/],
+    ["compacted", /conversation was compacted while a ping was out/], ["ledger-failed", /ping ledger could not be written/]]) {
+    assert.match(keepWarmStopped(reason, { usd: 0.1, pings: 2 }), text, reason);
+  }
 });
 
 test("keepwarm <hours> yes is the confirmation for a long window, and only for that form", () => {
