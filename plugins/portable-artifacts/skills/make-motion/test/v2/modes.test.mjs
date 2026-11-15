@@ -7,7 +7,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { registries, createRegistry } from '../../engine/registry.mjs';
-import '../../engine/modes/index.mjs';
+import { validateMode } from '../../engine/modes/index.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { validateFilm, withFilmDefaults } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
@@ -133,5 +133,26 @@ test('--list modes says each mode pace from its own wpm', () => {
   for (const name of ['pro', 'viral']) {
     const { summary } = listEntries('modes').find((e) => e.name === name);
     assert.match(summary, new RegExp(`${registries.modes.get(name).wpm} words a minute`));
+  }
+});
+
+// ---- voice data: voiceSpeed and emphasisPause are mode data, read by the voice code, never by a mode's name ----
+
+test('pro and viral carry voice data: voiceSpeed 1.0 and 1.1, emphasisPause 0', () => {
+  assert.deepEqual([registries.modes.get('pro').voiceSpeed, registries.modes.get('pro').emphasisPause], [1.0, 0]);
+  assert.deepEqual([registries.modes.get('viral').voiceSpeed, registries.modes.get('viral').emphasisPause], [1.1, 0]);
+});
+
+test('a mode whose voiceSpeed is outside 0.8 to 1.25 fails validateMode, naming the mode and the field', () => {
+  const ok = { ...SLOW, voiceSpeed: 1.0, emphasisPause: 0 };
+  assert.doesNotThrow(() => validateMode(ok));
+  assert.doesNotThrow(() => validateMode({ ...ok, voiceSpeed: 0.8 }));
+  assert.doesNotThrow(() => validateMode({ ...ok, voiceSpeed: 1.25 }));
+  assert.doesNotThrow(() => validateMode(SLOW), 'voice data is optional');
+  for (const voiceSpeed of [0.79, 1.26, 0, -1, NaN, '1', Infinity]) {
+    assert.throws(() => validateMode({ ...ok, voiceSpeed }), /mode "test-slow": voiceSpeed must be/, String(voiceSpeed));
+  }
+  for (const emphasisPause of [-0.1, NaN, '0', 3.5]) {
+    assert.throws(() => validateMode({ ...ok, emphasisPause }), /mode "test-slow": emphasisPause must be/, String(emphasisPause));
   }
 });

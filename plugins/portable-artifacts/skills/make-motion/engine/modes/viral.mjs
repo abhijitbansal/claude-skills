@@ -15,4 +15,6 @@ export const viral = {
   maxHookWords: 7, // the review: an opening statement of more words is a creative finding (absent: no limit)
   platformSafeZone: true, // a look serving this mode composes inside the platform safe zone on 9:16 (kinds/shared.mjs)
   captions: true, // reserved: no caption track is drawn yet
+  voiceSpeed: 1.1, // Kokoro speed of the narration (0.8 to 1.25, checked by validateMode)
+  emphasisPause: 0, // seconds of silence before an emphasised word; 0: emphasis neither splits a call nor pauses
 };

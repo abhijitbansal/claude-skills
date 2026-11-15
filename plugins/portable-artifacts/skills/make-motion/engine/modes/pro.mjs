@@ -14,4 +14,6 @@ export const pro = {
   hookFromFrameZero: false, // the first shot may open on its field and bring its words in as they are spoken
   maxLineWords: 12, // the review: a line of more words is a creative finding (absent: no limit)
   captions: false,
+  voiceSpeed: 1.0, // Kokoro speed of the narration (0.8 to 1.25, checked by validateMode)
+  emphasisPause: 0, // seconds of silence before an emphasised word; 0: emphasis neither splits a call nor pauses
 };
