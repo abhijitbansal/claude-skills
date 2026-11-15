@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRegistry } from '../../engine/registry.mjs';
@@ -25,6 +25,7 @@ function stubRegistries({ modes = [] } = {}) {
     srcFields: ['src'],
     targets: () => ['image', 'caption'],
   });
+  r.kinds.add('plain', { schema: { properties: {} } }); // no targets function: accepts no target
   r.looks.add('desk', { name: 'desk', modes: ['pro'], cuts: ['cut', 'match'] });
   r.looks.add('pop', { name: 'pop', modes: ['viral'], cuts: ['cut'] });
   r.devices.add('highlight', { supports: () => true });
@@ -40,6 +41,7 @@ before(() => {
   mkdirSync(path.join(specDir, 'assets'));
   writeFileSync(path.join(specDir, 'assets', 'photo.png'), 'x');
   writeFileSync(path.join(specDir, 'film.json'), '{}');
+  writeFileSync(path.join(specDir, 'clip:1.png'), 'x');
   registries = stubRegistries();
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
@@ -496,6 +498,197 @@ test('loadFilm names the path of a file that is not JSON', () => {
     return true;
   });
 });
+// --- review round 1: crashes, bounded work, filesystem errors, echoes ---
+
+test('an anchor with a line terminator is an error, never a crash', () => {
+  for (const at of ['word:a\nb', 'start\u2028+1', 'end\r\n', 'sentence:0\u2029']) {
+    const r = check(film({}, [{ ...shotA, on: [{ at, do: 'highlight' }] }]));
+    assert.equal(r.ok, false, JSON.stringify(at));
+    assert.equal(r.errors[0].path, 'shots[0].on[0].at');
+  }
+});
+
+test('a 100,000 character say validates fast and reports only its length', () => {
+  const started = performance.now();
+  const r = check(film({}, [{ ...shotA, say: 'word '.repeat(20000), on: [{ at: 'word:5', do: 'highlight' }] }]));
+  assert.ok(performance.now() - started < 1000, 'took too long');
+  assert.equal(r.errors.length, 1);
+  assert.equal(r.errors[0].path, 'shots[0].say');
+  assert.match(r.errors[0].message, /400/);
+});
+
+test('shots after the sixtieth are not checked, only counted', () => {
+  const shots = Array.from({ length: 70 }, (_, i) => ({ id: `s${i}`, show: i === 65 ? 'statment' : 'statement', hold: 1 }));
+  const r = check(film({}, shots));
+  assert.deepEqual(r.errors.map((e) => e.path), ['shots']);
+});
+
+test('a huge shots array is cheap to refuse', () => {
+  const started = performance.now();
+  const r = check(film({}, Array.from({ length: 200000 }, () => 1)));
+  assert.ok(performance.now() - started < 1000, 'took too long');
+  assert.ok(r.errors.length <= 61, `${r.errors.length} errors`);
+  assert.equal(r.errors[0].path, 'shots');
+});
+
+test('a non-object shot among the first sixty is an error at its path', () => {
+  const r = check(film({}, [shotA, 5]));
+  assert.deepEqual(r.errors, [{ path: 'shots[1]', message: 'must be object' }]);
+});
+
+test('on entries after the eighth are not checked, only counted', () => {
+  const on = Array.from({ length: 10 }, (_, i) => ({ at: 'start', do: i === 9 ? 'hilight' : 'highlight' }));
+  const r = check(film({}, [{ ...shotA, on }]));
+  assert.deepEqual(r.errors.map((e) => e.path), ['shots[0].on']);
+});
+
+test('loadFilm refuses a file over 1 MB and names the path and the limit', () => {
+  const file = writeFilm('big.json', `{"version":2,"shots":[],"pad":"${' '.repeat(1024 * 1024)}"}`);
+  assert.throws(() => loadFilm(file, { registries }), (err) => {
+    assert.ok(!(err instanceof SpecError));
+    assert.ok(err.message.includes(file), err.message);
+    assert.match(err.message, /1 MB/);
+    return true;
+  });
+});
+
+test('a src file that cannot be read reports its code, not "not found"', () => {
+  symlinkSync('loop.png', path.join(specDir, 'assets', 'loop.png'));
+  const loop = check(film({}, [{ id: 'p', show: 'picture', src: 'assets/loop.png', hold: 2 }]));
+  assert.match(loop.errors[0].message, /ELOOP/);
+  assert.doesNotMatch(loop.errors[0].message, /not found/);
+  const long = check(film({}, [{ id: 'p', show: 'picture', src: `assets/${'a'.repeat(300)}.png`, hold: 2 }]));
+  assert.match(long.errors[0].message, /ENAMETOOLONG/);
+  const nul = check(film({}, [{ id: 'p', show: 'picture', src: 'assets/a\0b.png', hold: 2 }]));
+  assert.equal(nul.errors.length, 1);
+  assert.match(nul.errors[0].message, /ERR_INVALID_ARG_VALUE/);
+});
+
+test('a src in a folder that cannot be searched reports EACCES', { skip: process.getuid?.() === 0 }, () => {
+  const locked = path.join(specDir, 'locked');
+  mkdirSync(locked);
+  writeFileSync(path.join(locked, 'a.png'), 'x');
+  chmodSync(locked, 0o000);
+  try {
+    const r = check(film({}, [{ id: 'p', show: 'picture', src: 'locked/a.png', hold: 2 }]));
+    assert.match(r.errors[0].message, /EACCES/);
+  } finally {
+    chmodSync(locked, 0o700);
+  }
+});
+
+test('a src file that disappears between two checks does not throw', () => {
+  const file = path.join(specDir, 'assets', 'fleeting.png');
+  writeFileSync(file, 'x');
+  const shots = [{ id: 'p', show: 'picture', src: 'assets/fleeting.png', hold: 2 }];
+  assert.equal(check(film({}, shots)).ok, true);
+  rmSync(file);
+  const r = check(film({}, shots));
+  assert.match(r.errors[0].message, /not found/);
+});
+
+test('a missing spec folder is an error at each src, and fine without one', () => {
+  const gone = path.join(specDir, 'no-such-folder');
+  const withSrc = validateFilm(film({}, [{ id: 'p', show: 'picture', src: 'assets/photo.png', hold: 2 }]), { specDir: gone, registries });
+  assert.equal(withSrc.errors[0].path, 'shots[0].src');
+  assert.match(withSrc.errors[0].message, /spec folder/);
+  assert.match(withSrc.errors[0].message, /ENOENT|not found/);
+  assert.equal(validateFilm(film(), { specDir: gone, registries }).ok, true);
+});
+
+test('validateFilm needs a specDir string', () => {
+  assert.throws(() => validateFilm(film(), { registries }), TypeError);
+  assert.throws(() => validateFilm(film()), TypeError);
+});
+
+test('an unreadable spec folder is an error at the src, not a crash', { skip: process.getuid?.() === 0 }, () => {
+  const sealed = mkdtempSync(path.join(tmpdir(), 'mm-v2-sealed-'));
+  chmodSync(sealed, 0o000);
+  try {
+    const r = validateFilm(film({}, [{ id: 'p', show: 'picture', src: 'assets/photo.png', hold: 2 }]), { specDir: sealed, registries });
+    assert.equal(r.errors[0].path, 'shots[0].src');
+    assert.match(r.errors[0].message, /EACCES/);
+  } finally {
+    chmodSync(sealed, 0o700);
+    rmSync(sealed, { recursive: true, force: true });
+  }
+});
+
+test('version 3 alone is one error at version', () => {
+  const r = check({ version: 3, shots: [shotA] });
+  assert.equal(r.ok, false);
+  assert.equal(r.errors.length, 1);
+  assert.equal(r.errors[0].path, 'version');
+  assert.match(r.errors[0].message, /must be 2/);
+});
+
+test('a bad target is reported even when the shot has another schema error', () => {
+  const r = check(film({}, [{ ...shotA, text: 5, on: [{ at: 'start', do: 'highlight', target: 'label' }] }]));
+  assert.deepEqual(r.errors.map((e) => e.path).sort(), ['shots[0].on[0].target', 'shots[0].text']);
+});
+
+test('targets that cannot be computed for a broken shot are skipped, not thrown', () => {
+  const regs = stubRegistries();
+  regs.kinds.add('fragile', {
+    schema: { properties: { items: { type: 'array' } } },
+    targets: (shot) => shot.items.map(String),
+  });
+  const r = validateFilm(film({}, [{ id: 'f', show: 'fragile', items: 'oops', hold: 2, on: [{ at: 'start', do: 'highlight', target: 'x' }] }]), { specDir, registries: regs });
+  assert.deepEqual(r.errors.map((e) => e.path), ['shots[0].items']);
+});
+
+test('a kind with no targets function accepts no target', () => {
+  const bad = check(film({}, [{ id: 'p', show: 'plain', hold: 2, on: [{ at: 'start', do: 'highlight', target: 'x' }] }]));
+  assert.equal(bad.errors.length, 1);
+  assert.equal(bad.errors[0].path, 'shots[0].on[0].target');
+  assert.match(bad.errors[0].message, /this kind has no targets/);
+  assert.equal(check(film({}, [{ id: 'p', show: 'plain', hold: 2, on: [{ at: 'start', do: 'highlight' }] }])).ok, true);
+});
+
+test('a file name with a colon is not mistaken for a URL', () => {
+  assert.equal(check(film({}, [{ id: 'p', show: 'picture', src: 'clip:1.png', hold: 2 }])).ok, true);
+});
+
+test('real URLs are refused', () => {
+  for (const src of ['https://example.com/a.png', 'data:image/png;base64,AAAA', 'blob:abc', 'file:///etc/passwd', 'javascript:alert(1)']) {
+    const r = check(film({}, [{ id: 'p', show: 'picture', src, hold: 2 }]));
+    assert.match(r.errors[0].message, /URL/, src);
+  }
+});
+
+test('drive and UNC paths are absolute', () => {
+  for (const src of ['C:\\x.png', 'C:/x.png', '\\\\host\\share\\x.png', '//host/share/x.png']) {
+    const r = check(film({}, [{ id: 'p', show: 'picture', src, hold: 2 }]));
+    assert.match(r.errors[0].message, /absolute/, src);
+  }
+});
+
+test('a relative src with a backslash is told to use forward slashes', () => {
+  const r = check(film({}, [{ id: 'p', show: 'picture', src: 'assets\\photo.png', hold: 2 }]));
+  assert.match(r.errors[0].message, /forward slashes/);
+});
+
+test('values echoed in error messages are cut to 80 characters', () => {
+  const long = 'x'.repeat(1000);
+  const echoes = [
+    check(film({}, [{ ...shotA, id: long.toUpperCase() }])).errors[0].message,
+    check(film({}, [{ id: 'a'.repeat(1000), show: 'statement', say: 'Hi.' }, { id: 'a'.repeat(1000), show: 'statement', say: 'Hi.' }])).errors.at(-1).message,
+    check(film({}, [shotA, { id: 'b', show: 'statement', say: 'Hi.', cut: long }])).errors[0].message,
+    check(film({}, [{ ...shotA, on: [{ at: 'start', do: 'highlight', target: long }] }])).errors[0].message,
+    check(film({}, [{ ...shotA, on: [{ at: long, do: 'highlight' }] }])).errors[0].message,
+    check(film({}, [{ ...shotA, on: [{ at: 'start', do: long }] }])).errors[0].message,
+    check(film({ look: long })).errors[0].message,
+    check(film({}, [{ id: 'a', show: long }])).errors[0].message,
+    check(film({ accent: long })).errors[0].message,
+    check({ version: long, shots: [shotA] }).errors[0].message,
+    check(film({}, [{ id: 'p', show: 'picture', src: long, hold: 2 }])).errors[0].message,
+  ];
+  echoes.forEach((message, i) => {
+    assert.ok(message.length < 400, `echo ${i} is ${message.length} characters: ${message.slice(0, 120)}`);
+    assert.ok(!/(.)\1{100}/.test(message), `echo ${i} holds a long run of the value`);
+  });
+});
+
 test('loadFilm reports a version 1 file as a SpecError with the one error', () => {
   const file = writeFilm('v1.json', { scenes: [] });
   assert.throws(() => loadFilm(file, { registries }), (err) => {

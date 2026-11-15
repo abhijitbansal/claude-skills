@@ -128,6 +128,31 @@ test('results are rounded to 1e-6 seconds', () => {
   assert.equal(resolveAnchor(0.1 + 0.2, shot), 0.3);
 });
 
+test('an anchor with a line terminator is an AnchorError, not a TypeError', () => {
+  for (const bad of ['word:a\nb', 'start +1', 'end\r\n+1', 'sentence:0 ', ' start']) {
+    assert.throws(() => resolveAnchor(bad, shot), (err) => err instanceof AnchorError, JSON.stringify(bad));
+  }
+});
+
+test('a word with a hyphen and digits can be named whole, with or without an offset', () => {
+  const covid = { id: 'c', duration: 3, words: [{ text: 'covid-19', start: 0.4, end: 0.9 }, { text: 'file.', start: 1, end: 1.5 }], sentences: [] };
+  assert.equal(resolveAnchor('word:covid-19', covid), 0.4);
+  assert.equal(resolveAnchor('word:COVID-19', covid), 0.4);
+  assert.equal(resolveAnchor('word:covid-19+0.1', covid), 0.5);
+  assert.equal(resolveAnchor('word:covid19', covid), 0.4);
+  assert.equal(resolveAnchor('word:file-0.08', covid), 0.92);
+});
+
+test('a value echoed in an anchor error is cut to 80 characters', () => {
+  for (const bad of ['x'.repeat(500), `word:${'y'.repeat(500)}`]) {
+    assert.throws(() => resolveAnchor(bad, shot), (err) => {
+      assert.ok(err.message.length < 400, `${err.message.length} characters`);
+      assert.match(err.message, /\.\.\./);
+      return true;
+    });
+  }
+});
+
 test('the shot is not mutated', () => {
   const before = JSON.stringify(shot);
   resolveAnchor('word:file-0.08', shot);

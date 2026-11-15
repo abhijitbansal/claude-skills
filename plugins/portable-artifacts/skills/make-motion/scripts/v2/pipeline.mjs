@@ -1,17 +1,31 @@
 // The v2 load pipeline: read a film file, validate it, fill in the defaults and
 // build its timeline. The CLI (a later task) turns a thrown Error into exit 2.
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { SpecError, validateFilm, withFilmDefaults } from './spec.mjs';
 
+// A film is a short script; a file past this size is not one, and parsing it would only cost time.
+export const MAX_FILM_BYTES = 1024 * 1024;
+
+const unreadable = (specPath, err) => new Error(`cannot read ${specPath}: ${err.code ?? err.message}`);
+
 function readFilmFile(specPath) {
+  let size;
+  try {
+    size = statSync(specPath).size;
+  } catch (err) {
+    throw unreadable(specPath, err);
+  }
+  if (size > MAX_FILM_BYTES) {
+    throw new Error(`${specPath} is ${size} bytes; a film file can be at most 1 MB (${MAX_FILM_BYTES} bytes)`);
+  }
   let raw;
   try {
     raw = readFileSync(specPath, 'utf8');
   } catch (err) {
-    throw new Error(`cannot read ${specPath}: ${err.code ?? err.message}`);
+    throw unreadable(specPath, err);
   }
   try {
     return JSON.parse(raw);

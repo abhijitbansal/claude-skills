@@ -8,7 +8,7 @@ import Ajv from 'ajv';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { resolveAnchor, AnchorError } from '../../engine/script/anchors.mjs';
+import { resolveAnchor, AnchorError, echoValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 
@@ -36,9 +36,15 @@ const V1_MESSAGE = 'this is a version 1 spec; make-motion 2 reads version 2 only
 const NOT_OBJECT_MESSAGE = 'a film must be a JSON object such as { "version": 2, "shots": [ ... ] }';
 const ID_RE = /^[a-z][a-z0-9-]*$/;
 const ACCENT_RE = /^#[0-9a-f]{6}$/i;
-const URL_RE = /^[a-z][a-z0-9+.-]+:/i;
+// A scheme with "//" is a URL; so are these opaque ones. A name such as "clip:1.png" is a file.
+const URL_RE = /^(?:[a-z][a-z0-9+.-]*:\/\/|(?:data|blob|file|javascript):)/i;
 const DRIVE_RE = /^[a-z]:[\\/]/i;
+const UNC_RE = /^\\\\/;
 const SRC_EXAMPLE = '"assets/photo.png"';
+const NOT_FOUND_CODES = new Set(['ENOENT', 'ENOTDIR']);
+
+// A user's value inside quotes, cut to a length a message can repeat.
+const quote = (value) => JSON.stringify(echoValue(value));
 
 export class SpecError extends Error {
   constructor(errors) {
@@ -65,7 +71,9 @@ const ROOT_SCHEMA = {
     seed: { type: 'integer', minimum: 0, maximum: SEED_MAX },
     accent: { type: 'string' }, // #rrggbb: checkAccent shows an example
     generatedBy: GENERATED_BY_SCHEMA,
-    shots: { type: 'array', minItems: 1, maxItems: SHOTS_MAX, items: { type: 'object' } },
+    // Items are not listed: Ajv would walk and report every one of a huge array.
+    // checkShots reports a shot that is not an object, for the first SHOTS_MAX.
+    shots: { type: 'array', minItems: 1, maxItems: SHOTS_MAX },
   },
 };
 
@@ -123,12 +131,16 @@ function schemaErrors(check, value, base) {
 // --- registries ---
 
 // { value } or { error }: the registry's own did-you-mean message on a miss.
+// The miss is asked about the name as an error may repeat it (cut short), so a
+// huge name cannot fill the message.
 function lookup(registry, name) {
+  if (registry.has(name)) return { value: registry.get(name) };
   try {
-    return { value: registry.get(name) };
+    registry.get(echoValue(name));
   } catch (err) {
     return { error: err.message };
   }
+  return { error: `unknown name ${quote(name)}` };
 }
 
 function modeDefinition(mode, regs) {
@@ -141,12 +153,12 @@ function modeDefinition(mode, regs) {
 function checkVersion(spec) {
   if (spec.version === undefined) return [{ path: 'version', message: `required; write "version": ${FILM_VERSION}` }];
   if (spec.version === FILM_VERSION) return [];
-  return [{ path: 'version', message: `must be ${FILM_VERSION}, the only version make-motion 2 reads; got ${JSON.stringify(spec.version)}` }];
+  return [{ path: 'version', message: `must be ${FILM_VERSION}, the only version make-motion 2 reads; got ${quote(spec.version)}` }];
 }
 
 function checkAccent(spec) {
   if (typeof spec.accent !== 'string' || ACCENT_RE.test(spec.accent)) return [];
-  return [{ path: 'accent', message: `${JSON.stringify(spec.accent)} is not a colour; write it as #rrggbb, for example "#ff6600"` }];
+  return [{ path: 'accent', message: `${quote(spec.accent)} is not a colour; write it as #rrggbb, for example "#ff6600"` }];
 }
 
 // The look the film uses, as { look, errors }. A look that is missing, unknown,
@@ -180,9 +192,9 @@ function checkShotId(shot, base, seen) {
   if (typeof shot.id !== 'string') return [];
   const at = pathJoin(base, 'id');
   if (!ID_RE.test(shot.id)) {
-    return [{ path: at, message: `id ${JSON.stringify(shot.id)} must start with a lowercase letter and use only lowercase letters, digits and hyphens, for example "intro-2"` }];
+    return [{ path: at, message: `id ${quote(shot.id)} must start with a lowercase letter and use only lowercase letters, digits and hyphens, for example "intro-2"` }];
   }
-  if (seen.has(shot.id)) return [{ path: at, message: `duplicate id "${shot.id}" (first used at ${seen.get(shot.id)})` }];
+  if (seen.has(shot.id)) return [{ path: at, message: `duplicate id ${quote(shot.id)} (first used at ${seen.get(shot.id)})` }];
   seen.set(shot.id, base);
   return [];
 }
@@ -197,29 +209,33 @@ function resolveKind(shot, base, regs) {
   return { kind: found.value, name: shot.show, errors: [] };
 }
 
-// Narration: say must parse, hold only without say. Returns { errors, timed },
-// timed: whether the shot has a length the anchors can be resolved against.
+// A say worth parsing: a string within the schema's length range. A longer or
+// empty one already has its schema error, and parsing it would only cost time.
+const isParsableSay = (say) => typeof say === 'string' && say !== '' && say.length <= SAY_MAX;
+
+// Narration: say must parse, hold only without say. Returns { errors, hasLength },
+// hasLength: whether the shot has a length its anchors can be resolved against.
 function checkNarration(shot, base) {
   const errors = [];
-  let timed = true;
+  let hasLength = true;
   if (shot.say !== undefined && shot.hold !== undefined) {
     errors.push({ path: pathJoin(base, 'hold'), message: 'hold cannot be used with say: the narration sets the length of the shot; remove "hold", or remove "say" to hold for a set time' });
   }
   if (shot.say !== undefined) {
-    timed = typeof shot.say === 'string' && shot.say !== '';
-    if (timed) {
+    hasLength = isParsableSay(shot.say);
+    if (hasLength) {
       try {
         parseSay(shot.say);
       } catch (err) {
         if (!(err instanceof SayError)) throw err;
         errors.push({ path: pathJoin(base, 'say'), message: err.message });
-        timed = false;
+        hasLength = false;
       }
     }
   } else if (shot.hold !== undefined) {
-    timed = Number.isFinite(shot.hold) && shot.hold > 0;
+    hasLength = Number.isFinite(shot.hold) && shot.hold > 0;
   }
-  return { errors, timed };
+  return { errors, hasLength };
 }
 
 function checkCut(shot, index, base, ctx) {
@@ -227,13 +243,13 @@ function checkCut(shot, index, base, ctx) {
   const at = pathJoin(base, 'cut');
   if (index === 0) {
     if (shot.cut === 'cut') return [];
-    return [{ path: at, message: `the first shot has nothing before it to cut from; remove "cut", or write "cut": "cut" (got ${JSON.stringify(shot.cut)})` }];
+    return [{ path: at, message: `the first shot has nothing before it to cut from; remove "cut", or write "cut": "cut" (got ${quote(shot.cut)})` }];
   }
   if (!ctx.look) return [];
   const cuts = ctx.look.cuts ?? [];
   if (cuts.includes(shot.cut)) return [];
   const hint = didYouMean(shot.cut, cuts);
-  return [{ path: at, message: `look "${ctx.look.name}" has no cut ${JSON.stringify(shot.cut)}; ${hint ? `did you mean "${hint}"? ` : ''}its cuts are: ${cuts.join(', ')}` }];
+  return [{ path: at, message: `look "${ctx.look.name}" has no cut ${quote(shot.cut)};${hint ? `did you mean "${hint}"? ` : ''}its cuts are: ${cuts.join(', ')}` }];
 }
 
 // The shot as the timeline sees it, so anchors resolve against real word times.
@@ -243,10 +259,10 @@ function timelineShot(shot, ctx) {
   return buildTimeline(film, { fps: ctx.fps }).shots[0];
 }
 
-function checkAnchor(item, at, timed) {
-  if (timed === null || item.at === undefined) return [];
+function checkAnchor(item, at, entry) {
+  if (entry === null || item.at === undefined) return [];
   try {
-    resolveAnchor(item.at, timed);
+    resolveAnchor(item.at, entry);
   } catch (err) {
     if (!(err instanceof AnchorError)) throw err;
     return [{ path: pathJoin(at, 'at'), message: err.message }];
@@ -269,41 +285,75 @@ function checkDevice(item, at, ctx) {
 function checkTarget(item, at, targets, kindName) {
   if (typeof item.target !== 'string' || targets === null) return [];
   const where = pathJoin(at, 'target');
-  if (targets.length === 0) return [{ path: where, message: `${kindName} has no targets; remove "target"` }];
+  if (targets.length === 0) return [{ path: where, message: 'this kind has no targets; remove "target"' }];
   if (targets.includes(item.target)) return [];
   const hint = didYouMean(item.target, targets);
-  return [{ path: where, message: `unknown target ${JSON.stringify(item.target)}; ${hint ? `did you mean "${hint}"? ` : ''}the targets of ${kindName} are: ${targets.join(', ')}` }];
+  return [{ path: where, message: `unknown target ${quote(item.target)}; ${hint ? `did you mean "${hint}"? ` : ''}the targets of ${kindName} are: ${targets.join(', ')}` }];
 }
 
-// `targets`: the kind's target names for this shot, or null when they cannot be known.
-function checkOn(shot, base, ctx, { timed, targets, kindName }) {
+// The kind's target names for a shot: [] for a kind with no `targets` function,
+// null when they cannot be known (no kind, or `targets` throws on a shot that
+// already has schema errors). A throw on a schema-valid shot is the kind's bug.
+function kindTargets(kind, shot, shapeIsValid) {
+  if (!kind) return null;
+  if (typeof kind.targets !== 'function') return [];
+  try {
+    const names = kind.targets(shot);
+    return Array.isArray(names) ? names : null;
+  } catch (err) {
+    if (shapeIsValid) throw err;
+    return null;
+  }
+}
+
+// `entry`: the shot's timeline entry for its anchors, or null. `targets`: see kindTargets.
+// Only the first ON_MAX entries are checked; the schema reports the excess.
+function checkOn(shot, base, ctx, { entry, targets, kindName }) {
   if (!Array.isArray(shot.on)) return [];
-  return shot.on.flatMap((item, j) => {
+  return shot.on.slice(0, ON_MAX).flatMap((item, j) => {
     if (!isPlainObject(item)) return [];
     const at = pathJoin(pathJoin(base, 'on'), j);
-    return [...checkAnchor(item, at, timed), ...checkDevice(item, at, ctx), ...checkTarget(item, at, targets, kindName)];
+    return [...checkAnchor(item, at, entry), ...checkDevice(item, at, ctx), ...checkTarget(item, at, targets, kindName)];
   });
 }
 
 // What is wrong with a `src` as written, or null. Checked by hand so the
 // message can say which rule it broke: relative, inside the folder, exists.
 function srcProblem(src, specDir) {
-  const quoted = JSON.stringify(src);
-  if (path.isAbsolute(src) || DRIVE_RE.test(src)) return `${quoted} is an absolute path; write a path relative to the spec folder, such as ${SRC_EXAMPLE}`;
-  if (URL_RE.test(src)) return `${quoted} is a URL; write a path relative to the spec folder, such as ${SRC_EXAMPLE}`;
-  const outside = `${quoted} is outside the spec folder; move the file inside it and write its path relative to the spec file, such as ${SRC_EXAMPLE}`;
-  if (leavesFolder(specDir, path.resolve(specDir, src))) return outside;
-  let real;
+  const quoted = quote(src);
+  const relative = `write a path relative to the spec folder, such as ${SRC_EXAMPLE}`;
+  if (path.isAbsolute(src) || DRIVE_RE.test(src) || UNC_RE.test(src)) return `${quoted} is an absolute path; ${relative}`;
+  if (URL_RE.test(src)) return `${quoted} is a URL; ${relative}`;
+  if (src.includes('\\')) return `${quoted} contains a backslash; use forward slashes, as in ${SRC_EXAMPLE}`;
+  if (leavesFolder(specDir, path.resolve(specDir, src))) return outsideMessage(quoted);
+  return resolveOnDisk(src, specDir, quoted) ?? null;
+}
+
+const outsideMessage = (quoted) => `${quoted} is outside the spec folder; move the file inside it and write its path relative to the spec file, such as ${SRC_EXAMPLE}`;
+
+// Why the file cannot be used, or undefined when it can. Every filesystem call
+// is guarded: a file can vanish between two checks, and only a missing file is
+// "not found"; any other failure is reported with its code.
+function resolveOnDisk(src, specDir, quoted) {
   let realRoot;
   try {
     realRoot = realpathSync(specDir);
-    real = realpathSync(path.resolve(specDir, src));
-  } catch {
-    return `file not found: ${quoted} (paths are relative to the spec folder)`;
+  } catch (err) {
+    return `the spec folder ${quote(specDir)} cannot be read: ${errorCode(err)}`;
   }
-  if (leavesFolder(realRoot, real)) return outside;
-  return statSync(real).isDirectory() ? `${quoted} is a folder, not a file; name the file inside it` : null;
+  let real;
+  try {
+    real = realpathSync(path.resolve(specDir, src));
+    if (leavesFolder(realRoot, real)) return outsideMessage(quoted);
+    if (statSync(real).isDirectory()) return `${quoted} is a folder, not a file; name the file inside it`;
+  } catch (err) {
+    if (NOT_FOUND_CODES.has(err.code)) return `file not found: ${quoted} (paths are relative to the spec folder)`;
+    return `cannot read ${quoted}: ${errorCode(err)}`;
+  }
+  return undefined;
 }
+
+const errorCode = (err) => err.code ?? err.message;
 
 function leavesFolder(root, target) {
   const rel = path.relative(root, target);
@@ -325,23 +375,26 @@ function checkShot(shot, index, ctx, seen) {
   const check = resolved.kind ? shotCheckerFor(resolved.name, resolved.kind) : checkBaseShot;
   const shape = schemaErrors(check, shot, base);
   const narration = checkNarration(shot, base);
-  const timed = narration.timed ? timelineShot(shot, ctx) : null;
-  const targets = shape.length === 0 && typeof resolved.kind?.targets === 'function' ? resolved.kind.targets(shot) : null;
+  const entry = narration.hasLength ? timelineShot(shot, ctx) : null;
+  const targets = kindTargets(resolved.kind, shot, shape.length === 0);
   return [
     ...resolved.errors,
     ...shape,
     ...checkShotId(shot, base, seen),
     ...narration.errors,
     ...checkCut(shot, index, base, ctx),
-    ...checkOn(shot, base, ctx, { timed, targets, kindName: resolved.name }),
+    ...checkOn(shot, base, ctx, { entry, targets, kindName: resolved.name }),
     ...checkSrcFields(shot, base, resolved.kind, ctx.specDir),
   ];
 }
 
+// Only the first SHOTS_MAX shots are checked; the schema reports the excess.
 function checkShots(spec, ctx) {
   if (!Array.isArray(spec.shots)) return [];
   const seen = new Map();
-  return spec.shots.flatMap((shot, index) => (isPlainObject(shot) ? checkShot(shot, index, ctx, seen) : []));
+  return spec.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => (
+    isPlainObject(shot) ? checkShot(shot, index, ctx, seen) : [{ path: pathJoin('shots', index), message: 'must be object' }]
+  ));
 }
 
 function collectErrors(spec, specDir, regs) {
