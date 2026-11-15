@@ -211,7 +211,7 @@ function checkSpans(spans, keptLength) {
 function leadSamples(index, first, chars, frames) {
   // Call start: clamped to at least 0, so a pad shorter than the fitted range (11 to 24 frames) never moves a start
   // later than raw.
-  if (index === 0) return Math.max(-Infinity, msToSamples(LEAD.callStartBaseMs + LEAD.callStartPerPadFrameMs * frames[0]));
+  if (index === 0) return Math.max(0, msToSamples(LEAD.callStartBaseMs + LEAD.callStartPerPadFrameMs * frames[0]));
   let token = first - 1;
   let spaceFrames = 0;
   while (token >= 1 && chars[token - 1] === SPACE) {
