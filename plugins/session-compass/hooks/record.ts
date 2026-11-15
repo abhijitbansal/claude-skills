@@ -17,9 +17,13 @@ export type Where = { repo: string; worktree: string; branch: string }
 
 const STATUS_FIELDS = ['goal', 'step', 'next'] as const
 
-// Cuts to `max` UTF-16 units including the ellipsis, between clusters: never half an emoji.
+// Control characters (C0, DEL, C1): an ESC or BEL in stored text must never reach the terminal.
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g
+
+// Flattens whitespace to single spaces, drops control characters, then cuts to `max` UTF-16 units
+// including the ellipsis, between clusters: never half an emoji.
 export function truncate(text: string, max: number): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
+  const flat = text.replace(/\s+/g, ' ').replace(CONTROL, '').trim()
   if (flat.length <= max) return flat
   let kept = ''
   for (const cluster of clusters(flat)) {

@@ -56,7 +56,7 @@ function takeLine(words: readonly string[], width: number): { line: string; rest
     }
     const room = width - (line === '' ? 0 : cellWidth(line) + 1)
     const isLong = cellWidth(word) > width || cellWidth(word) >= LONG_TOKEN_CELLS
-    const { head, tail } = isLong ? sliceCells(word, room, line === '') : { head: '', tail: word }
+    const { head, tail } = isLong ? sliceCells(word, room) : { head: '', tail: word }
     if (head === '') return { line, rest: words.slice(i) }
     return { line: line === '' ? head : `${line} ${head}`, rest: [tail, ...words.slice(i + 1)].filter(w => w !== '') }
   }

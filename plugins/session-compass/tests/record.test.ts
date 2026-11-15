@@ -5,6 +5,12 @@ import {
 } from '../hooks/record'
 
 describe('truncate', () => {
+  test('control characters never reach the display, whitespace still flattens to one space', () => {
+    expect(truncate('a\u001b[31mred\u0007b\u007fc\u0085d\u009be', 80)).toBe('a[31mredbcde')
+    expect(truncate('a\n\t b\r\nc', 80)).toBe('a b c')
+    expect(applyStatus(base(), { goal: 'ship\u001b]0;pwned\u0007 it' }, 1).goal).toBe('ship]0;pwned it')
+  })
+
   test('never leaves half of a surrogate pair or a split emoji sequence', () => {
     const family = '👨‍👩‍👧'
     const cut = truncate(`a${family}${family}`, 10)

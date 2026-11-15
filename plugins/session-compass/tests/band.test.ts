@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 import { formatBand, fullLines, hintLabel, hintReserve, tally, wrapTwo } from '../hooks/band'
-import { cellWidth } from '../hooks/cells'
+import { cellWidth, sliceCells } from '../hooks/cells'
 import { newRecord } from '../hooks/record'
 
 const rec = {
@@ -168,6 +168,39 @@ test('a long unbroken token fills line one and continues on line two', () => {
   expect(wrapped.isCut).toBe(false)
   // A short word still moves whole to the next line.
   expect(wrapTwo('see refresh', 8)).toEqual({ first: 'see', second: 'refresh', isCut: false })
+})
+
+test('default-emoji BMP characters count two cells, counted here by hand', () => {
+  // o, k, space = 3; ✅ 2; space 1; ⭐ 2; space 1; ⚡ 2; space 1; d, o, n, e = 4  →  16
+  expect(cellWidth('ok ✅ ⭐ ⚡ done')).toBe(16)
+  for (const ch of ['⌚', '⏩', '⏰', '⏳', '◽', '☔', '♈', '♿', '⚓', '⚪', '⚽', '⛄', '⛎', '⛔', '⛪', '⛲', '⛵', '⛺', '⛽', '✊', '✨', '❌', '❎', '❓', '❗', '➕', '➰', '➿', '⬛', '⭕']) {
+    expect(cellWidth(ch)).toBe(2)
+  }
+  // A character followed by the emoji variation selector is two cells; without it, one.
+  expect(cellWidth('✔️')).toBe(2)
+  expect(cellWidth('❤️')).toBe(2)
+  expect(cellWidth('✔')).toBe(1)
+  // Other wide blocks, and the kana voicing marks that take no cell of their own.
+  expect([cellWidth('〈'), cellWidth('︐'), cellWidth('\u{16FE0}'), cellWidth('\u{1B000}')]).toEqual([2, 2, 2, 2])
+  expect(cellWidth('゙')).toBe(0)
+  expect(cellWidth('が')).toBe(2)
+})
+
+test('a goal of default-emoji characters wraps by that hand count', () => {
+  const marks = { ...rec, goal: '✅⭐⚡'.repeat(12) }
+  const cells = (s: string): number => [...s].reduce((n, ch) => n + ('✅⭐⚡'.includes(ch) ? 2 : 1), 0)
+  for (const columns of [20, 33, 60]) {
+    const line = formatBand(marks, undefined, columns)
+    expect(cells(line.text)).toBeLessThanOrEqual(columns)
+    expect(cells(line.second ?? '') + (line.isCut === true ? hintReserve(columns) : 0)).toBeLessThanOrEqual(columns)
+  }
+})
+
+test('a cut never returns more cells than asked: a too-wide first cluster gives nothing', () => {
+  expect(sliceCells('日本', 1)).toEqual({ head: '', tail: '日本' })
+  expect(sliceCells('日本', 2)).toEqual({ head: '日', tail: '本' })
+  const wrapped = wrapTwo('日本語', 1)
+  expect(wrapped).toEqual({ first: '', second: '…', isCut: true })
 })
 
 test('a warning wider than the band still hints at the full text', () => {
