@@ -222,8 +222,14 @@ test('the page limit is 1024 KB and an oversized page is refused without writing
   const spec = path.join(dir, 'flow.diagram.json');
   fs.writeFileSync(spec, JSON.stringify(example('flow')));
   const out = path.join(dir, 'big.html');
-  const { html } = buildPage(example('flow'), { name: 'flow' });
-  const exactly = Buffer.byteLength(html);
+  // The page names its spec and its output file, so its size depends on both names: measure it with the very same
+  // names (in another folder), not with a page built under different ones.
+  const probeDir = tmp();
+  const probeSpec = path.join(probeDir, 'flow.diagram.json');
+  fs.writeFileSync(probeSpec, JSON.stringify(example('flow')));
+  const probeOut = path.join(probeDir, 'big.html');
+  assert.equal((await build(probeSpec, { out: probeOut })).ok, true);
+  const exactly = fs.statSync(probeOut).size;
   const refused = await build(spec, { out, maxBytes: exactly - 1 });
   assert.equal(refused.ok, false);
   assert.match(refused.errors[0].message, /the page is \d+ KB; the limit is \d+ KB/);
@@ -260,11 +266,15 @@ test('a chain that wraps into legible rows passes', async (t) => {
 
 // ---- PA-21 / NEW-73: --shots -------------------------------------------------------------------------------------
 
+// shot.mjs refuses to start while another headless browser runs (the guard is for one person's Mac). `node --test` runs
+// the test files side by side, so a sibling file's browser is usually live here: these tests mean to run beside it.
+const SHOTS_ENV = { ALLOW_BROWSER_RUN: '1' };
+
 test('--shots writes a PNG per viewport and colour scheme and prints each path', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { file } = buildPage(example('flow'), { name: 'flow' });
   const out = tmp();
-  const r = run([file, '--shots', out]);
+  const r = run([file, '--shots', out], SHOTS_ENV);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const paths = r.stdout.split('\n').filter((l) => l.endsWith('.png'));
   assert.equal(paths.length, 4, r.stdout);
@@ -274,7 +284,7 @@ test('--shots writes a PNG per viewport and colour scheme and prints each path',
     assert.equal(fs.readFileSync(hit).subarray(1, 4).toString(), 'PNG');
     assert.ok(hit.startsWith(fs.realpathSync(out)) || hit.startsWith(out), 'written under --shots');
   }
-  const json = JSON.parse(run([file, '--shots', out, '--json']).stdout.split('\n')[0]);
+  const json = JSON.parse(run([file, '--shots', out, '--json'], SHOTS_ENV).stdout.split('\n')[0]);
   assert.equal(json.ok, true);
   assert.equal(json.shots.length, 4);
 });
@@ -283,7 +293,7 @@ test('a failed check still takes its screenshots', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const bad = doctored('flow', (html) => html.replace('</body>', '<script>console.error("boom")</script></body>'));
   const out = tmp();
-  const r = run([bad, '--shots', out]);
+  const r = run([bad, '--shots', out], SHOTS_ENV);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.equal(r.stdout.split('\n').filter((l) => l.endsWith('.png')).length, 4);
 });

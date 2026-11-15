@@ -358,8 +358,10 @@ test('shift-click traces the shortest route along the arrows: hops listed in ord
   assert.deepEqual(await routeIds(page), ['api', 'db', 'edge-0', 'edge-1', 'web']);
   assert.deepEqual(await dimmedNodes(page), ['pay']);
   assert.deepEqual(await selectedIds(page), [], 'a route replaces the selection');
-  await page.click('.pa-node[data-id="pay"]');
-  assert.equal(await title(page), 'Payments', 'a plain click ends the route and selects');
+  // The panel narrows the stage and the drawing stays where it was drawn (W2P-M04), so Payments, at the far right, is
+  // behind the panel now: a plain click on a hop ends the route instead.
+  await page.click('.pa-node[data-id="api"]');
+  assert.equal(await title(page), 'Checkout API', 'a plain click ends the route and selects');
   assert.deepEqual(await routeIds(page), []);
   assert.deepEqual(problems, []);
   await context.close();
@@ -466,9 +468,13 @@ test('opening and closing the panel does not move or rescale the clicked node', 
   // The ResizeObserver refit runs a frame after the panel opens: settle (the viewBox holds still) before each read, or the
   // box can be read before the refit and the test passes without the fix. Seed to see it fail: in viewer.js replace
   // camera.holdView(panel.paint) with panel.paint() and the box moves or rescales after the settle.
+  // The shape's own box: boundingBox() of the node also takes in its stroke and focus ring, which a selection thickens.
   const box = async () => {
     await settle(page);
-    return page.locator('.pa-node[data-id="web"]').boundingBox();
+    return page.evaluate(() => {
+      const r = document.querySelector('.pa-node[data-id="web"] .pa-shape').getBoundingClientRect();
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    });
   };
   const near = (a, b, what) => assert.ok(Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2 && Math.abs(a.width - b.width) < 0.5, `${what}: ${JSON.stringify(a)} vs ${JSON.stringify(b)}`);
   const before = await box();
