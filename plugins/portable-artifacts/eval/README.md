@@ -20,19 +20,37 @@ node run-eval.mjs --skill diagram --host claude --only checkout-path,edit-existi
 node run-eval.mjs --skill explainer --host claude --model haiku --only recap-from-repo,edit-existing
 node run-eval.mjs --skill scene --host claude --model haiku --only city-inline,edit-switch-forest
 node run-eval.mjs --skill dashboard --host codex-oss --model gemma4
+node run-eval.mjs --skill motion --host codex-oss --model gemma4 --allow-local-models
 node run-eval.mjs --skill explainer --host copilot --agent artifact-builder --model "Claude Haiku 5.5"
+node run-eval.mjs --skill diagram --host claude-frontmatter     # no --model: the account default model; frontmatter use unverified
 ```
 
-Hosts are defined in `hosts.json`: `claude`, `codex`, `codex-oss`
+Each command above runs a real host, and a billed host is billed per prompt: count the prompts first (`--limit`,
+`--only`) and state the number before a run. Nothing else in this folder calls a model: the tests use a fake skill and a fake host.
+
+Hosts are defined in `hosts.json`: `claude`, `claude-frontmatter` (the same command with no `modelArgs`, so a
+`--model` is refused and the account's default model runs). The harness copies the skill to
+`<work>/skills/<dir>/` and the prompt says to read its `SKILL.md`; Claude Code does not scan that folder for
+skills, so the skill is read as a plain file and whether its `model` and `effort` frontmatter applies is
+unverified. Check the session log before using this host to measure the frontmatter path. The other hosts are `codex`, `codex-oss`
 (Ollama via `codex exec --oss`), `gemini` and `copilot`. To add a host,
 add an entry with a `cmd` template (`{prompt}`, `{cwd}`, `{model}`), plus
-optional `modelArgs`, `agentArgs` and a `check` command.
+optional `modelArgs`, `agentArgs` and a `check` command. The `claude` allowlist includes the read-only
+helpers `echo`, `pwd` and `head` next to `node`, `npm`, `ls` and `cat`.
+
+A host marked `"local": true` (`codex-oss`) is not run on `motion` or `explainer` unless you pass
+`--allow-local-models`: gemma4 often ended its turn before writing the spec on those two (see
+[`results/INDEX.md`](results/INDEX.md)), and each such run waited out the whole timeout. A run that has written no spec and
+made no `validate` call after `--abort-no-spec <sec>` seconds (default: the host's `abortNoSpecSec`, 240 for
+`codex-oss`; `0` turns it off) is killed and marked `aborted` in the summary. For an edit prompt, a seed left unchanged counts as no spec.
 
 `--set <name>` runs the prompts in `prompts/<skill>-<name>.json` instead of
 the default `prompts/<skill>.json` (which stays as it is, so committed
 summaries remain comparable). An unknown set exits 2 with
 `unknown --set "x"; available for motion: benchmark, items`. `--only` and
-`--limit` apply after `--set`. Motion has two sets (see "Motion sets" below).
+`--limit` apply after `--set`. The sets are: motion `benchmark` and `items` (see "Motion sets" below),
+explainer `features` (Simple English, a plan round trip, embeds by file, an edit, `kpis`, `cards`, `image`, `details`
+and `diff` sections), dashboard `kinds` (the six chart kinds the default set does not name) and diagram `cloud` (AWS icons).
 
 `--agent <name>` runs the host through a named custom agent. It works only
 for a host with `agentArgs` (today `copilot`: `--agent {agent}`); any other
@@ -46,17 +64,20 @@ of which model ran. (The harness rebuilds each page from the spec without
 
 ## What a run does
 
-1. Copies the skill (without `node_modules`, which is symlinked back to
-   the original), `fixtures/data/`, and the seed spec for edit prompts
+1. Copies the skill (with a `node_modules` folder of links back to the
+   original), `fixtures/data/`, and the seed spec for edit prompts
    into a temp dir. A skill that loads sibling skills (`explainer` needs
    `make-diagram` and `make-dashboard`; so does `scene`, for its lift prompts)
-   gets those copied beside it. A prompt
-   marked `"repo": true` also gets `./repo`, a small git repository (`main`,
-   then `feat/search` with three commits) for `gather.mjs` to read.
+   gets those copied beside it. `explainer` gets neither `make-scene` nor `make-motion` on purpose: a
+   `scene` or `motion` section needs a WebGL page or ffmpeg and Chromium, and no prompt asks for one (a test pins that exemption).
+   A prompt marked `"repo": true` also gets `./repo`, a small git repository (`main`,
+   then `feat/search` with three commits, dated one day apart ending now so they stay inside a "last 12 weeks" window) for `gather.mjs` to read.
 2. Runs the host with the prompt *"Read `skills/<skill>/SKILL.md` and
    follow its workflow … Task: … Save the spec as `./<spec>.json`."*.
    `EVAL_LOG` is set, so every `validate.mjs` call the host makes adds a
-   line to a log, which is how retries are counted.
+   line (`{ ts, ok, errors }`) to a log, which is how retries are counted. The log is copied into the case
+   folder as `.eval-log.jsonl`. The per-call error messages are not in it yet: the validators write only the count,
+   so a retry loop can be seen (how many calls, which one was the first valid) but not read.
 3. Scores the result. The harness reruns `validate` and the output step
    (`build` for dashboards, diagrams, explainers and scenes, `render --contact-sheet` for motion) itself,
    so a host whose sandbox blocked commands is still scored on its spec.
@@ -65,10 +86,12 @@ of which model ran. (The harness rebuilds each page from the spec without
 |---|---|
 | spec | the host wrote the spec file |
 | valid | the harness's final `validate` passes |
-| validate runs | how many times the host ran `validate` (1 = right first time) |
+| validate runs | how many times the host ran `validate`. 1 is a single call; 0 means the host never ran it (the harness still validates the spec itself), which is not the same as valid on the first call |
 | output | the build or contact sheet succeeded |
-| check | motion only: `scripts/check.mjs <spec> --json` passed (`✓`), failed (`✗`), or did not apply (`-`: skipped without a browser, the output step failed, or the skill has no check). It runs only after `output` succeeded, and its output is kept as `check.log`. The totals line reads `check ok n/m` over the rows whose check ran. |
-| changed | for edit prompts: the leaf JSON paths that differ from the seed (a targeted edit changes only a few) |
+| check | `scripts/check.mjs … --json` passed (`✓`), failed (`✗`), or did not apply (`-`: skipped without a browser, the output step failed, or the skill has no check). Motion's check reads the spec; diagram, explainer and scene check the page the build wrote (`out/<skill>.html`); dashboard has none here. It runs only after `output` succeeded, and its output is kept as `check.log`. The totals line reads `check ok n/m` over the rows whose check ran. A check that opens a browser runs one prompt at a time, like everything else here. |
+| feature | the spec uses what the prompt asked for: the prompt's `expect` list (`key`, `key=value` or `key^=prefix`, matched on any object in the spec; `block=title-card`, `kind=area`, `type=diff`; `a|b` is met by either, for a thing the spec can say two ways, like a transition given as a bare name or as an object with a `type`) is all found. `kind=` counts the typed chart kind only, so a chart written as raw Vega-Lite reads as missing. `-` when the prompt lists none. It never changes `valid`, so a summary from before this column is still comparable. The totals line reads `feature used n/m`; a miss names what was not found |
+| first try | `✓` when the host's first `validate` call passed, `✗` when it needed more, `-` when it never ran one |
+| changed | for edit prompts: the leaf JSON paths that differ from the seed (a targeted edit changes only a few). A prompt with `maxChanged` is flagged `edit too broad` in the notes when more paths changed than that (a rewrite of the seed is not an edit). It never changes `valid`: the paths are counted by array index, so one node inserted mid-array shifts every later one. The limits sit above what committed summaries show a correct edit changing |
 
 Results go to `results/<timestamp>/<host>-<skill>/`: `results.json`,
 `summary.md`, and for each case the spec, the transcript, and the built
@@ -96,8 +119,12 @@ tour, for the rename). The pass bar for a billed run is 90% valid.
   each naming a 10 to 30 second duration and tagged with a `category`. Some ask for
   capabilities a later release adds, so a spec that cannot express them is a
   real miss, not a harness fault.
-- `--set items`: one prompt per new field or block, appended as each feature
-  lands (empty until then).
+- `--set items`: 57 prompts, one per field or block added since the first release, each with an `expect` list for the
+  feature-used column. It covers all 38 blocks, including the ten added in 1.2.0 (five product-screen mockups,
+  five hand-drawn), none of which has a committed result. A test checks that every block has a prompt that expects it, and that
+  each expectation is met by a spec the skill ships. `item-beats` is a 6-second clip with a closing line on beat 8:
+  the first version (10 seconds, last change at 3 seconds) could not pass `check.mjs`, which fails a dead stretch,
+  more than 3 seconds in which nothing on screen changes, outside the final 3 seconds.
 
 The benchmark prompts read files from `fixtures/data/`, which every run copies to
 `./data/`:
@@ -117,10 +144,34 @@ The benchmark prompts read files from `fixtures/data/`, which every run copies t
 `makeTestVideo` with `{ source: 'smptebars' }`; both were generated once and
 committed. A test checks `music.wav` byte for byte against the helper.
 
+## Other fixtures
+
+`fixtures/seeds/` holds the spec an edit prompt starts from (`dashboard.json`, `diagram.json`, `explainer.json`,
+`scene.json`, `scene-tour.json`, `motion.json`); `fixtures/data/` also has `sales.csv`, `web_traffic.csv`,
+`tickets.csv` (priority, channel, team and three numbers, for the dashboard `kinds` set), `service_calls.json`,
+`orders.diagram.json`, `units.dashboard.json` and `logo.svg`. An edit prompt names the change it wants, and
+`maxChanged` is how many leaf paths a targeted edit should change; more is reported as too broad.
+
+## Bar and budget
+
+- **Bar.** A gate in a committed summary passes when at least `ceil(0.9 × n)` prompts are valid and the median
+  validate runs is 2 or fewer (scene: 90% valid). Valid means the harness's own `validate` and output step passed; the `feature`
+  column says whether the prompt's feature is in the spec, and `check` whether the page passes its browser check.
+  Neither judges whether the text or the picture is good.
+- **Budget.** One prompt is one host session. State the prompt count and the host before a billed run, run each prompt once
+  (no cell here has been run three times, so a pass is one sample), and add a row to
+  [`results/INDEX.md`](results/INDEX.md) with the plugin version, the host CLI version and the command line.
+- **Which model ran.** `model reported` is the agent's own claim. With `--host claude-frontmatter` the model is the
+  account default and the frontmatter path is unverified: read the model from the session log.
+
 ## Tests
 
 `node --test "test/**/*.test.mjs"` uses a fake skill and fake host, so it
-needs no LLM.
+needs no LLM. `test/lib.test.mjs` covers scoring, the prompt files (every block, section type and chart kind has a
+prompt that expects it) and the run-eval flags; `test/validate-fuzz.test.mjs` runs the five `validate.mjs` scripts on specs
+whose keys and lookup values are `constructor`, `__proto__` and `toString`, and shows it catches a scratch validator
+that accepts them; `test/docs-facts.test.mjs` ties the plugin README and USAGE to the code. They need each skill's
+`node_modules` installed, and none opens a browser or calls a model.
 
 ## Caveats
 

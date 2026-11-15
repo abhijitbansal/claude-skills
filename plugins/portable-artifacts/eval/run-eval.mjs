@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, buildPrompt, expandCmd, loadPrompts, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
+import { SKILLS, LOCAL_MODEL_GATED_SKILLS, buildPrompt, expandCmd, loadPrompts, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const { values: opts } = parseArgs({
@@ -20,11 +20,13 @@ const { values: opts } = parseArgs({
     only: { type: 'string' },
     timeout: { type: 'string', default: '600' },
     out: { type: 'string' },
+    'allow-local-models': { type: 'boolean', default: false },
+    'abort-no-spec': { type: 'string' },
   },
 });
 
 function usage(msg) {
-  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--agent name] [--set name] [--limit n] [--only id,id] [--timeout sec] [--out dir]\n`);
+  process.stderr.write(`${msg}\nusage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--agent name] [--set name] [--limit n] [--only id,id] [--timeout sec] [--abort-no-spec sec] [--allow-local-models] [--out dir]\n`);
   process.exit(2);
 }
 
@@ -37,6 +39,14 @@ if (opts.agent !== undefined) {
   if (opts.agent === '') usage('--agent needs a name');
   if (!host.agentArgs) usage(`host "${opts.host}" has no agentArgs`);
 }
+// A host without modelArgs runs whatever model its own settings pick (claude-frontmatter: the SKILL.md frontmatter), so a --model would be ignored.
+if (opts.model !== undefined && !host.modelArgs) usage(`host "${opts.host}" has no modelArgs, so --model would be ignored; leave it out`);
+if (host.local && LOCAL_MODEL_GATED_SKILLS.includes(opts.skill) && !opts['allow-local-models']) {
+  usage(`${opts.skill} is not run on a local model by default (host "${opts.host}"): local models often end their turn before writing the spec on ${LOCAL_MODEL_GATED_SKILLS.join(' and ')}, and each such run waits out the timeout; see eval/results/INDEX.md. Pass --allow-local-models to run it anyway`);
+}
+// Seconds with no spec file and no validate call before a run is cut short: --abort-no-spec, else the host's abortNoSpecSec; 0 turns it off.
+const abortNoSpecSec = opts['abort-no-spec'] === undefined ? (host.abortNoSpecSec ?? 0) : Number(opts['abort-no-spec']);
+if (!Number.isInteger(abortNoSpecSec) || abortNoSpecSec < 0 || opts['abort-no-spec'] === '') usage(`--abort-no-spec must be a whole number of seconds (0 turns it off), got "${opts['abort-no-spec']}"`);
 
 // --set picks prompts/<skill>-<set>.json (no flag: prompts/<skill>.json); an unknown set is a usage error before any host runs.
 let prompts;
@@ -88,21 +98,29 @@ for (const p of prompts) {
   process.stdout.write(`▶ ${p.id} (${work})\n`);
   const caseDir = path.join(resultsDir, p.id);
   fs.mkdirSync(caseDir, { recursive: true });
+  const evalLog = path.join(work, '.eval-log.jsonl');
+  const specFile = path.join(work, skillCfg.spec);
+  // Progress = a validate call, or a spec the host wrote (for an edit prompt: one that differs from the seed it started with).
+  const seedText = p.seed ? fs.readFileSync(specFile, 'utf8') : null;
+  const madeProgress = () => fs.existsSync(evalLog) || (fs.existsSync(specFile) && (seedText === null || fs.readFileSync(specFile, 'utf8') !== seedText));
   const r = await run(argv, {
     cwd: work,
-    env: { EVAL_LOG: path.join(work, '.eval-log.jsonl'), PA_OUTPUT_DIR: path.join(work, 'out') }, // PA_OUTPUT_DIR keeps make-diagram's default output inside the workdir
+    env: { EVAL_LOG: evalLog, PA_OUTPUT_DIR: path.join(work, 'out') }, // PA_OUTPUT_DIR keeps the default output inside the workdir
     timeoutMs: Number(opts.timeout) * 1000,
     logFile: path.join(caseDir, 'transcript.txt'),
+    abortIf: abortNoSpecSec > 0 ? { afterMs: abortNoSpecSec * 1000, done: madeProgress } : undefined,
   });
-  const score = await scoreRun({ work, skillCfg, skillDir: path.join(work, 'skills', skillCfg.dir), seedSpec });
-  const row = { id: p.id, hostExit: r.code, timedOut: r.timedOut, seconds: r.seconds, ...score };
+  const score = await scoreRun({ work, skillCfg, skillDir: path.join(work, 'skills', skillCfg.dir), seedSpec, expect: p.expect, maxChanged: p.maxChanged });
+  const row = { id: p.id, hostExit: r.code, timedOut: r.timedOut, aborted: r.aborted, seconds: r.seconds, ...score };
   rows.push(row);
-  for (const f of [skillCfg.spec, 'output.log', 'check.log', ...skillCfg.artifacts]) {
+  // .eval-log.jsonl is every validate call the host made, in order: kept so a retry loop can be read back, not just counted.
+  for (const f of [skillCfg.spec, 'output.log', 'check.log', '.eval-log.jsonl', ...skillCfg.artifacts]) {
     const src = path.join(work, f);
     if (fs.existsSync(src)) fs.cpSync(src, path.join(caseDir, path.basename(f)), { recursive: true });
   }
   fs.rmSync(work, { recursive: true, force: true }); // artifacts already copied; rmSync does not follow the node_modules symlink
-  process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  check ${row.checkOk === null ? '-' : row.checkOk ? '✓' : '✗'}  ${row.seconds.toFixed(0)}s  model ${row.model}\n`);
+  const tri = (x) => (x === null ? '-' : x ? '✓' : '✗');
+  process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  check ${tri(row.checkOk)}  feature ${tri(row.featureOk)}  ${row.seconds.toFixed(0)}s  model ${row.model}${row.aborted ? '  (aborted: no spec)' : ''}\n`);
 }
 
 fs.writeFileSync(path.join(resultsDir, 'results.json'), `${JSON.stringify({ host: opts.host, skill: opts.skill, model: opts.model ?? null, agent: opts.agent ?? null, rows }, null, 2)}\n`);

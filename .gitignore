@@ -14,6 +14,7 @@ plugins/ios-dev/skills/app-preview/.imessage-to
 # portable-artifacts eval output (summaries are copied to results/summary-*.md)
 plugins/portable-artifacts/eval/results/*
 !plugins/portable-artifacts/eval/results/summary-*.md
+!plugins/portable-artifacts/eval/results/INDEX.md
 plugins/portable-artifacts/**/out/
 plugins/portable-artifacts/**/dist/
 plugins/portable-artifacts/**/.cache/
