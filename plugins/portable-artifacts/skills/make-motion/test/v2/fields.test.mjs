@@ -13,21 +13,37 @@ const get = (name) => registries.fields.get(name);
 
 // A recording fake: every method call on a context is logged as [name, ...args]; gradients are objects
 // that log addColorStop into the same list. OffscreenCanvas instances are collected in `surfaces`.
-function recordingContext() {
+// A gradient whose methods live on the prototype, so two recorded gradients compare equal in deepEqual.
+class FakeGradient {
+  constructor(calls) { Object.defineProperty(this, 'calls', { value: calls, enumerable: false }); }
+  addColorStop(...stop) { this.calls.push(['addColorStop', ...stop]); }
+}
+
+// Property writes are logged too, as ['=name', value], so tests can see state changes in call order.
+// throwOn names a method that throws when called, to test cleanup.
+function recordingContext({ throwOn } = {}) {
   const calls = [];
   const props = {};
   const ctx = new Proxy(props, {
     get(target, key) {
       if (key in target) return target[key];
+      if (key === throwOn) return () => { calls.push([String(key)]); throw new Error(`${String(key)} failed`); };
       if (key === 'createRadialGradient' || key === 'createLinearGradient') {
         return (...args) => {
           calls.push([key, ...args]);
-          return { addColorStop: (...stop) => calls.push(['addColorStop', ...stop]) };
+          return new FakeGradient(calls);
+        };
+      }
+      if (key === 'createImageData') {
+        return (w, h) => {
+          const image = { width: w, height: h, data: new Uint8ClampedArray(w * h * 4) };
+          calls.push(['createImageData', w, h]);
+          return image;
         };
       }
       return (...args) => { calls.push([String(key), ...args]); };
     },
-    set(target, key, value) { target[key] = value; return true; },
+    set(target, key, value) { calls.push([`=${String(key)}`, value]); target[key] = value; return true; },
   });
   return { ctx, calls, props };
 }
@@ -185,31 +201,41 @@ test('an override does not move the other randomly drawn values', () => {
 });
 
 test('unknown params throw and list the accepted names', () => {
-  assert.throws(() => get('paper').plan({ w: 100, h: 100, seed: 1, palette, params: { fibers: 5 } }),
+  assert.throws(() => get('paper').plan({ w: 300, h: 300, seed: 1, palette, params: { fibers: 5 } }),
     /unknown param "fibers" for field "paper"; accepted: blotches, blotchAlpha, fibres, fibreAlpha, specks, grainAlpha/);
-  assert.throws(() => get('mesh').plan({ w: 100, h: 100, seed: 1, palette, params: { x: 1 } }),
+  assert.throws(() => get('mesh').plan({ w: 300, h: 300, seed: 1, palette, params: { x: 1 } }),
     /unknown param "x" for field "mesh"; accepted: blobs, strength/);
-  assert.throws(() => get('halftone').plan({ w: 100, h: 100, seed: 1, palette, params: { size: 1 } }),
+  assert.throws(() => get('halftone').plan({ w: 300, h: 300, seed: 1, palette, params: { size: 1 } }),
     /unknown param "size" for field "halftone"; accepted: cell, angle, color, strength/);
 });
 
 test('params with a bad value throw naming the param and its range', () => {
-  assert.throws(() => get('paper').plan({ w: 100, h: 100, seed: 1, palette, params: { fibres: 2.5 } }), /param "fibres" must be an integer/);
-  assert.throws(() => get('paper').plan({ w: 100, h: 100, seed: 1, palette, params: { grainAlpha: 2 } }), /param "grainAlpha" must be a number in \[0, 1\]/);
-  assert.throws(() => get('mesh').plan({ w: 100, h: 100, seed: 1, palette, params: { blobs: 0 } }), /param "blobs" must be an integer in \[1, 8\]/);
-  assert.throws(() => get('halftone').plan({ w: 100, h: 100, seed: 1, palette, params: { color: 'neon' } }), /param "color" must be one of: ink, ink2, accent, accent2, rule/);
-  assert.throws(() => get('halftone').plan({ w: 100, h: 100, seed: 1, palette, params: [] }), /params must be an object/);
+  assert.throws(() => get('paper').plan({ w: 300, h: 300, seed: 1, palette, params: { fibres: 2.5 } }), /param "fibres" must be an integer/);
+  assert.throws(() => get('paper').plan({ w: 300, h: 300, seed: 1, palette, params: { grainAlpha: 2 } }), /param "grainAlpha" must be a number in \[0, 1\]/);
+  assert.throws(() => get('mesh').plan({ w: 300, h: 300, seed: 1, palette, params: { blobs: 0 } }), /param "blobs" must be an integer in \[1, 8\]/);
+  assert.throws(() => get('halftone').plan({ w: 300, h: 300, seed: 1, palette, params: { color: 'neon' } }), /param "color" must be one of: ink, ink2, accent, accent2, rule/);
+  assert.throws(() => get('halftone').plan({ w: 300, h: 300, seed: 1, palette, params: [] }), /params must be an object/);
 });
 
 test('plan rejects a bad size, unit, seed or palette', () => {
   for (const name of FIELD_NAMES) {
     const f = get(name);
-    assert.throws(() => f.plan({ w: 0, h: 100, seed: 1, palette }), /w and h must be finite numbers > 0/, name);
-    assert.throws(() => f.plan({ w: 100, h: NaN, seed: 1, palette }), /w and h must be finite numbers > 0/, name);
-    assert.throws(() => f.plan({ w: 100, h: 100, unit: -1, seed: 1, palette }), /unit must be a finite number > 0/, name);
-    assert.throws(() => f.plan({ w: 100, h: 100, seed: 'x', palette }), /seed must be a finite number/, name);
-    assert.throws(() => f.plan({ w: 100, h: 100, seed: 1, palette: { ...palette, accent: 'red' } }), /palette\.accent must be #rrggbb/, name);
-    assert.throws(() => f.plan({ w: 100, h: 100, seed: 1 }), /palette must be an object/, name);
+    assert.throws(() => f.plan({ w: 0, h: 300, seed: 1, palette }), /w and h must be positive integers/, name);
+    assert.throws(() => f.plan({ w: 300, h: NaN, seed: 1, palette }), /w and h must be positive integers/, name);
+    assert.throws(() => f.plan({ w: 300.5, h: 300, seed: 1, palette }), /w and h must be positive integers/, name);
+    assert.throws(() => f.plan({ w: 300, h: -300, seed: 1, palette }), /w and h must be positive integers/, name);
+    assert.throws(() => f.plan({ w: 300, h: 300, unit: -1, seed: 1, palette }), /unit must be at least 0\.25/, name);
+    assert.throws(() => f.plan({ w: 300, h: 300, unit: 0.24, seed: 1, palette }), /unit must be at least 0\.25/, name);
+    assert.throws(() => f.plan({ w: 300, h: 300, unit: NaN, seed: 1, palette }), /unit must be at least 0\.25/, name);
+    assert.throws(() => f.plan({ w: 300, h: 200, seed: 1, palette }), /unit must be at least 0\.25/, `${name}: default unit 200/1080 is too small`);
+    assert.doesNotThrow(() => f.plan({ w: 300, h: 270, seed: 1, palette }), name);
+    assert.throws(() => f.plan({ w: 300, h: 300, seed: 'x', palette }), /seed must be an integer/, name);
+    assert.throws(() => f.plan({ w: 300, h: 300, seed: 1.5, palette }), /seed must be an integer/, name);
+    for (const bad of [null, undefined, 7, 'plan', []]) {
+      assert.throws(() => f.plan(bad), /plan input must be an object/, `${name}: ${JSON.stringify(bad)}`);
+    }
+    assert.throws(() => f.plan({ w: 300, h: 300, seed: 1, palette: { ...palette, accent: 'red' } }), /palette\.accent must be #rrggbb/, name);
+    assert.throws(() => f.plan({ w: 300, h: 300, seed: 1 }), /palette must be an object/, name);
   }
 });
 
@@ -221,7 +247,7 @@ test('paper paints once into an offscreen canvas of the plan size, then only bli
   assert.equal(surface.width, 640);
   assert.equal(surface.height, 360);
   assert.ok(names(surface.rec.calls).filter((n) => n === 'stroke').length >= p.fibres.length, 'fibres were stroked into the cache');
-  assert.deepEqual(main.calls, [['drawImage', surface, 0, 0]]);
+  assert.deepEqual(main.calls, [['save'], ['drawImage', surface, 0, 0], ['restore']]);
   const made = surfaces.length;
   const cachedCalls = surface.rec.calls.length;
 
@@ -229,12 +255,12 @@ test('paper paints once into an offscreen canvas of the plan size, then only bli
   get('paper').paint(again.ctx, p, 3.5);
   assert.equal(surfaces.length, made, 'no new offscreen canvas on the second paint');
   assert.equal(surface.rec.calls.length, cachedCalls, 'fibres were not redrawn');
-  assert.deepEqual(again.calls, [['drawImage', surface, 0, 0]]);
+  assert.deepEqual(again.calls, [['save'], ['drawImage', surface, 0, 0], ['restore']]);
 });
 
 test('paper caches per plan object: a separate plan gets its own surface', () => {
-  const a = get('paper').plan({ w: 200, h: 100, seed: 1, palette });
-  const b = get('paper').plan({ w: 200, h: 100, seed: 2, palette });
+  const a = get('paper').plan({ w: 480, h: 270, seed: 1, palette });
+  const b = get('paper').plan({ w: 480, h: 270, seed: 2, palette });
   get('paper').paint(recordingContext().ctx, a, 0);
   const afterA = surfaces.length;
   get('paper').paint(recordingContext().ctx, b, 0);
@@ -252,8 +278,8 @@ test('paper layers a tint, blotch gradients, fibres, specks and a grain tile', (
 });
 
 test('paper grain is the same pixel for pixel for the same seed', () => {
-  const a = get('paper').plan({ w: 300, h: 200, seed: 5, palette });
-  const b = get('paper').plan({ w: 300, h: 200, seed: 5, palette });
+  const a = get('paper').plan({ w: 480, h: 300, seed: 5, palette });
+  const b = get('paper').plan({ w: 480, h: 300, seed: 5, palette });
   get('paper').paint(recordingContext().ctx, a, 0);
   const first = surfaces.map((s) => s.rec.calls);
   surfaces.length = 0;
@@ -267,7 +293,7 @@ test('paper and halftone paint the same whatever t is; mesh does not', () => {
     const run = (t) => {
       surfaces.length = 0;
       const main = recordingContext();
-      f.paint(main.ctx, f.plan({ w: 320, h: 180, seed: 3, palette }), t);
+      f.paint(main.ctx, f.plan({ w: 480, h: 300, seed: 3, palette }), t);
       return { main: main.calls.map((c) => c[0]), cache: surfaces.map((s) => s.rec.calls) };
     };
     assert.deepEqual(run(0), run(9), name);
@@ -275,7 +301,7 @@ test('paper and halftone paint the same whatever t is; mesh does not', () => {
   const mesh = get('mesh');
   const at = (t) => {
     const main = recordingContext();
-    mesh.paint(main.ctx, mesh.plan({ w: 320, h: 180, seed: 3, palette }), t);
+    mesh.paint(main.ctx, mesh.plan({ w: 480, h: 300, seed: 3, palette }), t);
     return main.calls;
   };
   assert.notDeepEqual(at(0), at(9));
@@ -337,10 +363,122 @@ test('mesh draws each blob as a radial gradient centred on its swaying position'
   assert.equal(main.calls.filter((c) => c[0] === 'fillRect').length, p.blobs.length + 1, 'paper base plus one fill per blob');
 });
 
-test('mesh paint rejects a t that is not a finite number', () => {
-  const p = get('mesh').plan({ w: 640, h: 360, seed: 3, palette });
-  assert.throws(() => get('mesh').paint(recordingContext().ctx, p, NaN), /t must be a finite number/);
-  assert.throws(() => get('mesh').paint(recordingContext().ctx, p, '1'), /t must be a finite number/);
+test('every field paint rejects a t that is not a finite number, naming the field', () => {
+  for (const name of FIELD_NAMES) {
+    const p = get(name).plan({ w: 640, h: 360, seed: 3, palette });
+    for (const bad of [NaN, Infinity, '1', undefined, null]) {
+      assert.throws(() => get(name).paint(recordingContext().ctx, p, bad), new RegExp(`${name}\\.paint: t must be a finite number`), `${name} t=${String(bad)}`);
+    }
+  }
+});
+
+test('paint rejects a plan of the wrong field and names both', () => {
+  const plans = Object.fromEntries(FIELD_NAMES.map((n) => [n, get(n).plan({ w: 480, h: 300, seed: 3, palette })]));
+  for (const name of FIELD_NAMES) {
+    for (const other of FIELD_NAMES.filter((n) => n !== name)) {
+      assert.throws(() => get(name).paint(recordingContext().ctx, plans[other], 0), { message: `${name}.paint: expected a ${name} plan, got ${other}` }, `${name} given ${other}`);
+    }
+    assert.throws(() => get(name).paint(recordingContext().ctx, null, 0), new RegExp(`${name}\\.paint: expected a ${name} plan, got null`));
+    assert.throws(() => get(name).paint(recordingContext().ctx, {}, 0), new RegExp(`${name}\\.paint: expected a ${name} plan, got object`));
+    assert.throws(() => get(name).paint(recordingContext().ctx, undefined, 0), new RegExp(`${name}\\.paint: expected a ${name} plan, got undefined`));
+  }
+  assert.equal(surfaces.length, 0, 'a rejected plan creates no canvas');
+});
+
+const STATE_CALLS = /^(=|setTransform$|resetTransform$|transform$|scale$|rotate$|translate$)/;
+
+test('paint leaves no state behind: one save/restore pair around every state change', () => {
+  for (const name of FIELD_NAMES) {
+    const f = get(name);
+    const main = recordingContext();
+    f.paint(main.ctx, f.plan({ w: 480, h: 300, seed: 3, palette }), 1);
+    const list = names(main.calls);
+    assert.equal(list[0], 'save', name);
+    assert.equal(list.at(-1), 'restore', name);
+    assert.equal(list.filter((n) => n === 'save').length, 1, name);
+    assert.equal(list.filter((n) => n === 'restore').length, 1, name);
+    const outside = [...list.slice(0, 1), ...list.slice(-1)];
+    assert.ok(outside.every((n) => !STATE_CALLS.test(n)), `${name}: no state change outside the pair`);
+  }
+});
+
+test('paint honours the caller transform, alpha and composite mode: it never resets them on the caller context', () => {
+  for (const name of FIELD_NAMES) {
+    const f = get(name);
+    const main = recordingContext();
+    f.paint(main.ctx, f.plan({ w: 480, h: 300, seed: 3, palette }), 1);
+    const touched = names(main.calls).filter((n) => /^(=globalAlpha|=globalCompositeOperation|setTransform|resetTransform|transform|scale|rotate|translate)$/.test(n));
+    assert.deepEqual(touched, [], name);
+  }
+});
+
+test('paint restores the context even when a draw call throws', () => {
+  const cases = [['paper', 'drawImage'], ['halftone', 'drawImage'], ['mesh', 'createRadialGradient']];
+  for (const [name, failing] of cases) {
+    const f = get(name);
+    const main = recordingContext({ throwOn: failing });
+    assert.throws(() => f.paint(main.ctx, f.plan({ w: 480, h: 300, seed: 3, palette }), 1), new RegExp(`${failing} failed`), name);
+    const list = names(main.calls);
+    assert.equal(list.filter((n) => n === 'save').length, 1, name);
+    assert.equal(list.at(-1), 'restore', name);
+  }
+});
+
+test('paint restores the context when the cache cannot be built', () => {
+  delete globalThis.OffscreenCanvas;
+  const f = get('paper');
+  const main = recordingContext();
+  assert.throws(() => f.paint(main.ctx, f.plan({ w: 480, h: 300, seed: 3, palette }), 0), /OffscreenCanvas is not available/);
+  assert.deepEqual(names(main.calls), ['save', 'restore']);
+});
+
+test('an offscreen build context sets its own transform, alpha and composite before it draws', () => {
+  const DRAWS = new Set(['fillRect', 'fill', 'stroke', 'arc', 'drawImage', 'putImageData']);
+  for (const name of ['paper', 'halftone']) {
+    surfaces.length = 0;
+    const f = get(name);
+    f.paint(recordingContext().ctx, f.plan({ w: 480, h: 300, seed: 3, palette }), 0);
+    assert.ok(surfaces.length >= 1);
+    for (const s of surfaces) {
+      const calls = s.rec.calls;
+      const firstDraw = calls.findIndex((c) => DRAWS.has(c[0]));
+      const before = calls.slice(0, firstDraw);
+      assert.ok(before.some((c) => c[0] === 'setTransform' && c.slice(1).join() === '1,0,0,1,0,0'), `${name}: identity transform set`);
+      assert.ok(before.some((c) => c[0] === '=globalAlpha' && c[1] === 1), `${name}: alpha set to 1`);
+      assert.ok(before.some((c) => c[0] === '=globalCompositeOperation' && c[1] === 'source-over'), `${name}: composite set to source-over`);
+    }
+  }
+});
+
+test('mesh and halftone draw from different random streams for the same seed', () => {
+  let agree = 0;
+  for (let seed = 1; seed <= 40; seed += 1) {
+    const meshBucket = get('mesh').plan({ w: 480, h: 300, seed, palette }).blobs.length - 4;
+    const angle = get('halftone').plan({ w: 480, h: 300, seed, palette }).angle;
+    if (meshBucket === Math.min(2, Math.floor(((angle - 15) / 60) * 3))) agree += 1;
+  }
+  assert.ok(agree < 30, `first draws agreed for ${agree} of 40 seeds: the streams look shared`);
+});
+
+test('the paper grain tile is written with one ImageData, in 8 grey steps at the plan alpha', () => {
+  const p = get('paper').plan({ w: 480, h: 300, seed: 5, palette });
+  get('paper').paint(recordingContext().ctx, p, 0);
+  const tile = surfaces.find((s) => s.width === p.grain.size && s.height === p.grain.size);
+  const calls = tile.rec.calls;
+  assert.deepEqual(calls.filter((c) => c[0] === 'createImageData').map((c) => c.slice(1)), [[256, 256]]);
+  const puts = calls.filter((c) => c[0] === 'putImageData');
+  assert.equal(puts.length, 1);
+  assert.deepEqual(puts[0].slice(2), [0, 0]);
+  assert.equal(calls.filter((c) => c[0] === 'fillRect').length, 0, 'no per-pixel rects');
+  const { data } = puts[0][1];
+  const alpha = Math.round(p.grain.alpha * 255);
+  const greys = new Set();
+  for (let i = 0; i < data.length; i += 4) {
+    assert.ok(data[i] === data[i + 1] && data[i] === data[i + 2], 'grey');
+    assert.equal(data[i + 3], alpha);
+    greys.add(data[i]);
+  }
+  assert.deepEqual([...greys].sort((a, b) => a - b), [0, 36, 73, 109, 146, 182, 219, 255]);
 });
 
 test('halftone dots sit on a grid rotated by the plan angle', () => {
@@ -377,7 +515,7 @@ test('halftone fills its background and caches like paper', () => {
   const main = recordingContext();
   f.paint(main.ctx, p, 0);
   const surface = surfaces[0];
-  assert.deepEqual(main.calls, [['drawImage', surface, 0, 0]]);
+  assert.deepEqual(main.calls, [['save'], ['drawImage', surface, 0, 0], ['restore']]);
   assert.ok(surface.rec.calls.some((c) => c[0] === 'fillRect' && c.slice(1).join() === '0,0,400,300'));
   const count = surface.rec.calls.length;
   f.paint(recordingContext().ctx, p, 5);
@@ -387,7 +525,7 @@ test('halftone fills its background and caches like paper', () => {
 
 test('paint without OffscreenCanvas fails with a clear message instead of a ReferenceError', () => {
   delete globalThis.OffscreenCanvas;
-  const p = get('paper').plan({ w: 100, h: 100, seed: 1, palette });
+  const p = get('paper').plan({ w: 300, h: 300, seed: 1, palette });
   assert.throws(() => get('paper').paint(recordingContext().ctx, p, 0), /OffscreenCanvas is not available/);
 });
 

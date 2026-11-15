@@ -3,10 +3,13 @@
 //   x = x + ampX * sin(2pi * t / period + phase)
 //   y = y + ampY * sin(2pi * t / (period * ratio) + phase2)
 // so a blob never leaves its amplitude of the base, however long the shot runs.
-import { mulberry32 } from '../../template/seeded.mjs';
+// paint draws inside the caller's transform, alpha and composite mode (the camera moves a field and a
+// cut may fade it) and leaves no state behind: it sits between save() and restore().
 import { registries } from '../registry.mjs';
 import { mix, rgba } from './color.mjs';
-import { TAU, checkInput, deepFreeze, randInt, randRange, resolveParams } from './shared.mjs';
+import {
+  LAYERS, TAU, checkInput, checkPaint, deepFreeze, layerRng, randInt, randRange, resolveParams, withSavedState,
+} from './shared.mjs';
 
 // Sizes are in units (1 unit = short side / 1080); plan() scales lengths by `unit`. Periods are seconds.
 const BLOB_COUNT = [4, 6];
@@ -17,6 +20,7 @@ const SWAY_RATIO = [1.2, 1.6]; // y period / x period, so the path is a slow Lis
 const DEFAULT_STRENGTH = 0.6;
 const MIX_TOWARD_PAPER = 0.5;
 const MAX_BLOBS = 8;
+const DIAMETER = 2; // diameter in radii
 // A gaussian-ish falloff: [position along the radius, share of the blob alpha].
 const BLOB_STOPS = Object.freeze([[0, 1], [0.2, 0.88], [0.45, 0.55], [0.7, 0.2], [1, 0]]);
 
@@ -53,7 +57,7 @@ function planBlob(rng, { w, h, unit }, color) {
 export function plan(input) {
   const { w, h, unit, seed, palette } = checkInput(input);
   const params = resolveParams('mesh', input.params, RULES);
-  const rng = mulberry32(seed);
+  const rng = layerRng(seed, LAYERS.mesh);
   const drawn = randInt(rng, BLOB_COUNT);
   const colours = shuffled(rng, colourPool(palette));
   const blobs = Array.from({ length: params.blobs ?? drawn }, (_, i) => planBlob(rng, { w, h, unit }, colours[i % colours.length]));
@@ -67,8 +71,7 @@ function blobCentre(b, t) {
   ];
 }
 
-export function paint(ctx, p, t) {
-  if (typeof t !== 'number' || !Number.isFinite(t)) throw new Error(`t must be a finite number, got ${t}`);
+function drawMesh(ctx, p, t) {
   ctx.fillStyle = p.background;
   ctx.fillRect(0, 0, p.w, p.h);
   for (const b of p.blobs) {
@@ -76,8 +79,13 @@ export function paint(ctx, p, t) {
     const gradient = ctx.createRadialGradient(x, y, 0, x, y, b.r);
     for (const [at, share] of BLOB_STOPS) gradient.addColorStop(at, rgba(b.color, p.alpha * share));
     ctx.fillStyle = gradient;
-    ctx.fillRect(x - b.r, y - b.r, b.r * 2, b.r * 2);
+    ctx.fillRect(x - b.r, y - b.r, b.r * DIAMETER, b.r * DIAMETER);
   }
+}
+
+export function paint(ctx, fieldPlan, t) {
+  checkPaint('mesh', fieldPlan, t);
+  withSavedState(ctx, () => drawMesh(ctx, fieldPlan, t));
 }
 
 registries.fields.add('mesh', { plan, paint });

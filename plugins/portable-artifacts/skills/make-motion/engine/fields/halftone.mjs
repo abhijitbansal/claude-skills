@@ -1,10 +1,13 @@
 // The "halftone" field: dots on a rotated grid over a flat paper colour, their area shrinking along a
 // falloff line across the canvas. plan() is pure data; paint() draws once into a cached offscreen canvas
 // and blits it afterwards (halftone never changes with t).
-import { mulberry32 } from '../../template/seeded.mjs';
+// paint draws inside the caller's transform, alpha and composite mode (the camera moves a field and a
+// cut may fade it) and leaves no state behind: the blit sits between save() and restore().
 import { registries } from '../registry.mjs';
 import { mix } from './color.mjs';
-import { TAU, blitCached, checkInput, clean, deepFreeze, randRange, resolveParams } from './shared.mjs';
+import {
+  LAYERS, TAU, blitCached, checkInput, checkPaint, clean, deepFreeze, layerRng, randRange, resolveParams,
+} from './shared.mjs';
 
 // Sizes are in units (1 unit = short side / 1080); plan() scales them by `unit`.
 const DEFAULT_CELL = 22;
@@ -36,7 +39,7 @@ function planFalloff(rng, w, h) {
 export function plan(input) {
   const { w, h, unit, seed, palette } = checkInput(input);
   const params = resolveParams('halftone', input.params, RULES);
-  const rng = mulberry32(seed);
+  const rng = layerRng(seed, LAYERS.halftone);
   const drawnAngle = randRange(rng, ANGLE_RANGE);
   const cell = (params.cell ?? DEFAULT_CELL) * unit;
   return deepFreeze({
@@ -83,8 +86,9 @@ function buildHalftone(c, p) {
 
 const cache = new WeakMap();
 
-// halftone does not depend on t, so the third argument of the field contract is not used.
-export function paint(ctx, fieldPlan) {
+// t is checked but not used: halftone does not change over time.
+export function paint(ctx, fieldPlan, t) {
+  checkPaint('halftone', fieldPlan, t);
   blitCached(ctx, cache, fieldPlan, buildHalftone);
 }
 

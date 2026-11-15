@@ -12,16 +12,50 @@ const isFiniteNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 
 export const clean = (n) => n + 0; // turns -0 into 0 so plans survive a JSON round trip
 
+const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+const isPositiveInteger = (v) => Number.isInteger(v) && v > 0;
+const MIN_UNIT = 0.25; // a short side under 270 px: grain, fibres and dots would shrink below a pixel
+
 // Validates the arguments every field plan takes and fills in unit (pixels per unit) when it is omitted.
-export function checkInput({ w, h, unit, seed, palette } = {}) {
-  if (!isFiniteNumber(w) || !isFiniteNumber(h) || w <= 0 || h <= 0) throw new Error(`w and h must be finite numbers > 0, got ${w} x ${h}`);
-  if (unit !== undefined && (!isFiniteNumber(unit) || unit <= 0)) throw new Error(`unit must be a finite number > 0, got ${unit}`);
-  if (!isFiniteNumber(seed)) throw new Error(`seed must be a finite number, got ${seed}`);
-  if (palette === null || typeof palette !== 'object') throw new Error('palette must be an object with paper, ink, ink2, accent, accent2 and rule');
+export function checkInput(input) {
+  if (!isPlainObject(input)) throw new Error(`plan input must be an object with w, h, seed and palette, got ${input === null ? 'null' : typeof input}`);
+  const { w, h, unit, seed, palette } = input;
+  if (!isPositiveInteger(w) || !isPositiveInteger(h)) throw new Error(`w and h must be positive integers (pixels), got ${w} x ${h}`);
+  const resolved = unit ?? Math.min(w, h) / REFERENCE_SIDE;
+  if (!isFiniteNumber(resolved) || resolved < MIN_UNIT) {
+    throw new Error(`unit must be at least ${MIN_UNIT} (1 unit = short side / ${REFERENCE_SIDE}; a short side under ${MIN_UNIT * REFERENCE_SIDE} px is too small), got ${resolved}`);
+  }
+  if (!Number.isInteger(seed)) throw new Error(`seed must be an integer, got ${seed}`);
+  if (!isPlainObject(palette)) throw new Error('palette must be an object with paper, ink, ink2, accent, accent2 and rule');
   for (const key of PALETTE_KEYS) {
     if (!isHexColour(palette[key])) throw new Error(`palette.${key} must be #rrggbb, got ${JSON.stringify(palette[key])}`);
   }
-  return { w, h, unit: unit ?? Math.min(w, h) / REFERENCE_SIDE, seed, palette };
+  return { w, h, unit: resolved, seed, palette };
+}
+
+// What paint(ctx, plan, t) is given: a plan made by the same field and a finite t. Checked before ctx is touched.
+export function checkPaint(field, plan, t) {
+  if (!isPlainObject(plan) || plan.field !== field) throw new Error(`${field}.paint: expected a ${field} plan, got ${describePlan(plan)}`);
+  if (!isFiniteNumber(t)) throw new Error(`${field}.paint: t must be a finite number, got ${t}`);
+}
+
+function describePlan(plan) {
+  if (plan === null) return 'null';
+  if (Array.isArray(plan)) return 'array';
+  if (typeof plan !== 'object') return typeof plan;
+  return typeof plan.field === 'string' ? plan.field : 'object';
+}
+
+// Runs draw(ctx) between save() and restore(), restoring even when a draw call throws, so a field
+// leaves the caller's fillStyle and the like untouched. It deliberately does not reset the caller's
+// transform, alpha or composite mode: the camera moves a field and a cut may fade it.
+export function withSavedState(ctx, draw) {
+  ctx.save();
+  try {
+    draw(ctx);
+  } finally {
+    ctx.restore();
+  }
 }
 
 function checkParam(field, name, value, rule) {
@@ -47,7 +81,9 @@ export function resolveParams(field, params, rules) {
   return Object.freeze({ ...params });
 }
 
-// One random stream per layer, so overriding one param never shifts the draws of another layer.
+// One random stream per layer, so overriding one param never shifts the draws of another layer. Every
+// layer of every field has its own index here, so two fields given the same seed are not correlated.
+export const LAYERS = Object.freeze({ paperBlotches: 0, paperFibres: 1, paperSpecks: 2, paperGrain: 3, mesh: 4, halftone: 5 });
 export const layerRng = (seed, layer) => mulberry32((seed + Math.imul(layer + 1, LAYER_STRIDE)) >>> 0);
 
 export const randRange = (rng, [lo, hi]) => lo + (hi - lo) * rng();
@@ -61,23 +97,30 @@ export function deepFreeze(value) {
   return value;
 }
 
-// An OffscreenCanvas and its 2d context. It is the page (or a test fake) that provides the class.
+// An OffscreenCanvas and its 2d context, which is the field's own: transform, alpha and composite mode
+// are set explicitly. It is the page (or a test fake) that provides the class.
 export function createSurface(w, h) {
   if (typeof OffscreenCanvas !== 'function') throw new Error('OffscreenCanvas is not available here; fields paint through it');
   const canvas = new OffscreenCanvas(w, h);
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('OffscreenCanvas could not give a 2d context');
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = 'source-over';
   return { canvas, ctx };
 }
 
-// Paints the plan once into an offscreen canvas of the plan's size, keyed by the plan object, then blits it.
+// Paints the plan once into an offscreen canvas of the plan's size, keyed by the plan object, then blits
+// it into the caller's context (inside the caller's transform, alpha and composite mode).
 export function blitCached(ctx, cache, plan, build) {
-  let canvas = cache.get(plan);
-  if (canvas === undefined) {
-    const surface = createSurface(plan.w, plan.h);
-    build(surface.ctx, plan);
-    canvas = surface.canvas;
-    cache.set(plan, canvas);
-  }
-  ctx.drawImage(canvas, 0, 0);
+  withSavedState(ctx, () => {
+    let canvas = cache.get(plan);
+    if (canvas === undefined) {
+      const surface = createSurface(plan.w, plan.h);
+      build(surface.ctx, plan);
+      canvas = surface.canvas;
+      cache.set(plan, canvas);
+    }
+    ctx.drawImage(canvas, 0, 0);
+  });
 }
