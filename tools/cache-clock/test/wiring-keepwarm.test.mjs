@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { loadConfig } from "../extension/lib/config.mjs";
 import { PING_DISPLAY, PING_PROMPT } from "../extension/lib/keepwarm.mjs";
 import { usage, pingUsage, T0, MIN } from "./fixtures.mjs";
-import { fakeHost, sonnet, iso, goCold } from "./helpers/fake-host.mjs";
+import { fakeHost, sonnet, iso, goCold, flush } from "./helpers/fake-host.mjs";
 
 // Keep-warm: the scheduler wired to a fake host that answers each ping like Copilot does.
 const HOUR = 60 * MIN;
@@ -196,7 +196,7 @@ test("two processes on one session: only the lock holder pings", async () => {
   assert.deepEqual([h1.sent.length, h2.sent.length], [7, 0]);
 });
 
-// RF 4: the user types while a ping is in flight; their turn is real and restarts the window.
+// RF 4: the user types while a ping is in flight; their turn is real, and its window starts when the ping is done.
 test("the user typing while a ping is in flight counts as a real turn", async () => {
   const h = fakeHost({ config: KW });
   h.autoReply = false;
@@ -213,7 +213,7 @@ test("the user typing while a ping is in flight counts as a real turn", async ()
   h.emit("session.idle", {});
   await h.command("");
   assert.match(lastLog(h), /session +2 model calls/);
-  assert.match(lastLog(h), /1 ping · \$0\.02/);
+  assert.match(lastLog(h), /0 pings · \$0/, "the window the user's message started is fresh once the ping is done");
   assert.match(lastLog(h), /3h00m left/);
 });
 
@@ -288,13 +288,26 @@ test("/cache-clock keepwarm 8 asks with the estimated cost first", async () => {
   assert.match(lastLog(no), /unchanged/);
 });
 
-test("a host that cannot ask saves a long keep-warm window and prints the estimate with it", async () => {
+test("a host that cannot ask does not save a long window: it shows the estimate and the command that confirms", async () => {
   const h = fakeHost({ config: KW });
   await h.start();
   h.emit("assistant.usage", sonnet({ at: iso(T0) }));
   await h.command("keepwarm 8");
+  assert.equal(loadConfig(h.dir).keepWarmHours, 3, "nothing is saved without a confirmation");
+  assert.match(lastLog(h), /about 24 pings, about \$0\.48/);
+  assert.match(lastLog(h), /not saved.*\/cache-clock keepwarm 8 yes/s);
+  await h.command("keepwarm 8 yes");
   assert.equal(loadConfig(h.dir).keepWarmHours, 8);
-  assert.match(lastLog(h), /about 24 pings, about \$0\.48.*keep-warm: 8h after your last message/s);
+  assert.match(lastLog(h), /keep-warm: 8h after your last message/);
+});
+
+test("a question that throws is treated the same: a long window is not saved", async () => {
+  const h = fakeHost({ config: KW, answer: new Error("no ui") });
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: iso(T0) }));
+  await h.command("keepwarm 12");
+  assert.equal(loadConfig(h.dir).keepWarmHours, 3);
+  assert.match(lastLog(h), /\/cache-clock keepwarm 12 yes/);
 });
 
 test("no keep-warm window above 6 hours is saved unless the user turns it on", async () => {
@@ -343,4 +356,215 @@ test("keepwarm on starts a window from the last model call, and keepwarm off end
   assert.match(lastLog(h), /keep-warm: off/);
   await h.run(HOUR);
   assert.equal(h.sent.length, 1);
+});
+
+// C1: whatever text the host hands the prompt hook for our own ping, it must not reset the window, the spend or the count.
+for (const [label, variant] of [["the display text", PING_DISPLAY], ["the prompt with a trailing newline", `${PING_PROMPT}\n`],
+  ["a transformed prompt", `<context>today</context>\n${PING_PROMPT}`]]) {
+  test(`a ping whose hook text is ${label} is still the ping: nothing resets, so payback stops it at 24`, async () => {
+    const h = fakeHost({ config: KW });
+    h.replyToPing = async () => {
+      await h.prompt(variant);
+      h.emit("user.message", PING_MESSAGE);
+      h.emit("assistant.turn_start", {});
+      h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+      h.emit("session.idle", {});
+    };
+    await h.start();
+    await h.turn();
+    await h.run(3 * HOUR);
+    assert.equal(h.sent.length, 24);
+    await h.command("");
+    assert.match(lastLog(h), /stopped \(payback\) · 24 pings · \$0\.48/);
+  });
+}
+
+// H1: a ping's turn ends and no main-agent usage came for it.
+test("a ping's turn that ends with no main-agent usage stops keep-warm after one send", async () => {
+  const h = fakeHost({ config: KW });
+  h.replyToPing = () => {
+    h.emit("user.message", PING_MESSAGE);
+    h.emit("assistant.turn_start", {});
+    h.emit("assistant.usage", { ...pingUsage({ at: iso(h.now) }), interactionType: "system-agent" });
+    h.emit("session.idle", {});
+  };
+  await h.start();
+  await h.turn();
+  await h.run(10 * MIN, 1000);
+  assert.equal(h.sent.length, 1);
+  await h.command("");
+  assert.match(lastLog(h), /stopped \(unmeasured\)/);
+});
+
+// H2: a reply that leaves the expiry where it was means the ping is not keeping anything warm.
+test("a ping whose reply does not move the expiry forward stops keep-warm after one send", async () => {
+  const h = fakeHost({ config: KW });
+  h.replyToPing = () => {
+    h.emit("user.message", PING_MESSAGE);
+    h.emit("assistant.turn_start", {});
+    h.emit("assistant.usage", { ...pingUsage({ at: iso(h.now) }), cacheExpiresAt: iso(T0 + 5 * MIN), cacheTtlSeconds: undefined });
+    h.emit("session.idle", {});
+  };
+  await h.start();
+  await h.turn();
+  await h.run(10 * MIN, 1000);
+  assert.equal(h.sent.length, 1);
+  await h.command("");
+  assert.match(lastLog(h), /stopped \(not-refreshing\)/);
+});
+
+// H3: the user's prompt is busy from the moment the hook fires, on every host.
+for (const [userMessage, lookup] of [[true, true], [false, true], [true, false], [false, false]]) {
+  test(`a prompt typed in the last minute of the cache holds the ping back (user.message ${userMessage}, model lookup ${lookup})`, async () => {
+    const h = fakeHost({ config: KW, emitUserMessage: userMessage });
+    h.autoReply = false;
+    if (!lookup) delete h.session.rpc.model;
+    await h.start();
+    if (!lookup) h.emit("session.model_change", { newModel: "claude-sonnet-5.5" });
+    await h.turn();
+    h.now += 4 * MIN + 20_000;
+    await h.prompt("a real question");
+    await flush();
+    h.advance(0);
+    await flush();
+    assert.equal(h.sent.length, 0, "the ping waits for the user's turn");
+  });
+}
+
+test("a user turn's idle does not end a ping that is still in flight", async () => {
+  const h = fakeHost({ config: KW });
+  h.autoReply = false;
+  const { keepWarm } = await h.start();
+  await h.turn();
+  await h.run(4 * MIN);
+  assert.equal(keepWarm.status().inFlight, true);
+  await h.prompt("typed meanwhile");
+  h.emit("user.message", { content: "typed meanwhile" });
+  h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 200_000, write: 0 }));
+  h.emit("session.idle", {});
+  assert.equal(keepWarm.status().inFlight, true, "that idle ended the user's turn, not the ping's");
+  assert.equal(h.sent.length, 1);
+  h.emit("user.message", PING_MESSAGE);
+  h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+  h.emit("session.idle", {});
+  assert.equal(keepWarm.status().inFlight, false);
+});
+
+// M1: a real send after a timed-out ping is a real call, even on a host that reports no user.message.
+test("a real cold send after a timed-out ping is booked as a call, not as a late ping", async () => {
+  const h = fakeHost({ config: KW, emitUserMessage: false, answer: "Send anyway" });
+  h.autoReply = false;
+  await h.start();
+  await h.turn();
+  await h.run(6 * MIN + 10_000);
+  await h.run(3 * MIN);
+  await h.prompt("back again");
+  h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 10_000, write: 190_000 }));
+  h.emit("session.idle", {});
+  await h.command("");
+  assert.match(lastLog(h), /session +2 model calls/);
+  assert.doesNotMatch(lastLog(h), /stopped \(cold-reply\)/);
+});
+
+// L2: a host that sends usage but no idle.
+test("a host that sends a ping's usage but no idle: the ping ends with its usage and is counted, not failed", async () => {
+  const h = fakeHost({ config: KW });
+  h.replyToPing = () => {
+    h.emit("user.message", PING_MESSAGE);
+    h.emit("assistant.turn_start", {});
+    h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+  };
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  assert.ok(!h.logs.some((l) => /ping failed/.test(l.message)));
+  await h.command("");
+  assert.match(lastLog(h), /1 ping · \$0\.02/);
+});
+
+// M5: the heads-up is suppressed only while keep-warm will really ping.
+test("when keep-warm cannot ping because another process holds the lock, the heads-up works as before", async () => {
+  const alive = new Set([1, 2]);
+  const h1 = fakeHost({ config: KW, alive });
+  const h2 = fakeHost({ config: KW, dir: h1.dir, pid: 2, alive });
+  await h1.start();
+  await h2.start();
+  await h1.turn();
+  await h2.turn();
+  for (let i = 0; i < 26; i += 1) {
+    await h1.run(10_000);
+    await h2.run(10_000);
+  }
+  assert.ok(h2.logs.some((l) => /goes cold in/.test(l.message)), "the process that cannot ping still warns");
+  assert.ok(!h1.logs.some((l) => /goes cold in/.test(l.message)), "the pinging process does not");
+  await h2.command("");
+  assert.match(lastLog(h2), /last skip: locked \(another process holds this session's keep-warm lock\)/);
+});
+
+test("when keep-warm has stopped, the heads-up works again", async () => {
+  const h = fakeHost({ config: { ...KW, keepWarmMaxUsd: 0.04, keepWarmPayback: false } });
+  await h.start();
+  await h.turn();
+  await h.run(14 * MIN);
+  assert.equal(h.sent.length, 2);
+  assert.ok(h.logs.some((l) => /goes cold in/.test(l.message)));
+});
+
+// M7: an unanswered card must not stall keep-warm silently.
+test("an open question that blocks pinging is said in the log and on the card, once", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  h.emit("user_input.requested", { requestId: "q1" });
+  await h.run(10 * MIN);
+  assert.equal(h.logs.filter((l) => /waiting on an open question/.test(l.message)).length, 1);
+  await h.command("");
+  assert.match(lastLog(h), /waiting on an open question/);
+  h.emit("user_input.completed", { requestId: "q1" });
+  await h.command("");
+  assert.doesNotMatch(lastLog(h), /waiting on an open question/);
+});
+
+// L7: plain notes in VS Code, and an honest message for an old window.
+const VS_CODE = { VSCODE_CANVAS_DATA_DIR: "/tmp/agentHostCanvasData/x" };
+
+test("in VS Code a keep-warm stop note is a plain note, not an error box", async () => {
+  const h = fakeHost({ env: VS_CODE, config: { ...KW, keepWarmMaxUsd: 0.04, keepWarmPayback: false } });
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  const note = h.logs.find((l) => /keep-warm stopped/.test(l.message));
+  assert.ok(note, "the stop was logged");
+  assert.notEqual(note.level, "error");
+});
+
+test("keepwarm on with an old last call says the window starts at the next message", async () => {
+  const h = fakeHost();
+  await h.start();
+  await h.turn();
+  h.now += 4 * HOUR;
+  await h.command("keepwarm on");
+  assert.ok(!h.logs.some((l) => /window ended/.test(l.message)));
+  await h.command("");
+  assert.match(lastLog(h), /keep-warm  on \(3h\) · starts after your next message/);
+});
+
+// L8: turning it on live and starting with it on are the same fresh start.
+test("turning keep-warm on live and starting a session with it already on give the same keep-warm state", async () => {
+  const live = fakeHost();
+  await live.start();
+  await live.turn();
+  await live.command("keepwarm on");
+  assert.match(lastLog(live), /each open session runs its own window and budget/, "the saved line says the setting is global");
+  await live.command("");
+  const reloaded = fakeHost({ config: KW });
+  reloaded.history = record("session.usage_record", T0, { usage: sonnet() });
+  await reloaded.start();
+  await reloaded.command("");
+  const keepWarmLine = (h) => lastLog(h).split("\n").find((l) => /^ {2}keep-warm/.test(l));
+  assert.equal(keepWarmLine(reloaded), keepWarmLine(live));
+  assert.match(keepWarmLine(live), /on · 3h00m left · 0 pings · \$0/);
 });

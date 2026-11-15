@@ -76,7 +76,7 @@ test("the card shows keep-warm state, time left, pings, spend and the last skip"
   const on = { ...DEFAULTS, keepWarmHours: 3 };
   const status = { state: "on", msLeft: 9_000_000, pings: 7, usd: 0.14, lastSkip: "busy", stopped: null, inFlight: false };
   assert.match(card(warm, tally, on, status), /keep-warm  on · 2h30m left · 7 pings · \$0\.14 · last skip: busy/);
-  assert.match(card(warm, tally, on, { ...status, lastSkip: null, pings: 1 }), /keep-warm  on · 2h30m left · 1 ping · \$0\.14$/);
+  assert.match(card(warm, tally, on, { ...status, lastSkip: null, pings: 1 }), /keep-warm  on · 2h30m left · 1 ping · \$0\.14(\n|$)/);
   assert.match(card(warm, tally, on, { state: "waiting" }), /keep-warm  on \(3h\) · starts after your next message/);
   assert.match(card(warm, tally, on), /keep-warm  on \(3h\) · starts after your next message/);
   assert.match(card(warm, tally, on, { ...status, state: "stopped", stopped: "payback" }), /keep-warm  stopped \(payback\) · 7 pings · \$0\.14/);
@@ -92,13 +92,36 @@ test("stop notes name the stop and the spend", () => {
   }
 });
 
+test("the card names why keep-warm is idle, and says the setting is global", () => {
+  const tally = { calls: 3, coldIdle: 0, coldBreak: 0, extraUsd: 0 };
+  const warm = { ...snap, state: "warm", msLeft: 192_000 };
+  const on = { ...DEFAULTS, keepWarmHours: 3 };
+  const status = { state: "on", msLeft: 9_000_000, pings: 7, usd: 0.14, lastSkip: null, stopped: null, inFlight: false };
+  for (const [skip, text] of [["auto", /the selection is Auto/], ["context-full", /above 85% of the prompt limit/], ["unpriced", /price is unknown/],
+    ["locked", /another process holds this session's keep-warm lock/], ["busy", /a turn is running or about to start/], ["question-open", /waiting on an open question/]]) {
+    assert.match(card(warm, tally, on, { ...status, lastSkip: skip }), new RegExp(`last skip: ${skip} \\(`), skip);
+    assert.match(card(warm, tally, on, { ...status, lastSkip: skip }), text, skip);
+  }
+  assert.match(card(warm, tally, on, { ...status, waitingOnQuestion: true }), /waiting on an open question/);
+  assert.match(card(warm, tally, on, status), /the setting is global: every open session runs its own window and budget/);
+  assert.doesNotMatch(card(warm, tally, DEFAULTS), /the setting is global/, "nothing to explain while it is off");
+});
+
+test("every stop reason has its own line, and the new ones say what happened", () => {
+  const spend = { usd: 0.1, pings: 2 };
+  for (const [reason, text] of [["not-refreshing", /did not move the cache expiry forward/], ["ping-cap", /ping limit for this window was reached/],
+    ["too-late", /about to expire before a ping could refresh it/], ["send-failed", /a ping failed to send/], ["unmeasured", /ping's cost was not reported/]]) {
+    assert.match(keepWarmStopped(reason, spend), text, reason);
+  }
+});
+
 test("saved and quote lines say what was saved and what it may cost", () => {
-  assert.equal(keepWarmSaved({ ...DEFAULTS, keepWarmHours: 3 }), "cache-clock: keep-warm: 3h after your last message · budget $0.50 · payback stop on (saved for all sessions)");
-  assert.equal(keepWarmSaved({ ...DEFAULTS, keepWarmHours: 8, keepWarmPayback: false, keepWarmMaxUsd: 2 }), "cache-clock: keep-warm: 8h after your last message · budget $2.00 · payback stop off (saved for all sessions)");
+  assert.equal(keepWarmSaved({ ...DEFAULTS, keepWarmHours: 3 }), "cache-clock: keep-warm: 3h after your last message · budget $0.50 · payback stop on (saved for all sessions; each open session runs its own window and budget)");
+  assert.equal(keepWarmSaved({ ...DEFAULTS, keepWarmHours: 8, keepWarmPayback: false, keepWarmMaxUsd: 2 }), "cache-clock: keep-warm: 8h after your last message · budget $2.00 · payback stop off (saved for all sessions; each open session runs its own window and budget)");
   assert.equal(keepWarmSaved(DEFAULTS), "cache-clock: keep-warm: off (saved for all sessions)");
   assert.equal(keepWarmQuote(snap, 8, { pings: 120, usd: 2.4 }),
-    "cache-clock: keep-warm for 8h on Claude Sonnet 5.5 (200.0k tokens) sends about 120 pings, about $2.40 at the last reported prices; the budget and payback stop end it sooner. Turn it on?");
-  assert.equal(keepWarmQuote(null, 8, null), "cache-clock: keep-warm for 8h: cost unknown until a priced model call. Turn it on?");
+    "cache-clock: keep-warm for 8h on Claude Sonnet 5.5 (200.0k tokens) sends about 120 pings, about $2.40 at the last reported prices; the budget and payback stop end it sooner. This setting is global, so every open session gets its own window and budget; this estimate is for one session. Turn it on?");
+  assert.equal(keepWarmQuote(null, 8, null), "cache-clock: keep-warm for 8h: cost unknown until a priced model call. This setting is global: every open session gets its own window and budget. Turn it on?");
 });
 
 test("configDir honours CACHE_CLOCK_HOME, then COPILOT_HOME", () => {
@@ -180,6 +203,14 @@ test("loadConfigResult reports unparseable and non-object files, and keeps valid
   assert.deepEqual(loadConfig(dir), mixed.config);
 });
 
+test("keepwarm <hours> yes is the confirmation for a long window, and only for that form", () => {
+  assert.deepEqual(parseCommand("keepwarm 8 yes"), { kind: "set", patch: { keepWarmHours: 8 } });
+  assert.deepEqual(parseCommand("keepwarm 12 yes"), { kind: "set", patch: { keepWarmHours: 12 } });
+  for (const bad of ["keepwarm 6 yes", "keepwarm 3 yes", "keepwarm on yes", "keepwarm off yes", "keepwarm 13 yes", "keepwarm 8 no", "keepwarm 8 yes now", "keepwarm budget 1 yes", "keepwarm payback on yes"]) {
+    assert.equal(parseCommand(bad).kind, "error", bad);
+  }
+});
+
 test("numbers are plain decimals: no hex, no exponent, no signs", () => {
   for (const bad of ["min 0x2", "min 1e-1", "min +1", "min -0", "headsup 0x10", "keepwarm budget 1e0", "keepwarm budget 0x1", "keepwarm 1e1", "keepwarm 0x3", "keepwarm +3"]) {
     assert.equal(parseCommand(bad).kind, "error", bad);
@@ -250,6 +281,6 @@ test("help explains what the clock does, what a cold send triggers, every comman
     /\/cache-clock guard refuse/, /\/cache-clock guard warn/, /\/cache-clock guard off/,
     /\/cache-clock min /, /\/cache-clock headsup /, /\/cache-clock help/,
     /report\.mjs --since 7d/, /VS Code/, /chat\.canvases\.enabled/, /--project/,
-    /\/cache-clock keepwarm on/, /keepwarm budget /, /keepwarm payback off/, /Keep-warm \(off until you turn it on; it costs money\)/,
+    /\/cache-clock keepwarm on/, /keepwarm budget /, /keepwarm payback off/, /Keep-warm \(off until you turn it on; it costs money\)/, /every open session gets its own window and its own budget/,
   ]) assert.match(HELP, want);
 });

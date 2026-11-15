@@ -7,7 +7,7 @@ import { createClock } from "./clock.mjs";
 import { configDir, createKeepWarmStore, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
 import { NOT_A_PROMPT, decide } from "./guard.mjs";
-import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, isPingPrompt, keepWarmEstimate } from "./keepwarm.mjs";
+import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, keepWarmEstimate, looksLikePing, looksLikePingText } from "./keepwarm.mjs";
 import { NANO_AIU_PER_USD, isMainInteraction, normalizeUsage } from "./usage.mjs";
 
 // The heads-up comes at most a fifth of the ttl before expiry.
@@ -96,7 +96,7 @@ function seed(clock, readHistory, session, select, resolveAuto, { onTruncated, o
     if (event.type !== "session.usage_record") continue;
     const call = mainCall({ ...event, data: event.data?.usage });
     if (!call) continue;
-    if (ledger.onUsage()) clock.ingestPing(call);
+    if (ledger.onUsage(looksLikePing(call))) clock.ingestPing(call);
     else clock.ingest(call);
   }
   return busy;
@@ -126,6 +126,10 @@ const isVsCode = (env) => Boolean(env?.VSCODE_CANVAS_DATA_DIR);
 const SEND = "Send anyway";
 const HOLD = "Don't send";
 const OK = "OK";
+// A prompt that has been submitted but whose turn has not started counts as busy for this long.
+const PROMPT_PENDING_MS = 30_000;
+// A keep-warm note about something that went wrong: a warning, never an error box in VS Code.
+const KEEPWARM_WARN = { level: "warning" };
 // An unanswered question holds the send; the next send in the episode goes through.
 const QUESTION_TIMEOUT_MS = 5 * 60_000;
 const MODEL_LOOKUP_TIMEOUT_MS = 250;
@@ -176,6 +180,10 @@ export async function attach({
     turnSource: null, openRequests: new Set(),
     // A ping message was seen and its usage record has not arrived yet.
     pingOwed: false,
+    // This turn is the ping's own (a ping message or a ping record was seen in it).
+    ownTurn: false,
+    // Until when a submitted prompt, whose turn has not started yet, counts as busy.
+    promptPendingUntil: 0,
   };
   // Built once the session id is known; every use before then is a no-op.
   let keepWarm = null;
@@ -184,6 +192,11 @@ export async function attach({
   // In VS Code only error-level messages reach the chat.
   const warnLevel = vsCode ? { level: "error" } : { level: "warning" };
   const rescheduleKeepWarm = () => keepWarm?.reschedule();
+  // Keep-warm replans first, so the heads-up sees whether a ping is really coming.
+  const replan = () => {
+    rescheduleKeepWarm();
+    scheduleHeadsUp();
+  };
   // A failure worth knowing about once, not on every prompt. Dropped until a session can log it.
   const logged = new Set();
   const logOnce = (key, text, options) => {
@@ -206,8 +219,8 @@ export async function attach({
     if (vsCode && canAsk(state.session)) return quietly(() => askUser(message, [OK]));
     return say(message, vsCode ? { level: "error" } : options);
   };
-  const keepWarmIsOn = () => keepWarm?.status().state === "on";
-  const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, getConfig, say, keepWarmIsOn });
+  const keepWarmWillPing = () => keepWarm?.status().willPing === true;
+  const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, getConfig, say, keepWarmWillPing });
   // While the selection is Auto, the model Copilot last resolved it to stands in for it.
   const effectiveSelection = () => state.selection?.modelId === "auto" && state.autoModel ? { ...state.selection, modelId: state.autoModel } : state.selection;
   const snapshot = () => clock.snapshot(now(), effectiveSelection());
@@ -274,7 +287,11 @@ export async function attach({
     }
     // Not awaited: abort() waits for this hook to return, so awaiting it deadlocks. A send that
     // could not be stopped goes out, so the hook must not claim it was held.
-    return abortSend() ? { suppressOutput: true } : undefined;
+    if (!abortSend()) return undefined;
+    // The send is held, so no turn will start for it.
+    state.promptPendingUntil = 0;
+    rescheduleKeepWarm();
+    return { suppressOutput: true };
   };
   const abortSend = () => {
     const report = (err) => say(`cache-clock: could not stop the send (${messageOf(err)}); it may have gone out.`, warnLevel);
@@ -289,9 +306,12 @@ export async function attach({
 
   async function onPrompt(input) {
     // Our own keep-warm ping may fire this hook: never guard it, never count it as the user.
-    // The text alone proves nothing, since a user can type it; it must match a ping we just sent.
-    if (keepWarm?.status().inFlight && isPingPrompt(input?.prompt)) return undefined;
+    // The text alone proves nothing, since a user can type it: it counts only while a ping we sent is
+    // out, and then loosely, because the host may pass the display text or a transformed prompt.
+    if (keepWarm?.status().inFlight && looksLikePingText(input?.prompt)) return undefined;
     if (NOT_A_PROMPT.test(String(input?.prompt ?? "").trimStart())) return undefined;
+    // From this moment a turn is about to start, on every host, before any timer is armed.
+    state.promptPendingUntil = now() + PROMPT_PENDING_MS;
     // A real prompt restarts the keep-warm window, whatever the guard decides next.
     quietly(() => keepWarm?.onUserTurn(now()), (err) => {
       logOnce("keepwarm-turn", `cache-clock: keep-warm could not restart its window (${messageOf(err)}).`);
@@ -376,8 +396,10 @@ export async function attach({
   state.refusedKey = loadRefusal(dir, state.session.sessionId, now());
   // Started only now, so a resumed session's clock is already in place when it first plans.
   keepWarm = buildKeepWarm({
-    state, snapshot, getConfig, now, timers, say, warnLevel,
-    infoLevel: vsCode ? { level: "error" } : { ephemeral: true },
+    state, snapshot, getConfig, now, timers, say,
+    // Plain notes: in VS Code they go to its log, not an error box in the chat.
+    infoLevel: vsCode ? undefined : { ephemeral: true },
+    onPlanChange: () => scheduleHeadsUp(),
     store: keepWarmStore(dir, state.session.sessionId),
   });
   keepWarm.start();
@@ -395,46 +417,52 @@ export async function attach({
     if (event.agentId || id === undefined) return;
     if (opened) state.openRequests.add(id);
     else state.openRequests.delete(id);
-    if (!opened) keepWarm.reschedule();
+    keepWarm.reschedule();
   };
 
   state.session.on("session.model_change", (event) => {
     if (event.agentId) return;
     select(event.data, true);
-    scheduleHeadsUp();
-    rescheduleKeepWarm();
+    replan();
   });
   state.session.on("session.model_deselected", (event) => {
     if (event.agentId) return;
     select(null, true);
-    scheduleHeadsUp();
-    rescheduleKeepWarm();
+    replan();
   });
   state.session.on("session.auto_mode_resolved", (event) => {
     // Not a selection change: Auto may resolve for the very send a question is open on.
     if (event.agentId || !resolveAuto(event.data)) return;
-    scheduleHeadsUp();
-    rescheduleKeepWarm();
+    replan();
   });
   state.session.on("user.message", (event) => {
     if (event.agentId) return;
     const ping = isPingMessage(event.data);
     state.turnSource = ping ? "ping" : "user";
-    if (ping) state.pingOwed = true;
+    if (ping) {
+      state.pingOwed = true;
+      state.ownTurn = true;
+    }
   });
   state.session.on("assistant.turn_start", (event) => {
     if (event.agentId) return;
     state.busy = true;
+    // The user's turn has started; a ping's turn starting says nothing about a prompt still queued.
+    if (state.turnSource !== "ping") state.promptPendingUntil = 0;
     keepWarm.onBusy();
   });
   state.session.on("session.idle", (event) => {
     if (event.agentId) return;
+    // Only the ping's own idle ends the ping; a user turn's idle leaves it in flight.
+    const own = state.ownTurn;
     state.busy = false;
     state.turnSource = null;
     state.pingOwed = false;
+    state.ownTurn = false;
+    if (!own) state.promptPendingUntil = 0;
+    keepWarm.onIdle(own);
     // A heads-up skipped because a turn was running gets another chance now.
     scheduleHeadsUp();
-    keepWarm.onIdle();
   });
   state.session.on("assistant.usage", (event) => {
     const call = mainCall(event);
@@ -445,18 +473,18 @@ export async function attach({
     // typed after the ping's own message must not take the ping's record (pingOwed).
     if ((state.pingOwed && awaiting) || state.turnSource === "ping" || (awaiting && state.turnSource !== "user")) {
       state.pingOwed = false;
+      state.ownTurn = true;
       fileKeepWarmPing(call, awaiting);
       scheduleHeadsUp();
       return;
     }
-    if (clock.ingest(call)) scheduleHeadsUp();
-    keepWarm.reschedule();
+    clock.ingest(call);
+    replan();
   });
   state.session.on("session.compaction_complete", (event) => {
     if (event.agentId || !compacted(event)) return;
     clock.invalidate();
-    scheduleHeadsUp();
-    rescheduleKeepWarm();
+    replan();
   });
   state.session.on("session.shutdown", (event) => {
     if (!event.agentId) keepWarm.stop("shutdown");
@@ -472,7 +500,7 @@ export async function attach({
 }
 
 /** The keep-warm scheduler wired to this session's host, config and clock. */
-function buildKeepWarm({ state, snapshot, getConfig, now, timers, say, warnLevel, infoLevel, store }) {
+function buildKeepWarm({ state, snapshot, getConfig, now, timers, say, infoLevel, onPlanChange, store }) {
   const send = () => {
     state.turnSource = null;
     const options = { prompt: PING_PROMPT, displayPrompt: PING_DISPLAY, source: "system", mode: "enqueue" };
@@ -489,7 +517,7 @@ function buildKeepWarm({ state, snapshot, getConfig, now, timers, say, warnLevel
       config: getConfig(),
       session: {
         busy: state.busy,
-        pendingPrompt: Boolean(state.pendingPrompt),
+        pendingPrompt: Boolean(state.pendingPrompt) || now() < state.promptPendingUntil,
         questionOpen: state.openRequests.size > 0,
         selectedModel: state.selection?.modelId ?? null,
       },
@@ -500,15 +528,16 @@ function buildKeepWarm({ state, snapshot, getConfig, now, timers, say, warnLevel
       return timer;
     },
     clearTimer: (timer) => timers.clearTimeout(timer),
-    log: (text, severity) => say(text, severity === "warn" ? warnLevel : infoLevel),
+    log: (text, severity) => say(text, severity === "warn" ? KEEPWARM_WARN : infoLevel),
+    onPlanChange,
   });
 }
 
-function headsUpScheduler({ state, selection, clock, now, timers, getConfig, say, keepWarmIsOn }) {
+function headsUpScheduler({ state, selection, clock, now, timers, getConfig, say, keepWarmWillPing }) {
   timers.clearTimeout(state.headsUpTimer);
   state.headsUpTimer = null;
-  // Pings keep the cache warm, and a heads-up would fire next to every one of them.
-  if (keepWarmIsOn()) return;
+  // While pings will really keep the cache warm, a heads-up would fire next to every one of them.
+  if (keepWarmWillPing()) return;
   const config = getConfig();
   const snap = clock.snapshot(now(), selection());
   if (config.headsUpMin <= 0 || snap?.state !== "warm") return;
@@ -520,7 +549,7 @@ function headsUpScheduler({ state, selection, clock, now, timers, getConfig, say
     state.headsUpTimer = null;
     const live = clock.snapshot(now(), selection());
     // Mid-turn the next model call refreshes the cache on its own.
-    if (state.busy || live?.state !== "warm" || live.extraUsd === null) return;
+    if (state.busy || live?.state !== "warm" || live.extraUsd === null || keepWarmWillPing()) return;
     if (live.extraUsd < getConfig().minUsd) return;
     state.headsUpShown = key;
     say(headsUp(live), { ephemeral: true });
@@ -560,11 +589,12 @@ async function confirmKeepWarm(ctx, patch) {
   // The budget and payback stops end a long window early, so the quote counts only the pings they allow.
   const quote = keepWarmQuote(snap, hours, keepWarmEstimate(snap, hours, ctx.getConfig()));
   const answer = await ctx.askUser(quote, [TURN_ON, CANCEL]);
-  // A host that cannot ask gets the estimate and the saved setting in one reply.
-  if (answer !== UNASKED && answer !== TURN_ON) return ctx.show("cache-clock: keep-warm unchanged.");
+  // Nothing could ask the user (or the question failed), so nothing is saved: repeating the command
+  // with `yes` is the confirmation.
+  if (answer === UNASKED) return ctx.show(`${quote}\ncache-clock: not saved. To confirm, repeat it as /cache-clock keepwarm ${hours} yes`);
+  if (answer !== TURN_ON) return ctx.show("cache-clock: keep-warm unchanged.");
   const next = saveSettings({ ...ctx, patch });
-  if (!next) return undefined;
-  return ctx.show(answer === UNASKED ? `${quote}\n${savedLine(next, patch)}` : savedLine(next, patch));
+  return next ? ctx.show(savedLine(next, patch)) : undefined;
 }
 
 async function runCommand(ctx) {

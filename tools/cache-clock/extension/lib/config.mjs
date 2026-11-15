@@ -1,7 +1,7 @@
 // Settings shared by every session: guard mode, cost threshold, heads-up lead time,
 // and the keep-warm window, budget and payback stop.
 
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -171,14 +171,22 @@ export function pidAlive(pid) {
 }
 
 const isCount = (v) => Number.isInteger(v) && v >= 0;
+const isOptionalAmount = (v) => v === undefined || v === null || (Number.isFinite(v) && v >= 0);
 
 /** The stored window with only its known fields, or null when any field is invalid. */
 function validWindow(w) {
   if (!w || typeof w !== "object") return null;
-  const { startedAt, endsAt, usd, pings, stopped } = w;
+  const { startedAt, endsAt, usd, pings, stopped, lastSendAt, lastPingUsd } = w;
   const ok = Number.isFinite(startedAt) && Number.isFinite(endsAt) && endsAt >= startedAt &&
-    Number.isFinite(usd) && usd >= 0 && isCount(pings) && (stopped === null || typeof stopped === "string");
-  return ok ? { startedAt, endsAt, usd, pings, stopped } : null;
+    Number.isFinite(usd) && usd >= 0 && isCount(pings) && (stopped === null || typeof stopped === "string") &&
+    isOptionalAmount(lastSendAt) && isOptionalAmount(lastPingUsd);
+  if (!ok) return null;
+  // The time of the last send and the cost of the last ping are kept only when known.
+  return {
+    startedAt, endsAt, usd, pings, stopped,
+    ...(lastSendAt == null ? {} : { lastSendAt }),
+    ...(lastPingUsd == null ? {} : { lastPingUsd }),
+  };
 }
 
 function lockHolder(file) {
@@ -219,14 +227,22 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive
     }
   }
 
+  /**
+   * The lock is a file holding the holder's pid, and it appears whole or not at all: a hard link to
+   * a finished temp file is atomic and fails when the lock exists. A stale lock is taken over by
+   * renaming a finished temp file over it, then re-reading it to confirm the pid is ours. Callers
+   * confirm again with `lock()` before every ping, so of two processes that raced for a stale lock
+   * only the last writer keeps pinging.
+   */
   function lock() {
     if (!valid) return false;
     mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
     const file = keepWarmFile(dir, sessionId, "lock");
-    // Second pass only after removing a lock whose holder is gone.
-    for (let attempt = 0; attempt < 2; attempt += 1) {
+    const mine = `${file}.${pid}.${randomUUID()}.tmp`;
+    writeFileSync(mine, JSON.stringify({ pid }) + "\n", { flag: "wx", mode: 0o600 });
+    try {
       try {
-        writeFileSync(file, JSON.stringify({ pid }), { flag: "wx", mode: 0o600 });
+        linkSync(mine, file);
         return true;
       } catch (err) {
         if (err.code !== "EEXIST") throw err;
@@ -234,16 +250,23 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive
       const holder = lockHolder(file);
       if (holder === pid) return true;
       if (holder !== null && isAlive(holder)) return false;
-      rmSync(file, { force: true });
+      renameSync(mine, file);
+      return lockHolder(file) === pid;
+    } finally {
+      rmSync(mine, { force: true });
     }
-    return false;
   }
 
   function unlock() {
     if (valid && lockHolder(keepWarmFile(dir, sessionId, "lock")) === pid) rmSync(keepWarmFile(dir, sessionId, "lock"), { force: true });
   }
 
-  return { load, save, lock, unlock };
+  /** Forgets the stored window, as when keep-warm is turned off: the next on is a fresh start. */
+  function clear() {
+    if (valid) rmSync(keepWarmFile(dir, sessionId, "json"), { force: true });
+  }
+
+  return { load, save, lock, unlock, clear };
 }
 
 // Plain decimals only: Number() would also take 0x2, 1e-1 and Infinity.
@@ -271,6 +294,11 @@ function parseKeepWarm(rest) {
     return extra.length || !["on", "off"].includes(second)
       ? { kind: "error", message: "keepwarm payback takes on or off" }
       : { kind: "set", patch: { keepWarmPayback: second === "on" } };
+  }
+  // `keepwarm <hours> yes` confirms a window above the threshold, for hosts that cannot ask.
+  if (second === "yes" && extra.length === 0 && /^\d+(\.\d+)?$/.test(first ?? "")) {
+    const hours = Number(first);
+    return hours > KEEPWARM_CONFIRM_ABOVE_HOURS && hours <= KEEPWARM_MAX_HOURS ? hoursPatch(hours) : { kind: "error", message: KEEPWARM_USAGE };
   }
   if (second !== undefined || first === undefined) return { kind: "error", message: KEEPWARM_USAGE };
   if (first === "on") return hoursPatch(KEEPWARM_ON_HOURS);

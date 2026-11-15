@@ -7,6 +7,8 @@ export function createClock() {
   const lastByModel = new Map();
   let lastModel = null;
   let lastConversation = null;
+  // When the last real (not keep-warm) call happened: the user's last message, for the keep-warm window.
+  let lastRealCallAt = null;
   // Observations from before compaction/configuration changes cannot prove cache warmth.
   let staleModels = new Set();
   let tally = { calls: 0, coldIdle: 0, coldBreak: 0, coldSwitch: 0, extraUsd: 0, unpricedRewrites: 0 };
@@ -36,6 +38,7 @@ export function createClock() {
       unpricedRewrites: tally.unpricedRewrites + (isCold && extra === null ? 1 : 0),
     };
     remember(call);
+    lastRealCallAt = call.at;
     return { kind, lostTokens: lost, extraUsd: extra, call };
   }
 
@@ -71,7 +74,7 @@ export function createClock() {
       return {
         model: model ?? "unknown", displayName: last?.displayName ?? model ?? "unknown selection",
         state: "unknown", reason: !model ? "selection-unavailable" : model === "auto" ? "auto" : !unqualified ? "qualified-selection" : "model-switch",
-        expiresAt: null, msLeft: null, ttlSec: null, lastCallAt: context.at, startAt: null, maxPromptTokens: null,
+        expiresAt: null, msLeft: null, ttlSec: null, lastCallAt: context.at, lastRealCallAt, startAt: null, maxPromptTokens: null,
         contextTokens, prices: priced ?? null, coldUsd: costs?.coldUsd ?? null,
         warmUsd: costs?.warmUsd ?? null, extraUsd: costs?.extraUsd ?? null,
       };
@@ -88,6 +91,7 @@ export function createClock() {
       msLeft: expiresAt === null ? null : expiresAt - now,
       ttlSec: last.ttlSec,
       lastCallAt: last.at,
+      lastRealCallAt,
       startAt: last.startAt,
       maxPromptTokens: last.maxPromptTokens,
       prices: last.prices,

@@ -106,6 +106,7 @@ expired exactly when Copilot said it would. The question form was checked live o
     /cache-clock headsup 5       warn up to 5 minutes before expiry (off to disable)
     /cache-clock keepwarm on     keep warm 3 hours after your last message
     /cache-clock keepwarm 6      0 to 12 hours; above 6 shows the estimated cost first
+    /cache-clock keepwarm 8 yes  confirm a window above 6 hours where the host cannot ask
     /cache-clock keepwarm off
     /cache-clock keepwarm budget 0.50   stop after $0.50 of pings in one window, 0 to 5
     /cache-clock keepwarm payback off   keep pinging after pings cost more than one cold rewrite
@@ -208,7 +209,7 @@ call read 10,157 tokens from cache. The conversation itself is per session.
 ## Keep-warm
 
 **Off until you turn it on, and it costs money.** Tested against a fake Copilot host only.
-A live check is pending; this section changes with its result.
+A live check is pending; this section changes with its result (see "Live check" below).
 
 - **What a ping is.** A tiny message sent into your session shortly before the cache would
   expire, so your next message reads the conversation at the warm price. The prompt is
@@ -216,37 +217,93 @@ A live check is pending; this section changes with its result.
   out through `session.rpc.send` (`source: "system"`, `mode: "enqueue"`, `billable: false`)
   when the host has it, else `session.send`, which has no billable flag. A ping refreshes
   the clock but is not a model call: it stays out of the card's tally, the guard and the
-  report's statistics, and its cost shows as keep-warm spend. The guard never stops it,
-  but only your own in-flight ping is exempt: text you type or paste that carries the
-  marker is an ordinary prompt and is guarded.
+  report's statistics, and its cost shows as keep-warm spend. While a ping is in flight, the
+  prompt hook treats text that contains the marker (or equals the display text) as the ping,
+  because the host may hand the hook either; at any other time the same text is an ordinary
+  prompt that you typed or pasted, and it is guarded and restarts the window like any other.
 - **Turning it on.** `/cache-clock keepwarm on` keeps warm for 3 hours after your last real
-  message. `keepwarm <hours>` takes 0 to 12; above 6 it shows the estimated cost and asks
-  first. Each real message restarts the window.
-- **When it stops, by itself.** Payback (pings have cost as much as the cold rewrite they
-  avoid, which `keepwarm payback off` turns off), the budget (`keepwarm budget`, $0.50 by
-  default, 0 to 5) and the window end. Also a ping that comes back cold, two failed sends
-  in a row, and a ping whose cost was not reported. Each stop is logged with the spend.
-- **When it holds off.** A turn is running, a question is open, the context is above 85%
-  of the model's prompt limit, you switched model, or the selection is Auto.
+  message. `keepwarm <hours>` takes 0 to 12. Above 6 it shows the estimated cost and asks
+  first; where the host cannot ask, or the question fails, nothing is saved and the reply says
+  to repeat it as `/cache-clock keepwarm <hours> yes` (that form is accepted only above 6
+  hours). Each real message restarts the window, except while a ping is out: then its window
+  starts when the ping is done, so a window is never reset by a ping.
+- **The setting is global; the window is not.** The setting is saved for every session. Each
+  open session gets its own window, its own budget and its own pings, so two open sessions
+  cost twice. The card, the help and the confirmation all say so.
+- **When it stops, by itself, for the rest of the window.** Each stop is one line with the
+  spend; the next real message starts a new window. The stops are: payback (pings have cost
+  as much as the cold rewrite they avoid; `keepwarm payback off` turns this one off), the
+  budget (`keepwarm budget`, $0.50 by default, 0 to 5), the window end, and the ping limit
+  for the window. Anything keep-warm cannot measure or recognise also stops it: a ping that
+  came back cold, a reply that did not move the cache expiry forward, a ping's turn that ended
+  with no usage for it, a send that failed or got no reply in 2 minutes (it may have gone out,
+  so it is not retried), and a cache with under 15 seconds left (too late for a ping to land).
+- **Hard limits that do not depend on cost.** Pings are never closer together than the cache
+  lifetime minus the lead (at least 60 s), and a window never sends more than
+  ceil(window length / that gap) + 1 pings. The budget check uses the larger of the estimate
+  and the cost of the last ping that was measured.
+- **When it holds off (it does not stop; it waits).** A turn is running, or you just submitted
+  a prompt whose turn has not started; a question card is open (after one cache lifetime the log
+  and the card say keep-warm is waiting on an open question); the context is above 85% of the
+  model's prompt limit; the selected model is not the one that was warmed; the selection is Auto;
+  the model's price is unknown; another process holds this session's lock; the cache is cold or
+  its state unknown. The card shows the last reason in words.
+- **Heads-up.** The heads-up before expiry stays quiet only while keep-warm will really ping.
+  When keep-warm is on but cannot ping (any hold above, or stopped), the heads-up works as before.
 - **Spend.** Read from the ping's own usage event, `copilotUsage.totalNanoAiu` (nano-AIU
-  ÷ 1e11 = dollars). A ping that gets no reply for 2 minutes counts as a failed send; if
-  its usage event still arrives within 10 minutes, its cost is added to the total and
-  counts against the budget and payback.
-- **Reloads and two processes.** The window, its spend and any stop are stored in
-  `~/.copilot/cache-clock/keepwarm/<sha256 of the session id>.json`, so a reloaded
-  extension resumes them instead of starting a fresh budget. A `.lock` file beside it lets
-  only one process per session ping; a crashed holder's lock is taken over.
-- **Estimated cost, 200,000-token context.** Estimated from list prices, not measured on a
-  bill:
+  ÷ 1e11 = dollars); every model call inside the ping's turn counts, and the ping itself once.
+  A ping whose usage still arrives within 10 minutes of the 2-minute watchdog has its cost added
+  to the total. A ping whose cost is not reported stops keep-warm.
+- **Reloads and two processes.** The window, its spend, the time of the last send and any stop
+  are stored in `~/.copilot/cache-clock/keepwarm/<sha256 of the session id>.json`, so a reloaded
+  extension resumes them instead of starting a fresh budget. A `.lock` file beside it lets only
+  one process per session ping. It is created whole (a hard link to a finished file), a crashed
+  holder's lock is replaced by renaming a finished file over it, and the pid is confirmed again
+  before every ping. Turning keep-warm off forgets the stored window, so turning it on later,
+  live or in a new session, starts the same fresh window from your last real message (or waits for
+  your next one if that was longer ago than the window).
+- **Notes.** In VS Code a stop note is a plain note in its log, not an error box; the card shows
+  the state.
+- **Estimated cost, 200,000-token context.** Computed from `keepWarmEstimate` with the list
+  prices in `test/fixtures.mjs`, not measured on a bill:
 
   | Model | Cache lifetime | One ping | One cold rewrite (extra cost) | Pings in 3 h | 3 h of pings | Break-even idle time |
   |---|---|---|---|---|---|---|
   | Sonnet 5.5 | 5 min | about $0.020 | about $0.48 | 45 | about $0.90 | about 96 min |
-  | Luna | 30 min | about $0.002 | about $0.023 | 8 | about $0.016 | about 4.8 h |
+  | Luna | 30 min | about $0.002 | about $0.023 | 7 | about $0.014 | about 4.6 h |
 
-  Keep-warm saves money when the idle gap is shorter than the break-even time and loses
-  money after it. With payback on (the default), Sonnet stops after 24 pings at this size,
-  and the budget is $0.50, so the 3-hour figure above needs `payback off` and a higher budget.
+  The pings column is floor(3 h / (lifetime − lead)); break-even is the rewrite cost divided by
+  the ping cost, times the gap between pings. Keep-warm saves money when the idle gap is shorter
+  than the break-even time and loses money after it. With payback on (the default), Sonnet stops
+  after 24 pings at this size and the budget is $0.50, so the 3-hour figure above needs
+  `payback off` and a higher budget.
+
+### Live check (owner-run, billed): what to look at
+
+Nothing above has run against a real host. Before trusting keep-warm, run it on a small context
+on GPT-6 Luna (`/cache-clock keepwarm 1`, `keepwarm payback off`, about three pings) and record,
+from `~/.copilot/session-state/<id>/events.jsonl` and the screen:
+
+1. The text the prompt hook receives for a ping (`input.prompt`): the exact prompt, the display
+   text, or something wrapped? Whether `onUserPromptSubmitted` fires at all.
+2. Whether the ping's `assistant.usage` arrives with no `agentId`, with the conversation
+   interaction type (`conversation-agent`) and a nonzero `copilotUsage.totalNanoAiu`, and whether
+   `billable: false` changed that cost. Whether each record carries `duration`.
+3. Whether `session.idle` follows each ping, and whether `cacheExpiresAt` moves forward to the
+   ping's start plus the lifetime (the `not-refreshing` stop depends on it).
+4. Whether a ping triggers reasoning, tool calls or more than one model call in its turn (the
+   cost counts every call in the turn, but a ping that thinks is not "tiny").
+5. Whether the provider cache really stays warm: `cacheReadTokens` on the ping and on your next
+   real message is at least 90% of the previous input, and the next real message does not
+   rewrite the context.
+6. How the ping's turn shows in Copilot CLI and in VS Code (and that the stop note is a plain
+   note there).
+7. Whether `/clear` changes the session id (the window, budget and lock are keyed by it).
+8. Where the marker lands on `user.message` (`content` or `transformedContent`) and its
+   `source`, and whether `session.rpc.send` existed or the `session.send` fallback ran.
+
+Record the results as a dated, measured table here. If pings did not keep the provider cache
+warm, say keep-warm is not recommended.
 
 Tested against a fake Copilot host only. A live check is pending; this section changes with its result.
 

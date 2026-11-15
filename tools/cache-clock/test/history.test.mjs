@@ -176,7 +176,7 @@ test("pings are left out of calls and cold counts, and their cost is shown as ke
   const s = { model: "claude-sonnet-5.5", ttl: 300 };
   const log = [record(T0, { ...s, input: 100_000, read: 0, write: 100_000 }),
     msg({ content: "cache-clock keep-warm", transformedContent: "[cache-clock:keepwarm] Reply with exactly: ." }),
-    record(T0 + 4 * MIN, { ...s, input: 100_000, read: 100_000, write: 0, nanoAiu: 2e9 }),
+    record(T0 + 4 * MIN, { ...s, input: 100_000, read: 100_000, write: 0, output: 0, nanoAiu: 2e9 }),
     msg({ content: "carry on" }), record(T0 + 8 * MIN, { ...s, input: 101_000, read: 100_000, write: 1000 })].join("\n");
   const sum = summarize([{ id: "kw", ...parseSessionLog(log) }]);
   const m = sum.models[0];
@@ -202,11 +202,22 @@ test("a user message between the ping message and the ping's record does not tur
   const log = [record(T0, { ...s, input: 100_000, read: 0, write: 100_000 }),
     msg({ content: "cache-clock keep-warm", transformedContent: "[cache-clock:keepwarm] Reply with exactly: .", source: "system" }),
     msg({ content: "typed while the ping ran" }),
-    record(T0 + 4 * MIN, { ...s, input: 100_000, read: 100_000, write: 0, nanoAiu: 2e9 }),
+    record(T0 + 4 * MIN, { ...s, input: 100_000, read: 100_000, write: 0, output: 0, nanoAiu: 2e9 }),
     record(T0 + 5 * MIN, { ...s, input: 101_000, read: 100_000, write: 1000 })].join("\n");
   const sum = summarize([{ id: "order", ...parseSessionLog(log) }]);
   assert.deepEqual([sum.models[0].calls, sum.pings], [2, 1]);
   assert.ok(Math.abs(sum.keepWarmUsd - 0.02) < 1e-12);
+});
+
+test("a ping message with no usage does not make the next user call a ping", () => {
+  const msg = (o) => JSON.stringify({ type: "user.message", timestamp: iso(T0), data: o });
+  const s = { model: "claude-sonnet-5.5", ttl: 300 };
+  const log = [record(T0, { ...s, input: 100_000, read: 0, write: 100_000 }),
+    msg({ content: "cache-clock keep-warm", transformedContent: "[cache-clock:keepwarm] Reply with exactly: .", source: "system" }),
+    msg({ content: "a real question" }),
+    record(T0 + 4 * MIN, { ...s, input: 101_000, read: 100_000, write: 1000, output: 400 })].join("\n");
+  const sum = summarize([{ id: "no-usage", ...parseSessionLog(log) }]);
+  assert.deepEqual([sum.models[0].calls, sum.pings], [2, 0], "the user's call is a call");
 });
 
 test("report CLI reads a session-state directory and prints JSON", () => {

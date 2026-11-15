@@ -70,7 +70,10 @@ const STOP_TEXT = {
   budget: "the keep-warm budget is spent",
   "window-end": "the keep-warm window ended",
   "cold-reply": "a ping came back cold, so pinging is not keeping this cache warm",
-  "send-failed": "two pings in a row failed to send",
+  "send-failed": "a ping failed to send or got no reply, and may have gone out",
+  "not-refreshing": "a ping did not move the cache expiry forward, so pinging is not keeping this cache warm",
+  "ping-cap": "the ping limit for this window was reached",
+  "too-late": "the cache was about to expire before a ping could refresh it",
   unmeasured: "a ping's cost was not reported, so the budget cannot be enforced",
 };
 
@@ -79,24 +82,43 @@ export function keepWarmStopped(reason, spend) {
   return `${NAME}: keep-warm stopped: ${STOP_TEXT[reason] ?? reason} (${pings(spend.pings)}, ${usd(spend.usd)} this window).`;
 }
 
+// Why keep-warm is idle right now, in words, for the card.
+const SKIP_TEXT = {
+  busy: "a turn is running or about to start",
+  "question-open": "waiting on an open question",
+  auto: "the selection is Auto",
+  "context-full": "the context is above 85% of the prompt limit",
+  unpriced: "the model's price is unknown",
+  locked: "another process holds this session's keep-warm lock",
+  "model-switch": "the selected model is not the one that was warmed",
+  "not-warm": "the cache is cold",
+  invalid: "a setting or the window is not a usable number",
+};
+
+const GLOBAL_NOTE = "the setting is global: every open session runs its own window and budget";
+
 /** The reply after the keep-warm settings were saved. */
 export function keepWarmSaved(config) {
   if (!(config.keepWarmHours > 0)) return `${NAME}: keep-warm: off (saved for all sessions)`;
-  return `${NAME}: keep-warm: ${config.keepWarmHours}h after your last message · budget ${usd(config.keepWarmMaxUsd)} · payback stop ${config.keepWarmPayback ? "on" : "off"} (saved for all sessions)`;
+  return `${NAME}: keep-warm: ${config.keepWarmHours}h after your last message · budget ${usd(config.keepWarmMaxUsd)} · payback stop ${config.keepWarmPayback ? "on" : "off"} (saved for all sessions; each open session runs its own window and budget)`;
 }
 
 /** The cost question shown before a long keep-warm window is saved. `estimate` is keepWarmEstimate's result. */
 export function keepWarmQuote(snap, hours, estimate) {
-  if (!snap || !estimate) return `${NAME}: keep-warm for ${hours}h: cost unknown until a priced model call. Turn it on?`;
+  if (!snap || !estimate) return `${NAME}: keep-warm for ${hours}h: cost unknown until a priced model call. This setting is global: every open session gets its own window and budget. Turn it on?`;
   return `${NAME}: keep-warm for ${hours}h on ${snap.displayName} (${tokens(snap.contextTokens)} tokens) sends about ${estimate.pings} pings, ` +
-    `about ${usd(estimate.usd)} at the last reported prices; the budget and payback stop end it sooner. Turn it on?`;
+    `about ${usd(estimate.usd)} at the last reported prices; the budget and payback stop end it sooner. This setting is global, so every open session gets its own window and budget; this estimate is for one session. Turn it on?`;
 }
 
 /** The card's keep-warm line from the settings and the scheduler's status(). */
 function keepWarmLine(config, keepWarm) {
   if (!(config.keepWarmHours > 0)) return "off (/cache-clock keepwarm on)";
-  const { state, msLeft, usd: spent, pings: count, lastSkip, stopped } = keepWarm ?? {};
-  if (state === "on") return `on · ${duration(msLeft)} left · ${pings(count)} · ${usd(spent)}${lastSkip ? ` · last skip: ${lastSkip}` : ""}`;
+  const { state, msLeft, usd: spent, pings: count, lastSkip, stopped, waitingOnQuestion } = keepWarm ?? {};
+  if (state === "on") {
+    const why = SKIP_TEXT[lastSkip] ? ` (${SKIP_TEXT[lastSkip]})` : "";
+    const idle = lastSkip ? ` · last skip: ${lastSkip}${why}` : "";
+    return `on · ${duration(msLeft)} left · ${pings(count)} · ${usd(spent)}${idle}${waitingOnQuestion ? " · waiting on an open question" : ""}`;
+  }
   if (state === "stopped") return `stopped (${stopped}) · ${pings(count)} · ${usd(spent)}`;
   return `on (${config.keepWarmHours}h) · starts after your next message`;
 }
@@ -134,6 +156,7 @@ export function card(snap, tally, config, keepWarm = null) {
       (tally.unpricedRewrites ? ` (priced subtotal; ${tally.unpricedRewrites} rewrite(s) missing prices)` : ""),
     `  guard      ${guardLine(config)}`,
     `  keep-warm  ${keepWarmLine(config, keepWarm)}`,
+    ...(config.keepWarmHours > 0 ? [`             ${GLOBAL_NOTE}`] : []),
   ];
   return lines.join("\n");
 }
@@ -162,6 +185,7 @@ export const HELP = [
   "  reads the conversation at the warm price instead of rewriting it. Each ping is a small model call.",
   "  It starts from your last message and stops by itself when pings cost as much as one cold rewrite,",
   "  when the budget is spent, when the window ends, or when a ping fails or comes back cold.",
+  "  The setting is global: every open session gets its own window and its own budget.",
   "",
   "Commands",
   "  /cache-clock                 the card: cache state, time left, next-send prices, session tally",
@@ -172,6 +196,7 @@ export const HELP = [
   "  /cache-clock headsup 5       warn 5 minutes before the cache expires (off to disable)",
   "  /cache-clock keepwarm on     keep warm 3 hours after your last message",
   "  /cache-clock keepwarm 6      0 to 12 hours; above 6 shows the estimated cost first",
+  "  /cache-clock keepwarm 8 yes  confirm a window above 6 hours where the host cannot ask",
   "  /cache-clock keepwarm off",
   "  /cache-clock keepwarm budget 0.50   stop after $0.50 of pings in one window, 0 to 5",
   "  /cache-clock keepwarm payback off   keep pinging after pings cost more than one cold rewrite",
