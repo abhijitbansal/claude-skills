@@ -17,7 +17,7 @@ import { auditFrame } from '../../engine/review/frame.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 
-const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false });
+const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false, voiceSpeed: 1.0, emphasisPause: 0 });
 const SAY = 'One two three four five six.';
 const FPS = 30;
 
@@ -143,16 +143,25 @@ test('pro and viral carry voice data: voiceSpeed 1.0 and 1.1, emphasisPause 0', 
   assert.deepEqual([registries.modes.get('viral').voiceSpeed, registries.modes.get('viral').emphasisPause], [1.1, 0]);
 });
 
-test('a mode whose voiceSpeed is outside 0.8 to 1.25 fails validateMode, naming the mode and the field', () => {
+test('a mode whose voice data is missing or outside its range fails validateMode, naming the mode and the field', () => {
   const ok = { ...SLOW, voiceSpeed: 1.0, emphasisPause: 0 };
   assert.doesNotThrow(() => validateMode(ok));
   assert.doesNotThrow(() => validateMode({ ...ok, voiceSpeed: 0.8 }));
   assert.doesNotThrow(() => validateMode({ ...ok, voiceSpeed: 1.25 }));
-  assert.doesNotThrow(() => validateMode(SLOW), 'voice data is optional');
-  for (const voiceSpeed of [0.79, 1.26, 0, -1, NaN, '1', Infinity]) {
+  for (const voiceSpeed of [undefined, 0.79, 1.26, 0, -1, NaN, '1', Infinity]) {
     assert.throws(() => validateMode({ ...ok, voiceSpeed }), /mode "test-slow": voiceSpeed must be/, String(voiceSpeed));
   }
-  for (const emphasisPause of [-0.1, NaN, '0', 3.5]) {
+  for (const emphasisPause of [undefined, -0.1, NaN, '0', 3.5]) {
     assert.throws(() => validateMode({ ...ok, emphasisPause }), /mode "test-slow": emphasisPause must be/, String(emphasisPause));
   }
+});
+
+test('a mode added to the shared registry is checked as it is added: without voice data it cannot register', () => {
+  const { voiceSpeed: _speed, emphasisPause: _pause, ...bare } = SLOW;
+  assert.throws(() => registries.modes.add('test-no-voice', { ...bare, name: 'test-no-voice' }), /mode "test-no-voice": voiceSpeed must be/);
+  assert.equal(registries.modes.has('test-no-voice'), false, 'a refused mode is not left in the registry');
+  assert.throws(() => registries.modes.add('test-fast-voice', { ...SLOW, name: 'test-fast-voice', voiceSpeed: 2 }), /mode "test-fast-voice": voiceSpeed must be/);
+  assert.throws(() => registries.modes.add('test-bad-pause', { ...SLOW, name: 'test-bad-pause', emphasisPause: -1 }), /emphasisPause must be/);
+  registries.modes.add('test-voiced', { ...SLOW, name: 'test-voiced' });
+  assert.equal(registries.modes.get('test-voiced').voiceSpeed, 1.0);
 });

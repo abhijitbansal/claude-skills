@@ -789,42 +789,63 @@ test('loadFilm reports a version 1 file as a SpecError with the one error', () =
   });
 });
 
-// --- voice: a user's pronunciation hint may only use characters the voice has ---
+// --- voice: a user's pronunciation hint may only use phoneme characters the voice has ---
 
 const U02DE = String.fromCharCode(0x02de); // rhotic hook: not in the voice's vocab
 const hint = (word, ipa) => `[${word}](/${ipa}/)`;
+const sayShot = (say) => film({}, [shotA, { id: 'b', show: 'statement', say }]);
+const hintErrors = (ipa) => check(sayShot(`Say ${hint('word', ipa)} now.`)).errors;
 
 test('a pronunciation hint with a character outside the voice vocab is an error at shots[i].say naming the characters', () => {
-  const say = `Say ${hint('car', `k\u0251${U02DE}`)} now.`;
-  const r = check(film({}, [shotA, { id: 'b', show: 'statement', say }]));
+  const r = check(sayShot(`Say ${hint('car', `k\u0251${U02DE}`)} now.`));
   assert.equal(r.ok, false);
   assert.equal(r.errors.length, 1);
   assert.equal(r.errors[0].path, 'shots[1].say');
   assert.ok(r.errors[0].message.includes(`"${U02DE}"`), r.errors[0].message);
   assert.match(r.errors[0].message, /U\+02DE/);
-  assert.ok(r.errors[0].message.includes('[car](/'), 'names the hint');
+  assert.ok(r.errors[0].message.includes('on "car"'), 'names the word the hint is on');
 });
 
-test('every bad hint of a shot is named in one error, each character once', () => {
+test('a hint refuses a space, the pad, punctuation and characters the voice rewrites, and says which and why', () => {
+  const cases = [
+    ['b c', 'U+0020', /space/],
+    ['b$c', 'U+0024', /pad/],
+    ['b:c', 'U+003A', /punctuation/],
+    ['bc.', 'U+002E', /punctuation/],
+    ['b,c', 'U+002C', /punctuation/],
+    ['b\u2014c', 'U+2014', /punctuation/],
+    ['bra', 'U+0072', /rewrites it to "\u0279"/],
+    ['lox', 'U+0078', /rewrites it to "k"/],
+    ['b\u02b2a', 'U+02B2', /rewrites it to "j"/],
+  ];
+  for (const [ipa, point, why] of cases) {
+    const errors = hintErrors(ipa);
+    assert.equal(errors.length, 1, ipa);
+    assert.equal(errors[0].path, 'shots[1].say');
+    assert.ok(errors[0].message.includes(point), `${ipa}: ${errors[0].message}`);
+    assert.match(errors[0].message, why, ipa);
+  }
+});
+
+test('a hint is checked after NFC normalisation: a letter that composes into a character the voice lacks is refused, one that does not compose is fine', () => {
+  const composed = hintErrors('e\u0303');
+  assert.equal(composed.length, 1);
+  assert.match(composed[0].message, /U\+1EBD/, 'names the normalised character');
+  assert.deepEqual(hintErrors('\u0251\u0303'), [], 'a + combining tilde has no precomposed form');
+});
+
+test('every bad hint of a shot is named in one error; a good one is not', () => {
   const say = `${hint('a', `x${U02DE}${U02DE}`)} ${hint('b', 'ok')} ${hint('c', '\u00e9')}`;
   const r = check(film({}, [{ id: 'a', show: 'statement', say }]));
   assert.equal(r.errors.length, 1);
-  assert.equal((r.errors[0].message.match(/U\+02DE/g) ?? []).length, 1);
+  assert.equal((r.errors[0].message.match(/U\+02DE/g) ?? []).length, 1, 'a repeat inside one hint is named once');
   assert.match(r.errors[0].message, /U\+00E9/);
-  assert.ok(!r.errors[0].message.includes('[b]'), 'a good hint is not named');
+  assert.match(r.errors[0].message, /on "a"/);
+  assert.ok(!r.errors[0].message.includes('on "b"'), 'a good hint is not named');
 });
 
-test('a hint made only of vocab characters, and narration with no hint, validate', () => {
-  const good = hint('tomato', 't\u0259m\u02c8e\u026ato\u028a');
-  assert.deepEqual(check(film({}, [{ id: 'a', show: 'statement', say: `Say ${good}.` }])), { ok: true, errors: [] });
+test('a hint made only of voice phoneme characters, stress and length marks, and narration with no hint, validate', () => {
+  assert.deepEqual(hintErrors('t\u0259m\u02c8e\u026ato\u028a'), []);
+  assert.deepEqual(hintErrors('k\u02c8\u0251\u02d0'), []);
   assert.deepEqual(check(film()), { ok: true, errors: [] });
-});
-
-test('a mode whose voice data is out of range is an error at mode that names the field', () => {
-  const bad = (extra) => check(film({ mode: 'pro' }), stubRegistries({ modes: [{ ...STUB_MODES[0], ...extra }] }));
-  assert.match(bad({ voiceSpeed: 1.3 }).errors[0].message, /voiceSpeed/);
-  assert.equal(bad({ voiceSpeed: 1.3 }).errors[0].path, 'mode');
-  assert.match(bad({ emphasisPause: -0.1 }).errors[0].message, /emphasisPause/);
-  assert.equal(bad({ voiceSpeed: 1.1, emphasisPause: 0 }).ok, true);
-  assert.equal(bad({}).ok, true, 'voice data is optional');
 });

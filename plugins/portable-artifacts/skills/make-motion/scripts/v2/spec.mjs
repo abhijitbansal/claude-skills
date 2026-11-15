@@ -6,9 +6,9 @@ import { realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
-import { validateMode } from '../../engine/modes/index.mjs';
+import '../../engine/modes/index.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
-import { EMBEDDED_VOCAB, unknownChars } from './voice/tokens.mjs';
+import { EMBEDDED_VOCAB } from './voice/tokens.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { resolveAnchor, anchorSeconds, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
@@ -148,18 +148,10 @@ function modeName(spec, regs) {
 }
 
 // A mode that is not registered gets the registry's own did-you-mean; one that is not a string has its schema error.
-// A registered mode whose voice data is out of range (voiceSpeed, emphasisPause) is an error at `mode`.
 function checkMode(spec, regs) {
   const name = spec.mode ?? DEFAULT_MODE;
-  if (typeof name !== 'string') return [];
-  if (!regs.modes.has(name)) return [{ path: 'mode', message: lookup(regs.modes, name).error }];
-  try {
-    validateMode(regs.modes.get(name));
-  } catch (err) {
-    if (!(err instanceof RangeError)) throw err;
-    return [{ path: 'mode', message: err.message }];
-  }
-  return [];
+  if (typeof name !== 'string' || regs.modes.has(name)) return [];
+  return [{ path: 'mode', message: lookup(regs.modes, name).error }];
 }
 
 // --- the film's own settings: version, mode, look, fps ---
@@ -229,17 +221,37 @@ const isParsableSay = (say) => typeof say === 'string' && say !== '' && say.leng
 
 const codePoint = (char) => `U+${char.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
 
-// One message for the pronunciation hints of a say that use characters the voice cannot say (the vocab embedded in
-// voice/tokens.mjs, so no download is needed), or null. A hint is the only place such a character is an error: the
-// phonemiser's own output outside the vocab is dropped at synthesis.
+// A pronunciation hint holds phoneme characters only: in the voice's vocab (embedded in voice/tokens.mjs, so no download
+// is needed), and not the pad, a space or punctuation (each would split the narration token or add a pad inside it), and
+// not a character the voice's text rules rewrite (so the sound written is the sound spoken). Refused, never rewritten.
+const HINT_PAD = '$';
+const HINT_PUNCTUATION = new Set([';', ':', ',', '.', '!', '?', '\u2014', '\u2026', '"', '(', ')', '\u201c', '\u201d']);
+const HINT_REWRITTEN = new Map([['r', '\u0279'], ['x', 'k'], ['\u02b2', 'j']]);
+
+// Why `char` may not be in a hint, or null when it may.
+function hintRefusal(char) {
+  if (char === HINT_PAD) return 'the model pad, not a sound';
+  if (char === ' ') return 'a space; a hint is the sound of one word';
+  if (HINT_PUNCTUATION.has(char)) return 'punctuation, which splits the narration';
+  if (HINT_REWRITTEN.has(char)) return `the voice rewrites it to "${HINT_REWRITTEN.get(char)}"; write that instead`;
+  return EMBEDDED_VOCAB.has(char) ? null : 'not a character the voice has';
+}
+
+// One message for the pronunciation hints of a say that hold refused characters, or null. The hint is checked after
+// Unicode NFC normalisation (the characters named are those of the normalised hint). The phonemiser's own output outside
+// the vocab is not checked here: it is dropped at synthesis.
 function ipaHintProblem(tokens) {
   const bad = tokens.flatMap((token) => {
     if (token.ipa === undefined) return [];
-    const chars = unknownChars(token.ipa, EMBEDDED_VOCAB);
-    return chars.length === 0 ? [] : [`[${token.text}](/${token.ipa}/) has ${chars.map((c) => `"${c}" (${codePoint(c)})`).join(', ')}`];
+    const hint = token.ipa.normalize('NFC');
+    const refused = [...new Set([...hint])].flatMap((char) => {
+      const why = hintRefusal(char);
+      return why === null ? [] : [`"${char}" (${codePoint(char)}, ${why})`];
+    });
+    return refused.length === 0 ? [] : [`/${token.ipa}/ on "${token.text}" has ${refused.join(', ')}`];
   });
   if (bad.length === 0) return null;
-  return `pronunciation hints use characters the voice cannot say: ${bad.join('; ')}; write the sound with other IPA characters, or remove the hint`;
+  return `pronunciation hints use characters the voice cannot take: ${bad.join('; ')}; write the sound with IPA phoneme characters of the voice, or remove the hint`;
 }
 
 // Narration: say must parse, hold only without say. Returns { errors, hasLength },
