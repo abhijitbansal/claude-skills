@@ -41,10 +41,55 @@ Findings, condensed:
 
 The bar is not met. This counts as revision round 1 of 2.
 
-## Revision 1 (in progress)
+## Revision 1 (commit `6eb70a1c`)
 
 Decisions sent to the implementer, as art direction:
 
 - desk: statements sized to carry the frame (up to 300 units, block up to 64% of the height, centred); the kicker becomes a taped slug card at a fixed place in the top-right with the shot number; highlight bands contain their words' ink and never touch neighbouring lines; a review finding when emphasis covers more than 40% of a statement's words; quieter, larger paper blotches; a motion smear on slide and punch cuts; the number rebuilt as a hero numeral up to 820 units with a label in the label face beside it and no rule; the clipping push eased back, the dim lightened, the marker frame thinner and drawn in two passes.
 - pop: wider word spaces; statements become a flush-left stack in which each line is scaled to fill the safe width; every statement shows its words as ghosts and lights them as spoken; a region highlight changes the close-up's hard shadow instead of adding a frame; the establishing picture is a 4:5 crop around the region; the number and its tags flush left; a kicker is a tag.
 - The films' scripts were revised by the director: fewer emphasised words, hard cuts instead of repeated slides, no competing devices in one frame, no placeholder kicker copy.
+- Rulings made during the revision: the emphasis finding fires when emphasised words are half or more of a statement's words, or when one highlight run is laid out over more than one line (highlight looks only); the motion smear draws its centre sample at full opacity with four outer samples at one-fifth; a `pop` stack is one group of per-line text nodes and counts as one size class in the review.
+
+Results on the committed tree, measured by the controller after the implementer was stopped:
+
+| Check | Result |
+|---|---|
+| v2 suite (`node --test --test-concurrency=1 "test/v2/**/*.test.mjs"`, tap file) | 742 tests, 742 pass, 0 fail, 0 skipped |
+| gate-desk | exit 0, ok, 0 findings, 623 frames, render 42.1 s, 12.84 MB, 4.95 Mbit/s |
+| gate-pop | ok, 0 findings, 362 frames (228 captured), render 11.7 s, 5.30 MB. Measured before the implementer's last three desk-only fixes; the implementer reports the file byte-identical afterwards (not re-measured by the controller) |
+
+### Second independent look review (fresh agent, sheets only)
+
+Verdict: **desk: ship after fixes. pop: ship after fixes, close to not yet** ("the type shots are clean; on a showreel it would read as a template"). Strongest frame: desk `problem` at 3.93 s. Weakest: pop `proof` at 2.53 s, then the desk slide smear.
+
+Findings, condensed:
+
+- desk: slug numbers read 01, 03, 05 because two shots have no slug; on `count` the change tag sits above the label so it reads in the wrong order, and the label is too small at phone size; the push slices words at the frame edge and the dim looks muddy; the smear reads as stepped echoes, not blur; the proof beat shows no words; a red underline is a second emphasis device; one-word lines ("machine.") and a two-line tail; the product name hyphen-wrapped on a slug; the slug sits closer to the edge than the text.
+- pop: the establishing crop slices panels and is unreadable; the close-up holds with no words; one blank frame after a hard cut; the same stepped smear; unspoken words too close to white; the change tag's plate barely separates from the ground; "spec" in one film and "file" in the other.
+
+The bar is not met. This counts as revision round 2 of 2.
+
+## Pass rule for the last review
+
+After revision 2 a third fresh reviewer sees the sheets. The gate passes only if its verdict is SHIP for both films. Any other verdict sends the frames and all three reviews to the owner, and engine work on the look stops until the owner answers. Individual findings under a SHIP verdict are recorded as follow-ups, not argued.
+
+## Revision 2 (in progress)
+
+Director's rulings that stand against the second review, recorded so they are not flipped a third time:
+
+- `pop` statements stay a flush-left stack with each line scaled to the safe width. Round 1 criticised three equal centred lines with no hero; round 2 criticised the unequal lines. The stack is the look.
+- `pop` number and close-up stay flush left on the same edge as the stack.
+- The establishing shadow in accent 2 turning to the accent on the highlight is the device; it stays.
+- No handle or address on the `pop` end card: the films carry no invented contact details. An end lockup belongs to the showreel plan.
+
+Film scripts, revised by the director: one word ("file") in both films; the `desk` underline replaced by the look's own highlight; every `desk` shot carries a slug with a section name; a line of words on the proof beat in both films.
+
+Engine decisions sent to the implementer:
+
+- `desk` number: label in ink at a larger step beside the numeral, change text under the label.
+- Clipping: a slug in editorial looks; a caption that stays in the frame for the whole shot; an optional author crop for the establishing window; a stronger dim outside the region.
+- No shot may open on an empty frame; the review reports one that does.
+- The smear becomes a true average of many samples over half a frame. If the mid-cut frame still reads as echoes, the gate films use hard cuts and the smear is parked.
+- Line breaking avoids one-word lines when a size within 15% allows.
+- Unspoken words dimmer; the slug's right margin matches the text's left margin; a shot fades out as one group.
+- Sheets sample every shot at least every 1.2 s so a reviewer can judge motion.
