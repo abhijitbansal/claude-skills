@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 import type { Artifact, SessionRecord } from '../types'
-import { bandView, formatBand, tally } from './band'
+import { bandView, formatBand, fullLines, goalKey, hintLabel, tally } from './band'
 import { capture } from './capture'
 import { PANE_ID, paneView, type Tab } from './pane'
 import { GIT_TIMEOUT_MS, INDEX, PREFIX, isRecord, recordKey } from './io'
@@ -13,6 +13,11 @@ import {
 // Atoms sit in this file: the host's state scan reads only atoms declared here.
 const record = atom({ plugin: 'session-compass', key: 'record' } as const, null)
 const tab = atom({ plugin: 'session-compass', key: 'tab' } as const, 'this' as Tab)
+// Band view state, per session and never stored: `expanded` shows the full text; `hidden` holds the
+// goal the band was hidden at (see goalKey) and keeps it hidden until the goal differs.
+const expanded = atom({ plugin: 'session-compass', key: 'expanded' } as const, false)
+const hidden = atom({ plugin: 'session-compass', key: 'hidden' } as const, null as string | null)
+const BAND_USAGE = 'more (open or fold the full text), hide, show'
 
 export const STATUS_TOOL_ID = 'mcp__session-compass__compass_status'
 const STATUS_TOOL = {
@@ -210,7 +215,11 @@ export const register: Register = on => {
 
   on('session.start', async ($, e, next) => {
     await $.tool.register(STATUS_TOOL)
-    await $.command.register({ name: 'compass', description: 'Open the session compass pane' })
+    await $.command.register({
+      name: 'compass',
+      description: 'Open the session compass pane, or open (more), hide or show the band',
+      argumentHint: '[more|hide|show]',
+    })
     const id = await $.session.id()
     const now = await $.clock.now()
     // A new load starts verified; a read that fails twice flips the flag until the store answers.
@@ -264,14 +273,38 @@ export const register: Register = on => {
   }).catch(($, e, next) => next(e))
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    // The compass line is always up; only a survey on screen takes its place.
+    // The compass band is up unless a survey takes its place or the person hid it at this goal.
     const rec = await read($, record)
     if (e.props.hasSurvey || rec === null) return next(e)
-    const line = formatBand(rec, tally(await readTestBoard($)), e.props.bodyColumns)
-    return bandView($.ui.resolve(e), line, await next(e))
+    if ((await read($, hidden)) === goalKey(rec)) return next(e)
+    const columns = e.props.bodyColumns
+    const line = formatBand(rec, tally(await readTestBoard($)), columns)
+    const controls = {
+      isOpen: await read($, expanded),
+      full: fullLines(rec),
+      hint: hintLabel(columns),
+      onToggle: () => { update($, expanded, v => !v).catch(err => logPane($, 'band expand', err)) },
+    }
+    return bandView($.ui.resolve(e), line, await next(e), controls)
   })
 
-  on('command.run', { command: 'compass' }, async $ => {
+  on('command.run', { command: 'compass' }, async ($, e) => {
+    const arg = e.args.trim().toLowerCase()
+    if (arg === 'more') {
+      const isOpen = await update($, expanded, v => !v)
+      return { text: isOpen ? 'Compass band expanded. /compass more folds it.' : 'Compass band folded.' }
+    }
+    if (arg === 'hide') {
+      const key = goalKey(await read($, record))
+      await update($, hidden, () => key)
+      await update($, expanded, () => false)
+      return { text: 'Compass band hidden until the goal changes. /compass show brings it back.' }
+    }
+    if (arg === 'show') {
+      await update($, hidden, () => null)
+      return { text: 'Compass band shown.' }
+    }
+    if (arg !== '') return { text: `Unknown argument "${arg.slice(0, 40)}". /compass takes: ${BAND_USAGE}; no argument opens the pane.` }
     await $.ui.open({ id: PANE_ID, title: 'Compass' })
     return { text: 'Compass opened.' }
   })
@@ -310,8 +343,10 @@ export const register: Register = on => {
     const done = await queue(state, 'status', async () => {
       const now = await $.clock.now()
       let error: string | undefined
+      let before: string | undefined
       const written = await update($, record, cur => {
         error = undefined
+        before = cur?.goal
         if (cur === null) return cur
         const out = applyStatus(cur, input, now)
         if ('error' in out) {
@@ -322,7 +357,11 @@ export const register: Register = on => {
       })
       if (written === null) outcome.deny = 'session-compass: no session record yet'
       else if (error !== undefined) outcome.deny = error
-      else await saveRecord($, state, written)
+      else {
+        await saveRecord($, state, written)
+        // A new goal brings a hidden band back for good, even if the old text returns later.
+        if (written.goal !== before && (await read($, hidden)) !== null) await update($, hidden, () => null)
+      }
     }, $).then(() => true, () => false)
     if (!done) return { deny: 'session-compass: status not saved, try again' }
     // A registered tool's result is read like an MCP tool's: a string or content

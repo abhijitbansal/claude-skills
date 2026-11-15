@@ -11,15 +11,29 @@ Cubby · worktrees/claude-mods (feat/session-mods) · Goal: Ship the session mod
 
 ### Compass band
 
-One line above the prompt: `repo · worktree (branch) · Goal · Now · N artifacts · tests`.
+Up to two lines above the prompt: `repo · worktree (branch) · Goal · Now · N artifacts · tests`.
 
 - It is always up, from the moment the session starts, and updates as the goal, step
-  and artifacts change. Only a survey on screen takes its place.
+  and artifacts change. Only a survey on screen takes its place, or you hide it (below).
+- **Two lines.** It stays on one line while it fits, dropping optional segments as before.
+  Otherwise it wraps onto a second line at a space or at a ` · ` separator, using the
+  width the host gives the band. Only the end of line two is ever cut, with an `…`.
+- **Full text.** When line two is cut, it ends in `▸ /compass more` (`▸ more` on narrow
+  terminals; nothing under 24 columns). Click it, or type `/compass more`, to show the
+  repo, worktree, branch, goal, step and next in full, wrapped and unshortened. Click
+  `▾ fold` or type `/compass more` again to fold it. `/compass more` works even when
+  nothing is cut, since it also shows `next`, which the band never does. An expanded band
+  taller than the space above the prompt scrolls: focus it with ctrl+x tab.
+- **Hide.** `/compass hide` removes the band until the goal changes (a `compass_status`
+  call with a different `goal`). `/compass show` brings it back at once. A hidden band
+  and an expanded band are kept for this session only: they are not stored, so they do
+  not carry into another session.
 - With no goal set, it shows your first prompt dimmed and `(no goal set)`.
 - `tests` appears when [test-board](../test-board) is installed and has recent runs. It
   clears when those runs leave test-board 60 minutes after they finished; closing the
   test-board band with `✕` leaves it up.
-- Narrow terminals drop the artifact count, then `tests`, then shorten the worktree path.
+- Narrow terminals drop the artifact count, then `tests`, then shorten the worktree path;
+  only when the goal still does not fit on one line does the band take a second line.
 - Runs with a tool error, an interruption, a reported nonzero exit, incomplete output,
   or unavailable/invalid/conflicting counts carry a warning. Failed tests already show
   in the `✗` count, an unknown command status is the normal case for a live run, and
@@ -29,6 +43,9 @@ One line above the prompt: `repo · worktree (branch) · Goal · Now · N artifa
   The `/compass` pane also shows the warnings; Test Board provides the details.
 
 ### `/compass` pane
+
+`/compass` with no argument opens the pane. `/compass more`, `hide` and `show` drive the
+band (above); any other argument is refused with the accepted list.
 
 - **This session** tab: repo, worktree and branch; goal; step and next; how long ago
   the status was set; Test Board's pass/fail tally; and every artifact, grouped as
