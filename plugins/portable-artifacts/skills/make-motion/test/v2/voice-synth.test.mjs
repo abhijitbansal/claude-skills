@@ -329,6 +329,84 @@ test('a runtime folder without a lockfile is machine trouble with the install hi
   });
 });
 
+// ---------- interruption (an AbortSignal) ----------
+
+const aborted = () => {
+  const controller = new AbortController();
+  controller.abort();
+  return controller.signal;
+};
+const isInterruption = (err) => {
+  assert.deepEqual([err.name, err.kind], ['AbortError', undefined], 'an interruption, never film or machine trouble');
+  return true;
+};
+
+test('an already aborted signal: nothing is checked, downloaded or spawned, and the call rejects with an AbortError', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn();
+    let ensured = 0;
+    const ensureModel = async () => { ensured += 1; };
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, ensureModel, signal: aborted() })), isInterruption);
+    assert.deepEqual([fake.calls.length, ensured], [0, 0]);
+    assert.equal(existsSync(path.join(outDir, '.voice')), false, 'not even a staging folder');
+  });
+});
+
+test('a cache hit is unaffected by an aborted signal', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn();
+    const first = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn }));
+    const again = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, signal: aborted() }));
+    assert.deepEqual([again.cached, again.sidecar, fake.calls.length], [true, first.sidecar, 1]);
+  });
+});
+
+test('an abort during the model check rejects at once with an AbortError, and no worker starts', async () => {
+  await withScratch(async (outDir) => {
+    const controller = new AbortController();
+    const fake = fakeSpawn();
+    const ensureModel = () => {
+      setImmediate(() => controller.abort());
+      return new Promise(() => {});
+    };
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, ensureModel, signal: controller.signal })), isInterruption);
+    assert.equal(fake.calls.length, 0);
+  });
+});
+
+test('an abort while the worker runs kills it once, removes the staging folder and rejects with an AbortError', async () => {
+  await withScratch(async (outDir) => {
+    const controller = new AbortController();
+    let child = null;
+    const spawn = () => {
+      child = fakeChild();
+      setImmediate(() => controller.abort());
+      return child;
+    };
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn, signal: controller.signal })), isInterruption);
+    assert.deepEqual(child.kills, ['SIGKILL']);
+    assert.deepEqual(voiceFolder(outDir), [], 'no staging folder, no job file, no entry');
+    child.finish(null, 'SIGKILL');
+  });
+});
+
+test('an abort after a successful run has no effect: the entry stays and the next call is a cache hit', async () => {
+  await withScratch(async (outDir) => {
+    const controller = new AbortController();
+    const fake = fakeSpawn();
+    const made = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, signal: controller.signal }));
+    controller.abort();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(fake.calls[0].child.kills, [], 'a finished worker is not killed');
+    const again = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn }));
+    assert.deepEqual([made.cached, again.cached, fake.calls.length], [false, true, 1]);
+  });
+});
+
+test('synthesiseFilm refuses a signal that is not an AbortSignal', async () => {
+  await assert.rejects(synthesiseFilm(FILM, opts(os.tmpdir(), { signal: { aborted: false } })), /signal/);
+});
+
 test('synthesiseFilm refuses a timeout that is not a positive number of seconds, and a voice other than af_heart', async () => {
   const fake = fakeSpawn();
   await assert.rejects(synthesiseFilm(FILM, opts(os.tmpdir(), { spawn: fake.spawn, timeoutSeconds: 0 })), /timeoutSeconds/);

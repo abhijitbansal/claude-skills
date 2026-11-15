@@ -73,6 +73,26 @@ export class VoiceSynthError extends Error {
 }
 
 const machine = (message, hint, extra = {}) => new VoiceSynthError(message, { kind: 'machine', hint, ...extra });
+
+// An interruption: name 'AbortError' and no `kind`, so a caller never takes it for film or machine trouble.
+const abortError = (signal) => Object.assign(new Error('voice synthesis was interrupted'), { name: 'AbortError', cause: signal.reason });
+const throwIfAborted = (signal) => {
+  if (signal?.aborted) throw abortError(signal);
+};
+
+// `promise`, or an AbortError as soon as `signal` aborts (the promise's own outcome is then ignored).
+function untilAborted(promise, signal) {
+  if (!signal) return promise;
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(abortError(signal));
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));
+  });
+}
 const sha256Hex = (bytes) => createHash('sha256').update(bytes).digest('hex');
 
 function sortKeys(value) {
@@ -224,24 +244,34 @@ function workerError(code, signal, tail) {
 /**
  * Runs the worker on `jobFile` through `spawn` (child_process.spawn's signature). Its stdout lines go to `log` as they
  * come. Resolves on exit 0; rejects with its classified error, or, when it has not finished after `timeoutSeconds`,
- * kills it (SIGKILL) and rejects with machine trouble that says so (`timedOut: true`).
+ * kills it (SIGKILL) and rejects with machine trouble that says so (`timedOut: true`). When `signal` aborts first, the
+ * worker is killed (SIGKILL) and the call rejects with an AbortError; after the worker has finished, an abort does
+ * nothing.
  */
-function runWorker(spawn, jobFile, timeoutSeconds, log) {
+function runWorker(spawn, jobFile, { timeoutSeconds, log, signal }) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let timer = null;
+    let child = null;
     const tail = [];
     const keepTail = (line) => {
       tail.push(line);
       if (tail.length > STDERR_TAIL_LINES) tail.shift();
     };
+    const onAbort = () => {
+      if (settled) return;
+      child.kill('SIGKILL');
+      settle(reject, abortError(signal));
+    };
     const settle = (fn, value) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
       fn(value);
     };
-    const child = spawn(process.execPath, [WORKER_PATH, jobFile], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    child = spawn(process.execPath, [WORKER_PATH, jobFile], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    signal?.addEventListener('abort', onAbort, { once: true });
     const streamsDone = Promise.all([lineReader(child.stdout, log), lineReader(child.stderr, keepTail)]);
     timer = setTimeout(() => {
       child.kill('SIGKILL');
@@ -266,8 +296,9 @@ function publish(staging, dir) {
 }
 
 // Runs the worker in a fresh staging folder (unique name, created exclusively, as is the job file in it) and
-// publishes the folder as `dir`. The staging folder is removed on every path.
-async function synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log, timeoutSeconds }) {
+// publishes the folder as `dir`. The staging folder is removed on every path, an interruption included.
+async function synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log, timeoutSeconds, signal }) {
+  throwIfAborted(signal);
   mkdirSync(path.dirname(dir), { recursive: true });
   const staging = `${dir}.partial-${process.pid}-${randomUUID()}`;
   mkdirSync(staging);
@@ -278,7 +309,7 @@ async function synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log,
     const jobFile = path.join(staging, 'job.json');
     writeFileSync(jobFile, `${JSON.stringify(job)}\n`, { flag: 'wx' });
     log(`voice: synthesising ${shots.filter((s) => s.say !== null).length} narrated shots`);
-    await runWorker(spawn, jobFile, timeoutSeconds, log);
+    await runWorker(spawn, jobFile, { timeoutSeconds, log, signal });
     rmSync(jobFile);
     publish(staging, dir);
   } finally {
@@ -286,7 +317,9 @@ async function synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log,
   }
 }
 
-const OPTIONS = Object.freeze(['outDir', 'voice', 'spawn', 'log', 'runtime', 'modelDir', 'offline', 'timeoutSeconds', 'ensureModel']);
+const OPTIONS = Object.freeze(['outDir', 'voice', 'spawn', 'log', 'runtime', 'modelDir', 'offline', 'timeoutSeconds', 'ensureModel', 'signal']);
+const isAbortSignal = (signal) => typeof signal?.aborted === 'boolean' && typeof signal.addEventListener === 'function'
+  && typeof signal.removeEventListener === 'function';
 
 function checkOptions(options) {
   const unknown = Object.keys(options).filter((key) => !OPTIONS.includes(key));
@@ -296,6 +329,7 @@ function checkOptions(options) {
   if (timeoutSeconds !== undefined && !(Number.isFinite(timeoutSeconds) && timeoutSeconds > 0)) {
     throw new TypeError(`synthesiseFilm: timeoutSeconds must be a positive number of seconds, got ${String(timeoutSeconds)}`);
   }
+  if (options.signal !== undefined && !isAbortSignal(options.signal)) throw new TypeError('synthesiseFilm: signal must be an AbortSignal');
   checkVoice(options.voice);
 }
 
@@ -303,21 +337,26 @@ function checkOptions(options) {
  * The film's narration. -> Promise<{ dir, sidecar, cached }>. Options: `outDir` (the cache goes in <outDir>/.voice/),
  * `voice` ('af_heart'), `log(line)`, `runtime` (the optional voice package folder, default <skill>/optional/voice) and
  * `modelDir` (default the model's cache folder), `offline` (true: a missing model file is not downloaded),
- * `timeoutSeconds` (default DEFAULT_TIMEOUT_SECONDS, synthesis only) and two test seams: `spawn`
- * (child_process.spawn's signature) and `ensureModel` (ensureVoiceModel's). Rejects with a VoiceSynthError
- * ({ kind, hint, exitCode, signal, timedOut }); option mistakes are TypeErrors.
+ * `timeoutSeconds` (default DEFAULT_TIMEOUT_SECONDS, synthesis only), `signal` (an AbortSignal) and two test seams:
+ * `spawn` (child_process.spawn's signature) and `ensureModel` (ensureVoiceModel's). Rejects with a VoiceSynthError
+ * ({ kind, hint, shot?, exitCode, signal, timedOut }); option mistakes are TypeErrors.
+ * Interruption: a cache hit is returned whatever the signal. Otherwise an already aborted signal checks, downloads and
+ * spawns nothing; an abort during the model check rejects at once (a download already under way may still finish into
+ * the model folder: the download code takes no signal); an abort while the worker runs kills it and removes the
+ * staging folder. Each rejects with an Error named 'AbortError' that has no `kind`.
  */
 export async function synthesiseFilm(film, options = {}) {
   checkOptions(options);
-  const { outDir, voice, log = () => {}, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS } = options;
+  const { outDir, voice, log = () => {}, timeoutSeconds = DEFAULT_TIMEOUT_SECONDS, signal } = options;
   const { spawn = spawnChild, ensureModel = ensureVoiceModel } = options;
   const runtime = options.runtime ?? path.join(OPTIONAL_ROOT, 'voice');
   const modelDir = options.modelDir ?? voiceModelDir();
   const dir = path.join(outDir, CACHE_DIR, voiceHash(film, { voice, runtimeLock: lockHash(runtime) }));
   const cached = cachedSidecar(dir, film, log);
   if (cached) return { dir, sidecar: cached, cached: true };
-  await ensureModelFirst(ensureModel, modelDir, options.offline ?? false, log);
-  await synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log, timeoutSeconds });
+  throwIfAborted(signal);
+  await untilAborted(ensureModelFirst(ensureModel, modelDir, options.offline ?? false, log), signal);
+  await synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log, timeoutSeconds, signal });
   const made = readEntry(dir, film);
   if (!made.sidecar) throw machine(`the voice worker finished, but its output in ${dir} is incomplete: ${made.problem}`, RERUN_HINT);
   return { dir, sidecar: made.sidecar, cached: false };
