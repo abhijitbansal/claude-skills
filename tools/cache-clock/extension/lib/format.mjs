@@ -62,6 +62,45 @@ export function headsUp(snap) {
   );
 }
 
+/** `1 ping` or `n pings`. */
+export const pings = (n) => (n === 1 ? "1 ping" : `${n} pings`);
+
+const STOP_TEXT = {
+  payback: "pings have cost as much as the cold rewrite they avoid",
+  budget: "the keep-warm budget is spent",
+  "window-end": "the keep-warm window ended",
+  "cold-reply": "a ping came back cold, so pinging is not keeping this cache warm",
+  "send-failed": "two pings in a row failed to send",
+  unmeasured: "a ping's cost was not reported, so the budget cannot be enforced",
+};
+
+/** The note logged when keep-warm stops itself. `spend` is this window's { usd, pings }. */
+export function keepWarmStopped(reason, spend) {
+  return `${NAME}: keep-warm stopped: ${STOP_TEXT[reason] ?? reason} (${pings(spend.pings)}, ${usd(spend.usd)} this window).`;
+}
+
+/** The reply after the keep-warm settings were saved. */
+export function keepWarmSaved(config) {
+  if (!(config.keepWarmHours > 0)) return `${NAME}: keep-warm: off (saved for all sessions)`;
+  return `${NAME}: keep-warm: ${config.keepWarmHours}h after your last message · budget ${usd(config.keepWarmMaxUsd)} · payback stop ${config.keepWarmPayback ? "on" : "off"} (saved for all sessions)`;
+}
+
+/** The cost question shown before a long keep-warm window is saved. `estimate` is keepWarmEstimate's result. */
+export function keepWarmQuote(snap, hours, estimate) {
+  if (!snap || !estimate) return `${NAME}: keep-warm for ${hours}h: cost unknown until a priced model call. Turn it on?`;
+  return `${NAME}: keep-warm for ${hours}h on ${snap.displayName} (${tokens(snap.contextTokens)} tokens) sends about ${estimate.pings} pings, ` +
+    `about ${usd(estimate.usd)} at the last reported prices; the budget and payback stop end it sooner. Turn it on?`;
+}
+
+/** The card's keep-warm line from the settings and the scheduler's status(). */
+function keepWarmLine(config, keepWarm) {
+  if (!(config.keepWarmHours > 0)) return "off (/cache-clock keepwarm on)";
+  const { state, msLeft, usd: spent, pings: count, lastSkip, stopped } = keepWarm ?? {};
+  if (state === "on") return `on · ${duration(msLeft)} left · ${pings(count)} · ${usd(spent)}${lastSkip ? ` · last skip: ${lastSkip}` : ""}`;
+  if (state === "stopped") return `stopped (${stopped}) · ${pings(count)} · ${usd(spent)}`;
+  return `on (${config.keepWarmHours}h) · starts after your next message`;
+}
+
 function selectionReason(snap) {
   if (snap.reason === "auto") return "Auto has not resolved the next model";
   if (snap.reason === "qualified-selection") return "usage cannot verify the selected provider/context tier";
@@ -83,7 +122,7 @@ function guardLine(config) {
   return `${guard} · ${heads}`;
 }
 
-export function card(snap, tally, config) {
+export function card(snap, tally, config, keepWarm = null) {
   if (!snap) return `${NAME}: no model call yet in this session.`;
   const ratio = snap.prices?.read > 0 ? `${Math.round(snap.prices.write / snap.prices.read)}× per token` : "prices not reported";
   const lines = [
@@ -94,6 +133,7 @@ export function card(snap, tally, config) {
     `  session    ${tally.calls} model calls · ${tally.coldIdle} cold after idle · ${tally.coldBreak} prefix breaks · ${tally.coldSwitch ?? 0} switch rewrites · ${usd(tally.extraUsd)} estimated extra` +
       (tally.unpricedRewrites ? ` (priced subtotal; ${tally.unpricedRewrites} rewrite(s) missing prices)` : ""),
     `  guard      ${guardLine(config)}`,
+    `  keep-warm  ${keepWarmLine(config, keepWarm)}`,
   ];
   return lines.join("\n");
 }
@@ -117,6 +157,12 @@ export const HELP = [
   "  Auto is priced as the model it last resolved to. Unresolved or unpriced Auto warns once and sends.",
   "  Unknown selection/prices or unverified provider/context tier: warn and send, never borrow another model's price.",
   "",
+  "Keep-warm (off until you turn it on; it costs money)",
+  "  While you are away, Cache Clock can send a tiny ping before the cache expires, so your next message",
+  "  reads the conversation at the warm price instead of rewriting it. Each ping is a small model call.",
+  "  It starts from your last message and stops by itself when pings cost as much as one cold rewrite,",
+  "  when the budget is spent, when the window ends, or when a ping fails or comes back cold.",
+  "",
   "Commands",
   "  /cache-clock                 the card: cache state, time left, next-send prices, session tally",
   "  /cache-clock guard refuse    ask (or refuse once) before a costly cold send (default)",
@@ -124,6 +170,11 @@ export const HELP = [
   "  /cache-clock guard off       no guard",
   "  /cache-clock min 0.25        only guard cold sends whose extra cost is at least $0.25 (default $0.10)",
   "  /cache-clock headsup 5       warn 5 minutes before the cache expires (off to disable)",
+  "  /cache-clock keepwarm on     keep warm 3 hours after your last message",
+  "  /cache-clock keepwarm 6      0 to 12 hours; above 6 shows the estimated cost first",
+  "  /cache-clock keepwarm off",
+  "  /cache-clock keepwarm budget 0.50   stop after $0.50 of pings in one window, 0 to 5",
+  "  /cache-clock keepwarm payback off   keep pinging after pings cost more than one cold rewrite",
   "  /cache-clock help            this text",
   "",
   "What cold sends already cost you, across every saved session:",

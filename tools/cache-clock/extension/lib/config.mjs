@@ -127,6 +127,98 @@ export function saveRefusal(dir, sessionId, key, at) {
   }
 }
 
+// The keep-warm window and a one-process-per-session lock, so a reloaded extension resumes
+// its window and spend instead of restarting a budget, and two processes never both ping.
+const KEEPWARM_DIR = "keepwarm";
+
+const keepWarmFile = (dir, id, ext) => join(dir, KEEPWARM_DIR, `${createHash("sha256").update(id).digest("hex")}.${ext}`);
+
+/** True unless the OS says the pid does not exist (EPERM means it exists, owned by someone else). */
+export function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code !== "ESRCH";
+  }
+}
+
+const isCount = (v) => Number.isInteger(v) && v >= 0;
+
+/** The stored window with only its known fields, or null when any field is invalid. */
+function validWindow(w) {
+  if (!w || typeof w !== "object") return null;
+  const { startedAt, endsAt, usd, pings, stopped } = w;
+  const ok = Number.isFinite(startedAt) && Number.isFinite(endsAt) && endsAt >= startedAt &&
+    Number.isFinite(usd) && usd >= 0 && isCount(pings) && (stopped === null || typeof stopped === "string");
+  return ok ? { startedAt, endsAt, usd, pings, stopped } : null;
+}
+
+function lockHolder(file) {
+  try {
+    const { pid } = JSON.parse(readFileSync(file, "utf8"));
+    return Number.isInteger(pid) ? pid : null;
+  } catch {
+    return null; // an unreadable lock has no live holder
+  }
+}
+
+/**
+ * Per-session keep-warm state under `<dir>/keepwarm/<sha256(sessionId)>.{json,lock}`.
+ * `save` and `lock` can throw on a filesystem error; the scheduler decides what that means.
+ */
+export function createKeepWarmStore(dir, sessionId, { pid = process.pid, isAlive = pidAlive } = {}) {
+  const valid = validSessionId(sessionId);
+
+  function load() {
+    if (!valid) return null;
+    try {
+      return validWindow(JSON.parse(readFileSync(keepWarmFile(dir, sessionId, "json"), "utf8")));
+    } catch {
+      return null; // missing or corrupt: the window starts again at the next real turn
+    }
+  }
+
+  function save(window) {
+    if (!valid) return;
+    mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
+    const file = keepWarmFile(dir, sessionId, "json");
+    const tmp = `${file}.${pid}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(tmp, JSON.stringify(window) + "\n", { flag: "wx", mode: 0o600 });
+      renameSync(tmp, file);
+    } finally {
+      rmSync(tmp, { force: true });
+    }
+  }
+
+  function lock() {
+    if (!valid) return false;
+    mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
+    const file = keepWarmFile(dir, sessionId, "lock");
+    // Second pass only after removing a lock whose holder is gone.
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        writeFileSync(file, JSON.stringify({ pid }), { flag: "wx", mode: 0o600 });
+        return true;
+      } catch (err) {
+        if (err.code !== "EEXIST") throw err;
+      }
+      const holder = lockHolder(file);
+      if (holder === pid) return true;
+      if (holder !== null && isAlive(holder)) return false;
+      rmSync(file, { force: true });
+    }
+    return false;
+  }
+
+  function unlock() {
+    if (valid && lockHolder(keepWarmFile(dir, sessionId, "lock")) === pid) rmSync(keepWarmFile(dir, sessionId, "lock"), { force: true });
+  }
+
+  return { load, save, lock, unlock };
+}
+
 function amount(text) {
   const v = Number(String(text).replace(/^\$/, ""));
   return text !== undefined && text !== "" && isAmount(v) ? v : null;

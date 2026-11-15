@@ -1,6 +1,8 @@
 // Keep-warm: an occasional tiny request that refreshes the provider prompt cache
-// while the owner is away. This module owns the ping marker, the pure planner and,
-// later, the scheduler. It imports nothing from guard, history or wiring.
+// while the owner is away. This module owns the ping marker, the pure planner and the
+// scheduler. It imports nothing from guard, history or wiring.
+
+import { keepWarmStopped } from "./format.mjs";
 
 export const PING_MARKER = "[cache-clock:keepwarm]";
 export const PING_PROMPT = `${PING_MARKER} Reply with exactly: .`;
@@ -72,6 +74,233 @@ export function planPing({ snapshot, config, window, spend, session, now }) {
   if (at > window.endsAt) return { skip: "window-ended" };
   const priced = priceSkip({ snapshot, config, spend });
   return priced ? { skip: priced } : { at };
+}
+
+export const RETRY_MS = 15_000;
+export const IN_FLIGHT_TIMEOUT_MS = 120_000;
+export const MAX_FAILED_SENDS = 2;
+// A timer that wakes this much early still sends; one that finds the plan further out re-plans.
+const FIRE_TOLERANCE_MS = 1000;
+// Stops that mean something is wrong, not just that the window is over.
+const WARN_STOPS = new Set(["cold-reply", "send-failed", "unmeasured"]);
+// Planner skips that end the window, and the stop reason each is recorded as.
+const SKIP_STOPS = { payback: "payback", budget: "budget", "window-ended": "window-end" };
+
+/**
+ * The keep-warm scheduler. Everything outside is injected: `send()` sends one ping,
+ * `read()` returns { snapshot, config, session }, `store` keeps the window and the lock,
+ * `now`, `setTimer`, `clearTimer` and `log(text, "info" | "warn")` are the host's.
+ * It holds at most one plan timer; every re-plan starts from a fresh `read()`.
+ */
+export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, log }) {
+  let window = null;
+  let timer = null;
+  let watchdog = null;
+  let inFlight = false;
+  let sendId = 0;
+  let failures = 0;
+  let lastSkip = null;
+  let saveWarned = false;
+  let lockWarned = false;
+  let holdsLock = false;
+  let closed = false;
+
+  const spend = () => ({ usd: window?.usd ?? 0, pings: window?.pings ?? 0 });
+  const planNow = ({ snapshot, config, session }) => planPing({ snapshot, config, window, spend: spend(), session, now: now() });
+  const clearAll = () => {
+    clearTimer(timer);
+    clearTimer(watchdog);
+    timer = null;
+    watchdog = null;
+  };
+
+  /** Writes the window; a failing store is reported once and keep-warm carries on from memory. */
+  function persist() {
+    if (!window || !(read().config.keepWarmHours > 0)) return;
+    try {
+      store.save(window);
+    } catch (err) {
+      if (saveWarned) return;
+      saveWarned = true;
+      log(`cache-clock: could not save the keep-warm window (${err.message}); a reload may restart its budget.`, "info");
+    }
+  }
+
+  const arm = (at) => {
+    clearTimer(timer);
+    timer = setTimer(onTimer, Math.max(0, at - now()));
+  };
+
+  function reschedule() {
+    clearTimer(timer);
+    timer = null;
+    if (closed || inFlight || window?.stopped) return;
+    const plan = planNow(read());
+    if ("at" in plan) {
+      lastSkip = null;
+      arm(plan.at);
+      return;
+    }
+    lastSkip = plan.skip;
+    if (SKIP_STOPS[plan.skip]) stop(SKIP_STOPS[plan.skip]);
+  }
+
+  function tryLock() {
+    try {
+      const held = store.lock() === true;
+      holdsLock = holdsLock || held;
+      return held;
+    } catch (err) {
+      if (!lockWarned) {
+        lockWarned = true;
+        log(`cache-clock: could not take the keep-warm lock (${err.message}); not pinging.`, "info");
+      }
+      return false;
+    }
+  }
+
+  function onTimer() {
+    timer = null;
+    if (closed) return;
+    const fresh = read();
+    const plan = planNow(fresh);
+    if (!("at" in plan) || plan.at - now() > FIRE_TOLERANCE_MS) {
+      reschedule();
+      return;
+    }
+    if (!tryLock()) {
+      lastSkip = "locked";
+      arm(now() + leadMs(lifetimeOf(fresh.snapshot)));
+      return;
+    }
+    fire();
+  }
+
+  function fire() {
+    inFlight = true;
+    sendId += 1;
+    const id = sendId;
+    clearTimer(watchdog);
+    watchdog = setTimer(() => failed(id, new Error(`no reply in ${IN_FLIGHT_TIMEOUT_MS / 1000}s`)), IN_FLIGHT_TIMEOUT_MS);
+    try {
+      Promise.resolve(send()).catch((err) => failed(id, err));
+    } catch (err) {
+      failed(id, err);
+    }
+  }
+
+  /** One failed send, from a rejection or the watchdog. Stale ids (already answered or stopped) are ignored. */
+  function failed(id, err) {
+    if (!inFlight || id !== sendId) return;
+    clearTimer(watchdog);
+    watchdog = null;
+    inFlight = false;
+    failures += 1;
+    log(`cache-clock: keep-warm ping failed (${err?.message ?? err}).`, "info");
+    if (failures >= MAX_FAILED_SENDS) stop("send-failed");
+    else arm(now() + RETRY_MS);
+  }
+
+  function releaseLock() {
+    if (!holdsLock) return;
+    holdsLock = false;
+    try {
+      store.unlock();
+    } catch (err) {
+      log(`cache-clock: could not release the keep-warm lock (${err.message}).`, "info");
+    }
+  }
+
+  function stop(reason) {
+    clearAll();
+    inFlight = false;
+    sendId += 1;
+    if (reason === "shutdown") {
+      closed = true;
+      releaseLock();
+      return;
+    }
+    if (window) {
+      window = { ...window, stopped: reason };
+      persist();
+    }
+    log(keepWarmStopped(reason, spend()), WARN_STOPS.has(reason) ? "warn" : "info");
+  }
+
+  function start() {
+    if (read().config.keepWarmHours > 0) {
+      try {
+        window = store.load();
+      } catch (err) {
+        log(`cache-clock: could not read the keep-warm window (${err.message}); starting a new one.`, "info");
+      }
+    }
+    reschedule();
+  }
+
+  function onUserTurn(at) {
+    if (closed) return;
+    const hours = read().config.keepWarmHours;
+    window = { startedAt: at, endsAt: at + Math.max(0, hours) * HOUR_MS, usd: 0, pings: 0, stopped: null };
+    failures = 0;
+    persist();
+    reschedule();
+  }
+
+  function configChanged() {
+    if (closed) return;
+    const { snapshot, config } = read();
+    if (!(config.keepWarmHours > 0)) {
+      clearTimer(timer);
+      timer = null;
+      window = null;
+      return;
+    }
+    const startedAt = window?.startedAt ?? snapshot?.lastCallAt ?? null;
+    if (startedAt === null) return; // no real turn yet: the window starts with the first one
+    window = { usd: 0, pings: 0, stopped: null, ...window, startedAt, endsAt: startedAt + config.keepWarmHours * HOUR_MS };
+    persist();
+    reschedule();
+  }
+
+  function onPingUsage({ usd, warm }) {
+    if (!inFlight || closed) return;
+    if (usd === null || usd === undefined) {
+      stop("unmeasured");
+      return;
+    }
+    const base = window ?? { startedAt: now(), endsAt: now(), usd: 0, pings: 0, stopped: null };
+    window = { ...base, usd: base.usd + usd, pings: base.pings + 1 };
+    failures = 0;
+    persist();
+    if (!warm) stop("cold-reply");
+  }
+
+  function onIdle() {
+    if (closed) return;
+    inFlight = false;
+    clearTimer(watchdog);
+    watchdog = null;
+    reschedule();
+  }
+
+  function onBusy() {
+    clearTimer(timer);
+    timer = null;
+  }
+
+  function status() {
+    const hours = read().config.keepWarmHours;
+    const base = { msLeft: window ? Math.max(0, window.endsAt - now()) : 0, ...spend(), lastSkip, stopped: window?.stopped ?? null, inFlight };
+    if (!(hours > 0)) return { ...base, state: "off" };
+    if (!window) return { ...base, state: "waiting" };
+    if (window.stopped) return { ...base, state: "stopped" };
+    // The window ran out while no timer was armed: say so without waiting for a re-plan.
+    if (now() > window.endsAt) return { ...base, state: "stopped", stopped: "window-end", msLeft: 0 };
+    return { ...base, state: "on" };
+  }
+
+  return { start, onUserTurn, onPingUsage, onIdle, onBusy, reschedule, configChanged, stop, status };
 }
 
 /** Rough pings and dollars for `hours` of keep-warm at the snapshot's prices, or null if unknown. */

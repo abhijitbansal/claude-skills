@@ -1,18 +1,28 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { attach } from "../extension/lib/wiring.mjs";
-import { saveConfig } from "../extension/lib/config.mjs";
-import { usage, T0, MIN } from "./fixtures.mjs";
+import { createKeepWarmStore, loadConfig, saveConfig } from "../extension/lib/config.mjs";
+import { PING_DISPLAY, PING_PROMPT } from "../extension/lib/keepwarm.mjs";
+import { usage, pingUsage, T0, MIN } from "./fixtures.mjs";
+
+const iso = (ms) => new Date(ms).toISOString();
 
 // A stand-in for the CopilotSession an extension gets from joinSession().
 // `answer` turns on in-chat questions: a value (or function of the question) for ui.select,
 // "pending" for a question nobody answers, or an Error for a host that throws.
-function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir = mkdtempSync(join(tmpdir(), "cc-wiring-")), env = {}, answer } = {}) {
+function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir = mkdtempSync(join(tmpdir(), "cc-wiring-")), env = {}, answer, pid = 1, alive = new Set([pid]), autoReply = true, emitUserMessage = true } = {}) {
   saveConfig(dir, config);
-  const host = { now: T0, logs: [], aborts: 0, handlers: new Map(), timers: [], joinConfig: null, asked: [], selected: { modelId: "claude-sonnet-5.5" } };
+  const host = { now: T0, logs: [], aborts: 0, handlers: new Map(), timers: [], joinConfig: null, asked: [], selected: { modelId: "claude-sonnet-5.5" }, pid, alive, sent: [], autoReply, emitUserMessage, hostGone: null };
+  // Both send paths record the request and, like the host, answer with a ping turn.
+  const recordSend = (params) => {
+    host.sent.push(params);
+    if (host.autoReply) queueMicrotask(() => host.replyToPing());
+    return `msg-${host.sent.length}`;
+  };
   const ui = answer === undefined ? {} : {
     capabilities: { ui: { elicitation: true } },
     ui: {
@@ -27,7 +37,8 @@ function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir
   host.session = {
     ...ui,
     sessionId: "s-1",
-    rpc: { model: { getCurrent: async () => host.selected } },
+    rpc: { model: { getCurrent: async () => host.selected }, send: async (params) => recordSend(params) },
+    send: async (params) => recordSend(params),
     log: async (message, options = {}) => { host.logs.push({ message, ...options }); },
     // Never resolves: the real abort() waits for the prompt hook, so awaiting it deadlocks.
     abort: () => { host.aborts += 1; return new Promise(() => {}); },
@@ -54,7 +65,25 @@ function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5 }, dir
   host.command = (args) => host.joinConfig.commands.find((c) => c.name === "cache-clock").handler({ sessionId: "s-1", command: `/cache-clock ${args}`, commandName: "cache-clock", args });
   host.history = "";
   const readHistory = () => { if (host.history instanceof Error) throw host.history; return host.history; };
-  host.start = () => attach({ joinSession: host.joinSession, now: () => host.now, timers: host.timerApi, dir, readHistory, env });
+  host.replyToPing = () => {
+    if (host.emitUserMessage) host.emit("user.message", { content: PING_DISPLAY, transformedContent: PING_PROMPT, source: "system" });
+    host.emit("assistant.turn_start", {});
+    host.emit("assistant.usage", pingUsage({ at: iso(host.now) }));
+    host.emit("session.idle", {});
+  };
+  host.turn = async (text = "carry on", o = {}) => {
+    await host.prompt(text);
+    host.emit("user.message", { content: text });
+    host.emit("assistant.turn_start", {});
+    host.emit("assistant.usage", sonnet({ at: iso(host.now), ...o }));
+    host.emit("session.idle", {});
+  };
+  host.run = async (ms, step = 10_000) => { for (const end = host.now + ms; host.now < end;) { host.advance(step); await flush(); } };
+  host.start = () => attach({
+    joinSession: host.joinSession, now: () => host.now, timers: host.timerApi, dir, readHistory, env,
+    keepWarmStore: (d, id) => createKeepWarmStore(d, id, { pid: host.pid, isAlive: (p) => host.alive.has(p) }),
+    onHostGone: (fn) => { host.hostGone = fn; },
+  });
   host.dir = dir;
   return host;
 }
@@ -919,4 +948,244 @@ test("returning to Auto forgets the old pick and warns again", async () => {
   choose("auto");
   await h.prompt("three");
   assert.equal(unknownWarnings(), 2, "each return to Auto warns once");
+});
+
+// Keep-warm: the scheduler wired to a fake host that answers each ping like Copilot does.
+const HOUR = 60 * MIN;
+const KW = { mode: "refuse", minUsd: 0.1, headsUpMin: 5, keepWarmHours: 3, keepWarmMaxUsd: 0.5, keepWarmPayback: true };
+const lastLog = (h) => h.logs.at(-1).message;
+const record = (type, ms, data) => JSON.stringify({ type, timestamp: iso(ms), data });
+const sessionLockFile = (dir, id) => join(dir, "keepwarm", `${createHash("sha256").update(id).digest("hex")}.lock`);
+const PING_MESSAGE = { content: PING_DISPLAY, transformedContent: PING_PROMPT, source: "system" };
+
+test("keep-warm is off by default: no ping in an hour", async () => {
+  const h = fakeHost();
+  await h.start();
+  await h.turn();
+  await h.run(HOUR);
+  assert.equal(h.sent.length, 0);
+});
+
+test("a ping goes through rpc.send with the fixed prompt and flags", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(4 * MIN);
+  assert.deepEqual(h.sent[0], { prompt: PING_PROMPT, displayPrompt: PING_DISPLAY, source: "system", mode: "enqueue", billable: false });
+});
+
+test("without rpc.send the ping falls back to session.send", async () => {
+  const h = fakeHost({ config: KW });
+  delete h.session.rpc.send;
+  await h.start();
+  await h.turn();
+  await h.run(4 * MIN);
+  assert.deepEqual(h.sent[0], { prompt: PING_PROMPT, displayPrompt: PING_DISPLAY, source: "system", mode: "enqueue" });
+});
+
+test("pings are not model calls, never ask, and show on the card", async () => {
+  const h = fakeHost({ config: KW, answer: "Don't send" });
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  await h.command("");
+  assert.match(lastLog(h), /session +1 model calls/);
+  assert.match(lastLog(h), /keep-warm  on · 2h30m left · 7 pings · \$0\.14/);
+  assert.equal(h.asked.length, 0);
+});
+
+test("a host without user.message still files pings by the in-flight flag", async () => {
+  const h = fakeHost({ config: KW, emitUserMessage: false });
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  await h.command("");
+  assert.match(lastLog(h), /session +1 model calls/);
+});
+
+test("no heads-up line while keep-warm is on", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  assert.ok(h.logs.every((l) => !/goes cold in/.test(l.message)));
+});
+
+test("a ping's own prompt hook is never guarded", async () => {
+  const h = fakeHost({ answer: "Don't send" });
+  await goCold(h);
+  assert.equal(await h.prompt(PING_PROMPT), undefined);
+  assert.equal(h.aborts, 0);
+  assert.equal(h.asked.length, 0);
+});
+
+test("a ping whose prompt reaches the hook does not restart the window", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  assert.equal(await h.prompt(PING_PROMPT), undefined);
+  await h.command("");
+  assert.match(lastLog(h), /2h30m left/, "only a real prompt restarts the window");
+});
+
+test("a resumed session seeds pings as pings", async () => {
+  const h = fakeHost({ config: KW });
+  h.now = T0 + 4 * MIN;
+  h.history = [record("session.usage_record", T0, { usage: sonnet() }), record("user.message", T0 + 4 * MIN, PING_MESSAGE),
+    record("session.usage_record", T0 + 4 * MIN, { usage: pingUsage({ at: iso(T0 + 4 * MIN) }) })].join("\n");
+  await h.start();
+  await h.command("");
+  assert.match(lastLog(h), /session +1 model calls/);
+});
+
+// RF 1: the extension reloads mid-window and must resume its window, spend and stop.
+test("a reload mid-window resumes the window and its spend", async () => {
+  const alive = new Set([1, 2]);
+  const h1 = fakeHost({ config: KW, alive });
+  await h1.start();
+  await h1.turn();
+  await h1.run(40 * MIN);
+  assert.equal(h1.sent.length, 10);
+  alive.delete(1);
+  const h2 = fakeHost({ config: KW, dir: h1.dir, pid: 2, alive });
+  h2.now = h1.now;
+  h2.history = [record("session.usage_record", T0, { usage: sonnet() }), record("user.message", h2.now, PING_MESSAGE),
+    record("session.usage_record", h2.now, { usage: pingUsage({ at: iso(h2.now) }) })].join("\n");
+  await h2.start();
+  await h2.run(3 * HOUR);
+  assert.equal(h1.sent.length + h2.sent.length, 24);
+  await h2.command("");
+  assert.match(lastLog(h2), /stopped \(payback\) · 24 pings · \$0\.48/);
+});
+
+// RF 2: two processes attached to one session: only the lock holder pings.
+test("two processes on one session: only the lock holder pings", async () => {
+  const alive = new Set([1, 2]);
+  const h1 = fakeHost({ config: KW, alive });
+  const h2 = fakeHost({ config: KW, dir: h1.dir, pid: 2, alive });
+  await h1.start();
+  await h2.start();
+  await h1.turn();
+  await h2.turn();
+  for (let i = 0; i < 180; i += 1) {
+    await h1.run(10_000);
+    await h2.run(10_000);
+  }
+  assert.deepEqual([h1.sent.length, h2.sent.length], [7, 0]);
+});
+
+// RF 4: the user types while a ping is in flight; their turn is real and restarts the window.
+test("the user typing while a ping is in flight counts as a real turn", async () => {
+  const h = fakeHost({ config: KW });
+  h.autoReply = false;
+  await h.start();
+  await h.turn();
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 1);
+  h.emit("user.message", PING_MESSAGE);
+  h.emit("assistant.turn_start", {});
+  await h.prompt("one more thing");
+  h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+  h.emit("user.message", { content: "one more thing" });
+  h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 200_000, write: 0 }));
+  h.emit("session.idle", {});
+  await h.command("");
+  assert.match(lastLog(h), /session +2 model calls/);
+  assert.match(lastLog(h), /1 ping · \$0\.02/);
+  assert.match(lastLog(h), /3h00m left/);
+});
+
+// RF 5: a model switch to Auto during the window stops pings.
+test("switching to Auto stops pings", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 1);
+  h.emit("session.model_change", { newModel: "auto" });
+  await h.run(30 * MIN);
+  assert.equal(h.sent.length, 1);
+  await h.command("");
+  assert.match(lastLog(h), /last skip: auto/);
+});
+
+test("session shutdown clears keep-warm timers and frees the lock", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 1);
+  assert.ok(existsSync(sessionLockFile(h.dir, "s-1")), "the pinging process holds the lock");
+  h.emit("session.shutdown", {});
+  await h.run(HOUR);
+  assert.equal(h.sent.length, 1);
+  assert.equal(existsSync(sessionLockFile(h.dir, "s-1")), false);
+  const gone = fakeHost({ config: KW });
+  await gone.start();
+  await gone.turn();
+  await gone.run(4 * MIN);
+  assert.ok(existsSync(sessionLockFile(gone.dir, "s-1")));
+  gone.hostGone();
+  assert.equal(existsSync(sessionLockFile(gone.dir, "s-1")), false);
+  await gone.run(HOUR);
+  assert.equal(gone.sent.length, 1);
+});
+
+test("a stop note reaches the session log", async () => {
+  const h = fakeHost({ config: { ...KW, keepWarmMaxUsd: 0.04, keepWarmPayback: false } });
+  await h.start();
+  await h.turn();
+  await h.run(30 * MIN);
+  assert.equal(h.sent.length, 2);
+  assert.ok(h.logs.some((l) => /keep-warm stopped: the keep-warm budget is spent \(2 pings, \$0\.04/.test(l.message)));
+});
+
+test("an unwritable keep-warm folder never breaks the prompt hook", async () => {
+  const h = fakeHost({ config: KW });
+  writeFileSync(join(h.dir, "keepwarm"), "");
+  await h.start();
+  await assert.doesNotReject(h.turn());
+  assert.equal(await h.prompt("hi"), undefined);
+});
+
+test("/cache-clock keepwarm 8 asks with the estimated cost first", async () => {
+  const yes = fakeHost({ config: KW, answer: "Turn on" });
+  await yes.start();
+  yes.emit("assistant.usage", sonnet({ at: iso(T0) }));
+  await yes.command("keepwarm 8");
+  assert.match(yes.asked[0].message, /about 120 pings, about \$2\.40/);
+  assert.deepEqual(yes.asked[0].options, ["Turn on", "Cancel"]);
+  assert.equal(loadConfig(yes.dir).keepWarmHours, 8);
+  assert.match(lastLog(yes), /keep-warm: 8h after your last message/);
+  const no = fakeHost({ config: KW, answer: "Cancel" });
+  await no.start();
+  no.emit("assistant.usage", sonnet({ at: iso(T0) }));
+  await no.command("keepwarm 8");
+  assert.equal(loadConfig(no.dir).keepWarmHours, 3);
+  assert.match(lastLog(no), /unchanged/);
+});
+
+test("a host that cannot ask saves a long keep-warm window and prints the estimate with it", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  h.emit("assistant.usage", sonnet({ at: iso(T0) }));
+  await h.command("keepwarm 8");
+  assert.equal(loadConfig(h.dir).keepWarmHours, 8);
+  assert.match(lastLog(h), /about 120 pings, about \$2\.40.*keep-warm: 8h after your last message/s);
+});
+
+test("keepwarm on starts a window from the last model call, and keepwarm off ends it", async () => {
+  const h = fakeHost();
+  await h.start();
+  await h.turn();
+  await h.command("keepwarm on");
+  assert.equal(loadConfig(h.dir).keepWarmHours, 3);
+  assert.match(lastLog(h), /keep-warm: 3h after your last message · budget \$0\.50 · payback stop on/);
+  await h.run(4 * MIN);
+  assert.equal(h.sent.length, 1);
+  await h.command("keepwarm off");
+  assert.match(lastLog(h), /keep-warm: off/);
+  await h.run(HOUR);
+  assert.equal(h.sent.length, 1);
 });

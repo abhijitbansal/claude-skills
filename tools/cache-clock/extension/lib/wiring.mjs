@@ -4,10 +4,11 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createClock } from "./clock.mjs";
-import { configDir, loadConfig, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
-import { HELP, card, coldQuestion, coldWarn, headsUp, refusal, usd } from "./format.mjs";
+import { configDir, createKeepWarmStore, loadConfig, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
+import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
 import { NOT_A_PROMPT, decide } from "./guard.mjs";
-import { isMainInteraction, normalizeUsage } from "./usage.mjs";
+import { PING_DISPLAY, PING_PROMPT, createKeepWarm, isPingMessage, isPingText, keepWarmEstimate } from "./keepwarm.mjs";
+import { NANO_AIU_PER_USD, isMainInteraction, normalizeUsage } from "./usage.mjs";
 
 // The heads-up comes at most a fifth of the ttl before expiry.
 const HEADS_UP_TTL_SHARE = 5;
@@ -35,6 +36,8 @@ function seed(clock, readHistory, session, select, resolveAuto) {
     return false; // no log yet (new session) or unreadable: the clock starts at the next call
   }
   let busy = false;
+  // True from a root keep-warm user message until the next root user message.
+  let pingTurn = false;
   for (const line of text.split("\n")) {
     let event;
     try {
@@ -49,6 +52,7 @@ function seed(clock, readHistory, session, select, resolveAuto) {
       busy = event.data?.sessionWasActive === true || event.data?.continuePendingWork === true;
     }
     if (!event.agentId && event.type === "assistant.turn_start") busy = true;
+    if (!event.agentId && event.type === "user.message") pingTurn = isPingMessage(event.data);
     // `session.idle` is ephemeral and never persisted: a finished turn ends with
     // `assistant.turn_end`, and a closed session with `session.shutdown`.
     if (!event.agentId && (event.type === "session.idle" || event.type === "assistant.turn_end" || event.type === "session.shutdown")) busy = false;
@@ -58,7 +62,9 @@ function seed(clock, readHistory, session, select, resolveAuto) {
     if (!event.agentId && event.type === "session.compaction_complete" && compacted(event)) clock.invalidate();
     if (event.type !== "session.usage_record") continue;
     const call = mainCall({ ...event, data: event.data?.usage });
-    if (call) clock.ingest(call);
+    if (!call) continue;
+    if (pingTurn) clock.ingestPing(call);
+    else clock.ingest(call);
   }
   return busy;
 }
@@ -109,20 +115,37 @@ async function ask(session, timers, message, options) {
   }
 }
 
-export async function attach({ joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog, env = process.env }) {
+const closeOnHostGone = (fn) => {
+  process.stdin.once("end", fn);
+  process.once("exit", fn);
+};
+
+export async function attach({
+  joinSession, now = Date.now, timers = globalThis, dir = configDir(), readHistory = readSessionLog, env = process.env,
+  keepWarmStore = createKeepWarmStore, onHostGone = closeOnHostGone,
+}) {
   const clock = createClock();
-  const state = { session: null, refusedKey: null, busy: false, headsUpTimer: null, headsUpShown: null, pendingPrompt: null, selection: null, selectionRevision: 0, autoModel: null, unknownWarnedFor: null };
+  const state = {
+    session: null, refusedKey: null, busy: false, headsUpTimer: null, headsUpShown: null, pendingPrompt: null,
+    selection: null, selectionRevision: 0, autoModel: null, unknownWarnedFor: null,
+    // Who started the turn now running: "ping" (ours), "user", or null when unknown.
+    turnSource: null, openRequests: new Set(),
+  };
+  // Built once the session id is known; every use before then is a no-op.
+  let keepWarm = null;
   const vsCode = isVsCode(env);
   const say = (message, options) => quietly(() => state.session?.log(message, options));
   // In VS Code only error-level messages reach the chat.
   const warnLevel = vsCode ? { level: "error" } : { level: "warning" };
+  const rescheduleKeepWarm = () => keepWarm?.reschedule();
   // Command output: a card with OK in VS Code, where a plain log line never reaches the chat.
   // Not awaited, so the command returns while the card waits for OK.
   const show = (message, options) => {
     if (vsCode && canAsk(state.session)) return quietly(() => ask(state.session, timers, message, [OK]));
     return say(message, vsCode ? { level: "error" } : options);
   };
-  const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, dir, say });
+  const keepWarmIsOn = () => keepWarm?.status().state === "on";
+  const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, dir, say, keepWarmIsOn });
   // While the selection is Auto, the model Copilot last resolved it to stands in for it.
   const effectiveSelection = () => state.selection?.modelId === "auto" && state.autoModel ? { ...state.selection, modelId: state.autoModel } : state.selection;
   const snapshot = () => clock.snapshot(now(), effectiveSelection());
@@ -175,6 +198,7 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
       // known, so it cannot read as a change. Only a reply or an event moves the selection.
       if (current !== FAILED && current != null && revision === state.selectionRevision) select(current);
       scheduleHeadsUp();
+      rescheduleKeepWarm();
     })().finally(() => { lookup = null; });
     return lookup;
   };
@@ -192,7 +216,11 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
   };
 
   async function onPrompt(input) {
+    // Our own keep-warm ping fires this hook too: never guard it, never count it as the user.
+    if (isPingText(input?.prompt)) return undefined;
     if (NOT_A_PROMPT.test(String(input?.prompt ?? "").trimStart())) return undefined;
+    // A real prompt restarts the keep-warm window, whatever the guard decides next.
+    quietly(() => keepWarm?.onUserTurn(now()));
     // Share the whole check, including asynchronous selection resolution.
     if (state.pendingPrompt) {
       const result = await state.pendingPrompt;
@@ -247,8 +275,11 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
   }
 
   const onCommand = async (context) => {
-    if (parseCommand(context?.args).kind === "status") await refreshSelection();
-    return runCommand({ context, clock, snapshot, dir, show, scheduleHeadsUp });
+    const { kind } = parseCommand(context?.args);
+    // The status card and the keep-warm cost estimate both need the live selection.
+    if (kind === "status" || kind === "confirm") await refreshSelection();
+    const askUser = (message, options) => ask(state.session, timers, message, options);
+    return runCommand({ context, clock, snapshot, dir, show, scheduleHeadsUp, keepWarm, askUser });
   };
 
   state.session = await joinSession({
@@ -258,50 +289,135 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
 
   state.busy = seed(clock, readHistory, state.session, select, resolveAuto);
   state.refusedKey = loadRefusal(dir, state.session.sessionId, now());
+  // Started only now, so a resumed session's clock is already in place when it first plans.
+  keepWarm = buildKeepWarm({
+    state, snapshot, dir, now, timers, say, warnLevel,
+    infoLevel: vsCode ? { level: "error" } : { ephemeral: true },
+    store: keepWarmStore(dir, state.session.sessionId),
+  });
+  keepWarm.start();
+  onHostGone(() => keepWarm.stop("shutdown"));
   scheduleHeadsUp();
+
+  /** A ping's usage refreshes the clock but is not a model call; the scheduler gets its cost if it sent it. */
+  const fileKeepWarmPing = (call, inFlight) => {
+    const { kind } = clock.ingestPing(call);
+    if (!inFlight) return;
+    keepWarm.onPingUsage({ usd: call.nanoAiu === null ? null : call.nanoAiu / NANO_AIU_PER_USD, warm: kind === "warm" });
+  };
+  const trackRequest = (event, opened) => {
+    const id = event.data?.requestId;
+    if (event.agentId || id === undefined) return;
+    if (opened) state.openRequests.add(id);
+    else state.openRequests.delete(id);
+    if (!opened) keepWarm.reschedule();
+  };
 
   state.session.on("session.model_change", (event) => {
     if (event.agentId) return;
     select(event.data, true);
     scheduleHeadsUp();
+    rescheduleKeepWarm();
   });
   state.session.on("session.model_deselected", (event) => {
     if (event.agentId) return;
     select(null, true);
     scheduleHeadsUp();
+    rescheduleKeepWarm();
   });
   state.session.on("session.auto_mode_resolved", (event) => {
     // Not a selection change: Auto may resolve for the very send a question is open on.
     if (event.agentId || !resolveAuto(event.data)) return;
     scheduleHeadsUp();
+    rescheduleKeepWarm();
+  });
+  state.session.on("user.message", (event) => {
+    if (event.agentId) return;
+    state.turnSource = isPingMessage(event.data) ? "ping" : "user";
   });
   state.session.on("assistant.turn_start", (event) => {
     if (event.agentId) return;
     state.busy = true;
+    keepWarm.onBusy();
   });
   state.session.on("session.idle", (event) => {
     if (event.agentId) return;
     state.busy = false;
+    state.turnSource = null;
     // A heads-up skipped because a turn was running gets another chance now.
     scheduleHeadsUp();
+    keepWarm.onIdle();
   });
   state.session.on("assistant.usage", (event) => {
     const call = mainCall(event);
-    if (call && clock.ingest(call)) scheduleHeadsUp();
+    if (!call) return;
+    const inFlight = keepWarm.status().inFlight;
+    // A host that does not report user.message is told apart by the ping in flight.
+    if (state.turnSource === "ping" || (inFlight && state.turnSource !== "user")) {
+      fileKeepWarmPing(call, inFlight);
+      scheduleHeadsUp();
+      return;
+    }
+    if (clock.ingest(call)) scheduleHeadsUp();
+    keepWarm.reschedule();
   });
   state.session.on("session.compaction_complete", (event) => {
     if (event.agentId || !compacted(event)) return;
     clock.invalidate();
     scheduleHeadsUp();
+    rescheduleKeepWarm();
   });
+  state.session.on("session.shutdown", (event) => {
+    if (!event.agentId) keepWarm.stop("shutdown");
+  });
+  // A question being open means the user is at the keyboard: no pings until it is answered.
+  for (const prefix of ["user_input", "elicitation"]) {
+    state.session.on(`${prefix}.requested`, (event) => trackRequest(event, true));
+    state.session.on(`${prefix}.completed`, (event) => trackRequest(event, false));
+  }
 
   await refreshSelection();
-  return { session: state.session, clock };
+  return { session: state.session, clock, keepWarm };
 }
 
-function headsUpScheduler({ state, selection, clock, now, timers, dir, say }) {
+/** The keep-warm scheduler wired to this session's host, config and clock. */
+function buildKeepWarm({ state, snapshot, dir, now, timers, say, warnLevel, infoLevel, store }) {
+  const send = () => {
+    state.turnSource = null;
+    const options = { prompt: PING_PROMPT, displayPrompt: PING_DISPLAY, source: "system", mode: "enqueue" };
+    const { rpc } = state.session;
+    // The rpc form can mark the request non-billable; the plain form has no such flag.
+    return typeof rpc?.send === "function" ? rpc.send({ ...options, billable: false }) : state.session.send(options);
+  };
+  return createKeepWarm({
+    send,
+    store,
+    now,
+    read: () => ({
+      snapshot: snapshot(),
+      config: loadConfig(dir),
+      session: {
+        busy: state.busy,
+        pendingPrompt: Boolean(state.pendingPrompt),
+        questionOpen: state.openRequests.size > 0,
+        selectedModel: state.selection?.modelId ?? null,
+      },
+    }),
+    setTimer: (fn, ms) => {
+      const timer = timers.setTimeout(fn, ms);
+      timer?.unref?.();
+      return timer;
+    },
+    clearTimer: (timer) => timers.clearTimeout(timer),
+    log: (text, severity) => say(text, severity === "warn" ? warnLevel : infoLevel),
+  });
+}
+
+function headsUpScheduler({ state, selection, clock, now, timers, dir, say, keepWarmIsOn }) {
   timers.clearTimeout(state.headsUpTimer);
   state.headsUpTimer = null;
+  // Pings keep the cache warm, and a heads-up would fire next to every one of them.
+  if (keepWarmIsOn()) return;
   const config = loadConfig(dir);
   const snap = clock.snapshot(now(), selection());
   if (config.headsUpMin <= 0 || snap?.state !== "warm") return;
@@ -321,18 +437,50 @@ function headsUpScheduler({ state, selection, clock, now, timers, dir, say }) {
   state.headsUpTimer?.unref?.();
 }
 
-function runCommand({ context, clock, snapshot, dir, show, scheduleHeadsUp }) {
-  const parsed = parseCommand(context?.args);
-  if (parsed.kind === "status") return show(card(snapshot(), clock.tally(), loadConfig(dir)));
-  if (parsed.kind === "help") return show(HELP);
-  if (parsed.kind === "error") return show(`cache-clock: ${parsed.message}. Try /cache-clock help.`, { level: "error" });
-  const next = { ...loadConfig(dir), ...parsed.patch };
+const KEEPWARM_KEYS = ["keepWarmHours", "keepWarmMaxUsd", "keepWarmPayback"];
+const TURN_ON = "Turn on";
+const CANCEL = "Cancel";
+
+/** Saves a settings patch and tells the scheduler; returns the saved settings, or null after showing the failure. */
+function saveSettings({ patch, dir, show, scheduleHeadsUp, keepWarm }) {
+  const next = { ...loadConfig(dir), ...patch };
   try {
     saveConfig(dir, next);
   } catch (err) {
-    return show(`cache-clock: could not save settings to ${dir}: ${err.message}`, { level: "error" });
+    show(`cache-clock: could not save settings to ${dir}: ${err.message}`, { level: "error" });
+    return null;
   }
+  if (KEEPWARM_KEYS.some((key) => key in patch)) keepWarm?.configChanged();
   scheduleHeadsUp();
+  return next;
+}
+
+function savedLine(next, patch) {
+  if (KEEPWARM_KEYS.some((key) => key in patch)) return keepWarmSaved(next);
   const heads = next.headsUpMin > 0 ? `${next.headsUpMin}m` : "off";
-  return show(`cache-clock: guard: ${next.mode} · min ${usd(next.minUsd)} · heads-up ${heads} (saved for all sessions)`);
+  return `cache-clock: guard: ${next.mode} · min ${usd(next.minUsd)} · heads-up ${heads} (saved for all sessions)`;
+}
+
+/** A long keep-warm window costs real money: show the estimate and ask before saving it. */
+async function confirmKeepWarm(ctx, patch) {
+  const hours = patch.keepWarmHours;
+  const snap = ctx.snapshot();
+  const quote = keepWarmQuote(snap, hours, keepWarmEstimate(snap, hours));
+  const answer = await ctx.askUser(quote, [TURN_ON, CANCEL]);
+  // A host that cannot ask gets the estimate and the saved setting in one reply.
+  if (answer !== UNASKED && answer !== TURN_ON) return ctx.show("cache-clock: keep-warm unchanged.");
+  const next = saveSettings({ ...ctx, patch });
+  if (!next) return undefined;
+  return ctx.show(answer === UNASKED ? `${quote}\n${savedLine(next, patch)}` : savedLine(next, patch));
+}
+
+async function runCommand(ctx) {
+  const { context, clock, snapshot, dir, show, keepWarm } = ctx;
+  const parsed = parseCommand(context?.args);
+  if (parsed.kind === "status") return show(card(snapshot(), clock.tally(), loadConfig(dir), keepWarm?.status()));
+  if (parsed.kind === "help") return show(HELP);
+  if (parsed.kind === "error") return show(`cache-clock: ${parsed.message}. Try /cache-clock help.`, { level: "error" });
+  if (parsed.kind === "confirm") return confirmKeepWarm(ctx, parsed.patch);
+  const next = saveSettings({ ...ctx, patch: parsed.patch });
+  return next ? show(savedLine(next, parsed.patch)) : undefined;
 }
