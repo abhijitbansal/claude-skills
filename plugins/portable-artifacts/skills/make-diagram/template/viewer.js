@@ -308,8 +308,7 @@
     svg.addEventListener('focusin', function (e) {
       var id = trace.idAt(e.target);
       if (!id) return;
-      // Only keyboard focus scrolls a node into view: a node the pointer is pressing is already under it, and the panel
-      // narrowing the stage can leave one half behind it, which must not make the view jump out from under the click.
+      // Only keyboard focus scrolls a node into view: a pressed node is already under the pointer, so never jump the view.
       if (!story.isPresenting() && !downAt) camera.ensureVisible(id);
       trace.focus(id);
     });
