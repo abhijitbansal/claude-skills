@@ -257,7 +257,7 @@
         <ul>
           <li>Reads expiry, TTL and per-token prices from Copilot's own <code>assistant.usage</code> events. Through Copilot, a Claude Sonnet 5.5 cache write costs 25× a read and the cache lives 5 minutes.</li>
           <li><code>/cache-clock</code> shows the card: time left, warm vs cold price, session tally. A heads-up appears just before expiry.</li>
-          <li>Optional keep-warm, off until <code>/cache-clock keepwarm on</code> and it costs money: a tiny ping before expiry keeps the cache warm for 3 hours after your last message (up to 12), and stops at payback, the budget or the window end. Tested against a fake host only; the owner's live check is still to be run.</li>
+          <li>Optional keep-warm, off until <code>/cache-clock keepwarm on</code> and it costs money: a tiny ping before expiry keeps the cache warm for 3 hours after your last message (up to 12), and stops at payback, the budget, the window end or the daily limit. The setting is global, but each open session has its own window, budget and 24-hour ceiling: at most 362 pings in 24 hours and the daily dollar limit (default $2.00) per session; deleting the ledger file resets it. Tested against a fake host only; do not enable it before the owner&rsquo;s live check confirms that Copilot labels the ping&rsquo;s message as ours.</li>
           <li>The report reads every persisted Copilot session and totals what cold sends already cost. In VS Code it needs <code>"chat.canvases.enabled": true</code>.</li>
         </ul>
       </article>

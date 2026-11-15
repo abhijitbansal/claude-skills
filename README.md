@@ -131,8 +131,11 @@ Then run `/cache-clock help` in Copilot. The install is pinned to the release ta
 `cache-clock-v1.1.0` and checks a SHA-256 for every file; the curl lines work once that tag
 exists. Optional keep-warm is off until `/cache-clock keepwarm on` and it costs money: it
 keeps the cache warm for 3 hours after your last message (up to 12) and stops at payback,
-the budget or the window end. It is tested against a fake Copilot host only; a live check
-is still to be run by the owner.
+the budget, the window end or the daily limit. The setting is global, but each open session
+has its own window, budget and 24-hour ceiling: per session, at most 362 pings in 24 hours and
+the daily dollar limit (default $2.00); deleting the ledger file resets it. It is tested against
+a fake Copilot host only; do not enable it before the owner's live check confirms that Copilot
+labels the ping's message as ours.
 
 Full reference: [tools/cache-clock/README.md](tools/cache-clock/README.md) ·
 [guide](docs/features/cache-clock.html) ·
