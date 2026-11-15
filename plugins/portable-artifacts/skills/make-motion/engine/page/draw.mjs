@@ -77,11 +77,15 @@ function drawPath(ctx, n) {
 
 // ---- images ----
 
+// props.clip = [sx, sy, sw, sh] in the picture's own pixels draws only that part of it, stretched to w x h.
 function drawImage(ctx, n, assets) {
-  const { src, w, h } = n.props;
+  const { src, w, h, clip } = n.props;
   const image = assets.get(src);
   if (!image) throw new Error(`image node "${n.id}": no loaded picture for src "${src}"`);
-  ctx.drawImage(image, 0, 0, w ?? image.width, h ?? image.height);
+  if (clip === undefined) return ctx.drawImage(image, 0, 0, w ?? image.width, h ?? image.height);
+  const ok = Array.isArray(clip) && clip.length === 4 && clip.every(Number.isFinite) && clip[2] > 0 && clip[3] > 0;
+  if (!ok) throw new Error(`image node "${n.id}": clip must be [sx, sy, sw, sh] in image pixels with sw, sh > 0, got ${JSON.stringify(clip)}`);
+  return ctx.drawImage(image, ...clip, 0, 0, w ?? clip[2], h ?? clip[3]);
 }
 
 // ---- fields ----

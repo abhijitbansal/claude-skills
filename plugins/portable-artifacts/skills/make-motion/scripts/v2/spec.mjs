@@ -273,11 +273,17 @@ function checkAnchor(item, at, entry) {
 
 const supportsLook = (device, look) => typeof device.supports !== 'function' || Boolean(device.supports(look));
 
-function checkDevice(item, at, ctx) {
+// A kind may draw some devices itself when they aim at one of its regions (kind.regionDevices, e.g. clipping draws a
+// region highlight as a frame): those are allowed in any look, on a region: target only.
+const REGION_TARGET = 'region:';
+const kindDrawsIt = (item, kind) => Array.isArray(kind?.regionDevices) && kind.regionDevices.includes(item.do)
+  && typeof item.target === 'string' && item.target.startsWith(REGION_TARGET);
+
+function checkDevice(item, at, ctx, kind) {
   if (typeof item.do !== 'string' || item.do === '') return [];
   const found = lookup(ctx.regs.devices, item.do);
   if (found.error) return [{ path: pathJoin(at, 'do'), message: found.error }];
-  if (!ctx.look || supportsLook(found.value, ctx.look)) return [];
+  if (!ctx.look || supportsLook(found.value, ctx.look) || kindDrawsIt(item, kind)) return [];
   const supported = ctx.regs.devices.names().filter((name) => supportsLook(ctx.regs.devices.get(name), ctx.look));
   const message = `device "${item.do}" is not supported by look "${ctx.look.name}"; it supports: ${supported.join(', ') || 'no devices'}`;
   return [{ path: pathJoin(at, 'do'), message }];
@@ -323,12 +329,12 @@ function onCountErrors(shot, base) {
 
 // `entry`: the shot's timeline entry for its anchors, or null. `targets`: see kindTargets.
 // Only the first ON_MAX entries are checked; the schema reports the excess.
-function checkOn(shot, base, ctx, { entry, targets, kindName }) {
+function checkOn(shot, base, ctx, { entry, targets, kindName, kind }) {
   if (!Array.isArray(shot.on)) return [];
   return shot.on.slice(0, ON_MAX).flatMap((item, j) => {
     if (!isPlainObject(item)) return [];
     const at = pathJoin(pathJoin(base, 'on'), j);
-    return [...checkAnchor(item, at, entry), ...checkDevice(item, at, ctx), ...checkTarget(item, at, targets, kindName)];
+    return [...checkAnchor(item, at, entry), ...checkDevice(item, at, ctx, kind), ...checkTarget(item, at, targets, kindName)];
   });
 }
 
@@ -400,7 +406,7 @@ function checkShot(shot, index, ctx, seen) {
     ...checkShotId(shot, base, seen),
     ...narration.errors,
     ...checkCut(shot, index, base, ctx),
-    ...checkOn(shot, base, ctx, { entry, targets, kindName: resolved.name }),
+    ...checkOn(shot, base, ctx, { entry, targets, kindName: resolved.name, kind: resolved.kind }),
     ...checkSrcFields(shot, base, resolved.kind, ctx.specDir),
   ];
 }

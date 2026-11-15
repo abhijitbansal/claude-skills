@@ -108,6 +108,8 @@ export function fieldNode(shot, ctx) {
     x: (canvas.w - w) / HALF, y: (canvas.h - h) / HALF, w, h, unit,
     field: look.field.field, params: look.field.params, palette: look.palette,
     seed: ctx.seed,
+    // a locked look (pop) keeps its surface still under camera punches; a drifting one (desk) moves with the camera
+    ...(look.camera.style === 'locked' ? { fixed: true } : {}),
   }, { depth: 1 });
 }
 
@@ -230,13 +232,18 @@ export function onDevices(shot, ctx, { boxes, defaultTarget, behind = {}, skip =
     const target = item.target ?? defaultTarget;
     const box = boxes[target];
     if (!box) throw new Error(`shot "${shot.id}": on[${j}] target "${target}" has no box (have: ${Object.keys(boxes).join(', ')})`);
-    const extra = extrasFor(item.do, box, ctx);
-    if (extra === null) throw new Error(`shot "${shot.id}": on[${j}]: device "${item.do}" needs more than a target and cannot be placed with "on"`);
-    const built = registries.devices.get(item.do).build({
-      id: `${shot.id}.on${j}`, box, at: ctx.at(item.at), look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, ...extra,
-    });
+    const built = buildDevice(shot, ctx, { item, j, box, at: ctx.at(item.at) });
     const under = item.do === 'highlight' ? behind[target] ?? null : null;
     return [{ nodes: built.nodes, before: under, camera: built.camera, target, at: ctx.at(item.at) }];
+  });
+}
+
+/** One `on` event's device (event j of the shot, id `<shot>.on<j>`) built on `box`, landing on `at`. */
+export function buildDevice(shot, ctx, { item, j, box, at }) {
+  const extra = extrasFor(item.do, box, ctx);
+  if (extra === null) throw new Error(`shot "${shot.id}": on[${j}]: device "${item.do}" needs more than a target and cannot be placed with "on"`);
+  return registries.devices.get(item.do).build({
+    id: `${shot.id}.on${j}`, box, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, ...extra,
   });
 }
 

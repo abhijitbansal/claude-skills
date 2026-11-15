@@ -106,3 +106,22 @@ test('a field node paints its seeded texture inside its transform', async (t) =>
   assert.notEqual(await a.hashFrame(FPS + 1), one, 'another seed paints another sheet');
   assert.deepEqual(a.errors, []);
 });
+
+test('an image node with clip draws only that part of the picture', async (t) => {
+  // shot.png is 160x100 in 10-row stripes: rows 0-9 light, rows 10-19 blue
+  const image = (id, clip, x) => ({ type: 'image', id, props: { src: 'shot.png', w: 100, h: 100, clip, x, y: 100 } });
+  const film = { fps: FPS, shots: [{ id: 'a', show: 'free', hold: 1, background: '#000000', srcs: ['shot.png'], nodes: [
+    image('light', [0, 0, 160, 10], 100), image('blue', [0, 10, 160, 10], 300),
+  ] }] };
+  const a = await openStage(film, { specDir });
+  if (!a) { t.skip('no browser'); return; }
+  t.after(() => a.close());
+  await a.hashFrame(0);
+  const [light, blue] = await a.page.evaluate(() => {
+    const ctx = document.getElementById('stage').getContext('2d');
+    return [Array.from(ctx.getImageData(150, 190, 1, 1).data), Array.from(ctx.getImageData(350, 110, 1, 1).data)];
+  });
+  assert.ok(light[0] > 200 && light[2] > 200, `the light stripe fills its whole box: ${light}`);
+  assert.ok(blue[2] > 150 && blue[0] < 80, `the blue stripe fills its whole box: ${blue}`);
+  assert.deepEqual(a.errors, []);
+});

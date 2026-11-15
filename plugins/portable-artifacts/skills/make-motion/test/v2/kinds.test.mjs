@@ -484,20 +484,18 @@ test('a region box is the region inside the drawn picture, through its rotation'
   desk.boxes['region:query'].forEach((v, i) => near(v, want[i], `desk ${i}`));
 });
 
-test('a mark on a region goes over the picture, and the camera pushes until the region fills 62% of the width', () => {
+test('a mark on a region goes over the picture, and the desk camera pushes until the region fills 62% of the width', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
     on: [{ at: 'word:query', do: 'circle', target: 'region:query' }] };
-  for (const [look, format] of [['desk', '16:9'], ['pop', '9:16'], ['desk', '9:16']]) {
-    const { nodes, camera, timing, ctx, boxes, canvas } = expandShot(shot, look, format);
+  for (const format of ['16:9', '9:16']) {
+    const { nodes, camera, timing, ctx, boxes, canvas } = expandShot(shot, 'desk', format);
     const ids = nodes.map((n) => n.id);
-    if (look === 'desk') assert.ok(ids.indexOf('c.on0') > ids.indexOf('c.image'), 'mark drawn over the picture');
+    assert.ok(ids.indexOf('c.on0') > ids.indexOf('c.image'), 'mark drawn over the picture');
     const push = camera.find((layer) => layer.some((k) => k.zoom !== undefined));
     const at = timing.words[4].start;
-    const safe = viralOf(canvas);
-    const width = look === 'pop' ? canvas.w - safe.left - safe.right : canvas.w;
-    const want = Math.min(3.2, Math.max(1.2, (0.62 * width) / boxes['region:query'][2]));
-    near(push.at(-1).t, at, `${look} ${format} lands on the event`);
-    near(push.at(-1).zoom, want, `${look} ${format} zoom`);
+    const want = Math.min(3.2, Math.max(1.2, (0.62 * canvas.w) / boxes['region:query'][2]));
+    near(push.at(-1).t, at, `${format} lands on the event`);
+    near(push.at(-1).zoom, want, `${format} zoom`);
     assert.equal(push.at(-1).ease, ctx.look.moves.enter.ease);
     near(push[0].t, at - 0.9, 'over 0.9 s');
   }
@@ -507,46 +505,116 @@ test('a mark on a region goes over the picture, and the camera pushes until the 
 
 test('a pushed region sits on the composition centre, as far as the field allows', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { mid: [0.4, 0.4, 0.2, 0.2] }, on: [{ at: 1, do: 'underline', target: 'region:mid' }] };
-  for (const [look, format] of [['desk', '16:9'], ['pop', '9:16']]) {
-    const { boxes, canvas } = expandShot(shot, look, format);
-    const f = filmFor([shot], look, format);
-    const safe = viralOf(canvas);
-    const centre = look === 'pop' ? [safe.left + (canvas.w - safe.left - safe.right) / 2, (safe.top + canvas.h - safe.bottom) / 2] : [canvas.w / 2, canvas.h / 2];
-    const pic = f.sampleAt(2).find((n) => n.id === 'c.image');
-    const rest = expandShot(shot, look, format).nodes.find((n) => n.id === 'c.image');
-    const [bx, by, bw, bh] = boxes['region:mid'];
-    // the region centre moves with the picture group: rest offset scaled by the camera zoom
-    const zoom = pic.scale / (rest.props.scale ?? 1);
-    const rx = pic.x + (bx + bw / 2 - rest.props.x) * zoom, ry = pic.y + (by + bh / 2 - rest.props.y) * zoom;
-    assert.ok(Math.abs(rx - centre[0]) < 4 && Math.abs(ry - centre[1]) < 4, `${look} ${format}: region at ${rx}, ${ry}, centre ${centre}`);
-  }
+  const { boxes, canvas } = expandShot(shot, 'desk', '16:9');
+  const f = filmFor([shot], 'desk', '16:9');
+  const pic = f.sampleAt(2).find((n) => n.id === 'c.image');
+  const rest = expandShot(shot, 'desk', '16:9').nodes.find((n) => n.id === 'c.image');
+  const [bx, by, bw, bh] = boxes['region:mid'];
+  // the region centre moves with the picture group: rest offset scaled by the camera zoom
+  const zoom = pic.scale / (rest.props.scale ?? 1);
+  const rx = pic.x + (bx + bw / 2 - rest.props.x) * zoom, ry = pic.y + (by + bh / 2 - rest.props.y) * zoom;
+  assert.ok(Math.abs(rx - canvas.w / 2) < 4 && Math.abs(ry - canvas.h / 2) < 4, `region at ${rx}, ${ry}`);
 });
 
-test('a highlight on a region is a marker frame with the rest of the picture dimmed: hand-drawn in desk, ruled in pop', () => {
+test('a highlight on a region is a hand-drawn marker frame with the rest of the picture dimmed in desk', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
     on: [{ at: 'word:query', do: 'highlight', target: 'region:query' }] };
-  for (const [look, width, cap] of [['desk', 12, 'round'], ['pop', 10, 'square']]) {
-    const { nodes, timing, ctx } = expandShot(shot, look);
-    const at = timing.words[4].start;
-    const pic = nodes.find((n) => n.id === 'c.image');
-    assert.ok(!all(nodes).some((n) => n.props.under), `${look}: no filled band`);
-    const sides = all([pic]).filter((n) => /^c\.on0\.side\d$/.test(n.id));
-    assert.equal(sides.length, 4, `${look}: four strokes inside the picture`);
-    for (const s of sides) {
-      assert.equal(s.props.stroke, ctx.look.palette.accent);
-      assert.equal(s.props.strokeWidth, width);
-      assert.equal(s.props.lineCap, cap);
-      assert.equal(s.props.blend, undefined);
-    }
-    const lands = sides.map((s) => lastKey(s.tracks.draw).t);
-    assert.deepEqual([...lands].sort((a, b) => a - b), lands, `${look}: drawn on in order`);
-    landsOn(sides[3], 'draw', at, `${look}: the frame closes on the event`);
-    const dim = all([pic]).find((n) => n.id === 'c.on0.dim');
-    assert.equal(dim.props.fill, ctx.look.palette.ink);
-    assert.equal(dim.props.d.match(/M/g).length, 2, 'the region is cut out of the overlay');
-    near(sample(dim.tracks.opacity, 0), 0);
-    near(sample(dim.tracks.opacity, at), 0.32, 'dims with the frame');
+  const { nodes, timing, ctx } = expandShot(shot, 'desk');
+  const at = timing.words[4].start;
+  const pic = nodes.find((n) => n.id === 'c.image');
+  assert.ok(!all(nodes).some((n) => n.props.under), 'no filled band');
+  const sides = all([pic]).filter((n) => /^c\.on0\.side\d$/.test(n.id));
+  assert.equal(sides.length, 4, 'four strokes inside the picture');
+  for (const s of sides) {
+    assert.equal(s.props.stroke, ctx.look.palette.accent);
+    assert.equal(s.props.strokeWidth, 12);
+    assert.equal(s.props.lineCap, 'round');
+    assert.equal(s.props.blend, undefined);
   }
+  const lands = sides.map((s) => lastKey(s.tracks.draw).t);
+  assert.deepEqual([...lands].sort((a, b) => a - b), lands, 'drawn on in order');
+  landsOn(sides[3], 'draw', at, 'the frame closes on the event');
+  const dim = all([pic]).find((n) => n.id === 'c.on0.dim');
+  assert.equal(dim.props.fill, ctx.look.palette.ink);
+  assert.equal(dim.props.d.match(/M/g).length, 2, 'the region is cut out of the overlay');
+  near(sample(dim.tracks.opacity, 0), 0);
+  near(sample(dim.tracks.opacity, at), 0.32, 'dims with the frame');
+});
+
+// ---- pop clipping: a region event is a cut to a close-up ----
+
+const POP_SHOT = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query and then the chart below it.',
+  regions: { query: [0.6, 0.2, 0.3, 0.2], chart: [0.1, 0.3, 0.4, 0.3] },
+  on: [{ at: 'word:query', do: 'underline', target: 'region:query' }, { at: 'word:chart', do: 'highlight', target: 'region:chart' }] };
+const opacityAt = (n, t) => sample(n.tracks.opacity, t, n.step);
+
+test('pop: the whole picture until the first region event, then a hard switch to the region as its own cut-out', () => {
+  const { nodes, timing, canvas, ctx } = expandShot(POP_SHOT, 'pop', '9:16');
+  const at = timing.words[4].start; // "query"
+  const pic = nodes.find((n) => n.id === 'c.image');
+  const close = nodes.find((n) => n.id === 'c.close0');
+  near(opacityAt(pic, at - 1 / FPS), 1, 'the whole picture just before');
+  near(opacityAt(close, at - 1 / FPS), 0, 'no close-up just before');
+  near(opacityAt(pic, at), 0, 'the whole picture gone on the event frame');
+  near(opacityAt(close, at), 1, 'the close-up on the event frame');
+  const image = all([close]).find((n) => n.type === 'image');
+  assert.deepEqual(image.props.clip, [0.6 * 1600, 0.2 * 1000, 0.3 * 1600, 0.2 * 1000], 'the region in image pixels');
+  assert.equal(image.props.src, 'shot.png');
+  assert.ok(all([close]).some((n) => n.id.endsWith('.keyline')) && all([close]).some((n) => n.id.endsWith('.shadow')), 'a cutout: keyline and shadow');
+  const safe = viralOf(canvas);
+  const safeW = canvas.w - safe.left - safe.right, safeH = canvas.h - safe.top - safe.bottom;
+  const fitsWidth = Math.abs(image.props.w - 0.92 * safeW) < 1e-6, fitsHeight = Math.abs(image.props.h - 0.7 * safeH) < 1e-6;
+  assert.ok(fitsWidth || fitsHeight, `92% of the safe width or 70% of its height: ${image.props.w} x ${image.props.h}`);
+  assert.ok(image.props.w <= 0.92 * safeW + EPS && image.props.h <= 0.7 * safeH + EPS);
+  near(image.props.w / image.props.h, (0.3 * 1600) / (0.2 * 1000), 'the region keeps its shape');
+  const cutoutGroup = close.children.find((n) => n.id === 'c.close0.cutout');
+  near(cutoutGroup.props.x, safe.left + safeW / 2);
+  near(cutoutGroup.props.y, safe.top + safeH / 2);
+  const punch = ctx.look.devices.punch.scale;
+  const switchKeys = (expandShot(POP_SHOT, 'pop', '9:16').camera).flat().filter((k) => k.zoom === punch);
+  assert.ok(switchKeys.some((k) => Math.abs(k.t - at) < 1e-6), 'the switch lands with a punch');
+});
+
+test('pop: a second, different region event switches to that close-up; devices sit against the close-up and draw on after the cut', () => {
+  const { nodes, timing, boxes } = expandShot(POP_SHOT, 'pop', '9:16');
+  const first = timing.words[4].start, second = timing.words[8].start; // "query", "chart"
+  const [a, b] = ['c.close0', 'c.close1'].map((id) => nodes.find((n) => n.id === id));
+  near(opacityAt(a, second - 1 / FPS), 1); near(opacityAt(b, second - 1 / FPS), 0);
+  near(opacityAt(a, second + 1e-6), 0); near(opacityAt(b, second + 1e-6), 1); // anchors round to 1e-6 s
+  const underline = all([a]).find((n) => n.id === 'c.on0');
+  assert.ok(underline, 'the underline belongs to its close-up');
+  const [, by, , bh] = boxes['region:query'];
+  const ys = underline.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  assert.ok(Math.min(...ys) > by + bh, 'under the close-up');
+  near(lastKey(underline.tracks.draw).t, first + registries.looks.get('pop').moves.draw.dur, 'starts drawing on the cut');
+  const sides = all([b]).filter((n) => /^c\.on1\.side\d$/.test(n.id));
+  assert.equal(sides.length, 4, 'a ruled frame around the second close-up');
+  for (const s of sides) { assert.equal(s.props.strokeWidth, 10); assert.equal(s.props.lineCap, 'square'); }
+  assert.ok(!all([b]).some((n) => n.id === 'c.on1.dim'), 'no overlay on a close-up');
+  const [cx, cy, cw, ch] = boxes['region:chart'];
+  const xs = sides.flatMap((s) => s.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 0));
+  assert.ok(Math.min(...xs) < cx && Math.max(...xs) > cx + cw, 'the frame goes around the close-up');
+  assert.ok(ch > 0);
+});
+
+test('pop clippings never push the camera, and the pop field ignores the camera', () => {
+  const { camera, nodes } = expandShot(POP_SHOT, 'pop', '9:16');
+  const punch = registries.looks.get('pop').devices.punch.scale;
+  assert.ok(camera.flat().every((k) => k.zoom === undefined || k.zoom === 1 || k.zoom === punch), 'only punch zooms');
+  assert.equal(nodes[0].props.fixed, true, 'pop field fixed');
+  assert.equal(expandShot(POP_SHOT, 'desk').nodes[0].props.fixed, undefined, 'desk field moves with the camera');
+  const out = registries.cuts.get('punch').apply({ from: [], to: [nodes[0]].map((n) => sampleGraph([n], 0)[0]), p: 0.5, canvas: canvasOf('9:16') });
+  assert.equal(out[0].scale, 1, 'a punch cut leaves a fixed field alone');
+});
+
+test('the validator lets a clipping take a highlight on a region in pop, and still refuses highlight on text in pop', () => {
+  const pop = (shots) => validateFilm({ version: 2, mode: 'viral', shots }, { specDir });
+  const clip = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { q: [0.1, 0.1, 0.2, 0.2] } };
+  assert.deepEqual(pop([{ ...clip, on: [{ at: 1, do: 'highlight', target: 'region:q' }] }]).errors, []);
+  const onImage = pop([{ ...clip, on: [{ at: 1, do: 'highlight', target: 'image' }] }]);
+  assert.match(onImage.errors[0].message, /device "highlight" is not supported by look "pop"/);
+  const onText = pop([{ id: 'a', show: 'statement', say: 'One file.', on: [{ at: 0, do: 'highlight', target: 'text' }] }]);
+  assert.match(onText.errors[0].message, /device "highlight" is not supported by look "pop"/);
 });
 
 test('the push never shows the edge of the field', () => {

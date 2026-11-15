@@ -12,6 +12,9 @@ const DIM = 0.32; // opacity of the ink overlay outside the region
 const DIM_EASE = 'outCubic';
 const DRAW_SHARE = 2; // the frame takes this many of the look's draw moves, a quarter of it per side
 const SIDES = 4;
+
+/** How long a region frame takes to draw in `look`, all four sides. */
+export const markDuration = (look) => DRAW_SHARE * look.moves.draw.dur;
 const STROKE_POINTS = 4; // points along a hand stroke, ends included
 
 // One hand stroke from a to b: it runs `overshoot` past both corners and its points sit off the line by a seeded wobble.
@@ -38,10 +41,11 @@ function dimPath([px, py, pw, ph], [x, y, w, h]) {
 
 /**
  * The nodes of a region highlight: [dim overlay, side0..side3], every coordinate in the picture's own space.
- * @param {{ id: string, region: number[], picture: number[], at: number, look: object, unit: number, seed: number }} p
- *   region and picture are [x, y, w, h]; the frame closes, and the overlay reaches DIM, on `at`.
+ * @param {{ id: string, region: number[], picture: number[], at: number, look: object, unit: number, seed: number, dim?: boolean }} p
+ *   region and picture are [x, y, w, h]; the frame closes, and the overlay reaches DIM, on `at`. `dim: false` leaves
+ *   the overlay out (a close-up that is all region has nothing to dim).
  */
-export function regionMark({ id, region, picture, at, look, unit, seed }) {
+export function regionMark({ id, region, picture, at, look, unit, seed, dim = true }) {
   const hand = isHand(look);
   const spec = hand ? HAND : CRISP;
   const pad = spec.pad * unit;
@@ -58,8 +62,9 @@ export function regionMark({ id, region, picture, at, look, unit, seed }) {
     const props = { d, stroke: colourOf(look, 'accent'), strokeWidth: spec.width * unit, lineCap: spec.cap };
     return node('path', `${id}.side${i}`, props, { tracks: { draw }, step });
   });
-  const dim = node('path', `${id}.dim`, { d: dimPath(picture, region), fill: colourOf(look, 'ink') }, {
+  if (!dim) return sides;
+  const overlay = node('path', `${id}.dim`, { d: dimPath(picture, region), fill: colourOf(look, 'ink') }, {
     tracks: { opacity: landing(at, { ease: DIM_EASE, dur: at - start }, 0, DIM) },
   });
-  return [dim, ...sides];
+  return [overlay, ...sides];
 }

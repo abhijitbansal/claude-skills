@@ -55,7 +55,8 @@ function slide({ from, to, p, canvas }) {
 function punch({ to, p, canvas }) {
   const zoom = lerp(PUNCH.zoom, 1, ease(PUNCH.ease)(p));
   const cx = canvas.w / HALF, cy = canvas.h / HALF;
-  return to.map((n) => Object.freeze({ ...n, x: cx + (n.x - cx) * zoom, y: cy + (n.y - cy) * zoom, scale: n.scale * zoom }));
+  // a fixed node (a locked look's field) stays put, as it does under the camera
+  return to.map((n) => (n.props.fixed === true ? n : Object.freeze({ ...n, x: cx + (n.x - cx) * zoom, y: cy + (n.y - cy) * zoom, scale: n.scale * zoom })));
 }
 
 // ---- match ----

@@ -11,6 +11,7 @@ import { layoutText } from '../text/layout.mjs';
 import { landing } from '../devices/shared.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { regionMark } from './region-mark.mjs';
+import { closeUpPlan, closeUps } from './close-ups.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, typeset, compositionRect, fieldNode, enterTracks,
   defaultCamera, pushLayer, onDevices, placeDevices, deviceCamera, unionBox,
@@ -63,16 +64,25 @@ function pictureParts(shot, ctx, { w, h, hero }) {
   return [...card, ...cutout];
 }
 
+// The whole picture's opacity: in over the enter move from the shot start (none for a matched hero), and gone on the
+// exact frame of `hideAt` when pop cuts to a close-up.
+function pictureOpacity(move, matched, hideAt) {
+  const keys = matched ? [{ t: 0, v: 1 }] : [{ t: 0, v: 0 }, { t: move.dur, v: 1, ease: move.ease }];
+  if (hideAt === undefined) return track(keys);
+  const shown = keys.filter((k) => k.t < hideAt);
+  return track([...(shown.length > 0 ? shown : [{ t: 0, v: 0 }]), { t: hideAt, v: shown.length > 0 && hideAt >= keys.at(-1).t ? 1 : 0 }, { t: hideAt, v: 0 }]);
+}
+
 // The picture group at `centre`: the parts and any region marks, turned -2 degrees in desk, entering from below
 // (desk) or popping in (pop) over the enter move from the shot start; a matched hero has no entrance.
-function pictureGroup(shot, ctx, { hero, centre, children }) {
+function pictureGroup(shot, ctx, { hero, centre, children, hideAt }) {
   const { look, unit } = ctx;
   const desk = isDesk(look);
   const move = look.moves.enter;
   const rest = move.dur;
-  let tracks = {};
-  if (!arrivesMatched(shot, ctx)) {
-    tracks = { opacity: landing(rest, move, 0, 1) };
+  const matched = arrivesMatched(shot, ctx);
+  const tracks = { opacity: pictureOpacity(move, matched, hideAt) };
+  if (!matched) {
     if (desk) tracks.y = landing(rest, move, centre[1] + RISE * unit, centre[1]);
     if (move.scale !== undefined) tracks.scale = landing(rest, move, move.scale, 1);
   }
@@ -125,15 +135,21 @@ function centreOf(ctx) {
 // The picture's drawn size: on 16:9 its longer side is SHARE of the canvas short side; elsewhere its width is
 // TALL_WIDTH of the available width (the platform safe zone for pop on 9:16, else inside the margins), its height at most
 // TALL_HEIGHT of the available height.
-function pictureSize(ctx, picture) {
+// The space a picture fits in: the platform safe zone for pop on 9:16, else the canvas inside the margins.
+function availableArea(ctx) {
   const { look, canvas, unit } = ctx;
+  const rect = compositionRect(ctx);
+  if (rect.safe) return { w: rect.w, h: rect.h };
+  return { w: gridSpan(look, canvas, 1, look.grid.columns).w, h: canvas.h - 2 * look.grid.margin * unit };
+}
+
+function pictureSize(ctx, picture) {
+  const { canvas } = ctx;
   if (isWide(canvas)) {
     const fit = (SHARE * Math.min(canvas.w, canvas.h)) / Math.max(picture.width, picture.height);
     return { w: picture.width * fit, h: picture.height * fit };
   }
-  const rect = compositionRect(ctx);
-  const margin = look.grid.margin * unit;
-  const available = rect.safe ? { w: rect.w, h: rect.h } : { w: gridSpan(look, canvas, 1, look.grid.columns).w, h: canvas.h - 2 * margin };
+  const available = availableArea(ctx);
   const fit = Math.min((TALL_WIDTH * available.w) / picture.width, (TALL_HEIGHT * available.h) / picture.height);
   return { w: picture.width * fit, h: picture.height * fit };
 }
@@ -152,28 +168,39 @@ function regionMarks(shot, ctx, { w, h, tilt, local }) {
   });
 }
 
+const isRegionEvent = (item) => typeof item.target === 'string' && item.target.startsWith(REGION_PREFIX);
+
 function expandClipping(shot, ctx) {
   const { look, unit, timing } = ctx;
   checkRegions(shot);
-  const { w, h } = pictureSize(ctx, ctx.asset(shot.src));
+  const desk = isDesk(look);
+  const picture = ctx.asset(shot.src);
+  const { w, h } = pictureSize(ctx, picture);
   const hero = heroId(shot, 'image');
   const centre = centreOf(ctx);
   const parts = pictureParts(shot, ctx, { w, h, hero });
   const tilt = parts.find((n) => n.id === `${hero}.cutout`)?.props.rotate ?? 0;
-  const turn = (isDesk(look) ? DESK_TURN : 0) + tilt;
+  const turn = (desk ? DESK_TURN : 0) + tilt;
   const local = ([fx, fy, fw, fh]) => [fx * w - w / HALF, fy * h - h / HALF, fw * w, fh * h];
-  const group = pictureGroup(shot, ctx, { hero, centre, children: [...parts, ...regionMarks(shot, ctx, { w, h, tilt, local })] });
-  const boxes = { image: turnedBox(centre, turn, local([0, 0, 1, 1])) };
-  for (const [name, region] of Object.entries(shot.regions ?? {})) boxes[`${REGION_PREFIX}${name}`] = turnedBox(centre, turn, local(region));
-  // The camera pushes in on the first event aimed at a region, landing as the event does.
-  const pushed = (shot.on ?? []).find((item) => item.target?.startsWith(REGION_PREFIX));
-  const push = pushed && boxes[pushed.target] ? pushLayer(ctx, boxes[pushed.target], ctx.at(pushed.at)) : null;
-  const caption = captionNode(shot, ctx, { group, hero, w, h, centre, push });
-  if (caption) boxes.caption = caption.box;
-  const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'image', skip: isRegionHighlight });
+  // desk pushes the camera in on a region; pop cuts to a close-up of it instead (close-ups.mjs)
+  const plan = desk ? null : closeUpPlan(shot, ctx);
+  const hideAt = plan?.cuts[0]?.at;
+  const marks = desk ? regionMarks(shot, ctx, { w, h, tilt, local }) : [];
+  const group = pictureGroup(shot, ctx, { hero, centre, children: [...parts, ...marks], hideAt });
+  const inPicture = Object.fromEntries(Object.entries(shot.regions ?? {}).map(([name, region]) => [`${REGION_PREFIX}${name}`, turnedBox(centre, turn, local(region))]));
+  const close = plan ? closeUps(shot, ctx, { picture, area: availableArea(ctx), centre, plan }) : { nodes: [], camera: [], boxes: {} };
+  const pictureBoxes = { image: turnedBox(centre, turn, local([0, 0, 1, 1])), ...inPicture, ...close.boxes };
+  // The camera pushes in on the first event aimed at a region, landing as the event does (desk only).
+  const pushed = desk ? (shot.on ?? []).find(isRegionEvent) : undefined;
+  const push = pushed && pictureBoxes[pushed.target] ? pushLayer(ctx, pictureBoxes[pushed.target], ctx.at(pushed.at)) : null;
+  // The caption goes with the whole picture: out during a desk push, cut on the frame pop switches to a close-up.
+  const leaves = hideAt === undefined ? push : [{ t: hideAt }, { t: hideAt }];
+  const caption = captionNode(shot, ctx, { group, hero, w, h, centre, push: leaves });
+  const boxes = caption ? { ...pictureBoxes, caption: caption.box } : pictureBoxes;
+  const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'image', skip: desk ? isRegionHighlight : isRegionEvent });
   return {
-    nodes: placeDevices([fieldNode(shot, ctx), group, ...(caption ? [caption.text] : [])], devices),
-    camera: [...defaultCamera(look, timing, unit), ...(push ? [push] : []), ...deviceCamera(devices)],
+    nodes: placeDevices([fieldNode(shot, ctx), group, ...close.nodes, ...(caption ? [caption.text] : [])], devices),
+    camera: [...defaultCamera(look, timing, unit), ...(push ? [push] : []), ...close.camera, ...deviceCamera(devices)],
     boxes,
     hero,
     background: look.palette.paper,
@@ -205,5 +232,7 @@ registries.kinds.add('clipping', {
     ...Object.keys(shot.regions ?? {}).map((name) => `${REGION_PREFIX}${name}`),
   ],
   ids: (shot) => [heroId(shot, 'image')],
+  // A highlight on a region is drawn by this kind (region-mark.mjs, close-ups.mjs), in any look.
+  regionDevices: ['highlight'],
   expand: expandClipping,
 });
