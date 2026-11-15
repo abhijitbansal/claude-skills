@@ -17,8 +17,20 @@ function flagHint(message, options) {
   return hint === null ? '' : `; did you mean '--${hint}'`;
 }
 
-// Strict parseArgs; any problem becomes a one-line UsageError.
+// --help / -h: not an error. A UsageError with help = true and the usage line as its message, so a script's
+// existing `catch (e) { if (e instanceof UsageError) exitUsage(e, { json }) }` prints it and exits 0.
+class HelpRequested extends UsageError {
+  constructor(usage) {
+    super(usage);
+    this.help = true;
+  }
+}
+
+// Strict parseArgs; any problem becomes a one-line UsageError. --help and -h (unless the script declares
+// its own) throw a help request first, so they win over any other flag problem.
 export function parseCli(argv, options, usage) {
+  const wantsHelp = argv.some((a) => (a === '--help' && !('help' in options)) || (a === '-h' && !('h' in options)));
+  if (wantsHelp) throw new HelpRequested(usage);
   try {
     const { values, positionals } = parseArgs({ args: argv, options, allowPositionals: true, strict: true });
     return { values, positionals };
@@ -36,9 +48,16 @@ export function parseTimeout(value, fallbackSeconds) {
 }
 
 // Exit 2 with one line: JSON on stdout when asked, plain text on stderr otherwise.
+// A help request prints the usage line on stdout and exits 0 instead.
 // Sets exitCode and returns (callers must stop): process.exit() right after a
 // pipe write intermittently SIGSEGVs on Node 24.7.
 export function exitUsage(error, { json = false } = {}) {
+  if (error.help === true) {
+    if (json) process.stdout.write(`${JSON.stringify({ ok: true, usage: error.message })}\n`);
+    else process.stdout.write(`usage: ${error.message}\n`);
+    process.exitCode = 0;
+    return;
+  }
   const message = String(error.message).split('\n')[0];
   if (json) process.stdout.write(`${JSON.stringify({ ok: false, errors: [{ path: '', message }] })}\n`);
   else process.stderr.write(`${message}\n`);

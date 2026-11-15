@@ -78,7 +78,7 @@ test('unknown property inside an edge, step, frame and note is rejected', async 
 
 test('type is required and checked against the closed set', async () => {
   const missing = await mutated('flow', (s) => { delete s.type; });
-  assert.deepEqual(missing, [{ path: 'type', message: 'required' }]);
+  assert.deepEqual(missing, [{ path: 'type', message: 'required (one of "architecture", "flow", "sequence", "state")' }]);
   const typo = await mutated('flow', (s) => { s.type = 'sequance'; });
   assert.deepEqual(typo, [{
     path: 'type',

@@ -89,42 +89,42 @@ test('decision, approval and question require an id', async () => {
   const { id: _a, ...a } = approval();
   const { id: _q, ...q } = question();
   assert.deepEqual(await errorsOf(plan([d, a, q])), [
-    { path: 'sections[0].id', message: 'required' },
-    { path: 'sections[1].id', message: 'required' },
-    { path: 'sections[2].id', message: 'required' },
+    { path: 'sections[0].id', message: 'required (string)' },
+    { path: 'sections[1].id', message: 'required (string)' },
+    { path: 'sections[2].id', message: 'required (string)' },
   ]);
 });
 
 test('decision requires question, options, recommended and why', async () => {
   assert.deepEqual(await errorsOf(plan([{ type: 'decision', id: 'd' }])), [
-    { path: 'sections[0].question', message: 'required' },
-    { path: 'sections[0].options', message: 'required' },
-    { path: 'sections[0].recommended', message: 'required' },
-    { path: 'sections[0].why', message: 'required' },
+    { path: 'sections[0].question', message: 'required (string)' },
+    { path: 'sections[0].options', message: 'required (array of object)' },
+    { path: 'sections[0].recommended', message: 'required (string)' },
+    { path: 'sections[0].why', message: 'required (string)' },
   ]);
 });
 
 test('an option needs a label; its fields are closed', async () => {
   const errors = await errorsOf(plan([decision({ options: [{ pros: ['a'] }, { label: 'B', con: ['x'] }] })]));
   assert.deepEqual(errors, [
-    { path: 'sections[0].options[0].label', message: 'required' },
+    { path: 'sections[0].options[0].label', message: 'required (string)' },
     { path: 'sections[0].options[1].con', message: 'unknown property; did you mean "cons"?' },
   ]);
 });
 
 test('approval requires item and why; question requires text; review requires items', async () => {
   assert.deepEqual(await errorsOf(plan([{ type: 'approval', id: 'a' }, { type: 'question', id: 'q' }, { type: 'review' }])), [
-    { path: 'sections[0].item', message: 'required' },
-    { path: 'sections[0].why', message: 'required' },
-    { path: 'sections[1].text', message: 'required' },
-    { path: 'sections[2].items', message: 'required' },
+    { path: 'sections[0].item', message: 'required (string)' },
+    { path: 'sections[0].why', message: 'required (string)' },
+    { path: 'sections[1].text', message: 'required (string)' },
+    { path: 'sections[2].items', message: 'required (array of object)' },
   ]);
 });
 
 test('a review item needs point and why', async () => {
   assert.deepEqual(await errorsOf(plan([decision(), review({ items: [{ target: 'storage' }] })])), [
-    { path: 'sections[1].items[0].point', message: 'required' },
-    { path: 'sections[1].items[0].why', message: 'required' },
+    { path: 'sections[1].items[0].point', message: 'required (string)' },
+    { path: 'sections[1].items[0].why', message: 'required (string)' },
   ]);
 });
 

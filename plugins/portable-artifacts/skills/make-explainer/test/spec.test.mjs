@@ -45,7 +45,7 @@ test('loadSpec reports unreadable and malformed files as UsageError', () => {
 test('root shape errors', async () => {
   assert.deepEqual(await errorsOf(null), [{ path: '', message: 'must be object' }]);
   assert.deepEqual(await errorsOf([]), [{ path: '', message: 'must be object' }]);
-  assert.deepEqual(await errorsOf({}), [{ path: 'title', message: 'required' }, { path: 'sections', message: 'required' }]);
+  assert.deepEqual(await errorsOf({}), [{ path: 'title', message: 'required (string)' }, { path: 'sections', message: 'required (array of object)' }]);
   assert.deepEqual(await errorsOf({ title: 'T', sections: 'x' }), [{ path: 'sections', message: 'must be array' }]);
   assert.deepEqual(await errorsOf(doc([42])), [{ path: 'sections[0]', message: 'must be object' }]);
   assert.deepEqual(await errorsOf({ title: 3, sections: [text()] }), [{ path: 'title', message: 'must be string' }]);
@@ -89,11 +89,11 @@ test('section type: required, unknown with did-you-mean, and per-section indepen
 });
 
 test('section fields: required, unknown (closed), wrong type', async () => {
-  assert.deepEqual(await errorsOf(doc([{ type: 'text' }])), [{ path: 'sections[0].text', message: 'required' }]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'text' }])), [{ path: 'sections[0].text', message: 'required (string)' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'text', text: 'x', points: ['a'] }])), [
     { path: 'sections[0].points', message: 'unknown property; allowed: type, id, title, label, text, simple' },
   ]);
-  assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a' }] }])), [{ path: 'sections[0].items[0].value', message: 'required' }]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a' }] }])), [{ path: 'sections[0].items[0].value', message: 'required (string or number)' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: [] }] }])), [{ path: 'sections[0].items[0].value', message: 'must be string,number' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'kpis', items: [{ label: 'a', value: '1', tnoe: 'good' }] }])), [
     { path: 'sections[0].items[0].tnoe', message: 'unknown property; did you mean "tone"?' },
@@ -313,11 +313,11 @@ test('motion needs video or spec', async () => {
 });
 
 test('callout requires tone, title and text', async () => {
-  assert.deepEqual(await errorsOf(doc([{ type: 'callout', tone: 'info', text: 'x' }])), [{ path: 'sections[0].title', message: 'required' }]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'callout', tone: 'info', text: 'x' }])), [{ path: 'sections[0].title', message: 'required (string)' }]);
   assert.deepEqual(await errorsOf(doc([{ type: 'callout' }])), [
-    { path: 'sections[0].tone', message: 'required' },
-    { path: 'sections[0].title', message: 'required' },
-    { path: 'sections[0].text', message: 'required' },
+    { path: 'sections[0].tone', message: 'required (one of "info", "warn", "good", "bad")' },
+    { path: 'sections[0].title', message: 'required (string)' },
+    { path: 'sections[0].text', message: 'required (string)' },
   ]);
   assert.deepEqual(await errorsOf(doc([{ type: 'callout', tone: 'info', title: 'T', text: 'x' }])), []);
 });

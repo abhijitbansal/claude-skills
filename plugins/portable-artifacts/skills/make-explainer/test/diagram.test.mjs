@@ -58,7 +58,7 @@ test('errors in an embedded spec are re-pathed under sections[i].diagram', async
 
 test('a diagram missing a required field is reported at the field', async () => {
   const errors = await errorsOf(doc([section({ type: 'flow', nodes: [{ id: 'a', label: 'A' }] })]), folder());
-  assert.deepEqual(errors, [{ path: 'sections[0].diagram.title', message: 'required' }]);
+  assert.deepEqual(errors, [{ path: 'sections[0].diagram.title', message: 'required (string)' }]);
 });
 
 test('errors in a diagram file are re-pathed the same way and name the file', async () => {

@@ -4,8 +4,15 @@
 
 export const FIELDS = ['model', 'effort', 'agent'];
 export const MAX_FIELD = 60;
-const PATTERN = '^[A-Za-z0-9 ._:/()+-]+$';
-const field = { type: 'string', minLength: 1, maxLength: MAX_FIELD, pattern: PATTERN };
+// [ ] stay allowed for ids such as claude-opus-5-5[1m]; Ajv compiles patterns with the u flag, so they are escaped.
+const PATTERN = '^[A-Za-z0-9 ._:/()+\\[\\]-]+$';
+const field = {
+  type: 'string',
+  minLength: 1,
+  maxLength: MAX_FIELD,
+  pattern: PATTERN,
+  description: 'letters, digits, spaces and the characters . _ : / ( ) + [ ] -',
+};
 
 export const GENERATED_BY_SCHEMA = {
   type: 'object',
@@ -16,8 +23,11 @@ export const GENERATED_BY_SCHEMA = {
 export const PROVENANCE_OPTIONS = { model: { type: 'string' }, effort: { type: 'string' }, agent: { type: 'string' } };
 
 // Unknown spec keys are kept so the closed schema can reject typos like "modle".
+// "host" is an alias of "agent" (SKILL.md used to say "your host"): renamed when "agent" is absent, left for the
+// schema to name when both are given.
 export function mergeGeneratedBy(fromSpec, flags = {}) {
-  const merged = { ...fromSpec };
+  const { host, ...rest } = { ...fromSpec };
+  const merged = host !== undefined && rest.agent === undefined ? { ...rest, agent: host } : { ...fromSpec };
   for (const k of FIELDS) {
     if (flags[k] !== undefined) merged[k] = flags[k];
   }
