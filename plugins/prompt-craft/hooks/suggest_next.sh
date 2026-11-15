@@ -4,6 +4,9 @@
 # Routed through advisor.py --mode=stop. Silent (exit 0) when nothing fits.
 set -uo pipefail
 
+# Kill switch: PROMPT_CRAFT_ADVISOR=0 turns every advisor hook off.
+[ "${PROMPT_CRAFT_ADVISOR:-1}" = "0" ] && exit 0
+
 INPUT="$(cat)"
 SCRIPTS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../scripts" && pwd)"
 

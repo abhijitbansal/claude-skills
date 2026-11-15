@@ -300,6 +300,8 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 
 ## Tests
 
+Node 21+ (the quoted glob is expanded by `node --test` itself, which older versions do not do; CI uses 24):
+
 ```sh
 cd tools/cache-clock && node --test "test/*.test.mjs"
 ```

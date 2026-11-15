@@ -71,6 +71,12 @@ def test_load_overlay_parses_builtins_and_prefer_over(tmp_path):
     assert ov["prefer_over"]["/prompt-craft:plan"] == ["/goal", "/ecc:plan"]
 
 
+def test_shipped_overlay_defers_debug_to_systematic_debugging():
+    """CAT-87: the shipped overlay pairs /prompt-craft:debug with the canonical skill."""
+    ov = br.load_overlay(br.OVERLAY_PATH)
+    assert ov["prefer_over"]["/prompt-craft:debug"] == ["/superpowers:systematic-debugging"]
+
+
 def test_build_registry_writes_valid_atomic_file(tmp_path):
     _mk_skill(tmp_path, "prompt-craft", "plan", "Decompose a task.")
     home = tmp_path / "home"

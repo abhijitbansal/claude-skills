@@ -20,6 +20,7 @@ Commands:
 
 import argparse
 import datetime
+import hashlib
 import hmac
 import json
 import os
@@ -52,8 +53,15 @@ DEFAULT_LIMIT_PATTERNS = [
     r"Claude AI usage limit reached\|(?P<epoch>\d{9,12})",
     # Interactive UI: "5-hour limit reached ∙ resets 3am" / "resets at 4:30pm"
     r"limit reached.{0,40}?resets?(?:\s+at)?\s+(?P<time>\d{1,2}(?::\d{2})?\s*(?:am|pm))",
+    # Current UI line: "You've hit your session limit · resets 3:45pm"
+    # (also usage / weekly wording). Time-of-day only: dated resets such as
+    # "resets Nov 20, 3pm" are not parsed until a real one is captured.
+    r"hit your (?:session|usage|weekly) limit.{0,80}?resets?(?:\s+at)?\s+(?P<time>\d{1,2}(?::\d{2})?\s*(?:am|pm))",
     # "You've hit your usage limit ... wait until your limit resets at 8pm"
-    r"usage limit.{0,80}?(?:resets?|try again)(?:\s+at)?\s+(?P<time>\d{1,2}(?::\d{2})?\s*(?:am|pm))",
+    # and "Usage limit reached — try again at 6:15pm". The bare phrase
+    # "usage limit" is not enough: prose that merely mentions a limit must
+    # not pause the session.
+    r"(?:hit your usage limit|usage limit reached).{0,80}?(?:resets?|try again)(?:\s+at)?\s+(?P<time>\d{1,2}(?::\d{2})?\s*(?:am|pm))",
 ]
 
 # Agent presets. The preset's only *behavioral* job beyond launch convenience
@@ -165,7 +173,7 @@ ANSI_CODES = {
 }
 SPINNER_FRAMES = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
 SPINNER_TICK_SECONDS = 0.25
-VERSION = "2.1.0"
+VERSION = "2.1.2"
 
 
 def use_color(stream=None):
@@ -449,7 +457,7 @@ def resolve_agent(repo, cfg):
 
     `resume_message`: top-level explicit key (if present) > preset.
     `limit_patterns`: the resolved agent's preset patterns (user `limit_patterns`
-    is appended to this resolved set by `limit_patterns()`).
+    are tried before this resolved set by `limit_patterns()`).
     """
     if "agent" in repo:
         name = repo["agent"]
@@ -645,8 +653,12 @@ def _seed_prompt_file(path, repo_name):
 
 
 def build_config(repos, resume_message, ntfy_url, claude_args="",
-                 scan_roots=None):
+                 scan_roots=None, existing=None):
+    """Config the wizard writes. `existing` is the config being reconfigured:
+    its keys (limit_patterns, poll_interval_seconds, ...) survive; only the
+    keys the wizard asks about are replaced."""
     cfg = dict(DEFAULT_CONFIG)
+    cfg.update(existing or {})
     cfg["repos"] = repos
     cfg["resume_message"] = resume_message or DEFAULT_CONFIG["resume_message"]
     cfg["ntfy_url"] = ntfy_url or ""
@@ -804,7 +816,7 @@ def run_wizard(args):
         ntfy = prompt_text("ntfy.sh topic URL (empty to skip)", default="")
 
     cfg = build_config(repos, resume_message, ntfy, claude_args=global_args,
-                       scan_roots=root_list)
+                       scan_roots=root_list, existing=existing)
     atomic_write_json(target, cfg, mode=0o644)
 
     print()
@@ -869,6 +881,19 @@ def load_config(explicit=None):
             die(f"{path}: repo {repo['name']!r} collides with the reserved "
                 f"watcher session {reserved!r}; rename the repo or change "
                 f"'session_prefix'")
+    # tmux rewrites '.' and ':' in session names, so two repos can end up
+    # sharing one session; say which name each renamed repo really uses.
+    seen = {}
+    for repo in cfg["repos"]:
+        sess = session_name(cfg, repo)
+        if sess in seen:
+            die(f"{path}: repos {seen[sess]!r} and {repo['name']!r} both map "
+                f"to the tmux session {sess!r} ('.' and ':' become '_'); "
+                f"rename one")
+        seen[sess] = repo["name"]
+        if sess != f"{cfg['session_prefix']}-{repo['name']}":
+            log(f"repo {repo['name']!r} uses the tmux session {sess!r} "
+                f"('.' and ':' become '_')", glyph="!", color="yellow")
     cfg["_path"] = path
     return cfg
 
@@ -878,8 +903,9 @@ def limit_patterns(cfg, agent=None):
 
     The resolved agent's preset patterns form the base set (claude's are the
     former DEFAULT_LIMIT_PATTERNS; copilot ships none). The user's top-level
-    `limit_patterns` are appended to that *resolved* set, so they no longer
-    unconditionally bolt the Claude defaults onto an unwatched agent. With no
+    `limit_patterns` are tried BEFORE that *resolved* set (first match wins),
+    so they no longer unconditionally bolt the Claude defaults onto an
+    unwatched agent. With no
     `agent` argument the claude preset is used, matching today's behavior.
     """
     base = (agent or AGENT_PRESETS["claude"]).get("limit_patterns") or []
@@ -887,8 +913,15 @@ def limit_patterns(cfg, agent=None):
     return [re.compile(p, re.IGNORECASE) for p in pats]
 
 
+def tmux_safe(name):
+    """The name tmux stores for a requested session name: it rewrites '.' and
+    ':' (pane/window separators in a target) to '_'. Looking a session up by
+    the unrewritten name never finds it."""
+    return name.replace(".", "_").replace(":", "_")
+
+
 def session_name(cfg, repo):
-    return f"{cfg['session_prefix']}-{repo['name']}"
+    return tmux_safe(f"{cfg['session_prefix']}-{repo['name']}")
 
 
 WATCHER_SUFFIX = "watcher"
@@ -896,7 +929,7 @@ WATCHER_SUFFIX = "watcher"
 
 def watcher_session_name(cfg):
     """Derived name of the detached watcher tmux session, <prefix>-watcher."""
-    return f"{cfg['session_prefix']}-{WATCHER_SUFFIX}"
+    return tmux_safe(f"{cfg['session_prefix']}-{WATCHER_SUFFIX}")
 
 
 # ----------------------------------------------------------------- state ---
@@ -1083,27 +1116,48 @@ def parse_clock_time(text, now=None):
     return candidate
 
 
+def message_digest(matched):
+    """Short stable digest of a matched limit message (whitespace-normalised),
+    so the watcher can recognise a message it already handled."""
+    norm = " ".join(matched.split())
+    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
+
+
+def find_limit(text, patterns, now=None):
+    """Return (reset datetime, message digest) for the bottom-most
+    usage-limit message in `text`, or None. Bottom-most, because a handled
+    message from an earlier limit can linger above a new one in the pane;
+    the first match would hide the new limit from the watcher."""
+    last = None
+    for pat in patterns:
+        for m in pat.finditer(text):
+            if last is None or m.start() > last.start():
+                last = m
+    if last is None:
+        return None
+    m = last
+    digest = message_digest(m.group(0))
+    groups = m.groupdict()
+    if groups.get("epoch"):
+        try:
+            return (datetime.datetime.fromtimestamp(int(groups["epoch"])),
+                    digest)
+        except (ValueError, OverflowError, OSError):
+            pass  # absurd timestamp in pane output; use the fallback
+    if groups.get("time"):
+        parsed = parse_clock_time(groups["time"], now=now)
+        if parsed:
+            return parsed, digest
+    # Pattern matched but carried no usable timestamp: fall back to a
+    # conservative wait so we still resume eventually.
+    now = now or datetime.datetime.now()
+    return now + datetime.timedelta(hours=1), digest
+
+
 def detect_limit(text, patterns, now=None):
     """Return the reset datetime if `text` contains a usage-limit message."""
-    for pat in patterns:
-        m = pat.search(text)
-        if not m:
-            continue
-        groups = m.groupdict()
-        if groups.get("epoch"):
-            try:
-                return datetime.datetime.fromtimestamp(int(groups["epoch"]))
-            except (ValueError, OverflowError, OSError):
-                pass  # absurd timestamp in pane output; use the fallback
-        if groups.get("time"):
-            parsed = parse_clock_time(groups["time"], now=now)
-            if parsed:
-                return parsed
-        # Pattern matched but carried no usable timestamp: fall back to a
-        # conservative wait so we still resume eventually.
-        now = now or datetime.datetime.now()
-        return now + datetime.timedelta(hours=1)
-    return None
+    found = find_limit(text, patterns, now=now)
+    return found[0] if found else None
 
 
 def classify(text, patterns):
@@ -1858,6 +1912,43 @@ def start_caffeinate():
         return None
 
 
+# parse_clock_time never dates a reset more than a day ahead, so a handled
+# message can only be mistaken for a fresh one for about that long.
+HANDLED_TTL_SECONDS = 24 * 3600 + 600
+
+
+def _is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def _state_dict(state, key):
+    value = state.get(key)
+    return value if isinstance(value, dict) else {}
+
+
+def _paused_and_reset(state):
+    """(paused names, reset_at float or None) from a loaded state dict; a
+    corrupt entry reads as 'nothing paused'."""
+    paused = state.get("paused", [])
+    reset_at = state.get("reset_at")
+    if not isinstance(paused, list) or (
+            reset_at is not None and not _is_number(reset_at)):
+        return set(), None
+    return set(paused), reset_at
+
+
+def _with_bookkeeping(state, cooldown, handled):
+    """Copy of `state` with the cooldown/handled maps set, or dropped when
+    empty so an idle watcher leaves no extra keys behind."""
+    merged = {k: v for k, v in state.items()
+              if k not in ("cooldown", "handled")}
+    if cooldown:
+        merged["cooldown"] = dict(cooldown)
+    if handled:
+        merged["handled"] = dict(handled)
+    return merged
+
+
 def cmd_watch(cfg, args):
     # --detach re-execs this watcher into a detached tmux session and returns.
     # NOT os.fork(): caffeinate -w <pid> would otherwise target the pre-fork
@@ -1900,47 +1991,72 @@ def cmd_watch(cfg, args):
         clear_state()
     state.update(identity)
     save_state(state)
-    # After resuming, the old limit message lingers in the pane scrollback;
-    # skip re-detection on a session until the cooldown passes.
-    cooldown_until = {}
+    cooldown_s = cfg["resume_cooldown_seconds"]
     try:
         while True:
-            paused = set(state.get("paused", []))
-            reset_at = state.get("reset_at")
+            # Re-read state every poll: `wind resume`, the dashboard and
+            # `wind up` change it while we sleep, and a stale in-memory view
+            # would type resume text into sessions that are already running.
+            loaded = load_state()
+            state = {**loaded, **identity}
+            paused, reset_at = _paused_and_reset(state)
+            now_ts = time.time()
+            # Both survive a watcher restart. `cooldown`: after resuming, the
+            # old limit message lingers in scrollback, so skip a session until
+            # it passes. `handled`: digest of the message we already paused
+            # for, so the same stale text cannot re-trigger once the cooldown
+            # is over (parse_clock_time would date it for tomorrow).
+            cooldown = {n: u for n, u in _state_dict(state, "cooldown").items()
+                        if _is_number(u) and u > now_ts}
+            handled = {n: h for n, h in _state_dict(state, "handled").items()
+                       if isinstance(h, dict) and _is_number(h.get("until"))
+                       and h["until"] > now_ts}
 
             for repo, patterns in watched:
                 name = session_name(cfg, repo)
                 if not session_exists(name) or name in paused:
                     continue
-                if time.time() < cooldown_until.get(name, 0):
+                if now_ts < cooldown.get(name, 0):
                     continue
                 text = capture_pane(name, cfg["capture_lines"])
-                reset = detect_limit(text, patterns)
-                if not reset:
+                found = find_limit(text, patterns)
+                if not found:
                     continue
-                if reset.timestamp() < time.time() - 120:
+                reset, digest = found
+                if reset.timestamp() < now_ts - 120:
                     continue  # stale message from a previous limit
+                if handled.get(name, {}).get("hash") == digest:
+                    continue  # the message we already paused for and resumed
                 paused.add(name)
                 ts = reset.timestamp()
+                handled[name] = {"hash": digest,
+                                 "until": ts + HANDLED_TTL_SECONDS}
                 # One account-level clock: keep the latest reset time seen.
                 if not reset_at or ts > reset_at:
                     reset_at = ts
                 log(f"{name}: usage limit detected, resets "
                     f"{reset:%a %H:%M}", glyph="!", color="yellow")
 
+            def flush(current):
+                """Persist `current` with the pruned bookkeeping if it
+                differs from what was loaded."""
+                merged = _with_bookkeeping(current, cooldown, handled)
+                if merged != loaded:
+                    save_state(merged)
+                return merged
+
+            state = _with_bookkeeping(state, cooldown, handled)
             if paused and reset_at:
-                if state.get("paused") != sorted(paused) or \
-                        state.get("reset_at") != reset_at:
-                    first_detection = not state.get("reset_at")
-                    state = {"paused": sorted(paused), "reset_at": reset_at,
-                             **identity}
-                    save_state(state)
-                    if first_detection:
-                        when = datetime.datetime.fromtimestamp(
-                            reset_at + buffer_s)
-                        notify(cfg, f"Usage limit hit. Resuming "
-                                    f"{len(paused)} session(s) at "
-                                    f"{when:%H:%M}.")
+                first_detection = not loaded.get("reset_at")
+                state = {**state, "paused": sorted(paused),
+                         "reset_at": reset_at}
+                state = flush(state)
+                if first_detection:
+                    when = datetime.datetime.fromtimestamp(
+                        reset_at + buffer_s)
+                    notify(cfg, f"Usage limit hit. Resuming "
+                                f"{len(paused)} session(s) at "
+                                f"{when:%H:%M}.")
                 if time.time() >= reset_at + buffer_s:
                     log("reset time reached, resuming paused sessions",
                         glyph="→", color="cyan")
@@ -1958,13 +2074,17 @@ def cmd_watch(cfg, args):
                     sent += resume_orphans(cfg, _paused_orphans(state, set(by_name)))
                     notify(cfg, f"Resumed {len(sent)} session(s) after "
                                 f"limit reset.")
-                    until = time.time() + cfg["resume_cooldown_seconds"]
+                    until = time.time() + cooldown_s
                     for name in paused:
-                        cooldown_until[name] = until
+                        cooldown[name] = until
                     # Drop limit state but keep recording our identity so a
                     # later `wind down` can still reap this running watcher.
-                    state = dict(identity)
-                    save_state(state)
+                    state = {k: v for k, v in state.items()
+                             if k not in ("paused", "reset_at")}
+                    flush(state)
+                    paused, reset_at = set(), None
+            else:
+                flush(state)
 
             if paused and reset_at:
                 eta = reset_at + buffer_s - time.time()
@@ -2014,9 +2134,15 @@ def add_repo_to_config(cfg, path):
         with open(cfg["_path"]) as f:
             raw = json.load(f)
         existing = raw.get("repos", [])
+        new_session = session_name(cfg, entry)
         for r in existing:
             if r.get("name") == name:
                 raise ValueError(f"a repo named {name!r} is already configured")
+            if session_name(cfg, r) == new_session:
+                raise ValueError(
+                    f"{name!r} would share the tmux session {new_session!r} "
+                    f"with {r.get('name')!r} ('.' and ':' become '_'); "
+                    f"rename the directory")
             if os.path.expanduser(r.get("path", "")) == full:
                 raise ValueError(
                     f"{full} is already configured as {r.get('name')!r}")
@@ -2043,7 +2169,8 @@ def cmd_add(cfg, args):
         entry = add_repo_to_config(cfg, args.path)
     except ValueError as e:
         die(str(e))
-    log(f"added {entry['name']} -> {entry['path']}", glyph="✓", color="green")
+    log(f"added {entry['name']} -> {entry['path']} "
+        f"(tmux session {session_name(cfg, entry)})", glyph="✓", color="green")
     # Re-load so cfg carries the new entry for launch + watcher config.
     cfg = load_config(cfg["_path"])
     repo = next(r for r in cfg["repos"] if r["name"] == entry["name"])
@@ -2061,7 +2188,9 @@ def main(argv=None):
         description="Second Wind: auto-resume Claude Code tmux sessions "
                     "after the 5-hour usage limit resets.")
     parser.add_argument("-c", "--config", help="path to config JSON")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--version", action="version",
+                        version=f"wind {VERSION}")
+    sub =parser.add_subparsers(dest="command", required=True)
 
     p_init = sub.add_parser("init", help="write a starter config file")
     p_init.add_argument("--force", action="store_true",

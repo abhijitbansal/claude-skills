@@ -24,7 +24,7 @@ exec $SHELL
 ```
 
 This places everything in `~/.wind` and adds `~/.wind/bin` to PATH (with your
-consent). On seeded machines `setup.sh` already handles this.
+consent).
 
 If `raw.githubusercontent.com` is rate-limited or blocked (a `403` behind some
 VPNs/proxies), install from a clone instead — the installer prints this same
@@ -48,7 +48,7 @@ sh claude-skills/tools/second-wind/install.sh
 | `wind status` | per-session state + next reset time |
 | `wind resume` | manually nudge all sessions with the resume message |
 | `wind down` | kill all wind sessions (and the watcher) |
-| `wind dash` | serve the live localhost dashboard (status, full-color pane tails, click-to-expand modal, resume/send/kill, **＋ add repo** from scanned candidates); `--port` to change port, `--no-browser` to skip auto-open |
+| `wind dash` | serve the live localhost dashboard (status, plain-text card tails, allowlisted-colour click-to-expand modal, resume/send/kill, **＋ add repo** from scanned candidates); `--port` to change port, `--no-browser` to skip auto-open |
 
 ## Typical setup
 
@@ -76,9 +76,9 @@ The config may live at `./second-wind.json` or `~/.wind/config.json`.
 - `scan_roots`: directories the wizard scanned, persisted so `wind add` and the dashboard's Add-repo can offer more repos without re-`init`.
 - `resume_message`: text typed into each paused **claude** session after reset (default `continue`); copilot uses its own preset message.
 - `ntfy_url`: optional ntfy.sh topic URL — notifies when the limit hits and when sessions resume.
-- `limit_patterns`: extra regexes appended to the resolved agent's built-ins if Claude Code's limit message format changes.
+- `limit_patterns`: extra regexes, tried before the resolved agent's built-ins, for when Claude Code's limit message format changes.
 
-Full reference: `tools/second-wind/README.md` in the claude-skills repo.
+Full reference: https://github.com/abhijitbansal/claude-skills/blob/main/tools/second-wind/README.md
 
 ## Agents (Claude + Copilot)
 

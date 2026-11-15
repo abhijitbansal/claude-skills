@@ -135,6 +135,83 @@ def test_wire_unwire_preserves_user_statusline_with_statusline_in_name(tmp_path)
     assert settings["statusLine"]["command"] == user_cmd
 
 
+# ---- CAT-84: act only when the current command is our shim -----------------
+
+def _settings(home):
+    return json.loads((home / ".claude" / "settings.json").read_text())
+
+
+def test_unwire_never_wired_leaves_users_statusline_alone(tmp_path):
+    user_cmd = "echo MINE"
+    home = _home(tmp_path, json.dumps({"statusLine": {"type": "command", "command": user_cmd}}))
+    r = ws.unwire(home)
+    assert _settings(home)["statusLine"]["command"] == user_cmd
+    assert r["restored"] == ""
+    assert r.get("changed") is False
+
+
+def test_unwire_twice_keeps_the_restored_base(tmp_path):
+    home = _home(tmp_path, json.dumps({"statusLine": {"type": "command", "command": "echo BASE"}}))
+    ws.wire(home, str(PLUGIN))
+    ws.unwire(home)
+    ws.unwire(home)  # second call must not pop the restored statusLine
+    assert _settings(home)["statusLine"]["command"] == "echo BASE"
+
+
+def test_unwire_keeps_the_backup_it_recommends(tmp_path):
+    home = _home(tmp_path, json.dumps({"statusLine": {"type": "command", "command": "echo BASE"}}))
+    ws.wire(home, str(PLUGIN))
+    assert list((home / ".claude").glob("settings.json.bak.*"))
+    ws.unwire(home)
+    backups = list((home / ".claude").glob("settings.json.bak.*"))
+    assert backups, "unwire must leave the timestamped backup on disk"
+    # The pre-wire original survives (a later backup must not overwrite it).
+    assert any("echo BASE" in b.read_text() for b in backups)
+    pointer = (home / ".claude" / "prompt-craft" / "last-backup").read_text().strip()
+    assert Path(pointer).exists()
+
+
+def test_unwire_when_statusline_changed_after_wiring_does_not_overwrite(tmp_path):
+    home = _home(tmp_path, json.dumps({"statusLine": {"type": "command", "command": "echo BASE"}}))
+    ws.wire(home, str(PLUGIN))
+    settings = _settings(home)
+    settings["statusLine"]["command"] = "echo CHANGED-LATER"
+    (home / ".claude" / "settings.json").write_text(json.dumps(settings))
+    ws.unwire(home)
+    assert _settings(home)["statusLine"]["command"] == "echo CHANGED-LATER"
+
+
+def test_wire_installs_the_shim_from_plugin_root(tmp_path):
+    root = tmp_path / "fake-plugin"
+    (root / "hooks").mkdir(parents=True)
+    (root / "hooks" / "statusline_shim.sh").write_text("#!/usr/bin/env bash\n# FAKE-ROOT-MARKER\n")
+    home = _home(tmp_path, json.dumps({}))
+    ws.wire(home, str(root))
+    assert "FAKE-ROOT-MARKER" in (home / ".claude" / "prompt-craft" / "statusline.sh").read_text()
+
+
+def test_wire_rejects_non_dict_statusline_without_writing(tmp_path):
+    home = _home(tmp_path, json.dumps({"statusLine": "echo oops"}))
+    before = (home / ".claude" / "settings.json").read_text()
+    try:
+        ws.wire(home, str(PLUGIN))
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised
+    assert (home / ".claude" / "settings.json").read_text() == before
+
+
+def test_wire_rejects_non_object_settings(tmp_path):
+    home = _home(tmp_path, json.dumps(["not", "an", "object"]))
+    try:
+        ws.wire(home, str(PLUGIN))
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised
+
+
 def test_wire_dry_run_exits_clean_and_writes_nothing(tmp_path):
     """--wire --dry-run must exit 0, write nothing, and print a backup-path line."""
     import io

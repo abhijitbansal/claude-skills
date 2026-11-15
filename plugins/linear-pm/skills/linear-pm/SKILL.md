@@ -7,6 +7,10 @@ description: Linear project management conventions and slash commands. Auto-load
 
 This skill documents the vocabulary every `/linear-*` command relies on. The commands ship at `plugins/linear-pm/commands/` and locate their helper scripts via `${CLAUDE_PLUGIN_ROOT}`. The prerequisite check is `${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/bootstrap.sh` (or a project-local copy at `.claude/skills/linear-pm/scripts/bootstrap.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset). The per-repo policy lives at `.claude/linear.yml`.
 
+## Linear MCP tools
+
+The commands write to Linear through MCP tools, which this plugin does not ship. The guide spells them `mcp__claude_ai_Linear__save_issue`, `…__save_comment`, `…__list_issues` and so on, which is the prefix the claude.ai Linear connector registers. A Linear server added another way can carry a different prefix (`mcp__<server>__save_issue`). Before the first Linear call in a command, check that a tool ending in `__save_issue` (and the other `list_`/`get_`/`save_` tools the command uses) is available, and use whatever prefix it has. If there is none, stop and tell the user to add a Linear connector in Claude Code's MCP settings; do not guess a tool name.
+
 ## Labels (created by /linear-init if missing)
 
 | Label | Purpose | Set by |
@@ -32,7 +36,7 @@ Uses Linear's built-in workflow — no custom states required.
 
 ## Branch naming
 
-`<branch_prefix><issue-key>-<slug>` where `<slug>` is kebab-case truncation of the issue title (~40 chars, `[a-z0-9-]`).
+`<branch_prefix><issue-key>-<slug>` where `<slug>` is kebab-case truncation of the issue title (~50 chars, `[a-z0-9-]`).
 
 Default `branch_prefix` for autonomous work: `agent/`.
 Manually-created branches can use any prefix; `/linear-sync` parses the issue key from anywhere in the branch name.

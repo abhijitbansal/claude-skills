@@ -30,6 +30,19 @@ def test_counts_leading_slash_token_only(tmp_path):
     assert prof["by_command"]["/commit"]["last_ts"] == "2026-06-02T00:00:00Z"
 
 
+def test_path_like_leading_token_is_not_recorded(tmp_path):
+    """CAT-85: a prompt that starts with a file path is not a command."""
+    home = tmp_path / "home"
+    _history(home, [
+        {"display": "/Users/someone/project/src/app.py is broken", "timestamp": "t1"},
+        {"display": "/tmp/x.log has the error", "timestamp": "t2"},
+        {"display": "/prompt-craft:review now", "timestamp": "t3"},
+        {"display": "/commit", "timestamp": "t4"},
+    ])
+    prof = lh.learn(home, env={})
+    assert set(prof["by_command"]) == {"/prompt-craft:review", "/commit"}
+
+
 def test_pasted_contents_never_read(tmp_path):
     home = tmp_path / "home"
     _history(home, [{"display": "/commit", "pastedContents": {"a": "/secret-token"}, "timestamp": "t"}])

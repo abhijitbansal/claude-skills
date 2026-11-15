@@ -11,3 +11,4 @@ names = ["/goal", "/model", "/code-review", "/clear", "/compact"]
 # prompt-craft skill -> canonical commands it defers to (the hand-off).
 "/prompt-craft:plan" = ["/goal", "/ecc:plan"]
 "/prompt-craft:review" = ["/code-review"]
+"/prompt-craft:debug" = ["/superpowers:systematic-debugging"]

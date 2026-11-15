@@ -206,9 +206,10 @@ export async function attach({ joinSession, now = Date.now, timers = globalThis,
     }
   }
 
-  // Auto with no priced model to stand in for it cannot be guarded; say so once per selection.
+  // A selection with no price to guard on (Auto with no priced stand-in, an unseen model,
+  // a provider- or tier-qualified one) is warned about once per selection, not on every send.
   const alreadyWarnedUnknown = (snap) => {
-    if (state.selection?.modelId !== "auto" || snap.extraUsd !== null) return false;
+    if (snap.extraUsd !== null) return false;
     const key = JSON.stringify(state.selection);
     if (state.unknownWarnedFor === key) return true;
     state.unknownWarnedFor = key;

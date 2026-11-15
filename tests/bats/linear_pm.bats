@@ -116,6 +116,107 @@ init_repo() {  # $1 = dir
   type _linear_yaml_get_list >/dev/null
 }
 
+# --- load-config.sh --print (CAT-88) ---
+# Each Bash call is a fresh shell, so exports from a sourced loader are gone by
+# the next call; --print lets a command read the values in the same call.
+
+@test "load-config --print emits KEY=value lines including LINEAR_PM_AUTONOMY" {
+  write_linear_yml "${TMP}/repo"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash "${SCRIPTS}/load-config.sh" --print
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"LINEAR_PM_TEAM=ABH"* ]] || false
+  [[ "$output" == *"LINEAR_PM_PROJECT=Demo"* ]] || false
+  [[ "$output" == *"LINEAR_PM_AUTONOMY=review-only"* ]] || false
+  [[ "$output" == *"LINEAR_PM_MAX_PR_LINES=500"* ]] || false
+}
+
+@test "load-config --print reports a configured autonomy value" {
+  write_linear_yml "${TMP}/repo" "autonomy: allowed"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash "${SCRIPTS}/load-config.sh" --print
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"LINEAR_PM_AUTONOMY=allowed"* ]] || false
+}
+
+@test "load-config --print repeats list keys once per item" {
+  write_linear_yml "${TMP}/repo" "verify:" "  - npm test" "  - npm run lint"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash "${SCRIPTS}/load-config.sh" --print
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"LINEAR_PM_VERIFY=npm test"* ]] || false
+  [[ "$output" == *"LINEAR_PM_VERIFY=npm run lint"* ]] || false
+}
+
+@test "load-config --print works when sourced, in the same shell" {
+  write_linear_yml "${TMP}/repo" "autonomy: disabled"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash -c "source '${SCRIPTS}/load-config.sh' --print"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"LINEAR_PM_AUTONOMY=disabled"* ]] || false
+}
+
+@test "load-config --print keeps the loader's error path (no linear.yml)" {
+  mkdir -p "${TMP}/repo"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash "${SCRIPTS}/load-config.sh" --print
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"linear.yml not found"* ]] || false
+}
+
+@test "load-config rejects an unknown flag and lists the accepted ones" {
+  write_linear_yml "${TMP}/repo"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash "${SCRIPTS}/load-config.sh" --pritn
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--print"* ]] || false
+}
+
+@test "commands that read config tell the agent to source and print in one Bash call" {
+  for c in linear-block linear-sync linear-new linear-status; do
+    grep -q -- "--print" "${REPO_ROOT}/plugins/linear-pm/commands/${c}.md"
+  done
+}
+
+# --- command docs (CAT-89 block half, CAT-91) ---
+
+@test "linear-block removes agent-ready so a blocked issue is not picked again" {
+  local f="${REPO_ROOT}/plugins/linear-pm/commands/linear-block.md"
+  grep -q "Remove the \`agent-ready\` label" "$f"
+}
+
+@test "linear-sync never moves a Done or cancelled issue and only counts an OPEN PR" {
+  local f="${REPO_ROOT}/plugins/linear-pm/commands/linear-sync.md"
+  grep -q "Done" "$f"
+  grep -q "never move" "$f"
+  grep -q 'state=="OPEN"' "$f"
+  grep -q 'parse-issue-key.sh" "\$BRANCH" "\$LINEAR_PM_TEAM"' "$f"
+}
+
+@test "linear-pm skill documents the MCP tool availability check and the 50-char slug" {
+  local f="${REPO_ROOT}/plugins/linear-pm/skills/linear-pm/SKILL.md"
+  grep -q "Linear MCP tools" "$f"
+  grep -q "~50 chars" "$f"
+  ! grep -q "~40 chars" "$f"
+}
+
+@test "linear-pm plugin has no stale 'polling agent' wording or private example keys" {
+  run grep -rniE "polling agent|ABH|document-scanner" \
+    "${REPO_ROOT}/plugins/linear-pm/skills" \
+    "${REPO_ROOT}/plugins/linear-pm/commands/linear-block.md" \
+    "${REPO_ROOT}/plugins/linear-pm/commands/linear-sync.md" \
+    "${REPO_ROOT}/plugins/linear-pm/commands/linear-init.md" \
+    "${REPO_ROOT}/plugins/linear-pm/commands/linear-new.md" \
+    "${REPO_ROOT}/plugins/linear-pm/commands/linear-status.md"
+  [ "$status" -eq 1 ]
+}
+
 # --- make-slug.sh ---
 
 @test "make-slug lowercases and hyphenates a normal title" {
@@ -162,6 +263,50 @@ init_repo() {  # $1 = dir
   [ "$output" = "" ]
 }
 
+# CAT-91: team-aware, case-insensitive parsing
+
+@test "parse-issue-key with a team accepts a lowercase key after a user prefix" {
+  run bash "${SCRIPTS}/parse-issue-key.sh" "user/abh-123-title" "ABH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ABH-123" ]
+}
+
+@test "parse-issue-key with a team rejects non-team tokens like UTF-8" {
+  run bash "${SCRIPTS}/parse-issue-key.sh" "fix/UTF-8-bug" "ABH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+@test "parse-issue-key with a team takes the team's key even when another token comes first" {
+  run bash "${SCRIPTS}/parse-issue-key.sh" "fix/UTF-8-abh-7-bug" "ABH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ABH-7" ]
+}
+
+@test "parse-issue-key with a team does not match inside a longer word" {
+  run bash "${SCRIPTS}/parse-issue-key.sh" "fix/xabh-9-bug" "ABH"
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+@test "parse-issue-key reads the team from LINEAR_PM_TEAM when no second arg is given" {
+  run env LINEAR_PM_TEAM=ABH bash "${SCRIPTS}/parse-issue-key.sh" "user/abh-123-title"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ABH-123" ]
+}
+
+@test "parse-issue-key without a team keeps the uppercase-only behaviour" {
+  run bash "${SCRIPTS}/parse-issue-key.sh" "user/abh-123-title"
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+}
+
+@test "parse-issue-key ignores a team value that is not a plain key" {
+  run bash "${SCRIPTS}/parse-issue-key.sh" "agent/ABH-5-x" ".*"
+  [ "$status" -eq 0 ]
+  [ "$output" = "ABH-5" ]
+}
+
 # --- bootstrap.sh ---
 
 @test "bootstrap resolves REPO_ROOT to the invocation cwd, not the script's own location" {
@@ -185,4 +330,54 @@ init_repo() {  # $1 = dir
   run bash "${SCRIPTS}/bootstrap.sh" --quiet
   [ "$status" -eq 1 ]
   [[ "$output" == *"not inside a git repo"* ]]
+}
+
+# CAT-50: strict flags. A typo must not silently run the full check.
+
+@test "bootstrap rejects an unknown flag with exit 2 and lists the accepted ones" {
+  mkdir -p "${TMP}/repo"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash "${SCRIPTS}/bootstrap.sh" --quite
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"--quite"* ]] || false
+  [[ "$output" == *"--quiet"* ]] || false
+  [[ "$output" != *"checking prerequisites"* ]] || false
+}
+
+@test "bootstrap --help exits 0 and lists the flags" {
+  run bash "${SCRIPTS}/bootstrap.sh" --help
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"--quiet"* ]] || false
+}
+
+# CAT-91: bootstrap gaps
+
+@test "bootstrap fails when linear.yml still holds the template placeholders" {
+  mkdir -p "${TMP}/repo/.claude"
+  printf 'team: REPLACE_TEAM_KEY\nproject: REPLACE_PROJECT_NAME\n' > "${TMP}/repo/.claude/linear.yml"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash "${SCRIPTS}/bootstrap.sh" --quiet
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"placeholder"* ]] || false
+}
+
+@test "bootstrap accepts a real team and project" {
+  write_linear_yml "${TMP}/repo" "autonomy: review-only"
+  init_repo "${TMP}/repo"
+  cd "${TMP}/repo"
+  run bash "${SCRIPTS}/bootstrap.sh" --quiet
+  [[ "$output" != *"placeholder"* ]] || false
+}
+
+@test "bootstrap reports a missing python3" {
+  write_linear_yml "${TMP}/repo" "autonomy: review-only"
+  init_repo "${TMP}/repo"
+  mkdir -p "${TMP}/nopy"
+  for t in git grep awk head dirname; do ln -s "$(command -v "$t")" "${TMP}/nopy/$t"; done
+  cd "${TMP}/repo"
+  run env PATH="${TMP}/nopy" /bin/bash "${SCRIPTS}/bootstrap.sh" --quiet
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"python3"* ]] || false
 }

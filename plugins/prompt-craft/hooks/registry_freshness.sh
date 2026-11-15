@@ -4,6 +4,9 @@
 # --version change (version dimension skipped if claude is off PATH). Always exit 0.
 set -uo pipefail
 
+# Kill switch: PROMPT_CRAFT_ADVISOR=0 turns every advisor hook off.
+[ "${PROMPT_CRAFT_ADVISOR:-1}" = "0" ] && exit 0
+
 INPUT="$(cat)"
 CWD="$(printf '%s' "$INPUT" | /usr/bin/python3 -c 'import sys, json
 try:

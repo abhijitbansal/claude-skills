@@ -15,14 +15,30 @@
 # Usage:
 #   <plugin root>/skills/linear-pm/scripts/bootstrap.sh
 #   <plugin root>/skills/linear-pm/scripts/bootstrap.sh --quiet   # only print failures + summary
+#   <plugin root>/skills/linear-pm/scripts/bootstrap.sh --help
 # <plugin root> is the installed plugin directory
 # (~/.claude/plugins/cache/<marketplace>/linear-pm/<version>) or a source
 # checkout's plugins/linear-pm. Run it from the repo being checked.
+# Unknown flags exit 2 (a typo must not silently run the full check).
 
 set -uo pipefail   # not -e; we want to keep going past failures and report all of them
 
 QUIET=false
-[[ "${1:-}" == "--quiet" ]] && QUIET=true
+for arg in "$@"; do
+  case "$arg" in
+    --quiet) QUIET=true ;;
+    -h | --help)
+      echo "usage: bootstrap.sh [--quiet] [--help]"
+      echo "  --quiet   only print failures, warnings and the summary"
+      echo "  --help    show this help"
+      exit 0
+      ;;
+    *)
+      echo "bootstrap: unknown option '$arg' (accepted: --quiet, --help)" >&2
+      exit 2
+      ;;
+  esac
+done
 
 # --- colors (auto-disabled when not a TTY) ---
 if [[ -t 1 ]]; then
@@ -44,6 +60,12 @@ fail() { ((FAIL++)); printf "${R}[FAIL]${X} %s\n" "$1"; [[ -n "${2:-}" ]] && pri
 # a plugin cache path (marketplace install) or a project-local copy, and
 # either way the repo being checked is wherever the user is standing.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# git is needed to find the repo at all, so a missing git is reported as such
+# here instead of as "not inside a git repo".
+if ! command -v git >/dev/null 2>&1; then
+  echo "bootstrap: git not installed (macOS: xcode-select --install)" >&2
+  exit 1
+fi
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
 if [[ -z "$REPO_ROOT" ]]; then
   echo "bootstrap: not inside a git repo (run this from within the target repo)" >&2
@@ -53,18 +75,17 @@ cd "$REPO_ROOT" || { echo "bootstrap: failed to cd into $REPO_ROOT" >&2; exit 1;
 
 $QUIET || printf "${B}linear-pm bootstrap${X} — checking prerequisites in %s\n\n" "$REPO_ROOT"
 
-# --- 1. git installed ---
-if command -v git >/dev/null 2>&1; then
-  ok "git installed ($(git --version | awk '{print $3}'))"
-else
-  fail "git not installed" "Install Xcode Command Line Tools: xcode-select --install"
-fi
+# --- 1. git installed, and we are inside a repo ---
+# Both are guaranteed here: the checks above exit before reaching this point
+# otherwise. Reported as passes so the summary count stays honest.
+ok "git installed ($(git --version | awk '{print $3}'))"
+ok "inside a git repo ($REPO_ROOT)"
 
-# --- 2. inside a git repo ---
-if git rev-parse --show-toplevel >/dev/null 2>&1; then
-  ok "inside a git repo ($(git rev-parse --show-toplevel))"
+# --- 2. python3 installed (load-config.sh parses linear.yml with it) ---
+if command -v python3 >/dev/null 2>&1; then
+  ok "python3 installed ($(python3 --version 2>&1 | awk '{print $2}'))"
 else
-  fail "not inside a git repo" "cd into your app repo before running this script"
+  fail "python3 not installed" "load-config.sh needs python3 to read .claude/linear.yml; macOS: xcode-select --install"
 fi
 
 # --- 3. gh CLI installed ---
@@ -100,13 +121,19 @@ if [[ -f "$LINEAR_YML" ]]; then
   has_team=$(grep -E '^team:[[:space:]]*[^[:space:]]' "$LINEAR_YML" 2>/dev/null | head -1)
   has_project=$(grep -E '^project:[[:space:]]*[^[:space:]]' "$LINEAR_YML" 2>/dev/null | head -1)
 
-  if [[ -n "$has_team" ]]; then
+  # /linear-init substitutes REPLACE_TEAM_KEY / REPLACE_PROJECT_NAME; a file that
+  # still has them was copied from the template and never filled in.
+  if [[ -n "$has_team" && "$has_team" == *REPLACE_TEAM_KEY* ]]; then
+    fail "linear.yml \`team:\` is still the template placeholder" "Set team: to your Linear team key, or re-run /linear-init"
+  elif [[ -n "$has_team" ]]; then
     ok "linear.yml has \`team:\` ($(echo "$has_team" | awk '{print $2}'))"
   else
     fail "linear.yml missing required \`team:\` key" "Add: team: <your-linear-team-key>"
   fi
 
-  if [[ -n "$has_project" ]]; then
+  if [[ -n "$has_project" && "$has_project" == *REPLACE_PROJECT_NAME* ]]; then
+    fail "linear.yml \`project:\` is still the template placeholder" "Set project: to your Linear project name, or re-run /linear-init"
+  elif [[ -n "$has_project" ]]; then
     ok "linear.yml has \`project:\` ($(echo "$has_project" | awk '{print $2}'))"
   else
     fail "linear.yml missing required \`project:\` key" "Add: project: <your-linear-project-name>"
