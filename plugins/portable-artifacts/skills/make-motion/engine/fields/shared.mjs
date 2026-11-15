@@ -1,6 +1,6 @@
 // Helpers shared by the v2 fields (paper, mesh, halftone): input and param checks, seeded draws,
 // deep freezing and the offscreen cache. Pure and DOM-free; OffscreenCanvas is only looked up at paint time.
-import { mulberry32 } from '../../template/seeded.mjs';
+import { mulberry32 } from '../seeded.mjs';
 import { isHexColour } from './color.mjs';
 import { unitOf, REFERENCE_SIDE } from '../units.mjs';
 

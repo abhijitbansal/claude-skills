@@ -5,6 +5,8 @@ import { applyFont, WORD_IDENTITY } from './text-style.mjs';
 import { measurePath, path2D } from './geometry.mjs';
 import { roughShape } from './rough.mjs';
 import { contentBox, localMatrix } from './bounds.mjs';
+import { registries } from '../registry.mjs';
+import '../fields/index.mjs';
 
 const DEFAULT_TEXT_FILL = '#ffffff';
 const DEFAULT_STROKE_WIDTH = 1;
@@ -82,13 +84,28 @@ function drawImage(ctx, n, assets) {
   ctx.drawImage(image, 0, 0, w ?? image.width, h ?? image.height);
 }
 
+// ---- fields ----
+
+// A field node's props carry everything its plan needs ({ field, params, w, h, unit, seed, palette }). The plan is
+// built once per node id and props (shots share the field id but not the seed, so the props are part of the key)
+// and painted inside the node's transform. A film has a bounded number of these, one or two per shot.
+const fieldPlans = new Map();
+
+function drawField(ctx, n, time = 0) {
+  const { field, params, w, h, unit, seed, palette } = n.props;
+  const def = registries.fields.get(field);
+  const key = `${n.id}\n${JSON.stringify([field, params, w, h, unit, seed, palette])}`;
+  if (!fieldPlans.has(key)) fieldPlans.set(key, def.plan({ w, h, unit, seed, params, palette }));
+  def.paint(ctx, fieldPlans.get(key), time);
+}
+
 // ---- nodes ----
 
 function drawBody(ctx, n, env) {
   if (n.type === 'text') return drawText(ctx, n);
   if (n.type === 'path') return drawPath(ctx, n);
   if (n.type === 'image') return drawImage(ctx, n, env.assets);
-  if (n.type === 'field') throw new Error(`field node "${n.id}": fields are drawn by a later stage`);
+  if (n.type === 'field') return drawField(ctx, n, env.time);
   return undefined; // a group draws only its children
 }
 
@@ -143,13 +160,13 @@ export function resetContext(ctx) {
  * Paint `sampled` onto ctx. The caller has already painted the background.
  * @param {CanvasRenderingContext2D} ctx
  * @param {object[]} sampled sampleGraph output after applyCamera
- * @param {{ assets?: Map<string, ImageBitmap | HTMLImageElement>, canvas: { w: number, h: number }, fields?: object[] }} env
- *   `canvas` and `fields` are for field nodes, which a later task draws.
+ * @param {{ assets?: Map<string, ImageBitmap | HTMLImageElement>, canvas: { w: number, h: number }, time?: number }} env
+ *   `time` is the film time in seconds, handed to a field's paint (a field may move with it).
  */
-export function drawFrame(ctx, sampled, { assets = new Map(), canvas, fields = [] } = {}) {
+export function drawFrame(ctx, sampled, { assets = new Map(), canvas, time = 0 } = {}) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
   ctx.filter = 'none';
-  const env = { assets, canvas, fields };
+  const env = { assets, canvas, time };
   for (const n of sampled) drawNode(ctx, n, env);
 }

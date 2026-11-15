@@ -1,7 +1,7 @@
 // Helpers shared by the v2 graphic devices: parameter checks, the seeded noise stream, colour and style lookup,
 // the landing rule, the object entrance and the path string builders. Pure and DOM-free; imports nothing from
 // engine/page. Every path a device writes uses only M, L, Q, C and Z, so its numbers are all x y pairs.
-import { mulberry32 } from '../../template/seeded.mjs';
+import { mulberry32 } from '../seeded.mjs';
 import { track } from '../time/track.mjs';
 import { node, isNode } from '../graph/node.mjs';
 

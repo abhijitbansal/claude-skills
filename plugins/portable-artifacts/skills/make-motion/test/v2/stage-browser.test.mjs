@@ -449,14 +449,14 @@ const rawRequest = (s, text) => new Promise((resolve, reject) => {
 const portOf = (s) => new URL(s.url).port;
 const CSP = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 
-test('the server serves the page, engine modules, the two v1 modules and film.json under a CSP', async (t) => {
+test('the server serves the page, engine modules, the v1 formats module and film.json under a CSP', async (t) => {
   const s = await serve(t, FILM);
   const page = await get(s, '/');
   assert.equal(page.status, 200);
   assert.equal(page.headers['content-security-policy'], CSP);
   assert.equal(page.headers['x-content-type-options'], 'nosniff');
   assert.equal(page.headers['cross-origin-resource-policy'], 'same-origin');
-  for (const ok of ['/engine/registry.mjs', '/engine/page/stage.mjs', '/shared/errors.mjs', '/v1/seeded.mjs', '/v1/formats.mjs', '/engine/fonts/shared/geist-sans-latin-600-normal.woff2']) {
+  for (const ok of ['/engine/registry.mjs', '/engine/page/stage.mjs', '/shared/errors.mjs', '/engine/seeded.mjs', '/v1/formats.mjs', '/engine/fonts/shared/geist-sans-latin-600-normal.woff2']) {
     const res = await get(s, ok);
     assert.equal(res.status, 200, ok);
     assert.equal(res.headers['cross-origin-resource-policy'], 'same-origin', ok);
@@ -467,7 +467,7 @@ test('the server serves the page, engine modules, the two v1 modules and film.js
 
 test('the server refuses everything outside its allow-list', async (t) => {
   const s = await serve(t, FILM);
-  for (const bad of ['/engine/../package.json', '/engine/%2e%2e/package.json', '/engine/..%2fpackage.json', '/engine/page%2fstage.mjs', '/engine/page\\stage.mjs', '/template/formats.mjs', '/v1/vars.mjs', '/engine/fonts/shared/../../package.json', '/package.json', '/node_modules/playwright/package.json', '/asset/../secret.txt']) {
+  for (const bad of ['/engine/../package.json', '/engine/%2e%2e/package.json', '/engine/..%2fpackage.json', '/engine/page%2fstage.mjs', '/engine/page\\stage.mjs', '/template/formats.mjs', '/template/seeded.mjs', '/v1/seeded.mjs', '/v1/vars.mjs', '/engine/fonts/shared/../../package.json', '/package.json', '/node_modules/playwright/package.json', '/asset/../secret.txt']) {
     const { status } = await get(s, bad);
     assert.ok(status === 400 || status === 404, `${bad} -> ${status}`);
   }

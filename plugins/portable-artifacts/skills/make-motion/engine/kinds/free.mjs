@@ -92,5 +92,7 @@ registries.kinds.add('free', {
   },
   srcFields: ['srcs'],
   targets: () => [],
+  // The top-level node ids a match cut can carry across (validateFilm checks a match has one in common).
+  ids: (shot) => (Array.isArray(shot.nodes) ? shot.nodes.filter((d) => typeof d?.id === 'string').map((d) => d.id) : []),
   expand: expandFree,
 });

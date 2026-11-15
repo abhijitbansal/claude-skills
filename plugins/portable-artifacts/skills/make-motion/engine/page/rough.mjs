@@ -1,6 +1,6 @@
 // Hand-drawn look: a path's points displaced by seeded noise. The seed is a hash of the node id, so a node wobbles
 // the same way in every frame and every run. Cached per node, path and amplitude.
-import { mulberry32 } from '/v1/seeded.mjs';
+import { mulberry32 } from '../seeded.mjs';
 import { samplePolylines } from './geometry.mjs';
 
 const FNV_OFFSET = 0x811c9dc5;

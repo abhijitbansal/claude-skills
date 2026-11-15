@@ -414,6 +414,32 @@ function checkShots(spec, ctx) {
   ));
 }
 
+// --- match cuts ---
+
+// The node ids a shot puts on screen as its kind reports them (kind.ids), or null when that cannot be known: no
+// such kind, or a kind without `ids`.
+function shotIds(shot, regs) {
+  if (!isPlainObject(shot) || typeof shot.show !== 'string' || !regs.kinds.has(shot.show)) return null;
+  const kind = regs.kinds.get(shot.show);
+  if (typeof kind.ids !== 'function') return null;
+  const ids = kind.ids(shot);
+  return Array.isArray(ids) ? ids : null;
+}
+
+// A match cut carries a node across: the shot and the one before it must share a node id. Kinds whose ids are not
+// known are not checked.
+function checkMatchCuts(spec, regs) {
+  if (!Array.isArray(spec.shots)) return [];
+  const shots = spec.shots.slice(0, SHOTS_MAX);
+  return shots.flatMap((shot, index) => {
+    if (index === 0 || !isPlainObject(shot) || shot.cut !== 'match') return [];
+    const prev = shots[index - 1];
+    const before = shotIds(prev, regs), after = shotIds(shot, regs);
+    if (before === null || after === null || after.some((id) => before.includes(id))) return [];
+    return [{ path: pathJoin(pathJoin('shots', index), 'cut'), message: `"match" needs a node id shared with shot ${quote(prev.id)}; shared ids come from "hero"` }];
+  });
+}
+
 function collectErrors(spec, specDir, regs) {
   if (!isPlainObject(spec)) return [{ path: '', message: NOT_OBJECT_MESSAGE }];
   if (Array.isArray(spec.scenes) || spec.version === 1) return [{ path: '', message: V1_MESSAGE }];
@@ -424,6 +450,7 @@ function collectErrors(spec, specDir, regs) {
     ...checkAccent(spec),
     ...settings,
     ...checkShots(spec, ctx),
+    ...checkMatchCuts(spec, regs),
   ];
 }
 

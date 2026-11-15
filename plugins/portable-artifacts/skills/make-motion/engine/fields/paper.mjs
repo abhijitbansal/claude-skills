@@ -3,7 +3,7 @@
 // cached offscreen canvas and blits that on every later call (paper never changes with t).
 // paint draws inside the caller's transform, alpha and composite mode (the camera moves a field and a
 // cut may fade it) and leaves no state behind: the blit sits between save() and restore().
-import { mulberry32 } from '../../template/seeded.mjs';
+import { mulberry32 } from '../seeded.mjs';
 import { registries } from '../registry.mjs';
 import { mix, rgba } from './color.mjs';
 import {

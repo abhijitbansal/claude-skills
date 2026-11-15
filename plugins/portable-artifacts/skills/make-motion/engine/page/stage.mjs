@@ -1,23 +1,17 @@
-// The render page's stage. It loads the film from /film.json, loads the fonts the film needs, expands each shot
-// through its kind, then answers seeks: __seek(i) draws frame i, __snapshot(i) reports its laid-out nodes,
-// __stateKey(i) a stable key of its state. window.__ready resolves once the page can be seeked.
-// Cuts, looks, fields, devices and the WebGL post pass are later tasks: this stage draws one shot at a time
-// straight onto the visible canvas and reports post: '2d'.
-import { registries } from '../registry.mjs';
-import '../kinds/index.mjs';
-import { sampleGraph, stateKey } from '../graph/sample.mjs';
-import { camera as makeCamera, applyCamera } from '../graph/camera.mjs';
+// The render page's stage. It loads the film from /film.json, loads the fonts the film and its look need, builds the
+// film (every shot expanded once through its kind, cuts and cameras applied: engine/graph/film.mjs), then answers
+// seeks: __seek(i) draws frame i, __snapshot(i) reports its laid-out nodes, __stateKey(i) a stable key of its state.
+// window.__ready resolves once the page can be seeked. The WebGL post pass is a later task: this stage draws straight
+// onto the visible canvas and reports post: '2d'.
+import { buildFilm, resolveLook } from '../graph/film.mjs';
+import { stateKey } from '../graph/sample.mjs';
 import { canvasSize } from '/v1/formats.mjs';
-import { unitOf } from '../units.mjs';
-import { srcsOfShot } from '../assets.mjs';
 import { drawFrame, resetContext } from './draw.mjs';
 import { annotate } from './bounds.mjs';
 import { createMeasure } from './text-style.mjs';
 import { facesFor, loadFaces } from './fonts-shared.mjs';
-import { hashString } from './rough.mjs';
 
 const POST_PASS = '2d';
-const TIME_DECIMALS = 1e9; // shot-local time is rounded to 1e-9 s, so float noise cannot change a sample
 
 async function fetchJson(url) {
   const res = await fetch(url);
@@ -42,40 +36,6 @@ async function loadAssets(srcs) {
   return new Map(srcs.map((src, n) => [src, bitmaps[n]]));
 }
 
-// ctx.asset(src) for a shot: the size of one of the srcs the shot declares; any other string is an error.
-function shotAsset(shot, kind, images) {
-  const declared = new Set(srcsOfShot(shot, kind.srcFields));
-  return (src) => {
-    if (!declared.has(src)) throw new Error(`shot "${shot.id}": "${src}" is not one of its srcs (it declares ${declared.size === 0 ? 'none' : [...declared].map((s) => `"${s}"`).join(', ')})`);
-    const image = images.get(src);
-    return { width: image.width, height: image.height };
-  };
-}
-
-// One shot, expanded once: its nodes, its camera function and when it starts.
-function expandShot(film, timeline, index, env) {
-  const shot = film.shots[index];
-  const timing = timeline.shots[index];
-  const kind = registries.kinds.get(shot.show);
-  const asset = shotAsset(shot, kind, env.assets);
-  const ctx = {
-    canvas: env.canvas,
-    unit: unitOf(env.canvas),
-    timing,
-    measure: env.measure,
-    seed: (hashString(shot.id) ^ (film.seed ?? 0)) >>> 0,
-    asset,
-  };
-  const out = kind.expand(shot, ctx);
-  if (!out || !Array.isArray(out.nodes)) throw new Error(`kind "${shot.show}" must return { nodes: [...] } for shot "${shot.id}"`);
-  return {
-    start: timing.start,
-    nodes: out.nodes,
-    cam: makeCamera({ tracks: out.camera ?? {}, canvas: env.canvas }),
-    background: out.background ?? '#000000',
-  };
-}
-
 async function init() {
   const { film, timeline, assets: srcs } = await fetchJson('/film.json');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
@@ -85,20 +45,16 @@ async function init() {
   element.width = w;
   element.height = h;
   const ctx = element.getContext('2d');
-  await loadFaces(facesFor(film));
+  // The designed kinds take their type from the look, so the look's fonts load with any the film names itself.
+  await loadFaces(facesFor({ film, fonts: resolveLook(film).fonts }));
   const assets = await loadAssets(srcs);
-  const env ={ canvas, measure: createMeasure(document.createElement('canvas').getContext('2d')), assets };
-  const shots = timeline.shots.map((_, i) => expandShot(film, timeline, i, env));
+  const measure = createMeasure(document.createElement('canvas').getContext('2d'));
+  const built = buildFilm({ film, timeline, measure, assets, canvas });
   const { fps, frameCount } = timeline;
 
-  // The shot whose [start, end) holds time; the last shot also owns t === duration (frame frameCount).
-  const shotAt = (time) => shots.findLast((s) => s.start <= time + 1 / TIME_DECIMALS);
   const frameState = (i) => {
     if (!Number.isInteger(i) || i < 0 || i > frameCount) throw new Error(`frame must be an integer in 0..${frameCount}, got ${i}`);
-    const time = i / fps;
-    const shot = shotAt(time);
-    const t = Math.round((time - shot.start) * TIME_DECIMALS) / TIME_DECIMALS + 0; // + 0 turns -0 into 0
-    return { background: shot.background, sampled: applyCamera(sampleGraph(shot.nodes, t), shot.cam(t), canvas) };
+    return built.frameAt(i / fps);
   };
 
   window.__seek = (i) => {
@@ -106,9 +62,9 @@ async function init() {
     resetContext(ctx); // a seek that threw halfway must not leave its clip, alpha or save stack to the next one
     ctx.fillStyle = background;
     ctx.fillRect(0, 0, w, h);
-    drawFrame(ctx, sampled, { assets: env.assets, canvas, fields: [] });
+    drawFrame(ctx, sampled, { assets, canvas, time: i / fps });
   };
-  window.__measure = env.measure; // the layout measure, for tests
+  window.__measure = measure; // the layout measure, for tests
   window.__snapshot = (i) => annotate(frameState(i).sampled);
   window.__stateKey = (i) => stateKey(frameState(i));
   return { frameCount, fps, size: [w, h], post: POST_PASS };

@@ -1,0 +1,180 @@
+// The `statement` kind: a line of type as the whole frame, its words arriving as they are spoken. `desk` sets it flush
+// left on column 2 with its ink centred at 44% of the height and highlights emphasised runs; `pop` centres it in caps
+// and recolours and pulses emphasised words. An optional kicker sits above it. Pure and DOM-free.
+import { registries } from '../registry.mjs';
+import { node } from '../graph/node.mjs';
+import { track } from '../time/track.mjs';
+import { layoutText } from '../text/layout.mjs';
+import { gridSpan } from '../looks/index.mjs';
+import { parseSay, SayError } from '../script/say.mjs';
+import {
+  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan,
+  typeset, fieldNode, wordTimes, enterTracks, pulseScale, wipeIn, rectPath, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
+} from './shared.mjs';
+
+const TEXT_MAX = 200;
+const KICKER_MAX = 40;
+const DESK = Object.freeze({ centre: 0.44, fromStep: 3, toStep: 5 });
+const POP = Object.freeze({ centre: 0.5, fromStep: 4, toStep: 5 });
+const FIRST_COLUMN = 2;
+const KICKER = Object.freeze({ step: 1, gap: 28, ruleGap: 12, rule: 2, ruleLength: 96 });
+// The highlighter band behind a run, in em of the text: from this far above the baseline, this tall.
+const HIGHLIGHT_TOP = 0.6;
+const HIGHLIGHT_HEIGHT = 0.68;
+const FILL_EASE = 'outCubic';
+const NO_WRAP = 1e6;
+const HALF = 2;
+
+function sourceText(shot, look) {
+  const text = shot.text ?? (shot.say === undefined ? undefined : parseSay(shot.say).plain);
+  if (typeof text !== 'string' || wordsOf(text).length === 0) throw new Error(`statement: shot "${shot.id}" needs text or say`);
+  const set = typeset(text);
+  return look.caps.display ? set.toUpperCase() : set;
+}
+
+// The kicker's height above the text's cap line, so the text is fitted with room for it.
+const kickerRoom = (look, unit) => (KICKER.gap + look.scale[KICKER.step - 1] * CAP_HEIGHT + KICKER.ruleGap + KICKER.rule) * unit;
+
+// Where the text goes and at what size: { layout, font, x, y, span }.
+function compose(text, shot, ctx) {
+  const { look, canvas, unit } = ctx;
+  const desk = look.emphasis === 'highlight';
+  const plan = desk ? DESK : POP;
+  const span = gridSpan(look, canvas, FIRST_COLUMN, desk && isWide(canvas) ? 9 : 11);
+  const margin = look.grid.margin * unit;
+  const above = shot.kicker === undefined ? 0 : kickerRoom(look, unit);
+  const centre = plan.centre * canvas.h;
+  const maxHeight = HALF * Math.min(centre - margin - above, canvas.h - centre - margin);
+  const min = sizeAt(look, plan.fromStep, unit), max = sizeAt(look, plan.toStep, unit);
+  const opts = { text, font: fontFor(look, 'display', max, unit), maxWidth: span.w, align: desk ? 'left' : 'center', measure: ctx.measure, optical: true };
+  const { layout, font } = fitDisplay(opts, { min, max, maxHeight, maxLines: look.maxLines.display }, look, unit);
+  const ink = inkSpan(layout);
+  return { layout, font, x: span.x, y: centre - (ink.top + ink.bottom) / HALF, span };
+}
+
+const placedWords = (layout) => layout.lines.flatMap((line) => line.words.map((word) => ({ line, word })));
+
+// One word's box in canvas pixels: cap line to just under the baseline.
+function wordBox(at, { line, word }, size) {
+  const baseline = at.y + line.y;
+  return [at.x + line.x + word.x, baseline - CAP_HEIGHT * size, word.width, (CAP_HEIGHT + WORD_DESCENT) * size];
+}
+
+// Word tracks: the entrance on each word's time (none for a matched hero), and in a recolour look the emphasis.
+function wordTracksFor(words, times, ctx, matched) {
+  const { look, unit, timing } = ctx;
+  return words.map((_, i) => {
+    const { at, spoken } = times[i];
+    const tracks = matched ? {} : enterTracks(look, unit, at);
+    if (look.emphasis !== 'recolor-scale' || spoken === null || !timing.words[spoken].emphasis) return tracks;
+    return {
+      ...tracks,
+      scale: pulseScale(look, { enterAt: matched ? undefined : at, pulse: at }),
+      fill: track([{ t: at, v: look.palette.ink }, { t: at + look.moves.emphasize.dur, v: look.palette.accent, ease: FILL_EASE }]),
+    };
+  });
+}
+
+// Runs of adjacent emphasised words on one line, each [first, last] word index.
+function emphasisRuns(layout, times, timing) {
+  const emphasised = (index) => times[index].spoken !== null && timing.words[times[index].spoken].emphasis;
+  return layout.lines.flatMap((line) => line.words.reduce((runs, word) => {
+    if (!emphasised(word.index)) return runs;
+    const open = runs.at(-1);
+    if (open && open.last === word.index - 1) return [...runs.slice(0, -1), { ...open, last: word.index }];
+    return [...runs, { line, first: word.index, last: word.index }];
+  }, []));
+}
+
+function highlights(shot, ctx, placed, times) {
+  const { look, unit, seed, timing } = ctx;
+  if (look.emphasis !== 'highlight') return [];
+  const { layout, font } = placed;
+  const at = placed;
+  const device = registries.devices.get('highlight');
+  return emphasisRuns(layout, times, timing).flatMap(({ line, first, last }, k) => {
+    const a = line.words.find((w) => w.index === first), b = line.words.find((w) => w.index === last);
+    const left = at.x + line.x + a.x;
+    const box = [left, at.y + line.y - HIGHLIGHT_TOP * font.size, at.x + line.x + b.x + b.width - left, HIGHLIGHT_HEIGHT * font.size];
+    return device.build({ id: `${shot.id}.hl${k}`, box, at: times[first].at, look, unit, seed }).nodes;
+  });
+}
+
+// The kicker line and, in a look with a hairline (desk), the rule over it. Both land with the first word.
+function kickerNodes(shot, ctx, placed, landAt) {
+  if (shot.kicker === undefined) return [];
+  const { look, unit, measure } = ctx;
+  const font = fontFor(look, 'label', sizeAt(look, KICKER.step, unit), unit);
+  const text = look.caps.label ? typeset(shot.kicker).toUpperCase() : typeset(shot.kicker);
+  const desk = look.emphasis === 'highlight';
+  const layout = layoutText({ text, font, maxWidth: desk ? NO_WRAP : placed.span.w, align: desk ? 'left' : 'center', measure });
+  const capLine = placed.y + placed.layout.lines[0].y - CAP_HEIGHT * placed.font.size;
+  const baseline = capLine - KICKER.gap * unit;
+  const x = desk ? placed.x : placed.span.x;
+  const y = baseline - layout.lines[0].y;
+  const kicker = node('text', `${shot.id}.kicker`, { x, y, layout, font, fill: look.palette.ink2 }, { tracks: enterTracks(look, unit, landAt, { y }) });
+  if (!desk) return [kicker];
+  const ruleY = baseline - CAP_HEIGHT * font.size - KICKER.ruleGap * unit - KICKER.rule * unit;
+  const rule = node('path', `${shot.id}.rule`, { x, y: ruleY, d: rectPath(KICKER.ruleLength * unit, KICKER.rule * unit), fill: look.palette.rule }, { tracks: wipeIn(look, landAt) });
+  return [rule, kicker];
+}
+
+function boxesFor(placed, words) {
+  const { layout, font, x, y } = placed;
+  const wordBoxes = words.map((w) => wordBox({ x, y }, w, font.size));
+  return Object.fromEntries([['text', unionBox(wordBoxes)], ...wordBoxes.map((box, i) => [`word:${i}`, box])]);
+}
+
+function expandStatement(shot, ctx) {
+  const { look, unit, timing } = ctx;
+  const placed = compose(sourceText(shot, look), shot, ctx);
+  const words = placedWords(placed.layout).sort((a, b) => a.word.index - b.word.index);
+  const times = wordTimes(words.map((w) => w.word.text), timing);
+  const matched = arrivesMatched(shot, ctx);
+  const hero = heroId(shot, 'text');
+  const text = node('text', hero, { x: placed.x, y: placed.y, layout: placed.layout, font: placed.font, fill: look.palette.ink }, {
+    wordTracks: wordTracksFor(words, times, ctx, matched),
+  });
+  const boxes = boxesFor(placed, words);
+  const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
+  const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'text', behind });
+  const firstAt = times.length > 0 ? Math.min(look.moves.enter.dur, times[0].at) : 0;
+  const base = [fieldNode(shot, ctx), ...kickerNodes(shot, ctx, placed, firstAt), ...highlights(shot, ctx, placed, times), text];
+  return {
+    nodes: placeDevices(base, devices),
+    camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],
+    boxes,
+    hero,
+    background: look.palette.paper,
+  };
+}
+
+// A say that does not parse has its own validation error; its targets are then just `text`.
+function plainSay(say) {
+  try {
+    return parseSay(say).plain;
+  } catch (err) {
+    if (err instanceof SayError) return '';
+    throw err;
+  }
+}
+
+function statementTargets(shot) {
+  const text = shot.text ?? (typeof shot.say === 'string' ? plainSay(shot.say) : '');
+  return ['text', ...wordsOf(text).map((_, i) => `word:${i}`)];
+}
+
+registries.kinds.add('statement', {
+  schema: {
+    properties: {
+      text: { type: 'string', minLength: 1, maxLength: TEXT_MAX },
+      kicker: { type: 'string', minLength: 1, maxLength: KICKER_MAX },
+      hero: HERO_SCHEMA,
+    },
+  },
+  srcFields: [],
+  heroTarget: 'text',
+  targets: statementTargets,
+  ids: (shot) => [heroId(shot, 'text')],
+  expand: expandStatement,
+});
