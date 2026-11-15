@@ -199,6 +199,8 @@ test('main: one PNG per page, width and scheme at a real viewport, deviceScaleFa
   assert.deepEqual(r.out.trim().split('\n').sort(), names.map((n) => path.join(outDir, n)).sort());
   assert.deepEqual(fs.readdirSync(outDir).sort(), [...names].sort());
   assert.deepEqual(log.contexts.map((c) => [c.viewport.width, c.colorScheme, c.deviceScaleFactor]), [[390, 'light', 1], [390, 'dark', 1], [1280, 'light', 1], [1280, 'dark', 1]]);
+  // Shots show the settled page: entrance animations (make-explainer's section rise-in) start at opacity 0.
+  assert.ok(log.contexts.every((c) => c.reducedMotion === 'reduce'), 'every context asks for reduced motion');
   assert.ok(log.shots.every((s) => s.fullPage === true && s.clip === undefined));
   assert.equal(log.closed, true);
 });

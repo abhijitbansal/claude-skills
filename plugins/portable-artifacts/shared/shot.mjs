@@ -152,7 +152,8 @@ const measurePage = async () => {
 };
 
 async function shootOne(browser, { url, name, width, scheme, out }) {
-  const context = await browser.newContext({ viewport: { width, height: VIEWPORT_HEIGHT }, colorScheme: scheme, deviceScaleFactor: 1 });
+  // reducedMotion: a shot shows the settled page, not an entrance animation still at opacity 0 (the explainer's rise-in).
+  const context = await browser.newContext({ viewport: { width, height: VIEWPORT_HEIGHT }, colorScheme: scheme, deviceScaleFactor: 1, reducedMotion: 'reduce' });
   const problems = [];
   const warnings = [];
   try {
