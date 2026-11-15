@@ -109,6 +109,10 @@
    moving with the amount of content (the base margin: auto centres it). The title leaves the ghost numeral's column
    free: the numeral is 12rem at most and hidden below 900px, so the title's end padding is 1.1 times its size. */
 :root[data-flavor="poster"] .slide:not(.slide-has-art):not(.slide-cover) .slide-inner { margin-block: 0 auto; }
+/* The label above the heading takes no room in the flow: a slide with one and a slide without put the heading at the
+   same height, because every content slide reserves the label's band (one 12px mono line plus its 14px gap, 36px). */
+:root[data-flavor="poster"] .slide:not(.slide-has-art):not(.slide-cover) .slide-inner { position: relative; padding-top: calc(var(--sp-4) + 36px); }
+:root[data-flavor="poster"] .slide:not(.slide-has-art):not(.slide-cover) .slide-eyebrow { position: absolute; top: var(--sp-4); left: 0; right: 0; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (min-width: 901px) {
   :root[data-flavor="poster"] .slide:not(.slide-has-art):not(.slide-cover) .slide-title { padding-inline-end: clamp(5.5rem, 1.1rem + 9.9vw, 13.2rem); }
 }

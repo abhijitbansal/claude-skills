@@ -206,17 +206,22 @@ test('a page with no checklist runs no saving probe', async (t) => {
 
 // ---- --shots (PA-21) -------------------------------------------------------------------------------
 
+// shot.mjs refuses to start while another headless browser runs (the guard is for one person's Mac). `node --test`
+// runs the test files side by side, so a sibling file's browser is usually live here (it was on CI): these tests mean
+// to run beside it, the deliberate second run the guard names.
+const SHOTS_ENV = { ALLOW_BROWSER_RUN: '1' };
+
 test('--shots writes a PNG per width and colour scheme into the folder and prints each path', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { file } = buildFile(exampleFile('checklist'));
   const out = path.join(scratchDir(), 'shots-out');
-  const r = cli([file, '--shots', out]);
+  const r = cli([file, '--shots', out], SHOTS_ENV);
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const names = fs.readdirSync(out).sort();
   assert.equal(names.length, 4, names.join(', '));
   for (const width of [390, 1280]) for (const scheme of ['light', 'dark']) assert.ok(names.some((n) => n.endsWith(`-${width}-${scheme}.png`)), `${width} ${scheme}`);
   for (const n of names) assert.ok(r.stdout.includes(path.join(out, n)) || r.stdout.includes(n), `${n} is printed`);
-  const json = JSON.parse(cli([file, '--shots', out, '--json']).stdout.split('\n')[0]);
+  const json = JSON.parse(cli([file, '--shots', out, '--json'], SHOTS_ENV).stdout.split('\n')[0]);
   assert.equal(json.shots.length, 4);
 });
 
@@ -235,7 +240,10 @@ test('--shots with a blank folder is a usage error, and a skipped check takes no
 
 test('a deck slide whose table scrolls vertically at 390 px is a warning, not a failure', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const rows = Array.from({ length: 8 }, (_, i) => [`Item ${i + 1}`, `${(i + 1) * 100} a month`]);
+  // The deck's table limit is 8 rows, so the rows themselves are tall: the cost cell wraps to several lines at 390 px.
+  // (Eight one-line rows fitted the frame on the CI runner, so the test no longer leans on the host's font metrics.)
+  const note = 'billed per seat, with a yearly true-up, a support tier and a metered overage that is invoiced after the month closes';
+  const rows = Array.from({ length: 8 }, (_, i) => [`Item ${i + 1}`, `${(i + 1) * 100} a month, ${note}`]);
   const built = buildSpec({ title: 'Table deck', mode: 'slides', sections: [{ type: 'table', title: 'The costs', columns: ['Item', 'Cost'], rows }] });
   const result = await checkPage(built.file);
   assert.equal(result.status, 'ok', result.problems.join('\n'));
