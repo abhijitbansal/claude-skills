@@ -151,6 +151,39 @@ test('a text node carries its layout and the page measure agrees with the drawin
   await a.close();
 });
 
+test('measure returns font-level ascent and descent, not per-glyph ones', async (t) => {
+  const a = await openStage(FILM); if (!a) return t.skip('no browser');
+  const font = { family: 'Geist', weight: 600, size: 96 };
+  const [x, tall] = await a.page.evaluate((f) => [window.__measure('x', f), window.__measure('Ålg', f)], font);
+  assert.ok(x.ascent > 0 && x.descent > 0);
+  assert.equal(x.ascent, tall.ascent); assert.equal(x.descent, tall.descent);
+  assert.ok(tall.width > x.width);
+  await a.close();
+});
+
+// A one-shot free film with the given nodes, for drawing-rule comparisons.
+const filmOf = (nodes) => ({ fps: FPS, shots: [{ id: 's', show: 'free', hold: 1, nodes }] });
+const hashOf = async (film, t) => {
+  const a = await openStage(film); if (!a) return t.skip('no browser') ?? null;
+  try { return await a.hashFrame(0); } finally { await a.close(); }
+};
+const box = (id, extra = {}) => ({ type: 'path', id, props: { d: 'M100 100H500V400H100Z', fill: '#e2574c', ...extra } });
+
+test('opacity above 1 is clamped, so a child cannot out-shine its parent', async (t) => {
+  const over = await hashOf(filmOf([{ type: 'group', id: 'g', props: { opacity: 0.5 }, children: [box('b', { opacity: 1.5 })] }]), t);
+  const exact = await hashOf(filmOf([{ type: 'group', id: 'g', props: { opacity: 0.5 }, children: [box('b', { opacity: 1 })] }]), t);
+  if (over === null) return;
+  assert.equal(over, exact);
+});
+
+test('a word beyond wordTracks draws untouched, as one with an identity entry does', async (t) => {
+  const text = { text: 'one two three', font: { family: 'Geist', weight: 600, size: 96 }, maxWidth: 1600, fill: '#ffffff', x: 100, y: 100 };
+  const short = await hashOf(filmOf([{ type: 'text', id: 'w', props: text, wordTracks: [{ opacity: keys([0, 0.5]) }] }]), t);
+  const full = await hashOf(filmOf([{ type: 'text', id: 'w', props: text, wordTracks: [{ opacity: keys([0, 0.5]) }, {}, {}] }]), t);
+  if (short === null) return;
+  assert.equal(short, full);
+});
+
 test('__stateKey is stable for a frame and differs across frames', async (t) => {
   const a = await openStage(FILM); if (!a) return t.skip('no browser');
   const keysAt = await a.page.evaluate(() => [window.__stateKey(0), window.__stateKey(0), window.__stateKey(40)]);

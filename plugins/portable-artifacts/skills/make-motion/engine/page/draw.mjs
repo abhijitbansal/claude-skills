@@ -11,12 +11,16 @@ const DEFAULT_STROKE_WIDTH = 1;
 const WORD_IDENTITY = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1 });
 const HALF = 2;
 
+// Sampled values are not clamped (an overshoot ease can leave 0..1), so opacity, draw and reveal are clamped here.
+const unit01 = (v) => Math.min(1, Math.max(0, v));
+
 // ---- text ----
 
 function drawWord(ctx, line, word, tracks, baseFill) {
-  if (tracks.opacity <= 0) return;
+  const opacity = unit01(tracks.opacity);
+  if (opacity <= 0) return;
   ctx.save();
-  ctx.globalAlpha *= tracks.opacity;
+  ctx.globalAlpha *= opacity;
   ctx.translate(line.x + word.x + word.width / HALF + tracks.x, line.y + tracks.y);
   ctx.scale(tracks.scale, tracks.scale);
   ctx.fillStyle = tracks.fill ?? baseFill;
@@ -31,7 +35,8 @@ function drawText(ctx, n) {
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   for (const line of layout.lines) {
-    for (const word of line.words) drawWord(ctx, line, word, n.words?.[word.index] ?? WORD_IDENTITY, fill);
+    // words has an entry only for each wordTracks entry; a word beyond them is untouched (opacity 1, no offset)
+    for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index] }, fill);
   }
 }
 
@@ -56,7 +61,8 @@ function strokeTrimmed(ctx, path, length, draw) {
 function drawPath(ctx, n) {
   const { fill, stroke, strokeWidth = DEFAULT_STROKE_WIDTH, lineCap = 'round' } = n.props;
   const { path, length } = shapeOf(n);
-  if (fill && n.draw >= 1) {
+  const draw = unit01(n.draw);
+  if (fill && draw >= 1) {
     ctx.fillStyle = fill;
     ctx.fill(path);
   }
@@ -65,7 +71,7 @@ function drawPath(ctx, n) {
   ctx.lineWidth = strokeWidth;
   ctx.lineCap = lineCap;
   ctx.lineJoin = 'round';
-  strokeTrimmed(ctx, path, length, n.draw);
+  strokeTrimmed(ctx, path, length, draw);
 }
 
 // ---- images ----
@@ -90,11 +96,12 @@ function drawBody(ctx, n, env) {
 // `reveal` keeps the left fraction of the node's own content box.
 function drawRevealed(ctx, n, env) {
   ctx.save();
-  if (n.reveal < 1) {
+  const reveal = unit01(n.reveal);
+  if (reveal < 1) {
     const box = localBounds(n);
     if (box) {
       ctx.beginPath();
-      ctx.rect(box[0], box[1], box[2] * Math.max(0, n.reveal), box[3]);
+      ctx.rect(box[0], box[1], box[2] * reveal, box[3]);
       ctx.clip();
     }
   }
@@ -103,10 +110,11 @@ function drawRevealed(ctx, n, env) {
 }
 
 function drawNode(ctx, n, env) {
-  if (!n.visible) return;
+  const opacity = unit01(n.opacity);
+  if (opacity <= 0) return; // also hides the children, as `visible` does
   ctx.save();
   ctx.transform(...localMatrix(n));
-  ctx.globalAlpha *= n.opacity;
+  ctx.globalAlpha *= opacity;
   if (n.blur > 0) ctx.filter = `blur(${n.blur}px)`; // a blurred parent blurs its children too
   drawRevealed(ctx, n, env);
   for (const child of n.children) drawNode(ctx, child, env);

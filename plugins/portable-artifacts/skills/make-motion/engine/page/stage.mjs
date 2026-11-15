@@ -88,7 +88,8 @@ async function init() {
     ctx.fillRect(0, 0, w, h);
     drawFrame(ctx, sampled, { assets: env.assets, canvas, fields: [] });
   };
-  window.__snapshot = (i) => annotate(frameState(i).sampled);
+  window.__measure = env.measure; // the layout measure, for tests
+  window.__snapshot =(i) => annotate(frameState(i).sampled);
   window.__stateKey = (i) => stateKey(frameState(i));
   return { frameCount, fps, size: [w, h], post: POST_PASS };
 }
