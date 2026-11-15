@@ -229,6 +229,30 @@ test('escapes: \\* and \\_ are literal marks and \\\\ is a backslash, none of th
   assert.equal(parseSay('(\\*)').plain, '(*)');
 });
 
+test('an escaped mark is ordinary text for the marks next to it', () => {
+  assert.deepEqual(parseSay('*a\\**').tokens, [plainTok('a*', { emphasis: true })]);
+  assert.deepEqual(parseSay('\\**a*').tokens, [plainTok('*a', { emphasis: true })]);
+  assert.deepEqual(parseSay('\\*\\*').tokens, [plainTok('**')]);
+  assert.deepEqual(parseSay('\\__a_').tokens, [plainTok('_a', { aside: true })]);
+  assert.deepEqual(parseSay('_a\\__').tokens, [plainTok('a_', { aside: true })]);
+  assert.deepEqual(parseSay('x \\**a* y').tokens.map((t) => [t.text, t.emphasis]), [['x', false], ['*a', true], ['y', false]]);
+  assert.deepEqual(parseSay('*a\\\\*').tokens, [plainTok('a\\', { emphasis: true })]);
+});
+
+test('a mark closes before the other mark and the other mark can open right after it', () => {
+  const glued = parseSay('*a*_b_').tokens;
+  assert.deepEqual(glued, [plainTok('ab', { emphasis: true, aside: true })]);
+  const spaced = parseSay('*a* _b_').tokens;
+  assert.deepEqual(spaced, [plainTok('a', { emphasis: true }), plainTok('b', { aside: true })]);
+  assert.deepEqual(parseSay('_a_*b*').tokens, [plainTok('ab', { emphasis: true, aside: true })]);
+  assert.deepEqual(parseSay('_a_ *b*').tokens, [plainTok('a', { aside: true }), plainTok('b', { emphasis: true })]);
+  assert.deepEqual(parseSay('go *a*_b_ now').tokens.map((t) => [t.text, t.emphasis, t.aside]), [['go', false, false], ['ab', true, true], ['now', false, false]]);
+});
+
+test('a mark pair in the middle of a word with nothing open is literal text', () => {
+  assert.deepEqual(parseSay('a*_b').tokens, [plainTok('a*_b')]);
+});
+
 test('a mark that can both open and close closes when its kind is open, otherwise opens', () => {
   const quoted = parseSay('say *"quoted"* ok').tokens;
   assert.deepEqual(quoted.map((t) => [t.text, t.emphasis]), [['say', false], ['"quoted"', true], ['ok', false]]);

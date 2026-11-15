@@ -24,6 +24,14 @@
 //     opens. A mark that can do neither (mid-word: snake_case, a*b, 2 * 3) is
 //     literal, and so is a closer with nothing open (foo*).
 //   - A run with the same mark twice (**bold**, __init__) is literal.
+//   - Inside a run of two (*_ or _*) the first mark looks at the text before
+//     the run and treats the other mark as what follows it, so it may close
+//     there; the second mark may open when the first one acted (opened or
+//     closed). So *a*_b_ closes the emphasis and opens the aside; without
+//     whitespace between the words that is ONE token "ab" with both flags.
+//   - An escaped character (see below) is ordinary text for every neighbour
+//     test: never a mark, never "the same mark". It also counts as a boundary
+//     for opening, so \**a* is a literal * then emphasised a (token "*a").
 //   - An opener of a kind that is already open is a SayError ("nested"). The
 //     "not an opening bracket" clause on closers is what makes *a (*"b"*) c*
 //     nested: otherwise the mark after ( would close the outer emphasis.
@@ -97,16 +105,23 @@ const isSpaceOrEdge = (ch) => ch === undefined || WHITESPACE_RE.test(ch);
 
 const NO_CONTEXT = { opens: false, closes: false };
 
-// Whether the run say[s, e) of `marks` can open and/or close. See the header.
-function runContext(say, s, e, st, marks) {
-  const prev = say[s - 1];
-  const next = say[e];
-  const beforeOpens = isSpaceOrEdge(prev) || OPENING_CONTEXT.has(prev) || st.pauseEnd === s;
-  const beforeCloses = s > 0 && !WHITESPACE_RE.test(prev) && !UNAMBIGUOUS_OPENERS.has(prev) && !marks.includes(prev);
-  const afterCloses = isSpaceOrEdge(next) || CLOSING_PUNCT.has(next) || DASHES_AND_SLASH.has(next)
-    || next === ELLIPSIS || matchAt(PAUSE_RE, say, e) !== null;
+// Whether mark number `k` of the run say[start, end) can open and/or close.
+// The first mark looks at the text before the run, the last at the text after
+// it; a mark inside a run sees the other mark of the run instead. `prevActed`
+// is whether the mark before it in the run opened or closed. See the header.
+function markContext(say, start, end, st, marks, k, prevActed) {
+  const isFirst = k === 0;
+  const isLast = k === marks.length - 1;
+  const prev = say[start - 1];
+  const next = say[end];
+  const beforeOpens = isFirst
+    ? isSpaceOrEdge(prev) || OPENING_CONTEXT.has(prev) || st.pauseEnd === start || st.escaped[start - 1] === 1
+    : prevActed;
+  const beforeCloses = !isFirst || (start > 0 && !WHITESPACE_RE.test(prev) && !UNAMBIGUOUS_OPENERS.has(prev));
+  const afterCloses = !isLast || isSpaceOrEdge(next) || CLOSING_PUNCT.has(next) || DASHES_AND_SLASH.has(next)
+    || next === ELLIPSIS || matchAt(PAUSE_RE, say, end) !== null;
   return {
-    opens: beforeOpens && !isSpaceOrEdge(next) && !marks.includes(next),
+    opens: beforeOpens && (!isLast || !isSpaceOrEdge(next)),
     closes: beforeCloses && afterCloses,
   };
 }
@@ -135,17 +150,21 @@ function addText(st, text, ipa) {
   if (ipa !== undefined) st.word.ipa = ipa;
 }
 
-// Closes, opens or (when it can do neither) writes out one mark.
+// Closes, opens or (when it can do neither) writes out one mark. Returns
+// whether the mark acted as a real mark.
 function applyMark(mark, ctx, st, say) {
   const isOpen = st.open[mark];
   if (ctx.closes && isOpen) {
     st.open[mark] = false;
-  } else if (ctx.opens) {
-    if (isOpen) throw nestedError(mark, say);
-    st.open[mark] = true;
-  } else {
-    addText(st, mark);
+    return true;
   }
+  if (!ctx.opens) {
+    addText(st, mark);
+    return false;
+  }
+  if (isOpen) throw nestedError(mark, say);
+  st.open[mark] = true;
+  return true;
 }
 
 // Handles a maximal run of mark characters starting at `s`. Returns the index
@@ -155,8 +174,11 @@ function readMarkRun(say, s, st) {
   while (MARK_CHARS.has(say[e])) e++;
   const marks = [...say.slice(s, e)];
   const wellFormed = marks.length <= MAX_RUN && new Set(marks).size === marks.length;
-  const ctx = wellFormed ? runContext(say, s, e, st, marks) : NO_CONTEXT;
-  for (const mark of marks) applyMark(mark, ctx, st, say);
+  let prevActed = false;
+  marks.forEach((mark, k) => {
+    const ctx = wellFormed ? markContext(say, s, e, st, marks, k, prevActed) : NO_CONTEXT;
+    prevActed = applyMark(mark, ctx, st, say);
+  });
   return e;
 }
 
@@ -236,8 +258,23 @@ function readAt(say, i, st) {
   return i + 1;
 }
 
+// Marks which characters are the escaped half of a backslash escape. They are
+// ordinary text for every neighbour test, never a mark.
+function findEscapes(say) {
+  const escaped = new Uint8Array(say.length);
+  for (let i = 0; i < say.length - 1; i++) {
+    if (say[i] === '\\' && ESCAPABLE.has(say[i + 1])) {
+      escaped[i + 1] = 1;
+      i++;
+    }
+  }
+  return escaped;
+}
+
 function scan(say) {
-  const st = { tokens: [], word: null, pause: 0, pauseEnd: -1, open: { '*': false, _: false } };
+  const st = {
+    tokens: [], word: null, pause: 0, pauseEnd: -1, open: { '*': false, _: false }, escaped: findEscapes(say),
+  };
   let i = 0;
   while (i < say.length) i = readAt(say, i, st);
   flush(st);
