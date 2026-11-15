@@ -60,7 +60,9 @@ function kpiTile(kpi, results) {
   const value = formatValue(results[kpi.query]?.rows[0]?.[kpi.field], kpi.format);
   const chars = [...value].length;
   const size = chars > KPI_LONG_CHARS ? ' kpi-wide kpi-long' : chars > KPI_WIDE_CHARS ? ' kpi-wide' : '';
-  return `<div class="kpi${size}" id="kpi-${escapeHtml(kpi.id)}"><div class="kpi-label">${escapeHtml(kpi.title)}</div><div class="kpi-value" style="--n: ${Math.max(1, chars)}">${escapeHtml(value)}</div></div>`;
+  const sql = results[kpi.query]?.sql;
+  const query = sql === undefined ? '' : `<details class="kpi-sql"><summary>Query</summary><pre class="sql">${escapeHtml(sql)}</pre></details>`;
+  return `<div class="kpi${size}" id="kpi-${escapeHtml(kpi.id)}"><div class="kpi-label">${escapeHtml(kpi.title)}</div><div class="kpi-value" style="--n: ${Math.max(1, chars)}">${escapeHtml(value)}</div>${query}</div>`;
 }
 
 function dataTable(res) {
@@ -72,10 +74,17 @@ function dataTable(res) {
 }
 
 // On a paired card pane 1 stays on the primary view; the tabs switch pane 2 over views[1..].
-function tabs(c) {
+// The views the tabs switch between (none when there is only one to show).
+const tabViews = (c) => {
   const list = c.pair ? c.views.slice(1) : c.views;
-  if (list.length < 2) return '';
-  const buttons = list.map((v, i) => `<button type="button" role="tab" id="tab-${escapeHtml(c.id)}-${escapeHtml(v.name)}" data-view="${escapeHtml(v.name)}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escapeHtml(v.label)}</button>`).join('');
+  return list.length < 2 ? [] : list;
+};
+const tabId = (c, v) => `tab-${escapeHtml(c.id)}-${escapeHtml(v.name)}`;
+
+function tabs(c) {
+  const list = tabViews(c);
+  if (!list.length) return '';
+  const buttons = list.map((v, i) => `<button type="button" role="tab" id="${tabId(c, v)}" aria-controls="panel-${escapeHtml(c.id)}" data-view="${escapeHtml(v.name)}" aria-selected="${i === 0}" tabindex="${i === 0 ? 0 : -1}">${escapeHtml(v.label)}</button>`).join('');
   return `<div class="views" role="tablist" aria-label="${escapeHtml(c.title)}${c.pair ? ' second view' : ' views'}">${buttons}</div>`;
 }
 
@@ -84,15 +93,21 @@ function exportMenu(c) {
     + '<button type="button" data-export="png">PNG</button><button type="button" data-export="svg">SVG</button><button type="button" data-export="csv">CSV</button></div></details>';
 }
 
+// The pane the tabs switch is their tabpanel (the runtime moves aria-labelledby to the selected tab);
+// on a paired card that is the second pane only.
 function panes(c) {
   const pane = (suffix, i) => `<div class="chart" id="chart-${escapeHtml(c.id)}${suffix}" data-pane="${i}" role="img" aria-label="${escapeHtml(c.title)}"></div>`;
-  return c.pair ? `<div class="panes pair">${pane('', 0)}${pane('-2', 1)}</div>` : `<div class="panes">${pane('', 0)}</div>`;
+  const list = tabViews(c);
+  const panel = list.length ? ` role="tabpanel" id="panel-${escapeHtml(c.id)}" aria-labelledby="${tabId(c, list[0])}"` : '';
+  if (!c.pair) return `<div class="panes"${panel}>${pane('', 0)}</div>`;
+  const second = panel ? `<div class="pane-panel"${panel}>${pane('-2', 1)}</div>` : pane('-2', 1);
+  return `<div class="panes pair">${pane('', 0)}${second}</div>`;
 }
 
 // chart: the spec chart; expanded: its expandCharts() entry (views, pair, width).
 function card(chart, expanded, results, maxRows) {
   const res = results[chart.query];
-  const note = res.truncated ? `<p class="meta">truncated at ${maxRows} rows</p>` : '';
+  const note = res.truncated ? `<p class="meta">truncated at ${maxRows} rows; raise <code>maxRows</code> in the spec or aggregate in SQL</p>` : '';
   const empty = res.rowCount === 0 ? '<p class="meta empty">No rows returned</p>' : '';
   const shown = Math.min(res.rowCount, TABLE_ROWS);
   return `<article class="card ${expanded.width === 'half' ? 'half' : 'full'}" id="card-${escapeHtml(chart.id)}">

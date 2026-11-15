@@ -66,6 +66,14 @@ const REJECTED = {
   'a CTE named after a table function, any case': 'WITH Duckdb_Settings AS (SELECT 1 AS name) SELECT * FROM Duckdb_Settings',
   'a CTE named after an extension-only table function': 'WITH read_postgres_binary AS (SELECT 1 AS a) SELECT * FROM read_postgres_binary',
   'a CTE named after a pg_catalog table': 'WITH pg_database AS (SELECT 1 AS n) SELECT * FROM pg_database',
+  // identifiers are case-insensitive in DuckDB: matching ignores case, but a
+  // mixed-case system name or self-reference must still be refused
+  'a mixed-case system view': 'SELECT * FROM Pg_Settings',
+  'a mixed-case system schema': 'SELECT * FROM PG_CATALOG.Pg_Settings',
+  'a mixed-case table function name': 'SELECT * FROM Duckdb_Databases()',
+  'a mixed-case self-reference (non-recursive)': 'WITH T AS (SELECT * FROM t) SELECT * FROM T',
+  'a mixed-case forward reference': 'WITH a AS (SELECT * FROM B), b AS (SELECT 1 AS n) SELECT * FROM a',
+  'a mixed-case CTE named after a system view': 'WITH Duckdb_Databases AS (SELECT 1 AS path) SELECT path FROM duckdb_databases',
 };
 
 for (const [name, sql] of Object.entries(REJECTED)) {
@@ -100,6 +108,10 @@ const ACCEPTED = {
   'DESCRIBE of a query': 'DESCRIBE SELECT * FROM sales',
   'a trailing semicolon': 'SELECT 1;',
   'a source, schema-qualified with main': 'SELECT * FROM main.sales',
+  'a CTE referenced in a different case': 'WITH Totals AS (SELECT region, SUM(amount) AS t FROM sales GROUP BY 1) SELECT * FROM totals',
+  'a source in upper case': 'SELECT * FROM SALES',
+  'an attached catalog in mixed case': 'SELECT * FROM Shop.items',
+  'a mixed-case recursive CTE': 'WITH RECURSIVE R(n) AS (SELECT 1 UNION ALL SELECT n + 1 FROM r WHERE n < 3) SELECT * FROM r',
 };
 
 for (const [name, sql] of Object.entries(ACCEPTED)) {
@@ -139,7 +151,10 @@ async function duckdbFile(dir, statements) {
   await conn.run('DETACH w');
   return file;
 }
-const specFor = (file) => ({ title: 't', sources: { ext: { type: 'duckdb', path: path.basename(file) } }, queries: { q: 'SELECT * FROM ext.items' } });
+const specFor = (file) => ({
+  title: 't', sources: { ext: { type: 'duckdb', path: path.basename(file) } }, queries: { q: 'SELECT * FROM ext.items' },
+  charts: [{ id: 'c', title: 'Items', query: 'q', vegaLite: { mark: 'bar', encoding: { y: { field: 'a', type: 'quantitative' } } } }], // a dashboard needs a chart or KPI
+});
 const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dash-guard-')));
 
 test('attached DuckDB file with a view or macro is refused', async () => {

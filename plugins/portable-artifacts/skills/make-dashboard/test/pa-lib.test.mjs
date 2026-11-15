@@ -55,3 +55,20 @@ test('fileStem makes a safe download name', () => {
   assert.equal(PA.fileStem('***'), 'chart');
   assert.equal(PA.fileStem('a'.repeat(80)).length, 60);
 });
+
+test('numericColumns: a column is numeric when every non-NULL value is a number', () => {
+  const PA = loadPaLib();
+  const rows = [{ region: 'North', revenue: 1234.5, units: 3, note: null }, { region: 'South', revenue: null, units: 12, note: 'x' }];
+  assert.deepEqual([...PA.numericColumns(['region', 'revenue', 'units', 'note'], rows)], ['revenue', 'units']);
+  assert.deepEqual([...PA.numericColumns(['n'], [{ n: null }])], [], 'an all-NULL column is not numeric');
+});
+
+test('cellText groups digits and caps decimals in numeric cells; text and NULLs as before', () => {
+  const PA = loadPaLib();
+  assert.equal(PA.cellText(1234567.891, 'revenue', true), '1,234,567.89');
+  assert.equal(PA.cellText(-0.5, 'delta', true), '-0.5');
+  assert.equal(PA.cellText(2025, 'year', true), '2025', 'a year column is not grouped');
+  assert.equal(PA.cellText('North', 'region', false), 'North');
+  assert.equal(PA.cellText(null, 'revenue', true), '');
+  assert.equal(PA.cellText(12, 'id_text', false), '12', 'a number in a text column stays as written');
+});

@@ -9,8 +9,11 @@ Write titles that state the finding ("North drives half of revenue"), not the fi
 
 - `views`: narrows and reorders the alternate views listed per kind below. `"table"` is always last and always there. Naming the kind itself (`"bar"` on a bar) is accepted and ignored.
 - `pair: true`: shows the primary view and the next view side by side and forces full width. The left pane stays on the primary view; the right pane has its own tabs over the remaining views, Table included. On a kind with no alternates (`scatter`, `heatmap`), pane 2 shows the Table.
-- Order follows the query for text `x` (the build sets `sort: null`), so put `ORDER BY` in the SQL. The `sorted` view sorts descending.
-- More than 8 categories, or a label longer than 12 characters, turns bars horizontal.
+- Order follows the query for every text role (bar, line and area `x`, heatmap `x` and `y`, boxplot `x`, donut slices: the build sets `sort: null`), so put `ORDER BY` in the SQL. A date axis still sorts by time. The `sorted` view sorts descending.
+- More than 8 categories, or a label longer than 12 characters, turns bars horizontal. Vertical bars never hide a category label: when the bands get too narrow (a phone) the labels turn 45 degrees.
+- Axis and tooltip titles come from the column: a snake_case alias reads as words (`p50_ms` shows "P50 ms"); any other name shows as written. The table view keeps the raw column names, right-aligns numbers and groups their digits.
+- `compact` prints the same text on the axis as on a KPI tile (three significant digits, K, M, B); tooltips show the exact value.
+- A `line` or `area` series with fewer than 3 points also draws its points (one point draws no line).
 - `color` allows at most 8 distinct values (3 for `scatter` and `bubble`). Fold the rest into "Other" in SQL.
 - A view that the data cannot support (negative values, or a zero total, for `share`, `normalized` and a coloured `area`) is not offered. If you list it in `views` and the query returns rows, that is an error; with zero rows it is silently dropped. `donut` is different: it is an error on its own when it has more than 6 slices or a negative value. So is a `kind: "area"` with `color` and a negative `y` (it stacks): use `line`. A NULL in the `color` column counts as one more value toward the cap.
 
@@ -43,7 +46,7 @@ Views: `stacked`, `normalized` (needs every `y` >= 0 and a positive total), `tab
 
 ## line
 
-Change over time. Roles: `x` (date or timestamp, or text in query order), `y` (number), optional `color` (text).
+Change over time. Roles: `x` (date or timestamp, or text in query order), `y` (number), optional `color` (text). A numeric `x` (a year, an hour) is an error that names the fix: `CAST(x AS VARCHAR) AS x` for categories in query order, or a real date (`make_date(year, month, 1)`) for a time axis.
 Gets: crosshair on the nearest point, x zoom and pan (date x only; double-click resets), legend filter when `color` is set.
 Views: `area` (when `color` is set it needs every `y` >= 0 and a positive total), `table`.
 

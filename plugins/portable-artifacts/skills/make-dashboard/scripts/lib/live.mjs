@@ -159,7 +159,12 @@ export async function startLiveServer({ specFile, port = 0, interval, theme, all
   const server = http.createServer((req, res) => {
     const { port: bound } = server.address();
     if (req.headers.host !== `127.0.0.1:${bound}` && req.headers.host !== `localhost:${bound}`) return res.writeHead(403).end('forbidden host');
-    const pathname = new URL(req.url, 'http://127.0.0.1').pathname;
+    let pathname;
+    try {
+      pathname = new URL(req.url, 'http://127.0.0.1').pathname; // '//' and friends throw
+    } catch {
+      return res.writeHead(400).end('bad request');
+    }
     if (req.method === 'POST' && pathname === '/rebuild') {
       if (req.headers['x-pa-token'] !== token) return res.writeHead(403).end('forbidden');
       rebuilder.trigger();

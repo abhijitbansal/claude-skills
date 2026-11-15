@@ -25,9 +25,15 @@ export function tableName({ catalog_name: catalog = '', schema_name: schema = ''
 }
 
 // policy: { views: Set of source view names, attached: Set of attached source names }
+// (both lower case: the spec's source-name pattern allows nothing else).
+// DuckDB folds unquoted and quoted identifiers case-insensitively, so every
+// comparison is on lower-cased names; `ctes` holds lower-cased CTE names.
 function tableAllowed(ref, policy, ctes) {
-  const { catalog_name: c = '', schema_name: s = '', table_name: t = '' } = ref;
-  if (SYSTEM_NAMES.includes(c.toLowerCase()) || SYSTEM_NAMES.includes(s.toLowerCase())) return false;
+  const lower = (v) => String(v ?? '').toLowerCase();
+  const c = lower(ref.catalog_name);
+  const s = lower(ref.schema_name);
+  const t = lower(ref.table_name);
+  if (SYSTEM_NAMES.includes(c) || SYSTEM_NAMES.includes(s)) return false;
   if (!c && !s) return policy.views.has(t) || ctes.has(t);
   if (!c) return policy.attached.has(s) || (s === 'main' && policy.views.has(t));
   return policy.attached.has(c) || (c === 'memory' && s === 'main' && policy.views.has(t));
@@ -66,7 +72,7 @@ export function checkAst(root, policy, isSystemName = () => false) {
     for (const entry of node.cte_map.map) {
       if (isSystemName(String(entry.key).toLowerCase())) fail(`CTE name ${JSON.stringify(entry.key)} shadows a system object; rename it`);
       visit(entry.value, new Set([...ctes, ...names])); // earlier CTEs only
-      names.push(entry.key);
+      names.push(String(entry.key).toLowerCase());
     }
     return new Set([...ctes, ...names]); // the main query sees all of them
   }
@@ -83,7 +89,7 @@ export function checkAst(root, policy, isSystemName = () => false) {
 
     if (node.type === 'RECURSIVE_CTE_NODE') {
       // only the recursive branch may refer to the CTE itself
-      for (const [key, value] of Object.entries(node)) visit(value, key === 'right' ? new Set([...scope, node.cte_name]) : scope);
+      for (const [key, value] of Object.entries(node)) visit(value, key === 'right' ? new Set([...scope, String(node.cte_name).toLowerCase()]) : scope);
       return;
     }
     if (node.type === 'BASE_TABLE') {

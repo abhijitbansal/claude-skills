@@ -19,24 +19,25 @@
     "theta": {
       "field": "revenue",
       "type": "quantitative",
-      "title": "revenue",
+      "title": "Revenue",
       "stack": true
     },
     "color": {
       "field": "region",
       "type": "nominal",
-      "title": "region"
+      "title": "Region",
+      "sort": null
     },
     "tooltip": [
       {
         "field": "region",
         "type": "nominal",
-        "title": "region"
+        "title": "Region"
       },
       {
         "field": "revenue",
         "type": "quantitative",
-        "title": "revenue"
+        "title": "Revenue"
       }
     ],
     "opacity": {

@@ -16,34 +16,43 @@
     "x": {
       "field": "quarter",
       "type": "nominal",
-      "title": "quarter",
-      "sort": null
+      "title": "Quarter",
+      "sort": null,
+      "axis": {
+        "labelOverlap": false,
+        "labelAngle": {
+          "expr": "bandwidth('x') < 20 ? -45 : 0"
+        },
+        "labelAlign": {
+          "expr": "bandwidth('x') < 20 ? 'right' : 'center'"
+        }
+      }
     },
     "y": {
       "field": "revenue",
       "type": "quantitative",
-      "title": "revenue"
+      "title": "Revenue"
     },
     "color": {
       "field": "region",
       "type": "nominal",
-      "title": "region"
+      "title": "Region"
     },
     "tooltip": [
       {
         "field": "quarter",
         "type": "nominal",
-        "title": "quarter"
+        "title": "Quarter"
       },
       {
         "field": "revenue",
         "type": "quantitative",
-        "title": "revenue"
+        "title": "Revenue"
       },
       {
         "field": "region",
         "type": "nominal",
-        "title": "region"
+        "title": "Region"
       }
     ],
     "xOffset": {

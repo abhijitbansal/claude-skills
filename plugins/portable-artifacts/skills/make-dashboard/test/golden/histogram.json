@@ -14,7 +14,7 @@
     "x": {
       "field": "a",
       "type": "quantitative",
-      "title": "a",
+      "title": "A",
       "bin": {
         "maxbins": 20
       }
@@ -28,7 +28,7 @@
       {
         "field": "a",
         "type": "quantitative",
-        "title": "a",
+        "title": "A",
         "bin": {
           "maxbins": 20
         }

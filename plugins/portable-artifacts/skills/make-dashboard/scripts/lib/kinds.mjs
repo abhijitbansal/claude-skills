@@ -38,6 +38,10 @@ export function fieldRef(column) {
 const NEED = { quantitative: 'a numeric column', temporal: 'a date or timestamp column', nominal: 'a text column' };
 const IS = { quantitative: 'numeric', temporal: 'a date', nominal: 'text' };
 
+// A numeric x (a year, an hour, a bucket number) on a line or area: say how to make it drawable.
+const CAST_HINT_KINDS = ['line', 'area'];
+const castHint = (column) => `; cast it in SQL: CAST(${column} AS VARCHAR) AS ${column} keeps the query order as categories, or build a date (make_date(year, month, 1)) for a time axis`;
+
 function need(classes) {
   return classes.map((c) => NEED[c]).join(' or ');
 }
@@ -67,7 +71,8 @@ function checkChart(chart, p, described) {
       }
       const cls = classOf(q.types[i]);
       if (!kind.types[role].includes(cls)) {
-        errors.push({ path: pathJoin(p, role), message: `${JSON.stringify(column)} is ${IS[cls]} (${q.types[i]}); ${role} of kind ${JSON.stringify(chart.kind)} needs ${need(kind.types[role])}` });
+        const hint = role === 'x' && cls === 'quantitative' && CAST_HINT_KINDS.includes(chart.kind) ? castHint(column) : '';
+        errors.push({ path: pathJoin(p, role), message: `${JSON.stringify(column)} is ${IS[cls]} (${q.types[i]}); ${role} of kind ${JSON.stringify(chart.kind)} needs ${need(kind.types[role])}${hint}` });
       }
     }
   }

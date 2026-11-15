@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { quoteArg } from '../../shared/doctor.mjs';
 import { loadSpec, validateSpec } from './spec.mjs';
-import { runQueries, checkFields, QueryError } from './data.mjs';
+import { runQueries, checkFields, kpiRowWarnings, QueryError } from './data.mjs';
 import { renderPage } from './html.mjs';
 import { expandCharts } from './views.mjs';
 import { checkSource, FILE_TYPES } from './sources.mjs';
@@ -76,6 +76,7 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   if (fieldErrors.length) return { ok: false, errors: fieldErrors };
   const expanded = expandCharts(spec, results);
   if (expanded.errors.length) return { ok: false, errors: expanded.errors };
+  const warnings = kpiRowWarnings(spec, results);
   const outDir = path.resolve(out ?? path.join(dir, 'dist'));
   const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts, env, now }));
   const sources = Object.entries(spec.sources).map(([name, src]) => [
@@ -83,7 +84,7 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
     FILE_TYPES.includes(src.type) ? checkSource(src, dir, { allowOutside }).abs : `${src.type} (env ${src.env})`,
   ]);
   const watch = [path.resolve(specFile), ...sources.map(([, abs]) => abs).filter((p) => path.isAbsolute(p))];
-  return { ok: true, spec, target, outDir, results, sources, watch };
+  return { ok: true, spec, target, outDir, results, sources, watch, warnings };
 }
 
 // ---- one chart, for callers that embed it (make-explainer) --------------------

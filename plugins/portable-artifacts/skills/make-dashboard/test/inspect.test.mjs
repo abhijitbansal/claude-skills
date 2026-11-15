@@ -23,6 +23,35 @@ test('prints column names, types and 5 sample rows for csv and parquet', () => {
   }
 });
 
+test('prints per-column distinct count, min, max and null share', () => {
+  const r = run(['sales.csv'], DATA);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /^summary:$/m);
+  assert.match(r.stdout, /^ {2}region +distinct ~?4 +min East +max West +null 0%$/m);
+  assert.match(r.stdout, /^ {2}date +distinct ~?\d+ +min 2025-01-\d\d +max 2025-\d\d-\d\d +null 0%$/m);
+  const j = JSON.parse(run(['sales.csv', '--json'], DATA).stdout);
+  const region = j.summary.find((c) => c.name === 'region');
+  assert.equal(region.min, 'East');
+  assert.equal(region.max, 'West');
+  assert.equal(region.nullShare, 0);
+  assert.equal(typeof region.distinct, 'number');
+});
+
+test('a summary that cannot be computed never hides the columns and sample rows', () => {
+  // the CSV sniffer types n from the first rows; the full scan SUMMARIZE needs then hits the text row
+  const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'dash-insp-dirty-')));
+  const lines = ['n', ...Array.from({ length: 25000 }, (_, i) => String(i)), 'not a number'];
+  fs.writeFileSync(path.join(dir, 'dirty.csv'), `${lines.join('\n')}\n`);
+  const r = run(['dirty.csv'], dir);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^sample \(5 rows\):$/m);
+  assert.match(r.stdout, /^summary: unavailable \(.+\)$/m);
+  const j = JSON.parse(run(['dirty.csv', '--json'], dir).stdout);
+  assert.equal(j.rows.length, 5);
+  assert.deepEqual(j.summary, []);
+  assert.match(j.summaryError, /\S/);
+});
+
 test('--json prints machine-readable output', () => {
   const r = run(['sales.csv', '--json'], DATA);
   const out = JSON.parse(r.stdout);
@@ -97,6 +126,17 @@ test('--spec validates the whole spec first: an injected source type writes noth
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^sources\.x\.type: must be one of "csv", "parquet"/m);
   assert.ok(!fs.existsSync(marker), 'the COPY must not run');
+});
+
+test('--spec works on a draft whose queries do not bind yet (table discovery comes first)', () => {
+  const dir = specDir();
+  const spec = JSON.parse(fs.readFileSync(path.join(dir, 'dashboard.json'), 'utf8'));
+  spec.queries.q = 'SELECT not_a_column_yet FROM sales';
+  spec.charts = [{ id: 'c1', title: 'C', query: 'q', kind: 'bar', x: 'not_a_column_yet', y: 'n' }];
+  fs.writeFileSync(path.join(dir, 'dashboard.json'), JSON.stringify(spec));
+  const r = run(['--spec', 'dashboard.json', '--source', 'sales'], dir);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stdout, /^ {2}region +VARCHAR$/m);
 });
 
 test('--spec honours --allow-outside like validate', () => {

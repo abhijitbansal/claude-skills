@@ -10,7 +10,9 @@ by any agent that can run shell commands.
   charts (kinds or raw Vega-Lite). The agent writes it; scripts do the rest.
 - **One output file, `dist/index.html`**: charts, data and libraries are all
   inlined. It opens from disk, needs no server and loads nothing from the
-  network.
+  network. The inlined chart libraries (Vega, Vega-Lite, vega-embed) add about
+  820 KB to every page (839,375 bytes measured at vega 6.4.0, vega-lite 6.5.0,
+  vega-embed 7.3.0), before fonts and data.
 - **Provenance on every card**: expand *Query* to see the SQL, the row count,
   the refresh time and the first rows of the result.
 - **Chart kinds, not chart code**: 11 kinds (bar, stacked-bar, grouped-bar, line,
@@ -33,17 +35,20 @@ by any agent that can run shell commands.
 
 ## Quick start
 
-```bash
-npm ci --omit=dev --prefix make-dashboard   # one-time, from the folder that contains make-dashboard
-node make-dashboard/scripts/doctor.mjs      # optional: what is missing, and how to fix it
+Replace `<skill-dir>` with the folder that holds this README. Run each line as one
+plain command with that literal path: no shell variable, no `&&` or `;` chains.
 
-SKILL=path/to/make-dashboard
-node $SKILL/scripts/inspect.mjs data/sales.csv          # columns, types, 5 sample rows
+```bash
+npm ci --omit=dev --prefix <skill-dir>                  # one-time
+node <skill-dir>/scripts/doctor.mjs                     # optional: what is missing, and how to fix it
+node <skill-dir>/scripts/inspect.mjs data/sales.csv     # columns, types, 5 sample rows, distinct/min/max/nulls
 # … write dashboard.json (or let your agent write it) …
-node $SKILL/scripts/validate.mjs dashboard.json         # prints `valid`, or path-precise errors
-node $SKILL/scripts/build.mjs dashboard.json            # writes dist/index.html (add --model/--effort/--agent to stamp it)
-node $SKILL/scripts/serve.mjs dist --open               # or just open dist/index.html
-node $SKILL/scripts/serve.mjs --watch dashboard.json --open   # live: rebuilds on save
+node <skill-dir>/scripts/validate.mjs dashboard.json    # prints `valid`, or path-precise errors
+node <skill-dir>/scripts/query.mjs dashboard.json --chart c1   # the rows a chart will show
+node <skill-dir>/scripts/build.mjs dashboard.json       # writes dist/index.html and prints its file:// URL
+node <skill-dir>/scripts/check.mjs dist --shots shots   # optional: open it in a browser, light and dark
+node <skill-dir>/scripts/serve.mjs dist --open          # or just open dist/index.html
+node <skill-dir>/scripts/serve.mjs --watch dashboard.json --open   # live: rebuilds on save
 ```
 
 From an agent, just ask: *"Build a dashboard of revenue by region and the
@@ -87,21 +92,24 @@ there are working specs in [`references/examples/`](references/examples/).
 
 | Command | Does | Flags |
 |---|---|---|
-| `inspect.mjs <file>` | Column names, types and 5 sample rows of a csv/parquet/json file | `--type`, `--json`, `--allow-outside` |
-| `validate.mjs <spec>` | Schema, references, SQL guard; binds every query against the real data and compiles every chart. `valid` means buildable | `--json`, `--timeout <s>`, `--allow-outside` |
-| `build.mjs <spec>` | Runs the queries and writes `dist/index.html` (next to the spec). Prints the exact `serve:` command | `--out <dir>`, `--timeout <s>` (default 30), `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--allow-outside`, `--json` |
-| `doctor.mjs` | What the skill needs and is missing, with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci` | `--json`, `--for <spec.json>`, `--fix <id[,id]>` |
-| `serve.mjs [dir]` | Serves the built page on `127.0.0.1` | `--port <n>`, `--open` |
-| `serve.mjs --watch <spec>` | Builds, serves and live-reloads; rebuilds on save of the spec or file sources. Has a *Rebuild now* button. Postgres/MySQL need `--interval` | `--interval <5..86400 s>`, `--theme <name>`, `--port`, `--open`, `--allow-outside`, `--timeout` |
+| `inspect.mjs <file>` | Column names, types, 5 sample rows and per-column distinct count, min, max and null share of a csv/parquet/json file (or `--spec <spec> --source <name>`, which works on a draft whose queries do not run yet) | `--type`, `--json`, `--allow-outside` |
+| `validate.mjs <spec>` | Schema, references, SQL guard; runs every query against the real data and expands every chart, as build does, so slice and colour caps, KPI row counts and value errors show here. `valid` means buildable | `--json`, `--timeout <s>`, `--allow-outside`, `--bind-only` (bind with `LIMIT 0` only: faster, misses value checks) |
+| `query.mjs <spec> --chart <id>` | Runs one chart's query as build does and prints its rows, so a title can state what they show | `--limit <n>` (default 20), `--json`, `--allow-outside`, `--timeout <s>` |
+| `build.mjs <spec>` | Runs the queries and writes `dist/index.html` (next to the spec). Prints the page's `file://` URL on its own line and the exact `serve:` command | `--out <dir>`, `--timeout <s>` (default 30), `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--allow-outside`, `--json` |
+| `check.mjs <dist>` | Opens the built page at 1280 and 390 px, light and dark; fails on console errors, chart errors, empty panes or horizontal scroll. Without a browser it prints `check: skipped` and exits 0 | `--shots <dir>` (one PNG per width and colour scheme: open them and look), `--json` |
+| `doctor.mjs` | What the skill needs and is missing, with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci`. Exit `0` when nothing required is missing, `1` when something is, `2` on a usage error | `--json`, `--for <check\|spec.json>`, `--fix <id[,id]>` |
+| `serve.mjs [dir]` | Serves the built page on `127.0.0.1`. `--open` warns instead of crashing when no opener exists; `PA_NO_BROWSER=1` never opens one | `--port <n>`, `--open` |
+| `serve.mjs --watch <spec>` | Builds, serves and live-reloads; rebuilds on save of the spec or file sources. Has a *Rebuild now* button. Postgres/MySQL need `--interval`. It never exits: run it in the background and stop it when done | `--interval <5..86400 s>`, `--theme <name>`, `--port`, `--open`, `--allow-outside`, `--timeout`, `--out <dir>` |
 | `setup.mjs [spec]` | One-time `INSTALL` of the DuckDB extensions for sqlite/postgres/mysql, so builds stay offline | — |
 
-Exit codes for every script: `0` OK, `1` spec errors, `2` usage or IO error.
+Exit codes for every script: `0` OK, `1` spec errors, `2` usage or IO error. A script
+run before `npm ci` prints the doctor command to install the dependencies and exits `2`.
 Errors name the JSON path and suggest the fix:
 
 ```
 charts[0].query: "rev_by_regin" not found; did you mean "rev_by_region"?
 charts[0].y: "revnue" is not a column of query "rev_by_region" (columns: region, revenue); did you mean "revenue"?
-sources.sales.path: resolves outside the spec folder (/etc/passwd); move the data under /proj or pass --allow-outside
+sources.sales.path: resolves outside the spec folder (/etc/passwd); copy or move the data under /proj and point the path there (--allow-outside is the owner's flag to add, not a fix to apply)
 ```
 
 ## Live reload and scheduled refresh
@@ -143,8 +151,11 @@ The agent writes the SQL, so it is treated as untrusted:
   environment variables and scrubbed from error messages. Result cells are
   scrubbed for them too, but that is defence in depth only: the guard above is
   the control that keeps secrets out of result rows.
-- Charts can't load anything: `url`, `data` and `usermeta` are rejected
-  anywhere in `vegaLite` (kind charts carry no Vega-Lite from you at all). The page runs under a CSP without `unsafe-eval`
+- Charts can't load or link to anything: `url`, `data`, `usermeta` and `href` are rejected
+  anywhere in `vegaLite`, and a top-level `config`, `width` or `autosize` is rejected
+  because the build sets them (kind charts carry no Vega-Lite from you at all).
+  Table names in SQL match case-insensitively, as DuckDB binds them; system names are
+  refused in any case. The page runs under a CSP without `unsafe-eval`
   (Vega's AST interpreter is used) and with chart actions disabled.
 - **The built page contains the query results.** Sharing it shares the data.
 

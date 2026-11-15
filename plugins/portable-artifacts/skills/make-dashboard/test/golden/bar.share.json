@@ -14,8 +14,17 @@
     "x": {
       "field": "region",
       "type": "nominal",
-      "title": "region",
-      "sort": null
+      "title": "Region",
+      "sort": null,
+      "axis": {
+        "labelOverlap": false,
+        "labelAngle": {
+          "expr": "bandwidth('x') < 41 ? -45 : 0"
+        },
+        "labelAlign": {
+          "expr": "bandwidth('x') < 41 ? 'right' : 'center'"
+        }
+      }
     },
     "y": {
       "field": "pa_share",
@@ -29,12 +38,12 @@
       {
         "field": "region",
         "type": "nominal",
-        "title": "region"
+        "title": "Region"
       },
       {
         "field": "revenue",
         "type": "quantitative",
-        "title": "revenue"
+        "title": "Revenue"
       },
       {
         "field": "pa_share",

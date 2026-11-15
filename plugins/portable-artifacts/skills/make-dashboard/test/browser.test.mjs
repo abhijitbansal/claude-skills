@@ -324,7 +324,7 @@ test('all 11 kinds render with no console errors or warnings, no horizontal over
   }
 });
 
-test('tooltips use the chart format and the raw column names; share shows "Share of <y>" as a percent', async (t) => {
+test('tooltips use the chart format and readable column titles; share shows "Share of <y>" as a percent', async (t) => {
   if (!(await haveBrowser())) return t.skip('no browser');
   const { out } = buildProject(ALL_KINDS_SPEC);
   const { page, problems } = await open(out);
@@ -336,7 +336,7 @@ test('tooltips use the chart format and the raw column names; share shows "Share
     return page.locator('#vg-tooltip-element').innerText();
   };
   const bar = await tooltip('#chart-k-bar .mark-rect path');
-  assert.match(bar, /region/);
+  assert.match(bar, /Region/, 'snake_case columns read as words');
   assert.match(bar, /Total Revenue\s*\$[\d,]+\.?\d*/, 'currency format in the tooltip');
   await page.mouse.move(0, 0);
   await page.click('#card-k-bar [data-view=share]');
@@ -345,7 +345,7 @@ test('tooltips use the chart format and the raw column names; share shows "Share
   assert.match(share, /Share of Total Revenue\s*\d+(\.\d)?%/);
   assert.doesNotMatch(share, /pa_share/);
   const heat = await tooltip('#chart-k-heat .mark-rect path');
-  assert.match(heat, /revenue\s*\$[\d,]+/);
+  assert.match(heat, /Revenue\s*\$[\d,]+/);
   // The first arc's bounding-box centre can sit in the donut hole: aim just inside its outer edge instead.
   await page.locator('#chart-k-donut').scrollIntoViewIfNeeded();
   const ring = await page.evaluate(() => {
@@ -361,12 +361,12 @@ test('tooltips use the chart format and the raw column names; share shows "Share
   await page.mouse.move(ring.x, ring.y, { steps: 4 });
   await page.waitForSelector('#vg-tooltip-element.visible', { timeout: 3000 });
   const donut = await page.locator('#vg-tooltip-element').innerText();
-  assert.match(donut, /product/);
-  assert.match(donut, /units/);
+  assert.match(donut, /Product/);
+  assert.match(donut, /Units/);
   const box = await tooltip('#chart-k-box .mark-rect path');
-  assert.match(box, /Median of amount\s*\$[\d,]+/, 'boxplot statistics follow the chart format');
+  assert.match(box, /Median of amount\s*\$[\d,]+/i, 'boxplot statistics follow the chart format');
   const line = await tooltip('#chart-k-line .mark-symbol path');
-  assert.match(line, /revenue\s*\$[\d,]+/);
+  assert.match(line, /Revenue\s*\$[\d,]+/);
   assert.deepEqual(problems, []);
 });
 
