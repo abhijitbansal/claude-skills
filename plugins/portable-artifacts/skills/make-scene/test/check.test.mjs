@@ -186,7 +186,7 @@ test('without playwright installed the check skips and exits 0', async (t) => {
   fs.mkdirSync(path.join(dir, 'scripts/lib'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'shared'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'scripts/lib/png.mjs', 'scripts/lib/canvas-shot.mjs', 'scripts/lib/shots.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs', 'shared/output.mjs']) {
+  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'scripts/lib/png.mjs', 'scripts/lib/canvas-shot.mjs', 'scripts/lib/shots.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs', 'shared/output.mjs', 'shared/stale-copy.mjs']) {
     fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
   }
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/check.mjs'), await goodPage(t)], { encoding: 'utf8', env: { ...process.env, PA_NO_BROWSER: '' } });

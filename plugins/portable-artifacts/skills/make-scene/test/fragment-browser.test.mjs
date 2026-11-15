@@ -1,6 +1,6 @@
 // W3-M02 (PA-26): a build --fragment output mounts inside a host page. fragment.test.mjs pins what is written; this is the
-// register's verify ("--fragment mounts in a test page"). Not yet run: it needs the serial browser slot. Seed to show it
-// can fail: in scripts/lib/build-run.mjs fragmentOf drop the PAScene.initAll line, and the scene never leaves 'loading'.
+// register's verify ("--fragment mounts in a test page"). The host page defines the theme variables, as the fragment's
+// note requires. Seed to show it can fail: in scripts/lib/build-run.mjs fragmentOf drop the PAScene.initAll line, and the scene never leaves 'loading'.
 // Skips without Chromium or WebGL2, and for no other reason.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { build } from '../scripts/build.mjs';
+import { DEFAULT_THEME, loadTheme, themeCss } from '../shared/theme.mjs';
 import { launchBrowser } from './helpers/browser.mjs';
 import { consoleProblem, skipUnlessReady } from './helpers/webgl.mjs';
 import { PINNED_ENV, tempDir, writeScene } from './helpers/scene-fixtures.mjs';
@@ -38,7 +39,10 @@ test('a fragment pasted into a host page mounts: ready, one canvas inside the ho
   const built = await build(writeScene(t, SPEC), { fragment: true, env: { ...PINNED_ENV, PA_OUTPUT_DIR: dir } });
   assert.equal(built.ok, true, JSON.stringify(built.errors));
   const hostFile = path.join(dir, 'host.html');
-  fs.writeFileSync(hostFile, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Host</title></head><body>
+  // The fragment's own note says the host page defines the theme variables (--page, --text, --accent ...): without them the
+  // runtime cannot resolve a colour and shows the table, so the host here carries the default theme's.
+  const hostTheme = themeCss(loadTheme(DEFAULT_THEME));
+  fs.writeFileSync(hostFile, `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Host</title><style>${hostTheme}</style></head><body>
 <h1 id="host-title">A host page</h1>
 ${fs.readFileSync(built.out, 'utf8')}
 <p id="host-after">after the scene</p>
