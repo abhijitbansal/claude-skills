@@ -408,7 +408,7 @@ test('SIGINT during a render leaves no temp files and no browser behind', async 
 
 // ---- the --json contract on every path ----
 
-const REPORT_KEYS = ['bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice'];
+const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice'];
 const shapeOf = (run) => {
   assert.equal(run.stdout.trim().split('\n').length, 1, `one line on stdout, got ${JSON.stringify(run.stdout)}`);
   const report = parse(run);

@@ -8,6 +8,9 @@
 //   voiceSpeed     Kokoro speed of the narration, VOICE_SPEED_MIN to VOICE_SPEED_MAX (the range the start rule was measured on)
 //   emphasisPause  seconds of silence before an emphasised word, 0 to EMPHASIS_PAUSE_MAX; 0 (the default) means
 //                  emphasis neither splits a call nor pauses
+// Loudness (REQUIRED, checked by validateMode like the voice data):
+//   loudness      { lufs, truePeakDb, lra }: the voice master's integrated target (LUFS_MIN to LUFS_MAX), its true-peak
+//                  ceiling (TRUE_PEAK_MIN to TRUE_PEAK_MAX dBTP) and loudnorm's loudness range (LRA_MIN to LRA_MAX LU)
 import { registries } from '../registry.mjs';
 import { pro } from './pro.mjs';
 import { viral } from './viral.mjs';
@@ -15,12 +18,37 @@ import { viral } from './viral.mjs';
 export const VOICE_SPEED_MIN = 0.8;
 export const VOICE_SPEED_MAX = 1.25;
 export const EMPHASIS_PAUSE_MAX = 3; // as the longest pause a say can write (engine/script/say.mjs PAUSE_MAX)
+// The ranges version 1 accepts for a film's loudness (scripts/lib/loudness.mjs), and loudnorm's own LRA range.
+export const LUFS_MIN = -30;
+export const LUFS_MAX = -5;
+export const TRUE_PEAK_MIN = -3;
+export const TRUE_PEAK_MAX = 0;
+export const LRA_MIN = 1;
+export const LRA_MAX = 50;
 
 const isNumberIn = (value, min, max) => typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max;
 
+const LOUDNESS_FIELDS = Object.freeze([
+  ['lufs', LUFS_MIN, LUFS_MAX],
+  ['truePeakDb', TRUE_PEAK_MIN, TRUE_PEAK_MAX],
+  ['lra', LRA_MIN, LRA_MAX],
+]);
+
+/** Throws a RangeError naming the mode when its `loudness` is not { lufs, truePeakDb, lra } inside their ranges. */
+export function validateLoudness({ name, loudness }) {
+  if (loudness === null || typeof loudness !== 'object') {
+    throw new RangeError(`mode "${name}": loudness must be { lufs, truePeakDb, lra }, got ${String(loudness)}`);
+  }
+  for (const [field, min, max] of LOUDNESS_FIELDS) {
+    if (!isNumberIn(loudness[field], min, max)) {
+      throw new RangeError(`mode "${name}": loudness.${field} must be a number from ${min} to ${max}, got ${String(loudness[field])}`);
+    }
+  }
+}
+
 /**
- * Throws a RangeError naming the mode and the field when the mode's voice data is missing or out of range. Returns the
- * mode, so it can be used inline.
+ * Throws a RangeError naming the mode and the field when the mode's voice data or loudness is missing or out of range.
+ * Returns the mode, so it can be used inline.
  */
 export function validateMode(mode) {
   const { name, voiceSpeed, emphasisPause } = mode;
@@ -30,12 +58,13 @@ export function validateMode(mode) {
   if (!isNumberIn(emphasisPause, 0, EMPHASIS_PAUSE_MAX)) {
     throw new RangeError(`mode "${name}": emphasisPause must be a number of seconds from 0 to ${EMPHASIS_PAUSE_MAX}, got ${String(emphasisPause)}`);
   }
+  validateLoudness(mode);
   return mode;
 }
 
-// Every mode added to the shared registry is checked as it is added, so a mode with no voice data cannot register. The
-// registry itself (engine/registry.mjs) is generic and knows nothing of modes, so its `add` for modes is wrapped here,
-// once (a second evaluation of this file keeps the first wrapper).
+// Every mode added to the shared registry is checked as it is added, so a mode with no voice data or no loudness cannot
+// register. The registry itself (engine/registry.mjs) is generic and knows nothing of modes, so its `add` for modes is
+// wrapped here, once (a second evaluation of this file keeps the first wrapper).
 const addMode = registries.modes.add;
 if (!addMode.validatesModes) {
   const checkedAdd = (name, mode) => {

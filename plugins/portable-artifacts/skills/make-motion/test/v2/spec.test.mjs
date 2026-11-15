@@ -14,8 +14,8 @@ import { hintRefusals } from '../../scripts/v2/voice/calls.mjs';
 // instead of registering into the shared ones. The modes are data the validator
 // and the timeline read (mode choice, default look and format, pace).
 const STUB_MODES = [
-  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0 },
-  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, voiceSpeed: 1.0, emphasisPause: 0 },
+  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 } },
+  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -14, truePeakDb: -1, lra: 9 } },
 ];
 function stubRegistries({ modes = STUB_MODES } = {}) {
   const r = {
@@ -432,7 +432,7 @@ test('withFilmDefaults keeps what the author wrote', () => {
   assert.deepEqual(withFilmDefaults(written, registries), written);
 });
 test('a registered mode supplies its own default look and format', () => {
-  const regs = stubRegistries({ modes: [{ name: 'pro', defaultLook: 'pop', defaultFormat: '1:1', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0 }] });
+  const regs = stubRegistries({ modes: [{ name: 'pro', defaultLook: 'pop', defaultFormat: '1:1', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 } }] });
   const out = withFilmDefaults({ version: 2, shots: [shotA] }, regs);
   assert.equal(out.look, 'pop');
   assert.equal(out.format, '1:1');

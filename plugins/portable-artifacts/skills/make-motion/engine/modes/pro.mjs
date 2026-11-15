@@ -16,4 +16,5 @@ export const pro = {
   captions: false,
   voiceSpeed: 1.0, // Kokoro speed of the narration (0.8 to 1.25, checked by validateMode)
   emphasisPause: 0, // seconds of silence before an emphasised word; 0: emphasis neither splits a call nor pauses
+  loudness: Object.freeze({ lufs: -16, truePeakDb: -1.5, lra: 11 }), // the voice master's targets (scripts/v2/voice/master.mjs)
 };

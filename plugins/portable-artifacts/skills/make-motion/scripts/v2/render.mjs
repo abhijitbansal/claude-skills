@@ -3,13 +3,23 @@
 // takes JPEG at quality 98 (a grainy frame costs far less to encode as JPEG). A frame whose __stateKey equals the
 // previous frame's is not captured again: the previous picture is sent twice. The video is written to a partial file
 // beside the output and renamed when ffmpeg is done, so a stop or a failure leaves no half-written MP4 behind.
+// A voiced film's narration (voice/master.mjs) is mixed and mastered before the first frame is captured, so a broken
+// audio chain fails fast; after the encode it is muxed into a second partial file, video copied, and only that file is
+// renamed to the output. A film without a voice takes none of those steps: its video is exactly what it was before.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { findFfmpeg } from '../lib/ffmpeg.mjs';
+import { registries } from '../../engine/registry.mjs';
+import { validateLoudness } from '../../engine/modes/index.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
+
+// The voice steps, loaded only for a voiced film: a silent film imports nothing of the voice (nor version 1's loudness
+// module, which brings its whole spec validator, about 200 ms of loading measured on the dev machine).
+const voiceSteps = () => import('./voice/master.mjs');
 
 export const JPEG_QUALITY = 98;
 const HELD_CHUNK = 150; // frames whose held flags are fetched in one page.evaluate
@@ -21,6 +31,7 @@ const STDERR_LINES = 5;
 const PARTIAL_MAX_AGE_MS = 60 * 60 * 1000;
 const PARTIAL_RE = /^\..+\.partial-\d+\.mp4$/;
 const QUIET = ['-hide_banner', '-loglevel', 'error'];
+const DEFAULT_MODE = 'pro'; // as the timeline's (engine/script/timing.mjs)
 
 // A JPEG decodes to full-range YUV; the video is limited-range yuv420p like every other, so scale between the two.
 const JPEG_RANGE_FILTER = ['-vf', 'scale=in_range=pc:out_range=tv'];
@@ -126,35 +137,61 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress }) {
   return captured;
 }
 
+// The mode's loudness targets for a voiced film's master; a voiced film rendered without its voice is refused, never
+// rendered silent as if it had none.
+function loudnessFor(film, voice) {
+  if (voice === undefined) {
+    if (film.voice !== undefined) throw new Error('renderFilm: the film has a voice; pass the voice stage\'s result ({ dir, sidecar }) as `voice`');
+    return null;
+  }
+  const name = film.mode ?? DEFAULT_MODE;
+  const mode = registries.modes.get(name);
+  validateLoudness({ ...mode, name });
+  return mode.loudness;
+}
+
 /**
  * @param {{ specPath?: string, out: string, exact?: boolean, onProgress?: (p: { frame: number, frames: number, captured: number }) => void,
- *   session?: object, signal?: AbortSignal }} opts a session (openSession) is used and left open when given; otherwise
- *   the film at specPath is loaded and opened here and closed after. exact: PNG capture (default: JPEG at quality 98).
- * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number }>}
+ *   session?: object, signal?: AbortSignal, voice?: { dir: string, sidecar: object } }} opts a session (openSession) is
+ *   used and left open when given; otherwise the film at specPath is loaded and opened here and closed after. exact: PNG
+ *   capture (default: JPEG at quality 98). voice: what the voice stage made, required for a film with `voice`.
+ * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number,
+ *   audio: { lufs: number, truePeakDb: number } | null }>} audio: the voice as measured in the finished file, null without one
  */
-export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal }) {
+export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice }) {
   const ffmpeg = await findFfmpeg();
   const own = session === undefined;
-  const open = own ? await openSession(loadFilm(specPath)) : session;
+  const loaded = own ? loadFilm(specPath) : null;
+  const loudness = loudnessFor(own ? loaded.film : session.film, voice);
+  const open = own ? await openSession(loaded) : session;
   const partial = path.join(path.dirname(out), `.${path.basename(out)}.partial-${process.pid}.mp4`);
+  const muxed = path.join(path.dirname(out), `.${path.basename(out)}.voice.partial-${process.pid}.mp4`);
   let encoder = null;
+  let work = null;
   const started = performance.now();
   try {
+    const steps = loudness === null ? null : await voiceSteps();
+    const run = steps?.ffmpegRunner(ffmpeg, signal);
     mkdirSync(path.dirname(out), { recursive: true });
     sweepPartials(path.dirname(out));
+    if (steps !== null) work = mkdtempSync(path.join(tmpdir(), 'mm-voice-'));
+    const master = steps === null ? null : await steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work });
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact })], signal);
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });
     await encoder.finish();
     encoder = null;
-    renameSync(partial, out);
+    const audio = master === null ? null : await steps.muxVoice({ run, video: partial, audio: master, out: muxed, duration: open.timeline.duration });
+    renameSync(audio === null ? partial : muxed, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
     const frames = open.timeline.frameCount;
     const bytes = statSync(out).size;
     const mbps = (bytes * BITS_PER_BYTE) / (frames / open.timeline.fps) / MEGA;
-    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps };
+    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps, audio };
   } finally {
     if (encoder) await encoder.stop();
     rmSync(partial, { force: true });
+    rmSync(muxed, { force: true });
+    if (work !== null) rmSync(work, { recursive: true, force: true });
     if (own) await open.close();
   }
 }

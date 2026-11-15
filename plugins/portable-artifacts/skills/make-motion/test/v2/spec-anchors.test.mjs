@@ -13,7 +13,7 @@ function stubRegistries() {
   const r = { kinds: createRegistry('kind'), looks: createRegistry('look'), modes: createRegistry('mode'), devices: createRegistry('device') };
   r.kinds.add('statement', { schema: { properties: { text: { type: 'string' } } }, targets: () => ['text'] });
   r.looks.add('desk', { name: 'desk', modes: ['pro'], cuts: ['cut'] });
-  r.modes.add('pro', { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0 });
+  r.modes.add('pro', { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 } });
   r.devices.add('circle', { supports: () => true });
   return r;
 }

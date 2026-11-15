@@ -2,12 +2,14 @@
 // outline of a film, and the shape of a finding. Pure: it builds strings and objects.
 //
 // The report has the same keys on every path, so a reader never has to guess which exist:
-//   ok, output, sheets, timed, voice, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings
+//   ok, output, sheets, timed, voice, audio, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings
 // and `error: { message, hint }` when a problem with the machine stopped the run (a missing film file, no browser, no
 // ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, a voice that cannot be made, an interrupt).
 // `timed` is 'estimated' or 'measured' (the timeline used), null before one was built. `voice` is
 // { cached, seconds, model } for a film whose voice was made (seconds: the narration's total length, the sum of its
-// shot WAVs; model: the sidecar's model record), else null. What had been done by then
+// shot WAVs; model: the sidecar's model record), else null. `audio` is { lufs, truePeakDb } of the voice in the
+// rendered MP4, as measured in that file (ebur128), for a film whose voice was muxed into it, else null. What had been
+// done by then
 // stays in it: the stages that ran, the findings already found. A film's own fault (it does not validate, the page
 // raises an error about it) is a finding, not an error.
 import { parseSay } from '../../engine/script/say.mjs';
@@ -59,6 +61,7 @@ export function reportOf(state) {
     sheets: state.sheets,
     timed: state.timed,
     voice: state.voice,
+    audio: state.audio,
     post: state.post,
     capture: state.capture,
     stages: state.stages,
@@ -75,7 +78,7 @@ export function reportOf(state) {
 
 /** The report of a run that never began (a usage error): empty, with the error. */
 export const errorReport = (error) => reportOf({
-  validated: false, error, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, post: null, capture: null,
+  validated: false, error, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,
   frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null,
 });
 

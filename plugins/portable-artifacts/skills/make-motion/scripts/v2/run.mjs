@@ -39,7 +39,7 @@ const synthesiseFilm = async (film, options) => (await import('./voice/synth.mjs
 const seconds = (started) => Math.round(((performance.now() - started) / MS_PER_SECOND) * MILLIS_DECIMALS) / MILLIS_DECIMALS;
 
 const newState = () => ({
-  validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, post: null, capture: null,
+  validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,
   frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, outline: null, sheetsDir: null,
 });
 
@@ -92,7 +92,7 @@ function outputPaths(options) {
 }
 
 // The stages that need the page: the sheets and the audit, then (unless --no-render) the video.
-async function reviewAndRender({ options, loaded, state, io: { signal, log } }) {
+async function reviewAndRender({ options, loaded, made, state, io: { signal, log } }) {
   const { out, sheetsDir } = outputPaths(options);
   state.sheetsDir = sheetsDir;
   const session = await openSession(loaded);
@@ -104,9 +104,9 @@ async function reviewAndRender({ options, loaded, state, io: { signal, log } }) 
     if (!options.noRender) {
       const rendered = await stage(state, log, 'render', () => {
         log('make: render started');
-        return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log) });
+        return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined });
       });
-      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps });
+      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, audio: rendered.audio });
     }
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];
@@ -183,7 +183,7 @@ async function execute(options, state, io) {
   }
   if (!options.noRender) await findFfmpeg(); // fail before the browser starts, naming how to fix it
   io.signal?.throwIfAborted();
-  await reviewAndRender({ options, loaded: { film, timeline, specDir }, state, io });
+  await reviewAndRender({ options, loaded: { film, timeline, specDir }, made, state, io });
 }
 
 /**

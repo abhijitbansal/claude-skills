@@ -172,7 +172,7 @@ function checkMode(spec, regs) {
     validateMode({ ...regs.modes.get(name), name });
   } catch (err) {
     if (!(err instanceof RangeError)) throw err;
-    return [{ path: 'mode', message: `${err.message}; the mode's data must have both voiceSpeed and emphasisPause` }];
+    return [{ path: 'mode', message: `${err.message}; the mode's data must have both voiceSpeed and emphasisPause, and loudness { lufs, truePeakDb, lra }` }];
   }
   return [];
 }

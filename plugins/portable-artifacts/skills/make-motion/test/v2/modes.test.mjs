@@ -17,7 +17,7 @@ import { auditFrame } from '../../engine/review/frame.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 
-const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false, voiceSpeed: 1.0, emphasisPause: 0 });
+const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 } });
 const SAY = 'One two three four five six.';
 const FPS = 30;
 
@@ -164,4 +164,36 @@ test('a mode added to the shared registry is checked as it is added: without voi
   assert.throws(() => registries.modes.add('test-bad-pause', { ...SLOW, name: 'test-bad-pause', emphasisPause: -1 }), /emphasisPause must be/);
   registries.modes.add('test-voiced', { ...SLOW, name: 'test-voiced' });
   assert.equal(registries.modes.get('test-voiced').voiceSpeed, 1.0);
+});
+
+// ---- loudness: the mastering targets of a voiced film are mode data ----
+
+test('pro and viral carry their loudness targets: pro -16 LUFS / -1.5 dBTP / LRA 11, viral -14 / -1 / 9', () => {
+  assert.deepEqual(registries.modes.get('pro').loudness, { lufs: -16, truePeakDb: -1.5, lra: 11 });
+  assert.deepEqual(registries.modes.get('viral').loudness, { lufs: -14, truePeakDb: -1, lra: 9 });
+  assert.ok(Object.isFrozen(registries.modes.get('pro').loudness), 'mode data cannot be changed in place');
+});
+
+test('a mode whose loudness is missing, out of range or malformed fails validateMode, naming the mode and the field', () => {
+  const ok = { ...SLOW };
+  assert.doesNotThrow(() => validateMode(ok));
+  const { loudness: _loudness, ...bare } = SLOW;
+  assert.throws(() => validateMode(bare), /mode "test-slow": loudness must be \{ lufs, truePeakDb, lra \}, got undefined/);
+  for (const lufs of [-31, -4, NaN, '-16', undefined]) {
+    assert.throws(() => validateMode({ ...ok, loudness: { ...ok.loudness, lufs } }), /mode "test-slow": loudness\.lufs must be a number from -30 to -5/, String(lufs));
+  }
+  for (const truePeakDb of [-3.1, 0.1, null]) {
+    assert.throws(() => validateMode({ ...ok, loudness: { ...ok.loudness, truePeakDb } }), /mode "test-slow": loudness\.truePeakDb must be a number from -3 to 0/, String(truePeakDb));
+  }
+  for (const lra of [0.5, 51, Infinity]) {
+    assert.throws(() => validateMode({ ...ok, loudness: { ...ok.loudness, lra } }), /mode "test-slow": loudness\.lra must be a number from 1 to 50/, String(lra));
+  }
+  assert.throws(() => validateMode({ ...ok, loudness: -16 }), /mode "test-slow": loudness must be \{ lufs, truePeakDb, lra \}/);
+});
+
+test('a mode added to the shared registry must carry its loudness: without it, it cannot register', () => {
+  const { loudness: _loudness, ...bare } = SLOW;
+  assert.throws(() => registries.modes.add('test-no-loudness', { ...bare, name: 'test-no-loudness' }), /mode "test-no-loudness": loudness must be \{ lufs, truePeakDb, lra \}/);
+  assert.equal(registries.modes.has('test-no-loudness'), false);
+  assert.throws(() => registries.modes.add('test-loud', { ...SLOW, name: 'test-loud', loudness: { lufs: 0, truePeakDb: -1, lra: 9 } }), /loudness\.lufs must be/);
 });

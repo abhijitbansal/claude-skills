@@ -492,9 +492,9 @@ test('describeError splits "what. how to fix" and gives a hint to the errors tha
 });
 
 test('a report has the same keys whatever stopped the run, and ok needs a valid film, no error and no mechanical finding', () => {
-  const base = { validated: true, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null };
+  const base = { validated: true, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null };
   const keys = Object.keys(reportOf(base)).sort();
-  assert.deepEqual(keys, ['bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice'].sort());
+  assert.deepEqual(keys, ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice'].sort());
   assert.equal(reportOf(base).ok, true);
   assert.equal(reportOf({ ...base, validated: false }).ok, false);
   assert.equal(reportOf({ ...base, findings: [{ kind: 'creative' }] }).ok, true);
