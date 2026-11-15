@@ -57,7 +57,7 @@ at all.
 git diff --name-only "$BASE_REF"..HEAD
 
 # RIGHT: pin the base to the actual divergence point first.
-merge_base="$(git merge-base "$BASE_REF" HEAD)"
+merge_base="$(git merge-base "$BASE_REF" HEAD)" || exit 0   # no base (shallow clone, unknown ref): fail open
 git log --name-only "$merge_base"..HEAD
 # (same file set: git diff --name-only "$BASE_REF"...HEAD — three-dot form;
 # log output also carries commit headers)
@@ -71,26 +71,43 @@ git log --name-only "$merge_base"..HEAD
 [[ "$cmd" =~ git\ push ]]
 
 # RIGHT: anchor to start-of-string or after a statement separator
-# (;  &&  ||  |), and terminate on a boundary that includes metacharacters,
+# (;  &&  ||  |  or a NEWLINE), allow any whitespace (tabs too) after the
+# separator, and terminate on a boundary that includes metacharacters,
 # not just whitespace/end-of-string.
 #
-# Keep the regex in a variable: written inline, the unescaped space before
-# `*` is a bash syntax error. Verified in bash 3.2 (macOS /bin/bash):
-# "git push" and "cd x; git push origin" match; "echo git push" and
-# "git pushx" do not.
-re='(^|[;&|]) *git[[:space:]]+push([[:space:]]|[;&|]|$)'
+# Keep the regex in a variable: written inline, the bracket and space rules
+# are easy to get wrong. $'...' puts a real newline in the separator class;
+# `^` alone only matches the start of the whole string, so a command on
+# line 2 is invisible without it. Verified in bash 3.2 (macOS /bin/bash).
+re=$'(^|[;&|\n])[[:space:]]*git[[:space:]]+push([[:space:]]|[;&|]|$)'
 [[ "$cmd" =~ $re ]]
 ```
+
+Case table (probed in `/bin/bash` 3.2; the older regex
+`(^|[;&|]) *git[[:space:]]+push(...)` missed the two rows marked MISS-before):
+
+| Command | Result |
+|---|---|
+| `git push` | match |
+| `cd x; git push origin` | match |
+| `cd r && git push` | match |
+| `cd repo` + newline + `git push` | match (MISS-before) |
+| `cd repo;` + tab + `git push` | match (MISS-before) |
+| `git` + tab + `push` | match |
+| `echo git push` | no match |
+| `git pushx` | no match |
+| `git commit -m "git push"` | no match |
+| `(git push)` | no match (documented gap, below) |
 
 This regex still misses `git -C <dir> push`, `git -c foo=bar push`,
 `FOO=1 git push` (anything between `git` and `push`, or an env prefix before
 `git`) and the subshell form `(git push)`; widen it if those matter.
 
-Statement-anchoring alone doesn't fix the quoted-string false positive —
-if the hook payload gives you the parsed argv (not just the raw string), match
-against that instead of the raw command text. If only the raw string is
-available, tightening the regex reduces false positives but cannot eliminate
-them; treat a match as advisory, not authoritative.
+The Bash hook payload carries the raw command string only, with no parsed
+argv, so a match is advisory, never authoritative. Statement-anchoring cannot
+remove the quoted-string false positive (`git commit -m "fix; git push bug"`
+still matches). Design the hook so a wrong match costs a harmless nudge, not a
+block.
 
 **3. Sentinel — fail-open on infra failure:**
 
@@ -114,6 +131,40 @@ When the gate is a Stop hook, combine the sentinel with `stop_hook_active`
 (Claude Code sets this on the *second* Stop-hook invocation in a turn) so
 the nudge fires once and the re-invocation after the user acts doesn't
 loop.
+
+## Checklist for authoring a guard hook (one that blocks or nudges on a command)
+
+Guard hooks keep failing in the same few ways; Cubby's own guards took dozens
+of fix commits (about 36 to 38 guard fixes measured by commit subject, 55 in the
+wider regex cluster). Run this list before shipping one, in addition to the
+anchoring rules above:
+
+1. Anchor every match to command position, never to a bare substring. A
+   command-position false positive reproduced eight times in the session that
+   fixed one; test each deny rule with the word in an argument, a path, a quoted
+   string and a filename.
+2. Strip a heredoc body only when it is provably data (the delimiter is quoted
+   and nothing evaluates it). A body that reaches `sh`, `eval` or `source` is
+   code; stripping it hides a real command.
+3. Resolve `git -C <dir>` and a preceding `cd <dir> &&` before judging what a
+   command touches, and normalise quotes and flags (`-c k=v`, `--git-dir`).
+4. Chained commands are the bypass: a guard that checks only the first command
+   let a chained delete through (a critical fix). Split on `;`, `&&`, `||`, `|`
+   and newlines and judge each part.
+5. Bound the statement splitter. A quadratic splitter took 27.6 s on a 40 KB
+   command against a 10 s hook timeout, so the hard check silently never ran.
+   Test with a command near the size you expect, against the real timeout, and
+   decide what a timeout means (fail open for a nudge, fail closed for a deny).
+6. Under `set -o pipefail`, `printf '%s' "$cmd" | grep -q …` can return 141
+   (SIGPIPE) and read as "no match". Use a herestring: `grep -q … <<< "$cmd"`.
+7. Fixtures come first and from another author: one should-block and one
+   should-allow set, written by an agent or person who has not seen the regex.
+   A guard has not been proven until it has been seen blocking the bad input.
+8. Warn only about what ran. A gate that warned on a chained command that never
+   executed trained people to ignore it.
+9. Keep the user-facing deny text naming the lesson and the plain form to use
+   instead, so the refusal teaches (see
+   `core-workflow:worktree-isolation-guard-refuses-complex-bash`).
 
 ## Evidence
 

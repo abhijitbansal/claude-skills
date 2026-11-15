@@ -5,7 +5,8 @@ description: "Set up or run a lightweight in-repo dev tracker (features / issues
 
 # dev-tracker (portable starter kit)
 
-One markdown ledger + dated archives + four modes. Proven shape: capture is instant
+One markdown ledger + dated archives + five modes (SETUP, CAPTURE, LIST, FIX,
+LEARN). Proven shape: capture is instant
 (no research), fixing is full ceremony (plan → approve → TDD → review), learning is
 suggest-only. Two hard-won pipeline rules are baked in: **shipped-archive** (items
 must not depend on manual device-verification to leave the active file — the origin
@@ -16,6 +17,7 @@ project hit 64 stuck items / 48× file growth before this rule) and the
 
 ```
 docs/tracker/
+  README.md             # project bindings (written by SETUP, read by every mode)
   TRACKER.md            # active items — one ## section each
   screenshots/          # <ID>-<n>.png, transient
   archive/YYYY-MM.md    # archived items, keyed by merge month
@@ -39,7 +41,17 @@ One-line intent. Expected vs actual for issues.
 
 - **ID** — `FEAT-NNN` / `BUG-NNN` / `TASK-NNN`, per-prefix counters, never reused.
   Next ID = max across `TRACKER.md` + all `archive/` files + 1; scan only real `##`
-  item headings (never IDs inside code fences or templates).
+  item headings (never IDs inside code fences or templates). Counters are
+  independent per prefix, so `BUG-045` and `FEAT-045` can both exist: they are
+  different items. Always cite the full ID, never a bare number.
+- **severity** — `high` (data loss, crash, blocks the main flow), `med`
+  (wrong behaviour with a workaround), `low` (cosmetic or rare). Omit for
+  features and tasks.
+- **session (`sNN`)** — the number of the working session that logged or fixed
+  the item, taken from the Session-# source in the bindings. A repo with no
+  session log leaves `logged:` as a date only.
+- **wave** — the set of items FIX groups into one branch and one merge. Archive
+  and the learn nudge both count in waves.
 - **type** — `feature` (new capability) | `issue` (defect/regression) | `task`
   (ops/deploy/verify/chore/tech-debt/docs — not a defect, not a capability).
 - **status** — `open → planned → in-progress → fixed → verified → closed`, plus
@@ -49,6 +61,23 @@ One-line intent. Expected vs actual for issues.
   never file a recurrence as a plain duplicate.
 
 ## Modes
+
+**SETUP** (once per repo, when `docs/tracker/` does not exist yet): create
+`docs/tracker/README.md` with the project bindings (section below, one answered
+line per binding; ask the user for any you cannot read from the repo), create
+`TRACKER.md` with the header below and an empty `archive/`, and commit
+`chore(tracker): set up`. The bindings live in the repo, not in this skill file,
+because a plugin update replaces the skill file and would erase them. Every
+other mode reads `docs/tracker/README.md` first and stops with "run SETUP" if it
+is missing.
+
+`TRACKER.md` header template:
+
+```markdown
+# Tracker
+status-flow: open → planned → in-progress → fixed → verified → closed (wont-fix, duplicate)
+last-learn: never
+```
 
 **CAPTURE** (cheap, instant — no source reads, no diagnosis): split prompt into items;
 dedup against open items + last ~20 closed on title/screen/family (high match bar —
@@ -90,17 +119,19 @@ commit it.
 
 ## Thin command files (optional)
 
-Create `.claude/commands/{feature,issue,task,backlog,fix,tracker-learn}.md`, each a
-2-line delegate, e.g.:
+Create `.claude/commands/{feature,issue,task,backlog,tracker-fix,tracker-learn}.md`,
+each a 2-line delegate, e.g.:
 
 ```markdown
 Log the following as a feature (type=feature) in the dev tracker.
-Follow the tracker skill (CAPTURE mode) exactly. Input: $ARGUMENTS
+Follow the `core-workflow:dev-tracker-portable` skill (CAPTURE mode) exactly. Input: $ARGUMENTS
 ```
 
-(`/fix` delegates to FIX mode, `/backlog` to LIST, `/tracker-learn` to LEARN.)
+(`/tracker-fix` delegates to FIX mode, `/backlog` to LIST, `/tracker-learn` to
+LEARN. The fix command is `/tracker-fix`, not `/fix`, which collides with other
+plugins' commands of that name.)
 
-## Project bindings — FILL THIS IN per project
+## Project bindings — SETUP writes these to `docs/tracker/README.md`
 
 - **Session-# source:** <e.g. docs/sessions/README.md last row, or omit sessions>
 - **Plan-doc home:** <e.g. docs/plans/>
@@ -111,6 +142,13 @@ Follow the tracker skill (CAPTURE mode) exactly. Input: $ARGUMENTS
 - **Wave/branch + model-routing rules:** <pointer to the repo's conventions doc>
 - **Release detection for shipped-archive:** <how to tell a fix shipped — release
   tags, TestFlight builds, deploy log>
+
+## Provenance
+
+This is a genericised copy of the tracker in the origin project (Cubby), whose
+own commands remain the better copy. This file was last touched by the catalog
+scrub on 2026-10-11 and no structural sync is recorded. When you next compare it
+with the origin copy, record the date and what you compared here.
 
 ## Token discipline
 
