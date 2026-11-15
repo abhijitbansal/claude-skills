@@ -49,9 +49,12 @@ export function loadVocab(tokenizerJson) {
   return new Map(entries);
 }
 
-/** Each character of `text` outside the vocab, once, in order of first appearance. */
+// The pad character ($, id 0): in the vocab, but a hint that contains it would put a pad mid-sequence.
+const PAD_CHAR = VOCAB_CHARS[PAD_ID];
+
+/** Each character of `text` outside the vocab, or the pad character `$`, once, in order of first appearance. */
 export function unknownChars(text, vocab) {
-  return [...new Set([...text].filter((c) => !vocab.has(c)))];
+  return [...new Set([...text].filter((c) => c === PAD_CHAR || !vocab.has(c)))];
 }
 
 /**

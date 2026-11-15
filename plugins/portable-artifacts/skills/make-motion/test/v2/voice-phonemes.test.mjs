@@ -13,6 +13,7 @@ const FIXTURE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fix
 const readFixture = (name) => JSON.parse(readFileSync(path.join(FIXTURE_DIR, name), 'utf8'));
 const PHONEME_CALLS = readFixture('phonemes.json').calls;
 const DROPPED_ENTRIES = readFixture('dropped.json').entries;
+const NORMALIZE_CALLS = readFixture('normalize.json').calls;
 const vocab = loadVocab(readFixture('tokenizer.json'));
 
 const EXPECTED_PHONEME_CALLS = 21;
@@ -37,6 +38,16 @@ test('toPhonemes builds the same string as kokoro-js 1.2.1 for every fixture cal
   for (const call of PHONEME_CALLS) {
     const actual = await toPhonemes(call.text, replayPhonemize(call.phonemize));
     assert.equal(actual, call.phonemes, call.text);
+  }
+});
+
+test('toPhonemes matches kokoro-js 1.2.1 on the normalize branches the spike fixtures miss', async () => {
+  const branches = new Set(NORMALIZE_CALLS.map((c) => c.branch));
+  for (const needed of ['titles', 'decimals', 'ranges', 'yeah', 'plural-years', 'dotted-initials', 'curly-quotes', 'pounds']) {
+    assert.ok(branches.has(needed), needed);
+  }
+  for (const call of NORMALIZE_CALLS) {
+    assert.equal(await toPhonemes(call.text, replayPhonemize(call.phonemize)), call.phonemes, `${call.branch}: ${call.text}`);
   }
 });
 
@@ -90,6 +101,11 @@ test('toIds reports nothing dropped when every character is in the vocab', () =>
 test('unknownChars lists each character outside the vocab once, in order (for IPA hint validation)', () => {
   assert.deepEqual(unknownChars('a˞bɝ˞', vocab), ['˞', 'ɝ']);
   assert.deepEqual(unknownChars('kˈoʊkəɹoʊ', vocab), []);
+});
+
+test('unknownChars treats the pad character $ as unknown, so a hint cannot inject a pad', () => {
+  assert.deepEqual(unknownChars('h$ɪ', vocab), ['$']);
+  assert.deepEqual(unknownChars('h$ɪ', EMBEDDED_VOCAB), ['$']);
 });
 
 test('the embedded vocab equals the pinned tokenizer.json vocab, id for id', () => {

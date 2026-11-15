@@ -1,0 +1,270 @@
+{
+ "about": "kokoro-js 1.2.1 phoneme strings (expected) and recorded phonemizer 1.2.1 calls (en-us) for normalize branches",
+ "generatedBy": "node .scratch/voice/make-normalize-fixture.mjs .scratch/voice-spike/rt .scratch/voice-spike/dl model plugins/portable-artifacts/skills/make-motion/test/v2/fixtures/voice/normalize.json",
+ "calls": [
+  {
+   "branch": "titles",
+   "text": "Dr. Smith met Mr. Jones, Ms. Lee and Mrs. Hall.",
+   "phonemes": "dˈɑːktɚ smˈɪθ mˈɛt mˈɪstɚ dʒˈoʊnz, mˈɪs lˈiː ænd mˈɪsɪz hˈɔːl.",
+   "phonemize": [
+    {
+     "input": "Doctor Smith met Mister Jones",
+     "lang": "en-us",
+     "output": [
+      "dˈɑːktɚ smˈɪθ mˈɛt mˈɪstɚ dʒˈoʊnz"
+     ]
+    },
+    {
+     "input": "Miss Lee and Mrs Hall",
+     "lang": "en-us",
+     "output": [
+      "mˈɪs lˈiː ænd mˈɪsɪz hˈɔːl"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "decimals",
+   "text": "Prices rose 3.5 percent, then .75 more.",
+   "phonemes": "pɹˈaɪsᵻz ɹˈoʊz θɹˈiː pˈɔɪnt fˈaɪv pɚsˈɛnt, ðˈɛn pˈɔɪnt sˈɛvən fˈaɪv mˈoːɹ.",
+   "phonemize": [
+    {
+     "input": "Prices rose 3 point 5 percent",
+     "lang": "en-us",
+     "output": [
+      "pɹˈaɪsᵻz ɹˈoʊz θɹˈiː pˈɔɪnt fˈaɪv pɚsˈɛnt"
+     ]
+    },
+    {
+     "input": "then  point 7 5 more",
+     "lang": "en-us",
+     "output": [
+      "ðˈɛn pˈɔɪnt sˈɛvən fˈaɪv mˈoːɹ"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "ranges",
+   "text": "Pick 1-2 items from pages 10-12.",
+   "phonemes": "pˈɪk wˈʌn tə tˈuː ˈaɪɾəmz fɹʌm pˈeɪdʒᵻz tˈɛn tə twˈɛlv.",
+   "phonemize": [
+    {
+     "input": "Pick 1 to 2 items from pages 10 to 12",
+     "lang": "en-us",
+     "output": [
+      "pˈɪk wˈʌn tə tˈuː ˈaɪɾəmz fɹʌm pˈeɪdʒᵻz tˈɛn tə twˈɛlv"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "yeah",
+   "text": "Yeah, yea, we agree.",
+   "phonemes": "jˈɛə, jˈɛə, wiː ɐɡɹˈiː.",
+   "phonemize": [
+    {
+     "input": "Ye'a",
+     "lang": "en-us",
+     "output": [
+      "jˈɛə"
+     ]
+    },
+    {
+     "input": "ye'a",
+     "lang": "en-us",
+     "output": [
+      "jˈɛə"
+     ]
+    },
+    {
+     "input": "we agree",
+     "lang": "en-us",
+     "output": [
+      "wiː ɐɡɹˈiː"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "plural-years",
+   "text": "Music of the 1990s and the 1800s.",
+   "phonemes": "mjˈuːzɪk ʌvðə nˈaɪntiːn nˈaɪndiz ænd ðɪ ˈeɪtiːn hˈʌndɹɪdz.",
+   "phonemize": [
+    {
+     "input": "Music of the 19 90s and the 18 hundreds",
+     "lang": "en-us",
+     "output": [
+      "mjˈuːzɪk ʌvðə nˈaɪntiːn nˈaɪnti z ænd ðɪ ˈeɪtiːn hˈʌndɹɪdz"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "years",
+   "text": "In 1905, 2000 and 2010 we grew.",
+   "phonemes": "ɪn nˈaɪntiːn ˈoʊ fˈaɪv, tˈuː θˈaʊzənd ænd twˈɛnti tˈɛn wiː ɡɹˈuː.",
+   "phonemize": [
+    {
+     "input": "In 19 oh 5",
+     "lang": "en-us",
+     "output": [
+      "ɪn nˈaɪntiːn ˈoʊ fˈaɪv"
+     ]
+    },
+    {
+     "input": "2000 and 20 10 we grew",
+     "lang": "en-us",
+     "output": [
+      "tˈuː θˈaʊzənd ænd twˈɛnti tˈɛn wiː ɡɹˈuː"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "dotted-initials",
+   "text": "The U.S.A. is large, and so is the U.K. economy.",
+   "phonemes": "ðə jˈuːˈɛsˈeɪ ɪz lˈɑːɹdʒ, ænd sˌoʊ ɪz ðə jˈuːkˈeɪ ɪkˈɑːnəmi.",
+   "phonemize": [
+    {
+     "input": "The U-S-A- is large",
+     "lang": "en-us",
+     "output": [
+      "ðə jˈuːˈɛsˈeɪ ɪz lˈɑːɹdʒ"
+     ]
+    },
+    {
+     "input": "and so is the U-K- economy",
+     "lang": "en-us",
+     "output": [
+      "ænd sˌoʊ ɪz ðə jˈuːkˈeɪ ɪkˈɑːnəmi"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "curly-quotes",
+   "text": "“Curly” quotes and ‘single’ ones.",
+   "phonemes": "\"kˈɜːli\" kwˈoʊts ænd sˈɪŋɡəl wˌʌnz.",
+   "phonemize": [
+    {
+     "input": "Curly",
+     "lang": "en-us",
+     "output": [
+      "kˈɜːli"
+     ]
+    },
+    {
+     "input": "quotes and 'single' ones",
+     "lang": "en-us",
+     "output": [
+      "kwˈoʊts ænd sˈɪŋɡəl wˌʌnz"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "pounds",
+   "text": "It costs £1, £5 or £2.05 today.",
+   "phonemes": "ɪt kˈɔsts wˈʌn pˈaʊnd, fˈaɪv pˈaʊndz ɔːɹ tˈuː pˈaʊndz ænd fˈaɪv pˈɛns tədˈeɪ.",
+   "phonemize": [
+    {
+     "input": "It costs 1 pound",
+     "lang": "en-us",
+     "output": [
+      "ɪt kˈɔsts wˈʌn pˈaʊnd"
+     ]
+    },
+    {
+     "input": "5 pounds or 2 pounds and 5 pence today",
+     "lang": "en-us",
+     "output": [
+      "fˈaɪv pˈaʊndz ɔːɹ tˈuː pˈaʊndz ænd fˈaɪv pˈɛns tədˈeɪ"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "dollars",
+   "text": "It is $1, $0.01 or $3 million.",
+   "phonemes": "ɪɾ ɪz wˈʌn dˈɑːlɚ, zˈiəɹoʊ dˈɑːlɚz ænd wˈʌn sˈɛnt ɔːɹ θɹˈiː mˈɪliən dˈɑːlɚz.",
+   "phonemize": [
+    {
+     "input": "It is 1 dollar",
+     "lang": "en-us",
+     "output": [
+      "ɪɾ ɪz wˈʌn dˈɑːlɚ"
+     ]
+    },
+    {
+     "input": "0 dollars and 1 cent or 3 million dollars",
+     "lang": "en-us",
+     "output": [
+      "zˈiəɹoʊ dˈɑːlɚz ænd wˈʌn sˈɛnt ɔːɹ θɹˈiː mˈɪliən dˈɑːlɚz"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "etc",
+   "text": "Apples, pears, etc. are fruit.",
+   "phonemes": "ˈæpəlz, pˈɛɹz, ɛtsˈɛtɹə. ɑːɹ fɹˈuːt.",
+   "phonemize": [
+    {
+     "input": "Apples",
+     "lang": "en-us",
+     "output": [
+      "ˈæpəlz"
+     ]
+    },
+    {
+     "input": "pears",
+     "lang": "en-us",
+     "output": [
+      "pˈɛɹz"
+     ]
+    },
+    {
+     "input": "etc",
+     "lang": "en-us",
+     "output": [
+      "ɛtsˈɛtɹə"
+     ]
+    },
+    {
+     "input": "are fruit",
+     "lang": "en-us",
+     "output": [
+      "ɑːɹ fɹˈuːt"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  },
+  {
+   "branch": "acronym-plural",
+   "text": "Two APIs and the CEOs agree.",
+   "phonemes": "tˈuː ˌeɪpˌiːˈaɪz ænd ðə sˌiːˌiːˈoʊz ɐɡɹˈiː.",
+   "phonemize": [
+    {
+     "input": "Two APIs and the CEOs agree",
+     "lang": "en-us",
+     "output": [
+      "tˈuː ˌeɪpˌiːˈaɪz ænd ðə sˌiːˌiːˈoʊz ɐɡɹˈiː"
+     ]
+    }
+   ],
+   "spikeMatches": true
+  }
+ ]
+}

@@ -1,9 +1,10 @@
 // Phoneme strings for Kokoro narration, built exactly as kokoro-js 1.2.1 builds them for an American voice.
 //
 // `normalize` and `toPhonemes` are a transcription of kokoro-js 1.2.1 (dist/kokoro.js, the unexported text function),
-// package author hexgrad, licensed under the Apache License, Version 2.0.
+// package author hexgrad, licensed under the Apache License, Version 2.0 (https://www.apache.org/licenses/LICENSE-2.0).
 // Changes: readable names, the phonemizer is injected, ES module exports.
-// The transcription matched kokoro-js's own phoneme string on 21 of 21 recorded calls (test/v2/voice-phonemes.test.mjs).
+// The transcription matched kokoro-js's own phoneme string on 37 of 37 recorded calls (test/v2/voice-phonemes.test.mjs:
+// fixtures phonemes.json 21, dropped.json 4, normalize.json 12).
 //
 // Pure: no I/O. The phonemizer is passed in as `phonemize(text, lang) -> Promise<string[]>`.
 

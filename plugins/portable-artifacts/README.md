@@ -318,7 +318,7 @@ Everything this plugin depends on is open source:
 | Funnel Display, Host Grotesk, Commit Mono, Young Serif, Schibsted Grotesk, JetBrains Mono, Big Shoulders Display, Familjen Grotesk, Martian Mono, Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible (latin subsets, via Fontsource) | OFL-1.1 |
 | [Kenney](https://kenney.nl) Interface Sounds and Impact Sounds (12 files, bundled as 48 kHz WAV) | CC0-1.0 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
-| [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js` 1.2.1, installed on demand into `optional/voice` from its lockfile) | Apache-2.0 |
+| [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js` 1.2.1, installed on demand into `optional/voice` from its lockfile; in make-motion version 2, `normalize` and `toPhonemes` in `scripts/v2/voice/phonemes.mjs` are transcribed from kokoro-js 1.2.1) | Apache-2.0 |
 | [MODNet](https://github.com/ZHKKKe/MODNet) portrait matting weights (about 25 MB, downloaded on first use of `cutout.mjs` from Hugging Face `Xenova/modnet`, pinned to one commit and a SHA-256) | Apache-2.0 |
 | Kokoro-82M ONNX weights (about 90 MB, downloaded on first voiceover from Hugging Face onnx-community/Kokoro-82M-v1.0-ONNX, pinned to one commit and a SHA-256 per file) | Apache-2.0 |
 | Kokoro-82M ONNX timestamped weights and the `af_heart` voice file (about 93 MB, downloaded on first version 2 voiceover from Hugging Face onnx-community/Kokoro-82M-v1.0-ONNX-timestamped, pinned to one commit and a SHA-256 per file; word times are read from the model) | Apache-2.0 |
