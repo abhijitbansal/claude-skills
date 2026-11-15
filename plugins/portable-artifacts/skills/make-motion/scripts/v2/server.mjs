@@ -8,6 +8,7 @@ import { createReadStream, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { registries } from '../../engine/registry.mjs';
+import '../../engine/kinds/index.mjs';
 import { srcsOfShot } from '../../engine/assets.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -36,7 +37,8 @@ const ASSET_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const CSP = "default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 // "/" or "/seg/seg": each segment starts with a letter or digit and holds only letters, digits, ".", "_" and "-".
 const SAFE_PATH = /^\/(?:[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*)?$/;
-const ASSET_ROUTE = /^\/asset\/(\d+)$/;
+const ASSET_ROUTE = /^\/asset\/(0|[1-9]\d*)$/; // a canonical index: not 00, 1.0 or 1e1
+export const MAX_IMAGES = 64; // distinct images a film may use
 const MISSING_CODES = new Set(['ENOENT', 'ENOTDIR']);
 
 function reply(res, status, text) {
@@ -44,7 +46,7 @@ function reply(res, status, text) {
   res.end(text);
 }
 
-function sendFile(req, res, file) {
+function sendFile(ctx, req, res, file) {
   res.writeHead(200, {
     'content-type': MIME[path.extname(file).toLowerCase()] ?? 'application/octet-stream',
     'content-length': statSync(file).size,
@@ -52,7 +54,10 @@ function sendFile(req, res, file) {
   });
   if (req.method === 'HEAD') return res.end();
   const stream = createReadStream(file);
-  stream.on('error', () => res.destroy());
+  stream.on('error', (err) => { // after the headers: all that is left is to say so and cut the response
+    ctx.report(err);
+    res.destroy();
+  });
   res.on('close', () => stream.destroy());
   return stream.pipe(res);
 }
@@ -72,36 +77,36 @@ export function fileInside(root, file) {
 }
 
 // `rel` is already a safe relative path; `extensions` is what may be served from `root`.
-function serveUnder(req, res, root, rel, extensions) {
+function serveUnder(ctx, req, res, root, rel, extensions) {
   if (!extensions.has(path.extname(rel).toLowerCase())) return reply(res, 404, 'not found');
   const file = fileInside(root, path.join(root, rel));
-  return file ? sendFile(req, res, file) : reply(res, 404, 'not found');
+  return file ? sendFile(ctx, req, res, file) : reply(res, 404, 'not found');
 }
 
 // The asset is checked again on every request: it must still resolve, through its links, to an image file inside the
 // film's folder, whatever has happened to the path since the server started.
-function serveAsset(req, res, asset) {
+function serveAsset(ctx, req, res, asset) {
   if (!asset) return reply(res, 404, 'not found');
   const file = fileInside(asset.root, asset.file);
-  return file && ASSET_EXTENSIONS.has(path.extname(file).toLowerCase()) ? sendFile(req, res, file) : reply(res, 404, 'not found');
+  return file && ASSET_EXTENSIONS.has(path.extname(file).toLowerCase()) ? sendFile(ctx, req, res, file) : reply(res, 404, 'not found');
 }
 
 function route(ctx, req, res) {
   const pathname = req.url.split('?')[0];
   if (!SAFE_PATH.test(pathname)) return reply(res, 400, 'bad path');
-  if (pathname === '/') return sendFile(req, res, PAGE_FILE);
-  if (Object.hasOwn(FIXED_FILES, pathname)) return sendFile(req, res, FIXED_FILES[pathname]);
+  if (pathname === '/') return sendFile(ctx, req, res, PAGE_FILE);
+  if (Object.hasOwn(FIXED_FILES, pathname)) return sendFile(ctx, req, res, FIXED_FILES[pathname]);
   if (pathname === '/film.json') {
     res.writeHead(200, { 'content-type': MIME['.json'], 'cache-control': 'no-store' });
     return res.end(ctx.filmJson);
   }
   const asset = ASSET_ROUTE.exec(pathname);
-  if (asset) return serveAsset(req, res, ctx.assets[Number(asset[1])]);
+  if (asset) return serveAsset(ctx, req, res, ctx.assets[Number(asset[1])]);
   if (pathname.startsWith(FONT_ROUTE)) {
     const name = pathname.slice(FONT_ROUTE.length);
-    return name.includes('/') ? reply(res, 404, 'not found') : serveUnder(req, res, FONTS_DIR, name, FONT_EXTENSIONS);
+    return name.includes('/') ? reply(res, 404, 'not found') : serveUnder(ctx, req, res, FONTS_DIR, name, FONT_EXTENSIONS);
   }
-  if (pathname.startsWith(ENGINE_ROUTE)) return serveUnder(req, res, ENGINE_DIR, pathname.slice(ENGINE_ROUTE.length), ENGINE_EXTENSIONS);
+  if (pathname.startsWith(ENGINE_ROUTE)) return serveUnder(ctx, req, res, ENGINE_DIR, pathname.slice(ENGINE_ROUTE.length), ENGINE_EXTENSIONS);
   return reply(res, 404, 'not found');
 }
 
@@ -140,13 +145,34 @@ function resolveSrc(specDir, shotId, src) {
   return { root, file };
 }
 
-// Each src a shot's kind names (its srcFields), in film order: { root, file } with the real path. A shot whose kind
-// is not registered contributes none: the page reports the unknown kind when it expands the shot.
-function assetFiles(film, specDir) {
-  return film.shots.flatMap((shot) => {
-    if (!registries.kinds.has(shot.show)) return [];
-    return srcsOfShot(shot, registries.kinds.get(shot.show).srcFields).map((src) => resolveSrc(specDir, shot.id, src));
-  });
+// The distinct src strings the film names (through each shot's kind srcFields), in first-seen order, each with the
+// shot that first named it. A shot whose kind is not registered contributes none: the page reports the unknown kind
+// when it expands the shot. A string used twice is one file, so one entry.
+function distinctSrcs(film) {
+  const seen = new Map();
+  for (const shot of film.shots) {
+    if (!registries.kinds.has(shot.show)) continue;
+    for (const src of srcsOfShot(shot, registries.kinds.get(shot.show).srcFields)) {
+      if (!seen.has(src)) seen.set(src, shot.id);
+    }
+  }
+  if (seen.size > MAX_IMAGES) throw new Error(`a film may use at most ${MAX_IMAGES} images; this one names ${seen.size}`);
+  return seen;
+}
+
+// { srcs, files }: the src strings /film.json lists, and for each (same index, so /asset/<n>) its { root, file }.
+function assetList(film, specDir) {
+  const seen = distinctSrcs(film);
+  return { srcs: [...seen.keys()], files: [...seen].map(([src, shotId]) => resolveSrc(specDir, shotId, src)) };
+}
+
+// stderr is the last place to report to: if writing there fails there is nowhere left to say so.
+function writeStderr(text) {
+  try {
+    process.stderr.write(text);
+  } catch {
+    // nothing further to do
+  }
 }
 
 /**
@@ -159,12 +185,18 @@ export async function startV2Server({ film, timeline, specDir, onError }) {
   if (!film || !Array.isArray(film.shots)) throw new TypeError('startV2Server: film must have a shots array');
   if (!timeline || !Array.isArray(timeline.shots)) throw new TypeError('startV2Server: timeline must have a shots array (see buildTimeline)');
   if (typeof specDir !== 'string') throw new TypeError('startV2Server: specDir must be a path');
-  const assets = assetFiles(film, specDir);
+  const { srcs, files } = assetList(film, specDir);
+  // A callback that throws must not take the server down with it: say so on stderr and carry on.
   const report = (err) => {
-    process.stderr.write(`v2 server: ${err?.stack ?? err}\n`);
-    if (onError) onError(err);
+    writeStderr(`v2 server: ${err?.stack ?? err}\n`);
+    if (!onError) return;
+    try {
+      onError(err);
+    } catch (callbackErr) {
+      writeStderr(`v2 server: onError threw: ${callbackErr?.stack ?? callbackErr}\n`);
+    }
   };
-  const ctx = { assets, filmJson: JSON.stringify({ film, timeline, assetCount: assets.length }), allowedHosts: new Set(), report };
+  const ctx = { assets: files, filmJson: JSON.stringify({ film, timeline, assets: srcs }), allowedHosts: new Set(), report };
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {
     server.once('error', reject);

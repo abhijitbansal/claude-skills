@@ -5,14 +5,17 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import net from 'node:net';
 import { deflateSync, crc32 } from 'node:zlib';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, unlinkSync, realpathSync } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { pathToFileURL } from 'node:url';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, unlinkSync, realpathSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { registries } from '../../engine/registry.mjs';
 import { node, isNode } from '../../engine/graph/node.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import '../../engine/kinds/free.mjs';
+import '../../engine/kinds/index.mjs';
 import { startV2Server, fileInside } from '../../scripts/v2/server.mjs';
 import { openStage } from './helpers/stage.mjs';
 
@@ -85,6 +88,7 @@ before(() => {
   writeFileSync(path.join(specDir, 'assets', 'pic.png'), solidPng(4, 4, RED));
   writeFileSync(path.join(specDir, 'assets', 'pic2.png'), solidPng(4, 4, BLUE));
   writeFileSync(path.join(specDir, 'secret.txt'), 'inside the folder but not an image');
+  writeFileSync(path.join(specDir, 'assets', 'bad.png'), 'a .png name, but not a picture');
   registries.kinds.add('pic', { schema: { properties: { src: { type: 'string' } } }, srcFields: ['src'], targets: () => [] });
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
@@ -530,4 +534,94 @@ test('a server error after listen is reported through onError, and close() twice
   assert.equal(seen.length, 1); assert.equal(seen[0].message, 'boom');
   await s.close();
   await s.close();
+});
+
+// ---- round 2: asset list, caps, decode errors, callbacks, stream errors ----
+
+const run = promisify(execFile);
+const freeFilm = (...shotSrcs) => ({ fps: FPS, shots: shotSrcs.map((srcs, i) => ({ id: `s${i}`, show: 'free', srcs, hold: 1 })) });
+const filmJsonOf = async (s) => JSON.parse((await get(s, '/film.json')).body.toString('utf8'));
+
+test('a fresh process that imports only the server has the kinds registered and serves the film images', async () => {
+  const url = (file) => JSON.stringify(pathToFileURL(path.resolve(import.meta.dirname, file)).href);
+  const code = `
+    import { startV2Server } from ${url('../../scripts/v2/server.mjs')};
+    import { buildTimeline } from ${url('../../engine/script/timing.mjs')};
+    const film = { fps: 30, shots: [{ id: 's', show: 'free', srcs: ['assets/pic.png'], hold: 1 }] };
+    const s = await startV2Server({ film, timeline: buildTimeline(film, { fps: 30 }), specDir: ${JSON.stringify(specDir)} });
+    const meta = await (await fetch(s.url + 'film.json')).json();
+    const asset = await fetch(s.url + 'asset/0');
+    console.log(JSON.stringify({ assets: meta.assets, status: asset.status }));
+    await s.close();`;
+  const { stdout } = await run(process.execPath, ['--input-type=module', '-e', code]);
+  assert.deepEqual(JSON.parse(stdout), { assets: ['assets/pic.png'], status: 200 });
+});
+
+test('film.json lists the distinct src strings in index order, one file per string', async (t) => {
+  const s = await serve(t, freeFilm(['assets/pic.png'], ['assets/pic.png', 'assets/pic2.png']));
+  assert.deepEqual((await filmJsonOf(s)).assets, ['assets/pic.png', 'assets/pic2.png']);
+  assert.deepEqual((await get(s, '/asset/0')).body, solidPng(4, 4, RED));
+  assert.deepEqual((await get(s, '/asset/1')).body, solidPng(4, 4, BLUE));
+  assert.equal((await get(s, '/asset/2')).status, 404);
+});
+
+test('a film may name at most 64 distinct images, and free takes at most 16 per shot', async (t) => {
+  const many = { fps: FPS, shots: Array.from({ length: 65 }, (_, i) => ({ id: `p${i}`, show: 'pic', src: `assets/missing-${i}.png`, hold: 1 })) };
+  await assert.rejects(() => serve(t, many), /a film may use at most 64 images; this one names 65/);
+  assert.equal(registries.kinds.get('free').schema.properties.srcs.maxItems, 16);
+});
+
+test('an image that cannot be decoded rejects __ready naming the src', async (t) => {
+  const film = freeFilm(['assets/bad.png']);
+  let stage;
+  try {
+    stage = await openStage(film, { specDir });
+  } catch (err) {
+    assert.match(err.message, /image "assets\/bad\.png" could not be loaded: /);
+    return;
+  }
+  if (stage === null) return t.skip('no browser');
+  await stage.close();
+  assert.fail('the page started with an undecodable image');
+});
+
+test('a throwing onError cannot crash the server', async (t) => {
+  const { dir } = scratchDir(t);
+  const calls = [];
+  const s = await serve(t, picFilm(), { specDir: dir, onError: (err) => { calls.push(err); throw new Error('callback failed'); } });
+  unlinkSync(path.join(dir, 'assets', 'pic.png'));
+  symlinkSync('pic.png', path.join(dir, 'assets', 'pic.png'));
+  assert.equal((await get(s, '/asset/0')).status, 500);
+  assert.doesNotThrow(() => s.server.emit('error', new Error('later')));
+  assert.equal(calls.length, 2);
+  assert.equal((await get(s, '/')).status, 200); // still serving
+});
+
+test('a read error after the headers are sent is reported and the response destroyed', async (t) => {
+  if (process.getuid?.() === 0) return t.skip('root can read a mode 000 file');
+  const { dir } = scratchDir(t);
+  const seen = [];
+  const s = await serve(t, picFilm(), { specDir: dir, onError: (err) => seen.push(err) });
+  const file = path.join(dir, 'assets', 'pic.png');
+  chmodSync(file, 0o000); // stat still works, so the headers go out; opening for read then fails (rm still removes it)
+  const outcome = await get(s, '/asset/0').catch((err) => err);
+  assert.ok(outcome instanceof Error || outcome.body.length === 0, 'the client must not get the file');
+  assert.equal(seen.length, 1); assert.equal(seen[0].code, 'EACCES');
+});
+
+test('/asset/<n> takes only a canonical non-negative integer', async (t) => {
+  const s = await serve(t, picFilm());
+  assert.equal((await get(s, '/asset/0')).status, 200);
+  for (const bad of ['/asset/00', '/asset/01', '/asset/1.0', '/asset/1e1', '/asset/0x0']) {
+    assert.equal((await get(s, bad)).status, 404, bad);
+  }
+  // A leading sign or an empty segment is refused earlier still, as a bad path (400): never served.
+  for (const bad of ['/asset/+1', '/asset/-1', '/asset/']) assert.ok([400, 404].includes((await get(s, bad)).status), bad);
+});
+
+test('a text node whose layout has no words has a zero box at its position, never NaN', async (t) => {
+  const emptyLine = { size: 20, width: 0, height: 0, overflow: false, lines: [{ x: 0, y: 16, width: 0, words: [] }] };
+  const a = await stageFor(t, filmOf([{ type: 'text', id: 'empty', props: { x: 120, y: 80, layout: emptyLine, font: { family: 'Geist', size: 20 } } }])); if (!a) return;
+  const [empty] = await a.page.evaluate(() => window.__snapshot(0));
+  assert.deepEqual(empty.bbox, [120, 80, 0, 0]);
 });

@@ -4,7 +4,7 @@
 // Cuts, looks, fields, devices and the WebGL post pass are later tasks: this stage draws one shot at a time
 // straight onto the visible canvas and reports post: '2d'.
 import { registries } from '../registry.mjs';
-import '../kinds/free.mjs';
+import '../kinds/index.mjs';
 import { sampleGraph, stateKey } from '../graph/sample.mjs';
 import { camera as makeCamera, applyCamera } from '../graph/camera.mjs';
 import { canvasSize } from '/v1/formats.mjs';
@@ -25,25 +25,21 @@ async function fetchJson(url) {
   return res.json();
 }
 
-async function loadAssets(count) {
-  return Promise.all(Array.from({ length: count }, async (_, n) => {
-    const res = await fetch(`/asset/${n}`);
-    if (!res.ok) throw new Error(`/asset/${n}: ${res.status}`);
-    return createImageBitmap(await res.blob());
-  }));
+// One picture per distinct src. `srcs` is the server's list from /film.json, and /asset/<n> is its n-th entry.
+// A failed fetch or decode rejects naming the src.
+async function loadImage(src, n) {
+  const res = await fetch(`/asset/${n}`);
+  if (!res.ok) throw new Error(`image "${src}" could not be loaded: HTTP ${res.status}`);
+  try {
+    return await createImageBitmap(await res.blob());
+  } catch (err) {
+    throw new Error(`image "${src}" could not be loaded: ${err.message}`);
+  }
 }
 
-// Every src the film names, in the order the server numbered them (/asset/<n>).
-const filmSrcs = (film) => film.shots.flatMap((shot) => srcsOfShot(shot, registries.kinds.get(shot.show).srcFields));
-
-// src string -> loaded picture. The same string is the same file (a path in the film's folder), so a repeat keeps
-// the first.
-function imagesBySrc(film, bitmaps) {
-  const srcs = filmSrcs(film);
-  if (srcs.length !== bitmaps.length) throw new Error(`the film names ${srcs.length} srcs but the server offered ${bitmaps.length}`);
-  const images = new Map();
-  srcs.forEach((src, n) => { if (!images.has(src)) images.set(src, bitmaps[n]); });
-  return images;
+async function loadAssets(srcs) {
+  const bitmaps = await Promise.all(srcs.map(loadImage));
+  return new Map(srcs.map((src, n) => [src, bitmaps[n]]));
 }
 
 // ctx.asset(src) for a shot: the size of one of the srcs the shot declares; any other string is an error.
@@ -81,7 +77,7 @@ function expandShot(film, timeline, index, env) {
 }
 
 async function init() {
-  const { film, timeline, assetCount } = await fetchJson('/film.json');
+  const { film, timeline, assets: srcs } = await fetchJson('/film.json');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
   const [w, h] = canvasSize(film);
   const canvas = { w, h };
@@ -90,8 +86,8 @@ async function init() {
   element.height = h;
   const ctx = element.getContext('2d');
   await loadFaces(facesFor(film));
-  const assets = imagesBySrc(film, await loadAssets(assetCount));
-  const env = { canvas, measure: createMeasure(document.createElement('canvas').getContext('2d')), assets };
+  const assets = await loadAssets(srcs);
+  const env ={ canvas, measure: createMeasure(document.createElement('canvas').getContext('2d')), assets };
   const shots = timeline.shots.map((_, i) => expandShot(film, timeline, i, env));
   const { fps, frameCount } = timeline;
 

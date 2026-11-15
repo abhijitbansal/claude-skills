@@ -7,6 +7,7 @@ import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 
 const DEFAULT_BACKGROUND = '#000000';
+const MAX_SRCS_PER_SHOT = 16;
 
 const isPlainObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -86,7 +87,7 @@ registries.kinds.add('free', {
       nodes: { type: 'array' },
       camera: { type: 'object' },
       background: { type: 'string' },
-      srcs: { type: 'array', items: { type: 'string' } },
+      srcs: { type: 'array', items: { type: 'string' }, maxItems: MAX_SRCS_PER_SHOT },
     },
   },
   srcFields: ['srcs'],

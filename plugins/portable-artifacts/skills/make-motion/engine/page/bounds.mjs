@@ -63,7 +63,8 @@ function textBounds(n) {
   const { layout } = n.props;
   if (!layout || layout.lines.length === 0) return null;
   const metrics = { ascent: layout.lines[0].y, descent: layout.height - layout.lines.at(-1).y };
-  return union(layout.lines.flatMap((line) => line.words.map((word) => wordBox(line, word, n.words?.[word.index], metrics))));
+  const boxes = layout.lines.flatMap((line) => line.words.map((word) => wordBox(line, word, n.words?.[word.index], metrics)));
+  return boxes.length > 0 ? union(boxes) : null; // no words: nothing drawn, so a zero box at the node's position
 }
 
 function imageBounds({ w, h }) {
