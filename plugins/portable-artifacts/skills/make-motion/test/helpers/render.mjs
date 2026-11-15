@@ -3,7 +3,7 @@
 // can never go quietly green by skipping.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -60,27 +60,31 @@ export async function requireRender(t, { need = DEFAULT_NEED, skipStatic = false
 /**
  * Renders `specPath` with render.mjs (`--out <tmp>/v.mp4`, then `args`), asserts exit 0 and returns
  * `{ sha256, out, stdout }`. SOURCE_DATE_EPOCH is pinned so the comment tag does not change the bytes;
- * the caller's `env` wins, so `{ env: { SOURCE_DATE_EPOCH: '' } }` gives a render stamped with today.
+ * the caller's `env` wins, so `{ env: { SOURCE_DATE_EPOCH: '' } }` gives a render stamped with today. `keepFrames: true`
+ * also keeps every captured PNG (PA_KEEP_FRAMES) and returns their folder as `frames`, for assertSameRender.
  */
-export async function renderHash(specPath, args = [], { env = {} } = {}) {
-  const out = path.join(mkdtempSync(path.join(tmpdir(), 'rh-')), 'v.mp4');
+export async function renderHash(specPath, args = [], { env = {}, keepFrames = false } = {}) {
+  const work = mkdtempSync(path.join(tmpdir(), 'rh-'));
+  const out = path.join(work, 'v.mp4');
+  const frames = keepFrames ? path.join(work, 'frames') : undefined;
   const r = spawnSync(process.execPath, [RENDER, specPath, '--out', out, ...withTestWorkers(args)], {
     encoding: 'utf8',
-    env: { ...process.env, SOURCE_DATE_EPOCH: PINNED_BUILD_DATE, ...env },
+    env: { ...process.env, SOURCE_DATE_EPOCH: PINNED_BUILD_DATE, ...(frames ? { PA_KEEP_FRAMES: frames } : {}), ...env },
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
-  return { sha256: createHash('sha256').update(readFileSync(out)).digest('hex'), out, stdout: r.stdout };
+  return { sha256: createHash('sha256').update(readFileSync(out)).digest('hex'), out, stdout: r.stdout, frames };
 }
 
 /**
  * Renders twice through `renderHash`, asserts the two files are byte-identical and returns the hash. On a mismatch it
- * dumps the per-frame MD5 of both renders to test/.out/framemd5 (CI uploads that folder) and names the first frame that
- * differs: see helpers/framemd5.mjs.
+ * dumps the per-frame MD5 of both renders to test/.out/framemd5 (CI uploads that folder), with the captured PNGs that
+ * differ, and names those frames: see helpers/framemd5.mjs.
  */
 export async function assertRendersIdentically(t, specPath, args) {
-  const first = await renderHash(specPath, args);
-  const second = await renderHash(specPath, args);
+  const first = await renderHash(specPath, args, { keepFrames: true });
+  const second = await renderHash(specPath, args, { keepFrames: true });
   assertSameRender(first, second, { ffmpeg: await findFfmpeg(), label: `${t?.name ?? path.basename(specPath)} ${path.basename(specPath)} ${(args ?? []).join(' ')}`.trim() });
+  for (const { frames } of [first, second]) rmSync(frames, { recursive: true, force: true }); // same bytes: the PNGs are not needed (a 1080x1920 run keeps megabytes)
   return first.sha256;
 }
 

@@ -7,8 +7,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseWorkers, parseFailAt, captureInOrder } from '../scripts/lib/workers.mjs';
-import { encodeArgs, draftSize } from '../scripts/lib/ffmpeg.mjs';
+import { parseWorkers, parseFailAt, parseKeepFrames, captureInOrder } from '../scripts/lib/workers.mjs';
+import { encodeArgs, draftSize, findFfmpeg } from '../scripts/lib/ffmpeg.mjs';
+import { assertSameRender } from './helpers/framemd5.mjs';
 import { UsageError } from '../scripts/lib/spec.mjs';
 import { requireRender, renderHash, assertRendersIdentically, makeTestVideo, BROWSER_ONLY } from './helpers/render.mjs';
 
@@ -37,6 +38,11 @@ test('parseFailAt: a strict non-negative integer, anything else is ignored', () 
   assert.equal(parseFailAt('5'), 5);
   assert.equal(parseFailAt('0'), 0);
   for (const bad of [undefined, '', 'abc', '5x', ' 5', '5 ', '-1', '5.0', '0x5', '1e1', '+5', 'null']) assert.equal(parseFailAt(bad), null, JSON.stringify(bad));
+});
+
+test('parseKeepFrames: an absolute folder, anything else is ignored', () => {
+  assert.equal(parseKeepFrames('/tmp/frames'), '/tmp/frames');
+  for (const bad of [undefined, '', 'frames', './frames', '1']) assert.equal(parseKeepFrames(bad), null, JSON.stringify(bad));
 });
 
 // Fake pages: a page seeks (a frame index) and screenshots it. Later pages are faster, so frames are ready out of order.
@@ -236,9 +242,12 @@ test('render: grain and vignette over a fade and a push give the same MP4 at 1 a
   writeFileSync(spec, JSON.stringify({ size: [320, 180], fps: 30, texture: { grain: 0.05, vignette: true }, scenes: [
     { id: 'a', duration: 1.2, background: '#10243a', elements: [{ id: 'g1', type: 'text', text: 'First scene', x: 160, y: 60, fontSize: 24, keyframes: [{ t: 0.2, opacity: 0 }, { t: 0.6, opacity: 1 }] }] },
     { id: 'b', duration: 1.2, background: '#3a1f33', transition: { type: 'push', direction: 'down', duration: 0.6 }, elements: [{ id: 'g2', type: 'text', text: 'Second scene', x: 160, y: 120, fontSize: 24 }] }] }));
-  const one = await renderHash(spec, ['--fps', '10', '--workers', '1']);
-  const four = await renderHash(spec, ['--fps', '10', '--workers', '4']);
-  assert.equal(four.sha256, one.sha256);
+  const one = await renderHash(spec, ['--fps', '10', '--workers', '1'], { keepFrames: true });
+  const four = await renderHash(spec, ['--fps', '10', '--workers', '4'], { keepFrames: true });
+  assertSameRender(one, four, { ffmpeg: await findFfmpeg(), label: 'grain and vignette over a push at 1 and 4 workers' });
+  // PA_KEEP_FRAMES wrote what the encoder got: one PNG per frame (2.4 s at 10 fps), in frame order whatever page drew it.
+  assert.deepEqual(readdirSync(four.frames).sort((a, b) => parseInt(a, 10) - parseInt(b, 10)), Array.from({ length: 24 }, (_, i) => `${i}.png`));
+  assert.equal(readFileSync(path.join(four.frames, '0.png')).subarray(1, 4).toString(), 'PNG');
 });
 
 // The default is auto (PA-40): a render with no --workers is the same MP4 as --workers 1.

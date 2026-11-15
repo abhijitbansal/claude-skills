@@ -236,11 +236,14 @@ its own page, [`references/sketch.md`](references/sketch.md), and
 
 Two renders of the same spec and media give identical frames and audio; the MP4 `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
 
-Known gap: the byte-identical claim failed once in CI. Two renders of a scene pair with film grain, a vignette and text in a
-`push` window (the push loop in `test/transitions.test.mjs`) gave different MP4s (hashes starting `98962a41` and `1d6494e6`),
-and the rerun passed. The cause is unknown and has not been reproduced. A failing byte-identical test now writes the per-frame
-MD5 of both renders to `test/.out/framemd5` (CI uploads that folder) and names the first frame that differs, so the next
-occurrence says where to look; no fix has been tried.
+Known gap: the byte-identical claim fails now and then in CI on Ubuntu. Three of eight make-motion runs on 2026-11-15 had one
+such failure each: the `push` and `blur` loops in `test/transitions.test.mjs` (the first gave hashes starting `98962a41` and
+`1d6494e6`) and the grain test in `test/workers.test.mjs`. Every one had film grain and a vignette over a transition window.
+The cause is unknown. On macOS the same clips give the same PNG for every frame, across browser launches and across pages.
+A failing byte-identical test writes the per-frame MD5 of both MP4s to `test/.out/framemd5` (CI uploads that
+folder). Those decoded frame numbers are approximate, because x264 carries a change in one frame into the frames around it.
+So the test also keeps every captured PNG and copies the ones that differ into the same folder, which names the exact
+frames. No fix has been tried.
 
 Limits: up to 50 scenes (no cap on the total length, but render time grows with it: use `--workers` and `--quality draft`), up to 20 audio tracks, 30 cues and 20 captions tracks; fps is 24, 25, 30 or 60; each side
 is 16–3840 px. Frame *i* samples `t = i / fps`, so put a final keyframe at

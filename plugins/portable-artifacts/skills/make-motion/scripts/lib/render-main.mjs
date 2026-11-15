@@ -28,7 +28,7 @@ import { startServer, assetSrcs } from './server.mjs';
 import { launchBrowser, guardNetwork } from './browser.mjs';
 import { readyBudget, waitReady, boundPage, frameLimit } from './ready.mjs';
 import { findFfmpeg, findFfprobe, encodeArgs, probeAudio, probeGraph, measureLoudness, draftSize, QUALITIES } from './ffmpeg.mjs';
-import { parseWorkers, autoCpus, captureInOrder } from './workers.mjs';
+import { parseWorkers, autoCpus, captureInOrder, parseKeepFrames } from './workers.mjs';
 import { wantsHelp, printHelp } from './help.mjs';
 import { specHasVideo, prepareVideo, videoAudioTracks } from './video.mjs';
 import { synthesiseCues } from './cues.mjs';
@@ -416,7 +416,10 @@ async function renderVideo(pages, p, state) {
   state.encoder = startEncoder(p.ffmpeg, encodeArgs({ fps: p.fps, out: state.partial, audio: p.audio, duration: p.total, metadata: p.metadata, quality: p.quality }));
   let written = 0;
   let nextMark = 1;
+  const keep = parseKeepFrames(process.env.PA_KEEP_FRAMES); // test-only: every PNG as the encoder gets it (workers.mjs)
+  if (keep) mkdirSync(keep, { recursive: true });
   const onFrame = async (png) => {
+    if (keep) writeFileSync(path.join(keep, `${written}.png`), png);
     await state.encoder.write(png);
     written++;
     if (written / p.frames >= nextMark / PROGRESS_STEPS) {
