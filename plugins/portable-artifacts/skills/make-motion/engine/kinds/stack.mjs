@@ -6,7 +6,7 @@
 // kicker tag, STACK.kickerGap over the first line) is centred in the available height; when it does not fit, every line
 // is set smaller in proportion. The hero is a group holding one text node per line, each tagged `stack: <hero id>` so the
 // review counts the lines of one stack as one size class. Emphasis recolours: in a mode that reads from frame 0 every
-// word is on screen from the first frame in ink2 and lights as it is spoken (ink, or the accent when emphasised); in any
+// word is on screen from the first frame as a ghost (ink at 0.4, shared.mjs ghostTracks) and lights as it is spoken (ink, or the accent when emphasised); in any
 // other mode words fade in on their times and an emphasised one turns accent. Nothing scales. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
@@ -15,7 +15,7 @@ import { layoutText } from '../text/layout.mjs';
 import { stackLines, FORCE_MARK } from '../text/breaks.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
 import { landing } from '../devices/shared.mjs';
-import { sizeAt, fontFor, compositionRect, runInk, inkExtent, capBox, unionBox, requireDevice } from './shared.mjs';
+import { sizeAt, fontFor, compositionRect, runInk, inkExtent, capBox, unionBox, requireDevice, ghostTracks } from './shared.mjs';
 
 export const STACK = Object.freeze({ fromStep: 3, max: 400, gap: 0.08, kickerGap: 28, ref: 100 });
 const FIT_PASSES = 3; // re-measure passes, for a face whose width is not exactly proportional to its size
@@ -112,12 +112,12 @@ export function composeStack(text, shot, ctx) {
   return { rows, lines: placed, area, kicker };
 }
 
-// A word's tracks: lit from ink2 when spoken (a mode that reads from frame 0), or fading in on its time; an emphasised
+// A word's tracks: lit from a ghost when spoken (a mode that reads from frame 0), or fading in on its time; an emphasised
 // word turns accent. `matched`: the hero arrived on a match cut and is on screen already.
 function wordTracks(look, { at, emphasised }, { ghost, matched }) {
   const lit = emphasised ? look.palette.accent : look.palette.ink;
   const turn = (from) => track([{ t: 0, v: from }, { t: at, v: from }, { t: at + look.moves.emphasize.dur, v: lit, ease: FILL_EASE }]);
-  if (ghost) return { fill: turn(look.palette.ink2) };
+  if (ghost) return ghostTracks(look, at, lit);
   const tracks = matched ? {} : { opacity: landing(at, look.moves.enter, 0, 1) };
   return emphasised ? { ...tracks, fill: turn(look.palette.ink) } : tracks;
 }

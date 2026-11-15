@@ -1,22 +1,26 @@
-// What validateFilm checks in a clipping shot beyond its schema: each region's rectangle, and, in a look that cuts to
+// What validateFilm checks in a clipping shot beyond its schema: each region's rectangle and the crop's, and, in a look that cuts to
 // region close-ups (a locked camera), the timing of region events and targets that the close-up would hide. Errors
 // are { path, message } with paths relative to the shot. Pure and DOM-free.
 import { REGION_PREFIX, regionOf, cutsToCloseUp, heroProblems, regionFloor, cutEnd } from './shared.mjs';
 
 const EDGE_EPSILON = 1e-9;
 
-/** Region rectangles: x, y, w, h are fractions of the image; w and h above 0; x + w and y + h at most 1. */
+// One rectangle [x, y, w, h] in fractions of the image, named `what` in its messages: w and h above 0, x + w and y + h at
+// most 1. A rectangle that is not four numbers is left to the schema, which says what to write.
+function rectProblems(rect, path, what) {
+  if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite)) return [];
+  const [x, y, w, h] = rect;
+  if (!(w > 0 && h > 0)) return [{ path, message: `${what}: w and h must be above 0, got ${w} and ${h}` }];
+  if (x + w > 1 + EDGE_EPSILON || y + h > 1 + EDGE_EPSILON) {
+    return [{ path, message: `${what} runs past the image: x + w and y + h must be at most 1, got ${x + w} and ${y + h}` }];
+  }
+  return [];
+}
+
+/** Region rectangles and the crop: x, y, w, h are fractions of the image; w and h above 0; x + w and y + h at most 1. */
 export function regionProblems(shot) {
-  return Object.entries(shot.regions ?? {}).flatMap(([name, rect]) => {
-    if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite)) return []; // the schema says what to write
-    const [x, y, w, h] = rect;
-    const path = `regions.${name}`;
-    if (!(w > 0 && h > 0)) return [{ path, message: `region "${name}": w and h must be above 0, got ${w} and ${h}` }];
-    if (x + w > 1 + EDGE_EPSILON || y + h > 1 + EDGE_EPSILON) {
-      return [{ path, message: `region "${name}" runs past the image: x + w and y + h must be at most 1, got ${x + w} and ${y + h}` }];
-    }
-    return [];
-  });
+  const regions = Object.entries(shot.regions ?? {}).flatMap(([name, rect]) => rectProblems(rect, `regions.${name}`, `region "${name}"`));
+  return shot.crop === undefined ? regions : [...regions, ...rectProblems(shot.crop, 'crop', 'crop')];
 }
 
 /**

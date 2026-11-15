@@ -1,6 +1,6 @@
 // What a `highlight` aimed at a clipping region draws. A filled marker band disappears over a dark picture, so a region
-// highlight is a marker frame around the region, drawn on side by side, with the rest of the picture dimmed by an
-// ink overlay that has the region cut out of it. A hand look (desk) draws the frame as four marker strokes 7 units wide
+// highlight is a marker frame around the region, drawn on side by side, with the rest of the picture dimmed by a
+// multiply of ink that has the region cut out of it (the region itself stays clean). A hand look (desk) draws the frame as four marker strokes 7 units wide
 // that hug the region with a 6-unit gap and overshoot the corners a little, each drawn twice, the second pass the same
 // geometry moved a unit or so, so the stroke reads as marker rather than vector; stepped at its hand rate. A crisp look
 // draws a ruled, square-cornered frame. Built from plain nodes in the picture's own space (the caller puts them in a
@@ -12,7 +12,8 @@ import { landing, isHand, colourOf, deviceRng, spread, smoothPath, polyline } fr
 // alpha each pass's opacity (where the two passes overlap the stroke reads denser, as marker ink does)
 const HAND = Object.freeze({ width: 7, overshoot: 6, wobble: 1.5, gap: 6, cap: 'round', pass: [1.2, -1.2], alpha: 0.85 });
 const CRISP = Object.freeze({ width: 10, overshoot: 0, wobble: 0, gap: 5, cap: 'square', pass: null, alpha: 1 });
-const DIM = 0.2; // opacity of the ink overlay outside the region
+const DIM = 0.45; // opacity of the ink overlay outside the region, multiplied over the picture (a spotlight, not a grey veil)
+const DIM_BLEND = 'multiply';
 const DIM_EASE = 'outCubic';
 const DRAW_SHARE = 2; // the frame takes this many of the look's draw moves, a quarter of it per side
 const SIDES = 4;
@@ -73,7 +74,7 @@ export function regionMark({ id, region, picture, at, look, unit, seed, dim = tr
     return [first, node('path', `${id}.side${i}.pass2`, { ...props, d: pathOf(moved) }, { tracks: { draw }, step })];
   });
   if (!dim) return sides;
-  const overlay = node('path', `${id}.dim`, { d: dimPath(picture, region), fill: colourOf(look, 'ink') }, {
+  const overlay = node('path', `${id}.dim`, { d: dimPath(picture, region), fill: colourOf(look, 'ink'), blend: DIM_BLEND }, {
     tracks: { opacity: landing(at, { ease: DIM_EASE, dur: at - start }, 0, DIM) },
   });
   return [overlay, ...sides];

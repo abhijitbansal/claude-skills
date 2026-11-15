@@ -14,9 +14,10 @@
     {
       "id": "proof",
       "show": "clipping",
-      "cut": "slide",
+      "cut": "cut",
       "src": "clipping.png",
-      "caption": "Fig. 1 · a make-dashboard page (illustration)",
+      "kicker": "The proof",
+      "caption": "Every chart shows its query",
       "say": "This dashboard is different. It shows the query behind every chart.",
       "regions": { "query": [0.58, 0.14, 0.37, 0.24] },
       "on": [{ "at": "word:query", "do": "highlight", "target": "region:query" }]
@@ -27,24 +28,24 @@
       "cut": "cut",
       "kicker": "How it works",
       "hero": "idea",
-      "say": "The model writes one small file. Scripts do the rest.",
-      "on": [{ "at": "word:file", "do": "underline", "target": "word:5" }]
+      "say": "The model writes *one small file*. Scripts do the rest."
     },
     {
       "id": "count",
       "show": "number",
       "cut": "match",
       "hero": "idea",
-      "say": "Five skills. One spec each.",
+      "kicker": "In numbers",
+      "say": "Five skills. One file each.",
       "value": 5,
       "label": "skills",
-      "delta": "one JSON spec each"
+      "delta": "one JSON file each"
     },
     {
       "id": "close",
       "show": "statement",
       "cut": "cut",
-      "kicker": "portable-artifacts",
+      "kicker": "The point",
       "say": "Built on your machine. *Nothing* leaves it."
     }
   ]

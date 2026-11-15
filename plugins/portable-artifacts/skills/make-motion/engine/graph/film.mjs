@@ -186,8 +186,10 @@ export function buildFilm({ film, timeline, measure, assets = new Map(), canvas,
     const local = Math.round((t - shot.start) * TIME_DECIMALS) / TIME_DECIMALS + 0; // + 0 turns -0 into 0
     if (!shot.cut || local >= shot.cutDur) return { background: shot.background, sampled: sampleShot(index, local) };
     const from = sampleShot(index - 1, shots[index - 1].duration);
-    // `frame`: how far p moves in one frame, for the cuts that smear what they move
-    const sampled = shot.cut.apply({ from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, frame: 1 / (timeline.fps * shot.cutDur) });
+    // `frame`: how far p moves in one frame, for the cuts that smear what they move, given only in a look that asks for the
+    // smear (look.smear); `background`: painted under each smear sample so that it covers the frame
+    const frame = look.smear === true ? 1 / (timeline.fps * shot.cutDur) : undefined;
+    const sampled = shot.cut.apply({ from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, frame, background: shot.background });
     return { background: shot.background, sampled };
   };
 

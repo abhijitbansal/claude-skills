@@ -3,8 +3,8 @@
 // with the kicker on a slug card in the top right (slug.mjs); a centred one centres it on the composition with the
 // kicker above; a stack (pop) sets each line at its own size to fill the width (stack.mjs). Emphasis follows the look's
 // emphasis system: a highlight behind each emphasised run (desk), or a recolour (with a pulse for recolor-scale).
-// In a mode that reads from frame 0 (viral) every word is on screen from the first frame in the quiet colour and lights
-// as it is spoken. Pure and DOM-free.
+// In a mode that reads from frame 0 (viral) every word is on screen from the first frame as a ghost (ink at 0.4) and
+// lights as it is spoken. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
@@ -16,17 +16,19 @@ import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
   isEditorial, requireDevice, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale,
-  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk,
+  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks,
 } from './shared.mjs';
 import { wordTimes } from './words.mjs';
-import { slugBox, slugNodes } from './slug.mjs';
+import { slugBox, slugNodes, SLUG } from './slug.mjs';
+import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { composeStack, stackNodes } from './stack.mjs';
 import { BAND_HEIGHT } from '../devices/highlight.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
 // desk: fitted between scale step 3 and 300 units, its block at most 64% of the height, ink centred at 50%; columns 2
-// to 9 (2 to 11 on vertical formats), and with a slug no narrower than columns 2 to 5
+// to 9 (2 to 11 on vertical formats), and with a slug no narrower than columns 2 to 5, trading size for a better break
+// no lower than 3 times its kicker
 const DESK = Object.freeze({ centre: 0.5, height: 0.64, fromStep: 3, max: 300, toWide: 9, toTall: 11, minTo: 5 });
 const POP = Object.freeze({ fromStep: 3, toStep: 5 }); // so a long word can shrink the block
 const FIRST_COLUMN = 2;
@@ -57,14 +59,18 @@ function highlightTogether(text, ctx) {
 }
 
 // The text fitted to columns FIRST_COLUMN..`to` and centred on DESK.centre of the height: { layout, font, x, y, span }.
-function fitEditorial(text, ctx, to) {
+// `tradeFloor`: the fit gives up size for a better break (fitText) only down to this size; `clear` (the slug card grown
+// by a gutter, or null): the fit prefers a layout whose block, so placed, stays off it.
+function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const { look, canvas, unit } = ctx;
   const span = gridSpan(look, canvas, FIRST_COLUMN, to);
   const min = sizeAt(look, DESK.fromStep, unit), max = DESK.max * unit;
-  const opts = { text, font: fontFor(look, 'display', max, unit), maxWidth: span.w, align: 'left', measure: ctx.measure, optical: true, together: highlightTogether(text, ctx) };
-  const { layout, font } = fitDisplay(opts, { min, max, maxHeight: DESK.height * canvas.h, maxLines: look.maxLines.display }, look, unit);
-  const ink = inkSpan(layout);
-  return { layout, font, x: span.x, y: DESK.centre * canvas.h - (ink.top + ink.bottom) / HALF, span };
+  const font = fontFor(look, 'display', max, unit);
+  const place = (layout, at) => ({ layout, font: at, x: span.x, y: DESK.centre * canvas.h - (inkSpan(layout).top + inkSpan(layout).bottom) / HALF, span });
+  const accept = clear ? (layout) => !overlaps(clear, blockInk(place(layout, { ...font, size: layout.size }), ctx.measure)) : undefined;
+  const opts = { text, font, maxWidth: span.w, align: 'left', measure: ctx.measure, optical: true, together: highlightTogether(text, ctx), accept };
+  const fitted = fitDisplay(opts, { min, max, maxHeight: DESK.height * canvas.h, maxLines: look.maxLines.display, tradeFloor }, look, unit);
+  return place(fitted.layout, fitted.font);
 }
 
 // The block a placed text's glyphs cover in canvas pixels, ascenders and descenders included.
@@ -79,25 +85,38 @@ function blockInk(placed, measure) {
 const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 const grown = ([x, y, w, h], by) => [x - by, y - by, w + HALF * by, h + HALF * by];
 
+// `placed` moved down until its block clears `clear` (the slug card grown by a gutter), as far as the bottom margin allows
+// (never up).
+function dropBelow(placed, clear, ctx) {
+  const { look, canvas, unit, measure } = ctx;
+  const block = blockInk(placed, measure);
+  const room = Math.max(0, canvas.h - look.grid.margin * unit - (block[1] + block[3]));
+  return { ...placed, y: placed.y + Math.min(room, clear[1] + clear[3] - block[1]) };
+}
+
 // desk: the type carries the frame, fitted to columns 2 to 9 (2 to 11 on vertical formats); with a slug, the span stops
 // a column earlier, and earlier again, until the block clears the card by a gutter. Narrowing stops before the text
-// would overflow (a long sentence on a square frame); a block that still meets the card then drops below it, as far as
-// the bottom margin allows.
+// would overflow (a long sentence on a square frame), and before it falls under the review's hero ratio over the slug's
+// kicker when dropping the block below the card clears it; a block that still meets the card then drops below it (the
+// frame review reports text left over a card: card-overlap).
 function composeEditorial(text, shot, ctx) {
   const { look, canvas, unit, measure } = ctx;
   const last = isWide(canvas) ? DESK.toWide : DESK.toTall;
   const slug = slugBox(shot, ctx);
   const clear = slug ? grown(slug.turned, look.grid.gutter * unit) : null;
-  let placed = fitEditorial(text, ctx, last);
-  for (let to = last - 1; clear && to >= DESK.minTo && overlaps(clear, blockInk(placed, measure)); to--) {
-    const narrower = fitEditorial(text, ctx, to);
+  // a statement stays three times the slug's kicker (the hero ratio the review asks of a frame's own texts; the slug is
+  // frame furniture, which the review leaves out)
+  const floor = slug ? MIN_HERO_RATIO * sizeAt(look, SLUG.kickerStep, unit) : 0;
+  const clears = (p) => !overlaps(clear, blockInk(p, measure));
+  let placed = fitEditorial(text, ctx, last, floor, clear);
+  for (let to = last - 1; clear && to >= DESK.minTo && !clears(placed); to--) {
+    const narrower = fitEditorial(text, ctx, to, floor, clear);
     if (narrower.layout.overflow && !placed.layout.overflow) break;
+    if (narrower.font.size < floor && placed.font.size >= floor && clears(dropBelow(placed, clear, ctx))) break;
     placed = narrower;
   }
-  if (!clear || !overlaps(clear, blockInk(placed, measure))) return placed;
-  const block = blockInk(placed, measure);
-  const room = canvas.h - look.grid.margin * unit - (block[1] + block[3]);
-  return { ...placed, y: placed.y + Math.min(room, clear[1] + clear[3] - block[1]) };
+  if (!clear || clears(placed)) return placed;
+  return dropBelow(placed, clear, ctx);
 }
 
 // Where the text goes and at what size: { layout, font, x, y, span }.
@@ -160,14 +179,13 @@ export function enterStarts(words, look) {
 }
 
 // A mode with `hookFromFrameZero` (viral) reads from the first frame: in every statement of a recolour look every word
-// is on screen from frame 0 in the quiet colour (ink2) and takes its own when it is spoken.
+// is on screen from frame 0 as a ghost (ink at 0.4, shared.mjs ghostTracks) and takes its own colour when it is spoken.
 export const ghostWords = (ctx) => ctx.mode.hookFromFrameZero === true && ctx.look.emphasis !== 'highlight';
 
-// A word that turns from the quiet colour to `to` when spoken at `at`, pulsing as it does when `peak` is given.
+// A ghost word that lights to `to` when spoken at `at`, pulsing as it does when `peak` is given.
 function hookTracks(look, at, to, peak) {
-  const { emphasize } = look.moves;
-  const fill = track([{ t: 0, v: look.palette.ink2 }, { t: at, v: look.palette.ink2 }, { t: at + emphasize.dur, v: to, ease: FILL_EASE }]);
-  return peak === undefined ? { fill } : { fill, scale: pulseScale(look, { pulse: at, peak }) };
+  const ghost = ghostTracks(look, at, to);
+  return peak === undefined ? ghost : { ...ghost, scale: pulseScale(look, { pulse: at, peak }) };
 }
 
 // Word tracks: the entrance on each word's time (none for a matched hero), and in a recolour look the emphasis (a pulse

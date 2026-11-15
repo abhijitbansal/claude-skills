@@ -41,6 +41,8 @@ import { pop } from './pop.mjs';
  * @property {number} wordStagger  seconds between words that have no spoken time; 0 means words follow their spoken times
  * @property {{ drift: number, style: 'desk' | 'locked' }} camera  drift is a travel in units
  * @property {string[]} cuts  a subset of cut, match, slide, punch
+ * @property {boolean} [smear]  true: slide and punch draw a motion smear (cuts/index.mjs) while they run; absent, they
+ *   draw each shot once, crisp (neither shipped look sets it)
  * @property {number} keyline  width of a cut-out's keyline
  * @property {{ dx: number, dy: number, blur: number, alpha: number, color: string }} shadow  offset and blur in units, color #rrggbb
  * @property {Record<string, object>} devices  styling per device name; colours are palette keys or #rrggbb

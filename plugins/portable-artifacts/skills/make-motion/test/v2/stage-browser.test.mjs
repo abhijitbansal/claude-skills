@@ -286,6 +286,22 @@ test('blend multiply lets the ink below show through; without blend the same rec
   assert.equal(right.dark, 0, 'plain: the yellow rectangle covers the letter');
 });
 
+test('a layer group composites as one picture at its opacity: its children do not show through one another', async (t) => {
+  const rect = (id, d, fill) => ({ type: 'path', id, props: { d, fill } });
+  // red underneath; over it a group at 0.5 holding a white sheet and a blue square on the sheet
+  const group = (layer) => ({ type: 'group', id: 'g', props: { opacity: 0.5, ...(layer ? { layer: true } : {}) }, children: [
+    rect('sheet', 'M0 0H800V600H0Z', '#ffffff'), rect('blue', 'M100 100H300V300H100Z', '#0000ff'),
+  ] });
+  const a = await stageFor(t, filmOf([rect('red', 'M0 0H800V600H0Z', '#ff0000'), group(true)])); if (!a) return;
+  const near = (got, want, what) => got.slice(0, 3).forEach((v, i) => assert.ok(Math.abs(v - want[i]) <= 3, `${what}: ${got} vs ${want}`));
+  // as one picture: half blue over half red on the square, half white over half red on the sheet
+  near(await seekAndPixel(a, 0, 200, 200), [128, 0, 128], 'the square');
+  near(await pixelAt(a, 600, 400), [255, 128, 128], 'the sheet');
+  // without `layer` the sheet shows through the square: each child is drawn at half opacity on its own
+  const b = await stageFor(t, filmOf([rect('red', 'M0 0H800V600H0Z', '#ff0000'), group(false)])); if (!b) return;
+  near(await seekAndPixel(b, 0, 200, 200), [128, 64, 191], 'the square, not a layer');
+});
+
 test('an unknown blend names the node and the accepted modes', async (t) => {
   const film = { fps: FPS, shots: [{ id: 's', show: 'free', hold: 1, nodes: [box('b', { blend: 'dodge' })] }] };
   const a = await stageFor(t, film); if (!a) return;

@@ -144,3 +144,17 @@ test('pop display caps are set with a 0.26 em word space in the page, wider than
   assert.ok(own < gap, `the face's own space (${own.toFixed(1)} px) is narrower than the set one`);
   assert.equal(pair.font.wordSpace, look.fonts.display.wordSpace);
 });
+
+// ---- revision 2: the desk statement under its slug, with the real face ----
+
+test('a desk statement with a slug keeps its highlight run whole, ends no sentence mid-line and stays at three times the kicker, in the page', async (t) => {
+  const film = { version: 2, mode: 'pro', look: 'desk', format: '16:9', fps: FPS, seed: 7, shots: [{ id: 'how', show: 'statement', kicker: 'How it works', say: 'The model writes *one small file*. Scripts do the rest.' }] };
+  const stage = await openStage(film, { specDir });
+  if (!stage) { t.skip('no browser'); return; }
+  t.after(() => stage.close());
+  const text = await stage.page.evaluate(() => window.__snapshot(0).find((n) => n.id === 'how.text'));
+  const lines = text.layout.lines.map((l) => l.words.map((w) => w.text).join(' '));
+  assert.ok(lines.every((line) => !/[.!?] \S/.test(line)), `no sentence ends mid-line: ${JSON.stringify(lines)}`);
+  assert.ok((text.props.highlightLines ?? 1) <= 1, `the highlight run on one line: ${JSON.stringify(lines)}`);
+  assert.ok(text.props.font.size >= 3 * registries.looks.get('desk').scale[1], `three times the kicker or more: ${text.props.font.size}`);
+});

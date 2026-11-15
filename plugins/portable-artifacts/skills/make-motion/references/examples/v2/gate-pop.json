@@ -15,8 +15,10 @@
       "show": "clipping",
       "cut": "punch",
       "src": "clipping.png",
+      "caption": "It shows its work.",
       "say": "This one shows you the query behind it.",
       "regions": { "query": [0.58, 0.14, 0.37, 0.24] },
+      "crop": [0.57, 0.1, 0.405, 0.885],
       "on": [{ "at": "word:query", "do": "highlight", "target": "region:query" }]
     },
     {
@@ -32,7 +34,7 @@
     {
       "id": "local",
       "show": "statement",
-      "cut": "slide",
+      "cut": "cut",
       "text": "No cloud. | No account. | No upload.",
       "say": "No cloud. No account. *No upload*.",
       "on": [{ "at": "word:upload", "do": "punch", "target": "text" }]

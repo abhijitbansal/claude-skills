@@ -8,7 +8,7 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { stillStretches } from '../../engine/review/pacing.mjs';
 import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
-import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings } from '../../scripts/v2/review.mjs';
+import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings, restingByShot } from '../../scripts/v2/review.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from '../../scripts/v2/layout.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 
@@ -357,7 +357,7 @@ test('a cut strip puts its 5 frames in one row', () => {
 
 const film = (shots) => ({ mode: 'pro', look: 'desk', fps: 30, shots });
 
-test('a shot sheet tiles start+0.1, the middle, 85% and each on event landing+0.05, then the phone tile', () => {
+test('a shot sheet tiles start+0.1, a frame every 1.2 s after it, the middle, 85% and each on event landing+0.05, then the phone tile', () => {
   const f = film([
     { id: 'a', hold: 4, show: 'free' },
     { id: 'b', hold: 4, show: 'free', on: [{ at: 1, do: 'circle' }, { at: 'end', do: 'underline' }] },
@@ -365,8 +365,11 @@ test('a shot sheet tiles start+0.1, the middle, 85% and each on event landing+0.
   const timeline = buildTimeline(f, { fps: 30 });
   const sheets = planSheets(f, timeline);
   const shot = sheets.find((s) => s.name === 'b.png');
-  // b runs 4 s to 8 s: start + 0.1 = 123, landing 1 s + 0.05 = 152, middle = 180, 85% = 222, 'end' + 0.05 clamps to 239
-  assert.deepEqual(shot.tiles.map((x) => [x.role, x.frame]), [['frame', 123], ['landing', 152], ['frame', 180], ['frame', 222], ['landing', 239], ['phone', 222]]);
+  // b runs 4 s to 8 s: start + 0.1 = 123, landing 1 s + 0.05 = 152, steps 5.3 s = 159, 6.5 s = 195, 7.7 s = 231,
+  // middle = 180, 85% = 222, 'end' + 0.05 clamps to 239
+  assert.deepEqual(shot.tiles.map((x) => [x.role, x.frame]), [
+    ['frame', 123], ['landing', 152], ['frame', 159], ['frame', 180], ['frame', 195], ['frame', 222], ['frame', 231], ['landing', 239], ['phone', 222],
+  ]);
   assert.ok(shot.tiles.every((x) => Math.abs(x.t - x.frame / 30) < 1e-9), 'a tile is stamped with the time of the frame it shows');
   const phone = shot.tiles.at(-1);
   assert.equal(phone.width, 360);
@@ -382,13 +385,26 @@ test('tiles at the same frame are listed once, and a landing past the shot end c
   assert.deepEqual(frames, [3, 15, 26, 29], 'start + 0.1 = landing 0.05 + 0.05, so one tile');
 });
 
-test('each cut gets a strip of 5 frames from 0.2 s before to 0.2 s after, named cut-<from>-<to>.png', () => {
+test('no two tiles of a shot sheet are more than 1.2 s apart, and the last is within 1.2 s of the shot end', () => {
+  const f = film([{ id: 'a', hold: 7, show: 'free' }]);
+  const timeline = buildTimeline(f, { fps: 30 });
+  const sheet = planSheets(f, timeline).find((s) => s.name === 'a.png');
+  const times = sheet.tiles.filter((x) => x.role !== 'phone').map((x) => x.t);
+  assert.ok(times[0] <= 0.1 + 1e-9, 'starts at start + 0.1 s');
+  times.slice(1).forEach((t, k) => assert.ok(t - times[k] <= 1.2 + 1e-9, `${times[k]} to ${t}`));
+  assert.ok(7 - times.at(-1) <= 1.2, `last tile ${times.at(-1)}`);
+});
+
+test('each cut gets a strip of every frame of its window plus two frames each side, named cut-<from>-<to>.png', () => {
   const f = film([{ id: 'a', hold: 2, show: 'free' }, { id: 'b', hold: 2, show: 'free', cut: 'slide' }, { id: 'c', hold: 2, show: 'free' }]);
   const timeline = buildTimeline(f, { fps: 30 });
   const sheets = planSheets(f, timeline);
   const strip = sheets.find((s) => s.name === 'cut-a-b.png');
-  assert.equal(strip.tiles.length, 5);
-  assert.deepEqual(strip.tiles.map((x) => +(x.t - 2).toFixed(3)), [-0.2, -0.1, 0, 0.1, 0.2]);
+  // b starts on frame 60; the slide's window is 0.4 s, frames 60 to 71; two frames each side
+  assert.deepEqual(strip.tiles.map((x) => x.frame), Array.from({ length: 16 }, (_, k) => 58 + k));
+  assert.deepEqual(strip.tiles.map((x) => x.label.split(' ')[0]), ['a', 'a', ...Array(14).fill('b')]);
+  // a hard cut's window is its first frame: frames 118 to 122
+  assert.deepEqual(sheets.find((s) => s.name === 'cut-b-c.png').tiles.map((x) => x.frame), [118, 119, 120, 121, 122]);
   assert.ok(sheets.some((s) => s.name === 'cut-b-c.png'));
   assert.equal(sheets.filter((s) => s.name.startsWith('cut-')).length, 2);
   assert.deepEqual(sheets.map((s) => s.name).sort(), ['a.png', 'b.png', 'c.png', 'cut-a-b.png', 'cut-b-c.png']);
@@ -402,6 +418,7 @@ test('the audit moments are the sheet frames, one frame every 0.25 s and each sh
   for (let quarter = 0; quarter < 20; quarter++) assert.ok(moments.includes(Math.round(quarter * 0.25 * 30)), `${quarter * 0.25}s`);
   assert.ok(moments.includes(Math.round(0.1 * 30)), 'start + 0.1 s from the sheet');
   assert.ok(moments.includes(89) && moments.includes(149), 'the last frame of each shot');
+  assert.ok(moments.includes(0) && moments.includes(90), 'the first frame of each shot');
   assert.ok(moments.every((m) => Number.isInteger(m) && m >= 0 && m < timeline.frameCount));
 });
 
@@ -584,4 +601,73 @@ test('a text flush on the safe edge is inside: the safe-area rule allows 1 unit,
   assert.equal(at(-0.8), 0, 'within a unit of it (a punch at 0.2 percent moves a flush line this far)');
   assert.equal(at(-2), 1, 'two units out is outside');
   assert.equal(at(-20, 1.015), 0, 'a camera punch at 1.5 percent is a move in progress');
+});
+
+// ---- revision 2: frame furniture (the lead's ruling) ----
+
+// A text inside a slug card or a caption card: props.furniture, set by the kind.
+const furnitureText = (opts) => {
+  const n = textNode(opts);
+  return { ...n, props: { ...n.props, furniture: true } };
+};
+
+test('frame furniture is left out of the sizes and hero rules: a desk count with its label at step 4 and a desk proof pass', () => {
+  const at = (id, size, y, role) => textNode({ id, size, x: 200, y, words: 1, role });
+  const slug = [furnitureText({ id: 'number', size: 72, x: 1500, y: 100, words: 1, role: 'slug' }), furnitureText({ id: 'kicker', size: 44, x: 1500, y: 220, words: 1, role: 'kicker' })];
+  // the figure, the label at step 4, the delta at step 2 and the slug's numeral and kicker
+  const count = [at('digits', 820, 40, 'hero'), at('label', 132, 650, 'label'), at('delta', 44, 960, 'tag'), ...slug];
+  assert.deepEqual(auditFrame(count, ctx()).filter((f) => f.rule === 'sizes' || f.rule === 'hero'), []);
+  // a clipping: only the slug and the caption card are text
+  const proof = [...slug, furnitureText({ id: 'caption', size: 44, x: 200, y: 900, words: 1, role: 'caption' })];
+  assert.deepEqual(auditFrame(proof, ctx()).filter((f) => f.rule === 'sizes' || f.rule === 'hero'), [], 'fewer than two texts remain: nothing to compare');
+});
+
+test('without the furniture mark the same texts are judged: a 72 against 44 frame fires the hero rule, and furniture under the size floor still fires', () => {
+  const plain = [textNode({ id: 'number', size: 72, x: 1500, y: 100, words: 1, role: 'slug' }), textNode({ id: 'kicker', size: 44, x: 1500, y: 300, words: 1, role: 'kicker' })];
+  assert.equal(auditFrame(plain, ctx()).filter((f) => f.rule === 'hero').length, 1, 'a 1.6 ratio fires');
+  const tiny = furnitureText({ id: 'kicker', size: 20, x: 1500, y: 300, words: 1, role: 'kicker' });
+  assert.equal(auditFrame([tiny], ctx()).filter((f) => f.rule === 'min-size').length, 1, 'furniture is still held to the size floor');
+});
+
+test('a text whose last frame catches the tail of a move is still judged at rest: the rest scale is the one it holds most', () => {
+  // one shot of 1 s at 30 fps: the text rests at scale 1 and only the last frame catches a pulse at 1.01
+  const timeline = { fps: 30, frameCount: 30, duration: 1, shots: [{ id: 'hero', index: 0, start: 0, end: 1, duration: 1 }] };
+  const tree = (scale) => [textNode({ id: 't', size: 44, x: -40, y: 300, scale })]; // its ink runs past the left safe edge
+  const snapshots = [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree(frame === 29 ? 1.01 : 1) }));
+  const resting = restingByShot(timeline, snapshots).get('hero');
+  assert.ok(Math.abs(resting.restScales.get('t') - 1) < 1e-9, `the scale held on most sampled frames: ${resting.restScales.get('t')}`);
+  const found = auditFrame(tree(1), ctx({ restScales: resting.restScales, hiddenWords: resting.hiddenWords }));
+  assert.ok(found.some((f) => f.rule === 'safe-area'), 'the at-rest layout is judged and the defect reported');
+});
+
+test('a text over the paper of a card that holds text (a slug or a caption card) is mechanical; the card\'s own texts and texts clear of it are not', () => {
+  const paper = { type: 'path', id: 'a.slug.paper', depth: 0, props: { textCard: true, fill: '#ffffff' }, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: [], bbox: [1400, 100, 360, 200], spread: 0 };
+  const own = textNode({ id: 'a.kicker', size: 44, x: 1440, y: 140, words: 1 });
+  const slug = { type: 'group', id: 'a.slug', depth: 0, props: { fixed: true }, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: [paper, own], bbox: [1400, 100, 360, 200], spread: 0 };
+  const over = textNode({ id: 'a.text', size: 132, x: 1200, y: 150, words: 2 }); // runs under the card
+  const found = auditFrame([slug, over], ctx()).filter((f) => f.rule === 'card-overlap');
+  assert.equal(found.length, 1, JSON.stringify(found));
+  assert.equal(found[0].kind, 'mechanical');
+  assert.equal(found[0].node, 'a.text|a.slug');
+  assert.match(found[0].message, /runs over the card/);
+  const clear = textNode({ id: 'a.text', size: 132, x: 200, y: 500, words: 2 });
+  assert.deepEqual(auditFrame([slug, clear], ctx()).filter((f) => f.rule === 'card-overlap'), [], 'the card\'s own text and a text clear of it');
+  const hidden = { ...slug, opacity: 0 };
+  assert.deepEqual(auditFrame([hidden, over], ctx()).filter((f) => f.rule === 'card-overlap'), [], 'a card not on screen');
+});
+
+test('a text whose words rest a hair off scale 1 (a move sampled before its end) is still judged at rest', () => {
+  const timeline = { fps: 30, frameCount: 30, duration: 1, shots: [{ id: 'hero', index: 0, start: 0, end: 1, duration: 1 }] };
+  // its words hold 1.004 on every sampled frame, and its ink runs past the left safe edge
+  const tree = () => {
+    const n = textNode({ id: 't', size: 44, x: -40, y: 300 });
+    return [{ ...n, words: n.words.map((w) => ({ ...w, scale: 1.004 })) }];
+  };
+  const snapshots = [0, 7, 15, 22, 29].map((frame) => ({ frame, tree: tree() }));
+  const resting = restingByShot(timeline, snapshots).get('hero');
+  const found = auditFrame(tree(), ctx({ restScales: resting.restScales, hiddenWords: resting.hiddenWords, restWords: resting.restWords }));
+  assert.ok(found.some((f) => f.rule === 'safe-area'), `the at-rest layout is judged: ${JSON.stringify(found.map((f) => f.rule))}`);
+  // a word still mid-pulse is not at rest
+  const pulsing = tree().map((n) => ({ ...n, words: n.words.map((w, i) => (i === 0 ? { ...w, scale: 1.08 } : w)) }));
+  assert.ok(!auditFrame(pulsing, ctx({ restScales: resting.restScales, restWords: resting.restWords })).some((f) => f.rule === 'safe-area'), 'a word mid-pulse');
 });

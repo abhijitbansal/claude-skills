@@ -11,13 +11,14 @@ import { layoutText, numeralAdvance } from '../text/layout.mjs';
 import { gridSpan, gridX } from '../looks/index.mjs';
 import { entrance, colourOf, polyline } from '../devices/shared.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, typeset, setCase, inkBox, shownFrom,
-  isEditorial, requireDevice, heroProblems, fieldNode, enterTracks, pulseScale, runInk,
-  defaultCamera, onDevices, placeDevices, deviceCamera,
+  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, setCase, inkBox, shownFrom,
+  isEditorial, heroProblems, fieldNode, enterTracks, pulseScale, runInk,
+  defaultCamera, onDevices, placeDevices, deviceCamera, openingLanding,
 } from './shared.mjs';
 import { NUMBER_WORDS, ONES, TENS } from './words.mjs';
 import { stackArea } from './stack.mjs';
 import { slugNodes } from './slug.mjs';
+import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
 const AFFIX_MAX = 8;
 const LABEL_MAX = 60;
@@ -31,12 +32,15 @@ const COUNT_FALLBACK = 0.6; // of the shot: when the count lands with no spoken 
 const MAX_COUNT_STEPS = 24; // distinct values a count may show on its way up
 const STEP_EPSILON = 1e-6;
 // desk figure: up to 820 units for one or two digits (560 for more) across columns 2 to 9 (2 to 11 when not wide),
-// baseline at 72%; label caps at step 3 beside it (48 units on) or under it (40 below the baseline); delta tag 12 above
-// the label, or 32 to its right
-const DESK = Object.freeze({ max: 560, maxShort: 820, toWide: 9, toTall: 11, baseline: 0.72, labelStep: 3, besideGap: 48, underGap: 40, tagGap: 12, deltaGap: 32, deltaDrop: 16 });
+// baseline at 72%; the label in ink at step 4 over the delta, the delta's cap line 24 units under the label's baseline,
+// the pair beside the figure (48 units after its ink) or under it (the label's ink 40 below the baseline)
+const DESK = Object.freeze({ max: 560, maxShort: 820, toWide: 9, toTall: 11, baseline: 0.72, labelStep: 4, labelFromStep: 2, besideGap: 48, underGap: 40, deltaGap: 24 });
 // pop figure: up to 900 units for one or two digits (760 for more) across the available width; label tag at step 3
-// (step 2 at the least) 40 under the baseline; delta tag at step 2 on a rule plate in ink, 16 under the label
-const POP = Object.freeze({ max: 760, maxShort: 900, tagGap: 40, tagStep: 3, tagFromStep: 2, deltaGap: 16, deltaStep: 2, deltaFill: 'rule', deltaText: 'ink' });
+// (step 2 at the least) 40 under the baseline; the delta's cap line 16 under the label tag; a kicker tag at step 2, 28
+// over the figure's cap line
+const POP = Object.freeze({ max: 760, maxShort: 900, tagGap: 40, tagStep: 3, tagFromStep: 2, deltaGap: 16, kickerStep: 2, kickerGap: 28 });
+// the delta in either look: label caps at step 2 in ink2, on no plate
+const DELTA = Object.freeze({ step: 2, text: 'ink2' });
 const SHORT_DIGITS = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
 const TAG = Object.freeze({ padX: 0.32, padY: 0.2 }); // em of the tag's own size
@@ -232,64 +236,72 @@ const digitCount = (steps) => steps.at(-1).text.replace(NOT_DIGIT, '').length;
 // How far a laid-out text's first line reaches above its baseline and where its ink starts (the label caps' real ink).
 const firstLineInk = (layout, font, measure) => runInk(layout.lines[0], font, measure);
 
+// The delta: label caps at DELTA.step in DELTA.text on no plate, its ink flush left at `left` and its cap line at `top`,
+// wrapped to `maxWidth`; it enters as a tag does (an object entrance about its centre). Its box runs from its ink edge
+// and its cap line to just under its last baseline (WORD_DESCENT), as inkBox does.
+function plainDelta(ctx, id, words, { left, top, maxWidth, at }) {
+  const { look, unit, measure } = ctx;
+  const font = fontFor(look, 'label', sizeAt(look, DELTA.step, unit), unit);
+  const layout = layoutText({ text: setCase(look, 'label', words), font, maxWidth, measure });
+  const x = left - firstLineInk(layout, font, measure).left, y = top + CAP_HEIGHT * font.size - layout.lines[0].y;
+  const advance = inkBox(x, y, layout);
+  const box = [left, advance[1], advance[0] + advance[2] - left, advance[3]]; // from the ink, which starts at `left`
+  const cx = box[0] + box[2] / HALF, cy = box[1] + box[3] / HALF;
+  const text = node('text', `${id}.text`, { x: x - cx, y: y - cy, layout, font, fill: colourOf(look, DELTA.text), role: 'tag' });
+  return { nodes: [entrance({ id, at, look, unit, cx, cy, children: [text] })], box, descent: WORD_DESCENT * font.size };
+}
+
+// The label in label caps at scale step `step`, in ink, with its ink starting at `left`, wrapped to the right margin.
+function deskLabel(shot, ctx, left, step) {
+  const { look, canvas, unit, measure } = ctx;
+  const font = fontFor(look, 'label', sizeAt(look, step, unit), unit);
+  const layout = layoutText({ text: setCase(look, 'label', shot.label), font, maxWidth: gridX(look, canvas, RIGHT_EDGE) - left, measure });
+  const ink = firstLineInk(layout, font, measure);
+  // up: first line's ink top to the last baseline
+  return { font, layout, x: left - ink.left, up: ink.up + layout.lines.at(-1).y - layout.lines[0].y };
+}
+
 // desk: the figure flush left on column 2 by its ink, fitted to columns 2 to 9 (2 to 11 on vertical formats) between
 // scale step 5 and DESK.maxShort units for one or two digits (DESK.max for more), its baseline at DESK.baseline of the
-// height; no hairline. The label in label caps at step 3: beside the figure on its baseline, DESK.besideGap after its
-// ink, when the figure is narrower than half the span, with the delta tag DESK.tagGap above it; otherwise under it, its
-// ink DESK.underGap below the baseline, with the delta tag DESK.deltaGap to its right on its last line (under it when
-// that would pass the right margin).
+// height; no hairline. The label (label caps at step 4, in ink) over the delta (plain label caps at step 2, in ink2), the
+// delta's cap line DESK.deltaGap under the label's baseline, so it reads figure, label, delta. When the figure is
+// narrower than half the span the block stands beside it, DESK.besideGap after its ink, bottom-aligned on its baseline;
+// otherwise it goes under it, the label's ink DESK.underGap below the baseline, all inside the bottom margin; a label
+// too long for that at step 4, or too large beside a narrow figure, is set a step smaller, down to DESK.labelFromStep, so
+// the figure keeps its top margin and is at least MIN_HERO_RATIO times the label.
 function deskParts(shot, ctx, steps, times) {
-  const { look, canvas, unit, measure } = ctx;
+  const { look, canvas, unit } = ctx;
   const span = gridSpan(look, canvas, 2, isWide(canvas) ? DESK.toWide : DESK.toTall);
   const left = span.x;
   const maxSize = (digitCount(steps) <= SHORT_DIGITS ? DESK.maxShort : DESK.max) * unit;
   const fig = figureAt(shot, ctx, { maxWidth: span.w, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize, steps });
   const beside = fig.total < span.w / HALF;
-  const font = fontFor(look, 'label', sizeAt(look, DESK.labelStep, unit), unit);
-  const labelLeft = beside ? left + fig.total + DESK.besideGap * unit : left; // where the label's ink starts
-  const right = gridX(look, canvas, RIGHT_EDGE);
-  const layout = layoutText({ text: setCase(look, 'label', shot.label), font, maxWidth: right - labelLeft, measure });
-  const ink = firstLineInk(layout, font, measure);
-  const x = labelLeft - ink.left;
-  const below = beside ? 0 : DESK.underGap * unit + ink.up + layout.lines.at(-1).y - layout.lines[0].y + font.size * WORD_DESCENT;
-  const deltaRoom = beside || shot.delta === undefined ? 0 : DESK.deltaDrop * unit + tagHeight(ctx, shot.delta);
-  const baseline = Math.min(DESK.baseline * canvas.h, canvas.h - look.grid.margin * unit - below - deltaRoom);
-  const y = beside ? baseline - layout.lines.at(-1).y : baseline + DESK.underGap * unit + ink.up - layout.lines[0].y;
-  const fade = times.matched ? {} : { opacity: enterTracks(look, unit, times.start + look.moves.enter.dur).opacity };
-  const figure = figureGroup(shot, ctx, fig, { left, baseline, tracks: fade });
+  const blockLeft = beside ? left + fig.total + DESK.besideGap * unit : left; // where the label's and delta's ink start
   const labelAt = times.land + look.moves.enter.dur;
-  const label = node('text', `${shot.id}.label`, { x, y, layout, font, fill: look.palette.ink2, role: 'label' }, { tracks: enterTracks(look, unit, labelAt, { y }) });
-  const boxes = { value: figure.box, label: inkBox(x, y, layout) };
-  const nodes = [figure.group, label];
-  if (shot.delta === undefined) return { nodes, boxes, hero: figure.hero };
-  requireDevice(look, 'tag', 'number');
-  const at = labelAt + DELTA_LAG;
-  const delta = beside
-    ? deltaAbove(shot, ctx, { left: labelLeft, inkTop: y + layout.lines[0].y - ink.up, at })
-    : deltaBeside(shot, ctx, { x, y, line: layout.lines.at(-1), below: boxes.label, left: labelLeft, right, at });
+  const deltaAt = (top) => plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: blockLeft, top, maxWidth: gridX(look, canvas, RIGHT_EDGE) - blockLeft, at: labelAt + DELTA_LAG });
+  const probe = shot.delta === undefined ? null : deltaAt(0);
+  const deltaUp = probe === null ? 0 : DESK.deltaGap * unit + probe.box[3] - probe.descent; // label baseline to delta baseline
+  const placeAt = (step) => {
+    const label = deskLabel(shot, ctx, blockLeft, step);
+    const below = beside ? 0 : DESK.underGap * unit + label.up + deltaUp + (probe?.descent ?? WORD_DESCENT * label.font.size);
+    return { label, baseline: Math.min(DESK.baseline * canvas.h, canvas.h - look.grid.margin * unit - below) };
+  };
+  // the figure keeps its top margin and stays MIN_HERO_RATIO times the label (the review hero rule)
+  const clearsTop = ({ label, baseline }) => baseline - CAP_HEIGHT * fig.size >= look.grid.margin * unit && fig.size >= MIN_HERO_RATIO * label.font.size;
+  let placed = placeAt(DESK.labelStep);
+  for (let step = DESK.labelStep - 1; step >= DESK.labelFromStep && !clearsTop(placed); step--) placed = placeAt(step);
+  const { label, baseline } = placed;
+  // the label's last baseline: over the delta, which sits on the figure baseline (beside), or under the figure
+  const labelBaseline = beside ? baseline - deltaUp : baseline + DESK.underGap * unit + label.up;
+  const y = labelBaseline - label.layout.lines.at(-1).y;
+  const fade = times.matched ? {} : { opacity: openingLanding(shot, ctx, times.start + look.moves.enter.dur, look.moves.enter, 0, 1) };
+  const figure = figureGroup(shot, ctx, fig, { left, baseline, tracks: fade });
+  const labelNode = node('text', `${shot.id}.label`, { x: label.x, y, layout: label.layout, font: label.font, fill: look.palette.ink, role: 'label' }, { tracks: enterTracks(look, unit, labelAt, { y }) });
+  const boxes = { value: figure.box, label: inkBox(label.x, y, label.layout) };
+  const nodes = [figure.group, labelNode];
+  if (probe === null) return { nodes, boxes, hero: figure.hero };
+  const delta = deltaAt(labelBaseline + DESK.deltaGap * unit);
   return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };
-}
-
-// The height of the tag device's plate for `text` (it sizes itself from its text).
-function tagHeight(ctx, text) {
-  const params = { id: 'probe', text: typeset(text), at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, box: [0, 0, 1, 1] };
-  return registries.devices.get('tag').build(params).boxes.tag[3];
-}
-
-// The delta tag directly over the label: flush with its ink, DESK.tagGap above its first line's ink.
-function deltaAbove(shot, ctx, { left, inkTop, at }) {
-  const tag = placedTag(ctx, `${shot.id}.delta`, typeset(shot.delta), at, (w, h) => [left, inkTop - DESK.tagGap * ctx.unit - h]);
-  return { nodes: tag.nodes, box: tag.boxes.tag };
-}
-
-// The delta tag DESK.deltaGap after the label's last line, its text on that line's baseline; under the label, flush
-// with its ink, when that would pass the right margin.
-function deltaBeside(shot, ctx, { x, y, line, below, left, right, at }) {
-  const tag = placedTag(ctx, `${shot.id}.delta`, typeset(shot.delta), at, (w, h, tagBaseline) => {
-    const beside = [x + line.x + line.width + DESK.deltaGap * ctx.unit, y + line.y - tagBaseline];
-    return beside[0] + w <= right ? beside : [left, below[1] + below[3] + DESK.deltaDrop * ctx.unit];
-  });
-  return { nodes: tag.nodes, box: tag.boxes.tag };
 }
 
 // ---- pop ----
@@ -319,8 +331,9 @@ function plainTag(ctx, id, words, { left, top, maxWidth, at, fromStep, toStep, f
 
 // pop: the figure flush left on the stack's edge, filling the available width (the platform safe width on 9:16,
 // columns 1 to 12 otherwise) between scale step 5 and POP.maxShort units for one or two digits (POP.max for more); the
-// label a tag at step 3 POP.tagGap under its baseline; the delta a second tag (rule plate, ink text) POP.deltaGap under
-// that; all flush left, the block centred in the available height.
+// label a tag at step 3 POP.tagGap under its baseline; the delta plain label caps (plainDelta) POP.deltaGap under that;
+// a kicker, when given, a tag at step 2 POP.kickerGap over the figure's cap line (as a stack statement sets it); all
+// flush left, the block centred in the available height.
 function popParts(shot, ctx, steps, times) {
   const { look, unit } = ctx;
   const area = stackArea(ctx);
@@ -328,25 +341,27 @@ function popParts(shot, ctx, steps, times) {
   const fig = figureAt(shot, ctx, { maxWidth: area.w, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize, steps });
   const labelAt = times.land + look.moves.enter.dur;
   const style = look.devices.tag ?? {};
-  const labelTag = (top) => plainTag(ctx, `${shot.id}.label`, shot.label, {
-    left: area.left, top, maxWidth: area.w, at: labelAt, fromStep: POP.tagFromStep, toStep: POP.tagStep, fill: style.fill ?? 'ink', text: style.text ?? 'paper',
+  const tagOf = (id, words, top, at, [fromStep, toStep]) => plainTag(ctx, id, words, {
+    left: area.left, top, maxWidth: area.w, at, fromStep, toStep, fill: style.fill ?? 'ink', text: style.text ?? 'paper',
   });
-  const deltaTag = (top) => plainTag(ctx, `${shot.id}.delta`, shot.delta, {
-    left: area.left, top, maxWidth: area.w, at: labelAt + DELTA_LAG, fromStep: POP.deltaStep, toStep: POP.deltaStep, fill: POP.deltaFill, text: POP.deltaText,
-  });
-  // Measure the parts under the figure first, so the block is centred whole.
+  const labelTag = (top) => tagOf(`${shot.id}.label`, shot.label, top, labelAt, [POP.tagFromStep, POP.tagStep]);
+  const kickerTag = (top) => tagOf(`${shot.id}.kicker`, shot.kicker, top, look.moves.enter.dur, [POP.kickerStep, POP.kickerStep]);
+  const deltaTag = (top) => plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: area.left, top, maxWidth: area.w, at: labelAt + DELTA_LAG });
+  // Measure the parts over and under the figure first, so the block is centred whole.
+  const kickerH = shot.kicker === undefined ? 0 : kickerTag(0).box[3] + POP.kickerGap * unit;
   const labelH = labelTag(0).box[3];
   const deltaH = shot.delta === undefined ? 0 : POP.deltaGap * unit + deltaTag(0).box[3];
-  const blockH = CAP_HEIGHT * fig.size + POP.tagGap * unit + labelH + deltaH;
-  const baseline = area.top + (area.h - blockH) / HALF + CAP_HEIGHT * fig.size;
+  const blockH = kickerH + CAP_HEIGHT * fig.size + POP.tagGap * unit + labelH + deltaH;
+  const baseline = area.top + (area.h - blockH) / HALF + kickerH + CAP_HEIGHT * fig.size;
   const enterAt = times.start + look.moves.enter.dur;
   const tracks = times.matched
     ? { scale: pulseScale(look, { pulse: times.land }) }
-    : { opacity: enterTracks(look, unit, enterAt).opacity, scale: pulseScale(look, { enterAt, pulse: times.land }) };
+    : { opacity: openingLanding(shot, ctx, enterAt, look.moves.enter, 0, 1), scale: pulseScale(look, { enterAt, pulse: times.land }) };
   const figure = figureGroup(shot, ctx, fig, { left: area.left, baseline, tracks });
   const label = labelTag(baseline + POP.tagGap * unit);
-  const boxes = { value: figure.box, label: label.box };
-  const nodes = [figure.group, ...label.nodes];
+  const kicker = shot.kicker === undefined ? null : kickerTag(baseline - CAP_HEIGHT * fig.size - kickerH);
+  const boxes = { value: figure.box, label: label.box, ...(kicker ? { kicker: kicker.box } : {}) };
+  const nodes = [...(kicker ? kicker.nodes : []), figure.group, ...label.nodes];
   if (shot.delta === undefined) return { nodes, boxes, hero: figure.hero };
   const delta = deltaTag(label.box[1] + label.box[3] + POP.deltaGap * unit);
   return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };

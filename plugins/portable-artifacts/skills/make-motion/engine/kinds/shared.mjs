@@ -6,6 +6,7 @@ import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { fitText } from '../text/layout.mjs';
 import { landing } from '../devices/shared.mjs';
+import { ease } from '../time/ease.mjs';
 import '../cuts/index.mjs';
 
 // Cap height as a share of the font size. Canvas reports only the font's ascent box, not the cap height, so the
@@ -21,7 +22,7 @@ export const RESERVED_IDS = Object.freeze([FIELD_ID]);
 /** The prefix of a target that names one of a clipping's regions. */
 export const REGION_PREFIX = 'region:';
 const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
-const PUSH = Object.freeze({ share: 0.5, min: 1.2, max: 2.6, dur: 0.9 }); // the region fills `share` of the width
+const PUSH = Object.freeze({ share: 0.58, min: 1.2, max: 3.2, dur: 0.9 }); // the region fills `share` of the width
 const PUSH_OVERSHOOT = 1.2; // a spring ease can carry the push this far past its target; the pan limit allows for it
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
 const FORCE_MARK = '|';
@@ -68,6 +69,21 @@ export function compositionRect(ctx) {
 /** A shot that arrives on a match cut keeps its hero on screen from the first frame: no entrance. */
 export const arrivesMatched = (shot, ctx) => ctx.timing.index > 0 && shot.cut === 'match';
 
+/** A shot the viewer sees whole from its first frame: the film's first shot, or one that comes in on a hard cut. */
+export const opensWhole = (shot, ctx) => ctx.timing.index === 0 || (shot.cut ?? 'cut') === 'cut';
+
+/**
+ * landing() for a hero's entrance, except that in a shot seen whole (opensWhole) an entrance that would start on the
+ * shot's first frame starts from where it would be one frame in, so that frame already shows the hero (no shot opens
+ * on the field alone). Elsewhere it is landing() exactly.
+ */
+export function openingLanding(shot, ctx, at, move, from, to) {
+  const start = Math.max(0, at - move.dur);
+  if (start > 0 || at <= 0 || !opensWhole(shot, ctx)) return landing(at, move, from, to);
+  const first = ease(move.ease)(Math.min(1, 1 / (ctx.fps * at)));
+  return track([{ t: 0, v: from + (to - from) * first }, { t: at, v: to, ease: move.ease }]);
+}
+
 /** On-screen text as a typesetter sets it: an apostrophe inside a word becomes the typographic one (can't -> can, U+2019, t). */
 export const typeset = (text) => text.replace(APOSTROPHE_RE, '$1\u2019');
 
@@ -105,8 +121,8 @@ export function wordsOf(text) {
  * fitText with the look's display tracking, which depends on the size: fit with the tracking of the largest size,
  * then, when the size found tracks differently, fit again with that tracking at or below it.
  */
-export function fitDisplay(opts, { min, max, maxHeight, maxLines }, look, unit) {
-  const fit = (tracking, top) => fitText({ ...opts, font: { ...opts.font, tracking } }, { min, max: top, maxHeight, maxLines });
+export function fitDisplay(opts, { min, max, maxHeight, maxLines, tradeFloor }, look, unit) {
+  const fit = (tracking, top) => fitText({ ...opts, font: { ...opts.font, tracking } }, { min, max: top, maxHeight, maxLines, tradeFloor });
   const first = look.tracking(max / unit, 'display');
   const layout = fit(first, max);
   const settled = look.tracking(layout.size / unit, 'display');
@@ -215,6 +231,21 @@ export function pulseScale(look, { enterAt, enterFrom, pulse, peak }) {
   const from = Math.max(pulse, keys.at(-1).t);
   keys.push({ t: from, v: 1 }, { t: from + emphasize.dur, v: peak ?? emphasize.scale, ease: emphasize.ease }, { t: from + HALF * emphasize.dur, v: 1, ease: 'inOutQuad' });
   return track(keys);
+}
+
+// A ghost word (one not yet spoken, in a mode that reads from frame 0) is the look's ink at this opacity: quiet, but
+// readable at phone size, where ink2 sits too close to ink to show the progression.
+export const GHOST_OPACITY = 0.4;
+const LIGHT_EASE = 'outCubic';
+
+/** A ghost word's tracks: ink at GHOST_OPACITY from frame 0, turning to full opacity and `lit` (ink or the accent)
+ *  over the look's emphasize move from `at`, when it is spoken. */
+export function ghostTracks(look, at, lit) {
+  const { dur } = look.moves.emphasize;
+  return {
+    opacity: track([{ t: 0, v: GHOST_OPACITY }, { t: at, v: GHOST_OPACITY }, { t: at + dur, v: 1, ease: LIGHT_EASE }]),
+    fill: track([{ t: 0, v: look.palette.ink }, { t: at, v: look.palette.ink }, { t: at + dur, v: lit, ease: LIGHT_EASE }]),
+  };
 }
 
 /** A 0..1 wipe for a hairline: the look's draw move landing on `at`. */
@@ -344,6 +375,16 @@ export function buildDevice(shot, ctx, { item, j, box, at }) {
     id: `${shot.id}.on${j}`, box, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, ...extra,
   });
 }
+
+/** A copy of a top-level node with props.fixed: the camera leaves it where it stands (a slug or a caption pinned to the
+ *  frame stays put while a picture is pushed in). */
+export const pinned = (n) => node(n.type, n.id, { ...n.props, fixed: true }, { tracks: n.tracks, children: n.children, depth: n.depth, step: n.step, wordTracks: n.wordTracks });
+
+/** A card's children with its paper (id `<card id>.paper`) marked props.textCard: a card that holds text (a slug, a
+ *  caption card), which the frame review keeps other texts off. */
+export const asTextCard = (cardId, children) => children.map((n) => (n.id === `${cardId}.paper`
+  ? node(n.type, n.id, { ...n.props, textCard: true }, { tracks: n.tracks, children: n.children, depth: n.depth, step: n.step, wordTracks: n.wordTracks })
+  : n));
 
 /** `nodes` with each device's nodes inserted before its `before` node, or appended. */
 export function placeDevices(nodes, devices) {

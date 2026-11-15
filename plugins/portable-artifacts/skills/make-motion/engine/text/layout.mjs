@@ -14,7 +14,7 @@ const ALIGNMENTS = new Set(['left', 'center', 'right']);
 const HANGING_GLYPHS = new Set(['"', "'", '“', '‘', '(', '[']);
 const DIGITS = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
 const FIT_EPSILON = 1e-6;
-// fitText sets a text up to this much smaller than the largest size that fits, for a clean layout (below).
+// fitText sets a text up to this much smaller than the largest size that fits, for a better layout (rankOf below).
 const CLEAN_BREAK_SHARE = 0.85;
 
 // A layout is not clean when a sentence ends inside a line ("file. Scripts") or a line ends between two words marked
@@ -23,6 +23,34 @@ function unclean(layout, together = []) {
   const midSentence = layout.lines.some((line) => line.words.slice(0, -1).some((w) => endsSentence(w.text)));
   return midSentence || layout.lines.slice(0, -1).some((line) => together[line.words.at(-1).index] === true);
 }
+
+// A line holding a single word, in a text of more than one line.
+const hasLoneLine = (layout) => layout.lines.length > 1 && layout.lines.some((line) => line.words.length === 1);
+
+// How many sentences run over more than one line (a sentence ends on a word that endsSentence, or at the text's end).
+function splitSentences(layout) {
+  let split = 0, firstLine = null;
+  layout.lines.forEach((line, k) => line.words.forEach((w, j) => {
+    firstLine ??= k;
+    const last = k === layout.lines.length - 1 && j === line.words.length - 1;
+    if (!endsSentence(w.text) && !last) return;
+    if (k !== firstLine) split++;
+    firstLine = null;
+  }));
+  return split;
+}
+
+// A fitting layout's rank, lower is better, compared in order: clean (no sentence ending mid-line, no break inside a
+// `together` run), then accepted by the caller's own test (opts.accept, when given), then no line of one word, then the
+// fewest sentences broken over lines (a short last sentence set as "Scripts do / the rest." when it fits whole a little
+// smaller).
+const rankOf = (layout, { together, accept }) => [
+  unclean(layout, together) ? 1 : 0, accept === undefined || accept(layout) ? 0 : 1, hasLoneLine(layout) ? 1 : 0, splitSentences(layout),
+];
+const isBetter = (a, b) => {
+  const k = a.findIndex((v, i) => v !== b[i]);
+  return k >= 0 && a[k] < b[k];
+};
 
 function assertOptions({ font, maxWidth, align, measure }) {
   if (typeof measure !== 'function') throw new Error('layoutText: measure must be a function');
@@ -84,9 +112,10 @@ const emptyLayout = (font) => ({ size: font.size, width: 0, height: 0, lines: []
 
 /**
  * Lay text out in a box of `maxWidth`.
- * @param {{ text: string, font: object, maxWidth: number, align?: 'left'|'center'|'right', measure: Function, optical?: boolean, together?: boolean[] }} opts
+ * @param {{ text: string, font: object, maxWidth: number, align?: 'left'|'center'|'right', measure: Function, optical?: boolean, together?: boolean[], accept?: Function }} opts
  *   together (read by fitText only): together[i] asks to keep word i with word i + 1; fitText looks for a slightly
- *   smaller size whose layout keeps every such pair (see unclean)
+ *   smaller size whose layout keeps every such pair (see unclean). accept (read by fitText only): (layout) => boolean,
+ *   the caller's own test, ranked right after cleanliness (rankOf)
  * @returns {{ size: number, width: number, height: number, lines: object[], overflow: boolean }}
  */
 export function layoutText({ text, font, maxWidth, align = 'left', measure, optical = false }) {
@@ -115,13 +144,16 @@ export function layoutText({ text, font, maxWidth, align = 'left', measure, opti
 
 /**
  * The largest whole-number font size in [min, max] whose layout fits the box (height, optional line count, and
- * no word wider than maxWidth); when that layout is not clean (a sentence ending mid-line, or a break between words
- * marked opts.together), the largest size down to CLEAN_BREAK_SHARE of it whose layout fits and is clean, if there is
- * one. If none fits, the layout at min, with overflow: true.
+ * no word wider than maxWidth), traded down to CLEAN_BREAK_SHARE of it for a better layout: the largest size there
+ * whose layout ranks best (rankOf: clean first, so a sentence ending mid-line or a break between words marked
+ * opts.together outranks the rest; then no line of one word; then the fewest sentences broken over lines), never below
+ * limits.tradeFloor; with a tradeFloor, a layout that is still not clean (or not accepted) looks further down, to the
+ * floor, for the largest clean and accepted one (a floor there is the hero ratio the caller must keep). If none fits, the layout at min, with
+ * overflow: true.
  * @param {object} opts layoutText options; font.size is replaced by the search
- * @param {{ min: number, max: number, maxHeight: number, maxLines?: number }} limits
+ * @param {{ min: number, max: number, maxHeight: number, maxLines?: number, tradeFloor?: number }} limits
  */
-export function fitText(opts, { min, max, maxHeight, maxLines = Infinity }) {
+export function fitText(opts, { min, max, maxHeight, maxLines = Infinity, tradeFloor = 0 }) {
   const low = Math.ceil(min);
   const high = Math.floor(max);
   if (!(Number.isFinite(low) && Number.isFinite(high) && low >= 1 && low <= high)) {
@@ -131,20 +163,32 @@ export function fitText(opts, { min, max, maxHeight, maxLines = Infinity }) {
   const fits = (l) => l.height <= maxHeight + FIT_EPSILON && l.lines.length <= maxLines && l.width <= opts.maxWidth + FIT_EPSILON;
   for (let size = high; size > low; size--) {
     const layout = at(size);
-    if (fits(layout)) return unclean(layout, opts.together) ? cleaner(at, fits, size, low, opts.together) ?? layout : layout;
+    if (fits(layout)) return bestBelow(at, fits, layout, { low, tradeFloor, together: opts.together, accept: opts.accept });
   }
   const floor = at(low);
   return fits(floor) ? floor : { ...floor, overflow: true };
 }
 
-// The largest size below `size` (down to CLEAN_BREAK_SHARE of it, not below `low`) whose layout fits and is clean, or
-// null.
-function cleaner(at, fits, size, low, together) {
-  for (let s = size - 1; s >= Math.max(low, Math.ceil(size * CLEAN_BREAK_SHARE)); s--) {
-    const layout = at(s);
-    if (fits(layout) && !unclean(layout, together)) return layout;
+// The best-ranked layout from `top` (the largest that fits) down to CLEAN_BREAK_SHARE of its size, not below `low` or
+// `tradeFloor`; of layouts that rank the same, the largest. The search stops early once a layout ranks perfect. With a
+// tradeFloor, a best that is still not clean gives way to the largest clean layout further down, to the floor.
+function bestBelow(at, fits, top, { low, tradeFloor = 0, together, accept }) {
+  const floor = Math.max(low, Math.ceil(tradeFloor));
+  const window = Math.max(floor, Math.ceil(top.size * CLEAN_BREAK_SHARE));
+  const ranking = { together, accept };
+  let best = top, bestRank = rankOf(top, ranking);
+  for (let size = top.size - 1; size >= window && bestRank.some((v) => v > 0); size--) {
+    const layout = at(size);
+    if (!fits(layout)) continue;
+    const rank = rankOf(layout, ranking);
+    if (isBetter(rank, bestRank)) [best, bestRank] = [layout, rank];
   }
-  return null;
+  if ((bestRank[0] === 0 && bestRank[1] === 0) || tradeFloor <= 0) return best;
+  for (let size = window - 1; size >= floor; size--) {
+    const layout = at(size);
+    if (fits(layout) && !unclean(layout, together) && (accept === undefined || accept(layout))) return layout;
+  }
+  return best;
 }
 
 /** The widest of the digits 0-9: a fixed advance so a counter does not jitter as its digits change. */

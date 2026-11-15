@@ -134,6 +134,39 @@ function applyBlend(ctx, n) {
   ctx.globalCompositeOperation = blend;
 }
 
+// props.layer on a node: it and its children are drawn on a canvas of their own (cleared, the same size and transform
+// as the one being drawn on) and that picture is composited once, at the node's opacity and blend. Without it, opacity
+// multiplies into each child and overlapping children show through one another; a cut's smear sample (cuts/index.mjs)
+// must be one picture for its running average to weigh every sample the same. One scratch canvas per nesting depth.
+const layerCanvases = [];
+
+function layerContext(ctx, depth) {
+  const { width, height } = ctx.canvas;
+  let canvas = layerCanvases[depth];
+  if (!canvas || canvas.width !== width || canvas.height !== height) {
+    canvas = new OffscreenCanvas(width, height);
+    layerCanvases[depth] = canvas;
+  }
+  const layer = canvas.getContext('2d');
+  layer.setTransform(1, 0, 0, 1, 0, 0);
+  layer.globalAlpha = 1;
+  layer.globalCompositeOperation = 'source-over';
+  layer.filter = 'none';
+  layer.clearRect(0, 0, width, height);
+  layer.setTransform(ctx.getTransform());
+  return layer;
+}
+
+function drawLayer(ctx, n, env) {
+  const depth = env.layerDepth ?? 0;
+  const layer = layerContext(ctx, depth);
+  const inner = { ...env, layerDepth: depth + 1 };
+  drawBody(layer, n, inner);
+  for (const child of n.children) drawNode(layer, child, inner);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(layer.canvas, 0, 0);
+}
+
 function drawNode(ctx, n, env) {
   const opacity = unit01(n.opacity);
   if (opacity <= 0) return; // also hides the children, as `visible` does
@@ -143,8 +176,11 @@ function drawNode(ctx, n, env) {
   applyBlend(ctx, n);
   if (n.blur > 0) ctx.filter = `blur(${n.blur}px)`; // a blurred parent blurs its children too
   clipToReveal(ctx, n);
-  drawBody(ctx, n, env);
-  for (const child of n.children) drawNode(ctx, child, env);
+  if (n.props.layer === true) drawLayer(ctx, n, env);
+  else {
+    drawBody(ctx, n, env);
+    for (const child of n.children) drawNode(ctx, child, env);
+  }
   ctx.restore();
 }
 

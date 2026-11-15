@@ -102,7 +102,7 @@ async function snapshotsOf(session, plan, signal) {
     signal?.throwIfAborted();
     const chunk = plan.slice(from, from + SNAPSHOT_CHUNK);
     const trees = await session.page.evaluate((list) => list.map(([shot, i]) => (shot < 0 ? window.__snapshot(i) : window.__snapshotShot(shot, i))), chunk);
-    chunk.forEach(([, frame], k) => out.push({ frame, tree: trees[k] }));
+    chunk.forEach(([shot, frame], k) => out.push({ frame, tree: trees[k], whole: shot < 0 }));
   }
   return out;
 }
@@ -118,17 +118,67 @@ async function heldFlags(session, signal) {
   return held;
 }
 
-// shot id -> what its last frame says about its texts (see engine/review/frame.mjs): the words at opacity 0 there are
-// permanently hidden, and the scale each text stands at there is the scale it rests at.
-function restingByShot(timeline, snapshots) {
+const SCALE_DECIMALS = 1e4; // scales that agree to 4 decimals are the same rest
+
+// text id -> the scale it stands at on most of `trees` (a tie goes to the later frame): its rest. A last frame that
+// catches the tail of a spring, a pulse or a push would otherwise leave the text's whole at-rest layout unjudged.
+function modalScales(trees) {
+  const counts = new Map();
+  trees.forEach((tree) => textScalesIn(tree).forEach((scale, id) => {
+    const key = Math.round(scale * SCALE_DECIMALS) / SCALE_DECIMALS;
+    const seen = counts.get(id) ?? new Map();
+    seen.set(key, { n: (seen.get(key)?.n ?? 0) + 1, scale });
+    counts.set(id, seen);
+  }));
+  return new Map([...counts].map(([id, seen]) => [id, [...seen.values()].reduce((best, c) => (c.n >= best.n ? c : best)).scale]));
+}
+
+// text id -> per word index, the scale the word holds on most of `trees` (ties: the later frame).
+function modalWordScales(trees) {
+  const counts = new Map();
+  const walk = (n) => {
+    if (n.type === 'text' && Array.isArray(n.words)) {
+      const perWord = counts.get(n.id) ?? [];
+      n.words.forEach((w, i) => {
+        const scale = w.scale ?? 1, key = Math.round(scale * SCALE_DECIMALS) / SCALE_DECIMALS;
+        const seen = perWord[i] ?? new Map();
+        seen.set(key, { n: (seen.get(key)?.n ?? 0) + 1, scale });
+        perWord[i] = seen;
+      });
+      counts.set(n.id, perWord);
+    }
+    (n.children ?? []).forEach(walk);
+  };
+  trees.forEach((tree) => (tree ?? []).forEach(walk));
+  return new Map([...counts].map(([id, perWord]) => [id, perWord.map((seen) => [...seen.values()].reduce((best, c) => (c.n >= best.n ? c : best)).scale)]));
+}
+
+/**
+ * shot id -> what its sampled frames say about its texts (see engine/review/frame.mjs): the words at opacity 0 on its
+ * last frame are permanently hidden, and the scale each text (restScales) and each of its words (restWords) holds on
+ * most of its frames is the scale it rests at.
+ * @param {{ fps: number, shots: { id: string, start: number, end: number }[] }} timeline
+ * @param {{ frame: number, tree: object[] }[]} snapshots
+ */
+export function restingByShot(timeline, snapshots) {
   const byFrame = new Map(snapshots.map((snap) => [snap.frame, snap.tree]));
   return new Map(timeline.shots.map((shot) => {
-    const tree = byFrame.get(Math.round(shot.end * timeline.fps) - 1);
-    return [shot.id, tree ? { hiddenWords: hiddenWordsIn(tree), restScales: textScalesIn(tree) } : {}];
+    const first = Math.round(shot.start * timeline.fps), last = Math.round(shot.end * timeline.fps) - 1;
+    const tree = byFrame.get(last);
+    const trees = snapshots.filter((snap) => snap.frame >= first && snap.frame <= last).map((snap) => snap.tree);
+    return [shot.id, tree ? { hiddenWords: hiddenWordsIn(tree), restScales: modalScales(trees), restWords: modalWordScales(trees) } : {}];
   }));
 }
 
-function frameFindings(film, timeline, restingOf, { frame, tree }) {
+/** Is `frame` the first frame of a shot that came in on a hard cut, audited whole? The opening rule judges only that frame
+ *  (engine/review/frame.mjs openingFindings): a film may open on its own field, and a soft cut shows the outgoing shot. */
+export function opensShotAt(film, timeline, frame, whole) {
+  const shot = shotAtFrame(timeline, frame);
+  const hard = shot.index > 0 && (film.shots[shot.index].cut ?? 'cut') === 'cut';
+  return whole === true && hard && frame === Math.round(shot.start * timeline.fps);
+}
+
+function frameFindings(film, timeline, restingOf, { frame, tree, whole }) {
   const shot = shotAtFrame(timeline, frame);
   const t = frame / timeline.fps;
   const [width, height] = canvasSize(film);
@@ -136,6 +186,7 @@ function frameFindings(film, timeline, restingOf, { frame, tree }) {
   const ctx = {
     look, canvas, safe: safeRectFor(canvas, look), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, shotIndex: shot.index, t,
     isFirstShot: shot.index === 0, ...restingOf.get(shot.id),
+    opensShot: opensShotAt(film, timeline, frame, whole),
   };
   return auditFrame(tree, ctx).map((finding) => ({ shot: shot.id, t, finding }));
 }

@@ -1,16 +1,16 @@
 // The slug: in an editorial composition (desk) a shot's kicker is set on a small taped paper card in the top right,
 // the way a picture desk slugs a print: the shot's number among the film's numbered shots as a display-serif numeral,
-// the kicker under it in label caps. The card's right edge sits on the right edge of column 12 and its top at 14% of
-// the height, turned +3 degrees, the same in every shot; it enters with the look's enter move at the shot start. A
+// the kicker under it in label caps. The card's right margin equals the text block's left margin (the text
+// starts on column 2, so the card ends on the right edge of column 11) and its top sits at 14% of the height, turned +3 degrees, the same in every shot; it enters with the look's enter move at the shot start. A
 // shot without a kicker has no slug. Built from the `card` device plus two text nodes inside its group. Pure, DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
-import { sizeAt, fontFor, setCase, isEditorial, inkExtent } from './shared.mjs';
+import { sizeAt, fontFor, setCase, isEditorial, inkExtent, asTextCard } from './shared.mjs';
 
 export const SLUG = Object.freeze({ top: 0.14, turn: 3, pad: 30, gap: 18, numeralStep: 3, kickerStep: 2, digits: 2, maxColumns: 3 });
-const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
+const TEXT_COLUMN = 2; // the column a text block starts on: the slug's right margin is as wide as the text's left one
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const NO_WRAP = 1e6;
 const HALF = 2;
@@ -51,7 +51,7 @@ function slugParts(shot, ctx) {
 export function slugBox(shot, ctx) {
   if (!hasSlug(shot, ctx.look)) return null;
   const { w, h } = slugParts(shot, ctx);
-  const box = [gridX(ctx.look, ctx.canvas, RIGHT_EDGE) - w, SLUG.top * ctx.canvas.h, w, h];
+  const box = [ctx.canvas.w - gridX(ctx.look, ctx.canvas, TEXT_COLUMN) - w, SLUG.top * ctx.canvas.h, w, h];
   const a = SLUG.turn * DEGREES_TO_RADIANS;
   const tw = w * Math.cos(a) + h * Math.sin(a), th = w * Math.sin(a) + h * Math.cos(a);
   const cx = box[0] + w / HALF, cy = box[1] + h / HALF;
@@ -70,11 +70,12 @@ export function slugNodes(shot, ctx) {
   const numBaseline = top + parts.numInk.up;
   const kickBaseline = numBaseline + parts.gap + parts.kickInk.up;
   const numeral = node('text', `${id}.number`, {
-    x: left - parts.numInk.left, y: numBaseline - parts.numeral.lines[0].y, layout: parts.numeral, font: parts.numFont, fill: look.palette.ink, role: 'slug',
+    x: left - parts.numInk.left, y: numBaseline - parts.numeral.lines[0].y, layout: parts.numeral, font: parts.numFont, fill: look.palette.ink, role: 'slug', furniture: true,
   });
   const kicker = node('text', `${shot.id}.kicker`, {
-    x: left, y: kickBaseline - parts.kicker.lines[0].y, layout: parts.kicker, font: parts.kickFont, fill: look.palette.ink2, role: 'kicker',
+    x: left, y: kickBaseline - parts.kicker.lines[0].y, layout: parts.kicker, font: parts.kickFont, fill: look.palette.ink2, role: 'kicker', furniture: true,
   });
   // the card's own hand tilt is replaced: the slug turns exactly SLUG.turn in every shot
-  return [node('group', id, { ...card.props, rotate: SLUG.turn }, { tracks: card.tracks, children: [...card.children, numeral, kicker] })];
+  // pinned to the frame (props.fixed): the slug stands still through a drift or a push, the same in every shot
+  return [node('group', id, { ...card.props, rotate: SLUG.turn, fixed: true }, { tracks: card.tracks, children: [...asTextCard(id, card.children), numeral, kicker] })];
 }

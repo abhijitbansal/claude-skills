@@ -199,7 +199,9 @@ test('breakBySense pulls a word down rather than leave one alone under three or 
   const widths = [200, 200, 200, 250, 50, 50, 50, 200, 200];
   const words = widths.map((_, i) => `w${i}`);
   const rows = breakBySense(words, widths, 50, 450);
-  assert.deepEqual(rows, [[0], [1, 2], [3], [4, 5, 6], [7, 8]]);
+  // revision 2 costs a one-word line anywhere, so the break that also left w3 alone ([0][1 2][3][4 5 6][7 8]) gave way
+  assert.deepEqual(rows, [[0], [1, 2], [3, 4], [5, 6], [7, 8]]);
+  assert.ok(rows.at(-1).length > 1, 'the last line is not one word');
 });
 
 test('breakBySense never breaks after a word marked keep-with-next', () => {
@@ -309,8 +311,64 @@ test('words marked together stay on one line when a slightly smaller size allows
   // together[i]: keep word i with word i + 1 (Nothing, leaves, it. are the emphasised run)
   const together = [false, false, false, false, true, true, false];
   const fit = (extra) => fitText({ text, font: { family: 'x', size: 300, lineHeight: 1.1 }, maxWidth: 1000, measure: serif, ...extra }, { min: 72, max: 300, maxHeight: 691, maxLines: 4 });
-  assert.deepEqual(lineTexts(fit({})), ['Built on your', 'machine.', 'Nothing', 'leaves it.'], 'without the mark the run breaks');
   const kept = fit({ together });
   assert.ok(lineTexts(kept).includes('Nothing leaves it.'), `the run on one line: ${JSON.stringify(lineTexts(kept))}`);
   assert.ok(kept.size >= 0.85 * 160, `at most 15% smaller: ${kept.size}`);
+});
+
+// ---- revision 2: no line of one word (E5) ----
+
+const SERIF_W = { m: 0.85, w: 0.75, M: 0.9, W: 0.95, i: 0.28, l: 0.28, t: 0.32, f: 0.3, r: 0.36, j: 0.28, ' ': 0.24, '.': 0.24, s: 0.4, c: 0.42, e: 0.45 };
+const serifMeasure = (text, f) => ({ width: [...text].reduce((sum, ch) => sum + (SERIF_W[ch] ?? 0.52), 0) * f.size, ascent: f.size * 0.8, descent: f.size * 0.2 });
+const DESK_LIMITS = { min: 72, max: 300, maxHeight: 691, maxLines: 4 };
+const serifFit = (text, maxWidth, extra = {}) => fitText({ text, font: { family: 'x', size: 300, lineHeight: 1.1 }, maxWidth, measure: serifMeasure, ...extra }, DESK_LIMITS);
+// The largest size whose plain layout fits the box: what the fitter may give up at most 15% of.
+function largestFit(text, maxWidth) {
+  for (let size = DESK_LIMITS.max; size > DESK_LIMITS.min; size--) {
+    const l = layoutText({ text, font: { family: 'x', size, lineHeight: 1.1 }, maxWidth, measure: serifMeasure });
+    if (l.height <= DESK_LIMITS.maxHeight && l.lines.length <= DESK_LIMITS.maxLines && l.width <= maxWidth) return size;
+  }
+  return DESK_LIMITS.min;
+}
+const loneLines = (l) => l.lines.filter((line) => line.words.length === 1).map((line) => line.words[0].text);
+
+test('the fitter avoids a line of one word, first, middle or last, when a layout up to 15% smaller has none', () => {
+  const close = 'Built on your machine. Nothing leaves it.';
+  const l = serifFit(close, 1000);
+  assert.deepEqual(loneLines(l), [], `no one-word line: ${JSON.stringify(lineTexts(l))}`);
+  assert.ok(lineTexts(l).every((line) => !/[.!?] \S/.test(line)), 'and still no sentence ending mid-line');
+  assert.ok(l.size >= 0.85 * largestFit(close, 1000), `at most 15% smaller: ${l.size} of ${largestFit(close, 1000)}`);
+  // the highlight run still stays on one line: that rule keeps its priority
+  const kept = serifFit(close, 1000, { together: [false, false, false, false, true, true, false] });
+  assert.ok(lineTexts(kept).includes('Nothing leaves it.'), `the run on one line: ${JSON.stringify(lineTexts(kept))}`);
+  assert.deepEqual(loneLines(kept), []);
+  // a one-word text has nothing to avoid
+  assert.deepEqual(lineTexts(serifFit('Dashboards.', 1000)), ['Dashboards.']);
+});
+
+test('a short last sentence is not broken over two lines when it fits on one within 15%: "Scripts do the rest." stays whole', () => {
+  const how = 'The model writes one small file. Scripts do the rest.';
+  const l = serifFit(how, 1100);
+  const lines = lineTexts(l);
+  assert.equal(lines.at(-1), 'Scripts do the rest.', JSON.stringify(lines));
+  assert.ok(lines.every((line) => !/[.!?] \S/.test(line)), `no sentence ends mid-line: ${JSON.stringify(lines)}`);
+  assert.deepEqual(loneLines(l), []);
+  assert.ok(l.size >= 0.85 * largestFit(how, 1100), `at most 15% smaller: ${l.size} of ${largestFit(how, 1100)}`);
+});
+
+test('breakBySense costs a one-word line anywhere, not only last: it takes a break of two two-word lines over one and three', () => {
+  // at width 450 with a 50 space, [a][b c d] (slack 200 and 50) and [a b][c d] (slack 50 and 200) cost the same by
+  // slack, and the first is found first; only a cost on the one-word line separates them
+  const widths = [250, 100, 100, 100];
+  const words = ['aaaa', 'bb', 'cc', 'dd.'];
+  const rows = breakBySense(words, widths, 50, 450);
+  assert.ok(rows.every((r) => r.length > 1), `no one-word line: ${JSON.stringify(rows)}`);
+});
+
+test('a separator dot never starts a line: the break falls after it', () => {
+  const text = 'EVERY CHART SHOWS ITS QUERY · ILLUSTRATION';
+  for (let maxWidth = 400; maxWidth <= 2200; maxWidth += 50) {
+    const lines = lineTexts(layoutText({ text, font, maxWidth, measure }));
+    assert.ok(lines.every((line) => !line.startsWith('·')), `${maxWidth}: ${JSON.stringify(lines)}`);
+  }
 });
