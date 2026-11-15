@@ -273,7 +273,9 @@ export async function runJob(job, { ort, phonemize, log, at = {} }) {
     writeSidecar(path.join(job.dir, SIDECAR_FILE), sidecar);
     return sidecar;
   } finally {
-    await kokoro.close();
+    // A failure to release the session is logged, not thrown: it must never replace the error that ended the run
+    // (a film error would otherwise be reported as machine trouble), and on success the output is already written.
+    await kokoro.close().catch((err) => log(`voice: closing the voice model failed: ${oneLine(err)}`));
   }
 }
 

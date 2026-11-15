@@ -12,7 +12,9 @@
 import { spawn as spawnChild } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync,
+} from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
@@ -23,7 +25,7 @@ import { OPTIONAL_ROOT } from '../../lib/optional.mjs';
 import { ASIDE_SPEED_FACTOR, MAX_IDS } from './calls.mjs';
 import { STYLE_DIM, checkVoice } from './kokoro.mjs';
 import { VOICE_MODEL, ensureVoiceModel, voiceModelDir } from './model.mjs';
-import { SIDECAR_FILE, SIDECAR_VERSION, readSidecar, validateSidecar } from './sidecar.mjs';
+import { SIDECAR_FILE, SIDECAR_VERSION, SidecarError, readSidecar, validateSidecar } from './sidecar.mjs';
 import { ERROR_MARKER, INSTALL_HINT, JOB_VERSION, SILENCE_QUANTUM_SAMPLES, TRIM } from './worker.mjs';
 import { END_CAP_FRAMES, FRAME_SAMPLES, LEAD, SAMPLE_RATE } from './words.mjs';
 
@@ -63,6 +65,12 @@ const WAV_HEADER_BYTES = 44;
 const BYTES_PER_SAMPLE = 2;
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const RERUN_HINT = `run again; if it repeats, reinstall the voice package: ${optionalInstall('kokoro')}`;
+const FS_HINT = 'check that the output folder is writable and the disk has space, then run again';
+/** A staging folder older than this (by mtime) belongs to a run that died, and is removed when a run starts. */
+export const STALE_STAGING_MS = 60 * 60 * 1000;
+// A killed worker that has still not closed after this long is given up on (a SIGKILL ends a process at once).
+const KILL_GRACE_MS = 10 * 1000;
+const STAGING_RE = /^[0-9a-f]{64}\.partial-\d+-[0-9a-f-]{36}$/;
 
 export class VoiceSynthError extends Error {
   constructor(message, { kind, hint, shot, exitCode = null, signal = null, timedOut = false, cause } = {}) {
@@ -108,12 +116,9 @@ export function sourceHash(files) {
   return hash.digest('hex');
 }
 
-let codeSha256 = null;
-// The code hash of this run, computed once.
-const codeHash = () => {
-  codeSha256 ??= sourceHash(CODE_FILES);
-  return codeSha256;
-};
+// The code hash, read afresh for each run (eight small files), so a long-lived process that sees a source edit never
+// files new output under the old code's key.
+const codeHash = () => sourceHash(CODE_FILES);
 
 // The film's mode's voice pace, from the modes registry (its own error for an unknown mode).
 function paceOf(film) {
@@ -163,23 +168,37 @@ function wavSamples(file) {
   }
 }
 
+// Why a shot's WAV is not complete (missing, a header that disagrees with the sidecar, or a body shorter or longer
+// than its header), or null.
 function wavProblem(dir, shot) {
   if (shot.wav === null) return null;
   const file = path.join(dir, shot.wav);
   if (!existsSync(file)) return `${shot.wav} is missing`;
   const expected = Math.round(shot.seconds * SAMPLE_RATE);
   const samples = wavSamples(file);
-  return samples === expected ? null : `${shot.wav} holds ${samples} samples, the sidecar says ${expected}`;
+  if (samples !== expected) return `${shot.wav} holds ${samples} samples, the sidecar says ${expected}`;
+  const bytes = statSync(file).size;
+  const wanted = WAV_HEADER_BYTES + expected * BYTES_PER_SAMPLE;
+  return bytes === wanted ? null : `${shot.wav} is ${bytes} bytes, its header says ${wanted}`;
 }
 
-// { sidecar } when the entry in `dir` is complete and matches the film, else { problem }.
+// Whether an error reading an entry means the entry is incomplete (a missing file, a sidecar that is not JSON or does
+// not match the film) rather than trouble reading it (permissions, a folder where a file should be, a full table).
+function isIncomplete(err) {
+  const code = err?.cause?.code ?? err?.code;
+  return err instanceof SidecarError ? code === undefined || code === 'ENOENT' : code === 'ENOENT';
+}
+
+// { sidecar } when the entry in `dir` is complete and matches the film, else { problem }. Trouble reading it is
+// machine trouble, not a reason to throw the entry away.
 function readEntry(dir, film) {
   try {
     const sidecar = validateSidecar(readSidecar(path.join(dir, SIDECAR_FILE)), film);
     const problem = sidecar.shots.map((shot) => wavProblem(dir, shot)).find((p) => p !== null);
     return problem === undefined ? { sidecar } : { problem };
   } catch (err) {
-    return { problem: err.message };
+    if (isIncomplete(err)) return { problem: err.message };
+    throw machine(`the voice cache entry ${dir} cannot be read: ${err.message}`, FS_HINT, { cause: err });
   }
 }
 
@@ -193,8 +212,32 @@ function cachedSidecar(dir, film, log) {
     return sidecar;
   }
   log(`voice: the cache entry ${dir} is incomplete (${problem}); removing it and synthesising again`);
-  rmSync(dir, { recursive: true, force: true });
+  fsStep(`remove the incomplete cache entry ${dir}`, () => rmSync(dir, { recursive: true, force: true }));
   return null;
+}
+
+// Runs a file-system step of the parent; a failure (no permission, a full disk, a file where a folder should be) is
+// machine trouble that says which step failed.
+function fsStep(what, fn) {
+  try {
+    return fn();
+  } catch (err) {
+    throw machine(`voice: could not ${what}: ${String(err?.message ?? err).split('\n')[0]}`, FS_HINT, { cause: err });
+  }
+}
+
+const isStaging = (name) => STAGING_RE.test(name);
+
+// Removes staging folders in `cacheRoot` older than STALE_STAGING_MS by their mtime: leftovers of a run whose
+// make.mjs died (a crash, SIGKILL) before its own cleanup. Housekeeping only: nothing here reaches the sidecar.
+function sweepStaleStaging(cacheRoot, log) {
+  const now = Date.now();
+  for (const name of readdirSync(cacheRoot)) {
+    const folder = path.join(cacheRoot, name);
+    if (!isStaging(name) || now - statSync(folder).mtimeMs <= STALE_STAGING_MS) continue;
+    log(`voice: removing ${folder}, left by an earlier run that did not finish`);
+    rmSync(folder, { recursive: true, force: true });
+  }
 }
 
 const refuseDownload = () => Promise.reject(new Error('offline: no model file is downloaded'));
@@ -219,8 +262,8 @@ const lineReader = (stream, onLine) => {
   return once(reader, 'close');
 };
 
-// The worker's classified error from its last stderr line, or null when that line is not one. A film error keeps the
-// `shot` it names; machine trouble never carries one.
+// The worker's classified error from a stderr line, or null when that line is not one. A film error keeps the `shot`
+// it names; machine trouble never carries one.
 function markedError(line) {
   if (!line?.startsWith(ERROR_MARKER)) return null;
   try {
@@ -233,9 +276,11 @@ function markedError(line) {
   }
 }
 
+// The worker's error from its stderr tail: the last classified error line, wherever it is (a teardown warning or a
+// late notice printed after it changes nothing); without one, machine trouble naming the exit and the last line.
 function workerError(code, signal, tail) {
   const last = tail.at(-1);
-  const marked = markedError(last);
+  const marked = markedError([...tail].reverse().find((line) => line.startsWith(ERROR_MARKER)));
   if (marked) return new VoiceSynthError(marked.message, { ...marked, exitCode: code, signal });
   const what = signal ? `the voice worker was killed by ${signal}` : `the voice worker exited with code ${code}`;
   return machine(last ? `${what}: ${last}` : what, RERUN_HINT, { exitCode: code, signal });
@@ -246,41 +291,58 @@ function workerError(code, signal, tail) {
  * come. Resolves on exit 0; rejects with its classified error, or, when it has not finished after `timeoutSeconds`,
  * kills it (SIGKILL) and rejects with machine trouble that says so (`timedOut: true`). When `signal` aborts first, the
  * worker is killed (SIGKILL) and the call rejects with an AbortError; after the worker has finished, an abort does
- * nothing.
+ * nothing. After a kill the call waits for the worker to exit (at most KILL_GRACE_MS) before it rejects, so the
+ * staging folder is never removed under a worker still writing into it; its later output is not logged.
  */
 function runWorker(spawn, jobFile, { timeoutSeconds, log, signal }) {
   return new Promise((resolve, reject) => {
     let settled = false;
+    let killedFor = null;
     let timer = null;
+    let grace = null;
     let child = null;
     const tail = [];
     const keepTail = (line) => {
       tail.push(line);
       if (tail.length > STDERR_TAIL_LINES) tail.shift();
     };
-    const onAbort = () => {
-      if (settled) return;
-      child.kill('SIGKILL');
-      settle(reject, abortError(signal));
-    };
     const settle = (fn, value) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(grace);
       signal?.removeEventListener('abort', onAbort);
       fn(value);
     };
+    // Kills the worker; the call rejects with `error` once it has exited.
+    const killFor = (error) => {
+      if (settled || killedFor) return;
+      killedFor = error;
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+      child.kill('SIGKILL');
+      grace = setTimeout(() => settle(reject, killedFor), KILL_GRACE_MS);
+    };
+    function onAbort() {
+      killFor(abortError(signal));
+    }
     child = spawn(process.execPath, [WORKER_PATH, jobFile], { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     signal?.addEventListener('abort', onAbort, { once: true });
-    const streamsDone = Promise.all([lineReader(child.stdout, log), lineReader(child.stderr, keepTail)]);
+    const progress = (line) => {
+      if (!settled && !killedFor) log(line);
+    };
+    const streamsDone = Promise.all([lineReader(child.stdout, progress), lineReader(child.stderr, keepTail)]);
     timer = setTimeout(() => {
-      child.kill('SIGKILL');
       const hint = `run again; a long film may need a larger timeoutSeconds than ${timeoutSeconds}`;
-      settle(reject, machine(`the voice worker did not finish within ${timeoutSeconds} s and was killed`, hint, { timedOut: true }));
+      killFor(machine(`the voice worker did not finish within ${timeoutSeconds} s and was killed`, hint, { timedOut: true }));
     }, timeoutSeconds * MS_PER_SECOND);
     child.on('error', (err) => settle(reject, machine(`the voice worker could not start: ${err.message}`, RERUN_HINT, { cause: err })));
-    child.on('close', (code, signal) => {
-      streamsDone.then(() => (code === 0 ? settle(resolve) : settle(reject, workerError(code, signal, tail))));
+    child.on('close', (code, exitSignal) => {
+      streamsDone.then(() => {
+        if (killedFor) settle(reject, killedFor);
+        else if (code === 0) settle(resolve);
+        else settle(reject, workerError(code, exitSignal, tail));
+      });
     });
   });
 }
@@ -295,25 +357,51 @@ function publish(staging, dir) {
   }
 }
 
-// Runs the worker in a fresh staging folder (unique name, created exclusively, as is the job file in it) and
-// publishes the folder as `dir`. The staging folder is removed on every path, an interruption included.
+// Makes a fresh staging folder (unique name, created exclusively) with the job file in it (also exclusive), after
+// sweeping stale staging folders. -> { staging, jobFile }.
+function stage(dir, film, { voice, runtime, modelDir, log }) {
+  const cacheRoot = path.dirname(dir);
+  fsStep(`create ${cacheRoot}`, () => mkdirSync(cacheRoot, { recursive: true }));
+  fsStep(`clear stale staging folders in ${cacheRoot}`, () => sweepStaleStaging(cacheRoot, log));
+  const staging = `${dir}.partial-${process.pid}-${randomUUID()}`;
+  fsStep(`create ${staging}`, () => mkdirSync(staging));
+  const { voiceSpeed, emphasisPause } = paceOf(film);
+  const shots = film.shots.map((shot) => ({ id: shot.id, say: sayOf(shot) }));
+  const job = { version: JOB_VERSION, dir: staging, shots, speed: voiceSpeed, emphasisPause, voice, runtime, modelDir };
+  const jobFile = path.join(staging, 'job.json');
+  try {
+    fsStep(`write ${jobFile}`, () => writeFileSync(jobFile, `${JSON.stringify(job)}\n`, { flag: 'wx' }));
+  } catch (err) {
+    removeStaging(staging, log);
+    throw err;
+  }
+  log(`voice: synthesising ${shots.filter((s) => s.say !== null).length} narrated shots`);
+  return { staging, jobFile };
+}
+
+// Runs the worker in a fresh staging folder and publishes the folder as `dir`. The staging folder is removed on every
+// path, an interruption included, and only once the worker has exited.
 async function synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log, timeoutSeconds, signal }) {
   throwIfAborted(signal);
-  mkdirSync(path.dirname(dir), { recursive: true });
-  const staging = `${dir}.partial-${process.pid}-${randomUUID()}`;
-  mkdirSync(staging);
+  const { staging, jobFile } = stage(dir, film, { voice, runtime, modelDir, log });
   try {
-    const { voiceSpeed, emphasisPause } = paceOf(film);
-    const shots = film.shots.map((shot) => ({ id: shot.id, say: sayOf(shot) }));
-    const job = { version: JOB_VERSION, dir: staging, shots, speed: voiceSpeed, emphasisPause, voice, runtime, modelDir };
-    const jobFile = path.join(staging, 'job.json');
-    writeFileSync(jobFile, `${JSON.stringify(job)}\n`, { flag: 'wx' });
-    log(`voice: synthesising ${shots.filter((s) => s.say !== null).length} narrated shots`);
     await runWorker(spawn, jobFile, { timeoutSeconds, log, signal });
-    rmSync(jobFile);
-    publish(staging, dir);
+    fsStep(`publish ${staging} as ${dir}`, () => {
+      rmSync(jobFile);
+      publish(staging, dir);
+    });
   } finally {
+    removeStaging(staging, log);
+  }
+}
+
+// Removes a staging folder. A failure is logged, not thrown, so it never replaces the error that ended the run; the
+// folder is then swept by a later run once it is stale.
+function removeStaging(staging, log) {
+  try {
     rmSync(staging, { recursive: true, force: true });
+  } catch (err) {
+    log(`voice: could not remove ${staging} (${err.message}); a later run removes it once it is an hour old`);
   }
 }
 

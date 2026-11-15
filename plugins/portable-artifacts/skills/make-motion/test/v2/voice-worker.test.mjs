@@ -6,13 +6,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { SayError } from '../../engine/script/say.mjs';
-import { ERROR_MARKER, INSTALL_HINT, classifyError } from '../../scripts/v2/voice/worker.mjs';
-import { WORKER_PATH, synthesiseFilm } from '../../scripts/v2/voice/synth.mjs';
+import { STYLE_DIM, openKokoro } from '../../scripts/v2/voice/kokoro.mjs';
+import { MAX_IDS } from '../../scripts/v2/voice/calls.mjs';
+import { ERROR_MARKER, INSTALL_HINT, classifyError, runJob } from '../../scripts/v2/voice/worker.mjs';
+import { CODE_FILES, WORKER_PATH, synthesiseFilm } from '../../scripts/v2/voice/synth.mjs';
 import { VoiceTextError } from '../../scripts/v2/voice/tokens.mjs';
 import { SAMPLE_RATE } from '../../scripts/v2/voice/words.mjs';
 import { VOICE_MODEL, voiceModelDir } from '../../scripts/v2/voice/model.mjs';
@@ -43,15 +45,149 @@ test('classifyError: a VoiceTextError or SayError is the film\'s and names the s
   const crash = classifyError(new Error('ENOSPC: no space left'), 'synth', 'open');
   assert.equal(crash.kind, 'machine');
   assert.equal(crash.shot, undefined, 'machine trouble is not reported at a shot');
+  const hintAt = (stage) => classifyError(new Error('boom'), stage).hint;
+  assert.match(hintAt('runtime'), /runtime failed to load/);
+  assert.match(hintAt('model'), /changed on disk/);
+  assert.match(hintAt('session'), /onnxruntime could not open/);
+  assert.match(hintAt('job'), /different versions/);
+});
+
+// ---------- the code key: every voice module the worker loads is hashed ----------
+
+// "Loaded" is decided by a static scan: from worker.mjs, every relative `import ... from '...'` and
+// `export ... from '...'` (multi-line too), followed transitively. Bare package imports are not followed. Dynamic
+// imports would be missed; the voice modules have none (importOptional loads only the optional package).
+function staticallyLoaded(entry) {
+  const seen = new Set();
+  const visit = (file) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const source = readFileSync(file, 'utf8');
+    const specifiers = [...source.matchAll(/^\s*(?:import|export)\s[^'"]*?from\s+['"](\.{1,2}\/[^'"]+)['"]/gm), ...source.matchAll(/^\s*import\s+['"](\.{1,2}\/[^'"]+)['"]/gm)];
+    for (const [, spec] of specifiers) visit(path.resolve(path.dirname(file), spec));
+  };
+  visit(entry);
+  return [...seen];
+}
+
+test('every scripts/v2/voice module the worker loads (static import scan), and say.mjs, is in CODE_FILES; model.mjs is keyed by MODEL_PIN', () => {
+  const voiceDir = path.dirname(WORKER_PATH);
+  const loaded = staticallyLoaded(WORKER_PATH);
+  const shaping = loaded.filter((f) => path.dirname(f) === voiceDir || f.endsWith(path.join('engine', 'script', 'say.mjs')));
+  const exempt = new Set([path.join(voiceDir, 'model.mjs')]);
+  const missing = shaping.filter((f) => !exempt.has(f) && !CODE_FILES.includes(f));
+  assert.deepEqual(missing, [], `loaded by the worker but not in the code key: ${missing.join(', ')}`);
+  assert.deepEqual(CODE_FILES.filter((f) => !loaded.includes(f)), [], 'every keyed file is loaded by the worker');
+  assert.ok(loaded.some((f) => f.endsWith('calls.mjs')) && loaded.some((f) => f.endsWith('say.mjs')), 'the scan follows imports transitively');
+});
+
+// ---------- openKokoro and runJob with a fake onnxruntime ----------
+
+const VOICE_ROWS = 510;
+
+function fakeOrt({ release = async () => {} } = {}) {
+  const runs = [];
+  class Tensor {
+    constructor(type, data, dims) {
+      Object.assign(this, { type, data, dims });
+    }
+  }
+  const session = {
+    released: false,
+    async run(feeds) {
+      runs.push(feeds);
+      const t = feeds.input_ids.dims[1];
+      return {
+        waveform: { data: new Float32Array(600 * (t + 10)) },
+        durations: { data: Float32Array.from({ length: t }, (_, k) => (k === 0 ? 11 : 1)) },
+      };
+    },
+    async release() {
+      this.released = true;
+      await release();
+    },
+  };
+  const created = [];
+  const InferenceSession = { create: async (file, options) => { created.push({ file, options }); return session; } };
+  return { ort: { Tensor, InferenceSession }, runs, created, session };
+}
+
+// A voice file whose row r is filled with the value r, so the chosen style row is visible.
+function writeFakeModel(dir) {
+  mkdirSync(path.join(dir, 'voices'), { recursive: true });
+  const rows = new Float32Array(VOICE_ROWS * STYLE_DIM);
+  for (let r = 0; r < VOICE_ROWS; r++) rows.fill(r, r * STYLE_DIM, (r + 1) * STYLE_DIM);
+  writeFileSync(path.join(dir, 'voices', 'af_heart.bin'), Buffer.from(rows.buffer));
+}
+
+test('openKokoro opens the quantized model on the CPU and speak feeds int64 ids, the style row of the call length and the speed', async () => {
+  await withScratch(async (modelDir) => {
+    writeFakeModel(modelDir);
+    const fake = fakeOrt();
+    const kokoro = await openKokoro({ ort: fake.ort, modelDir, voice: 'af_heart' });
+    assert.equal(fake.created[0].file, path.join(modelDir, 'onnx', 'model_quantized.onnx'));
+    const ids = [0, 50, 156, 72, 0];
+    const out = await kokoro.speak({ ids, speed: 1.1 });
+    const feeds = fake.runs[0];
+    assert.equal(feeds.input_ids.type, 'int64');
+    assert.deepEqual(feeds.input_ids.dims, [1, 5]);
+    assert.deepEqual(Array.from(feeds.input_ids.data), ids.map(BigInt));
+    assert.equal(feeds.style.type, 'float32');
+    assert.deepEqual(feeds.style.dims, [1, STYLE_DIM]);
+    assert.ok(feeds.style.data.every((v) => v === 3), 'row clamp(T - 2, 0, 509) = 3');
+    assert.equal(feeds.speed.type, 'float32');
+    assert.deepEqual(feeds.speed.dims, [1]);
+    assert.equal(Math.fround(1.1), feeds.speed.data[0]);
+    assert.ok(out.waveform instanceof Float32Array);
+    assert.ok(out.durations instanceof Float32Array);
+    await kokoro.close();
+    assert.equal(fake.session.released, true);
+  });
+});
+
+test('speak clamps the style row to 509 for the longest call and refuses more than MAX_IDS ids', async () => {
+  await withScratch(async (modelDir) => {
+    writeFakeModel(modelDir);
+    const fake = fakeOrt();
+    const kokoro = await openKokoro({ ort: fake.ort, modelDir, voice: 'af_heart' });
+    await kokoro.speak({ ids: new Array(MAX_IDS).fill(16), speed: 1 });
+    assert.ok(fake.runs[0].style.data.every((v) => v === 509));
+    await assert.rejects(kokoro.speak({ ids: new Array(MAX_IDS + 1).fill(16), speed: 1 }), /513 ids.*512/);
+    await assert.rejects(kokoro.speak({ ids: [0, 50, 0], speed: 0 }), /speed/);
+  });
+});
+
+test('openKokoro refuses a voice other than af_heart and a voice file of the wrong size', async () => {
+  await withScratch(async (modelDir) => {
+    const fake = fakeOrt();
+    await assert.rejects(openKokoro({ ort: fake.ort, modelDir, voice: 'af_bella' }), /af_bella.*af_heart/);
+    mkdirSync(path.join(modelDir, 'voices'), { recursive: true });
+    writeFileSync(path.join(modelDir, 'voices', 'af_heart.bin'), Buffer.alloc(1000));
+    await assert.rejects(openKokoro({ ort: fake.ort, modelDir, voice: 'af_heart' }), /af_heart\.bin.*1000 bytes/);
+  });
+});
+
+test('runJob keeps a film error when closing the model also fails, and logs the close failure', async () => {
+  await withScratch(async (dir) => {
+    const modelDir = path.join(dir, 'model');
+    writeFakeModel(modelDir);
+    copyFileSync(path.join(HERE, 'fixtures/voice/tokenizer.json'), path.join(modelDir, 'tokenizer.json'));
+    const fake = fakeOrt({ release: async () => { throw new Error('session release failed'); } });
+    const phonemize = async (text) => [text.toLowerCase().replace(/[^a-z ]/g, '')];
+    const job = { version: 1, dir, shots: [{ id: 'long', say: `${'ba '.repeat(200)}ba.` }], speed: 1, emphasisPause: 0, voice: 'af_heart', runtime: dir, modelDir };
+    const lines = [];
+    await assert.rejects(runJob(job, { ort: fake.ort, phonemize, log: (l) => lines.push(l) }), (err) => err.name === 'VoiceTextError');
+    assert.ok(lines.some((l) => l.includes('session release failed')), lines.join('\n'));
+  });
 });
 
 // ---------- the worker as a child process (no model needed: it fails before loading one) ----------
 
-function runWorker(job, dir) {
+function runWorker(job, dir, env = process.env) {
   const jobFile = path.join(dir, 'job.json');
   writeFileSync(jobFile, JSON.stringify(job));
   return new Promise((resolve) => {
-    execFile(process.execPath, [WORKER_PATH, jobFile], (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr }));
+    execFile(process.execPath, [WORKER_PATH, jobFile], { env }, (err, stdout, stderr) => resolve({ code: err ? err.code : 0, stdout, stderr }));
   });
 }
 // The worker's last stderr line: the classified error it ends with.
@@ -68,6 +204,38 @@ test('the worker exits 2 (machine) with the install hint when the runtime is not
     assert.equal(code, 2);
     assert.deepEqual(lastError(stderr), { kind: 'machine', message: INSTALL_HINT, hint: INSTALL_HINT });
     assert.ok(INSTALL_HINT.startsWith('the optional voice package is not installed. Run: '), INSTALL_HINT);
+  });
+});
+
+// A stand-in runtime folder laid out like optional/voice, so importOptional accepts it: index.mjs exports a fake ort
+// and phonemize; the package and lockfile declare nothing.
+function writeFakeRuntime(dir) {
+  const runtime = path.join(dir, 'rt', 'voice');
+  mkdirSync(path.join(runtime, 'node_modules', 'onnxruntime-node'), { recursive: true });
+  writeFileSync(path.join(runtime, 'node_modules', 'onnxruntime-node', 'package.json'), '{"name":"onnxruntime-node","version":"0.0.0"}');
+  writeFileSync(path.join(runtime, 'package.json'), '{"name":"fake-voice","private":true,"type":"module","dependencies":{}}');
+  writeFileSync(path.join(runtime, 'package-lock.json'), '{"lockfileVersion":3,"packages":{"":{"name":"fake-voice"}}}');
+  writeFileSync(path.join(runtime, 'index.mjs'), 'export const ort = { InferenceSession: { create: async () => ({ run: async () => { throw new Error("unused"); }, release: async () => {} }) } };\nexport const phonemize = async (t) => [t];\n');
+  return runtime;
+}
+
+test('the worker itself never downloads: with a model file missing it refuses (machine, exit 2) and fetch is never called', async () => {
+  await withScratch(async (dir) => {
+    // A preload replaces fetch in the worker process with one that leaves a flag file and fails, so a worker that
+    // tried to download would be caught here without any network request.
+    const flag = path.join(dir, 'fetch-called');
+    const preload = path.join(dir, 'no-fetch.mjs');
+    writeFileSync(preload, 'import { writeFileSync } from "node:fs";\nglobalThis.fetch = async () => { writeFileSync(process.env.VOICE_TEST_FETCH_FLAG, "called"); throw new Error("test: fetch must not be called"); };\n');
+    const modelDir = path.join(dir, 'empty-model');
+    mkdirSync(modelDir);
+    const job = { version: 1, dir, shots: [{ id: 'a', say: 'Hi.' }], speed: 1, emphasisPause: 0, voice: 'af_heart', runtime: writeFakeRuntime(dir), modelDir };
+    const env = { ...process.env, NODE_OPTIONS: `--import=${pathToFileURL(preload).href}`, VOICE_TEST_FETCH_FLAG: flag };
+    const { code, stderr } = await runWorker(job, dir, env);
+    assert.equal(code, 2);
+    const error = lastError(stderr);
+    assert.equal(error.kind, 'machine');
+    assert.match(error.message, /never downloads/);
+    assert.equal(existsSync(flag), false, 'fetch was never called');
   });
 });
 

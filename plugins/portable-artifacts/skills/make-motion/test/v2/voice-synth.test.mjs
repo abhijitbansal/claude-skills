@@ -3,13 +3,14 @@
 // child process and the real-model integration tests are in voice-worker.test.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { parseSay } from '../../engine/script/say.mjs';
-import { ACCEPTED_VOICES, STYLE_DIM, editCall, openKokoro, planShotCalls, prepareCall } from '../../scripts/v2/voice/kokoro.mjs';
+import { ACCEPTED_VOICES, editCall, planShotCalls, prepareCall } from '../../scripts/v2/voice/kokoro.mjs';
 import {
   ERROR_MARKER, FADE_SAMPLES, INSTALL_HINT, LEAD_KEEP_MS, SILENCE_QUANTUM_SAMPLES, TRIM, encodeWav, sidecarShot,
   synthesiseShot, trimPads,
@@ -22,6 +23,7 @@ import { EMBEDDED_VOCAB } from '../../scripts/v2/voice/tokens.mjs';
 import { LEAD, SAMPLE_RATE } from '../../scripts/v2/voice/words.mjs';
 import { MAX_IDS, planCalls } from '../../scripts/v2/voice/calls.mjs';
 import { VOICE_MODEL } from '../../scripts/v2/voice/model.mjs';
+import { OPTIONAL_ROOT } from '../../scripts/lib/optional.mjs';
 
 const scratch = () => mkdtempSync(path.join(os.tmpdir(), 'voice-synth-'));
 const withScratch = async (fn) => {
@@ -102,14 +104,20 @@ test('voiceHash does not change when an unrelated field changes (look, hold, a s
 // ---------- synthesiseFilm with a fake spawn ----------
 
 // A child_process.spawn stand-in: an emitter with stdout and stderr streams. `finish` ends both streams, then emits
-// 'close' with the exit code and signal, as a real child does.
-function fakeChild() {
-  const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kills: [] });
-  child.kill = (signal) => child.kills.push(signal);
+// 'close' with the exit code and signal, as a real child does. A kill closes it, as a real SIGKILL does, unless
+// `closeOnKill` is false (then the test decides when it has exited).
+function fakeChild({ closeOnKill = true } = {}) {
+  const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), kills: [], finished: false });
   child.finish = (code, signal = null) => {
+    if (child.finished) return;
+    child.finished = true;
     child.stdout.end();
     child.stderr.end();
     setImmediate(() => child.emit('close', code, signal));
+  };
+  child.kill = (signal) => {
+    child.kills.push(signal);
+    if (closeOnKill) child.finish(null, signal);
   };
   return child;
 }
@@ -147,6 +155,7 @@ function fakeSpawn({ exitCode = 0, stderr = '', signal = null, beforeExit = asyn
 }
 
 const noModel = async () => {};
+const lockOfDefaultRuntime = () => createHash('sha256').update(readFileSync(path.join(OPTIONAL_ROOT, 'voice', 'package-lock.json'))).digest('hex');
 const opts = (outDir, more = {}) => ({ outDir, voice: 'af_heart', ensureModel: noModel, ...more });
 const voiceFolder = (outDir) => readdirSync(path.join(outDir, '.voice'));
 const marker = (error) => `${ERROR_MARKER}${JSON.stringify(error)}\n`;
@@ -287,6 +296,88 @@ test('a worker that never exits is killed after the timeout: machine trouble, an
   });
 });
 
+test('after a timeout kill the call waits for the worker to exit before removing its staging folder and rejecting', async () => {
+  await withScratch(async (outDir) => {
+    let child = null;
+    const spawn = () => { child = fakeChild({ closeOnKill: false }); return child; };
+    let settled = false;
+    const run = synthesiseFilm(FILM, opts(outDir, { spawn, timeoutSeconds: 0.05 })).finally(() => { settled = true; });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    assert.deepEqual(child.kills, ['SIGKILL']);
+    assert.equal(settled, false, 'still waiting for the killed worker to exit');
+    assert.equal(voiceFolder(outDir).filter((n) => n.includes('.partial-')).length, 1, 'its staging folder is still there');
+    child.finish(null, 'SIGKILL');
+    await assert.rejects(run, (err) => err.timedOut === true && err.kind === 'machine');
+    assert.deepEqual(voiceFolder(outDir), []);
+  });
+});
+
+test('a film error stays a film error when other stderr lines follow the worker\'s error line', async () => {
+  await withScratch(async (outDir) => {
+    const error = { kind: 'film', message: 'shot "open": too long', hint: 'add a comma', shot: 'open' };
+    const fake = fakeSpawn({ exitCode: 1, stderr: `${marker(error)}onnxruntime: teardown warning\n(node) a late notice\n` });
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn })), (err) => {
+      assert.deepEqual([err.kind, err.message, err.shot], ['film', 'shot "open": too long', 'open']);
+      return true;
+    });
+  });
+});
+
+test('staging folders older than an hour (left by a run that died) are removed when a run starts; fresh ones are kept', async () => {
+  await withScratch(async (outDir) => {
+    const cache = path.join(outDir, '.voice');
+    const old = path.join(cache, `${'0'.repeat(64)}.partial-1-00000000-0000-0000-0000-000000000000`);
+    const fresh = path.join(cache, `${'1'.repeat(64)}.partial-2-11111111-1111-1111-1111-111111111111`);
+    const other = path.join(cache, 'not-a-staging-folder');
+    for (const dir of [old, fresh, other]) mkdirSync(dir, { recursive: true });
+    const twoHoursAgo = new Date(Date.now() - 2 * 3600 * 1000);
+    utimesSync(old, twoHoursAgo, twoHoursAgo);
+    utimesSync(other, twoHoursAgo, twoHoursAgo);
+    await synthesiseFilm(FILM, opts(outDir, { spawn: fakeSpawn().spawn }));
+    assert.deepEqual([existsSync(old), existsSync(fresh), existsSync(other)], [false, true, true]);
+  });
+});
+
+test('a concurrent run that published the same entry first is kept, and this run returns it', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn({
+      beforeExit: async () => {
+        const winner = path.join(outDir, '.voice', hashOf(FILM, { runtimeLock: lockOfDefaultRuntime() }));
+        mkdirSync(winner);
+        writeWorkerOutput({ dir: winner, voice: 'af_heart', shots: FILM.shots.map((s) => ({ id: s.id, say: s.say ?? null })) });
+      },
+    });
+    const made = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn }));
+    assert.equal(made.cached, false);
+    assert.equal(made.sidecar.shots.length, 3);
+    assert.deepEqual(voiceFolder(outDir), [path.basename(made.dir)], 'the loser\'s staging folder is removed');
+  });
+});
+
+test('a file-system failure in the parent (no .voice folder can be made) is machine trouble with a hint', async () => {
+  await withScratch(async (dir) => {
+    const outDir = path.join(dir, 'a-file');
+    writeFileSync(outDir, 'not a folder');
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fakeSpawn().spawn })), (err) => {
+      assert.equal(err.kind, 'machine');
+      assert.match(err.hint, /writable/);
+      return true;
+    });
+  });
+});
+
+test('an entry that cannot be read for a reason other than being incomplete is machine trouble, and is not removed', async () => {
+  await withScratch(async (outDir) => {
+    const fake = fakeSpawn();
+    const { dir } = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn }));
+    rmSync(path.join(dir, 'voice.json'));
+    mkdirSync(path.join(dir, 'voice.json'));
+    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn })), (err) => err.kind === 'machine');
+    assert.equal(existsSync(path.join(dir, 'shot-0.wav')), true, 'the entry was left for a person to look at');
+    assert.equal(fake.calls.length, 1);
+  });
+});
+
 test('the worker\'s progress lines reach log while it runs, not after it exits', async () => {
   await withScratch(async (outDir) => {
     let heard;
@@ -315,6 +406,10 @@ test('a corrupt or incomplete cache entry is a miss: one log line, the entry rem
     writeFileSync(path.join(dir, 'shot-0.wav'), encodeWav(new Float32Array(10), SAMPLE_RATE));
     const fourth = await run();
     assert.deepEqual([fourth.cached, fake.calls.length], [false, 4], 'a WAV of the wrong length is incomplete too');
+    const wav = path.join(dir, 'shot-0.wav');
+    writeFileSync(wav, readFileSync(wav).subarray(0, 1000));
+    const fifth = await run();
+    assert.deepEqual([fifth.cached, fake.calls.length], [false, 5], 'a truncated body under a full header is incomplete too');
   });
 });
 
@@ -416,91 +511,6 @@ test('synthesiseFilm refuses a timeout that is not a positive number of seconds,
   );
   assert.equal(fake.calls.length, 0);
   assert.deepEqual(ACCEPTED_VOICES, ['af_heart']);
-});
-
-// ---------- openKokoro with a fake onnxruntime ----------
-
-const VOICE_ROWS = 510;
-
-function fakeOrt() {
-  const runs = [];
-  class Tensor {
-    constructor(type, data, dims) {
-      Object.assign(this, { type, data, dims });
-    }
-  }
-  const session = {
-    released: false,
-    async run(feeds) {
-      runs.push(feeds);
-      const t = feeds.input_ids.dims[1];
-      return {
-        waveform: { data: new Float32Array(600 * (t + 10)) },
-        durations: { data: Float32Array.from({ length: t }, (_, k) => (k === 0 ? 11 : 1)) },
-      };
-    },
-    async release() {
-      this.released = true;
-    },
-  };
-  const created = [];
-  const InferenceSession = { create: async (file, options) => { created.push({ file, options }); return session; } };
-  return { ort: { Tensor, InferenceSession }, runs, created, session };
-}
-
-// A voice file whose row r is filled with the value r, so the chosen style row is visible.
-function writeFakeModel(dir) {
-  mkdirSync(path.join(dir, 'voices'), { recursive: true });
-  const rows = new Float32Array(VOICE_ROWS * STYLE_DIM);
-  for (let r = 0; r < VOICE_ROWS; r++) rows.fill(r, r * STYLE_DIM, (r + 1) * STYLE_DIM);
-  writeFileSync(path.join(dir, 'voices', 'af_heart.bin'), Buffer.from(rows.buffer));
-}
-
-test('openKokoro opens the quantized model on the CPU and speak feeds int64 ids, the style row of the call length and the speed', async () => {
-  await withScratch(async (modelDir) => {
-    writeFakeModel(modelDir);
-    const fake = fakeOrt();
-    const kokoro = await openKokoro({ ort: fake.ort, modelDir, voice: 'af_heart' });
-    assert.equal(fake.created[0].file, path.join(modelDir, 'onnx', 'model_quantized.onnx'));
-    const ids = [0, 50, 156, 72, 0];
-    const out = await kokoro.speak({ ids, speed: 1.1 });
-    const feeds = fake.runs[0];
-    assert.equal(feeds.input_ids.type, 'int64');
-    assert.deepEqual(feeds.input_ids.dims, [1, 5]);
-    assert.deepEqual(Array.from(feeds.input_ids.data), ids.map(BigInt));
-    assert.equal(feeds.style.type, 'float32');
-    assert.deepEqual(feeds.style.dims, [1, STYLE_DIM]);
-    assert.ok(feeds.style.data.every((v) => v === 3), 'row clamp(T - 2, 0, 509) = 3');
-    assert.equal(feeds.speed.type, 'float32');
-    assert.deepEqual(feeds.speed.dims, [1]);
-    assert.equal(Math.fround(1.1), feeds.speed.data[0]);
-    assert.ok(out.waveform instanceof Float32Array);
-    assert.ok(out.durations instanceof Float32Array);
-    await kokoro.close();
-    assert.equal(fake.session.released, true);
-  });
-});
-
-test('speak clamps the style row to 509 for the longest call and refuses more than MAX_IDS ids', async () => {
-  await withScratch(async (modelDir) => {
-    writeFakeModel(modelDir);
-    const fake = fakeOrt();
-    const kokoro = await openKokoro({ ort: fake.ort, modelDir, voice: 'af_heart' });
-    await kokoro.speak({ ids: new Array(MAX_IDS).fill(16), speed: 1 });
-    assert.ok(fake.runs[0].style.data.every((v) => v === 509));
-    await assert.rejects(kokoro.speak({ ids: new Array(MAX_IDS + 1).fill(16), speed: 1 }), /513 ids.*512/);
-    await assert.rejects(kokoro.speak({ ids: [0, 50, 0], speed: 0 }), /speed/);
-  });
-});
-
-test('openKokoro refuses a voice other than af_heart and a voice file of the wrong size', async () => {
-  await withScratch(async (modelDir) => {
-    const fake = fakeOrt();
-    await assert.rejects(openKokoro({ ort: fake.ort, modelDir, voice: 'af_bella' }), /af_bella.*af_heart/);
-    mkdirSync(path.join(modelDir, 'voices'), { recursive: true });
-    writeFileSync(path.join(modelDir, 'voices', 'af_heart.bin'), Buffer.alloc(1000));
-    await assert.rejects(openKokoro({ ort: fake.ort, modelDir, voice: 'af_heart' }), /af_heart\.bin.*1000 bytes/);
-  });
 });
 
 // ---------- model input: phonemes, emphasis, ids ----------
