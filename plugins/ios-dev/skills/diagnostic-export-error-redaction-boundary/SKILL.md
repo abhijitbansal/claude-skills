@@ -69,6 +69,27 @@ that prompted the review — a redaction helper added at one call site and
 missed at three others leaves the same promise broken for whichever pipeline
 wasn't audited.
 
+## Catch regressions with a repo grep, not more prose
+
+The leak came back after this skill existed (a second reporter and a Vision
+logging call both fed a raw description into an exportable sink). Add a grep that
+names **your own exportable-log sink** (`DiagLog`, `DiagnosticLog`, whatever the
+app calls it) and run it in review or CI:
+
+```bash
+grep -rnE '(DiagnosticLog|DiagLog).*(localizedDescription|String\(describing: *error)' <source-root>
+```
+
+Run against a sample, it flags a `DiagnosticLog.shared.record("… \(error.localizedDescription)")`
+line and a `DiagLog.add(String(describing: error))` line, and stays quiet on
+`DiagnosticLog.shared.record(DiagnosticErrorRedactor.safeLabel(error))`.
+
+Limits, stated plainly: it only sees a sink name and a raw description **on the
+same line**. An indirect reporter such as `report(.failed(reason: error.localizedDescription))`
+escapes it, so name those reporters in the pattern too, or review them by hand.
+Triage the existing hits first (each is an open item or needs an allowlist), and
+keep test code out of the path.
+
 ## Evidence
 
 Session 0022: "#1 privacy (CONFIRMED) — the shareable DiagnosticLog (promises

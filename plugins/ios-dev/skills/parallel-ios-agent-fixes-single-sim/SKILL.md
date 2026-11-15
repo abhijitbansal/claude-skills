@@ -23,16 +23,29 @@ description: Fan out multiple subagents to fix a batch of independent code-revie
 
    ```bash
    git worktree add -b fix/pure-logic ../app-fixP HEAD
+   # A fresh worktree has only tracked files: bootstrap before the first build.
+   (cd ../app-fixP && xcodegen generate)   # + copy any gitignored local config
+   xcrun simctl clone <UDID> app-fixP-sim   # new device, same type/runtime/state
+   xcrun simctl list devices                 # read the clone's UDID (<UDID2>)
    xcrun simctl boot <UDID2>
    # subagent builds/tests in ../app-fixP with:
    #   -destination 'platform=iOS Simulator,id=<UDID2>' -derivedDataPath ../app-fixP/build
    ```
 
+   The bootstrap line matters: `.xcodeproj`, generated `BuildInfo` and local config
+   files are usually gitignored, so the first `xcodebuild` in a new worktree fails
+   on missing files that look like real defects (see Step 2 of
+   `superpowers:using-git-worktrees` for the general rule). Cloning an existing
+   device is the cheap way to get a second simulator (`simctl clone <device> <new name>`,
+   usage checked with `xcrun simctl help clone`; not run end to end here); `xcrun simctl create` also
+   works. Scripts elsewhere in this plugin that boot a simulator (`app-preview`)
+   take `--sim <name|UDID>`: pass the UDID here too.
+
 3. **Run the batches that share core files sequentially**, on the main tree and the main (first) simulator, one at a time — after all parallel batches are dispatched, or interleaved with them, but never concurrently with each other.
 
 4. **Each subagent, before touching code, confirms the baseline is green.** If the very first `xcodebuild test` fails with something that looks like environment noise ("test runner crashed", missing scheme), don't debug it as a real failure first — `rm -rf build && xcodegen generate` and rerun. Stale incremental state is a more common cause than an actual regression.
 
-5. **Each subagent does strict TDD and commits twice**: a RED commit (failing reproducer test), then a GREEN commit (fix + passing test). Self-verify with the full test run before reporting done, not just the one test it wrote.
+5. **Each subagent does strict TDD.** Where the repo allows a red commit, commit twice: a RED commit (failing reproducer test), then a GREEN commit (fix + passing test). If the repo requires every commit to be green (CI or a pre-commit gate), keep the RED run local and commit test and fix together. Self-verify with the full test run before reporting done, not just the one test it wrote.
 
 6. **Merge each finished parallel batch back before dispatching the next wave.** Once a worktree batch is green:
    ```bash
@@ -52,3 +65,9 @@ description: Fan out multiple subagents to fix a batch of independent code-revie
 - Never skip the disjointness check to launch parallel work sooner. Two agents editing the same shared core file is a guaranteed merge conflict (or worse, a silent semantic conflict that both branches compile but the merge breaks); route those through the sequential path instead.
 - Never skip the post-merge integration test run. Passing tests in isolation on disjoint files does not prove the merged tree passes — always re-run the full suite once on the combined tree before the next wave.
 - If you only have one simulator and can't boot a second, don't fake parallelism — collapse everything to the sequential path (step 3) rather than risk racing installs on the shared sim.
+
+## Related skills
+
+- `xcodegen-test-targets` — the XcodeGen setup the worktree bootstrap line regenerates.
+- `superpowers:subagent-driven-development` — the dispatch discipline this skill gives the iOS mechanics for.
+- `superpowers:using-git-worktrees` — worktree creation and per-worktree setup.

@@ -18,6 +18,13 @@ let label = ModelEntity(mesh: mesh, materials: [UnlitMaterial(color: .white)])
 // Billboard it every `update:` pass so it keeps facing the camera — see Gotcha 4.
 ```
 
+Alternative to hand-billboarding in `update:`: add a `BillboardComponent` to the
+label entity (`label.components.set(BillboardComponent())`) and let RealityKit
+keep it facing the camera. It is declared in `RealityFoundation` with
+`@available(iOS 18.0, …)` — checked against the iOS 27.2 SDK swiftinterface,
+2026-11-06. Not yet exercised in a windowed `RealityView` on a device; try it
+first and keep the `update:` pass as the fallback.
+
 ## Gotcha 2 — no default camera gestures in windowed mode
 
 Orbit/pinch is not free. Opt in explicitly:

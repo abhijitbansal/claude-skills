@@ -23,13 +23,36 @@ struct DocumentKeyPoints {
     """)
     let facts: [String]
 }
-// parseFacts(_:) splits each entry on the first ":", drops empty halves,
-// then runs the placeholder filter below.
 ```
+
+```swift
+enum KeyFactParser {
+    /// Splits each "LABEL: VALUE" entry on the FIRST ":" (values may contain
+    /// colons, e.g. times), drops entries with an empty half, then runs the
+    /// placeholder filter below.
+    nonisolated static func parseFacts(_ entries: [String]) -> [KeyFact] {
+        let facts: [KeyFact] = entries.compactMap { entry in
+            guard let colon = entry.firstIndex(of: ":") else { return nil }
+            let label = entry[..<colon].trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = entry[entry.index(after: colon)...]
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !label.isEmpty, !value.isEmpty else { return nil }
+            return KeyFact(label: label, value: value)
+        }
+        return filterFacts(facts)    // rule 2 below; same enum
+    }
+}
+```
+
+Run on macOS: `["Receipt Number: 151987", "Time: 10:30", "Amount:", ": 5",
+"no colon here", "Name: [Insert Name Here]", "Name: John Doe"]` parses to the
+first two facts only (value colons kept; empty halves, a missing colon, the
+bracket placeholder and the stock dummy all dropped).
 
 ## Rule 2 — verbatim-quote pinning + belt-and-suspenders filter
 
 ```swift
+// inside `enum KeyFactParser` (above)
 nonisolated static func filterFacts(_ facts: [KeyFact]) -> [KeyFact] {
     let knownDummies: Set<String> = ["john doe", "jane doe", "12345",
                                      "n/a", "none", "tbd", "unknown", "lorem ipsum"]

@@ -8,8 +8,14 @@ the backing store is fixed at launch.
 ## Why a factory
 
 - `try!` / `fatalError` on a CloudKit container build bricks launch whenever
-  iCloud is signed out or the container is unprovisioned — a state you cannot
-  control and will hit in review.
+  `ModelContainer.init` throws, and with CloudKit that happens when the schema
+  breaks a CloudKit rule (optional relationships, no unique constraints, no
+  `.deny` delete rule, inverses — see rule 2; the failure is often
+  `NSCocoaErrorDomain` 134060) or when the container is unprovisioned. A
+  signed-out iCloud account is not in that list: per Apple's SwiftData sync
+  docs the store loads locally and simply does not sync (not yet confirmed by
+  a signed-out simulator run; record one before relying on it). Use
+  `CKContainer.accountStatus()` to drive the Settings warning for signed-out.
 - Every store (production, preview, in-memory test) must pass
   `cloudKitDatabase` explicitly; funneling all container creation through one
   factory makes that impossible to forget.
@@ -22,7 +28,10 @@ the backing store is fixed at launch.
 import SwiftData
 
 /// The user's sync choice. Persisted as a raw value; read once at launch.
-enum CloudSyncMode: String, Sendable, Equatable, CaseIterable {
+/// `nonisolated`: under default MainActor isolation an unannotated enum's
+/// method is main-actor-isolated and the `nonisolated` factory below cannot
+/// call it (a hard error). Typechecked both ways against the iOS 27.2 SDK.
+nonisolated enum CloudSyncMode: String, Sendable, Equatable, CaseIterable {
     case off
     case privateDatabase
 
@@ -92,8 +101,9 @@ struct MyApp: App {
             )
             cloudSyncFailure = nil
         } catch {
-            // CloudKit container builds fail when iCloud is signed out or
-            // unprovisioned. Fall back to local-only; never brick launch.
+            // CloudKit container builds fail on a CloudKit schema violation
+            // (log the real code, see below) or an unprovisioned container.
+            // Fall back to local-only; never brick launch.
             Self.log.error("CloudKit container failed, falling back to local-only: \(error, privacy: .public)")
             do {
                 container = try ModelContainerFactory.make(
@@ -154,7 +164,11 @@ mid-session — live `ModelContext`s and `@Query`s still reference the old one.
 
 When `cloudSyncFailure != nil` (CloudKit requested but launch fell back to
 local-only), show a persistent, non-blocking warning row in Settings —
-"iCloud sync is unavailable (sign in to iCloud), data is stored on this
-device only" — rather than an alert at launch. The user's data is safe
+"iCloud sync is unavailable, data is stored on this device only" — rather than
+an alert at launch. `localizedDescription` hides the CloudKit error code: log
+the underlying `NSUnderlyingError` (or capture the device console, see
+`devicectl-crashlog-oslog-cli-diagnostics`). For a "sign in to iCloud" hint,
+branch on `try await CKContainer(identifier: containerID).accountStatus()`
+(`.noAccount`), not on the fallback alone. The user's data is safe
 locally; the reconcile pass (rule 3) catches CloudKit up after the next
 successful sync-ON launch because it is idempotent and bidirectional.

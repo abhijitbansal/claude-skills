@@ -32,7 +32,8 @@ grafted on. The rules and decisions are on this page; the full code is in
 
 > This skill is the **in-app SwiftUI implementation** only. The separate
 > question of keeping the in-app changelog in sync with the **App Store Connect
-> "What's New" metadata** (a manual paste, independent of the binary) and gating
+> "What's New" metadata** (set by hand in ASC, or by fastlane `deliver` from
+> `fastlane/metadata`; independent of the binary) and gating
 > a release on both is owned by
 > [`release-inapp-vs-asc-whatsnew-surfaces`](../release-inapp-vs-asc-whatsnew-surfaces/SKILL.md)
 > and the `ios-dev:release` preflight. They are two independent surfaces — don't
@@ -61,13 +62,21 @@ unchanged, feeding the gate `Changelog.currentVersion`; A4 and A5 must swap
 - **Seed on fresh install.** No `lastSeenVersion` stored → persist the bundled
   version *without* presenting. A new installer never performed an upgrade, so
   they get no "What's New" for the version they installed fresh; only real
-  upgraders get the pop-up.
+  upgraders get the pop-up. **Caveat — the first release that carries the gate:**
+  existing users have no `lastSeenVersion` either, so they are seeded too and
+  never see the pop-up for that release. If upgraders must see it, seed from a
+  prior-use signal (for example "the library already has content" or an older
+  onboarding-complete key) instead of treating every missing value as fresh.
 - **A downgrade never clobbers `lastSeenVersion`.** Bundled older than last-seen
   → do nothing, write nothing. After a TestFlight rollback, a later real upgrade
   past the rolled-back version must still fire the sheet.
-- **Gate on the marketing version only** (`CFBundleShortVersionString`). A
-  build-number bump on the same marketing version does not retrigger;
-  `buildNumber` is displayed, never part of the decision.
+- **Gate on the marketing version only.** The decider compares the bundled
+  JSON's `currentVersion` to `lastSeenVersion`; it never reads
+  `CFBundleShortVersionString` itself. The A7 test asserts the two are equal, so
+  a release that bumps the app version but forgets `WhatsNew.json` fails a test
+  instead of silently never presenting. A build-number bump on the same marketing
+  version does not retrigger; `buildNumber` is displayed, never part of the
+  decision.
 - **Compare versions numerically, component-wise** — `0.1.10` is newer than
   `0.1.2` even though `"10" < "2"` lexically. Fall back to string comparison
   only when either side isn't fully dotted-numeric.
@@ -109,7 +118,8 @@ Version + build come from the `Info.plist` at runtime; the git fields must be
 
 - **Generate `BuildInfo.swift` from a script** (`scripts/generate-build-info.sh`)
   wired as an Xcode Run Script build phase or called from `build.sh`. It must be
-  idempotent, write atomically (temp file then `mv`), and degrade to
+  idempotent, write atomically (temp file **in the output directory**, then `mv`,
+  so the move is a same-volume rename), and degrade to
   `unknown` outside a git repo; a dirty tree gets a `-dirty` commit suffix.
 - **`BuildInfo.swift` is gitignored.** It embeds a timestamp, so it is
   non-deterministic: regenerate every build, never hand-edit or commit it.
@@ -126,8 +136,9 @@ generator script, B2 the `BuildInfoSection` SwiftUI view.
 ## Gotchas / rationale
 
 - **In-app ≠ App Store Connect.** The pop-up here is compiled into the binary.
-  The ASC "What's New in This Version" text is a separate manual paste that can
-  silently drift — gate a release on both. See
+  The ASC "What's New in This Version" text is set separately (by hand in ASC, or
+  by fastlane `deliver` from `fastlane/metadata`) and can silently drift — gate a
+  release on both. See
   [`release-inapp-vs-asc-whatsnew-surfaces`](../release-inapp-vs-asc-whatsnew-surfaces/SKILL.md).
 
 ## Canonical references

@@ -44,8 +44,6 @@ nonisolated enum VisionLayoutFormatter {
     static let rowToleranceFactor: CGFloat = 0.6  // × median line height
     static let minRowTolerance: CGFloat = 0.006   // floor, normalized Y
     static let columnGapFraction: CGFloat = 0.04  // X-gap => column break
-    static let minColumnRowsPerSide = 3           // gutter rows before real columns
-    static let fullWidthFraction: CGFloat = 0.55  // full-width row = heading
 }
 ```
 
@@ -55,19 +53,20 @@ descending (Vision origin is bottom-left) and grouping while
 **Columns** are formed by sorting a row's items by `minX` and splitting into
 segments wherever the X-gap `>= columnGapFraction` of page width; segment
 text joins with a space, segments join with a tab — reading ACROSS the row is
-what protects receipts/key-value pairs from being scrambled. Beyond that base
-split, two refinements apply: a shared vertical gutter with
-`>= minColumnRowsPerSide` rows on EACH side is a real column block — emit
-each column top-to-bottom instead of tab-joining across; and a single segment
-spanning `>= fullWidthFraction` of the page width is a heading/footer that
-terminates the column block above it.
+what protects receipts/key-value pairs from being scrambled. That base split is
+what the reference implements. Beyond it, two refinements exist in the
+originating app but are **not** coded in the reference: a shared vertical
+gutter with >= 3 rows on EACH side is a real column block — emit each column
+top-to-bottom instead of tab-joining across; and a single segment spanning
+>= 55% of the page width is a heading/footer that terminates the column block
+above it. Add them yourself if your documents are multi-column pages.
 
 `LineItem` exists because tests can't construct `VNRecognizedTextObservation`;
 test the row/column geometry directly on `LineItem` arrays.
 
 **Read `references/ocr-layout-formatter.md` before implementing** — the full
 `formatPage`/`formatPages` row-grouping and column-splitting implementation
-with the two refinements above.
+(the base split; the two refinements above are not included).
 
 ### 2. ONE entry point, versioned sidecar cache, `searchableText` fallback
 

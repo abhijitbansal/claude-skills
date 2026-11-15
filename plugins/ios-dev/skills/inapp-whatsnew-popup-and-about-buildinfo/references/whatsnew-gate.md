@@ -331,6 +331,13 @@ struct WhatsNewDataTests {
         let wn = try #require(WhatsNew.bundled)
         #expect(wn.currentVersion == wn.entries.first?.version)
     }
+    @Test func currentVersionMatchesTheAppVersion() throws {
+        // The decider never reads the bundle version; this is what ties the two
+        // together. Fails when the app version is bumped without WhatsNew.json.
+        let wn = try #require(WhatsNew.bundled)
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        #expect(wn.currentVersion == appVersion)
+    }
     @Test func entriesAreStrictlyNewestFirst() throws {
         let wn = try #require(WhatsNew.bundled)
         let v = wn.entries.map(\.version)
