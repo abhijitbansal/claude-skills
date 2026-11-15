@@ -1,0 +1,48 @@
+{
+  "version": 2,
+  "mode": "viral",
+  "look": "pop",
+  "format": "9:16",
+  "seed": 7,
+  "shots": [
+    {
+      "id": "hook",
+      "show": "statement",
+      "kicker": "Real talk",
+      "say": "Your charts are *hiding* something."
+    },
+    {
+      "id": "proof",
+      "show": "clipping",
+      "cut": "punch",
+      "src": "clipping.png",
+      "say": "Every chart here shows its *query*.",
+      "regions": { "query": [0.58, 0.14, 0.37, 0.24] },
+      "on": [{ "at": "word:query", "do": "highlight", "target": "region:query" }]
+    },
+    {
+      "id": "count",
+      "show": "number",
+      "cut": "slide",
+      "say": "Five skills. One file each.",
+      "value": 5,
+      "label": "skills",
+      "delta": "one JSON file each",
+      "on": [{ "at": "word:One", "do": "punch", "target": "value" }]
+    },
+    {
+      "id": "local",
+      "show": "statement",
+      "cut": "punch",
+      "say": "No cloud. No account. *No upload*.",
+      "on": [{ "at": "word:upload", "do": "underline", "target": "word:5" }]
+    },
+    {
+      "id": "ask",
+      "show": "statement",
+      "cut": "slide",
+      "kicker": "portable-artifacts",
+      "say": "Save this. *Build yours*."
+    }
+  ]
+}

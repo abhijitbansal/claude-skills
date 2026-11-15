@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "desk",
+  "format": "16:9",
+  "seed": 7,
+  "shots": [
+    {
+      "id": "problem",
+      "show": "statement",
+      "kicker": "The problem",
+      "say": "Most dashboards can't tell you *where a number came from*."
+    },
+    {
+      "id": "proof",
+      "show": "clipping",
+      "cut": "slide",
+      "src": "clipping.png",
+      "caption": "Fig. 1 · a make-dashboard page (illustration)",
+      "say": "This one shows the query behind every chart.",
+      "regions": { "query": [0.58, 0.14, 0.37, 0.24] },
+      "on": [{ "at": "word:query", "do": "highlight", "target": "region:query" }]
+    },
+    {
+      "id": "how",
+      "show": "statement",
+      "cut": "slide",
+      "kicker": "How it works",
+      "hero": "idea",
+      "say": "The model writes *one small file*. Scripts do the rest."
+    },
+    {
+      "id": "count",
+      "show": "number",
+      "cut": "match",
+      "hero": "idea",
+      "say": "Five skills. One spec each.",
+      "value": 5,
+      "label": "skills, one JSON spec each",
+      "on": [{ "at": "word:One", "do": "underline", "target": "label" }]
+    },
+    {
+      "id": "close",
+      "show": "statement",
+      "cut": "slide",
+      "kicker": "portable-artifacts",
+      "say": "Built on your machine. *Nothing leaves it*.",
+      "on": [{ "at": "word:machine", "do": "underline", "target": "word:3" }]
+    }
+  ]
+}
