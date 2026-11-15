@@ -78,12 +78,17 @@ fi
 # 5. Find the freshest .app under DerivedData. The build script prints the path
 #    in its last line, but parsing it is brittle — DerivedData lookup is more
 #    robust and works for --no-build too.
-APP_PATH="$(find ~/Library/Developer/Xcode/DerivedData \
+#    Newest by mtime via the shell's -nt test: BSD `stat -f` does not exist on
+#    GNU/Linux (there it means filesystem status), so avoid stat entirely.
+APP_PATH=""
+while IFS= read -r candidate; do
+  if [[ -z "$APP_PATH" || "$candidate" -nt "$APP_PATH" ]]; then
+    APP_PATH="$candidate"
+  fi
+done < <(find "${HOME}/Library/Developer/Xcode/DerivedData" \
   -path "*/Build/Products/Debug-iphonesimulator/${APP_NAME}.app" \
   -not -path '*Index.noindex*' \
-  -type d 2>/dev/null \
-  | xargs -I {} stat -f '%m %N' {} \
-  | sort -rn | head -1 | cut -d' ' -f2-)"
+  -type d 2>/dev/null || true)
 
 if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
   echo "Could not locate ${APP_NAME}.app under DerivedData. Did the build succeed?" >&2

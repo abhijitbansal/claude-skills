@@ -58,8 +58,9 @@ team_from_profile() {
              "${HOME}/Library/MobileDevice/Provisioning Profiles"; do
     for profile in "${dir}"/*.mobileprovision; do
       [[ -f "${profile}" ]] || continue
-      appid="$(security cms -D -i "${profile}" 2>/dev/null \
-        | plutil -extract Entitlements.application-identifier raw -o - - 2>/dev/null || true)"
+      # The decoded profile is XML; pull the value with sed, not plutil (macOS only).
+      appid="$(security cms -D -i "${profile}" 2>/dev/null | tr '\n' ' ' \
+        | sed -n 's|.*<key>application-identifier</key>[[:space:]]*<string>\([^<]*\)</string>.*|\1|p' || true)"
       case "${appid}" in
         *."${BUNDLE_ID}") printf '%s\n' "${appid%%.*}"; return 0 ;;
       esac

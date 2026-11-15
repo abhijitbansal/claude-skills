@@ -117,6 +117,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   make_preview_app
   sims_two_booted
   run bash "${SCRIPTS}/launch.sh" --no-build --sim "iPhone 17"
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q "simctl install ${UDID_B} " "${XLOG}"
   grep -q "simctl terminate ${UDID_B} com.example.demo" "${XLOG}"
@@ -128,6 +129,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   make_preview_app
   sims_two_booted
   run bash "${SCRIPTS}/launch.sh" --no-build --sim "${UDID_A}"
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q "simctl launch ${UDID_A} com.example.demo" "${XLOG}"
 }
@@ -145,6 +147,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   make_preview_app
   sims_one_booted
   run bash "${SCRIPTS}/launch.sh" --no-build
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q "simctl install ${UDID_A} " "${XLOG}"
   [ -z "$(grep 'simctl boot' "${XLOG}" || true)" ]
@@ -154,6 +157,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   make_preview_app
   sims_none_booted
   run bash "${SCRIPTS}/launch.sh" --no-build
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q "simctl boot ${UDID_B}" "${XLOG}"
   grep -q "simctl install ${UDID_B} " "${XLOG}"
@@ -163,6 +167,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   make_preview_app
   sims_none_booted
   run bash "${SCRIPTS}/launch.sh" --no-build --sim "iPhone 16"
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q "simctl boot ${UDID_D}" "${XLOG}"
   [ -z "$(grep "simctl boot ${UDID_B}" "${XLOG}" || true)" ]
@@ -172,6 +177,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   make_preview_app
   sims_one_booted
   run bash "${SCRIPTS}/launch.sh" --sim "iPhone 17 Pro"
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q 'build -s iPhone 17 Pro' "${XLOG}"
 }
@@ -180,11 +186,13 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   make_preview_app
   sims_one_booted
   run bash "${SCRIPTS}/launch.sh"
+  echo "${output}"
   [ "$status" -eq 0 ]
   [ -z "$(grep -e '--no-launch' "${XLOG}" || true)" ]
   printf '#!/bin/sh\n# supports --no-launch\necho "build $*" >> "${XLOG}"\n' > build.sh
   : > "${XLOG}"
   run bash "${SCRIPTS}/launch.sh"
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q 'build --no-launch' "${XLOG}"
 }
@@ -193,6 +201,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   make_preview_app
   sims_two_booted
   run bash "${SCRIPTS}/snap.sh" --sim "iPhone 17" --dir "${TMP}/snaps" label
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q "simctl io ${UDID_B} screenshot" "${XLOG}"
   [ -z "$(grep 'simctl io booted' "${XLOG}" || true)" ]
@@ -220,6 +229,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   sims_two_booted
   run bash "${SCRIPTS}/bundle.sh" --no-build --no-deliver --sim "iPhone 17" \
     --description "spacing" --screen home --screen scan
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q "simctl openurl ${UDID_B} demo://scan" "${XLOG}"
   grep -q "simctl io ${UDID_B} screenshot" "${XLOG}"
@@ -231,6 +241,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   sims_one_booted
   run bash "${SCRIPTS}/bundle.sh" --no-build --no-deliver \
     --description "doc" --screen "doc:Receipts/a b&c#1.pdf"
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q 'openurl .* demo://doc?path=Receipts/a%20b%26c%231.pdf' "${XLOG}"
 }
@@ -267,6 +278,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
 @test "snap.sh --help exits 0" {
   make_preview_app
   run bash "${SCRIPTS}/snap.sh" --help
+  echo "${output}"
   [ "$status" -eq 0 ]
   [[ "$output" == *"--sim"* ]] || false
 }
@@ -292,6 +304,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
 @test "deliver.sh --help exits 0 without delivering" {
   make_preview_app
   run bash "${SCRIPTS}/deliver.sh" --help
+  echo "${output}"
   [ "$status" -eq 0 ]
   [[ "$output" == *"--no-ping"* ]] || false
   [ ! -d "${HOME}/Library/Mobile Documents" ]
@@ -304,6 +317,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   echo png > "${TMP}/a.png"
   unset IMESSAGE_TO
   run bash "${SCRIPTS}/deliver.sh" "${TMP}/a.png"
+  echo "${output}"
   [ "$status" -eq 0 ]
   [[ "$output" == *"export IMESSAGE_TO="* ]] || false
   [[ "$output" != *".imessage-to"* ]] || false
@@ -315,6 +329,7 @@ simctl_calls() { grep '^xcrun simctl' "${XLOG}" | grep -v 'simctl list' || true;
   echo png > "${TMP}/a.png"
   export IMESSAGE_TO="me@example.com"
   run bash "${SCRIPTS}/deliver.sh" "${TMP}/a.png"
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q '^osascript' "${XLOG}"
 }

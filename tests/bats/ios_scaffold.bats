@@ -385,6 +385,7 @@ PLIST
 SH
   chmod +x "${TMP}/stubs/security"
   run bash ./build.sh -d --no-launch
+  echo "${output}"
   [ "$status" -eq 0 ]
   grep -q 'DEVELOPMENT_TEAM=ZZTEAM9999' "${XLOG}"
 }
