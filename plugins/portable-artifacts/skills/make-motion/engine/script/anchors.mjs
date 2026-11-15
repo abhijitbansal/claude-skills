@@ -40,34 +40,48 @@ const SECONDS_RE = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/;
 // (a line terminator included) so the pattern always matches.
 const OFFSET_RE = /^([\s\S]*?)([+-](?:\d+(?:\.\d+)?|\.\d+))?$/;
 const INDEX_RE = /^\d+$/;
+// Digits only, with or without an offset: always the index form, never a word.
+const INDEX_FORM_RE = /^\d+(?:[+-](?:\d+(?:\.\d+)?|\.\d+))?$/;
+const WHITESPACE_RE = /\s/;
 const NON_WORD_RE = /[^\p{L}\p{N}]/gu;
 
-// A user's value as an error message may repeat it: one line, at most
-// ECHO_LIMIT characters. Strings stay as they are; anything else is JSON.
-export function echoValue(value) {
-  let text = value;
-  if (typeof value !== 'string') {
-    try {
-      text = JSON.stringify(value) ?? String(value);
-    } catch {
-      text = String(value);
-    }
+// Enough UTF-16 units to hold more than ECHO_LIMIT code points (4 each at most).
+const PREFIX_UNITS = ECHO_LIMIT * 4;
+
+function jsonText(value) {
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
   }
-  const flat = text.replace(CONTROL_RE, ' ');
-  return flat.length > ECHO_LIMIT ? `${flat.slice(0, ECHO_LIMIT - ELLIPSIS.length)}${ELLIPSIS}` : flat;
 }
+
+// A user's value as an error message may repeat it: one line, at most
+// ECHO_LIMIT code points (never a cut inside a surrogate pair). Strings stay
+// as they are; anything else is JSON. Only a prefix is looked at, so a huge
+// value costs no more than a short one.
+export function echoValue(value) {
+  const text = typeof value === 'string' ? value : jsonText(value);
+  const points = Array.from(text.slice(0, PREFIX_UNITS).replace(CONTROL_RE, ' '));
+  if (points.length <= ECHO_LIMIT) return points.join('');
+  return `${points.slice(0, ECHO_LIMIT - ELLIPSIS.length).join('')}${ELLIPSIS}`;
+}
+
+// echoValue for a message: a string in quotes, anything else as plain JSON, so
+// "3" and 3 read differently.
+export const showValue = (value) => (typeof value === 'string' ? JSON.stringify(echoValue(value)) : echoValue(value));
 
 const letters = (text) => text.replace(NON_WORD_RE, '').toLowerCase();
 const plural = (count, noun) => `${count} ${noun}${count === 1 ? '' : 's'}`;
 const rangeOf = (prefix, count) => (count === 1 ? `${prefix}:0` : `${prefix}:0 to ${prefix}:${count - 1}`);
 
 function badForm(ref) {
-  return new AnchorError(`cannot read anchor ${JSON.stringify(echoValue(ref))}; use ${FORMS}`);
+  return new AnchorError(`cannot read anchor ${showValue(ref)}; use ${FORMS}`);
 }
 
 function requireNarration(shot) {
   if (shot.words.length === 0) {
-    throw new AnchorError(`shot "${shot.id}" has no narration; word and sentence anchors need a say (use start, end or seconds)`);
+    throw new AnchorError(`shot "${echoValue(shot.id)}" has no narration; word and sentence anchors need a say (use start, end or seconds)`);
   }
 }
 
@@ -81,21 +95,21 @@ function wordStart(arg, shot) {
   if (INDEX_RE.test(arg)) {
     const index = Number(arg);
     if (index >= shot.words.length) {
-      throw new AnchorError(`word:${arg} is out of range in shot "${shot.id}"; it has ${plural(shot.words.length, 'word')} (${rangeOf('word', shot.words.length)})`);
+      throw new AnchorError(`word:${echoValue(arg)} is out of range in shot "${echoValue(shot.id)}"; it has ${plural(shot.words.length, 'word')} (${rangeOf('word', shot.words.length)})`);
     }
     return shot.words[index].start;
   }
   const found = findWord(arg, shot);
   if (found) return found.start;
   const spoken = shot.words.map((word) => word.text).join(', ');
-  throw new AnchorError(`no word "${echoValue(arg)}" in shot "${shot.id}"; its words are: ${spoken}`);
+  throw new AnchorError(`no word "${echoValue(arg)}" in shot "${echoValue(shot.id)}"; its words are: ${spoken}`);
 }
 
 function sentenceStart(arg, shot) {
   requireNarration(shot);
   const index = Number(arg);
   if (index >= shot.sentences.length) {
-    throw new AnchorError(`sentence:${arg} is out of range in shot "${shot.id}"; it has ${plural(shot.sentences.length, 'sentence')} (${rangeOf('sentence', shot.sentences.length)})`);
+    throw new AnchorError(`sentence:${echoValue(arg)} is out of range in shot "${echoValue(shot.id)}"; it has ${plural(shot.sentences.length, 'sentence')} (${rangeOf('sentence', shot.sentences.length)})`);
   }
   return shot.sentences[index].start;
 }
@@ -105,7 +119,7 @@ function sentenceStart(arg, shot) {
 function wholeWordStart(text, shot) {
   if (!text.startsWith(WORD_PREFIX)) return null;
   const arg = text.slice(WORD_PREFIX.length);
-  if (arg === '' || INDEX_RE.test(arg)) return null;
+  if (arg === '' || INDEX_FORM_RE.test(arg) || WHITESPACE_RE.test(arg)) return null;
   return findWord(arg, shot)?.start ?? null;
 }
 
@@ -114,7 +128,11 @@ function baseSeconds(base, shot, ref) {
   if (base === 'start') return 0;
   if (base === 'end') return shot.duration;
   if (base.startsWith('beat:')) throw new AnchorError(BEAT_MESSAGE);
-  if (base.startsWith(WORD_PREFIX) && base.length > WORD_PREFIX.length) return wordStart(base.slice(WORD_PREFIX.length), shot);
+  if (base.startsWith(WORD_PREFIX) && base.length > WORD_PREFIX.length) {
+    const arg = base.slice(WORD_PREFIX.length);
+    if (WHITESPACE_RE.test(arg)) throw badForm(ref); // no word is spoken with whitespace inside it
+    return wordStart(arg, shot);
+  }
   const sentence = /^sentence:(\d+)$/.exec(base);
   if (sentence) return sentenceStart(sentence[1], shot);
   throw badForm(ref);

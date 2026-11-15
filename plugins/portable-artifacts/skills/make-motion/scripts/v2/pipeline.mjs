@@ -12,14 +12,16 @@ export const MAX_FILM_BYTES = 1024 * 1024;
 const unreadable = (specPath, err) => new Error(`cannot read ${specPath}: ${err.code ?? err.message}`);
 
 function readFilmFile(specPath) {
-  let size;
+  let stat;
   try {
-    size = statSync(specPath).size;
+    stat = statSync(specPath);
   } catch (err) {
     throw unreadable(specPath, err);
   }
-  if (size > MAX_FILM_BYTES) {
-    throw new Error(`${specPath} is ${size} bytes; a film file can be at most 1 MB (${MAX_FILM_BYTES} bytes)`);
+  // Only a regular file has a size to check: a FIFO or device would be read without end.
+  if (!stat.isFile()) throw new Error(`${specPath} is not a regular file; give the path of a film .json file`);
+  if (stat.size > MAX_FILM_BYTES) {
+    throw new Error(`${specPath} is ${stat.size} bytes; a film file can be at most 1 MB (${MAX_FILM_BYTES} bytes)`);
   }
   let raw;
   try {

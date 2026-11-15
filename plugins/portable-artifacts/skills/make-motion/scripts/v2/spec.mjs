@@ -8,7 +8,7 @@ import Ajv from 'ajv';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { resolveAnchor, AnchorError, echoValue } from '../../engine/script/anchors.mjs';
+import { resolveAnchor, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 
@@ -38,13 +38,14 @@ const ID_RE = /^[a-z][a-z0-9-]*$/;
 const ACCENT_RE = /^#[0-9a-f]{6}$/i;
 // A scheme with "//" is a URL; so are these opaque ones. A name such as "clip:1.png" is a file.
 const URL_RE = /^(?:[a-z][a-z0-9+.-]*:\/\/|(?:data|blob|file|javascript):)/i;
-const DRIVE_RE = /^[a-z]:[\\/]/i;
+const DRIVE_RE = /^[a-z]:/i; // "C:\x", "C:/x" and the drive-relative "C:x"
 const UNC_RE = /^\\\\/;
 const SRC_EXAMPLE = '"assets/photo.png"';
 const NOT_FOUND_CODES = new Set(['ENOENT', 'ENOTDIR']);
 
-// A user's value inside quotes, cut to a length a message can repeat.
-const quote = (value) => JSON.stringify(echoValue(value));
+// A user's value as a message repeats it: a string in quotes, anything else as
+// plain JSON, cut to a length a message can hold.
+const quote = showValue;
 
 export class SpecError extends Error {
   constructor(errors) {
@@ -249,7 +250,7 @@ function checkCut(shot, index, base, ctx) {
   const cuts = ctx.look.cuts ?? [];
   if (cuts.includes(shot.cut)) return [];
   const hint = didYouMean(shot.cut, cuts);
-  return [{ path: at, message: `look "${ctx.look.name}" has no cut ${quote(shot.cut)};${hint ? `did you mean "${hint}"? ` : ''}its cuts are: ${cuts.join(', ')}` }];
+  return [{ path: at, message: `look "${ctx.look.name}" has no cut ${quote(shot.cut)}; ${hint ? `did you mean "${hint}"? Its` : 'its'} cuts are: ${cuts.join(', ')}` }];
 }
 
 // The shot as the timeline sees it, so anchors resolve against real word times.
@@ -288,22 +289,36 @@ function checkTarget(item, at, targets, kindName) {
   if (targets.length === 0) return [{ path: where, message: 'this kind has no targets; remove "target"' }];
   if (targets.includes(item.target)) return [];
   const hint = didYouMean(item.target, targets);
-  return [{ path: where, message: `unknown target ${quote(item.target)}; ${hint ? `did you mean "${hint}"? ` : ''}the targets of ${kindName} are: ${targets.join(', ')}` }];
+  return [{ path: where, message: `unknown target ${quote(item.target)}; ${hint ? `did you mean "${hint}"? The` : 'the'} targets of ${kindName} are: ${targets.join(', ')}` }];
 }
 
 // The kind's target names for a shot: [] for a kind with no `targets` function,
-// null when they cannot be known (no kind, or `targets` throws on a shot that
-// already has schema errors). A throw on a schema-valid shot is the kind's bug.
-function kindTargets(kind, shot, shapeIsValid) {
+// null when they cannot be known (no kind, or `targets` throws or misbehaves on
+// a shot that already has schema errors). On a schema-valid shot a throw, or a
+// result that is not an array, is the kind's bug and is raised as one.
+function kindTargets(kind, name, shot, shapeIsValid) {
   if (!kind) return null;
   if (typeof kind.targets !== 'function') return [];
   try {
     const names = kind.targets(shot);
-    return Array.isArray(names) ? names : null;
+    if (Array.isArray(names)) return names;
+    if (shapeIsValid) throw new Error(`kind "${name}": targets(shot) must return an array of target names, got ${showValue(names)}`);
+    return null;
   } catch (err) {
     if (shapeIsValid) throw err;
     return null;
   }
+}
+
+// The shot as Ajv and the kind see it: at most ON_MAX `on` entries, on a copy,
+// so a huge array is never walked. onCountErrors reports the excess.
+function boundedShot(shot) {
+  return Array.isArray(shot.on) && shot.on.length > ON_MAX ? { ...shot, on: shot.on.slice(0, ON_MAX) } : shot;
+}
+
+function onCountErrors(shot, base) {
+  if (!Array.isArray(shot.on) || shot.on.length <= ON_MAX) return [];
+  return [{ path: pathJoin(base, 'on'), message: `must NOT have more than ${ON_MAX} items` }];
 }
 
 // `entry`: the shot's timeline entry for its anchors, or null. `targets`: see kindTargets.
@@ -322,7 +337,8 @@ function checkOn(shot, base, ctx, { entry, targets, kindName }) {
 function srcProblem(src, specDir) {
   const quoted = quote(src);
   const relative = `write a path relative to the spec folder, such as ${SRC_EXAMPLE}`;
-  if (path.isAbsolute(src) || DRIVE_RE.test(src) || UNC_RE.test(src)) return `${quoted} is an absolute path; ${relative}`;
+  if (DRIVE_RE.test(src)) return `${quoted} is an absolute path (a single letter and a colon at the start looks like a Windows drive); ${relative}`;
+  if (path.isAbsolute(src) || UNC_RE.test(src)) return `${quoted} is an absolute path; ${relative}`;
   if (URL_RE.test(src)) return `${quoted} is a URL; ${relative}`;
   if (src.includes('\\')) return `${quoted} contains a backslash; use forward slashes, as in ${SRC_EXAMPLE}`;
   if (leavesFolder(specDir, path.resolve(specDir, src))) return outsideMessage(quoted);
@@ -373,10 +389,11 @@ function checkShot(shot, index, ctx, seen) {
   const base = pathJoin('shots', index);
   const resolved = resolveKind(shot, base, ctx.regs);
   const check = resolved.kind ? shotCheckerFor(resolved.name, resolved.kind) : checkBaseShot;
-  const shape = schemaErrors(check, shot, base);
+  const bounded = boundedShot(shot);
+  const shape = [...schemaErrors(check, bounded, base), ...onCountErrors(shot, base)];
   const narration = checkNarration(shot, base);
   const entry = narration.hasLength ? timelineShot(shot, ctx) : null;
-  const targets = kindTargets(resolved.kind, shot, shape.length === 0);
+  const targets = kindTargets(resolved.kind, resolved.name, bounded, shape.length === 0);
   return [
     ...resolved.errors,
     ...shape,

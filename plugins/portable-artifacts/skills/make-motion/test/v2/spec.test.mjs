@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, chmodSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRegistry } from '../../engine/registry.mjs';
@@ -687,6 +688,91 @@ test('values echoed in error messages are cut to 80 characters', () => {
     assert.ok(message.length < 400, `echo ${i} is ${message.length} characters: ${message.slice(0, 120)}`);
     assert.ok(!/(.)\1{100}/.test(message), `echo ${i} holds a long run of the value`);
   });
+});
+
+// --- review round 2 ---
+
+test('50,000 shots are refused with a handful of errors, fast', () => {
+  const shots = Array.from({ length: 50000 }, () => ({ id: 'dup', show: 'statement', hold: 1 }));
+  const started = performance.now();
+  const r = check(film({}, shots));
+  assert.ok(performance.now() - started < 1000, 'took too long');
+  assert.equal(r.errors[0].path, 'shots');
+  assert.ok(r.errors.length <= 62, `${r.errors.length} errors`);
+});
+
+test('an on array of 50,000 numbers is refused with a handful of errors, fast, and not changed', () => {
+  const on = Array.from({ length: 50000 }, () => 1);
+  const input = film({}, [{ ...shotA, on }]);
+  const started = performance.now();
+  const r = check(input);
+  assert.ok(performance.now() - started < 1000, 'took too long');
+  assert.ok(r.errors.some((e) => e.path === 'shots[0].on' && /8/.test(e.message)));
+  assert.ok(r.errors.length <= 10, `${r.errors.length} errors`);
+  assert.equal(input.shots[0].on.length, 50000);
+});
+
+test('the cut messages read as whole sentences', () => {
+  const two = (cut) => check(film({}, [shotA, { id: 'b', show: 'statement', say: 'Yo.', cut }])).errors[0].message;
+  assert.equal(two('fade'), 'look "desk" has no cut "fade"; its cuts are: cut, match');
+  assert.equal(two('matc'), 'look "desk" has no cut "matc"; did you mean "match"? Its cuts are: cut, match');
+});
+
+test('the target messages read as whole sentences', () => {
+  const message = (show, extra, target) => check(film({}, [{ id: 'p', show, hold: 2, ...extra, on: [{ at: 'start', do: 'highlight', target }] }])).errors[0].message;
+  assert.equal(message('statement', {}, 'label'), 'unknown target "label"; the targets of statement are: text');
+  assert.equal(message('picture', { src: 'assets/photo.png' }, 'captin'), 'unknown target "captin"; did you mean "caption"? The targets of picture are: image, caption');
+});
+
+test('a value that is not a string is shown as JSON, a string in quotes', () => {
+  const got = (version) => check({ version, shots: [shotA] }).errors[0].message;
+  assert.equal(got(3), 'must be 2, the only version make-motion 2 reads; got 3');
+  assert.equal(got('3'), 'must be 2, the only version make-motion 2 reads; got "3"');
+  assert.equal(got({ a: 1 }), 'must be 2, the only version make-motion 2 reads; got {"a":1}');
+  assert.equal(got(null), 'must be 2, the only version make-motion 2 reads; got null');
+});
+
+test('a cut inside a surrogate pair never happens in a message', () => {
+  const emoji = '\u{1F600}'.repeat(100);
+  const messages = [
+    check(film({}, [{ ...shotA, id: emoji }])).errors[0].message,
+    check(film({ look: emoji })).errors[0].message,
+    check({ version: emoji, shots: [shotA] }).errors[0].message,
+    check(film({}, [{ ...shotA, on: [{ at: emoji, do: 'highlight' }] }])).errors[0].message,
+  ];
+  for (const message of messages) {
+    assert.doesNotMatch(message, /\\ud[89a-f][0-9a-f]{2}/i, message.slice(0, 100));
+    assert.ok(message.length < 400);
+  }
+});
+
+test('loadFilm refuses what is not a regular file', () => {
+  assert.throws(() => loadFilm(specDir, { registries }), (err) => {
+    assert.ok(!(err instanceof SpecError));
+    assert.ok(err.message.includes(specDir), err.message);
+    assert.match(err.message, /not a regular file/);
+    return true;
+  });
+  const fifo = path.join(specDir, 'pipe.json');
+  execFileSync('mkfifo', [fifo]);
+  assert.throws(() => loadFilm(fifo, { registries }), /not a regular file/);
+});
+
+test('a kind whose targets returns a non-array is a programmer error that names the kind', () => {
+  const regs = stubRegistries();
+  regs.kinds.add('broken', { schema: { properties: {} }, targets: () => 'text' });
+  const shots = [{ id: 'b', show: 'broken', hold: 2, on: [{ at: 'start', do: 'highlight' }] }];
+  assert.throws(() => validateFilm(film({}, shots), { specDir, registries: regs }), /kind "broken".*targets.*array/);
+  const invalid = [{ id: 'b', show: 'broken', hold: 2, nope: 1 }];
+  assert.doesNotThrow(() => validateFilm(film({}, invalid), { specDir, registries: regs }));
+});
+
+test('a colon after a single leading letter is refused as a Windows drive', () => {
+  for (const src of ['C:x.png', 'C:\\x.png', 'C:/x.png', 'a:b.png']) {
+    const r = check(film({}, [{ id: 'p', show: 'picture', src, hold: 2 }]));
+    assert.match(r.errors[0].message, /Windows drive/, src);
+    assert.match(r.errors[0].message, /absolute/, src);
+  }
 });
 
 test('loadFilm reports a version 1 file as a SpecError with the one error', () => {

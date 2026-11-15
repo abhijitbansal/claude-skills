@@ -153,6 +153,65 @@ test('a value echoed in an anchor error is cut to 80 characters', () => {
   }
 });
 
+const numeric = {
+  id: 'n',
+  duration: 4,
+  words: [
+    { text: 'a', start: 0.1, end: 0.3 },
+    { text: '31', start: 0.5, end: 0.9 },
+    { text: '205', start: 1.2, end: 1.6 },
+    { text: 'b', start: 2, end: 2.2 },
+    { text: 'ab', start: 2.5, end: 2.9 },
+  ],
+  sentences: [],
+};
+
+test('word: followed by digits is always an index, with or without an offset', () => {
+  assert.equal(resolveAnchor('word:3', numeric), 2);
+  assert.equal(resolveAnchor('word:3+1', numeric), 3);
+  assert.equal(resolveAnchor('word:2-0.5', numeric), 0.7);
+  assert.throws(() => resolveAnchor('word:31', numeric), /word:31 is out of range in shot "n"/);
+  assert.throws(() => resolveAnchor('word:205', numeric), /word:205 is out of range/);
+});
+
+test('whitespace inside a word anchor never matches a word', () => {
+  for (const bad of ['word:a\nb', 'word:a b', 'word:a b', 'word:a\tb-0.5']) {
+    assert.throws(() => resolveAnchor(bad, numeric), (err) => {
+      assert.ok(err instanceof AnchorError);
+      assert.match(err.message, /^cannot read anchor/);
+      return true;
+    }, JSON.stringify(bad));
+  }
+});
+
+test('a cut inside a surrogate pair never happens', () => {
+  const emoji = '\u{1F600}'.repeat(100);
+  assert.throws(() => resolveAnchor(`word:${emoji}`, shot), (err) => {
+    assert.ok(err.message.isWellFormed(), 'lone surrogate in the message');
+    assert.ok(err.message.includes('...'));
+    return true;
+  });
+  assert.throws(() => resolveAnchor(emoji, shot), (err) => err.message.isWellFormed());
+});
+
+test('the shot id is cut where it is echoed', () => {
+  const longId = { ...shot, id: 'x'.repeat(500) };
+  for (const bad of ['word:server', 'word:9']) {
+    assert.throws(() => resolveAnchor(bad, longId), (err) => {
+      assert.ok(err.message.length < 300, `${err.message.length} characters`);
+      return true;
+    });
+  }
+  assert.throws(() => resolveAnchor('word:0', { ...longId, words: [], sentences: [] }), (err) => err.message.length < 300);
+  assert.throws(() => resolveAnchor('sentence:5', longId), (err) => err.message.length < 300);
+});
+
+test('a value that is not a string is shown as JSON, a string in quotes', () => {
+  assert.throws(() => resolveAnchor({ at: 1 }, shot), /cannot read anchor \{"at":1\}; use/);
+  assert.throws(() => resolveAnchor('middle', shot), /cannot read anchor "middle"; use/);
+  assert.throws(() => resolveAnchor(null, shot), /cannot read anchor null; use/);
+});
+
 test('the shot is not mutated', () => {
   const before = JSON.stringify(shot);
   resolveAnchor('word:file-0.08', shot);
