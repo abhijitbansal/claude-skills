@@ -54,6 +54,18 @@ teardown() { rm -rf "${TMP}"; }
   [ -L "${HOME}/.agents/skills/second-wind" ]   # sorts after the collision
 }
 
+@test "codex mode exits non-zero when ln itself fails (read-only dest dir)" {
+  # A failed link must not be reported as success. Only a real dir/file collision
+  # is a tolerated skip; permission errors stay fatal.
+  [ "$(id -u)" -ne 0 ] || skip "root ignores directory permissions"
+  mkdir -p "${HOME}/.codex" "${HOME}/.agents/skills"
+  chmod 555 "${HOME}/.agents/skills"
+  run bash "${INSTALL}" codex
+  chmod 755 "${HOME}/.agents/skills"
+  [ "$status" -ne 0 ]
+  [[ "$output" != *"codex: skills linked"* ]] || false
+}
+
 @test "copilot mode honors COPILOT_SKILLS_DIR override" {
   export COPILOT_SKILLS_DIR="${TMP}/custom-skills"
   mkdir -p "${COPILOT_SKILLS_DIR}"

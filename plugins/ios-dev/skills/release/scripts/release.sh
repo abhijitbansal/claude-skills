@@ -131,7 +131,8 @@ ipa_path="build/${APP_NAME}.ipa"
 # the user saw validated. The dry run records "<HEAD> <mode> <ipa>" next to the
 # IPA; --confirm-upload reuses that IPA only when the stamp still matches HEAD and
 # mode, never under --force (preflight FAILs may have been bypassed, so the tree
-# may be dirty). Delete the stamp (or the IPA) to force a rebuild.
+# may be dirty), and a --force build writes no stamp for a later run to trust.
+# Delete the stamp (or the IPA) to force a rebuild.
 ipa_stamp_file="$(release_scratch_dir)/ipa-built-from"
 head_sha="$(git rev-parse HEAD 2>/dev/null || echo none)"
 ipa_stamp="${head_sha} ${MODE} ${ipa_path}"
@@ -183,7 +184,10 @@ EOF
   fi
   run_hook s5-post
   [[ -f "${ipa_path}" ]] || { echo "no ${ipa_path} after export" >&2; exit 1; }
-  printf '%s\n' "${ipa_stamp}" > "${ipa_stamp_file}"
+  # A forced build may come from a dirty tree, so it never earns a stamp.
+  if [[ ${FORCE} -eq 0 ]]; then
+    printf '%s\n' "${ipa_stamp}" > "${ipa_stamp_file}"
+  fi
 }
 
 if [[ ${reuse_ipa} -eq 1 ]]; then

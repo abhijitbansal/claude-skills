@@ -299,6 +299,19 @@ add_hooks() {  # committed, executable hooks that log "<name> <mode>" to ${TMP}/
   [ "$(grep -c "^xcodebuild archive" "${MOCK_CALL_LOG}")" -eq 2 ]
 }
 
+@test "an IPA built under --force is never reused by a later non-forced --confirm-upload" {
+  # W2M-M04: a forced build may come from a dirty tree (preflight FAILs bypassed);
+  # it must not leave a stamp that a clean --confirm-upload run then trusts.
+  setup_release_env
+  printf 'build/Demo.ipa\nbuild/ExportOptions.plist\n' >> .git/info/exclude
+  run bash "${RELEASE}" testflight --dry-run --force < /dev/null
+  [ "$status" -eq 0 ]
+  run bash "${RELEASE}" testflight --confirm-upload < /dev/null
+  [ "$status" -eq 0 ]
+  out_lacks "reusing build/Demo.ipa"
+  [ "$(grep -c "^xcodebuild archive" "${MOCK_CALL_LOG}")" -eq 2 ]
+}
+
 @test "a dry run followed by --confirm-upload still passes the tree-clean gate" {
   setup_release_env
   # Real apps gitignore their build outputs; the fixture commits build/gen, so

@@ -37,11 +37,18 @@ link_skills() {
     fi
   done
   local d
+  local dst
   while IFS= read -r d; do
+    dst="${dest}/$(basename "${d}")"
     # A real dir from another installer (portable-artifacts, npx skills) is
     # skipped with a warning; one collision must not stop the rest linking.
-    safe_symlink "${d}" "${dest}/$(basename "${d}")" \
-      || warn "skipped $(basename "${d}"): ${dest}/$(basename "${d}") is not ours"
+    # Any other failure (ln permission denied) stays fatal: safe_symlink is
+    # called bare so errexit stays on inside it.
+    if [[ -e "${dst}" && ! -L "${dst}" ]]; then
+      warn "skipped $(basename "${d}"): ${dst} is not ours"
+      continue
+    fi
+    safe_symlink "${d}" "${dst}"
   done < <(skill_dirs)
 }
 

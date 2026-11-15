@@ -3460,12 +3460,54 @@ class WatcherStaleMessageAndState(unittest.TestCase):
             self._setup(tmp)
             self._seed_handled()
             pane = {"text": "working...\nall quiet"}
+            # two quiet polls: one missing poll could be a resize wrap
             self._run(lambda: pane["text"],
-                      [lambda: pane.update(text=self.TIME_LINE)])
+                      [lambda: None,
+                       lambda: pane.update(text=self.TIME_LINE)])
             state = self._read_state()
             self.assertEqual(state.get("paused"), ["wind-x"],
                              "line vanished then returned: a new limit")
             self.assertEqual(state["handled"]["wind-x"]["n"], 1)
+
+    def test_empty_capture_does_not_drop_handled_entry(self):
+        # W2M-M03: capture_pane returns "" when tmux fails; the lingering
+        # handled line must not read as a new limit on the next good poll.
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled(n=1)
+            pane = {"text": ""}
+            self._run(lambda: pane["text"],
+                      [lambda: pane.update(text=self.TIME_LINE)])
+            state = self._read_state()
+            self.assertNotIn("paused", state)
+            self.assertIn("wind-x", state["handled"])
+
+    def test_single_missing_poll_does_not_drop_handled_entry(self):
+        # W2M-M03: a resize that wraps the line makes the regex miss once.
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled(n=1)
+            pane = {"text": "wrapped\nlimit line\nmangled"}
+            self._run(lambda: pane["text"],
+                      [lambda: pane.update(text=self.TIME_LINE)])
+            state = self._read_state()
+            self.assertNotIn("paused", state)
+            self.assertIn("wind-x", state["handled"])
+
+    def test_handled_count_drops_when_a_copy_scrolls_out(self):
+        # W2M-M02: n=2 recorded, older copy scrolls out, a new copy appears
+        # later. The stored n must follow the visible count down to 1.
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled(n=2)
+            one = self.TIME_LINE
+            two = f"{self.TIME_LINE}\nresumed, working...\n{self.TIME_LINE}"
+            pane = {"text": one}
+            self._run(lambda: pane["text"],
+                      [lambda: pane.update(text=two)])
+            state = self._read_state()
+            self.assertEqual(state.get("paused"), ["wind-x"],
+                             "second copy after scroll-out is a new limit")
 
     def test_lingering_handled_line_stays_ignored(self):
         with tempfile.TemporaryDirectory() as tmp:

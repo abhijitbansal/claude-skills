@@ -1928,6 +1928,9 @@ def start_caffeinate():
 # parse_clock_time never dates a reset more than a day ahead, so a handled
 # message can only be mistaken for a fresh one for about that long.
 HANDLED_TTL_SECONDS = 24 * 3600 + 600
+# Consecutive polls a handled line must be absent from the pane before the
+# watcher treats a later identical line as a new limit.
+HANDLED_MISS_POLLS = 2
 
 
 def _is_number(value):
@@ -2005,6 +2008,7 @@ def cmd_watch(cfg, args):
     state.update(identity)
     save_state(state)
     cooldown_s = cfg["resume_cooldown_seconds"]
+    missing = {}  # session name -> consecutive polls its handled line was absent
     try:
         while True:
             # Re-read state every poll: `wind resume`, the dashboard and
@@ -2034,11 +2038,30 @@ def cmd_watch(cfg, args):
                 text = capture_pane(name, cfg["capture_lines"])
                 copies = limit_digests(text, patterns)
                 entry = handled.get(name)
-                if entry and entry.get("hash") not in copies:
-                    # The handled line left the pane, so the same words
-                    # later (a clock time has no date) are a new limit.
-                    del handled[name]
-                    entry = None
+                if entry and not text.strip():
+                    # tmux failed or the pane is blank: nothing to judge by,
+                    # so keep the handled entry as it is.
+                    continue
+                if entry and entry.get("hash") in copies:
+                    missing.pop(name, None)
+                    # Copies that scrolled out lower the count, so a later
+                    # identical line is seen as a new copy.
+                    visible = copies.count(entry["hash"])
+                    if visible < entry.get("n", 1):
+                        entry = {**entry, "n": visible}
+                        handled[name] = entry
+                elif entry:
+                    # Absent for HANDLED_MISS_POLLS polls in a row before it
+                    # counts as gone: a resize can wrap the line for one poll.
+                    # A different limit message still pauses below: its digest
+                    # cannot equal the absent one.
+                    missing[name] = missing.get(name, 0) + 1
+                    if missing[name] >= HANDLED_MISS_POLLS:
+                        # The handled line left the pane, so the same words
+                        # later (a clock time has no date) are a new limit.
+                        del handled[name]
+                        missing.pop(name, None)
+                        entry = None
                 found = find_limit(text, patterns)
                 if not found:
                     continue
