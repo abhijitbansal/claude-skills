@@ -14,11 +14,11 @@ import { landing } from '../devices/shared.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { regionMark } from './region-mark.mjs';
 import { closeUpPlan, closeUps } from './close-ups.mjs';
-import { clippingProblems } from './clipping-rules.mjs';
+import { clippingProblems, establishingFindings } from './clipping-rules.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, REGION_PREFIX, sizeAt, fontFor, heroId, isWide, arrivesMatched, setCase, inkBox, regionOf,
   isEditorial, cutsToCloseUp, requireDevice, compositionRect, fieldNode, enterTracks, defaultCamera, pushLayer, onDevices,
-  placeDevices, deviceCamera,
+  placeDevices, deviceCamera, withEstablishingView,
 } from './shared.mjs';
 
 const CAPTION_MAX = 80;
@@ -173,8 +173,9 @@ function regionMarks(shot, ctx, { w, h, tilt, local }) {
   });
 }
 
-function expandClipping(shot, ctx) {
+function expandClipping(given, ctx) {
   const { look, unit, timing } = ctx;
+  const shot = withEstablishingView(given, ctx); // a region event waits until the whole picture has been seen
   const problems = clippingProblems(shot);
   if (problems.length > 0) throw new Error(`clipping: shot "${shot.id}": ${problems.map((e) => `${e.path}: ${e.message}`).join('; ')}`);
   const closeUp = cutsToCloseUp(look);
@@ -218,7 +219,7 @@ registries.kinds.add('clipping', {
     id: 'query',
     show: 'clipping',
     src: 'assets/screenshot.png',
-    say: 'This one shows the query behind every chart.',
+    say: 'Every chart on this page shows its query.',
     caption: 'The query',
     regions: { query: [0.55, 0.2, 0.35, 0.2] },
     on: [{ at: 'word:query', do: 'circle', target: 'region:query' }],
@@ -249,4 +250,5 @@ registries.kinds.add('clipping', {
   regionDevices: ['highlight'],
   validate: clippingProblems,
   expand: expandClipping,
+  review: (shot, ctx) => establishingFindings(shot, ctx),
 });

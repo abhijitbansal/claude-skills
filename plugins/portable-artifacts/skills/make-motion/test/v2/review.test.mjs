@@ -8,7 +8,7 @@ import '../../engine/modes/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { stillStretches } from '../../engine/review/pacing.mjs';
 import { planSheets, auditMoments } from '../../scripts/v2/plan.mjs';
-import { dedupeFindings, safeRectFor, sessionFindings, auditPlan } from '../../scripts/v2/review.mjs';
+import { dedupeFindings, safeRectFor, sessionFindings, auditPlan, hookFindings } from '../../scripts/v2/review.mjs';
 import { layoutSheet, shotColumns, CUT_COLUMNS } from '../../scripts/v2/layout.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 
@@ -475,13 +475,50 @@ test('describeError splits "what. how to fix" and gives a hint to the errors tha
 });
 
 test('a report has the same keys whatever stopped the run, and ok needs a valid film, no error and no mechanical finding', () => {
-  const base = { validated: true, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null };
+  const base = { validated: true, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, post: null, capture: null, frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null };
   const keys = Object.keys(reportOf(base)).sort();
-  assert.deepEqual(keys, ['captured', 'capture', 'findings', 'frames', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed'].sort());
+  assert.deepEqual(keys, ['bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed'].sort());
   assert.equal(reportOf(base).ok, true);
   assert.equal(reportOf({ ...base, validated: false }).ok, false);
   assert.equal(reportOf({ ...base, findings: [{ kind: 'creative' }] }).ok, true);
   assert.equal(reportOf({ ...base, findings: [{ kind: 'mechanical' }] }).ok, false);
   const withError = reportOf({ ...base, error: { message: 'm', hint: 'h' } });
   assert.deepEqual([withError.ok, withError.error], [false, { message: 'm', hint: 'h' }]);
+});
+
+// ---- the director's round 1: overflow, word overlap, the viral hook ----
+
+test('an overflow message states the size it stopped at and names the widest word', () => {
+  const node = textNode({ id: 'hook.text', size: 96, words: 3, word: 'DASHBOARDS', overflow: true });
+  node.layout.lines[0].words[1] = { ...node.layout.lines[0].words[1], text: 'HIDING', width: 120 };
+  const [found] = auditFrame([node], ctx()).filter((f) => f.rule === 'overflow');
+  assert.match(found.message, /does not fit even at the smallest size its kind allows, 96 units/);
+  assert.match(found.message, /widest word is "DASHBOARDS" \(192 units wide\)/);
+  assert.doesNotMatch(found.message, /28-unit/);
+});
+
+test('no frame may have a word overlapping its neighbour on the line', () => {
+  const node = textNode({ id: 'line', size: 132, x: 200, y: 400, words: 3, perLine: 3 }); // words 264 wide at x 0, 264, 528: touching
+  assert.deepEqual(auditFrame([node], ctx()).filter((f) => f.rule === 'word-overlap'), []);
+  const pulsing = { ...node, words: node.words.map((w, i) => (i === 1 ? { ...w, scale: 1.12 } : w)) };
+  const [found] = auditFrame([pulsing], ctx()).filter((f) => f.rule === 'word-overlap');
+  assert.equal(found.kind, 'mechanical');
+  assert.match(found.message, /the word "word" overlaps "word" by 15\.8 units/);
+  const gap = textNode({ id: 'line', size: 132, x: 200, y: 400, words: 3, perLine: 3 });
+  gap.layout.lines[0].words.forEach((w, i) => { w.x = i * 300; });
+  assert.deepEqual(auditFrame([{ ...gap, words: gap.words.map((w, i) => (i === 1 ? { ...w, scale: 1.12 } : w)) }], ctx()).filter((f) => f.rule === 'word-overlap'), [], 'a 36 unit gap absorbs the pulse');
+  const hidden = { ...pulsing, words: pulsing.words.map((w, i) => (i !== 1 ? { ...w, opacity: 0 } : w)) };
+  assert.deepEqual(auditFrame([hidden], ctx()).filter((f) => f.rule === 'word-overlap'), [], 'words that are not on screen overlap nothing');
+});
+
+test('the first shot of a viral film must show all its text on frame 0; a pro film is not held to it', () => {
+  const tree = (opacities) => [{ ...textNode({ id: 'hook', words: opacities.length }), props: { role: 'hero' }, words: opacities.map((opacity) => ({ opacity, x: 0, y: 0, scale: 1 })) }];
+  const film = (mode, show = 'statement') => ({ mode, shots: [{ id: 'hook', show }] });
+  const at = (opacities) => [{ frame: 0, tree: tree(opacities) }];
+  assert.deepEqual(hookFindings(film('viral'), {}, at([1, 1, 1])), []);
+  const [found] = hookFindings(film('viral'), {}, at([1, 0, 0]));
+  assert.deepEqual([found.kind, found.path, found.shot, found.t], ['mechanical', 'shots[0]', 'hook', 0]);
+  assert.match(found.message, /2 of its 3 words are not on screen yet/);
+  assert.deepEqual(hookFindings(film('pro'), {}, at([1, 0, 0])), []);
+  assert.deepEqual(hookFindings(film('viral', 'number'), {}, at([1, 0, 0])), [], 'only a statement is a line of text to read');
 });

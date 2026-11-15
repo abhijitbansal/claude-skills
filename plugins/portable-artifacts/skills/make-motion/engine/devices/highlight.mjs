@@ -3,8 +3,10 @@
 // list (nodes draw in order). A look may ask for props.blend ('multiply' in desk) so the ink shows through.
 // In a hand look (desk) it is an uneven band: corners jittered and each long edge a
 // shallow two-segment curve; in a crisp look (pop) it is an exact rectangle. Either way it wipes in left to right
-// (`reveal`). Pure and DOM-free.
+// (`reveal`): landing on `at`, or, over a run of words, following them (the optional `stops` param: [{ at, x }], the
+// landing time and right edge of each word) so the band is never longer than the words on screen. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
+import { track } from '../time/track.mjs';
 import { checkParams, isHand, styleOf, colourOf, deviceRng, spread, landing, polyline, at2, styledBy } from './shared.mjs';
 
 const BAND_HEIGHT = 1.18; // of the box height
@@ -35,8 +37,31 @@ function handBand([x, top, w, band], unit, wobble, rng) {
   return `M${at2(tl)}${edge(tl, tr, rng, bow)}L${at2(br)}${edge(br, bl, rng, bow)}Z`;
 }
 
+const FRAME_EPSILON = 1e-9;
+
+// A reveal that follows the words under the band: `stops` is [{ at, x }], the time each word lands and its right edge
+// in canvas pixels, in order. The band grows over word k from the moment that word starts to arrive (`move.dur` before it
+// lands, but not before the word before it has landed) to its landing, holds in between, and never runs ahead of the
+// last word that is on screen. `reach` is how far the band extends past each end of the box.
+function revealFollowing(stops, { x, w }, reach, move, step) {
+  const settled = (t) => (step === undefined ? t : Math.floor(t * step + FRAME_EPSILON) / step);
+  const total = w + 2 * reach;
+  const keys = [];
+  let held = 0, shown = 0;
+  stops.forEach((stop, k) => {
+    const last = k === stops.length - 1;
+    const fraction = last ? 1 : Math.min(1, Math.max(0, (reach + stop.x - x) / total));
+    const start = Math.max(held, stop.at - move.dur);
+    keys.push({ t: start, v: shown }, { t: Math.max(start, settled(stop.at)), v: fraction, ease: move.ease });
+    held = Math.max(start, stop.at);
+    shown = fraction;
+  });
+  return track(keys);
+}
+
 function buildHighlight(params) {
-  const { id, box, at, look, unit, seed } = checkParams('highlight', params);
+  const { id, box, at, look, unit, seed } = checkParams('highlight', params, ['stops']);
+  const { stops } = params;
   const style = styleOf(look, 'highlight');
   const [x, y, w, h] = box;
   const band = h * BAND_HEIGHT;
@@ -48,7 +73,9 @@ function buildHighlight(params) {
   const props = { d, fill: colourOf(look, style.color ?? 'accent'), under: true };
   if (style.blend !== undefined) props.blend = style.blend;
   const step = hand ? look.moves.draw.step : undefined;
-  const tracks = { reveal: landing(at, look.moves.draw, 0, 1, step) };
+  const reach = hand ? SWIPE_OVERSHOOT * unit : 0;
+  const reveal = Array.isArray(stops) && stops.length > 0 ? revealFollowing(stops, { x, w }, reach, look.moves.draw, step) : landing(at, look.moves.draw, 0, 1, step);
+  const tracks = { reveal };
   return { nodes: [node('path', id, props, { tracks, step })] };
 }
 

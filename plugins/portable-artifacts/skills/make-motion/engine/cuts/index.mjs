@@ -124,13 +124,59 @@ const faded = (n, factor) => Object.freeze({ ...n, opacity: n.opacity * factor, 
 // The same node in the same state in both frames (its bbox aside) passes through untouched.
 const identical = (a, b) => stateKey({ ...a, bbox: undefined }) === stateKey({ ...b, bbox: undefined });
 
+const MATCH_FADE = 0.6; // of the cut: an unlike pair leaves over its first 60% and arrives over its last 60%
+const HALF_WAY = 0.5; // an outgoing hero of an unlike pair drifts this share of the way toward the incoming one
+
+// What a node shows, for deciding whether two heroes are the same: the words of its texts and the src of its images,
+// through its groups.
+function contentOf(n) {
+  const own = n.type === 'text' ? (n.props.layout?.lines ?? []).flatMap((line) => line.words.map((w) => w.text)).join(' ') : n.type === 'image' ? n.props.src : '';
+  return [own, ...n.children.map(contentOf)].join('|');
+}
+
+// Two shared heroes are the same hero when they are the same kind of node showing the same content; then the match
+// morphs one into the other. Unlike ones (a statement into a number) are not scaled or reflowed into each other.
+const sameHero = (a, b) => a.type === b.type && contentOf(a) === contentOf(b);
+
+const centreOf = (n) => (Array.isArray(n.bbox) && boxSize(n.bbox) > 0 ? boxCentre(n.bbox) : [n.x, n.y]);
+
+// How far the outgoing hero of an unlike pair has drifted toward the incoming one at progress p.
+function offsetOf(from, into, p) {
+  const f = clamp01(p / MATCH_FADE);
+  const [a, b] = [centreOf(from), centreOf(into)];
+  return [(b[0] - a[0]) * HALF_WAY * f, (b[1] - a[1]) * HALF_WAY * f];
+}
+
+// The outgoing hero of an unlike pair: not scaled, drifting up to half the way toward where the incoming hero stands
+// while it fades out over the first MATCH_FADE of the cut.
+function handOff(from, into, p) {
+  const f = clamp01(p / MATCH_FADE);
+  const [dx, dy] = offsetOf(from, into, p);
+  return Object.freeze({ ...from, x: from.x + dx, y: from.y + dy, opacity: from.opacity * (1 - f), visible: from.opacity * (1 - f) > 0 });
+}
+
+// The incoming hero of an unlike pair: it fades in over the last MATCH_FADE of the cut, moving in from where the
+// outgoing hero stands.
+function handIn(from, into, p) {
+  const f = clamp01((p - (1 - MATCH_FADE)) / MATCH_FADE);
+  const e = ease(MATCH.ease)(f);
+  const [a, b] = [centreOf(from), centreOf(into)];
+  return Object.freeze({
+    ...into, x: into.x + (a[0] - b[0]) * (1 - e), y: into.y + (a[1] - b[1]) * (1 - e),
+    opacity: into.opacity * f, visible: into.opacity * f > 0,
+  });
+}
+
 // Drawing order: the shared background the incoming frame starts with (shared nodes behind the picture plane, depth
 // > 0, such as the field: see backgroundNode()), then the outgoing nodes fading out, then the rest of the incoming frame
-// in its own order, a node identical in both passing through and any other shared node morphing in place.
+// in its own order, a node identical in both passing through, a like shared node morphing in place and an unlike one
+// handed over (handOff, handIn).
 function match({ from, to, p }) {
   const e = ease(MATCH.ease)(p);
   const outgoing = new Map(from.map((n) => [n.id, n]));
   const shared = new Set(to.filter((n) => outgoing.has(n.id)).map((n) => n.id));
+  const unlike = new Set(to.filter((n) => shared.has(n.id) && !(n.depth > 0) && !sameHero(outgoing.get(n.id), n)).map((n) => n.id));
+  const leaving = new Set([...shared].filter((id) => !unlike.has(id)));
   const out = clamp01(1 - p / MATCH.outgoingShare);
   const into = clamp01((p - MATCH.outgoingShare) / (1 - MATCH.outgoingShare));
   const lead = to.findIndex((n) => !shared.has(n.id) || !(n.depth > 0));
@@ -138,12 +184,21 @@ function match({ from, to, p }) {
   const blend = (n) => {
     if (!shared.has(n.id)) return faded(n, into);
     const a = outgoing.get(n.id);
+    if (unlike.has(n.id)) return handIn(a, n, p);
     if (identical(a, n)) return n;
     return n.depth > 0 ? backgroundNode(a, n, e) : morph(a, n, e);
   };
+  // The rest of the outgoing frame (a kicker, a highlight) drifts with its hero, or the band would be left behind the text.
+  const lead0 = [...unlike][0];
+  const drift = lead0 === undefined ? null : offsetOf(outgoing.get(lead0), to.find((t) => t.id === lead0), p);
+  const outgoingNode = (n) => {
+    if (unlike.has(n.id)) return handOff(n, to.find((t) => t.id === n.id), p);
+    const gone = faded(n, out);
+    return drift && !(n.depth > 0) ? Object.freeze({ ...gone, x: gone.x + drift[0], y: gone.y + drift[1] }) : gone;
+  };
   return [
     ...to.slice(0, split).map(blend),
-    ...from.filter((n) => !shared.has(n.id)).map((n) => faded(n, out)),
+    ...from.filter((n) => !leaving.has(n.id)).map(outgoingNode),
     ...to.slice(split).map(blend),
   ];
 }

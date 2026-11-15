@@ -59,5 +59,6 @@ export const pop = {
     tag: { fill: 'accent', text: 'paper' },
     cutout: { keylineColor: '#ffffff' },
   },
-  post: { grain: 0.03, halftone: 0.2, bloom: 0 },
+  // halftone 0: pop's own field is already a halftone, and the post pass would dot the pictures too (see the Look typedef)
+  post: { grain: 0.02, halftone: 0, bloom: 0 },
 };

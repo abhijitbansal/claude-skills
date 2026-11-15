@@ -8,5 +8,6 @@ export const pro = {
   wpm: 150,
   tail: 0.6,
   maxStillSeconds: 6,
+  hookFromFrameZero: false, // the first shot reads from frame 0: all its words on screen, each taking its colour when spoken
   captions: false,
 };

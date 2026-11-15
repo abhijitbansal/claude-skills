@@ -34,6 +34,7 @@ export const MIN_TEXT_UNITS = 28;
 export const MAX_TEXT_SIZES = 3;
 export const MIN_HERO_RATIO = 3;
 export const OVERLAP_UNITS = 4;
+const WORD_OVERLAP_UNITS = 1; // neighbouring words of a line may not meet by more than this
 export const PRO_MAX_LINE_WORDS = 12;
 export const VIRAL_MAX_FIRST_WORDS = 7;
 // Two sizes within this ratio of each other (a camera drift scales every text a little) count as one size.
@@ -170,11 +171,23 @@ function outsideSafe([x, y, w, h], safe) {
   return x < safe.left - EPSILON || y < safe.top - EPSILON || x + w > safe.right + EPSILON || y + h > safe.bottom + EPSILON;
 }
 
+// The widest word of a text, as { text, units }: what keeps it from fitting when it will not shrink any further.
+function widestWord(node, size) {
+  const words = wordsOf(node.layout);
+  const widest = words.reduce((best, w) => (w.width > best.width ? w : best), words[0]);
+  return { text: widest.text, units: (widest.width * size) / node.layout.size };
+}
+
+function overflowMessage(node, size) {
+  const widest = widestWord(node, size);
+  return `text "${node.id}" does not fit even at the smallest size its kind allows, ${Math.round(size)} units; its widest word is "${widest.text}" (${Math.round(widest.units)} units wide); shorten that word or cut words`;
+}
+
 function textRules(texts, ctx) {
   return texts.flatMap(({ node, size, role, ink, landed }) => {
     const out = [];
     const id = node.id;
-    if (node.layout.overflow) out.push(finding(ctx, CREATIVE, 'overflow', id, `text "${id}" does not fit at the ${MIN_TEXT_UNITS}-unit floor; cut words`, role));
+    if (node.layout.overflow) out.push(finding(ctx, CREATIVE, 'overflow', id, overflowMessage(node, size), role));
     if (landed && size < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(size)} units tall; the floor is ${MIN_TEXT_UNITS}`, role));
     if (landed && outsideSafe(ink, ctx.safe)) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
     return out;
@@ -194,6 +207,34 @@ function overlapRules(texts, ctx, unit) {
     out.push(finding(ctx, MECHANICAL, 'overlap', ids.join('|'), `texts "${ids[0]}" and "${ids[1]}" overlap by ${units(Math.min(across, down) / unit)} units`));
   }));
   return out;
+}
+
+// The words of each line that are on screen, left to right, as { text, left, right } in the text's own pixels, each
+// scaled about its own centre by its track (a pulse) and moved by it.
+function lineSpans(n) {
+  return n.layout.lines.map((line) => line.words
+    .filter((word) => (n.words?.[word.index]?.opacity ?? 1) > 0)
+    .map((word) => {
+      const t = { ...WORD_IDENTITY, ...n.words?.[word.index] };
+      const half = (word.width * Math.abs(t.scale)) / HALF, centre = line.x + word.x + word.width / HALF + t.x;
+      return { text: word.text, left: centre - half, right: centre + half };
+    })
+    .sort((a, b) => a.left - b.left));
+}
+
+// No frame may have a word overlapping its neighbour on the line (an emphasis pulse that grows a word into the next).
+function wordOverlapRules(texts, ctx, unit) {
+  // A count (props.steps: the number kind's digits) sets each figure as a word laid out by ink, so its words meet by design.
+  return texts.filter(({ node }) => node.props?.steps === undefined).flatMap(({ node, size }) => {
+    const perUnit = size / node.layout.size / unit; // the text's own pixels in units
+    const found = lineSpans(node).flatMap((spans) => spans.slice(1).flatMap((span, k) => {
+      const by = (spans[k].right - span.left) * perUnit;
+      return by > WORD_OVERLAP_UNITS ? [{ a: spans[k].text, b: span.text, by }] : [];
+    }));
+    if (found.length === 0) return [];
+    const [first] = found;
+    return [finding(ctx, MECHANICAL, 'word-overlap', node.id, `in text "${node.id}" the word "${first.a}" overlaps "${first.b}" by ${units(first.by)} units; an emphasis pulse is growing it into its neighbour`)];
+  });
 }
 
 // Sizes in ascending order grouped into runs where each is within SAME_SIZE_RATIO of the one below it.
@@ -259,5 +300,5 @@ export function auditFrame(sampled, ctx) {
   const unit = unitOf(ctx.canvas);
   const { texts, unmeasured } = visibleTexts(sampled, unit, ctx);
   const lost = unmeasured.map((id) => finding(ctx, MECHANICAL, 'measure', id, `${id}: could not be measured`));
-  return [...lost, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx)];
+  return [...lost, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx)];
 }

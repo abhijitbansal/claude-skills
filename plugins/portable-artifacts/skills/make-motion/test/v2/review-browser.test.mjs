@@ -138,3 +138,48 @@ test('a text of the incoming shot outside the safe area is found although it onl
   const found = await reviewFilm({ session });
   assert.deepEqual(found.filter((f) => f.kind === 'mechanical').map((f) => [f.shot, f.node, f.path]), [['b', 'edge', 'shots[1]']]);
 });
+
+// ---- the director's round 1 ----
+
+test('a region event that comes before the whole picture has been shown is a creative finding at shots[i].on[j], and the event is moved', async (t) => {
+  const clip = (at) => ({ id: 'c', show: 'clipping', src: 'assets/screenshot.png', say: 'This one shows the query behind every chart on the page today.', regions: { r: [0.1, 0.1, 0.3, 0.3] }, on: [{ at, do: 'circle', target: 'region:r' }] });
+  const session = await open(t, { version: 2, mode: 'pro', look: 'desk', format: '16:9', fps: FPS, seed: 3, shots: [clip('word:query')] }); if (!session) return;
+  const early = (await reviewFilm({ session })).filter((f) => f.rule === 'kind');
+  assert.equal(early.length, 1);
+  assert.deepEqual([early[0].kind, early[0].shot, early[0].path], ['creative', 'c', 'shots[0].on[0]']);
+  assert.match(early[0].message, /too early to show the whole picture first/);
+  const ok = await open(t, { version: 2, mode: 'pro', look: 'desk', format: '16:9', fps: FPS, seed: 3, shots: [clip(2.5)] }); if (!ok) return;
+  assert.deepEqual((await reviewFilm({ session: ok })).filter((f) => f.rule === 'kind'), []);
+});
+
+test('every frame of a pop statement pulse and entrance has no word meeting its neighbour, in the page as it is drawn', async (t) => {
+  const film = { version: 2, mode: 'viral', look: 'pop', format: '9:16', fps: FPS, seed: 7, shots: [
+    { id: 'hook', show: 'statement', say: 'Your charts are *hiding* something.' },
+    { id: 'local', show: 'statement', cut: 'punch', say: 'No cloud. No account. *No upload*.' },
+  ] };
+  const session = await open(t, film); if (!session) return;
+  const found = await reviewFilm({ session });
+  assert.deepEqual(found.filter((f) => f.rule === 'word-overlap' || f.rule === 'hook' || f.rule === 'overflow'), []);
+  // every frame, not only the sampled ones
+  const worst = await session.page.evaluate((count) => {
+    let worstOverlap = -Infinity;
+    for (let i = 0; i < count; i++) {
+      const walk = (n) => {
+        if (n.type === 'text' && n.layout) {
+          for (const line of n.layout.lines) {
+            const spans = line.words.filter((w) => (n.words?.[w.index]?.opacity ?? 1) > 0).map((w) => {
+              const tr = n.words?.[w.index] ?? { x: 0, scale: 1 };
+              const half = (w.width * Math.abs(tr.scale)) / 2, centre = line.x + w.x + w.width / 2 + tr.x;
+              return [centre - half, centre + half];
+            }).sort((a, b) => a[0] - b[0]);
+            spans.slice(1).forEach((s, k) => { worstOverlap = Math.max(worstOverlap, spans[k][1] - s[0]); });
+          }
+        }
+        (n.children ?? []).forEach(walk);
+      };
+      window.__snapshot(i).forEach(walk);
+    }
+    return worstOverlap;
+  }, session.timeline.frameCount);
+  assert.ok(worst <= 0.5, `the closest two words come within ${worst} px of each other`);
+});

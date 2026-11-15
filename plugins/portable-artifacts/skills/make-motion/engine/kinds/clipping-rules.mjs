@@ -1,7 +1,7 @@
 // What validateFilm checks in a clipping shot beyond its schema: each region's rectangle, and, in a look that cuts to
 // region close-ups (a locked camera), the timing of region events and targets that the close-up would hide. Errors
 // are { path, message } with paths relative to the shot. Pure and DOM-free.
-import { REGION_PREFIX, regionOf, cutsToCloseUp, heroProblems } from './shared.mjs';
+import { REGION_PREFIX, regionOf, cutsToCloseUp, heroProblems, regionFloor, cutEnd } from './shared.mjs';
 
 const EDGE_EPSILON = 1e-9;
 
@@ -56,4 +56,30 @@ function safeAt(at, ref) {
 /** The clipping kind's validate hook. */
 export function clippingProblems(shot, { look, at } = {}) {
   return [...heroProblems(shot), ...regionProblems(shot), ...closeUpProblems(shot, look, at)];
+}
+
+const SECOND_DECIMALS = 2;
+const secondsText = (n) => n.toFixed(SECOND_DECIMALS);
+
+/**
+ * Advice on timing: a region event whose word falls before the whole picture has been shown (the incoming cut has
+ * ended plus 0.6 s, and for a pushing camera the push time on top) is moved later by the kind; this says by how much,
+ * so the author can move the word later in the narration. `at` resolves an anchor to shot seconds.
+ * @returns {{ path: string, at: number, message: string }[]} path relative to the shot (`on[j]`)
+ */
+export function establishingFindings(shot, { look, timing, at }) {
+  if (!Array.isArray(shot.on)) return [];
+  const floor = regionFloor(shot, { look, timing });
+  return shot.on.flatMap((item, j) => {
+    if (regionOf(item?.target) === null) return [];
+    const t = safeAt(at, item.at);
+    if (t === null || t >= floor) return [];
+    const by = floor - t;
+    const view = cutsToCloseUp(look) ? 'cut to the close-up' : 'push in';
+    return [{
+      path: `on[${j}]`,
+      at: t,
+      message: `on[${j}] (${JSON.stringify(item.at)}) comes ${secondsText(by)} s too early to show the whole picture first: the incoming cut ends at ${secondsText(cutEnd(shot, timing))} s and the picture needs 0.6 s more before the camera may ${view}, so the event was moved to ${secondsText(floor)} s; move the word later in the narration by ${secondsText(by)} s or more`,
+    }];
+  });
 }

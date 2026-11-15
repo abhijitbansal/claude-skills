@@ -7,13 +7,15 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { findFfmpeg, encodeArgs } from '../lib/ffmpeg.mjs';
+import { findFfmpeg } from '../lib/ffmpeg.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
 
 export const JPEG_QUALITY = 98;
 const HELD_CHUNK = 150; // frames whose held flags are fetched in one page.evaluate
 const MS_PER_SECOND = 1000;
+const BITS_PER_BYTE = 8;
+const MEGA = 1e6;
 const STDERR_KEEP = 4000;
 const STDERR_LINES = 5;
 const PARTIAL_MAX_AGE_MS = 60 * 60 * 1000;
@@ -23,12 +25,20 @@ const QUIET = ['-hide_banner', '-loglevel', 'error'];
 // A JPEG decodes to full-range YUV; the video is limited-range yuv420p like every other, so scale between the two.
 const JPEG_RANGE_FILTER = ['-vf', 'scale=in_range=pc:out_range=tv'];
 
-// encodeArgs reads PNG frames; the fast mode feeds it JPEG frames instead.
-export function jpegInput(args) {
-  const at = args.findIndex((arg, k) => arg === '-c:v' && args[k + 1] === 'png');
-  const input = args.indexOf('-i', at);
-  if (at < 0 || input < 0) throw new Error('render: encodeArgs no longer takes png frames from a pipe; update jpegInput');
-  return [...args.slice(0, at + 1), 'mjpeg', ...args.slice(at + 2, input + 2), ...JPEG_RANGE_FILTER, ...args.slice(input + 2)];
+// The encoder settings, chosen by measurement (see the report of task 12, round 4): libx264 at crf 23 with `-tune film`
+// keeps the look's grain (about 85% of its high-pass energy on flat paper) at a size that a 20 s 1080p desk film fits in
+// under 20 MB; the version 1 default (no -crf, so crf 23 with no tune) gave 28 Mbit/s on grain at 0.05.
+export const ENCODER = Object.freeze({ preset: 'medium', crf: 23, tune: 'film' });
+
+/**
+ * The ffmpeg arguments for frames on a pipe: PNG frames (exact) or JPEG frames (fast: scaled from full to limited
+ * range, since a JPEG decodes to full-range YUV) into H.264 yuv420p. Built here rather than from the version 1 helper,
+ * which cannot express a crf or a tune.
+ */
+export function encoderArgs({ fps, out, exact }) {
+  const input = ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', exact ? 'png' : 'mjpeg', '-i', '-', ...(exact ? [] : JPEG_RANGE_FILTER)];
+  const video = ['-c:v', 'libx264', '-preset', ENCODER.preset, '-crf', String(ENCODER.crf), '-tune', ENCODER.tune, '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
+  return [...input, ...video, out];
 }
 
 // A promise that rejects when `signal` aborts (never settles without one); a stalled ffmpeg must not hold a stop request.
@@ -120,7 +130,7 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress }) {
  * @param {{ specPath?: string, out: string, exact?: boolean, onProgress?: (p: { frame: number, frames: number, captured: number }) => void,
  *   session?: object, signal?: AbortSignal }} opts a session (openSession) is used and left open when given; otherwise
  *   the film at specPath is loaded and opened here and closed after. exact: PNG capture (default: JPEG at quality 98).
- * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string }>}
+ * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number }>}
  */
 export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal }) {
   const ffmpeg = await findFfmpeg();
@@ -132,15 +142,16 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
   try {
     mkdirSync(path.dirname(out), { recursive: true });
     sweepPartials(path.dirname(out));
-    const args = encodeArgs({ fps: open.timeline.fps, out: partial });
-    encoder = startEncoder(ffmpeg, [...QUIET, ...(exact ? args : jpegInput(args))], signal);
+    encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact })], signal);
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });
     await encoder.finish();
     encoder = null;
     renameSync(partial, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
     const frames = open.timeline.frameCount;
-    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post };
+    const bytes = statSync(out).size;
+    const mbps = (bytes * BITS_PER_BYTE) / (frames / open.timeline.fps) / MEGA;
+    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps };
   } finally {
     if (encoder) await encoder.stop();
     rmSync(partial, { force: true });

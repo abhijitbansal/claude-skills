@@ -20,6 +20,11 @@ import { buildFilm, shotContext, resolveLook } from '../../engine/graph/film.mjs
 import { gridX } from '../../engine/looks/index.mjs';
 import { annotate } from '../../engine/page/bounds.mjs';
 import { countSteps } from '../../engine/kinds/number.mjs';
+import { pulsePeaks, enterStarts } from '../../engine/kinds/statement.mjs';
+import { pulseScale } from '../../engine/kinds/shared.mjs';
+import { landing } from '../../engine/devices/shared.mjs';
+import { establishingFindings } from '../../engine/kinds/clipping-rules.mjs';
+import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { FORMATS, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 import { validateFilm, SpecError } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
@@ -44,6 +49,9 @@ function expandIn(film, index = 0) {
   return { ...registries.kinds.get(shot.show).expand(shot, ctx), timing: timeline.shots[index], ctx, canvas };
 }
 const expandShot = (shot, look = 'desk', format = '16:9') => expandIn(filmOf([shot], look, format));
+// The shot as the second of a film: in viral mode the first shot reads from frame 0 (see the hook tests), later shots arrive word by word.
+const FILLER = { id: 'filler', show: 'statement', hold: 1, text: 'Hi' };
+const expandSecond = (shot, look = 'desk', format = '16:9') => expandIn(filmOf([FILLER, shot], look, format), 1);
 const filmFor = (shots, look = 'desk', format = '16:9', extra = {}) => {
   const film = filmOf(shots, look, format, extra);
   return buildFilm({ film, timeline: buildTimeline(film, { fps: FPS }), measure, assets: IMAGES, canvas: canvasOf(format), viralInsets: viralOf(canvasOf(format)) });
@@ -85,7 +93,7 @@ after(() => rmSync(specDir, { recursive: true, force: true }));
 
 test('statement words land on their spoken words', () => {
   for (const look of ['desk', 'pop']) {
-    const { nodes, timing } = expandShot({ id: 'a', show: 'statement', say: 'One file. No server.' }, look);
+    const { nodes, timing } = expandSecond({ id: 'a', show: 'statement', say: 'One file. No server.' }, look);
     const text = textNode(nodes), spoken = timing.words;
     assert.equal(text.wordTracks.length, spoken.length);
     text.wordTracks.forEach((w, i) => near(lastKey(w.opacity).t, spoken[i].start, `${look} word ${i}`));
@@ -96,7 +104,7 @@ test("an emphasised word gets the look's emphasis and nothing else", () => {
   const desk = expandShot({ id: 'a', show: 'statement', say: 'It is *lying* to you.' }, 'desk').nodes;
   assert.equal(desk.filter((n) => n.props.under).length, 1);
   assert.ok(!textNode(desk).wordTracks.some((w) => w.fill), 'desk recolours nothing');
-  const pop = expandShot({ id: 'a', show: 'statement', say: 'It is *lying* to you.' }, 'pop').nodes;
+  const pop = expandSecond({ id: 'a', show: 'statement', say: 'It is *lying* to you.' }, 'pop').nodes;
   assert.equal(pop.filter((n) => n.props.under).length, 0);
   const words = textNode(pop).wordTracks;
   assert.ok(words[2].fill);
@@ -233,7 +241,8 @@ test('desk highlights one run of adjacent emphasised words per line', () => {
   assert.ok(lines.some((l) => l.includes('so') && l.includes('very')), `precondition: one line holds both, got ${JSON.stringify(lines)}`);
   const highlights = run.nodes.filter((n) => n.props.under);
   assert.equal(highlights.length, 1);
-  landsOn(highlights[0], 'reveal', run.timing.words[2].start, 'lands on the first emphasised word');
+  landsOn(highlights[0], 'reveal', run.timing.words[3].start, 'lands on the last emphasised word');
+  assert.ok(sample(highlights[0].tracks.reveal, run.timing.words[2].start, highlights[0].step) < 1, 'not full when the first emphasised word lands');
   const textIndex = run.nodes.findIndex((n) => n.id === 'a.text');
   assert.ok(run.nodes.indexOf(highlights[0]) < textIndex, 'placed before the text');
   const split = expandShot({ id: 'a', show: 'statement', say: '*Really* *lying* now.', text: 'Really | lying now' });
@@ -241,12 +250,12 @@ test('desk highlights one run of adjacent emphasised words per line', () => {
 });
 
 test('pop statement is centred caps; an emphasised word turns accent and pulses to the emphasize scale', () => {
-  const { nodes, ctx, canvas, timing } = expandShot({ id: 'a', show: 'statement', say: 'It is *lying* to you.' }, 'pop', '9:16');
+  const { nodes, ctx, canvas, timing } = expandSecond({ id: 'a', show: 'statement', say: 'It is *lying* to you.' }, 'pop', '9:16');
   const look = ctx.look;
   const text = textNode(nodes);
   const words = text.props.layout.lines.flatMap((l) => l.words.map((w) => w.text));
   assert.deepEqual(words, ['IT', 'IS', 'LYING', 'TO', 'YOU.']);
-  assert.ok(text.props.font.size >= look.scale[3] && text.props.font.size <= look.scale[4]);
+  assert.ok(text.props.font.size >= look.scale[2] && text.props.font.size <= look.scale[4], 'fitted between scale steps 3 and 5');
   const safe = viralOf(canvas);
   const safeW = canvas.w - safe.left - safe.right;
   near(text.props.x + text.props.layout.lines[0].x + text.props.layout.lines[0].width / 2, safe.left + safeW / 2, 'centred on the safe zone');
@@ -257,7 +266,8 @@ test('pop statement is centred caps; an emphasised word turns accent and pulses 
   const start = timing.words[2].start;
   assert.equal(sample(fill, start), look.palette.ink);
   assert.equal(sample(fill, start + 5), look.palette.accent);
-  near(sample(scale, start + look.moves.emphasize.dur), look.moves.emphasize.scale, 'peak');
+  const peak = sample(scale, start + look.moves.emphasize.dur);
+  assert.ok(peak > 1 && peak <= look.moves.emphasize.scale + EPS, `the pulse peaks at ${peak}, not above the look's ${look.moves.emphasize.scale}`);
   near(sample(scale, start + 5), 1, 'back to 1');
   const later = timing.words[3].start;
   near(sample(text.wordTracks[3].scale, later - look.moves.enter.dur), look.moves.enter.scale, 'words pop from the enter scale');
@@ -493,7 +503,7 @@ test('a mark on a region goes over the picture, and the desk camera pushes until
     const ids = nodes.map((n) => n.id);
     assert.ok(ids.indexOf('c.on0') > ids.indexOf('c.image'), 'mark drawn over the picture');
     const push = camera.find((layer) => layer.some((k) => k.zoom !== undefined));
-    const at = timing.words[4].start;
+    const at = Math.max(timing.words[4].start, 0.6 + 0.9); // the first shot shows the whole picture for 0.6 s before a push of 0.9 s
     const want = Math.min(3.2, Math.max(1.2, (0.62 * canvas.w) / boxes['region:query'][2]));
     near(push.at(-1).t, at, `${format} lands on the event`);
     near(push.at(-1).zoom, want, `${format} zoom`);
@@ -505,10 +515,10 @@ test('a mark on a region goes over the picture, and the desk camera pushes until
 });
 
 test('a pushed region sits on the composition centre, as far as the field allows', () => {
-  const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { mid: [0.4, 0.4, 0.2, 0.2] }, on: [{ at: 1, do: 'underline', target: 'region:mid' }] };
+  const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { mid: [0.4, 0.4, 0.2, 0.2] }, on: [{ at: 2, do: 'underline', target: 'region:mid' }] };
   const { boxes, canvas } = expandShot(shot, 'desk', '16:9');
   const f = filmFor([shot], 'desk', '16:9');
-  const pic = f.sampleAt(1).find((n) => n.id === 'c.image'); // the landing time; the drift moves on after it
+  const pic = f.sampleAt(2).find((n) => n.id === 'c.image'); // the landing time; the drift moves on after it
   const rest = expandShot(shot, 'desk', '16:9').nodes.find((n) => n.id === 'c.image');
   const [bx, by, bw, bh] = boxes['region:mid'];
   // the region centre moves with the picture group: rest offset scaled by the camera zoom
@@ -522,7 +532,7 @@ test('a highlight on a region is a hand-drawn marker frame with the rest of the 
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
     on: [{ at: 'word:query', do: 'highlight', target: 'region:query' }] };
   const { nodes, timing, ctx } = expandShot(shot, 'desk');
-  const at = timing.words[4].start;
+  const at = Math.max(timing.words[4].start, 0.6 + 0.9);
   const pic = nodes.find((n) => n.id === 'c.image');
   assert.ok(!all(nodes).some((n) => n.props.under), 'no filled band');
   const sides = all([pic]).filter((n) => /^c\.on0\.side\d$/.test(n.id));
@@ -800,7 +810,7 @@ test('the caption fades out while the camera pushes in on a region', () => {
   const caption = textNode(nodes, 'c.caption');
   const shown = lastKey(caption.tracks.y).t; // the entrance has landed
   near(sample(caption.tracks.opacity, shown), 1, 'shown once it has entered');
-  near(sample(caption.tracks.opacity, timing.words[4].start), 0, 'gone when it lands');
+  near(sample(caption.tracks.opacity, Math.max(timing.words[4].start, 0.6 + 0.9)), 0, 'gone when it lands');
   const quiet = textNode(expandShot({ ...shot, on: undefined }).nodes, 'c.caption');
   near(sample(quiet.tracks.opacity, 5), 1, 'stays without a push');
 });
@@ -967,15 +977,197 @@ test('the count shows at most 24 values, a centred count centres every value, -$
 
 test('pop close-ups: a punch on a region keeps its keys, an early event shortens the entrance, the caption never appears after the switch', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, caption: 'The query', regions: { q: [0.6, 0.2, 0.3, 0.2] },
-    on: [{ at: 0.2, do: 'underline', target: 'region:q' }, { at: 1, do: 'punch', target: 'region:q' }] };
+    on: [{ at: 0.1, do: 'underline', target: 'region:q' }, { at: 1.5, do: 'punch', target: 'region:q' }] };
   const { nodes, camera, ctx } = expandShot(shot, 'pop', '9:16');
   const punch = ctx.look.devices.punch.scale;
-  assert.ok(camera.flat().some((k) => k.zoom === punch && Math.abs(k.t - 1) < 1e-6), 'the punch at 1 s keeps its keys');
+  assert.ok(camera.flat().some((k) => k.zoom === punch && Math.abs(k.t - 1.5) < 1e-6), 'the punch at 1.5 s keeps its keys');
   const pic = nodes.find((n) => n.id === 'c.image');
-  const lastIn = 0.2 - 1 / FPS;
+  const lastIn = 0.6 - 1 / FPS; // the event at 0.1 s is moved to 0.6 s, after the establishing view
   near(sample(pic.tracks.opacity, lastIn), 1, 'the entrance ends one frame before the switch');
   assert.ok(sample(pic.tracks.opacity, lastIn / 2) > 0, 'and is not collapsed to nothing');
-  near(sample(pic.tracks.opacity, 0.2), 0, 'gone on the switch');
+  near(sample(pic.tracks.opacity, 0.6), 0, 'gone on the switch');
   const caption = textNode(nodes, 'c.caption');
-  for (const t of [0.2, 0.3, 0.5, 1, 2]) near(sample(caption.tracks.opacity, t), 0, `no caption at ${t}`);
+  for (const t of [0.6, 0.7, 1, 1.5, 2]) near(sample(caption.tracks.opacity, t), 0, `no caption at ${t}`);
+});
+
+// ---- the director's round 1: highlight, hook, pulse ----
+
+// The boxes the words of a sampled text node occupy at one frame: each word's layout box scaled about its own centre.
+function wordSpans(node) {
+  return node.props.layout.lines.map((line) => line.words.map((word) => {
+    const track = node.words?.[word.index] ?? { x: 0, scale: 1, opacity: 1 };
+    const half = (word.width * Math.abs(track.scale)) / 2;
+    const centre = node.x + line.x + word.x + word.width / 2 + track.x;
+    return { index: word.index, left: centre - half, right: centre + half, opacity: track.opacity };
+  }));
+}
+
+test('a desk highlight over a run of words grows with them: never ahead of the last word on screen', () => {
+  const shot = { id: 'close', show: 'statement', say: 'It is *so very* wrong.', text: 'It is | so very wrong.' };
+  const film = filmFor([shot]);
+  const built = expandShot(shot);
+  const band = built.nodes.find((n) => n.props.under);
+  assert.ok(band, 'a highlight');
+  const text = textNode(built.nodes);
+  const run = text.props.layout.lines.flatMap((l) => l.words).filter((w) => ['so', 'very'].includes(w.text));
+  assert.equal(run.length, 2);
+  const line = text.props.layout.lines.find((l) => l.words.some((w) => w.text === 'so'));
+  const left = text.props.x + line.x + run[0].x, right = text.props.x + line.x + run.at(-1).x + run.at(-1).width;
+  const reach = 5, total = right - left + 2 * reach;
+  let aheadBy = -Infinity, sawGrowth = false;
+  const frames = Math.round(built.timing.duration * FPS);
+  for (let i = 0; i < frames; i++) {
+    const t = i / FPS;
+    const sampled = film.sampleShot(0, t);
+    const sampledText = sampled.find((n) => n.type === 'text');
+    const shift = sampledText.x - text.props.x; // the camera drift moves the band and the text alike
+    const words = wordSpans(sampledText).flat();
+    const shown = words.filter((w) => run.some((r) => r.index === w.index) && w.opacity > 0);
+    const revealed = sample(band.tracks.reveal, t, band.step);
+    const bandRight = shift + left - reach + revealed * total;
+    if (revealed > 0 && revealed < 1) sawGrowth = true;
+    const visibleRight = shown.length === 0 ? -Infinity : Math.max(...shown.map((w) => w.right));
+    if (revealed > 0) aheadBy = Math.max(aheadBy, bandRight - Math.max(visibleRight, shift + left - reach));
+  }
+  assert.ok(sawGrowth, 'the band is partly revealed on some frames');
+  assert.ok(aheadBy <= reach + 0.5, `the band runs ${aheadBy.toFixed(1)} px ahead of the last visible word (a hand swipe may run ${reach} px past the end of the text)`);
+  const lastLands = built.timing.words[3].start;
+  near(sample(band.tracks.reveal, lastLands, band.step), 1, 'full when the last emphasised word lands');
+  assert.ok(sample(band.tracks.reveal, built.timing.words[2].start, band.step) < 1, 'not full when the first of them lands');
+});
+
+test('in viral mode the first shot reads from frame 0: every word on screen in ink2, each taking its colour when spoken; later shots arrive word by word', () => {
+  const hook = { id: 'hook', show: 'statement', say: 'Your charts are *hiding* something.' };
+  const film = filmFor([hook, { id: 'two', show: 'statement', say: 'Look closer.' }], 'pop', '9:16');
+  const look = registries.looks.get('pop');
+  const first = film.sampleShot(0, 0).find((n) => n.type === 'text');
+  assert.ok(first.words.every((w) => w.opacity === 1 && w.scale === 1), 'all words visible at full size on frame 0');
+  assert.deepEqual(first.words.map((w) => w.fill), Array(5).fill(look.palette.ink2));
+  const spoken = buildTimeline(filmOf([hook, { id: 'two', show: 'statement', say: 'Look closer.' }], 'pop', '9:16'), { fps: FPS }).shots[0].words;
+  const after = film.sampleShot(0, spoken[3].start + 5).find((n) => n.type === 'text');
+  assert.equal(after.words[3].fill, look.palette.accent, 'the emphasised word has turned to its treatment');
+  assert.equal(after.words[0].fill, look.palette.ink, 'a plain word has turned to ink');
+  const early = film.sampleShot(0, 0).find((n) => n.type === 'text');
+  assert.equal(early.words[4].fill, look.palette.ink2, 'a word not yet spoken is still quiet');
+  const pulse = film.sampleShot(0, spoken[1].start + look.moves.emphasize.dur).find((n) => n.type === 'text');
+  assert.ok(pulse.words[1].scale > 1, 'a word pulses when it is spoken');
+  const second = film.sampleShot(1, 0).find((n) => n.type === 'text');
+  assert.ok(second.words.some((w) => w.opacity === 0), 'the second shot still arrives word by word');
+  const desk = filmFor([hook, hook].map((s, i) => ({ ...s, id: `s${i}` })), 'desk');
+  assert.ok(desk.sampleShot(0, 0).find((n) => n.type === 'text').words.some((w) => w.opacity === 0), 'pro mode keeps word-by-word arrival in its first shot');
+});
+
+test('no frame of an emphasis pulse has a word overlapping its neighbour on the line, and the peak is capped to the gaps and never above the look', () => {
+  const look = registries.looks.get('pop');
+  for (const [text, format] of [['Your charts are *hiding* something.', '16:9'], ['A *superfragilistic* B', '16:9'], ['No cloud. No account. *No upload*.', '9:16'], ['Your charts are *hiding* something.', '9:16']]) {
+    const shot = { id: 'p', show: 'statement', say: text };
+    const film = filmFor([FILLER, shot], 'pop', format);
+    const frames = Math.round(film.duration * FPS);
+    const spokenWords = buildTimeline(filmOf([FILLER, shot], 'pop', format), { fps: FPS }).shots[1].words;
+    const emphasised = spokenWords.findIndex((w) => w.emphasis), emphasisAt = spokenWords[emphasised].start;
+    let peak = 1;
+    for (let i = 0; i < frames; i++) {
+      const node = film.sampleShot(1, Math.max(0, i / FPS - 1)).find((n) => n.type === 'text');
+      if (i / FPS < 1) continue;
+      for (const line of wordSpans(node)) {
+        line.forEach((w, k) => { if (k > 0) assert.ok(line[k - 1].right <= w.left + 1e-6, `${text}: frame ${i}: word ${k - 1} meets word ${k} by ${(line[k - 1].right - w.left).toFixed(2)} px`); });
+      }
+      if (i / FPS - 1 >= emphasisAt) peak = Math.max(peak, node.words[emphasised].scale); // after it has landed: the pulse alone
+    }
+    assert.ok(peak > 1, `${text}: the word does pulse`);
+  }
+  // a long word between short ones has little room: its pulse is capped to the gap, whatever the ease does on the way
+  const gapLook = registries.looks.get('pop');
+  const line = { words: [{ index: 0, x: 0, width: 100 }, { index: 1, x: 130, width: 1000 }, { index: 2, x: 1160, width: 100 }] };
+  const words = line.words.map((word) => ({ line, word }));
+  const peaks = pulsePeaks(words, gapLook);
+  assert.ok(peaks.get(1) < gapLook.moves.emphasize.scale, 'the gap, not the look, limits the long word');
+  const pulse = pulseScale(gapLook, { pulse: 0, peak: peaks.get(1) });
+  const highest = Math.max(...Array.from({ length: 200 }, (_, i) => sample(pulse, i / 200)));
+  assert.ok(highest <= 1 + 30 / 1000 + 1e-6, `the long word's pulse reaches ${highest}; the gap allows ${1 + 30 / 1000}`);
+  // the entrance spring runs past 1 as well: it starts nearer to 1 where the gap is small, and as the look has it where there is room
+  const starts = enterStarts(words, gapLook);
+  assert.ok(starts.get(1) > gapLook.moves.enter.scale, 'the long word pops from a start nearer to 1');
+  const entering = landing(0.5, { ...gapLook.moves.enter }, starts.get(1), 1);
+  const reach = Math.max(...Array.from({ length: 200 }, (_, i) => sample(entering, 0.5 - gapLook.moves.enter.dur + (i / 200) * gapLook.moves.enter.dur)));
+  assert.ok(reach <= 1 + 30 / 1000 + 1e-6, `the long word's entrance reaches ${reach}`);
+  assert.equal(enterStarts([{ line: { words: [{ index: 0, x: 0, width: 400 }] }, word: { index: 0, x: 0, width: 400 } }], gapLook).get(0), gapLook.moves.enter.scale, 'a word with room pops as the look has it');
+  assert.equal(pulsePeaks([{ line: { words: [{ index: 0, x: 0, width: 400 }] }, word: { index: 0, x: 0, width: 400 } }], gapLook).get(0), gapLook.moves.emphasize.scale, 'a word with no neighbour keeps the look value');
+});
+
+// ---- a match between unlike heroes ----
+
+test('a match between unlike heroes does not scale them: the outgoing one drifts up to half the way and fades over the first 60%, the incoming one fades and moves in over the last 60%', () => {
+  const canvas = { w: 1920, h: 1080 };
+  const layoutOf = (...words) => ({ lines: [{ x: 0, y: 40, width: 100, words: words.map((text, index) => ({ text, index, x: 0, width: 50 })) }] });
+  const heroText = { ...fakeSampled('h', 200, { scale: 1.5 }), type: 'text', props: { layout: layoutOf('Hello', 'there') }, bbox: [200, 100, 400, 100] };
+  const heroFigure = { ...fakeSampled('h', 1000, { scale: 1 }), type: 'group', children: [{ ...fakeSampled('h.digits', 0), type: 'text', props: { layout: layoutOf('42') }, children: [] }], bbox: [900, 500, 400, 200] };
+  const cut = registries.cuts.get('match');
+  const kicker = fakeSampled('k', 300);
+  const at = (p) => cut.apply({ from: [kicker, heroText], to: [heroFigure], p, canvas });
+  const [fromCentre, toCentre] = [[400, 150], [1100, 600]];
+  // p 0.3: half of the fade (p / 0.6)
+  const early = at(0.3);
+  const leaving = early.find((n) => n.id === 'h' && n.type === 'text');
+  const arriving = early.find((n) => n.id === 'h' && n.type === 'group');
+  near(leaving.scale, 1.5, 'the outgoing hero is not scaled');
+  near(leaving.opacity, 0.5, 'half faded');
+  near(leaving.x, 200 + (toCentre[0] - fromCentre[0]) * 0.5 * 0.5, 'drifted half of the half way');
+  near(arriving.opacity, 0, 'the incoming hero has not started');
+  near(early.find((n) => n.id === 'k').x, 300 + (toCentre[0] - fromCentre[0]) * 0.5 * 0.5, 'the rest of the outgoing frame drifts with its hero, so a highlight is not left behind the text');
+  // p 0.6: the outgoing one is gone and has gone half the way; the incoming one is a third of the way in
+  const middle = at(0.6);
+  const gone = middle.find((n) => n.id === 'h' && n.type === 'text');
+  near(gone.opacity, 0); near(gone.x, 200 + (toCentre[0] - fromCentre[0]) * 0.5, 'at most half the way');
+  near(middle.find((n) => n.type === 'group').opacity, (0.6 - 0.4) / 0.6, 'fading in over the last 60%');
+  // the end: the incoming hero is home
+  const end = at(0.999);
+  const home = end.find((n) => n.type === 'group');
+  assert.ok(Math.abs(home.x - 1000) < 1 && Math.abs(home.opacity - 1) < 0.01, 'the incoming hero ends where it belongs');
+  // identical heroes still morph
+  const twin = { ...heroText, bbox: [1000, 500, 400, 100], x: 1000 };
+  const morphed = cut.apply({ from: [heroText], to: [twin], p: 0.5, canvas }).find((n) => n.id === 'h');
+  assert.equal(morphed.props.match, true, 'a like pair morphs into one group of two copies');
+});
+
+// ---- an establishing view before a region is singled out ----
+
+const CLIP = (extra = {}) => ({ id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart on the page today.', regions: { r: [0.1, 0.1, 0.3, 0.3] }, on: [{ at: 'word:one', do: 'circle', target: 'region:r' }], ...extra });
+const pushLanding = (camera) => camera.find((layer) => layer.some((k) => k.zoom !== undefined && k.zoom > 1))?.findLast((k) => k.zoom > 1);
+
+test('desk: the push starts no earlier than the incoming cut ends plus 0.6 s, so the whole picture is seen first', () => {
+  const early = expandIn(filmOf([FILLER, CLIP({ cut: 'slide' })]), 1);
+  const landing = pushLanding(early.camera);
+  const layer = early.camera.find((l) => l.some((k) => k.zoom > 1));
+  near(landing.t, 0.4 + 0.6 + 0.9, 'a slide ends at 0.4 s: the push lands 0.6 s plus its own 0.9 s after that');
+  assert.ok(layer[0].t >= 0.4 + 0.6 - EPS, `the push starts at ${layer[0].t}`);
+  const first = expandIn(filmOf([CLIP()]), 0);
+  near(pushLanding(first.camera).t, 0.6 + 0.9, 'the first shot has no cut: 0.6 s of the picture, then the push');
+  const late = expandIn(filmOf([FILLER, CLIP({ cut: 'slide', on: [{ at: 2.5, do: 'circle', target: 'region:r' }] })]), 1);
+  near(pushLanding(late.camera).t, 2.5, 'an event that is late enough stays where the narration puts it');
+});
+
+test('pop: the close-up switch is no earlier than the incoming cut ends plus 0.6 s', () => {
+  const clip = CLIP({ cut: 'punch', on: [{ at: 'word:one', do: 'underline', target: 'region:r' }] });
+  const { nodes } = expandIn(filmOf([FILLER, clip], 'pop', '9:16'), 1);
+  const hero = nodes.find((n) => n.id === 'c.image');
+  const hideAt = hero.tracks.opacity.points.at(-1).t;
+  assert.ok(hideAt >= 0.2 + 0.6 - EPS, `the picture goes at ${hideAt}`);
+});
+
+test('an event that was moved is reported at shots[i].on[j] with how early the word is', () => {
+  const clip = CLIP({ cut: 'slide' });
+  const film = filmOf([FILLER, clip]);
+  const timeline = buildTimeline(film, { fps: FPS });
+  const timing = timeline.shots[1];
+  const [found] = establishingFindings(clip, { look: registries.looks.get('desk'), timing, at: (ref) => resolveAnchor(ref, timing) });
+  assert.equal(found.path, 'on[0]');
+  const wordOne = timing.words.find((w) => w.text === 'one' || w.text === 'One');
+  const by = 0.4 + 0.6 + 0.9 - resolveAnchor('word:one', timing);
+  assert.match(found.message, new RegExp(`comes ${by.toFixed(2)} s too early to show the whole picture first`));
+  assert.match(found.message, /move the word later in the narration by/);
+  void wordOne;
+  const later = establishingFindings({ ...clip, on: [{ at: 2.5, do: 'circle', target: 'region:r' }] }, { look: registries.looks.get('desk'), timing, at: (ref) => resolveAnchor(ref, timing) });
+  assert.deepEqual(later, []);
+  assert.deepEqual(establishingFindings({ ...clip, on: [{ at: 0.1, do: 'highlight', target: 'image' }] }, { look: registries.looks.get('desk'), timing, at: (ref) => resolveAnchor(ref, timing) }), [], 'an event on the whole picture needs no establishing view');
 });

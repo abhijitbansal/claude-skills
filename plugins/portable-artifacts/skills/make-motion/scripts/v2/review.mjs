@@ -16,6 +16,7 @@ import { auditFrame, textScalesIn } from '../../engine/review/frame.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
+import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { auditMoments } from './plan.mjs';
 import { pageFinding } from './report.mjs';
 
@@ -152,6 +153,38 @@ function pacingFindings(film, timeline, held) {
   }));
 }
 
+// Advice a kind gives about its own shots (kind.review(shot, { look, timing, at }) -> [{ path, at, message }]): the clipping
+// kind says a region event comes too early to show the whole picture first.
+function kindFindings(film, timeline) {
+  const look = resolveLook(film);
+  return film.shots.flatMap((shot, index) => {
+    const review = registries.kinds.get(shot.show).review;
+    if (typeof review !== 'function') return [];
+    const timing = timeline.shots[index];
+    return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing) }).map((f) => ({
+      kind: 'creative', shot: shot.id, path: `shots[${index}].${f.path}`, t: timing.start + f.at, rule: 'kind', node: f.path, message: f.message,
+    }));
+  });
+}
+
+// The first shot of a mode that reads from frame 0 must show all of its text on frame 0: every word of a statement
+// is on screen (opacity above 0) in the first frame. Mechanical when not.
+export function hookFindings(film, timeline, snapshots) {
+  const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
+  const first = film.shots[0];
+  const zero = snapshots.find((snap) => snap.frame === 0);
+  if (!mode.hookFromFrameZero || first.show !== 'statement' || !zero) return [];
+  const texts = [];
+  const walk = (n) => { if (n.type === 'text' && n.props?.role === 'hero') texts.push(n); (n.children ?? []).forEach(walk); };
+  zero.tree.forEach(walk);
+  const [shown, all] = texts.reduce((sum, n) => [sum[0] + (n.words ?? []).filter((w) => w.opacity > 0).length, sum[1] + (n.words ?? []).length], [0, 0]);
+  if (all === 0 || shown === all) return [];
+  return [{
+    kind: 'mechanical', shot: first.id, path: 'shots[0]', t: 0, rule: 'hook', node: '',
+    message: `the first shot of a ${film.mode} film must show all of its text on frame 0; ${all - shown} of its ${all} words are not on screen yet`,
+  }];
+}
+
 /**
  * @param {{ session: object, signal?: AbortSignal }} opts session from openSession
  * @returns {Promise<{ kind: 'mechanical' | 'creative', shot: string, path: string, message: string, t: number, rule: string, node: string }[]>}
@@ -163,7 +196,7 @@ export async function reviewFilm({ session, signal }) {
   const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap));
   const deduped = dedupeFindings(audited, film.shots);
   const still = pacingFindings(film, timeline, await heldFlags(session, signal));
-  return [...deduped, ...still].sort((a, b) => a.t - b.t);
+  return [...deduped, ...still, ...kindFindings(film, timeline), ...hookFindings(film, timeline, snapshots)].sort((a, b) => a.t - b.t);
 }
 
 const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });

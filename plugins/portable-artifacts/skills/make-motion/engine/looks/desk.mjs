@@ -64,5 +64,6 @@ export const desk = {
     focus: { dim: 0.55 },
     route: { color: 'accent2', width: 4, pins: true, step: HAND_STEP },
   },
-  post: { grain: 0.05, halftone: 0, bloom: 0 },
+  // 0.02: the paper field already carries the texture; more grain is noise a 20 s film pays for in megabytes (round 4 measurements)
+  post: { grain: 0.02, halftone: 0, bloom: 0 },
 };

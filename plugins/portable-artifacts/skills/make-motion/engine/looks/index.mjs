@@ -41,7 +41,10 @@ import { pop } from './pop.mjs';
  * @property {number} keyline  width of a cut-out's keyline
  * @property {{ dx: number, dy: number, blur: number, alpha: number, color: string }} shadow  offset and blur in units, color #rrggbb
  * @property {Record<string, object>} devices  styling per device name; colours are palette keys or #rrggbb
- * @property {{ grain: number, halftone: number, bloom: number }} post  strengths from 0 to 1
+ * @property {{ grain: number, halftone: number, bloom: number }} post  strengths from 0 to 1 of the post pass (engine/page/post.mjs), which
+ *   runs over the WHOLE frame, pictures and clippings included: a halftone or a bloom above 0 dots or glows a screenshot
+ *   as it does the paper, and without WebGL2 only the grain is applied (the review says so). Use halftone only for a look
+ *   whose pictures should carry it; a look with a halftone field (pop) keeps it 0
  */
 
 export { unitOf as unit };

@@ -183,29 +183,34 @@ test('a render on a lost WebGL context fails and leaves no video', async (t) => 
 
 test('a shader that will not compile falls back to the 2D pass on a fresh canvas and says what was dropped', async (t) => {
   const broken = 'WebGL2RenderingContext.prototype.getShaderParameter = function () { return false; };';
-  const pop = stillFilm({ mode: 'viral', look: 'pop', format: '9:16' });
-  const s = await open(t, pop, { initScript: broken }); if (!s) return;
+  const s = await open(t, stillFilm({ mode: 'viral', look: 'pop', format: '9:16' }), { initScript: broken }); if (!s) return;
   assert.equal(s.info.post, '2d');
   assert.equal(s.info.postNotice.failed, true);
   assert.match(s.info.postNotice.reason, /fragment shader did not compile|vertex shader did not compile/);
-  assert.deepEqual(s.info.postNotice.dropped, ['halftone']);
+  assert.deepEqual(s.info.postNotice.dropped, [], 'pop asks for grain only');
   await s.page.evaluate(() => window.__seek(4));
   assert.ok(await maxDifference(s) > 0, 'the new canvas shows the frame with grain');
   const found = sessionFindings(s);
   assert.deepEqual(found.map((f) => f.kind), ['mechanical']);
-  assert.match(found[0].message, /^WebGL was unavailable \(.*\); the 2D post pass was used, with grain only: halftone from the look were dropped$/);
-  const desk = await open(t, stillFilm(), { initScript: broken });
-  assert.match(sessionFindings(desk)[0].message, /the look asks for nothing else/);
+  assert.match(found[0].message, /^WebGL was unavailable \(.*\); the 2D post pass was used, with grain only: the look asks for nothing else$/);
+  const synthetic = sessionFindings({ info: { postNotice: { failed: true, reason: 'x', dropped: ['halftone', 'bloom'] } }, errors: [], blocked: [] });
+  assert.match(synthetic[0].message, /halftone and bloom from the look were dropped/);
 });
 
-test('without WebGL2 a look that asks for halftone or bloom gets a creative finding naming them', async (t) => {
+test('without WebGL2 the post pass names the effects a look asked for and loses: halftone and bloom', async (t) => {
   const none = "const get = HTMLCanvasElement.prototype.getContext; HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return kind === 'webgl2' ? null : get.call(this, kind, ...rest); };";
-  const pop = await open(t, stillFilm({ mode: 'viral', look: 'pop', format: '9:16' }), { initScript: none }); if (!pop) return;
-  const found = sessionFindings(pop);
-  assert.deepEqual(found.map((f) => f.kind), ['creative']);
-  assert.match(found[0].message, /halftone from the look are dropped/);
-  const desk = await open(t, stillFilm(), { initScript: none });
-  assert.deepEqual(sessionFindings(desk), [], 'desk asks for grain only: nothing is lost');
+  const s = await open(t, stillFilm(), { initScript: none }); if (!s) return;
+  assert.deepEqual(sessionFindings(s), [], 'desk asks for grain only: nothing is lost');
+  const dropped = await s.page.evaluate(async () => {
+    const { createPost } = await import('/engine/page/post.mjs');
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    return createPost(canvas, { grain: 0.05, halftone: 0.2, bloom: 0.4, seed: 1 }).dropped;
+  });
+  assert.deepEqual(dropped, ['halftone', 'bloom']);
+  const creative = sessionFindings({ info: { postNotice: { failed: false, reason: 'this browser has no WebGL2', dropped } }, errors: [], blocked: [] });
+  assert.deepEqual(creative.map((f) => f.kind), ['creative']);
+  assert.match(creative[0].message, /halftone and bloom from the look are dropped/);
 });
 
 test('the 2D grain is the WebGL grain: the two paths agree to under 2 levels on average', async (t) => {

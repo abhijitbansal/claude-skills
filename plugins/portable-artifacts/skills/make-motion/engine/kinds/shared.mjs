@@ -6,6 +6,7 @@ import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { fitText } from '../text/layout.mjs';
 import { landing } from '../devices/shared.mjs';
+import '../cuts/index.mjs';
 
 // Cap height as a share of the font size. Canvas reports only the font's ascent box, not the cap height, so the
 // layouts below place cap lines with this ratio (Fraunces and Archivo both sit close to it).
@@ -167,12 +168,12 @@ export function enterTracks(look, unit, at, rest = { y: 0 }) {
   return tracks;
 }
 
-/** A scale track: the enter pop landing on `start + enter.dur` (when `enter`), then the emphasize pulse from `pulse`. */
-export function pulseScale(look, { enterAt, pulse }) {
+/** A scale track: the enter pop landing on `start + enter.dur` (when `enter`), then the emphasize pulse from `pulse` up to `peak` (default: the look's value). `enterFrom` replaces the pop's start scale. */
+export function pulseScale(look, { enterAt, enterFrom, pulse, peak }) {
   const { enter, emphasize } = look.moves;
-  const keys = enterAt === undefined ? [{ t: 0, v: 1 }] : [{ t: Math.max(0, enterAt - enter.dur), v: enter.scale ?? 1 }, { t: enterAt, v: 1, ease: enter.ease }];
+  const keys = enterAt === undefined ? [{ t: 0, v: 1 }] : [{ t: Math.max(0, enterAt - enter.dur), v: enterFrom ?? enter.scale ?? 1 }, { t: enterAt, v: 1, ease: enter.ease }];
   const from = Math.max(pulse, keys.at(-1).t);
-  keys.push({ t: from, v: 1 }, { t: from + emphasize.dur, v: emphasize.scale, ease: emphasize.ease }, { t: from + HALF * emphasize.dur, v: 1, ease: 'inOutQuad' });
+  keys.push({ t: from, v: 1 }, { t: from + emphasize.dur, v: peak ?? emphasize.scale, ease: emphasize.ease }, { t: from + HALF * emphasize.dur, v: 1, ease: 'inOutQuad' });
   return track(keys);
 }
 
@@ -233,6 +234,34 @@ export function pushLayer(ctx, box, at) {
     { t: Math.max(0, at - PUSH.dur), x: 0, y: 0, zoom: 1 },
     { t: at, x: clampAbs(x, panLimit(canvas.w, zoom, drift)), y: clampAbs(y, panLimit(canvas.h, zoom, drift)), zoom, ease: look.moves.enter.ease },
   ];
+}
+
+// ---- an establishing view ----
+
+const ESTABLISH = 0.6; // seconds of the whole picture, after the incoming cut has ended, before a region is singled out
+
+/** When the incoming cut of a shot ends, in shot seconds: 0 for the first shot and for a hard cut. */
+export function cutEnd(shot, timing) {
+  if (timing.index === 0) return 0;
+  return Math.min(registries.cuts.get(shot.cut ?? 'cut').dur, timing.duration);
+}
+
+/**
+ * The earliest shot second a region event may land on, so the whole picture is seen first: the push (or, in a locked
+ * look, the close-up switch) may not start before the incoming cut has ended plus ESTABLISH. A push starts PUSH.dur
+ * before it lands; a close-up switch starts where it lands.
+ */
+export function regionFloor(shot, { look, timing }) {
+  const quiet = cutEnd(shot, timing) + ESTABLISH;
+  return cutsToCloseUp(look) ? quiet : quiet + PUSH.dur;
+}
+
+/** `shot` with every event aimed at a region moved to no earlier than regionFloor (its anchor replaced by seconds). */
+export function withEstablishingView(shot, ctx) {
+  if (!Array.isArray(shot.on)) return shot;
+  const floor = regionFloor(shot, ctx);
+  const on = shot.on.map((item) => (regionOf(item.target) !== null && ctx.at(item.at) < floor ? { ...item, at: Math.min(floor, ctx.timing.duration) } : item));
+  return { ...shot, on };
 }
 
 // ---- devices from `on` ----

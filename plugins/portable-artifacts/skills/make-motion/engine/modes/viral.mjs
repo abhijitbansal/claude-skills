@@ -8,5 +8,6 @@ export const viral = {
   wpm: 175,
   tail: 0.3,
   maxStillSeconds: 3,
+  hookFromFrameZero: true, // the first shot reads from frame 0: all its words on screen, each taking its colour when spoken
   captions: true,
 };

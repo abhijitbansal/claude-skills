@@ -2,7 +2,7 @@
 // outline of a film, and the shape of a finding. Pure: it builds strings and objects.
 //
 // The report has the same keys on every path, so a reader never has to guess which exist:
-//   ok, output, sheets, timed, post, capture, stages, frames, captured, seconds, msPerFrame, findings
+//   ok, output, sheets, timed, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings
 // and `error: { message, hint }` when a problem with the machine stopped the run (a missing film file, no browser, no
 // ffmpeg, ffmpeg failing, an interrupt). What had been done by then stays in it: the stages that ran, the findings
 // already found. A film's own fault (it does not validate, the page cannot draw it) is a finding, not an error.
@@ -53,6 +53,8 @@ export function reportOf(state) {
     captured: state.captured,
     seconds: state.seconds,
     msPerFrame: state.msPerFrame,
+    bytes: state.bytes,
+    mbps: state.mbps,
     findings: state.findings,
     ...(state.error === null ? {} : { error: state.error }),
   };
@@ -61,7 +63,7 @@ export function reportOf(state) {
 /** The report of a run that never began (a usage error): empty, with the error. */
 export const errorReport = (error) => reportOf({
   validated: false, error, stages: [], findings: [], sheets: [], output: null, timed: null, post: null, capture: null,
-  frames: 0, captured: 0, seconds: null, msPerFrame: null,
+  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null,
 });
 
 const plainNarration = (shot) => (typeof shot.say === 'string' ? parseSay(shot.say).plain : '');
@@ -83,7 +85,7 @@ export function formatText(report, { sheetsDir }) {
   if (report.timed === null) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
-  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${report.post}, ${report.msPerFrame.toFixed(1)} ms per frame)`;
+  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${report.post}, ${report.msPerFrame.toFixed(1)} ms per frame); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
   lines.push(`frames: ${counts}`);
   return lines.join('\n');
 }

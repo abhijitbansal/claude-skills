@@ -28,7 +28,7 @@ const seconds = (started) => Math.round(((performance.now() - started) / MS_PER_
 
 const newState = () => ({
   validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, post: null, capture: null,
-  frames: 0, captured: 0, seconds: null, msPerFrame: null, outline: null, sheetsDir: null,
+  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, outline: null, sheetsDir: null,
 });
 
 // Runs fn and records its stage in state.stages whether it returns or throws; each stage is also said to `log`.
@@ -94,7 +94,7 @@ async function reviewAndRender({ options, loaded, state, io: { signal, log } }) 
         log('make: render started');
         return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log) });
       });
-      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame });
+      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps });
     }
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];

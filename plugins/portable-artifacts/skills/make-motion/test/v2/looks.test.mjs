@@ -142,7 +142,7 @@ test('desk values are the brief values', () => {
   assert.equal(l.wordStagger, 0);
   assert.deepEqual({ ...l.camera }, { drift: 12, style: 'desk' });
   assert.deepEqual([...l.cuts], ['cut', 'match', 'slide']);
-  assert.equal(l.post.grain, 0.05);
+  assert.equal(l.post.grain, 0.02);
   assert.deepEqual({ ...l.caps }, { display: false, label: true });
   assert.deepEqual({ ...l.lineHeight }, { display: 1.02, text: 1.3 });
   assert.deepEqual({ ...l.maxLines }, { display: 4, text: 3 });
@@ -164,7 +164,7 @@ test('pop values are the brief values', () => {
   assert.deepEqual({ ...l.moves.draw }, { ease: 'outExpo', dur: 0.2 });
   assert.deepEqual({ ...l.camera }, { drift: 0, style: 'locked' });
   assert.deepEqual([...l.cuts], ['cut', 'punch', 'slide']);
-  assert.deepEqual({ ...l.post }, { grain: 0.03, halftone: 0.2, bloom: 0 });
+  assert.deepEqual({ ...l.post }, { grain: 0.02, halftone: 0, bloom: 0 });
   assert.deepEqual({ ...l.caps }, { display: true, label: true });
   assert.deepEqual({ ...l.lineHeight }, { display: 0.92, text: 1.15 });
   assert.deepEqual({ ...l.maxLines }, { display: 3, text: 3 });

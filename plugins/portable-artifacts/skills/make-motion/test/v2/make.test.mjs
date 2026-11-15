@@ -4,7 +4,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -12,8 +12,7 @@ import { HERE, browserAvailable, ffmpegOrNull, headlessPids, probeVideo } from '
 import { registries } from '../../engine/registry.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
-import { jpegInput, sweepPartials } from '../../scripts/v2/render.mjs';
-import { encodeArgs } from '../../scripts/lib/ffmpeg.mjs';
+import { encoderArgs, ENCODER, sweepPartials } from '../../scripts/v2/render.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FPS = 30;
@@ -204,7 +203,8 @@ test('--json prints exactly one object, with stages, findings and the report key
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stdout.trim().split('\n').length, 1, 'one line on stdout');
   const report = parse(run);
-  assert.deepEqual(Object.keys(report).sort(), ['captured', 'capture', 'findings', 'frames', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed'].sort());
+  assert.deepEqual(Object.keys(report).sort(), [...REPORT_KEYS].sort());
+  assert.equal(report.bytes, null); assert.equal(report.mbps, null);
   assert.equal(report.msPerFrame, null, 'nothing was rendered');
   assert.equal(report.ok, true);
   assert.equal(report.timed, 'estimated');
@@ -306,6 +306,8 @@ test('a full run renders an H.264 yuv420p MP4 of the film, one frame per film fr
   assert.equal(video.codec, 'h264');
   assert.equal(video.pix_fmt, 'yuv420p');
   assert.equal(video.frames, report.frames);
+  assert.equal(report.bytes, statSync(report.output).size);
+  assert.ok(Math.abs(report.mbps - (report.bytes * 8) / (report.frames / FPS) / 1e6) < 1e-9, 'mbps is bytes over the video duration');
   assert.ok(Math.abs(video.duration - report.frames / FPS) < 0.05, `duration ${video.duration}`);
   assert.deepEqual([video.width, video.height], [1920, 1080]);
   assert.deepEqual(readdirSync(path.dirname(report.output)).filter((f) => f !== 'film.sheets' && f !== 'film.mp4'), []);
@@ -338,15 +340,21 @@ test('fast and exact renders of the same film are both H.264 yuv420p of the expe
   }
 });
 
-test('the fast mode reads JPEG frames and scales them to limited range; the exact mode keeps the version 1 arguments', () => {
-  const exact = encodeArgs({ fps: FPS, out: 'x.mp4' });
-  const fast = jpegInput(exact);
-  const input = fast.indexOf('-i');
-  assert.deepEqual(fast.slice(fast.indexOf('-c:v') + 1, fast.indexOf('-c:v') + 2), ['mjpeg']);
-  assert.deepEqual(fast.slice(input, input + 4), ['-i', '-', '-vf', 'scale=in_range=pc:out_range=tv']);
-  assert.ok(fast.includes('libx264') && fast.includes('yuv420p'));
-  assert.deepEqual(fast.filter((a) => a !== 'mjpeg' && a !== '-vf' && a !== 'scale=in_range=pc:out_range=tv'), exact.filter((a) => a !== 'png'), 'nothing else changes');
-  assert.throws(() => jpegInput(['-i', 'x']), /jpegInput/);
+test('the encoder arguments: PNG or JPEG frames from a pipe into H.264 yuv420p at crf 23 with the film tune; JPEG is scaled to limited range', () => {
+  const exact = encoderArgs({ fps: FPS, out: 'x.mp4', exact: true });
+  const fast = encoderArgs({ fps: FPS, out: 'x.mp4', exact: false });
+  const after = (args, flag) => args[args.indexOf(flag) + 1];
+  assert.equal(exact[exact.indexOf('-c:v') + 1], 'png');
+  assert.equal(fast[fast.indexOf('-c:v') + 1], 'mjpeg');
+  for (const args of [exact, fast]) {
+    assert.equal(after(args, '-crf'), String(ENCODER.crf));
+    assert.equal(after(args, '-tune'), 'film');
+    assert.equal(after(args, '-pix_fmt'), 'yuv420p');
+    assert.equal(args.at(-1), 'x.mp4');
+    assert.ok(args.includes('libx264') && args.includes('+faststart'));
+  }
+  assert.ok(!exact.includes('-vf') && fast.includes('scale=in_range=pc:out_range=tv'));
+  assert.deepEqual(ENCODER, { preset: 'medium', crf: 23, tune: 'film' });
 });
 
 test('no ffmpeg exits 2 before anything is captured, saying how to install it', async (t) => {
@@ -394,7 +402,7 @@ test('SIGINT during a render leaves no temp files and no browser behind', async 
 
 // ---- the --json contract on every path ----
 
-const REPORT_KEYS = ['captured', 'capture', 'findings', 'frames', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed'];
+const REPORT_KEYS = ['bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed'];
 const shapeOf = (run) => {
   assert.equal(run.stdout.trim().split('\n').length, 1, `one line on stdout, got ${JSON.stringify(run.stdout)}`);
   const report = parse(run);
