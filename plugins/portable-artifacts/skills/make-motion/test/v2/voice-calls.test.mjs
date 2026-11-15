@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { parseSay } from '../../engine/script/say.mjs';
 import { VOICE_SPEED_MAX, VOICE_SPEED_MIN } from '../../engine/modes/index.mjs';
-import { planCalls, ASIDE_SPEED_FACTOR, MAX_IDS, ABBREVIATIONS } from '../../scripts/v2/voice/calls.mjs';
+import { planCalls, hintPhonemes, hintRefusals, ASIDE_SPEED_FACTOR, MAX_IDS, ABBREVIATIONS } from '../../scripts/v2/voice/calls.mjs';
 import { normalize } from '../../scripts/v2/voice/phonemes.mjs';
 import { EMBEDDED_VOCAB, loadVocab, VoiceTextError } from '../../scripts/v2/voice/tokens.mjs';
 
@@ -193,8 +193,8 @@ test('a speed outside 0.8 to 1.25 is a RangeError, at both ends', () => {
   }
 });
 
-test('countIds must return a finite number synchronously, else a TypeError that says so', () => {
-  const bad = [undefined, null, NaN, Infinity, -1, '5', Promise.resolve(5)];
+test('countIds must return a non-negative integer synchronously, else a TypeError that says so', () => {
+  const bad = [undefined, null, NaN, Infinity, -1, 3.5, '5', Promise.resolve(5)];
   for (const value of bad) {
     assert.throws(() => plan('Hi there.', { countIds: () => value }), (err) => err instanceof TypeError && /synchronously/.test(err.message), String(value));
   }
@@ -233,7 +233,6 @@ test('every abbreviation the voice text normalisation handles is in the list', (
   const handled = candidates.filter((c) => [`${c}. Smith`, `${c}.`].some((text) => !normalize(text).includes(`${c}.`)));
   assert.deepEqual(handled, ['Dr', 'Mr', 'Ms', 'Mrs', 'etc'], 'the probe finds the abbreviations normalize handles: update the list if this changes');
   for (const abbreviation of handled) assert.ok(ABBREVIATIONS.includes(abbreviation.toLowerCase()), abbreviation);
-  for (const abbreviation of ABBREVIATIONS) assert.ok(handled.map((h) => h.toLowerCase()).includes(abbreviation), `${abbreviation} is handled by normalize`);
 });
 
 // ---- tokens with nothing speakable ----
@@ -252,4 +251,46 @@ test('a call with a dash among words stays one speech call', () => {
 test('the embedded vocab equals the pinned tokenizer.json vocab, id for id', () => {
   const file = JSON.parse(readFileSync(new URL('./fixtures/voice/tokenizer.json', import.meta.url), 'utf8'));
   assert.deepEqual([...EMBEDDED_VOCAB], [...loadVocab(file)]);
+});
+
+// ---- fix round 2 ----
+
+test('common titles and suffixes the voice normalisation leaves alone still do not split a sentence', () => {
+  assert.deepEqual(callTexts('We met Prof. Smith in St. Louis vs. Jones.'), ['We met Prof. Smith in St. Louis vs. Jones.']);
+  assert.deepEqual(callTexts('Gen. Lee and Capt. Ng and Lt. Ro and Col. Wu and Sgt. Yu and Rev. Pat met Mt. Hood.'), ['Gen. Lee and Capt. Ng and Lt. Ro and Col. Wu and Sgt. Yu and Rev. Pat met Mt. Hood.']);
+  assert.deepEqual(callTexts('Smith Jr. said so.'), ['Smith Jr. said so.']);
+  assert.deepEqual(callTexts('Smith Jr. Then left.'), ['Smith Jr.', 'Then left.'], 'a suffix ends a sentence before a capitalised word');
+  assert.deepEqual(callTexts('Acme Inc. Then left.'), ['Acme Inc.', 'Then left.']);
+  assert.deepEqual(callTexts('J. Smith said so.'), ['J. Smith said so.'], 'an initial before a name');
+  for (const name of ['prof', 'st', 'jr', 'sr', 'vs']) assert.ok(ABBREVIATIONS.includes(name), name);
+});
+
+test('an emphasis run that crosses a sentence end gets one silence before it, not one per sentence', () => {
+  const calls = plan('One. *Stop. Now.* Done.', { emphasisPause: 0.2 });
+  assert.deepEqual(calls.map((c) => c.tokens ?? c.seconds), [[0], 0.2, [1], [2], [3]]);
+});
+
+test('a leading dash does not make the first spoken word an emphasis that needs a silence', () => {
+  assert.deepEqual(plan('- *Now*.', { emphasisPause: 0.2 }).map((c) => [c.kind, c.tokens]), [['speech', [0, 1]]]);
+  assert.deepEqual(plan('(0.3) - *Now*.', { emphasisPause: 0.2 }).map((c) => c.kind), ['silence', 'speech']);
+});
+
+test('after a 512 split, a piece with nothing speakable is a skip, never a speech call', () => {
+  const say = `${'w '.repeat(509)}w, -`; // 509 words, a comma word (510 tokens = 512 ids), then a spaced dash
+  const calls = plan(say);
+  assert.deepEqual(calls.map((c) => [c.kind, c.tokens.length]), [['speech', 510], ['skip', 1]]);
+});
+
+// ---- one hint normaliser for the validator and the synthesiser ----
+
+test('hintPhonemes returns the NFC string the synthesiser must use, and refuses what hintRefusals names', () => {
+  assert.equal(hintPhonemes('k\u02c8\u0251\u02d0'), 'k\u02c8\u0251\u02d0');
+  assert.equal(hintPhonemes('\u0251\u0303'), '\u0251\u0303');
+  assert.equal(hintPhonemes('c\u0327'), '\u00e7', 'c + cedilla composes to the vocab character; the synthesiser must use the composed form');
+  for (const bad of ['b c', 'b$c', 'b:c', 'bra', 'lox', 'e\u0303']) {
+    assert.ok(hintRefusals(bad).length > 0, bad);
+    assert.throws(() => hintPhonemes(bad), (err) => err instanceof VoiceTextError && err.message.includes(hintRefusals(bad)[0]), bad);
+  }
+  assert.deepEqual(hintRefusals('xx\u02de\u02de'), [hintRefusals('xx\u02de\u02de')[0], hintRefusals('xx\u02de\u02de')[1]], 'each character once');
+  assert.equal(hintRefusals('xx\u02de\u02de').length, 2);
 });

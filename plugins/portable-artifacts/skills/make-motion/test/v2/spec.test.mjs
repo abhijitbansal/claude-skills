@@ -7,13 +7,14 @@ import path from 'node:path';
 import { createRegistry } from '../../engine/registry.mjs';
 import { validateFilm, withFilmDefaults, SpecError } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
+import { hintRefusals } from '../../scripts/v2/voice/calls.mjs';
 
 // The registries are module singletons, so these tests pass their own stubs
 // instead of registering into the shared ones. The modes are data the validator
 // and the timeline read (mode choice, default look and format, pace).
 const STUB_MODES = [
-  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6 },
-  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3 },
+  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0 },
+  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, voiceSpeed: 1.0, emphasisPause: 0 },
 ];
 function stubRegistries({ modes = STUB_MODES } = {}) {
   const r = {
@@ -430,7 +431,7 @@ test('withFilmDefaults keeps what the author wrote', () => {
   assert.deepEqual(withFilmDefaults(written, registries), written);
 });
 test('a registered mode supplies its own default look and format', () => {
-  const regs = stubRegistries({ modes: [{ name: 'pro', defaultLook: 'pop', defaultFormat: '1:1', wpm: 150, tail: 0.6 }] });
+  const regs = stubRegistries({ modes: [{ name: 'pro', defaultLook: 'pop', defaultFormat: '1:1', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0 }] });
   const out = withFilmDefaults({ version: 2, shots: [shotA] }, regs);
   assert.equal(out.look, 'pop');
   assert.equal(out.format, '1:1');
@@ -848,4 +849,30 @@ test('a hint made only of voice phoneme characters, stress and length marks, and
   assert.deepEqual(hintErrors('t\u0259m\u02c8e\u026ato\u028a'), []);
   assert.deepEqual(hintErrors('k\u02c8\u0251\u02d0'), []);
   assert.deepEqual(check(film()), { ok: true, errors: [] });
+});
+
+test('the validator and the synthesiser agree on a hint: an error exactly when hintRefusals names a character', () => {
+  for (const ipa of ['k\u02c8\u0251\u02d0', 'b c', 'b$c', 'bra', 'lox', 'e\u0303', '\u0251\u0303', 'c\u0327', `a${U02DE}`, 'b.', 'ok']) {
+    assert.equal(hintErrors(ipa).length > 0, hintRefusals(ipa).length > 0, ipa);
+  }
+});
+
+// --- voice data on the film's mode: checked here too, for a mode that reached a registry without the shared wrapper ---
+
+test('a film whose mode lacks voice data, or has it out of range, is an error at mode that says what to add', () => {
+  const regsWith = (extra, drop = []) => {
+    const mode = { ...STUB_MODES[0], ...extra };
+    for (const key of drop) delete mode[key];
+    return stubRegistries({ modes: [mode] });
+  };
+  const missing = check(film({ mode: 'pro' }), regsWith({}, ['voiceSpeed', 'emphasisPause']));
+  assert.equal(missing.ok, false);
+  assert.equal(missing.errors.length, 1);
+  assert.equal(missing.errors[0].path, 'mode');
+  assert.match(missing.errors[0].message, /voiceSpeed/);
+  assert.match(missing.errors[0].message, /both voiceSpeed and emphasisPause/);
+  assert.match(check(film({ mode: 'pro' }), regsWith({}, ['emphasisPause'])).errors[0].message, /emphasisPause must be/);
+  assert.match(check(film({ mode: 'pro' }), regsWith({ voiceSpeed: 1.3 })).errors[0].message, /voiceSpeed must be a number from 0.8 to 1.25, got 1.3/);
+  assert.equal(check(film({ mode: 'pro' }), regsWith({ voiceSpeed: 1.25, emphasisPause: 3 })).ok, true);
+  assert.equal(check(film({ mode: 'pro' })).ok, true, 'the stub modes carry voice data');
 });
