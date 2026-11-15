@@ -184,21 +184,45 @@ test('track rejects an empty or non-array key list', () => {
   assert.throws(() => track(null), /at least one key/);
 });
 test('track rejects out-of-order or non-finite times', () => {
-  assert.throws(() => track([{ t: 1, v: 0 }, { t: 0, v: 1 }]), /keys\[1\]\.t .* ascending/);
-  assert.throws(() => track([{ t: Number.NaN, v: 0 }]), /keys\[0\]\.t must be a finite number/);
-  assert.throws(() => track([{ t: '1', v: 0 }]), /keys\[0\]\.t must be a finite number/);
+  assert.throws(() => track([{ t: 1, v: 0 }, { t: 0, v: 1 }]), { message: /^keys\[1\]\.t: .*ascending/ });
+  assert.throws(() => track([{ t: Number.NaN, v: 0 }]), { message: /^keys\[0\]\.t: must be a finite number/ });
+  assert.throws(() => track([{ t: '1', v: 0 }]), { message: /^keys\[0\]\.t: must be a finite number/ });
 });
 test('track rejects mixed value types and ragged arrays', () => {
-  assert.throws(() => track([{ t: 0, v: 1 }, { t: 1, v: 'x' }]), /keys\[1\]\.v .* number/);
-  assert.throws(() => track([{ t: 0, v: [1, 2] }, { t: 1, v: [1] }]), /keys\[1\]\.v .* 2 numbers/);
-  assert.throws(() => track([{ t: 0, v: '#000000' }, { t: 1, v: 'red' }]), /keys\[1\]\.v .* colour/);
+  assert.throws(() => track([{ t: 0, v: 1 }, { t: 1, v: 'x' }]), { message: /^keys\[1\]\.v: must be a number/ });
+  assert.throws(() => track([{ t: 0, v: [1, 2] }, { t: 1, v: [1] }]), { message: /^keys\[1\]\.v: must be an array of 2 numbers/ });
+  assert.throws(() => track([{ t: 0, v: '#000000' }, { t: 1, v: 'red' }]), { message: /^keys\[1\]\.v: must be a #rrggbb colour/ });
 });
 test('track rejects values it cannot interpolate', () => {
-  assert.throws(() => track([{ t: 0, v: Number.NaN }]), /keys\[0\]\.v/);
-  assert.throws(() => track([{ t: 0, v: [1, 'a'] }]), /keys\[0\]\.v/);
-  assert.throws(() => track([{ t: 0, v: {} }]), /keys\[0\]\.v/);
-  assert.throws(() => track([{ t: 0 }]), /keys\[0\]\.v/);
+  assert.throws(() => track([{ t: 0, v: Number.NaN }]), { message: /^keys\[0\]\.v: / });
+  assert.throws(() => track([{ t: 0, v: [1, 'a'] }]), { message: /^keys\[0\]\.v: / });
+  assert.throws(() => track([{ t: 0, v: {} }]), { message: /^keys\[0\]\.v: / });
+  assert.throws(() => track([{ t: 0 }]), { message: /^keys\[0\]\.v: / });
+});
+test('a stepped string keeps its case', () => {
+  const tr = track([{ t: 0, v: 'Hello' }, { t: 1, v: 'World', ease: 'linear' }]);
+  assert.equal(sample(tr, 0), 'Hello');
+  assert.equal(sample(tr, 0.5), 'Hello');
+  assert.equal(sample(tr, 1), 'World');
+});
+test('a string that starts with # but is not #rrggbb throws instead of stepping', () => {
+  for (const bad of ['#fff', '#ff000080', '#ggg000', '#']) {
+    assert.throws(() => track([{ t: 0, v: bad }]), { message: /^keys\[0\]\.v: colours must be #rrggbb/ }, bad);
+    assert.throws(() => track([{ t: 0, v: '#000000' }, { t: 1, v: bad }]), { message: /^keys\[1\]\.v: colours must be #rrggbb/ }, bad);
+  }
+});
+test('an array value stored in a track is frozen', () => {
+  const tr = track([{ t: 0, v: [1, 2] }, { t: 1, v: [3, 4] }]);
+  assert.ok(Object.isFrozen(tr.points[0].v));
+  assert.ok(Object.isFrozen(tr.points[1].v));
+  assert.throws(() => { tr.points[0].v[0] = 99; }, TypeError);
+  assert.deepEqual(sample(tr, 0), [1, 2]);
+});
+test('track and sample errors read "<path>: <message>"', () => {
+  assert.throws(() => track([]), { message: /^keys: must have at least one key/ });
+  assert.throws(() => sample(track([{ t: 0, v: 0 }]), Number.NaN), { message: /^sample t: must be a finite number/ });
+  assert.throws(() => sample(track([{ t: 0, v: 0 }]), 0, 0), { message: /^sample stepFps: must be a finite number > 0/ });
 });
 test('track names the key whose ease is unknown', () => {
-  assert.throws(() => track([{ t: 0, v: 0 }, { t: 1, v: 1, ease: 'outCubik' }]), /keys\[1\]\.ease.*did you mean "outCubic"/);
+  assert.throws(() => track([{ t: 0, v: 0 }, { t: 1, v: 1, ease: 'outCubik' }]), { message: /^keys\[1\]\.ease: .*did you mean "outCubic"/ });
 });

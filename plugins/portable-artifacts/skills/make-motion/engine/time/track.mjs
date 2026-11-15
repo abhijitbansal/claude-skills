@@ -11,6 +11,7 @@ const HEX_RADIX = 16;
 const FRAME_EPSILON = 1e-9; // keeps an exact frame boundary (0.5 s at 24 fps) from flooring to the frame before
 
 const isNumber = (v) => typeof v === 'number' && Number.isFinite(v);
+const isHashString = (v) => typeof v === 'string' && v.startsWith('#');
 
 // Which interpolation a value takes: 'number', 'array', 'colour', 'string', or null when it is none of them.
 function kindOf(v) {
@@ -20,25 +21,27 @@ function kindOf(v) {
   return null;
 }
 
+// Every track error reads "<path>: <message>", the form resolveEase already used.
 function checkValue(v, index, first) {
-  const kind = kindOf(v);
   const at = `keys[${index}].v`;
+  if (isHashString(v) && !COLOUR_PATTERN.test(v)) throw new Error(`${at}: colours must be #rrggbb, got "${v}"`);
+  const kind = kindOf(v);
   if (index === 0) {
-    if (kind === null) throw new Error(`${at} must be a finite number, a non-empty number array or a string`);
+    if (kind === null) throw new Error(`${at}: must be a finite number, a non-empty number array or a string`);
     return kind;
   }
   const want = first.kind;
   if (kind === want && (want !== 'array' || v.length === first.length)) return kind;
-  const as = `(as keys[0].v is)`;
-  if (want === 'array') throw new Error(`${at} must be an array of ${first.length} numbers ${as}`);
-  if (want === 'colour') throw new Error(`${at} must be a #rrggbb colour ${as}`);
-  throw new Error(`${at} must be a ${want} ${as}`);
+  const as = '(as keys[0].v is)';
+  if (want === 'array') throw new Error(`${at}: must be an array of ${first.length} numbers ${as}`);
+  if (want === 'colour') throw new Error(`${at}: must be a #rrggbb colour ${as}`);
+  throw new Error(`${at}: must be a ${want} ${as}`);
 }
 
 function checkTime(t, index, previous) {
-  if (!isNumber(t)) throw new Error(`keys[${index}].t must be a finite number`);
+  if (!isNumber(t)) throw new Error(`keys[${index}].t: must be a finite number`);
   if (previous !== undefined && t < previous) {
-    throw new Error(`keys[${index}].t (${t}) is before keys[${index - 1}].t (${previous}); keys must be in ascending order of t`);
+    throw new Error(`keys[${index}].t: ${t} is before keys[${index - 1}].t (${previous}); keys must be in ascending order of t`);
   }
 }
 
@@ -50,10 +53,14 @@ function resolveEase(name, index) {
   }
 }
 
-const copyValue = (v) => (Array.isArray(v) ? [...v] : typeof v === 'string' ? v.toLowerCase() : v);
+// Stored values: arrays are frozen copies, colours are lowercased, every other string keeps its case.
+function copyValue(v) {
+  if (Array.isArray(v)) return Object.freeze([...v]);
+  return typeof v === 'string' && COLOUR_PATTERN.test(v) ? v.toLowerCase() : v;
+}
 
 export function track(keys) {
-  if (!Array.isArray(keys) || keys.length === 0) throw new Error('track needs at least one key');
+  if (!Array.isArray(keys) || keys.length === 0) throw new Error('keys: must have at least one key');
   const first = { kind: null, length: 0 };
   const points = keys.map((key, i) => {
     checkTime(key?.t, i, i > 0 ? keys[i - 1].t : undefined);
@@ -91,12 +98,12 @@ const out = (v) => (Array.isArray(v) ? [...v] : v);
 
 function quantise(t, stepFps) {
   if (stepFps === undefined) return t;
-  if (!isNumber(stepFps) || stepFps <= 0) throw new Error(`stepFps must be a finite number > 0, got ${stepFps}`);
+  if (!isNumber(stepFps) || stepFps <= 0) throw new Error(`sample stepFps: must be a finite number > 0, got ${stepFps}`);
   return Math.floor(t * stepFps + FRAME_EPSILON) / stepFps;
 }
 
 export function sample(tr, t, stepFps) {
-  if (!isNumber(t)) throw new Error(`sample time must be a finite number, got ${t}`);
+  if (!isNumber(t)) throw new Error(`sample t: must be a finite number, got ${t}`);
   const { points, kind } = tr;
   const time = quantise(t, stepFps);
   let i = -1;
