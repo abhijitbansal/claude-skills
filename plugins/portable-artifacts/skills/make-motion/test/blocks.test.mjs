@@ -66,10 +66,13 @@ const fill = (schema, pick, keep, at) => Object.fromEntries(Object.entries(schem
   .map(([key, child]) => [key, value(child, pick, keep, at ? `${at}.${key}` : key)]));
 // `assets` params (logo-outro's src, before-after-swipe's before.src) keep the example's file, which exists in the examples folder.
 const exampleAt = (example, dotted) => dotted.split('.').reduce((v, k) => v[k], example);
+// Params the extremes must not vary: flow-map's longest params put every end at lon 180, lat 83, which the US map (the enum's
+// last value) refuses as an error by design (test/maps.test.mjs), so its extremes draw the world map, which takes any lon and lat.
+const PINNED = { 'flow-map': { map: 'world' } };
 function extremes(name) {
   if (BLOCKS[name].sketchOnly) return sketchExtremes(name); // ids, node names and icons must be real: test/helpers/sketch-block-params.mjs
   const { params, example, assets = [] } = BLOCKS[name];
-  const keep = Object.fromEntries(assets.map((dotted) => [dotted, exampleAt(example, dotted)]));
+  const keep = { ...Object.fromEntries(assets.map((dotted) => [dotted, exampleAt(example, dotted)])), ...PINNED[name] };
   const make = (pick) => fill(params, pick, keep, '');
   return { example, first: make('first'), last: make('last'), small: make('small') };
 }

@@ -155,7 +155,11 @@ test('the ffmpeg hint installs into make-motion', async () => {
   const saved = { p: process.env.PATH, f: process.env.FFMPEG_PATH };
   process.env.PATH = tmp('doctor-nopath-'); delete process.env.FFMPEG_PATH;
   try {
-    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => e.message.includes(`npm i ffmpeg-static --no-save --prefix ${quoteArg(SKILL.replace(/[\\/]$/, ''))}`));
+    await assert.rejects(() => findFfmpeg({ skipStatic: true }), (e) => {
+      // PA-10: the hint is the doctor's own step (shared onDemandHint): `cd <skill> && npm install <pin> [siblings] --no-save`, not a `--prefix` command.
+      const skill = quoteArg(SKILL.replace(/[\\/]$/, '')).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      return new RegExp(`cd ${skill} && npm install (?:\\S+@\\S+ )*ffmpeg-static@\\d\\S* (?:\\S+@\\S+ )*--no-save`).test(e.message) && !/--prefix/.test(e.message);
+    });
   } finally {
     process.env.PATH = saved.p;
     if (saved.f !== undefined) process.env.FFMPEG_PATH = saved.f;

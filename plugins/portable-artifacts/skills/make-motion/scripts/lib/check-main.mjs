@@ -413,10 +413,13 @@ function frameZeroWarnings(scene, items, els, size, sketch = false) {
 // frame EARLY_FRAMES, so the blank thumbnail is a blink, not an opening. A fade from 0 over half a second is not this.
 const EARLY_FRAMES = 2;
 const EARLY_OPACITY = 0.5;
-async function shownWithinFirstFrames(page, spec) {
+// Only an opacity entrance is a blink: a line, chart or typing element that starts undrawn or empty is a stub of itself two
+// frames in (a stroke's first few pixels, one typed character), so the thumbnail is still blank and it never counts here.
+async function shownWithinFirstFrames(page, spec, items) {
+  const gradual = items.map(({ chain }) => chain.some((el) => startsUndrawn(el) || startsEmpty(el)));
   for (let frame = 1; frame <= EARLY_FRAMES; frame++) {
     const els = await measureAt(page, frame / spec.fps, 0);
-    if (els.some((m) => isShown(m, spec.size) && m.opacity >= EARLY_OPACITY)) return true;
+    if (els.some((m, j) => !gradual[j] && isShown(m, spec.size) && m.opacity >= EARLY_OPACITY)) return true;
   }
   return false;
 }
@@ -540,7 +543,7 @@ async function inspect(browser, spec, server, prepare, written) {
   const blocksOf = written.scenes.map((scene) => new Set((scene.elements ?? []).filter(isBlock).map((el) => el.id))); // `hold` goes on these, not on their parts
   const frame0 = await measureAt(page, 0, 0);
   let warnings = frameZeroWarnings(spec.scenes[0], itemsOf[0], frame0, spec.size, plans[0] !== null);
-  if (warnings.length && plans[0] === null && await shownWithinFirstFrames(page, spec)) warnings = []; // a title that is up by frame 2 is not a blank opening
+  if (warnings.length && plans[0] === null && await shownWithinFirstFrames(page, spec, itemsOf[0])) warnings = []; // a title that is up by frame 2 is not a blank opening
   const platform = isViral(spec) ? safeInsets(spec.size, spec.viral.safeZone) : null; // viral: the platform bands
   const band = [];
   const zone = spec.captions.length ? captionZone(spec.size, spec.format, platform) : null; // the caption rules need captions
