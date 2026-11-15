@@ -103,12 +103,23 @@ function clipToReveal(ctx, n) {
   ctx.clip();
 }
 
+// props.blend on any node: how it and its children composite onto what is already drawn. Default source-over.
+const BLEND_MODES = Object.freeze(['multiply', 'screen', 'overlay', 'lighter']);
+
+function applyBlend(ctx, n) {
+  const { blend } = n.props;
+  if (blend === undefined) return;
+  if (!BLEND_MODES.includes(blend)) throw new Error(`node "${n.id}": blend must be one of ${BLEND_MODES.join(', ')}, got ${JSON.stringify(blend)}`);
+  ctx.globalCompositeOperation = blend;
+}
+
 function drawNode(ctx, n, env) {
   const opacity = unit01(n.opacity);
   if (opacity <= 0) return; // also hides the children, as `visible` does
   ctx.save();
   ctx.transform(...localMatrix(n));
   ctx.globalAlpha *= opacity;
+  applyBlend(ctx, n);
   if (n.blur > 0) ctx.filter = `blur(${n.blur}px)`; // a blurred parent blurs its children too
   clipToReveal(ctx, n);
   drawBody(ctx, n, env);

@@ -260,6 +260,36 @@ test('reveal clips a node and its children: a group at 0.5 shows the left half o
   assert.deepEqual(await seekAndPixel(a, 0, 600, 200), [0, 0, 0, 255]); // the right child is outside the left half of 100..700
 });
 
+test('blend multiply lets the ink below show through; without blend the same rectangle covers it', async (t) => {
+  const word = (id, x) => ({ type: 'text', id, props: { x, y: 100, text: 'M', font: { family: 'Geist', weight: 600, size: 400 }, maxWidth: 1000, fill: '#000000' } });
+  const slab = (id, x, extra) => ({ type: 'path', id, props: { d: `M${x} 60H${x + 500}V560H${x}Z`, fill: '#ffe14a', ...extra } });
+  const film = { fps: FPS, shots: [{ id: 's', show: 'free', hold: 1, background: '#ffffff', nodes: [
+    word('ink-left', 100), slab('multiplied', 60, { blend: 'multiply' }),
+    word('ink-right', 740), slab('plain', 700, {}),
+  ] }] };
+  const a = await stageFor(t, film); if (!a) return;
+  await a.page.evaluate(() => window.__seek(0));
+  const count = (x) => a.page.evaluate((left) => {
+    const { data } = document.getElementById('stage').getContext('2d').getImageData(left, 60, 500, 500);
+    let dark = 0, yellow = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i] + data[i + 1] + data[i + 2] < 90) dark++;
+      if (data[i] > 240 && data[i + 1] > 200 && data[i + 2] < 120) yellow++;
+    }
+    return { dark, yellow };
+  }, x);
+  const left = await count(60), right = await count(700);
+  assert.ok(left.dark > 2000, `multiplied: the letter stays dark (${left.dark} dark pixels)`);
+  assert.ok(left.yellow > 20000, `multiplied: the paper turns yellow (${left.yellow})`);
+  assert.equal(right.dark, 0, 'plain: the yellow rectangle covers the letter');
+});
+
+test('an unknown blend names the node and the accepted modes', async (t) => {
+  const film = { fps: FPS, shots: [{ id: 's', show: 'free', hold: 1, nodes: [box('b', { blend: 'dodge' })] }] };
+  const a = await stageFor(t, film); if (!a) return;
+  await assert.rejects(a.page.evaluate(() => window.__seek(0)), /node "b": blend must be one of multiply, screen, overlay, lighter, got "dodge"/);
+});
+
 const BAD_LAYOUT = { size: 20, width: 10, height: 10, overflow: false, lines: [{ x: 0, y: 16, width: 10, words: [{ text: 'a', index: 0, x: 0, width: 10 }] }] };
 
 test('a seek after a failed seek equals a first seek', async (t) => {

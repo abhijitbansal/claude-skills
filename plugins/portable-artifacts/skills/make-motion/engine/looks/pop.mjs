@@ -51,6 +51,8 @@ export const pop = {
     punch: { scale: 1.08, dur: 0.12 },
     numeral: { color: 'accent' },
     arrow: { color: 'accent', width: 14 },
+    underline: { color: 'accent2', width: 10 },
+    card: { fill: 'ink', edge: 'plain' },
     tag: { fill: 'accent', text: 'paper' },
     cutout: { keylineColor: '#ffffff' },
   },
