@@ -489,14 +489,15 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
   <div class="grid2">
     <div class="card"><span class="chip warn">▲ early eviction</span><p>The guard trusts <code>cacheExpiresAt</code>. When a provider serves the cache cold sooner (Luna at 29 of 30 min, once), the send is billed cold and the guard stays quiet. The report counts it as a prefix break.</p></div>
     <div class="card"><span class="chip warn">▲ approximate price</span><p>The estimate is the last call’s input plus its answer. The real resend adds your message and attachments (44.4k actual vs 37.2k estimated). Copilot’s shared system prefix (~10k tokens) often stays cached, which pulls the other way.</p></div>
-    <div class="card"><span class="chip warn">▲ no keep-warm yet</span><p>cache-tax pings to hold the cache. An extension can only ping with <code>session.send</code>, which adds a user and an assistant turn each time. Run the report to see if pings would pay off.</p></div>
+    <div class="card"><span class="chip warn">▲ keep-warm is optional and untested live</span><p>Off until <code>/cache-clock keepwarm on</code>, and it costs money: a tiny ping before expiry keeps the cache warm for 3 hours after your last message (up to 12), and stops at payback, the budget or the window end. Each ping may show as a short turn in your conversation. Tested against a fake host only; the owner's live check is still to be run.</p></div>
     <div class="card"><span class="chip info">◆ other limits</span><p>With <code>auto</code>, the next prompt may route to another model; the guard prices the last model used. In <code>-p</code> mode, <code>/cache-clock</code> needs the interactive CLI. Claude was measured through <code>auto</code> only; each boundary result is a single run.</p></div>
   </div>
 </section>
 
 <footer>
   <h3 style="margin-top:0">Install</h3>
-  <pre><code>curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh</code></pre>
+  <pre><code>curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh</code></pre>
+  <p>The install is pinned to the release tag <code>cache-clock-v1.1.0</code> and checks a SHA-256 for every file; the command works once that tag exists.</p>
   <p>Copilot CLI: start a new <code>copilot</code> session, say yes when Copilot asks to “register hooks”, then run <code>/cache-clock help</code>. VS Code Copilot chat: from each repo, run the same line with <code>| sh -s -- --project</code> (a copy in <code>.github/extensions</code>), add <code>"chat.canvases.enabled": true</code> to VS Code settings, reload, and start a new chat.</p>
   <h3>Sources</h3>
   <ul class="plain sources">
