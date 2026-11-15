@@ -9,6 +9,7 @@ import { registries as defaultRegistries } from '../../engine/registry.mjs';
 import { validateMode } from '../../engine/modes/index.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
 import { hintRefusals } from './voice/calls.mjs';
+import { ACCEPTED_VOICES } from './voice/kokoro.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { resolveAnchor, anchorSeconds, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
@@ -56,6 +57,17 @@ const isPlainObject = (value) => value !== null && typeof value === 'object' && 
 
 // --- schemas ---
 
+// The film's voice: { name } (synthesised) or { src, words } (a recording of the user's own, with its word times).
+const VOICE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    name: { type: 'string' },
+    src: { type: 'string', minLength: 1 },
+    words: { type: 'string', minLength: 1 },
+  },
+};
+
 const ROOT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -69,6 +81,7 @@ const ROOT_SCHEMA = {
     seed: { type: 'integer', minimum: 0, maximum: SEED_MAX },
     accent: { type: 'string' }, // #rrggbb: checkAccent shows an example
     generatedBy: GENERATED_BY_SCHEMA,
+    voice: VOICE_SCHEMA, // checkVoice: one of the two shapes, a voice that exists
     // Items are not listed: Ajv would walk and report every one of a huge array.
     // checkShots reports a shot that is not an object, for the first SHOTS_MAX.
     shots: { type: 'array', minItems: 1, maxItems: SHOTS_MAX },
@@ -172,6 +185,25 @@ function checkVersion(spec) {
   return [{ path: 'version', message: `must be ${FILM_VERSION}, the only version make-motion 2 reads; got ${quote(spec.version)}` }];
 }
 
+const VOICE_SHAPES = 'use { "name": "af_heart" } to synthesise the narration, or { "src": "vo.wav", "words": "vo.json" } for a recording of your own with its word times';
+
+// The voice's shape (one of the two) and its name. Unknown keys and wrong types are the schema's; the paths in
+// { src, words } are read when that voice is built.
+function checkVoice(spec) {
+  const { voice } = spec;
+  if (!isPlainObject(voice)) return [];
+  const keys = Object.keys(voice).filter((key) => Object.hasOwn(VOICE_SCHEMA.properties, key));
+  if (keys.length < Object.keys(voice).length) return []; // an unknown key: the schema's did-you-mean says enough
+  const own = keys.includes('src') || keys.includes('words');
+  if (keys.length === 0) return [{ path: 'voice', message: `is empty; ${VOICE_SHAPES}` }];
+  if (keys.includes('name') && own) return [{ path: 'voice', message: `has a name and a recording; ${VOICE_SHAPES}` }];
+  if (own && !(keys.includes('src') && keys.includes('words'))) return [{ path: 'voice', message: `a recording needs both src and words; ${VOICE_SHAPES}` }];
+  if (own || typeof voice.name !== 'string' || ACCEPTED_VOICES.includes(voice.name)) return [];
+  const hint = didYouMean(voice.name, ACCEPTED_VOICES);
+  const accepted = `${hint ? `did you mean "${hint}"? The` : 'the'} accepted voice is: ${ACCEPTED_VOICES.join(', ')}`;
+  return [{ path: 'voice.name', message: `voice ${quote(voice.name)} is not available; ${accepted}` }];
+}
+
 function checkAccent(spec) {
   if (typeof spec.accent !== 'string' || ACCENT_RE.test(spec.accent)) return [];
   return [{ path: 'accent', message: `${quote(spec.accent)} is not a colour; write it as #rrggbb, for example "#ff6600"` }];
@@ -199,7 +231,8 @@ function resolveContext(spec, specDir, regs) {
   const mode = modeName(spec, regs);
   const fps = spec.fps === undefined ? DEFAULT_FPS : FPS_CHOICES.find((f) => f === spec.fps) ?? null;
   const { look, errors } = resolveLook(spec, mode, regs);
-  return { ctx: { mode, fps, look, regs, specDir }, errors };
+  // A voiced film's anchors land on measured times, known only after synthesis: anchorSpanErrors checks them then.
+  return { ctx: { mode, fps, look, regs, specDir, voiced: spec.voice !== undefined }, errors };
 }
 
 // --- shots ---
@@ -290,7 +323,8 @@ function timelineShot(shot, ctx) {
 
 // An anchor must parse and land inside its shot. Up to one frame outside is rounding and is clamped
 // (engine/script/anchors.mjs resolveAnchor); further out, the device would fire on the shot's edge, unseen.
-function checkAnchor(item, at, entry, fps) {
+// `inside: false` checks only that it parses and names a word that is spoken (a voiced film at validation).
+function checkAnchor(item, at, entry, { fps, inside = true }) {
   if (entry === null || item.at === undefined) return [];
   let seconds;
   try {
@@ -299,6 +333,7 @@ function checkAnchor(item, at, entry, fps) {
     if (!(err instanceof AnchorError)) throw err;
     return [{ path: pathJoin(at, 'at'), message: err.message }];
   }
+  if (!inside) return [];
   const slack = 1 / fps;
   if (seconds >= -slack && seconds <= entry.duration + slack) return [];
   const span = `0 to ${Number(entry.duration.toFixed(SPAN_DECIMALS))} s`;
@@ -367,7 +402,24 @@ function checkOn(shot, base, ctx, { entry, targets, kindName, kind }) {
   return shot.on.slice(0, ON_MAX).flatMap((item, j) => {
     if (!isPlainObject(item)) return [];
     const at = pathJoin(pathJoin(base, 'on'), j);
-    return [...checkAnchor(item, at, entry, ctx.fps), ...checkDevice(item, at, ctx, kind), ...checkTarget(item, at, targets, kindName)];
+    const anchor = checkAnchor(item, at, entry, { fps: ctx.fps, inside: !ctx.voiced });
+    return [...anchor, ...checkDevice(item, at, ctx, kind), ...checkTarget(item, at, targets, kindName)];
+  });
+}
+
+/**
+ * The anchors of a validated `film` checked against `timeline`, the one the film is drawn with: each must land inside
+ * its shot. For a voiced film this runs after synthesis, on the measured timeline (validateFilm skips the check, since
+ * estimated times say nothing about where a measured word falls). -> [{ path, message }], the validator's form.
+ */
+export function anchorSpanErrors(film, timeline) {
+  return film.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => {
+    if (!isPlainObject(shot) || !Array.isArray(shot.on)) return [];
+    const entry = timeline.shots[index] ?? null;
+    const base = pathJoin(pathJoin('shots', index), 'on');
+    return shot.on.slice(0, ON_MAX).flatMap((item, j) => (
+      isPlainObject(item) ? checkAnchor(item, pathJoin(base, j), entry, { fps: timeline.fps }) : []
+    ));
   });
 }
 
@@ -500,6 +552,7 @@ function collectErrors(spec, specDir, regs) {
     ...checkVersion(spec),
     ...schemaErrors(checkRootSchema, spec, ''),
     ...checkMode(spec, regs),
+    ...checkVoice(spec),
     ...checkAccent(spec),
     ...settings,
     ...checkShots(spec, ctx),

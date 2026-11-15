@@ -2,9 +2,12 @@
 // outline of a film, and the shape of a finding. Pure: it builds strings and objects.
 //
 // The report has the same keys on every path, so a reader never has to guess which exist:
-//   ok, output, sheets, timed, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings
+//   ok, output, sheets, timed, voice, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings
 // and `error: { message, hint }` when a problem with the machine stopped the run (a missing film file, no browser, no
-// ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, an interrupt). What had been done by then
+// ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, a voice that cannot be made, an interrupt).
+// `timed` is 'estimated' or 'measured' (the timeline used), null before one was built. `voice` is
+// { cached, seconds, model } for a film whose voice was made (seconds: the narration's total length, the sum of its
+// shot WAVs; model: the sidecar's model record), else null. What had been done by then
 // stays in it: the stages that ran, the findings already found. A film's own fault (it does not validate, the page
 // raises an error about it) is a finding, not an error.
 import { parseSay } from '../../engine/script/say.mjs';
@@ -23,6 +26,8 @@ const HINTS = Object.freeze([
   [/has been closed/, 'the browser closed while drawing the film; run again'],
   [/^Timeout \d+ms exceeded/, 'the browser did not answer in time; run again, and check that the machine is not overloaded'],
   [/^image ".*" could not be loaded/, 'the file is not a picture the browser can decode; replace it with a PNG, JPEG or WebP image'],
+  [/^the voice worker did not finish/, 'the voice took too long to synthesise; run again, and check that the machine is not overloaded'],
+  [/^the voice in .* does not match the film/, 'delete that folder to synthesise the voice again'],
 ]);
 
 /** { message, hint } for an error's first line: whole with its hint when HINTS knows it (a path in it may hold ". "),
@@ -53,6 +58,7 @@ export function reportOf(state) {
     output: state.output,
     sheets: state.sheets,
     timed: state.timed,
+    voice: state.voice,
     post: state.post,
     capture: state.capture,
     stages: state.stages,
@@ -69,7 +75,7 @@ export function reportOf(state) {
 
 /** The report of a run that never began (a usage error): empty, with the error. */
 export const errorReport = (error) => reportOf({
-  validated: false, error, stages: [], findings: [], sheets: [], output: null, timed: null, post: null, capture: null,
+  validated: false, error, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, post: null, capture: null,
   frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null,
 });
 
@@ -85,9 +91,13 @@ export function outlineOf(film, timeline) {
 /** `<id>  <show>  <start>-<end>s  "<plain narration>"`, one line per shot (the range joined by an en dash). */
 export const outlineLines = (outline) => outline.map((s) => `${s.id}  ${s.show}  ${secondsText(s.start)}${EN_DASH}${secondsText(s.end)}s  "${s.narration}"`);
 
+// A film is invalid when it does not validate, or when its anchors fail on the timeline built for it (a voiced film's
+// measured one: the timeline stage then fails with the anchor errors as findings).
+const isValid = (stages) => Boolean(stages.find((s) => s.name === 'validate')?.ok) && !stages.some((s) => s.name === 'timeline' && !s.ok);
+
 /** The text form of a report: `valid` or `invalid`, a line per finding, then where things went and the frame counts. */
 export function formatText(report, { sheetsDir }) {
-  const lines = [report.stages.find((s) => s.name === 'validate')?.ok ? 'valid' : 'invalid'];
+  const lines = [isValid(report.stages) ? 'valid' : 'invalid'];
   for (const f of report.findings) lines.push(`${f.kind}: ${f.path}: ${f.message}`);
   if (report.timed === null) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);

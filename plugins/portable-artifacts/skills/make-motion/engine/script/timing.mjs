@@ -1,6 +1,7 @@
-// Estimated word timing and the shot timeline, used when no voice has been
-// synthesised. Pure: no DOM, no clock, no randomness. The pace (wpm, tail)
-// is the film's mode's own, read from the modes registry.
+// Word timing and the shot timeline: estimated from the text when no voice has
+// been synthesised, measured from a voice sidecar's word times when one has.
+// Pure: no DOM, no clock, no randomness. The pace (wpm, tail) is the film's
+// mode's own, read from the modes registry.
 import { parseSay, SayError } from './say.mjs';
 import { registries } from '../registry.mjs';
 import '../modes/index.mjs';
@@ -55,6 +56,16 @@ function groupSentences(tokens, words) {
   return sentences;
 }
 
+// The shot's say parsed; a SayError names the shot.
+function parsedSay(shot) {
+  try {
+    return parseSay(shot.say);
+  } catch (err) {
+    if (err instanceof SayError) throw new SayError(`shot "${shot.id}": ${err.message}`, { cause: err });
+    throw err;
+  }
+}
+
 function secondsForShot(shot, pace) {
   if (shot.say === undefined || shot.say === null) {
     const hold = shot.hold ?? DEFAULT_HOLD;
@@ -63,20 +74,62 @@ function secondsForShot(shot, pace) {
     }
     return { seconds: hold, words: [], sentences: [] };
   }
-  let parsed;
-  try {
-    parsed = parseSay(shot.say);
-  } catch (err) {
-    if (err instanceof SayError) throw new SayError(`shot "${shot.id}": ${err.message}`, { cause: err });
-    throw err;
-  }
-  const { tokens, trailingPause } = parsed;
+  const { tokens, trailingPause } = parsedSay(shot);
   const words = estimateWords(tokens, { wpm: pace.wpm });
   return {
     seconds: words.at(-1).end + trailingPause + pace.tail,
     words,
     sentences: groupSentences(tokens, words),
   };
+}
+
+/**
+ * Seconds from a shot's start to its narration's start. The estimate starts its first word at the shot start (plus
+ * that word's own pause), and measured words keep that lead-in: sidecar times are from the first sample of the shot's
+ * WAV, and the WAV is placed at narrationStart(shot).
+ */
+export const NARRATION_LEAD = 0;
+
+/** The film second a timeline shot's narration (its WAV, for a voiced film) starts at. */
+export const narrationStart = (shot) => shot.start + NARRATION_LEAD;
+
+// The measured words of `shot` from its sidecar entry, as shot-local seconds in the estimate's shape.
+function measuredWords(shot, measured, index, tokens) {
+  const where = `words[${index}]`;
+  const flat = (Array.isArray(measured.sentences) ? measured.sentences : []).flatMap((s) => (Array.isArray(s?.words) ? s.words : []));
+  if (flat.length !== tokens.length) {
+    throw new RangeError(`${where}: ${flat.length} words, the say of shot "${shot.id}" has ${tokens.length}`);
+  }
+  return flat.map((w) => ({ text: w.text, start: w.start + NARRATION_LEAD, end: w.end + NARRATION_LEAD, emphasis: w.emphasis, aside: w.aside }));
+}
+
+// A spoken shot timed by its measured words: as long as its last word end plus the trailing pause and the tail, and
+// never shorter than its WAV, so the narration cannot run into the next shot.
+function measuredShot(shot, pace, measured, index) {
+  const { tokens, trailingPause } = parsedSay(shot);
+  const words = measuredWords(shot, measured, index, tokens);
+  const narration = words.at(-1).end;
+  const wav = Number.isFinite(measured.seconds) ? NARRATION_LEAD + measured.seconds : 0;
+  return {
+    seconds: Math.max(narration + trailingPause + pace.tail, wav),
+    words,
+    sentences: groupSentences(tokens, words),
+  };
+}
+
+function checkWords(words, film) {
+  if (words === undefined) return;
+  if (!Array.isArray(words)) throw new TypeError('words must be the voice sidecar\'s shots array, or undefined');
+  if (words.length !== film.shots.length) throw new RangeError(`words: ${words.length} shots, the film has ${film.shots.length}`);
+}
+
+// The shot timed by its measured words when the film has them and the shot speaks, else as estimated.
+function timedShot(shot, pace, words, index) {
+  if (words === undefined) return secondsForShot(shot, pace);
+  const measured = words[index];
+  if (measured?.id !== shot.id) throw new RangeError(`words[${index}]: shot ${JSON.stringify(measured?.id)}, the film's shot is "${shot.id}"`);
+  if (shot.say === undefined || shot.say === null) return secondsForShot(shot, pace);
+  return measuredShot(shot, pace, measured, index);
 }
 
 const toFrames = (seconds, fps) => Math.ceil(Math.max(MIN_SHOT_SECONDS, seconds) * fps - FRAME_EPSILON);
@@ -92,15 +145,19 @@ function paceOf(name, modes) {
 /**
  * The shot timeline of `film` at `fps`, each spoken shot paced by its mode (the registered mode's wpm and tail).
  * `modes` is the modes registry (default: the shared one; the validator passes the registries it checked with).
+ * `words` is a voice sidecar's `shots` list (scripts/v2/voice/sidecar.mjs), one entry per film shot, or undefined.
+ * With it every spoken shot takes its word times from the sidecar (from narrationStart) and `timed` is 'measured'; a
+ * sidecar that does not match the film throws, never falling back to the estimate. Without it, 'estimated'.
  */
-export function buildTimeline(film, { fps, modes = registries.modes } = {}) {
+export function buildTimeline(film, { fps, modes = registries.modes, words } = {}) {
   if (!Number.isFinite(fps) || fps <= 0) throw new RangeError(`fps must be a positive number, got ${fps}`);
   if (!Array.isArray(film.shots)) throw new TypeError('film.shots must be an array');
+  checkWords(words, film);
   const pace = paceOf(film.mode ?? DEFAULT_MODE, modes);
 
   let startFrame = 0;
   const shots = film.shots.map((shot, index) => {
-    const { seconds, words, sentences } = secondsForShot(shot, pace);
+    const { seconds, words: shotWords, sentences } = timedShot(shot, pace, words, index);
     const frames = toFrames(seconds, fps);
     const entry = {
       id: shot.id,
@@ -108,11 +165,11 @@ export function buildTimeline(film, { fps, modes = registries.modes } = {}) {
       start: startFrame / fps,
       end: (startFrame + frames) / fps,
       duration: frames / fps,
-      words,
+      words: shotWords,
       sentences,
     };
     startFrame += frames;
     return entry;
   });
-  return { fps, duration: startFrame / fps, frameCount: startFrame, timed: 'estimated', shots };
+  return { fps, duration: startFrame / fps, frameCount: startFrame, timed: words === undefined ? 'estimated' : 'measured', shots };
 }

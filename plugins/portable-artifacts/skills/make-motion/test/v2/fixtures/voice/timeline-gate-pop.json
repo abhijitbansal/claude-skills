@@ -1,0 +1,313 @@
+{
+  "fps": 30,
+  "duration": 12.066666666666666,
+  "frameCount": 362,
+  "timed": "estimated",
+  "shots": [
+    {
+      "id": "hook",
+      "index": 0,
+      "start": 0,
+      "end": 2.433333333333333,
+      "duration": 2.433333333333333,
+      "words": [
+        {
+          "text": "Your",
+          "start": 0,
+          "end": 0.2742857142857143,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "charts",
+          "start": 0.2742857142857143,
+          "end": 0.6857142857142857,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "are",
+          "start": 0.6857142857142857,
+          "end": 0.8914285714285715,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "hiding",
+          "start": 1.0114285714285716,
+          "end": 1.4845714285714287,
+          "emphasis": true,
+          "aside": false
+        },
+        {
+          "text": "something.",
+          "start": 1.4845714285714287,
+          "end": 2.101714285714286,
+          "emphasis": false,
+          "aside": false
+        }
+      ],
+      "sentences": [
+        {
+          "start": 0,
+          "end": 2.101714285714286,
+          "first": 0,
+          "last": 4
+        }
+      ]
+    },
+    {
+      "id": "proof",
+      "index": 1,
+      "start": 2.433333333333333,
+      "end": 4.933333333333334,
+      "duration": 2.5,
+      "words": [
+        {
+          "text": "This",
+          "start": 0,
+          "end": 0.2742857142857143,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "one",
+          "start": 0.2742857142857143,
+          "end": 0.48,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "shows",
+          "start": 0.48,
+          "end": 0.8228571428571428,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "you",
+          "start": 0.8228571428571428,
+          "end": 1.0285714285714285,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "the",
+          "start": 1.0285714285714285,
+          "end": 1.2342857142857142,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "query",
+          "start": 1.2342857142857142,
+          "end": 1.577142857142857,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "behind",
+          "start": 1.577142857142857,
+          "end": 1.9885714285714284,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "it.",
+          "start": 1.9885714285714284,
+          "end": 2.194285714285714,
+          "emphasis": false,
+          "aside": false
+        }
+      ],
+      "sentences": [
+        {
+          "start": 0,
+          "end": 2.194285714285714,
+          "first": 0,
+          "last": 7
+        }
+      ]
+    },
+    {
+      "id": "count",
+      "index": 2,
+      "start": 4.933333333333334,
+      "end": 6.933333333333334,
+      "duration": 2,
+      "words": [
+        {
+          "text": "Five",
+          "start": 0,
+          "end": 0.2742857142857143,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "skills.",
+          "start": 0.2742857142857143,
+          "end": 0.6857142857142857,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "One",
+          "start": 0.9357142857142857,
+          "end": 1.1414285714285715,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "file",
+          "start": 1.1414285714285715,
+          "end": 1.4157142857142857,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "each.",
+          "start": 1.4157142857142857,
+          "end": 1.69,
+          "emphasis": false,
+          "aside": false
+        }
+      ],
+      "sentences": [
+        {
+          "start": 0,
+          "end": 0.6857142857142857,
+          "first": 0,
+          "last": 1
+        },
+        {
+          "start": 0.9357142857142857,
+          "end": 1.69,
+          "first": 2,
+          "last": 4
+        }
+      ]
+    },
+    {
+      "id": "local",
+      "index": 3,
+      "start": 6.933333333333334,
+      "end": 9.933333333333334,
+      "duration": 3,
+      "words": [
+        {
+          "text": "No",
+          "start": 0,
+          "end": 0.2057142857142857,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "cloud.",
+          "start": 0.2057142857142857,
+          "end": 0.5485714285714286,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "No",
+          "start": 0.7985714285714286,
+          "end": 1.0042857142857142,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "account.",
+          "start": 1.0042857142857142,
+          "end": 1.4842857142857142,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "No",
+          "start": 1.854285714285714,
+          "end": 2.0908571428571427,
+          "emphasis": true,
+          "aside": false
+        },
+        {
+          "text": "upload.",
+          "start": 2.210857142857143,
+          "end": 2.684,
+          "emphasis": true,
+          "aside": false
+        }
+      ],
+      "sentences": [
+        {
+          "start": 0,
+          "end": 0.5485714285714286,
+          "first": 0,
+          "last": 1
+        },
+        {
+          "start": 0.7985714285714286,
+          "end": 1.4842857142857142,
+          "first": 2,
+          "last": 3
+        },
+        {
+          "start": 1.854285714285714,
+          "end": 2.684,
+          "first": 4,
+          "last": 5
+        }
+      ]
+    },
+    {
+      "id": "ask",
+      "index": 4,
+      "start": 9.933333333333334,
+      "end": 12.066666666666666,
+      "duration": 2.1333333333333333,
+      "words": [
+        {
+          "text": "Save",
+          "start": 0,
+          "end": 0.2742857142857143,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "this.",
+          "start": 0.2742857142857143,
+          "end": 0.5485714285714286,
+          "emphasis": false,
+          "aside": false
+        },
+        {
+          "text": "Build",
+          "start": 0.9185714285714286,
+          "end": 1.3128571428571427,
+          "emphasis": true,
+          "aside": false
+        },
+        {
+          "text": "yours.",
+          "start": 1.4328571428571428,
+          "end": 1.827142857142857,
+          "emphasis": true,
+          "aside": false
+        }
+      ],
+      "sentences": [
+        {
+          "start": 0,
+          "end": 0.5485714285714286,
+          "first": 0,
+          "last": 1
+        },
+        {
+          "start": 0.9185714285714286,
+          "end": 1.827142857142857,
+          "first": 2,
+          "last": 3
+        }
+      ]
+    }
+  ]
+}

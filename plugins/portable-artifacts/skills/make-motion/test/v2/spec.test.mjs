@@ -5,7 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRegistry } from '../../engine/registry.mjs';
-import { validateFilm, withFilmDefaults, SpecError } from '../../scripts/v2/spec.mjs';
+import { validateFilm, withFilmDefaults, SpecError, anchorSpanErrors } from '../../scripts/v2/spec.mjs';
+import { buildTimeline } from '../../engine/script/timing.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
 import { hintRefusals } from '../../scripts/v2/voice/calls.mjs';
 
@@ -875,4 +876,65 @@ test('a film whose mode lacks voice data, or has it out of range, is an error at
   assert.match(check(film({ mode: 'pro' }), regsWith({ voiceSpeed: 1.3 })).errors[0].message, /voiceSpeed must be a number from 0.8 to 1.25, got 1.3/);
   assert.equal(check(film({ mode: 'pro' }), regsWith({ voiceSpeed: 1.25, emphasisPause: 3 })).ok, true);
   assert.equal(check(film({ mode: 'pro' })).ok, true, 'the stub modes carry voice data');
+});
+
+// --- the film's voice ---
+
+test('voice accepts the synthesised shape and the own-recording shape', () => {
+  assert.deepEqual(check(film({ voice: { name: 'af_heart' } })), { ok: true, errors: [] });
+  assert.deepEqual(check(film({ voice: { src: 'vo.wav', words: 'vo.json' } })), { ok: true, errors: [] });
+});
+test('a misspelled voice key gets a did-you-mean at its path', () => {
+  const r = check(film({ voice: { nam: 'af_heart' } }));
+  assert.deepEqual(r.errors, [{ path: 'voice.nam', message: 'unknown property; did you mean "name"?' }]);
+});
+test('a voice name other than af_heart is an error listing the accepted one, with a did-you-mean', () => {
+  const r = check(film({ voice: { name: 'af_hart' } }));
+  assert.equal(r.errors.length, 1);
+  assert.equal(r.errors[0].path, 'voice.name');
+  assert.match(r.errors[0].message, /^voice "af_hart" is not available; did you mean "af_heart"\? The accepted voice is: af_heart$/);
+  assert.match(check(film({ voice: { name: 'zz' } })).errors[0].message, /not available; the accepted voice is: af_heart/);
+});
+test('a voice that is not one of the two shapes says what to write', () => {
+  const shapes = /\{ "name": "af_heart" \}.*\{ "src": "vo\.wav", "words": "vo\.json" \}/;
+  for (const voice of [{}, { name: 'af_heart', src: 'vo.wav' }, { src: 'vo.wav' }, { words: 'vo.json' }]) {
+    const r = check(film({ voice }));
+    assert.equal(r.errors.length, 1, JSON.stringify(voice));
+    assert.equal(r.errors[0].path, 'voice');
+    assert.match(r.errors[0].message, shapes);
+  }
+  assert.deepEqual(check(film({ voice: 'af_heart' })).errors.map((e) => e.path), ['voice']);
+  assert.match(check(film({ voice: 'af_heart' })).errors[0].message, /must be object/);
+  assert.deepEqual(check(film({ voice: { name: 3 } })).errors, [{ path: 'voice.name', message: 'must be string' }]);
+});
+
+test('a voiced film with hold and say on one shot still gets the hold error', () => {
+  const r = check(film({ voice: { name: 'af_heart' } }, [{ ...shotA, hold: 2 }]));
+  assert.equal(r.errors.length, 1);
+  assert.equal(r.errors[0].path, 'shots[0].hold');
+  assert.match(r.errors[0].message, /^hold cannot be used with say/);
+});
+
+// An anchor at 1.6 s in shot "a", whose estimated length is under 1.2 s: outside on estimated times.
+const pastEnd = (extra) => film(extra, [{ ...shotA, say: 'One file.', on: [{ at: 1.6, do: 'highlight' }] }]);
+
+test('a voiced film is not checked for anchors outside their shot on estimated times; a silent film is', () => {
+  assert.match(check(pastEnd({})).errors[0].message, /outside the shot/);
+  assert.deepEqual(check(pastEnd({ voice: { name: 'af_heart' } })), { ok: true, errors: [] });
+});
+test('a voiced film still gets the anchor errors that do not depend on time', () => {
+  const r = check(film({ voice: { name: 'af_heart' } }, [{ ...shotA, say: 'One file.', on: [{ at: 'word:server', do: 'highlight' }] }]));
+  assert.equal(r.errors.length, 1);
+  assert.equal(r.errors[0].path, 'shots[0].on[0].at');
+  assert.match(r.errors[0].message, /no word "server"/);
+});
+test('anchorSpanErrors checks every anchor against the timeline it is given, in the validator path form', () => {
+  const spec = pastEnd({ voice: { name: 'af_heart' } });
+  const timeline = buildTimeline(spec, { fps: 30, modes: registries.modes });
+  const errors = anchorSpanErrors(spec, timeline);
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].path, 'shots[0].on[0].at');
+  assert.match(errors[0].message, /^1\.6 resolves to 1\.6 s, outside the shot, which runs from 0 to [\d.]+ s/);
+  const longer = { ...timeline, shots: timeline.shots.map((s) => ({ ...s, duration: s.duration + 1 })) };
+  assert.deepEqual(anchorSpanErrors(spec, longer), [], 'inside a longer measured shot');
 });

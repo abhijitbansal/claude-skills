@@ -1,8 +1,10 @@
-// The stages behind scripts/make.mjs, in order: validate, timeline, review (the sheets and the audit), render. One
-// browser session serves review and render. runMake always returns a report (report.mjs) and an exit code: 0 ok, 1 not
-// ok (the film does not validate, or a mechanical finding exists, or the page raised an error about it), 2 for trouble
-// with the machine (a missing film file, no browser, no ffmpeg, ffmpeg failing, a crashed or closed browser page, a
-// timeout, a lost WebGL context, a picture the browser cannot decode: `report.error` says which and how to fix it),
+// The stages behind scripts/make.mjs, in order: validate, voice (only for a film with `voice`), timeline, review (the
+// sheets and the audit), render. One browser session serves review and render. runMake always returns a report
+// (report.mjs) and an exit code: 0 ok, 1 not ok (the film does not validate, its anchors fall outside their shots on
+// its measured timeline, a mechanical finding exists, or the page raised an error about it), 2 for trouble with the
+// machine (a missing film file, a voice that cannot be made, no browser, no ffmpeg, ffmpeg failing, a crashed or closed
+// browser page, a timeout, a lost WebGL context, a picture the browser cannot decode: `report.error` says which and how
+// to fix it),
 // 130 when stopped through `signal`. What was done before a stop stays in the report. It always closes what it opened,
 // never prints to stdout and never waits for input.
 import path from 'node:path';
@@ -10,7 +12,7 @@ import { performance } from 'node:perf_hooks';
 import { findFfmpeg } from '../lib/ffmpeg.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { loadFilm } from './pipeline.mjs';
-import { SpecError } from './spec.mjs';
+import { SpecError, anchorSpanErrors } from './spec.mjs';
 import { openSession, pageErrorMessage, machineMessage } from './session.mjs';
 import { writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
@@ -25,11 +27,19 @@ const EXIT_NOT_OK = 1;
 const EXIT_MACHINE = 2;
 const EXIT_INTERRUPTED = 130;
 const PAGE_PREFIX = 'page: '; // a finding about the page itself (sessionFindings, failureOutcome)
+const VOICE_SECONDS_STEPS = 1e4; // the report's voice.seconds, rounded as the sidecar's times are
+const SHOT_NAMED_RE = /^shot "([^"]+)":/; // how a voice error names its shot in its message (voice/worker.mjs)
+// describeError splits this at ". " into its message and its hint.
+const OWN_VOICE_MESSAGE = 'voice from your own recording ({ src, words }) is not built yet. '
+  + 'Write "voice": { "name": "af_heart" } to synthesise the narration, or remove "voice" for a film without narration';
+
+// The real synthesiser, loaded only for a voiced film: a silent film imports nothing of the voice.
+const synthesiseFilm = async (film, options) => (await import('./voice/synth.mjs')).synthesiseFilm(film, options);
 
 const seconds = (started) => Math.round(((performance.now() - started) / MS_PER_SECOND) * MILLIS_DECIMALS) / MILLIS_DECIMALS;
 
 const newState = () => ({
-  validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, post: null, capture: null,
+  validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, post: null, capture: null,
   frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, outline: null, sheetsDir: null,
 });
 
@@ -104,12 +114,68 @@ async function reviewAndRender({ options, loaded, state, io: { signal, log } }) 
   }
 }
 
+// A voice error that is the film's to fix: `kind: 'film'` and not a timeout. Anything else (`kind: 'machine'`, no kind,
+// a timeout) is machine trouble.
+const isFilmVoiceError = (err) => err?.kind === 'film' && err.timedOut !== true;
+
+// The voice error of a film as a finding: at the say of the shot it names (its `shot` field, else a message that starts
+// `shot "<id>":`), else at `voice`; its hint, when it has one, after the message.
+function voiceFinding(film, err) {
+  const id = typeof err.shot === 'string' ? err.shot : SHOT_NAMED_RE.exec(String(err.message))?.[1];
+  const index = film.shots.findIndex((shot) => shot.id === id);
+  const at = index === -1 ? 'voice' : `shots[${index}].say`;
+  const message = machineMessage(err);
+  return validationFinding({ path: at, message: typeof err.hint === 'string' && err.hint !== '' ? `${message}; ${err.hint}` : message });
+}
+
+// The film's narration through `synthesise` (synthesiseFilm's signature), cached beside the video in <out dir>/.voice/,
+// or null when the voice error is the film's own (it becomes a finding: exit 1). Machine trouble (the optional package
+// missing, the model refused, a timeout) propagates: exit 2 with its hint.
+async function makeVoice(film, options, state, io) {
+  let made;
+  try {
+    made = await stage(state, io.log, 'voice', () => {
+      if (film.voice.name === undefined) throw new Error(OWN_VOICE_MESSAGE);
+      const { out } = outputPaths(options);
+      return io.synthesise(film, { outDir: path.dirname(out), voice: film.voice.name, log: io.log });
+    });
+  } catch (err) {
+    if (!isFilmVoiceError(err)) throw err;
+    state.findings = [voiceFinding(film, err)];
+    return null;
+  }
+  const seconds = made.sidecar.shots.reduce((sum, shot) => sum + shot.seconds, 0);
+  state.voice = { cached: made.cached, seconds: Math.round(seconds * VOICE_SECONDS_STEPS) / VOICE_SECONDS_STEPS, model: made.sidecar.model };
+  return made;
+}
+
+// The timeline the film is drawn with: measured from the sidecar when there is one, and then its anchors are checked
+// against it (validateFilm could not: it had only estimated times). Anchor errors make the film invalid: they become
+// findings in the validator's path form and null is returned.
+async function timelineFor(film, made, state, log) {
+  try {
+    return await stage(state, log, 'timeline', () => {
+      const timeline = buildTimeline(film, { fps: film.fps, words: made?.sidecar.shots });
+      const errors = made ? anchorSpanErrors(film, timeline) : [];
+      if (errors.length > 0) throw new SpecError(errors);
+      return timeline;
+    });
+  } catch (err) {
+    if (!(err instanceof SpecError)) throw err;
+    state.findings = err.errors.map(validationFinding);
+    return null;
+  }
+}
+
 async function execute(options, state, io) {
   const loaded = await validate(options, state, io.log);
   if (!loaded) return;
   state.validated = true;
   const { film, specDir } = loaded;
-  const timeline = await stage(state, io.log, 'timeline', () => buildTimeline(film, { fps: film.fps }));
+  const made = film.voice === undefined ? null : await makeVoice(film, options, state, io);
+  if (film.voice !== undefined && made === null) return;
+  const timeline = await timelineFor(film, made, state, io.log);
+  if (!timeline) return;
   Object.assign(state, { timed: timeline.timed, frames: timeline.frameCount });
   if (options.outline) {
     state.outline = outlineOf(film, timeline);
@@ -128,7 +194,14 @@ export function failureOutcome(err, signal) {
   if (signal?.aborted) return { exitCode: EXIT_INTERRUPTED, error: { message: 'interrupted', hint: '' } };
   const pageMessage = pageErrorMessage(err);
   if (pageMessage !== null) return { exitCode: EXIT_NOT_OK, finding: pageFinding('mechanical', `page: ${pageMessage}`) };
-  return { exitCode: EXIT_MACHINE, error: describeError(machineMessage(err)) };
+  return { exitCode: EXIT_MACHINE, error: machineError(err) };
+}
+
+// { message, hint } of machine trouble: an error's own one-line `hint` when it carries one (a voice error does), else
+// describeError's reading of its first line.
+function machineError(err) {
+  if (typeof err?.hint === 'string' && err.hint !== '') return { message: machineMessage(err), hint: err.hint };
+  return describeError(machineMessage(err));
 }
 
 /**
@@ -151,14 +224,16 @@ function settle(state, err, signal) {
 
 /**
  * @param {{ specPath: string, out: string | null, exact: boolean, noRender: boolean, outline: boolean }} options
- * @param {{ signal?: AbortSignal, log?: (line: string) => void }} [io] log gets progress lines (the caller sends them to stderr)
+ * @param {{ signal?: AbortSignal, log?: (line: string) => void, synthesise?: Function }} [io] log gets progress lines
+ *   (the caller sends them to stderr); synthesise makes a voiced film's narration (default: voice/synth.mjs
+ *   synthesiseFilm, which tests replace with a fake that returns a sidecar)
  * @returns {Promise<{ report: object, exitCode: number, sheetsDir: string | null, outline: object[] | null }>}
  */
-export async function runMake(options, { signal, log = () => {} } = {}) {
+export async function runMake(options, { signal, log = () => {}, synthesise = synthesiseFilm } = {}) {
   const state = newState();
   let exitCode = null;
   try {
-    await execute(options, state, { signal, log });
+    await execute(options, state, { signal, log, synthesise });
   } catch (err) {
     exitCode = settle(state, err, signal);
   }
