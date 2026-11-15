@@ -52,18 +52,28 @@ function phonemeGroups(chars) {
 // The phone characters of a character array with stress marks, spaces and punctuation removed, as one string.
 const bareSound = (chars) => chars.filter((c) => isPhone(c) && !STRESS_MARKS.has(c)).join('');
 
+// How far a count-assigned span's sound may be from the token's own sound (unit-cost edit distance, stress, spaces and
+// punctuation removed) and still be accepted: espeak reduces words in context. Measured on 127 count-assigned recorded
+// tokens (fixtures durations, dropped, reorder, neighbours): reductions are at most 2 (tuː -> tə or tʊ, eɪ -> ɐ: 2;
+// ðə -> ðɪ, æn -> ɐn: 1), and every reorder or cancel-out shift is at least 4. So 2.
+const CONTEXT_EDIT_BOUND = 2;
+// A phoneme word shorter than this is no evidence of a reorder: one phone (a, ɐ, ə) occurs everywhere.
+const MIN_REORDER_PHONES = 2;
+
+const editDistance = (a, b) => editTable([...a].map((c) => ({ c })), [...b].map((c) => ({ c })))[[...a].length][[...b].length];
+
 // Token k owns the next counts[k] phoneme groups of the clause; a token with no group (a spaced dash) gets null.
 // Returns null when the counts do not add up (espeak linked or split words in context), or when any assigned span's
-// sound differs from the token's own sound, stress ignored: a linked pair and a split word can cancel in the counts
-// and shift every word between them.
+// sound is more than CONTEXT_EDIT_BOUND from the token's own sound: a linked pair and a split word can cancel in the
+// counts and shift every word between them, and a reorder can keep the counts right.
 function spansByCount(chars, tokenChars) {
   const counts = tokenChars.map((tc) => phonemeGroups(tc).length);
   const groups = phonemeGroups(chars);
   if (counts.reduce((a, b) => a + b, 0) !== groups.length) return null;
   const ends = counts.map((_, k) => counts.slice(0, k + 1).reduce((a, b) => a + b, 0));
   const spans = counts.map((n, k) => (n === 0 ? null : { first: groups[ends[k] - n].first, last: groups[ends[k] - 1].last }));
-  const agrees = spans.every((s, k) => s === null || bareSound(chars.slice(s.first, s.last + 1)) === bareSound(tokenChars[k]));
-  return agrees ? spans : null;
+  const isClose = (s, k) => editDistance(bareSound(chars.slice(s.first, s.last + 1)), bareSound(tokenChars[k])) <= CONTEXT_EDIT_BOUND;
+  return spans.every((s, k) => s === null || isClose(s, k)) ? spans : null;
 }
 
 // Levenshtein distance table between two arrays of { c } (unit costs).
@@ -119,31 +129,42 @@ function spansByAlignment(chars, tokenChars) {
   });
 }
 
-// Maximal runs of adjacent token indexes whose flag is true.
-function runsOf(flags) {
-  return flags.reduce((runs, flag, k) => {
-    if (!flag) return runs;
-    const last = runs.at(-1);
-    return last && last.at(-1) === k - 1 ? [...runs.slice(0, -1), [...last, k]] : [...runs, [k]];
+// The phoneme words of a character array, each as its bare sound (stress, spaces and punctuation removed).
+const bareWords = (chars) => phonemeGroups(chars).map((g) => bareSound(chars.slice(g.first, g.last + 1)));
+
+// Evidence of a reorder, as token index ranges [from, to]: token k's own phoneme word w (at least MIN_REORDER_PHONES
+// phones) is not among the words of its own span, but is a whole word of token j's span, and j's own phonemes do not
+// account for it. Then k and j, and every token between them, belong to one spoken phrase in another order.
+function reorderRanges(chars, tokenChars, spans) {
+  const own = tokenChars.map(bareWords);
+  const held = spans.map((s) => (s === null ? [] : bareWords(chars.slice(s.first, s.last + 1))));
+  return spans.flatMap((s, k) => (s === null ? [] : own[k].flatMap((w) => {
+    if ([...w].length < MIN_REORDER_PHONES || held[k].includes(w)) return [];
+    const holders = held.flatMap((h, j) => (j !== k && h.includes(w) && !own[j].includes(w) ? [j] : []));
+    if (holders.length === 0) return [];
+    const j = holders.reduce((best, x) => (Math.abs(x - k) < Math.abs(best - k) ? x : best));
+    return [[Math.min(k, j), Math.max(k, j)]];
+  })));
+}
+
+// Overlapping or touching ranges joined, in order.
+function joinRanges(ranges) {
+  return [...ranges].sort((a, b) => a[0] - b[0]).reduce((out, [from, to]) => {
+    const last = out.at(-1);
+    return last && from <= last[1] ? [...out.slice(0, -1), [last[0], Math.max(last[1], to)]] : [...out, [from, to]];
   }, []);
 }
 
-// Normalize can reorder words across say tokens ("$5 million" is spoken "5 million dollars"), which no in-order
-// placement can express. A run of two or more adjacent tokens whose spans fail the sound check is merged when one of
-// them is misplaced: its own sound occurs in the run's region but not in its own span. Each token of a merged run gets
-// the union span (run's first phone to its last) with `merged: true`; tokens outside the run are untouched. A run of
-// tokens that are only reduced in context ("to the" as tə ðɪ) has no misplaced token and stays as placed.
+// Normalize can reorder words across say tokens ("$5 million" is spoken "5 million dollars"; "$5 hundred thousand" is
+// "5 hundred thousand dollars"), which no in-order placement can express. Each range with evidence of a reorder
+// (reorderRanges) is merged: every token in it gets the union span, from the range's first phone to its last, with
+// `merged: true`. Tokens outside a range are untouched. Words that are only reduced or linked in context ("to the" as
+// tə ðɪ, "about a") give no evidence: their own words are not whole words of a neighbour's span, or are one phone.
 function mergeReordered(chars, tokenChars, spans) {
-  const soundOf = (s) => bareSound(chars.slice(s.first, s.last + 1));
-  const fails = spans.map((s, k) => s !== null && soundOf(s) !== bareSound(tokenChars[k]));
-  const merges = runsOf(fails).filter((run) => run.length > 1).flatMap((run) => {
-    const union = { first: spans[run[0]].first, last: spans[run.at(-1)].last, merged: true };
-    const region = soundOf(union);
-    const isMisplaced = (k) => {
-      const own = bareSound(tokenChars[k]);
-      return own.length > 0 && region.includes(own) && !soundOf(spans[k]).includes(own);
-    };
-    return run.some(isMisplaced) ? run.map((k) => [k, union]) : [];
+  const merges = joinRanges(reorderRanges(chars, tokenChars, spans)).flatMap(([from, to]) => {
+    const placed = spans.slice(from, to + 1).filter((s) => s !== null);
+    const union = { first: placed[0].first, last: placed.at(-1).last, merged: true };
+    return Array.from({ length: to - from + 1 }, (_, x) => [from + x, union]);
   });
   const byToken = new Map(merges);
   return spans.map((s, k) => byToken.get(k) ?? s);
@@ -233,13 +254,15 @@ function wordStarts(words, chars, frames, cum) {
 
 // End samples of the words: the next word's start when only spaces (or nothing, in a linked group) lie between them;
 // otherwise (punctuation follows, or the word is last) the last token counted as at most END_CAP_FRAMES frames.
+// No clamp to the start is needed: every lead is at least 0, so a start never passes its word's raw onset, and the
+// capped end is at least one frame after that onset.
 function wordEnds(words, starts, chars, frames, cum) {
   return words.map((span, w) => {
     const next = words[w + 1];
     const isDirect = next !== undefined && chars.slice(span.last, next.first - 1).every((c) => c === SPACE);
     if (isDirect) return starts[w + 1];
     const capped = (cum[span.last] + Math.min(frames[span.last], END_CAP_FRAMES)) * FRAME_SAMPLES;
-    return Math.max(starts[w], capped);
+    return capped;
   });
 }
 
@@ -258,10 +281,11 @@ function emptyTime(index, wordIndexes, starts, ends) {
  * precedes the previous word's start or the call's start.
  * End: a word followed directly by another word (only a space between) ends at that word's start; a word followed by
  * punctuation, or last in its call, ends after its last token counted as at most END_CAP_FRAMES frames. An end never
- * precedes its start. A zero-length span starts and ends at the next word's start, or at the previous word's end.
+ * precedes its start (every lead is at least 0, so a start never passes its raw onset, and a capped end is at least
+ * one frame after it). A zero-length span starts and ends at the next word's start, or at the previous word's end.
  * Tokens of one merged run (isMergedWith) are one word: each gets that word's start and end.
- * `end === start` is legal: a zero-length span (a spaced dash), or a word whose start was clamped up to the previous
- * word's start or whose capped end was clamped up to its start. Consumers must not assume `end > start`.
+ * `end === start` is legal: a zero-length span (a spaced dash), or a word followed directly by a word whose start was
+ * clamped up to its own start. Consumers must not assume `end > start`.
  */
 export function wordTimes({ kept, frames, spans }) {
   const chars = [...kept];

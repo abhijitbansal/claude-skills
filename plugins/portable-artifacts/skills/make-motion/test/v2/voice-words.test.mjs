@@ -16,6 +16,7 @@ const readFixture = (name) => JSON.parse(readFileSync(path.join(FIXTURE_DIR, nam
 const CALLS = readFixture('durations.json').calls;
 const DROPPED_ENTRIES = readFixture('dropped.json').entries;
 const REORDER_ENTRIES = readFixture('reorder.json').entries;
+const NEIGHBOUR_ENTRIES = readFixture('neighbours.json').entries;
 const vocab = loadVocab(readFixture('tokenizer.json'));
 
 const MIN_FIXTURE_CALLS = 8;
@@ -162,6 +163,60 @@ test('"It cost $5 million.": $5 and million. get one span over "5 million dollar
   assert.deepEqual(spans, [
     { first: 1, last: 2 }, { first: 4, last: 8 }, { first: 10, last: 30, merged: true }, { first: 10, last: 30, merged: true },
   ]);
+});
+
+test('a count assignment within the context edit bound is kept, not sent to alignment', () => {
+  // Counts add up (1 + 1 = 2 groups); "to" is spoken tə (distance 2 from tuː), "away" ɹɐweɪ (distance 1 from ɐweɪ).
+  // Alignment would give the inserted ɹ to "to" ("tə ɹ"); the count assignment keeps whole groups.
+  const kept = 'tə ɹɐwˈeɪ';
+  assert.deepEqual(wordSpans(kept, ['tˈuː', 'ɐwˈeɪ']).map((s) => spanText(kept, s)), ['tə', 'ɹɐwˈeɪ']);
+  const apple = 'ðə ʔæpəl';
+  assert.deepEqual(wordSpans(apple, ['ðə', 'ˈæpəl']).map((s) => spanText(apple, s)), ['ðə', 'ʔæpəl']);
+});
+
+test('a one-phone token never triggers a merge: the reviewer probe "about a" stays two words', () => {
+  // Count path (distances 1 and 1, within the bound): no merge.
+  const kept = 'ɐbˈaʊɾ ə mˈɪnɪt';
+  const spans = wordSpans(kept, ['ɐbˈaʊt', 'ɐ', 'mˈɪnɪt']);
+  assert.deepEqual(spans.map((s) => spanText(kept, s)), ['ɐbˈaʊɾ', 'ə', 'mˈɪnɪt']);
+  assert.ok(spans.every((s) => s.merged === undefined));
+  // Alignment path (linked "about a" makes the counts 3 against 2 groups): about (ɐbaʊɾ against ɐbaʊt) and a (ə against ɐ)
+  // both fail the sound check, and a's one phone ɐ occurs inside about's span; that alone is no evidence of a reorder.
+  // kept: ɐ1 b2 ˈ3 a4 ʊ5 ɾ6 ə7 space8 m9 ˈ10 ɪ11 n12 ɪ13 t14.
+  const linked = 'ɐbˈaʊɾə mˈɪnɪt';
+  const linkedSpans = wordSpans(linked, ['ɐbˈaʊt', 'ɐ', 'mˈɪnɪt']);
+  assert.deepEqual(linkedSpans, [{ first: 1, last: 6 }, { first: 7, last: 7 }, { first: 9, last: 14 }]);
+});
+
+// Hand-checked from recorded espeak output: neighbouring function words reduced or linked in context are each placed
+// one by one and never merged.
+const EXPECTED_NEIGHBOURS = {
+  'It took about a minute.': ['ɪt', 'tˈʊk', 'ɐbˌaʊt', 'ɐ', 'mˈɪnɪt'],
+  'We went to a party at the end.': ['wiː', 'wɛnt', 'tʊ', 'ɐ', 'pˈɑːɹɾi', 'æt', 'ðɪ', 'ˈɛnd'],
+  'Most of the time, a lot of us go to the end of a line.': ['mˈoʊst', 'əv', 'ðə', 'tˈaɪm', 'ɐ', 'lˈɑːt', 'ʌv', 'ˌʌs', 'ɡˌoʊ', 'tə', 'ðɪ', 'ˈɛnd', 'əv', 'ə', 'lˈaɪn'],
+  'Give it to an ally, then walk away.': ['ɡˈɪv', 'ɪt', 'tʊ', 'ɐn', 'ˈælaɪ', 'ðˈɛn', 'wˈɔːk', 'ɐwˈeɪ'],
+};
+
+test('real neighbouring function words ("about a", "to a", "of the", "of a" linked) are placed one by one, never merged', async () => {
+  for (const [say, texts] of Object.entries(EXPECTED_NEIGHBOURS)) {
+    const entry = NEIGHBOUR_ENTRIES.find((e) => e.say === say);
+    assert.ok(entry, say);
+    const { kept, spans } = await placedTokens(entry);
+    assert.equal(kept, entry.kept, say);
+    assert.deepEqual(spans.map((s) => spanText(kept, s)), texts, say);
+    assert.ok(spans.every((s) => s.merged === undefined), `${say}: nothing merged`);
+  }
+});
+
+test('a reorder across three tokens ("$5 hundred thousand" spoken "5 hundred thousand dollars") merges all three', async () => {
+  const entry = NEIGHBOUR_ENTRIES.find((e) => e.say === 'It cost $5 hundred thousand.');
+  const { kept, spans } = await placedTokens(entry);
+  const whole = 'fˈaɪv hˈʌndɹɪd θˈaʊzənd dˈɑːlɚz';
+  assert.deepEqual(spans.map((s) => spanText(kept, s)), ['ɪt', 'kˈɔst', whole, whole, whole]);
+  assert.deepEqual(spans.flatMap((s, k) => (s.merged === true ? [k] : [])), [2, 3, 4]);
+  const times = wordTimes({ kept, frames: framesOf(entry.durations), spans });
+  assert.deepEqual(times[3], times[2]);
+  assert.deepEqual(times[4], times[2]);
 });
 
 test('wordTimes gives merged tokens the same start and end, and times every other word as usual', async () => {

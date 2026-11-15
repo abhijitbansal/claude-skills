@@ -1,7 +1,8 @@
 // Token ids for the Kokoro model: pad 0, one id per phoneme character, pad 0.
 // Characters outside the vocab are dropped, as the pinned tokenizer.json (and so kokoro-js) does; the voice was made
 // with that behaviour. They are returned in `dropped`, and word spans are computed on `kept`, so no later word shifts.
-// Pure: the caller reads any tokenizer file. A user's own IPA hint is checked with `unknownChars` (an error there).
+// Pure: the caller reads any tokenizer file. `unknownChars` lists characters outside the vocab (and the pad) for
+// callers that need it; the IPA hint check in scripts/v2/spec.mjs is its own and does not use it.
 
 const PAD_ID = 0;
 
