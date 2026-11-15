@@ -100,7 +100,8 @@ function measuredWords(shot, measured, index, tokens) {
   if (flat.length !== tokens.length) {
     throw new RangeError(`${where}: ${flat.length} words, the say of shot "${shot.id}" has ${tokens.length}`);
   }
-  return flat.map((w) => ({ text: w.text, start: w.start + NARRATION_LEAD, end: w.end + NARRATION_LEAD, emphasis: w.emphasis, aside: w.aside }));
+  // The times are the voice's; what is emphasised or an aside is the film's own say.
+  return flat.map((w, k) => ({ text: w.text, start: w.start + NARRATION_LEAD, end: w.end + NARRATION_LEAD, emphasis: tokens[k].emphasis, aside: tokens[k].aside }));
 }
 
 // A spoken shot timed by its measured words: as long as its last word end plus the trailing pause and the tail, and
@@ -109,7 +110,10 @@ function measuredShot(shot, pace, measured, index) {
   const { tokens, trailingPause } = parsedSay(shot);
   const words = measuredWords(shot, measured, index, tokens);
   const narration = words.at(-1).end;
-  const wav = Number.isFinite(measured.seconds) ? NARRATION_LEAD + measured.seconds : 0;
+  if (!Number.isFinite(measured.seconds)) {
+    throw new RangeError(`words[${index}]: seconds must be the WAV's length in seconds, got ${measured.seconds}`);
+  }
+  const wav = NARRATION_LEAD + measured.seconds;
   return {
     seconds: Math.max(narration + trailingPause + pace.tail, wav),
     words,
@@ -146,8 +150,10 @@ function paceOf(name, modes) {
  * The shot timeline of `film` at `fps`, each spoken shot paced by its mode (the registered mode's wpm and tail).
  * `modes` is the modes registry (default: the shared one; the validator passes the registries it checked with).
  * `words` is a voice sidecar's `shots` list (scripts/v2/voice/sidecar.mjs), one entry per film shot, or undefined.
- * With it every spoken shot takes its word times from the sidecar (from narrationStart) and `timed` is 'measured'; a
- * sidecar that does not match the film throws, never falling back to the estimate. Without it, 'estimated'.
+ * With it every spoken shot takes its word times from the sidecar (from narrationStart), its emphasis and asides from
+ * its say, and `timed` is 'measured'. A sidecar whose shot count, ids, word counts or WAV lengths do not fit the film
+ * throws, never falling back to the estimate; word texts and times are validateSidecar's to check (run.mjs calls it).
+ * Without it, 'estimated'.
  */
 export function buildTimeline(film, { fps, modes = registries.modes, words } = {}) {
   if (!Number.isFinite(fps) || fps <= 0) throw new RangeError(`fps must be a positive number, got ${fps}`);

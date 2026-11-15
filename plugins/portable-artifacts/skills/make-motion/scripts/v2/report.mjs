@@ -28,8 +28,6 @@ const HINTS = Object.freeze([
   [/has been closed/, 'the browser closed while drawing the film; run again'],
   [/^Timeout \d+ms exceeded/, 'the browser did not answer in time; run again, and check that the machine is not overloaded'],
   [/^image ".*" could not be loaded/, 'the file is not a picture the browser can decode; replace it with a PNG, JPEG or WebP image'],
-  [/^the voice worker did not finish/, 'the voice took too long to synthesise; run again, and check that the machine is not overloaded'],
-  [/^the voice in .* does not match the film/, 'delete that folder to synthesise the voice again'],
 ]);
 
 /** { message, hint } for an error's first line: whole with its hint when HINTS knows it (a path in it may hold ". "),
@@ -94,15 +92,16 @@ export function outlineOf(film, timeline) {
 /** `<id>  <show>  <start>-<end>s  "<plain narration>"`, one line per shot (the range joined by an en dash). */
 export const outlineLines = (outline) => outline.map((s) => `${s.id}  ${s.show}  ${secondsText(s.start)}${EN_DASH}${secondsText(s.end)}s  "${s.narration}"`);
 
-// A film is invalid when it does not validate, or when its anchors fail on the timeline built for it (a voiced film's
-// measured one: the timeline stage then fails with the anchor errors as findings).
-const isValid = (stages) => Boolean(stages.find((s) => s.name === 'validate')?.ok) && !stages.some((s) => s.name === 'timeline' && !s.ok);
+// `valid` only when the film validated and no stage failed: a voice the film cannot be spoken with, anchors that fail on
+// the measured timeline, or trouble with the machine never read as valid.
+const isValid = (stages) => Boolean(stages.find((s) => s.name === 'validate')?.ok) && stages.every((s) => s.ok);
+const timelineFailed = (stages) => stages.some((s) => s.name === 'timeline' && !s.ok);
 
 /** The text form of a report: `valid` or `invalid`, a line per finding, then where things went and the frame counts. */
 export function formatText(report, { sheetsDir }) {
   const lines = [isValid(report.stages) ? 'valid' : 'invalid'];
   for (const f of report.findings) lines.push(`${f.kind}: ${f.path}: ${f.message}`);
-  if (report.timed === null) return lines.join('\n');
+  if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
   const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${report.post}, ${report.msPerFrame.toFixed(1)} ms per frame); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;

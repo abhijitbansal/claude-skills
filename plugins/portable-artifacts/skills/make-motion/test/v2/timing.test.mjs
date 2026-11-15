@@ -114,6 +114,21 @@ test('words that do not match the film are an error, never a quiet fall back to 
   assert.throws(() => buildTimeline(FILM, { fps: FPS, words: 'voice.json' }), TypeError);
 });
 
+test('what is emphasised is the film\'s: emphasis and aside come from the say, not from the sidecar', () => {
+  const flipped = SIDECAR.shots.map((s) => ({ ...s, sentences: s.sentences.map((sentence) => ({
+    ...sentence, words: sentence.words.map((w) => ({ ...w, emphasis: !w.emphasis, aside: !w.aside })),
+  })) }));
+  const estimated = buildTimeline(FILM, { fps: FPS });
+  measured(flipped).shots.forEach((shot, i) => {
+    assert.deepEqual(shot.words.map((w) => [w.emphasis, w.aside]), estimated.shots[i].words.map((w) => [w.emphasis, w.aside]));
+  });
+});
+
+test('a sidecar shot whose WAV length is not a number is an error, not a shot with no floor', () => {
+  const broken = SIDECAR.shots.map((s, i) => (i === 0 ? { ...s, seconds: Number.NaN } : s));
+  assert.throws(() => measured(broken), /words\[0\]: seconds must be the WAV's length in seconds, got NaN/);
+});
+
 test('buildTimeline does not change the words it is given', () => {
   const words = structuredClone(SIDECAR.shots);
   measured(words);

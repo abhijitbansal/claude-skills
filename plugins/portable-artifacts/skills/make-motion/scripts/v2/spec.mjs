@@ -161,7 +161,7 @@ function modeName(spec, regs) {
 }
 
 // A mode that is not registered gets the registry's own did-you-mean; one that is not a string has its schema error.
-// A registered mode must carry its voice data (voiceSpeed, emphasisPause): the shared registry refuses one without when
+// A registered mode must carry its voice data (voiceSpeed, emphasisPause, loudness): the shared registry refuses one without when
 // it is added, and this catches a mode that reached a registry some other way (a registry passed in, or a mode added
 // before engine/modes/index.mjs loaded). Reported at `mode`.
 function checkMode(spec, regs) {
@@ -231,8 +231,8 @@ function resolveContext(spec, specDir, regs) {
   const mode = modeName(spec, regs);
   const fps = spec.fps === undefined ? DEFAULT_FPS : FPS_CHOICES.find((f) => f === spec.fps) ?? null;
   const { look, errors } = resolveLook(spec, mode, regs);
-  // A voiced film's anchors land on measured times, known only after synthesis: anchorSpanErrors checks them then.
-  return { ctx: { mode, fps, look, regs, specDir, voiced: spec.voice !== undefined }, errors };
+  // A voiced film's anchors land on measured times, known only after synthesis: timedAnchorErrors checks them then.
+  return { ctx: { mode, fps, look, regs, specDir, voiced: isPlainObject(spec.voice) }, errors };
 }
 
 // --- shots ---
@@ -323,8 +323,12 @@ function timelineShot(shot, ctx) {
 
 // An anchor must parse and land inside its shot. Up to one frame outside is rounding and is clamped
 // (engine/script/anchors.mjs resolveAnchor); further out, the device would fire on the shot's edge, unseen.
-// `inside: false` checks only that it parses and names a word that is spoken (a voiced film at validation).
-function checkAnchor(item, at, entry, { fps, inside = true }) {
+// `inside: false` checks only that it parses and names a word that is spoken (a voiced film at validation). A measured
+// shot is as long as its narration, so its advice names the one way to lengthen it.
+const LENGTHEN = 'anchor it inside the shot, or lengthen the shot';
+const LENGTHEN_MEASURED = 'anchor it inside the shot, or end its say with a pause such as (0.5) to lengthen it';
+
+function checkAnchor(item, at, entry, { fps, inside = true, measured = false }) {
   if (entry === null || item.at === undefined) return [];
   let seconds;
   try {
@@ -337,7 +341,7 @@ function checkAnchor(item, at, entry, { fps, inside = true }) {
   const slack = 1 / fps;
   if (seconds >= -slack && seconds <= entry.duration + slack) return [];
   const span = `0 to ${Number(entry.duration.toFixed(SPAN_DECIMALS))} s`;
-  return [{ path: pathJoin(at, 'at'), message: `${quote(item.at)} resolves to ${seconds} s, outside the shot, which runs from ${span}; anchor it inside the shot, or lengthen the shot` }];
+  return [{ path: pathJoin(at, 'at'), message: `${quote(item.at)} resolves to ${seconds} s, outside the shot, which runs from ${span}; ${measured ? LENGTHEN_MEASURED : LENGTHEN}` }];
 }
 
 const supportsLook = (device, look) => typeof device.supports !== 'function' || Boolean(device.supports(look));
@@ -413,14 +417,36 @@ function checkOn(shot, base, ctx, { entry, targets, kindName, kind }) {
  * estimated times say nothing about where a measured word falls). -> [{ path, message }], the validator's form.
  */
 export function anchorSpanErrors(film, timeline) {
+  const measured = timeline.timed === 'measured';
   return film.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => {
     if (!isPlainObject(shot) || !Array.isArray(shot.on)) return [];
     const entry = timeline.shots[index] ?? null;
     const base = pathJoin(pathJoin('shots', index), 'on');
     return shot.on.slice(0, ON_MAX).flatMap((item, j) => (
-      isPlainObject(item) ? checkAnchor(item, pathJoin(base, j), entry, { fps: timeline.fps }) : []
+      isPlainObject(item) ? checkAnchor(item, pathJoin(base, j), entry, { fps: timeline.fps, measured }) : []
     ));
   });
+}
+
+// The kind rules of each shot of a validated `film` with its anchors resolved on `timeline` (validateFilm ran them
+// without times for a voiced film, so only the rules that judge times can fail here).
+function timedKindErrors(film, timeline, regs) {
+  const look = typeof film.look === 'string' && regs.looks.has(film.look) ? regs.looks.get(film.look) : null;
+  return film.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => {
+    if (!isPlainObject(shot) || typeof shot.show !== 'string' || !regs.kinds.has(shot.show)) return [];
+    const entry = timeline.shots[index] ?? null;
+    const kind = regs.kinds.get(shot.show);
+    return checkKindRules(boundedShot(shot), pathJoin('shots', index), { look }, { kind, entry, shapeIsValid: true });
+  });
+}
+
+/**
+ * Everything about a validated `film`'s anchors that depends on the times they resolve to, judged on `timeline`: each
+ * anchor inside its shot (anchorSpanErrors) and the kind rules that resolve anchors (the clipping close-up timing).
+ * validateFilm skips both for a voiced film; run.mjs calls this on its measured timeline. -> [{ path, message }].
+ */
+export function timedAnchorErrors(film, timeline, { registries = defaultRegistries } = {}) {
+  return [...anchorSpanErrors(film, timeline), ...timedKindErrors(film, timeline, registries)];
 }
 
 // What is wrong with a `src` as written, or null. Checked by hand so the
@@ -505,7 +531,9 @@ function checkShot(shot, index, ctx, seen) {
     ...checkCut(shot, index, base, ctx),
     ...checkOn(shot, base, ctx, { entry, targets, kindName: resolved.name, kind: resolved.kind }),
     ...checkSrcFields(shot, base, resolved.kind, ctx.specDir),
-    ...checkKindRules(bounded, base, ctx, { kind: resolved.kind, entry, shapeIsValid: shape.length === 0 }),
+    // A voiced film's kind rules run without times here (their timing rules are skipped) and with measured ones after
+    // synthesis (timedAnchorErrors).
+    ...checkKindRules(bounded, base, ctx, { kind: resolved.kind, entry: ctx.voiced ? null : entry, shapeIsValid: shape.length === 0 }),
   ];
 }
 
