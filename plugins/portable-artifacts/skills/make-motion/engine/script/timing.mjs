@@ -69,7 +69,7 @@ function secondsForShot(shot, pace) {
   try {
     parsed = parseSay(shot.say);
   } catch (err) {
-    if (err instanceof SayError) throw new SayError(`shot "${shot.id}": ${err.message}`);
+    if (err instanceof SayError) throw new SayError(`shot "${shot.id}": ${err.message}`, { cause: err });
     throw err;
   }
   const { tokens, trailingPause } = parsed;

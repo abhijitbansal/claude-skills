@@ -127,6 +127,87 @@ test('same-type nesting is a SayError that quotes the line', () => {
   assert.throws(() => parseSay('_a _b_ c_'), (e) => e instanceof SayError && /nested _ in "_a _b_ c_"/.test(e.message));
 });
 
+test('an opener of an already-open type is nested wherever it appears', () => {
+  const nested = (say, mark) => assert.throws(
+    () => parseSay(say),
+    (e) => e instanceof SayError && e.message.startsWith(`nested ${mark} in `),
+    say,
+  );
+  nested('*a (*b*) c*', '*');
+  nested('*a "*b*" c*', '*');
+  nested('*a *b* c*', '*');
+  nested('_a (_b_) c_', '_');
+  nested('_a "_b_" c_', '_');
+});
+
+test('marks inside brackets and quotes open and close at word boundaries', () => {
+  const p = parseSay('say (*hi*), "_x_" and *"quoted"* done');
+  assert.equal(p.plain, 'say (hi), "x" and "quoted" done');
+  assert.deepEqual(p.tokens.map((t) => t.emphasis), [false, true, false, false, true, false]);
+  assert.deepEqual(p.tokens.map((t) => t.aside), [false, false, true, false, false, false]);
+});
+
+test('a * or _ inside a word or between spaces is literal text', () => {
+  for (const say of ['call __init__ now', 'a*b and c*d', 'use snake_case here', '2 * 3 = 6']) {
+    const p = parseSay(say);
+    assert.equal(p.plain, say);
+    assert.ok(p.tokens.every((t) => !t.emphasis && !t.aside), say);
+  }
+  assert.equal(parseSay('call __init__ now').tokens.length, 3);
+});
+
+test('punctuation glued after a pause stays on the word and the pause moves on', () => {
+  const q = parseSay('Really...? Yes');
+  assert.deepEqual(q.tokens.map((t) => t.text), ['Really?', 'Yes']);
+  assert.equal(q.tokens[0].sentenceEnd, true);
+  assert.equal(q.tokens[1].pauseBefore, 0.35);
+  const quoted = parseSay('"wait..." now');
+  assert.deepEqual(quoted.tokens.map((t) => t.text), ['"wait"', 'now']);
+  assert.equal(quoted.tokens[1].pauseBefore, 0.35);
+  const timed = parseSay('ok(0.4), then');
+  assert.deepEqual(timed.tokens.map((t) => t.text), ['ok,', 'then']);
+  assert.equal(timed.tokens[1].pauseBefore, 0.4);
+  const last = parseSay('Really...?');
+  assert.equal(last.tokens.length, 1);
+  assert.equal(last.tokens[0].text, 'Really?');
+  assert.equal(last.trailingPause, 0.35);
+});
+
+test('a token of only closing punctuation joins the previous token and hands on its pause', () => {
+  const spaced = parseSay('ok (0.4), then');
+  assert.deepEqual(spaced.tokens.map((t) => t.text), ['ok,', 'then']);
+  assert.equal(spaced.tokens[1].pauseBefore, 0.4);
+  assert.equal(spaced.plain, 'ok, then');
+
+  const q = parseSay('Really ...? Yes');
+  assert.deepEqual(q.tokens.map((t) => t.text), ['Really?', 'Yes']);
+  assert.equal(q.tokens[0].sentenceEnd, true);
+  assert.equal(q.tokens[1].pauseBefore, 0.35);
+
+  const trailing = parseSay('done (0.4) .');
+  assert.deepEqual(trailing.tokens.map((t) => t.text), ['done.']);
+  assert.equal(trailing.tokens[0].sentenceEnd, true);
+  assert.equal(trailing.trailingPause, 0.4);
+
+  assert.deepEqual(parseSay('a , ; b').tokens.map((t) => t.text), ['a,;', 'b']);
+  assert.deepEqual(parseSay('go (a) " now').tokens.map((t) => t.text), ['go', '(a)"', 'now']);
+});
+
+test('an orphan punctuation token with no previous token stays as it is', () => {
+  assert.deepEqual(parseSay('?').tokens.map((t) => t.text), ['?']);
+  assert.deepEqual(parseSay(', hello').tokens.map((t) => t.text), [',', 'hello']);
+  assert.deepEqual(parseSay('"hi" there').tokens.map((t) => t.text), ['"hi"', 'there']);
+});
+
+test('the Unicode ellipsis is a pause exactly like ...', () => {
+  const p = parseSay('wait… what');
+  assert.equal(p.plain, 'wait what');
+  assert.equal(p.tokens[1].pauseBefore, 0.35);
+  assert.equal(parseSay('done…').trailingPause, 0.35);
+  assert.equal(parseSay('Really…? Yes').tokens[0].text, 'Really?');
+  assert.equal(parseSay('you…honestly').tokens.length, 2);
+});
+
 test('closing marks are not mistaken for nesting', () => {
   assert.equal(parseSay('*a* *b*').tokens.length, 2);
   assert.equal(parseSay('_a_ _b_.').tokens.length, 2);
@@ -158,7 +239,7 @@ test('sentenceEnd is true for . ! ? even inside closing quotes', () => {
 });
 
 test('empty or mark-only say lines are a SayError', () => {
-  for (const bad of ['', '   ', '...', '**', '(0.4)']) {
+  for (const bad of ['', '   ', '...', '…', '(0.4)', '... (0.4)']) {
     assert.throws(() => parseSay(bad), (e) => e instanceof SayError, `input ${JSON.stringify(bad)}`);
   }
   assert.throws(() => parseSay(undefined), SayError);
@@ -297,6 +378,17 @@ test('a bad mark in a say is a SayError that names the shot and quotes the line'
     () => buildTimeline({ shots: [{ id: 'intro', say: 'so *bad' }] }, { fps: 30 }),
     (e) => e instanceof SayError && /intro/.test(e.message) && /unclosed \* in "so \*bad"/.test(e.message),
   );
+});
+
+test('the rethrown shot SayError keeps the original as its cause', () => {
+  try {
+    buildTimeline({ shots: [{ id: 'intro', say: 'so *bad' }] }, { fps: 30 });
+    assert.fail('expected a throw');
+  } catch (e) {
+    assert.ok(e instanceof SayError);
+    assert.ok(e.cause instanceof SayError);
+    assert.equal(e.cause.message, 'unclosed * in "so *bad"');
+  }
 });
 
 test('an unknown mode, bad fps, bad hold and missing shots are errors', () => {
