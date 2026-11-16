@@ -54,6 +54,7 @@ function toPath(instancePath) {
 
 const quote = (v) => JSON.stringify(v);
 const NOISE = new Set(['anyOf', 'oneOf', 'if', 'discriminator']);
+const BLANK_PATTERN = '\\S'; // as engine/kinds/shared.mjs NOT_BLANK
 
 function formatOne(e) {
   const path = toPath(e.instancePath);
@@ -79,6 +80,10 @@ function formatOne(e) {
       return { path, message: `must be ${quote(e.params.allowedValue)}` };
     case 'type':
       return { path, message: `must be ${e.params.type}` };
+    case 'pattern':
+      // the kinds' not-blank pattern (engine/kinds/shared.mjs NOT_BLANK): say what is wrong, not the regular expression
+      if (e.params.pattern === BLANK_PATTERN) return { path, message: 'must not be blank: write the text, or leave the field out' };
+      return { path, message: e.message ?? e.keyword };
     default:
       return { path, message: e.message ?? e.keyword };
   }

@@ -41,12 +41,17 @@ test('loads through a file URL when the path has a space and a #', async () => {
   const voiceDir = path.join(root, 'voice');
   mkdirSync(voiceDir, { recursive: true });
   cpSync(REAL_VOICE_ENTRY, path.join(voiceDir, 'index.mjs'));
-  writeManifest(voiceDir, VOICE_DEPS);
-  writeLock(voiceDir, VOICE_LOCK);
+  // The real index.mjs also re-exports the version 2 runtime, so this folder carries all four of its imports.
+  writeManifest(voiceDir, { ...VOICE_DEPS, 'onnxruntime-node': '1.21.0', phonemizer: '1.2.1' });
+  writeLock(voiceDir, { ...VOICE_LOCK, 'node_modules/onnxruntime-node': { version: '1.21.0' }, 'node_modules/phonemizer': { version: '1.2.1' } });
   stubVoiceStack(voiceDir);
+  stubPkg(voiceDir, 'onnxruntime-node', 'export class InferenceSession {} export class Tensor {}');
+  stubPkg(voiceDir, 'phonemizer', 'export function phonemize() { return []; }');
   const mod = await loadKokoro({ root });
   assert.equal(typeof mod.KokoroTTS, 'function');
   assert.equal(typeof mod.RawAudio, 'function');
+  assert.equal(typeof mod.ort.InferenceSession, 'function');
+  assert.equal(typeof mod.phonemize, 'function');
   assert.equal(optionalEntryUrl('voice', root), pathToFileURL(path.join(root, 'voice', 'index.mjs')).href);
 });
 
