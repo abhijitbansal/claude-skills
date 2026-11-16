@@ -131,7 +131,7 @@ test('an explicit cues list replaces the plan, its anchors resolved across the w
   // word:6 is the film's seventh word, "this." in clip (open has five): 3 + 0.8 s; sentence:1 is open's "Now." at 2.2 s
   const cues = [{ at: 'word:6', cue: 'ding' }, { at: 2, cue: 'riser' }, { at: 'sentence:1', cue: 'chime' }];
   assert.deepEqual(pairs(plan(film({ mode: 'viral', cues }))), [[2, 'riser'], [2.2, 'chime'], [3.8, 'ding']]);
-  assert.deepEqual(pairs(plan(film({ sound: 'on', cues: [{ at: 'word:Forty+0.5', cue: 'drop' }] }))), [[6.6, 'drop']]);
+  assert.deepEqual(pairs(plan(film({ sound: 'on', cues: [{ at: 'shot:rows:word:Forty+0.5', cue: 'drop' }] }))), [[6.6, 'drop']]);
 });
 
 test('an explicit cues list is the author opting in: it plays in pro without "sound", and only "sound": "off" silences it', () => {
@@ -152,8 +152,38 @@ test('a cue on the film end sounds on its last frame, not after it', () => {
   assert.ok(Math.abs(planned.at(-1).t - LAST_FRAME) < EPSILON, `last cue at ${planned.at(-1).t}`);
 });
 
+test('an explicit anchor outside the film is an error naming the cue, not a silent move to the edge', () => {
+  for (const at of [999, -3, 'end+5', 'shot:rows:end+2']) {
+    assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 1, cue: 'ding' }, { at, cue: 'chime' }] })),
+      /^RangeError: cues\[1\]\.at: "chime" lands at -?[\d.]+ s, outside the film \(0 to 8\.5 s\)/, String(at));
+  }
+  assert.deepEqual(pairs(plan(film({ mode: 'viral', cues: [{ at: 'end', cue: 'ding' }] }))).length, 1, 'the film end itself is inside');
+});
+
+test('a word named by its text must name its shot: shot:<id>:<anchor> resolves in that shot, as an on event does', () => {
+  assert.deepEqual(pairs(plan(film({ mode: 'viral', cues: [{ at: 'shot:clip:word:this', cue: 'ding' }] }))), [[3.8, 'ding']]);
+  assert.deepEqual(pairs(plan(film({ mode: 'viral', cues: [{ at: 'shot:clip:start+0.5', cue: 'ding' }] }))), [[3.5, 'ding']]);
+  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 'word:this', cue: 'ding' }] })),
+    /cues\[0\]\.at: a word named by its text must name its shot: write "shot:clip:word:this"/);
+  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 'shot:nope:start', cue: 'ding' }] })),
+    /cues\[0\]\.at: no shot "nope"; the shots are: open, clip, rows/);
+  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 'shot:clip:word:nothing', cue: 'ding' }] })), /cues\[0\]\.at: no word "nothing" in shot "clip"/);
+});
+
+test('a word text spoken in two shots is ambiguous unprefixed: the error names both shots', () => {
+  const f = { version: 2, mode: 'viral', cues: [{ at: 'word:go', cue: 'ding' }], shots: [{ id: 'a', show: 'statement', say: 'Go.' }, { id: 'b', show: 'statement', say: 'Go.' }] };
+  const timeline = {
+    fps: FPS, duration: 4, frameCount: 120, timed: 'estimated',
+    shots: [
+      { id: 'a', index: 0, start: 0, end: 2, duration: 2, words: [word('Go.', 0, 0.4)], sentences: [] },
+      { id: 'b', index: 1, start: 2, end: 4, duration: 2, words: [word('Go.', 0, 0.4)], sentences: [] },
+    ],
+  };
+  assert.throws(() => planCues(f, timeline), /cues\[0\]\.at: a word named by its text must name its shot: "go" is spoken in shots "a" and "b"; write "shot:a:word:go"/);
+});
+
 test('a bad anchor in the explicit list is an error naming its path', () => {
-  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 1, cue: 'ding' }, { at: 'word:nothing', cue: 'ding' }] })), /cues\[1\]\.at: no word "nothing"/);
+  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 1, cue: 'ding' }, { at: 'sentence:9', cue: 'ding' }] })), /cues\[1\]\.at: sentence:9 is out of range/);
 });
 
 // ---- spacing ----
@@ -252,6 +282,71 @@ test('on buildTimeline: a number whose say opens on its figure lands on the cut,
   const events = soundEvents(f, timeline).filter((e) => e.shot === 'rows');
   assert.deepEqual(events.map((e) => [e.kind, e.t]), [['cut', rows.start], ['land', rows.start]], 'the count lands on "Four", the first word, at the shot start');
   assert.deepEqual(pairs(planCues(f, timeline)).filter(([t]) => t >= rows.start - EPSILON), [[Math.round(rows.start * 1e6) / 1e6, 'sub']], 'the click is dropped: the number arriving wins the tie with the cut');
+});
+
+// ---- fix round 1: chains, order, look checks on every path, pinned behaviour ----
+
+// Two shots, a then b from 2 s, b's first word emphasised 0.1 s in and `on` entries as given: a cut at 2.0, an emphasis
+// at 2.1 and whatever the entries add.
+function chainFilm(on, extra = {}) {
+  const f = { version: 2, mode: 'viral', ...extra, shots: [{ id: 'a', show: 'statement', say: 'One.' }, { id: 'b', show: 'statement', say: '*Now* go.', on }] };
+  const timeline = {
+    fps: FPS, duration: 4, frameCount: 120, timed: 'estimated',
+    shots: [
+      { id: 'a', index: 0, start: 0, end: 2, duration: 2, words: [word('One.', 0, 0.4)], sentences: [] },
+      { id: 'b', index: 1, start: 2, end: 4, duration: 2, words: [word('Now', 0.1, 0.4, true), word('go.', 0.5, 0.8)], sentences: [] },
+    ],
+  };
+  return { f, timeline };
+}
+
+test('a chain of clashes keeps every cue that clashes with nothing kept: cut 2.0, emphasis 2.1, device 2.2 give the cut and the device', () => {
+  const { f, timeline } = chainFilm([{ at: 0.2, do: 'highlight' }]);
+  assert.deepEqual(pairs(planCues(f, timeline)), [[2, 'click'], [2.2, 'pop']]);
+});
+
+test('the kept cues do not depend on the order of the input', () => {
+  const forward = chainFilm([{ at: 0.2, do: 'highlight' }, { at: 0.3, do: 'punch' }]);
+  const backward = chainFilm([{ at: 0.3, do: 'punch' }, { at: 0.2, do: 'highlight' }]);
+  assert.deepEqual(planCues(backward.f, backward.timeline), planCues(forward.f, forward.timeline));
+  const sorted = [{ at: 3, cue: 'click' }, { at: 3.1, cue: 'ding' }, { at: 3.2, cue: 'pop' }];
+  const shuffled = [sorted[2], sorted[0], sorted[1]];
+  assert.deepEqual(plan(film({ mode: 'viral', cues: shuffled })), plan(film({ mode: 'viral', cues: sorted })));
+});
+
+test('when a film brings its own list, the look\'s cue names are still checked', () => {
+  const looks = createRegistry('look');
+  const pop = registries.looks.get('pop');
+  looks.add('test-boing', { ...pop, name: 'test-boing', sounds: { ...pop.sounds, emphasis: 'boing' } });
+  assert.throws(() => plan(film({ mode: 'viral', look: 'test-boing', cues: [{ at: 1, cue: 'ding' }] }), { looks }), /look "test-boing": sounds\.emphasis: unknown cue "boing"/);
+});
+
+test('at plan time a look must still name a sound for every registered cut and device, or it is an error, not silence', () => {
+  const looks = createRegistry('look');
+  const pop = registries.looks.get('pop');
+  const { punch: _gone, ...cut } = pop.sounds.cut;
+  looks.add('test-no-punch', { ...pop, name: 'test-no-punch', sounds: { ...pop.sounds, cut } });
+  assert.throws(() => plan(film({ mode: 'viral', look: 'test-no-punch' }), { looks }), /look "test-no-punch": sounds\.cut\.punch must be a cue name or null/);
+});
+
+test('pinned: two emphasised runs with nothing between them make one emphasis event (say.mjs keeps no run boundaries)', () => {
+  const f = { version: 2, shots: [{ id: 'a', show: 'statement', say: 'The *end.* *Start* now.' }] };
+  const timeline = {
+    fps: FPS, duration: 3, frameCount: 90, timed: 'estimated',
+    shots: [{ id: 'a', index: 0, start: 0, end: 3, duration: 3, words: [word('The', 0, 0.2), word('end.', 0.3, 0.6, true), word('Start', 0.9, 1.2, true), word('now.', 1.3, 1.6)], sentences: [] }],
+  };
+  assert.deepEqual(soundEvents(f, timeline), [{ kind: 'emphasis', t: 0.3, shot: 'a' }]);
+});
+
+test('a device 0.2 s into a slide sounds as well as the slide: they are further apart than MIN_CUE_GAP', () => {
+  assert.deepEqual(pairs(plan(film({ mode: 'viral' }, { clipOn: [{ at: 0.2, do: 'highlight' }] }))).filter(([t]) => t >= 3 && t < 3.5), [[3, 'whoosh'], [3.2, 'pop']]);
+});
+
+test('a one-shot film has no cut events', () => {
+  const f = { version: 2, mode: 'viral', shots: [{ id: 'solo', show: 'statement', say: '*Now.*' }] };
+  const timeline = { fps: FPS, duration: 2, frameCount: 60, timed: 'estimated', shots: [{ id: 'solo', index: 0, start: 0, end: 2, duration: 2, words: [word('Now.', 0.1, 0.4, true)], sentences: [] }] };
+  assert.deepEqual(soundEvents(f, timeline), [{ kind: 'emphasis', t: 0.1, shot: 'solo' }]);
+  assert.deepEqual(pairs(planCues(f, timeline)), [[0.1, 'pop']]);
 });
 
 // ---- determinism ----

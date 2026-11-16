@@ -95,6 +95,10 @@ export function countLanding(timing, value, decimals) {
   return best ? best.start : COUNT_FALLBACK * timing.duration;
 }
 
+// Shot-local seconds at which a number shot's figure reaches its value: the one place the landing is computed, read by
+// expand (the picture) and by the kind's `landing` hook (scripts/v2/sound/events.mjs, the sound).
+const landingOf = (shot, timing) => countLanding(timing, shot.value, shot.decimals ?? 0);
+
 // A value part way through the count, cut toward zero at `decimals` so it never shows the final value early.
 function partial(value, share, decimals) {
   const scale = 10 ** decimals;
@@ -371,7 +375,7 @@ function expandNumber(given, ctx) {
   const { look, timing, unit, fps } = ctx;
   // A negative value with a prefix reads "-$5": the minus goes in front of the prefix and the figure counts its size.
   const shot = given.value < 0 && given.prefix !== undefined ? { ...given, value: -given.value, prefix: `-${given.prefix}` } : given;
-  const land = countLanding(timing, shot.value, shot.decimals ?? 0);
+  const land = landingOf(shot, timing);
   const start = Math.max(0, land - look.moves.count.dur);
   // The count changes at the look's own rhythm: a hand look (desk) on its 12 fps step, a crisp one (pop) every frame.
   const rate = look.moves.draw.step ?? fps;
@@ -410,7 +414,6 @@ registries.kinds.add('number', {
   ids: (shot) => [heroId(shot, 'value')],
   validate: heroProblems,
   expand: expandNumber,
-  // Shot-local seconds at which the figure reaches its value, as expand lands it (read by scripts/v2/sound/events.mjs).
-  landing: (shot, timing) => countLanding(timing, shot.value, shot.decimals ?? 0),
+  landing: landingOf, // when the figure reaches its value, as expand lands it (read by scripts/v2/sound/events.mjs)
   numbered: true, // counts toward the slug numbers of a film
 });

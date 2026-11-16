@@ -585,8 +585,8 @@ const notRegularMessage = (value) => `${quote(value)} is not a regular file (a F
 
 // { real } (the file's real path, inside the spec folder, a regular file and readable) or { error } at `at`: the same
 // rules as a picture's src (relative, inside the folder after links are followed, a file that exists), and never a FIFO
-// or a device, which a reader would wait on.
-function recordingFile(value, at, specDir) {
+// or a device, which a reader would wait on. Exported for a user's music file (sound/bed.mjs musicInput), checked alike.
+export function recordingFile(value, at, specDir) {
   const problem = srcProblem(value, specDir);
   if (problem) return { error: { path: at, message: problem } };
   try {

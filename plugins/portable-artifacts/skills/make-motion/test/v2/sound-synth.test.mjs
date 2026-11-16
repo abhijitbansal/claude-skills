@@ -2,10 +2,10 @@
 // sample generators, and the renderer that lays a cue list into one stereo track of the film's length.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { KNOWN_CUES, cueSamples, riserTo, renderCues } from '../../scripts/v2/sound/synth.mjs';
+import { KNOWN_CUES, RISER_RELEASE_SECONDS, cueSamples, riserTo, renderCues } from '../../scripts/v2/sound/synth.mjs';
 
 const RATE = 48000;
 const SEED = 7;
@@ -86,15 +86,36 @@ test('sub is a sine falling from 90 Hz toward 40 Hz', () => {
   hz.slice(1).forEach((f, k) => assert.ok(f <= hz[k] + 1, `cycle ${k + 1} rises: ${hz[k]} to ${f}`));
 });
 
-test('riserTo(seconds) is that long and peaks on its last sample', () => {
+test('riserTo(seconds) rises for that long to its peak, then releases over 4 ms to silence', () => {
+  const release = Math.round(RISER_RELEASE_SECONDS * RATE);
+  assert.equal(RISER_RELEASE_SECONDS, 0.004);
   for (const seconds of [0.5, 1.6, 3]) {
     const xs = riserTo(seconds, { seed: SEED });
-    assert.equal(xs.length, Math.round(seconds * RATE), `${seconds} s`);
-    assert.equal(Math.abs(xs.at(-1)), peakOf(xs), `${seconds} s peaks last`);
+    const peakAt = Math.round(seconds * RATE) - 1;
+    assert.equal(xs.length, peakAt + 1 + release, `${seconds} s`);
+    assert.equal(Math.abs(xs[peakAt]), peakOf(xs), `${seconds} s peaks after ${seconds} s`);
+    assert.equal(xs.at(-1), 0, `${seconds} s ends silent`);
     assert.ok(peakOf(xs.subarray(0, xs.length / 2)) < 0.5 * peakOf(xs), `${seconds} s rises`);
   }
   assert.throws(() => riserTo(0, { seed: SEED }), /riserTo: seconds must be a positive number/);
   assert.throws(() => riserTo(Number.NaN, { seed: SEED }), /riserTo: seconds must be a positive number/);
+});
+
+test('riserTo and cueSamples need a seed: an integer from 0 to 2^32 - 1, or a TypeError', () => {
+  for (const seed of [undefined, null, 1.5, -1, 2 ** 32, '7', Number.NaN]) {
+    assert.throws(() => riserTo(1, { seed }), (err) => err instanceof TypeError && /riserTo: seed must be an integer from 0 to 4294967295/.test(err.message), String(seed));
+    assert.throws(() => cueSamples('paper', { seed }), (err) => err instanceof TypeError && /cueSamples: seed must be an integer from 0 to 4294967295/.test(err.message), String(seed));
+  }
+  assert.throws(() => riserTo(1), TypeError);
+  assert.throws(() => cueSamples('click'), TypeError);
+});
+
+test('every voice starts and ends near silence: its first and last samples are within 0.001 of 0', () => {
+  for (const cue of KNOWN_CUES) {
+    const xs = cueSamples(cue, { seed: SEED });
+    assert.ok(Math.abs(xs[0]) <= 0.001, `${cue} starts at ${xs[0]}`);
+    assert.ok(Math.abs(xs.at(-1)) <= 0.001, `${cue} ends at ${xs.at(-1)}`);
+  }
 });
 
 test('an unknown cue is an error listing the known names', () => {
@@ -119,18 +140,25 @@ test('a cue is scaled by its gain: a click at -12 dB peaks a quarter as high as 
   assert.ok(Math.abs(ratio - 10 ** (-12 / 20)) < 0.002, `ratio ${ratio}`);
 });
 
-test('a riser ends on its anchor: its last non-zero sample within 2 ms of t', async () => {
+test('a riser peaks on its anchor: its loudest sample is at round(t x 48000), its release done 4 ms later', async () => {
   await renderCues([{ t: 1.5, cue: 'riser', gainDb: -12, pan: 0 }], { seconds: 3, seed: SEED, out: outFile('riser') });
   const { left } = readWav(outFile('riser'));
   const anchor = Math.round(1.5 * RATE);
-  assert.ok(Math.abs(lastNonZero(left) - anchor) <= 0.002 * RATE, `last sample at ${lastNonZero(left)}, anchor ${anchor}`);
   assert.equal(Math.abs(left[anchor]), peakOf(left), 'the riser peaks on the anchor');
+  assert.ok(lastNonZero(left) <= anchor + Math.round(RISER_RELEASE_SECONDS * RATE), `last sound at ${lastNonZero(left)}`);
 });
 
 test('a riser anchored earlier than its length is cut at the film start, not moved', async () => {
   await renderCues([{ t: 0.4, cue: 'riser', gainDb: -12, pan: 0 }], { seconds: 2, seed: SEED, out: outFile('early-riser') });
   const { left } = readWav(outFile('early-riser'));
-  assert.ok(Math.abs(lastNonZero(left) - Math.round(0.4 * RATE)) <= 0.002 * RATE);
+  assert.equal(Math.abs(left[Math.round(0.4 * RATE)]), peakOf(left), 'still peaks on its anchor');
+});
+
+test('renderCues writes through a temporary name: when that name cannot be written, nothing appears at out', async () => {
+  const out = outFile('blocked');
+  mkdirSync(`${out}.partial`);
+  await assert.rejects(() => renderCues([{ t: 0.1, cue: 'click', gainDb: -12, pan: 0 }], { seconds: 1, seed: SEED, out }));
+  assert.equal(existsSync(out), false);
 });
 
 test('overlapping cues never pass 0.98', async () => {

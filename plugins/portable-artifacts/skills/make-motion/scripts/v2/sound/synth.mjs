@@ -2,7 +2,7 @@
 // the cues they already have; sub, paper, marker and the riser are new, pure sample generators seeded from the film
 // seed through engine/seeded.mjs. renderCues lays a cue list (cues.mjs planCues) into one stereo track of the film's
 // length. Nothing here reads a clock or Math.random: the same cues and seed give the same bytes.
-import { writeFile } from 'node:fs/promises';
+import { rename, unlink, writeFile } from 'node:fs/promises';
 import { CUE_LAYERS, SAMPLE_RATE, cueWav, pinkNoise } from '../../lib/cues.mjs';
 import { mulberry32 } from '../../../engine/seeded.mjs';
 
@@ -15,6 +15,8 @@ const INT16_MAX = 32767;
 const WAV_HEADER_BYTES = 44;
 const CHANNELS = 2;
 const BYTES_PER_SAMPLE = 2;
+const SEED_LIMIT = 0xffffffff; // the largest seed the 32-bit generator tells apart
+const ONSET_SECONDS = 0.0005; // every voice rises from 0 over its first 0.5 ms, so it never starts on a step
 const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 
@@ -28,6 +30,8 @@ const MARKER = Object.freeze({ seconds: 0.18, from: 1800, to: 4200, q: 8, attack
 // its last moments (weight u^toneShape), under a rising envelope 0.05 x 20^u; its last sample is its peak.
 const RISER = Object.freeze({ seconds: 1.6, lo: 200, hi: 6000, toneLo: 200, toneHi: 2000, q: 2, curve: 1.5, toneShape: 8, floor: 0.05, rise: 20 });
 const RISER_CUE = 'riser';
+/** Seconds of release after a riser's peak, so it never ends on a full-height step. */
+export const RISER_RELEASE_SECONDS = 0.004;
 
 const frames = (seconds) => Math.round(seconds * SAMPLE_RATE);
 const sweep = (lo, hi, amount) => lo * (hi / lo) ** amount;
@@ -60,6 +64,14 @@ function levelled(xs) {
   const top = peakOf(xs);
   const tail = frames(TAIL_SECONDS);
   return Float32Array.from(xs, (x, i) => (top === 0 ? 0 : x * (PEAK / top) * Math.min(1, (xs.length - 1 - i) / tail)));
+}
+
+// The film seed (spec.mjs: an integer 0 to SEED_MAX): anything else is a TypeError, never a silent seed 0 or a seed
+// truncated into another one.
+function checkSeed(seed, who) {
+  if (!Number.isInteger(seed) || seed < 0 || seed > SEED_LIMIT) {
+    throw new TypeError(`${who}: seed must be an integer from 0 to ${SEED_LIMIT} (the film seed), got ${String(seed)}`);
+  }
 }
 
 // A seed of its own for each cue, from the film seed and the cue name (FNV-1a), so two noise cues never share noise.
@@ -116,18 +128,28 @@ export function riserTo(seconds, { seed } = {}) {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds) || seconds <= 0) {
     throw new RangeError(`riserTo: seconds must be a positive number, got ${String(seconds)}`);
   }
+  checkSeed(seed, 'riserTo');
   const length = Math.max(2, frames(seconds));
+  const release = frames(RISER_RELEASE_SECONDS);
   const pink = pinkNoise(mulberry32(cueSeed(seed, RISER_CUE)));
   const noisy = bandPass(pink, length, (u) => sweep(RISER.lo, RISER.hi, u ** RISER.curve), RISER.q);
   const noiseTop = peakOf(noisy) || 1;
   const tone = chirpToPeak(length, RISER.toneLo, RISER.toneHi, RISER.curve);
-  return Float32Array.from({ length }, (_, i) => {
+  return Float32Array.from({ length: length + release }, (_, i) => {
+    if (i >= length) {
+      // the release: the tone carried on at its last frequency (cos, as it peaked on sin(pi / 2)), falling linearly to 0
+      const k = i - length + 1;
+      return PEAK * Math.cos(TWO_PI * RISER.toneHi * k * DT) * (1 - k / release);
+    }
     const u = i / (length - 1);
     const w = u ** RISER.toneShape;
     const carrier = (1 - w) * (noisy[i] / noiseTop) + w * tone[i];
     return PEAK * RISER.floor * RISER.rise ** u * carrier;
   });
 }
+
+// The index of a riser's peak in its samples (riserTo): just before its release.
+const riserPeakIndex = (xs) => xs.length - 1 - frames(RISER_RELEASE_SECONDS);
 
 const NEW_VOICES = Object.freeze({ sub, paper, marker });
 
@@ -141,17 +163,29 @@ function versionOneMono(cue) {
   return Float32Array.from({ length: count }, (_, i) => wav.readInt16LE(WAV_HEADER_BYTES + i * CHANNELS * BYTES_PER_SAMPLE) / 32768);
 }
 
-/**
- * The mono 48 kHz samples of `cue`, peaking at PEAK (at most 0.9). `seed` (the film seed, a finite number) seeds the
- * noise of the new voices; the version 1 cues use version 1's own fixed noise, so the seed does not change them.
- * `riser` is riserTo(1.6 s): the version 1 riser fades out its last 5 ms, so its peak is not its end.
- */
-export function cueSamples(cue, { seed } = {}) {
-  if (!KNOWN_CUES.includes(cue)) throw new RangeError(`unknown cue ${JSON.stringify(cue)}; known cues: ${KNOWN_CUES.join(', ')}`);
-  if (typeof seed !== 'number' || !Number.isFinite(seed)) throw new TypeError(`cueSamples: seed must be a finite number, got ${String(seed)}`);
+// `xs` rising linearly from 0 over its first ONSET_SECONDS (version 1's click and impact start on their transient's
+// full height otherwise), as a new array.
+function withOnset(xs) {
+  const ramp = frames(ONSET_SECONDS);
+  return Float32Array.from(xs, (x, i) => (i < ramp ? (x * i) / ramp : x));
+}
+
+function rawSamples(cue, seed) {
   if (cue === RISER_CUE) return riserTo(RISER.seconds, { seed });
   if (Object.hasOwn(NEW_VOICES, cue)) return NEW_VOICES[cue](mulberry32(cueSeed(seed, cue)));
   return versionOneMono(cue);
+}
+
+/**
+ * The mono 48 kHz samples of `cue`, peaking at PEAK (at most 0.9), starting and ending at 0 (an ONSET_SECONDS rise; the
+ * voices' own fades and the riser's release at the end). `seed` (the film seed, an integer 0 to 2^32 - 1, required)
+ * seeds the noise of the new voices; the version 1 cues use version 1's own fixed noise, so the seed does not change
+ * them. `riser` is riserTo(1.6 s): the version 1 riser fades out its last 5 ms, so its peak is not its end.
+ */
+export function cueSamples(cue, { seed } = {}) {
+  if (!KNOWN_CUES.includes(cue)) throw new RangeError(`unknown cue ${JSON.stringify(cue)}; known cues: ${KNOWN_CUES.join(', ')}`);
+  checkSeed(seed, 'cueSamples');
+  return withOnset(rawSamples(cue, seed));
 }
 
 // ---- the track ----
@@ -205,9 +239,10 @@ function wavBytes(left, right) {
 }
 
 /**
- * Writes `out`: a stereo 48 kHz 16-bit WAV `seconds` long with each cue's samples added from round(t x 48000) (a riser
- * so its last sample falls there), scaled by its gainDb and pan, hard-limited at 0.98. A cue that would start at or past
- * the film's end (a riser: whose anchor would) is dropped; one that starts inside it is cut at the end.
+ * Writes `out` (through a temporary name, renamed into place): a stereo 48 kHz 16-bit WAV `seconds` long with each
+ * cue's samples added from round(t x 48000) (a riser so its peak falls there, its 4 ms release after), scaled by its
+ * gainDb and pan, hard-limited (clipped) at 0.98. A cue that would start at or past the film's end (a riser: whose
+ * anchor would) is dropped; one that starts inside it is cut at the end. `seed` is required (cueSamples).
  * -> Promise<{ file: out, dropped: number of cues dropped }>.
  */
 export async function renderCues(cues, { seconds, seed, out }) {
@@ -216,9 +251,10 @@ export async function renderCues(cues, { seconds, seed, out }) {
   }
   if (!Array.isArray(cues)) throw new TypeError('renderCues: cues must be an array of { t, cue, gainDb, pan }');
   cues.forEach(checkCue);
+  checkSeed(seed, 'renderCues');
   const length = frames(seconds);
-  const left = new Float64Array(length);
-  const right = new Float64Array(length);
+  const left = new Float32Array(length);
+  const right = new Float32Array(length);
   const voices = new Map();
   let dropped = 0;
   for (const { t, cue, gainDb, pan } of cues) {
@@ -229,8 +265,21 @@ export async function renderCues(cues, { seconds, seed, out }) {
     }
     if (!voices.has(cue)) voices.set(cue, cueSamples(cue, { seed }));
     const xs = voices.get(cue);
-    addInto(left, right, xs, cue === RISER_CUE ? anchor - (xs.length - 1) : anchor, 10 ** (gainDb / 20), pan);
+    addInto(left, right, xs, cue === RISER_CUE ? anchor - riserPeakIndex(xs) : anchor, 10 ** (gainDb / 20), pan);
   }
-  await writeFile(out, wavBytes(left, right));
+  await writeAtomically(out, wavBytes(left, right));
   return { file: out, dropped };
+}
+
+// Writes `bytes` to `out` through a temporary name beside it, renamed into place; the temporary file is removed when
+// writing fails, and the error propagates.
+async function writeAtomically(out, bytes) {
+  const partial = `${out}.partial`;
+  try {
+    await writeFile(partial, bytes);
+    await rename(partial, out);
+  } catch (err) {
+    await unlink(partial).catch((cleanup) => { if (cleanup.code !== 'ENOENT') err.cleanup = cleanup; });
+    throw err;
+  }
 }
