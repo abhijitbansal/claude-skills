@@ -6,7 +6,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { HERE, browserAvailable, ffmpegOrNull } from './helpers/session.mjs';
@@ -15,8 +15,9 @@ import { buildTimeline, narrationStart } from '../../engine/script/timing.mjs';
 import { parseSay } from '../../engine/script/say.mjs';
 import {
   LEVELS, RAMP_SECONDS, VOICE_RATE, TRACK_RATE, AAC_AUDIO, gainStages, shapingFilter, masterArgs, masterVoice, voiceTrackArgs, muxArgs, masterTrack, muxVoice,
-  judgeLevel, measureFile, AUDIO_HINT,
+  judgeLevel, measureFile, AUDIO_HINT, MASTER_AIM_LU, mixArgs, recordingInput,
 } from '../../scripts/v2/voice/master.mjs';
+import { ceilingFor } from '../../scripts/lib/loudness.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { renderFilm } from '../../scripts/v2/render.mjs';
 
@@ -199,20 +200,24 @@ test('masterVoice measures, then writes the master with one static gain: the tar
   assert.doesNotMatch(calls[1].join(' '), /alimiter/);
 });
 
-test('the gain is capped so the measured true peak stays at the ceiling; a cap of 1 LU or less takes no limiter', async () => {
-  const { run, calls } = fakeRunner([ebur(-20.0, -5.0), '']);
+test('the gain is capped so the measured true peak stays at the ceiling; a cap of 0.5 LU (MASTER_AIM_LU) or less takes no limiter', async () => {
+  assert.equal(MASTER_AIM_LU, 0.5);
+  const { run, calls } = fakeRunner([ebur(-20.0, -5.5), '']);
   const result = await master(run);
-  assert.deepEqual(result, { gainDb: 3, limited: false, measured: true }, 'want +4 dB, the peak allows +3 (ceiling -2 dBTP): 1 LU under is accepted');
+  assert.deepEqual(result, { gainDb: 3.5, limited: false, measured: true }, 'want +4 dB, the peak allows +3.5 (ceiling -2 dBTP): 0.5 LU under is accepted');
   assert.equal(calls.length, 2);
 });
 
-test('a cap that would leave the result more than 1 LU under the target takes the limiter, driven by the shortfall, measured again', async () => {
+test('a cap that would leave the result more than 0.5 LU under the target takes the limiter, driven first by the whole wanted gain, measured again', async () => {
   const { run, calls } = fakeRunner([ebur(-27.3, -3.1), ebur(-17.9, -5.0), '']);
   const result = await master(run);
   assert.deepEqual(result, { gainDb: 1.9, limited: true, measured: true });
   assert.equal(calls.length, 3);
-  assert.match(afOf(calls[1]), /volume=10\.20dB,alimiter=limit=0\.562341:level=false:latency=true,.*ebur128=peak=true/, 'driven by the shortfall: want 11.3, cap 1.1');
+  assert.match(afOf(calls[1]), /volume=11\.30dB,alimiter=limit=0\.562341:level=false:latency=true,.*ebur128=peak=true/, 'driven by the wanted gain, 11.3 dB, so the limiter is sure to engage');
   assert.match(afOf(calls[2]), /alimiter=.*volume=1\.90dB$/);
+  const small = fakeRunner([ebur(-20.0, -5.0), ebur(-16.6, -2.2), '']);
+  assert.deepEqual(await master(small.run), { gainDb: 0.2, limited: true, measured: true }, 'a 1 LU shortfall now takes the limiter too');
+  assert.match(afOf(small.calls[1]), /volume=4\.00dB,alimiter=/);
 });
 
 test('the limiter runs at most three rounds; what is then still short is written and left to the level judgement', async () => {
@@ -681,6 +686,21 @@ test('a sidecar WAV name that is not a bare file name beside it (a path, ".", ".
   }
 });
 
+test('masterTrack with neither a voice nor cues nor music resolves null without running ffmpeg: there is nothing to master', async () => {
+  const master = await masterTrack({ run: async () => assert.fail('ffmpeg must not run'), timeline: TIMELINE_AT(0), loudness: PRO.loudness, workDir: '/w' });
+  assert.equal(master, null);
+});
+
+test('renderFilm fails fast on cues ffmpeg cannot read: before any frame is captured, with ffmpeg\'s words and a hint, and leaves no file', async (t) => {
+  if (!await needFfmpeg(t)) return;
+  const page = { evaluate: () => assert.fail('no frame may be captured'), screenshot: () => assert.fail('no frame may be captured') };
+  const session = { film: { mode: 'viral', shots: [] }, timeline: TIMELINE, info: { post: '2d' }, page };
+  const out = path.join(dir, 'broken-cues', 'film.mp4');
+  const sound = { cues: { file: path.join(dir, 'no-such-cues.wav'), count: 2 }, music: null };
+  await assert.rejects(renderFilm({ out, session, sound }), (err) => /^sound master: ffmpeg failed \(exit \d+\)/.test(err.message) && err.hint.length > 0);
+  assert.deepEqual(readdirSync(path.dirname(out)), [], 'no output and no partial file');
+});
+
 test('renderFilm refuses a voiced film given without its voice, before any frame or file, rather than render it silent', async (t) => {
   if (!await needFfmpeg(t)) return;
   const session = { film: { mode: 'pro', voice: { name: 'af_heart' }, shots: [] }, timeline: TIMELINE, info: { post: '2d' }, page: null };
@@ -711,7 +731,7 @@ test('renderFilm judges the mastered level before any frame is captured: a narra
   const out = path.join(dir, 'off-target', 'film.mp4');
   const err = await renderFilm({ out, session, voice: { dir: voiceDir, sidecar } }).then(() => null, (e) => e);
   assert.ok(err !== null, 'the render must be refused');
-  assert.match(err.message, /^voice loudness: the mastered narration measures -?[\d.]+ LUFS, more than 1 LU under/);
+  assert.match(err.message, /^voice loudness: the mastered narration measures -?[\d.]+ LUFS, more than 0\.5 LU under/, 'judged before capture with the master\'s own 0.5 LU aim');
   assert.match(err.hint, /loudest moments/);
   assert.doesNotMatch(err.hint, /run again/);
   t.diagnostic(err.message);
@@ -757,4 +777,127 @@ test('make renders a voiced film with its mastered voice (report.audio measured)
   assert.equal(plain.exitCode, 0, JSON.stringify(plain.report.error ?? plain.report.findings));
   assert.equal(plain.report.audio, null);
   assert.deepEqual(probe(quiet).streams.map((s) => s.codec_type), ['video']);
+});
+
+// ---- the voice review's fixes (final-review.md I1, I2, I3) ----
+
+// A folder whose shot-0.wav is an ffconcat script whose one entry, seg.wav, is a symlink to a WAV outside the folder:
+// the reviewer's planted cache entry. Returns the script's path.
+function plantedScript(name) {
+  const outside = path.join(dir, `${name}-outside`);
+  const folder = path.join(dir, name);
+  mkdirSync(outside, { recursive: true });
+  mkdirSync(folder, { recursive: true });
+  writeWav(path.join(outside, 'secret.wav'), toneOf(0.5, 2));
+  symlinkSync(path.join(outside, 'secret.wav'), path.join(folder, 'seg.wav'));
+  writeFileSync(path.join(folder, 'shot-0.wav'), 'ffconcat version 1.0\nfile seg.wav\n');
+  return path.join(folder, 'shot-0.wav');
+}
+
+test('I1: our own WAVs (shot WAVs, the voice track, the cue track, the bed) open as WAV only; a user\'s recording or music keeps its plain-audio whitelist', () => {
+  const own = ['-protocol_whitelist', 'file', '-format_whitelist', 'wav', '-f', 'wav', '-i'];
+  const before = (args, file) => args.slice(args.indexOf(file) - own.length, args.indexOf(file));
+  const track = voiceTrackArgs({ shots: [{ wav: '/v/shot-0.wav' }], timeline: TIMELINE_AT(0), out: '/v/t.wav' });
+  assert.deepEqual(before(track, '/v/shot-0.wav'), own);
+  assert.deepEqual(before(masterArgs({ wav: '/w/v.wav', filter: '' }), '/w/v.wav'), own);
+  const mix = mixArgs({ voice: { wav: '/w/v.wav', filter: '' }, cues: { file: '/w/c.wav' }, music: { file: '/w/b.wav', recording: false, fadeFrom: null, duck: [] }, duration: 4, loudness: PRO.loudness });
+  for (const file of ['/w/v.wav', '/w/c.wav', '/w/b.wav']) assert.deepEqual(before(mix, file), own, file);
+  const theirs = mixArgs({ music: { file: '/film/track.mp3', recording: true, fadeFrom: null, duck: [] }, duration: 4, loudness: PRO.loudness });
+  assert.ok(theirs.join(' ').includes(recordingInput('/film/track.mp3').join(' ')));
+  const recording = voiceTrackArgs({ shots: [], timeline: TIMELINE_AT(0), out: '/v/t.wav', recording: '/film/vo.m4a' });
+  assert.ok(recording.join(' ').includes(recordingInput('/film/vo.m4a').join(' ')));
+});
+
+test('I1: a shot WAV or a cue track that is an ffconcat script pointing outside the folder is refused by ffmpeg with the real arguments', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const script = plantedScript('planted');
+  const track = ffmpegRun(ffmpeg, voiceTrackArgs({ shots: [{ wav: script }], timeline: TIMELINE_AT(0), out: path.join(dir, 'planted-track.wav') }));
+  assert.notEqual(track.status, 0, 'the voice mix decoded the script, and the file outside the folder through it');
+  const cues = ffmpegRun(ffmpeg, mixArgs({ cues: { file: script }, duration: 2, loudness: PRO.loudness }));
+  assert.notEqual(cues.status, 0, 'the sound mix decoded the script');
+});
+
+test('I1: a shot WAV that is a symlink (to a file outside the folder, or anywhere) is refused before ffmpeg runs', async () => {
+  const outside = path.join(dir, 'linked-outside');
+  const voiceDir = path.join(dir, 'linked-voice');
+  mkdirSync(outside, { recursive: true });
+  mkdirSync(voiceDir, { recursive: true });
+  writeWav(path.join(outside, 'secret.wav'), toneOf(0.5, 1));
+  symlinkSync(path.join(outside, 'secret.wav'), path.join(voiceDir, 'shot-0.wav'));
+  const sidecar = { version: 1, sampleRate: VOICE_RATE, shots: [{ id: 'a', wav: 'shot-0.wav', seconds: 1, sentences: [] }] };
+  await assert.rejects(masterTrack({ run: async () => assert.fail('ffmpeg must not run'), voice: { dir: voiceDir, sidecar }, timeline: TIMELINE_AT(0), loudness: PRO.loudness, workDir: dir }),
+    (err) => /shot-0\.wav.*not a regular file/.test(err.message) && err.hint.length > 0);
+});
+
+// The review's quiet track: 1 kHz bursts at 0.05 (0.25 s on, 0.25 s off) for 8 s, with one 30 ms burst at `peak` at 4 s.
+function quietWithPeak(peak, seconds = 8) {
+  return Float32Array.from({ length: Math.round(seconds * TRACK_RATE) }, (_, i) => {
+    const t = i / TRACK_RATE;
+    const level = t >= 4 && t < 4.03 ? peak : (t % 0.5 < 0.25 ? 0.05 : 0);
+    return level * Math.sin(2 * Math.PI * 1000 * t);
+  });
+}
+
+// The first pass's shortfall of a track at `wav`: the gain wanted minus the gain the ceiling allows (pro).
+function shortfall(ffmpeg, wav) {
+  const r = ffmpegRun(ffmpeg, masterArgs({ wav, filter: '' }));
+  const lufs = Number([...r.stderr.matchAll(/\bI:\s+(-?[\d.]+) LUFS/g)].at(-1)[1]);
+  const peak = Number([...r.stderr.matchAll(/True peak:\s+Peak:\s+(-?[\d.]+) dBFS/g)].at(-1)[1]);
+  return (PRO.loudness.lufs - lufs) - (ceilingFor(PRO.loudness.truePeakDb) - peak);
+}
+
+// [the review's shortfall, the burst that makes it on this track]: measured with .scratch/sound/i2-shortfall.mjs
+// (0.18 gives 0.5 LU, 0.19 1.0, 0.22 2.1, 0.3 4.6)
+const I2_CASES = [[0.6, 0.182], [1.2, 0.195], [2.0, 0.22], [5, 0.31]];
+
+test('I2: a quiet track with one loud moment masters within 0.5 LU of the target, whatever its shortfall (about 0.6, 1.2, 2.0 and 5 LU)', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const work = path.join(dir, 'i2');
+  mkdirSync(work, { recursive: true });
+  const run = realRun(ffmpeg);
+  for (const [wanted, peak] of I2_CASES) {
+    const wav = path.join(work, `quiet-${peak}.wav`);
+    const out = path.join(work, `master-${peak}.wav`);
+    writeWav(wav, quietWithPeak(peak), TRACK_RATE);
+    const short = shortfall(ffmpeg, wav);
+    t.diagnostic(`burst ${peak}: first-pass shortfall ${short.toFixed(2)} LU (the review's case: ${wanted})`);
+    assert.ok(Math.abs(short - wanted) <= Math.max(0.4, wanted * 0.3), `burst ${peak} makes a ${short.toFixed(2)} LU shortfall, not about ${wanted}`);
+    await masterVoice({ run, wav, out, filter: '', loudness: PRO.loudness });
+    const level = await measureFile({ run, file: out });
+    assert.ok(Math.abs(level.lufs - PRO.loudness.lufs) <= MASTER_AIM_LU, `burst ${peak}: master at ${level.lufs} LUFS`);
+    assert.deepEqual(judgeLevel(level, PRO.loudness, 'the master', { tolerance: MASTER_AIM_LU }), level);
+  }
+});
+
+test('I3: the before-capture judgement uses the master\'s 0.5 LU aim; the finished file keeps the 1 LU tolerance', () => {
+  const at = (lufs) => ({ lufs, truePeakDb: -3, note: null });
+  assert.throws(() => judgeLevel(at(-16.7), PRO.loudness, 'the mastered narration', { tolerance: MASTER_AIM_LU }), /measures -16\.7 LUFS, more than 0\.5 LU under/);
+  assert.deepEqual(judgeLevel(at(-16.7), PRO.loudness), at(-16.7), 'the finished file may be 0.7 LU off');
+  assert.deepEqual(judgeLevel(at(-16.4), PRO.loudness, 'the mastered narration', { tolerance: MASTER_AIM_LU }), at(-16.4));
+});
+
+// Speech-like noise (speechLike) low-passed at about 6 kHz, as a voice has little above it: the review's noise voice,
+// without the energy above AAC's own low-pass that no narration has.
+function speechBand(seconds) {
+  const raw = speechLike(seconds, 0.3);
+  const a = 1 - Math.exp((-2 * Math.PI * 6000) / VOICE_RATE);
+  let low = 0;
+  return raw.map((x) => (low += a * (x - low)));
+}
+
+test('I3: a noise-like voice that passes before capture also passes after the mux: the 0.5 LU aim leaves margin for the AAC encode', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const work = path.join(dir, 'i3');
+  const voiceDir = path.join(work, 'voice');
+  writeShotWavs(voiceDir, SIDECAR, (seconds) => speechBand(seconds));
+  const run = realRun(ffmpeg);
+  const master = await masterTrack({ run, voice: { dir: voiceDir, sidecar: SIDECAR }, timeline: TIMELINE, loudness: PRO.loudness, workDir: work });
+  const before = judgeLevel(await measureFile({ run, file: master }), PRO.loudness, 'the mastered narration', { tolerance: MASTER_AIM_LU });
+  const video = testVideo(ffmpeg, work, TIMELINE.duration);
+  const after = judgeLevel(await muxVoice({ run, video, audio: master, out: path.join(work, 'film.mp4'), duration: TIMELINE.duration }), PRO.loudness);
+  t.diagnostic(`master ${before.lufs} LUFS, finished file ${after.lufs} LUFS`);
+  assert.ok(Math.abs(after.lufs - PRO.loudness.lufs) <= 1, `${after.lufs} LUFS after the mux`);
 });

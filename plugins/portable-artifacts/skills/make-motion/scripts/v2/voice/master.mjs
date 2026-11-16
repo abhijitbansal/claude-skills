@@ -18,6 +18,7 @@
 // before the word, a straight ramp up to its level at the word's start, held to its end, and a ramp back down over the
 // next RAMP_SECONDS. `enable='between(t,a,b)'` was not used: it switches the gain on in one step, with no ramp.
 import { execFile, spawn } from 'node:child_process';
+import { lstatSync } from 'node:fs';
 import path from 'node:path';
 import { narrationStart } from '../../../engine/script/timing.mjs';
 import { fileInput, parseLoudness } from '../../lib/ffmpeg.mjs';
@@ -35,7 +36,19 @@ export const TRACK_RATE = MASTER_RATE; // the voice track, from the first mix to
 export const AAC_AUDIO = Object.freeze(['-c:a', 'aac', '-b:a', '160k', '-ar', String(MASTER_RATE), '-ac', '2']);
 /** The voice's integrated loudness may miss the mode's target by this many LU; more refuses the film. */
 export const LOUDNESS_TOLERANCE_LU = 1;
+/**
+ * The master aims within this many LU of the target (the limiter runs when the ceiling would leave it further short),
+ * and the mastered WAV is judged against it before any frame is captured: the finished file keeps
+ * LOUDNESS_TOLERANCE_LU, so the AAC encode has room to move it without a late refusal.
+ */
+export const MASTER_AIM_LU = 0.5;
 export const UNMEASURED_NOTE = 'the narration is too short for its loudness to be measured, so it was not normalised';
+/** The music bed's level in dB relative to the voice bus (the voice at its target level), before the duck. */
+export const BED_GAIN_DB = -18;
+/** Seconds a user's music fades over at its end (sound/bed.mjs musicEnd says where). */
+export const MUSIC_FADE_SECONDS = 1;
+/** The note of a film without a voice whose cues and music peak at the ceiling before they reach the mode's target. */
+export const NO_VOICE_NOTE = 'the film has no voice, and its cues and music cannot reach the mode\'s loudness target without crushing them: they were raised as far as the peak ceiling allows';
 
 const SHAPING_FRAME_SAMPLES = 48; // 1 ms at 48 kHz: the gain expression steps once a frame
 const HIGHPASS_HZ = 80;
@@ -154,6 +167,12 @@ const RECORDING_FORMATS = new Set(['wav', 'mp3', 'flac', 'ogg', 'aiff', 'mov,mp4
 const ACCEPTED_LABEL = 'WAV, MP3, FLAC, Ogg, M4A or MP4, or AIFF';
 /** The recording as an ffmpeg or ffprobe input: read through the file protocol only, and by an accepted demuxer only. */
 export const recordingInput = (file) => ['-protocol_whitelist', 'file', '-format_whitelist', RECORDING_DEMUXERS.join(','), '-i', file];
+/**
+ * One of our own WAVs as an ffmpeg input (a shot WAV, the voice track, the cue track, the bed): read through the file
+ * protocol only and by the WAV demuxer only, forced, so a file that is anything else (an ffconcat script planted in a
+ * cache folder, which would open another file) fails to open instead of being followed.
+ */
+export const ownWavInput = (file) => ['-protocol_whitelist', 'file', '-format_whitelist', 'wav', '-f', 'wav', '-i', file];
 export const PROBE_TIMEOUT_MS = 10000;
 const PROBE_MAX_BUFFER = 1024 * 1024;
 /** A recording may end this many seconds before its last word's end (Whisper's times step 0.02 s; encoders pad). */
@@ -246,7 +265,7 @@ export function voiceTrackArgs({ shots, timeline, out, recording }) {
   const chains = placed.map((s, k) => `[${k}:a]aformat=sample_rates=${TRACK_RATE}:channel_layouts=mono,adelay=delays=${s.delay}S:all=1[v${k}]`);
   const labels = placed.map((_, k) => `[v${k}]`).join('');
   const graph = `${chains.join(';')};${labels}amix=inputs=${placed.length}:duration=longest:normalize=0,apad=whole_len=${length},atrim=end_sample=${length}[voice]`;
-  const inputs = recording === undefined ? placed.flatMap((s) => fileInput(s.wav)) : recordingInput(recording);
+  const inputs = recording === undefined ? placed.flatMap((s) => ownWavInput(s.wav)) : recordingInput(recording);
   return [...QUIET, '-y', ...inputs, '-filter_complex', graph, '-map', '[voice]', ...NO_METADATA,
     '-ar', String(TRACK_RATE), '-ac', '1', '-c:a', 'pcm_s16le', out];
 }
@@ -278,8 +297,8 @@ function masterChain({ filter, drive, loudness }) {
  */
 export function masterArgs({ wav, out, filter, drive, loudness, gainDb }) {
   const chain = masterChain({ filter, drive, loudness });
-  if (gainDb === undefined) return [...MEASURE, ...fileInput(wav), ...NO_METADATA, '-af', `${chain},${METER}`, '-f', 'null', '-'];
-  return [...QUIET, '-y', ...fileInput(wav), ...NO_METADATA, '-af', `${chain},volume=${decibels(gainDb)}dB`, '-ar', String(MASTER_RATE), '-c:a', 'pcm_s16le', out];
+  if (gainDb === undefined) return [...MEASURE, ...ownWavInput(wav), ...NO_METADATA, '-af', `${chain},${METER}`, '-f', 'null', '-'];
+  return [...QUIET, '-y', ...ownWavInput(wav), ...NO_METADATA, '-af', `${chain},volume=${decibels(gainDb)}dB`, '-ar', String(MASTER_RATE), '-c:a', 'pcm_s16le', out];
 }
 
 const lastLine = (text) => text.trim().split('\n').filter((l) => l.trim()).at(-1) ?? 'no output';
@@ -291,13 +310,16 @@ async function step(run, args, what) {
   return stderr;
 }
 
-// One measuring pass: { lufs, truePeak } as ebur128 reads the chain's output (-Infinity for nothing).
-async function measureChain(run, base) {
-  const stderr = await step(run, masterArgs(base), 'voice master');
+// One measuring pass over `args` (a measuring masterArgs or mixArgs): { lufs, truePeak } as ebur128 reads it.
+async function measureWith(run, args, what) {
+  const stderr = await step(run, args, what);
   const level = parseLoudness(stderr);
-  if (level === null) throw new AudioError(`voice master: ffmpeg printed no loudness measurement (its last line: ${lastLine(stderr)})`);
+  if (level === null) throw new AudioError(`${what}: ffmpeg printed no loudness measurement (its last line: ${lastLine(stderr)})`);
   return level;
 }
+
+// One measuring pass of the voice chain: { lufs, truePeak } as ebur128 reads the chain's output (-Infinity for nothing).
+const measureChain = (run, base) => measureWith(run, masterArgs(base), 'voice master');
 
 // Over the gate: the integrated loudness was measured; the true peak reached it (the track has sound at all).
 const isMeasured = ({ lufs }) => Number.isFinite(lufs) && lufs > GATE_FLOOR_LUFS;
@@ -312,14 +334,17 @@ function gainFor(level, loudness) {
   return { gainDb: hundredths(Math.min(wanted, allowed)), shortDb: wanted - allowed };
 }
 
-// Limiter rounds while the peak cap leaves the gain more than LOUDNESS_TOLERANCE_LU short: each adds the shortfall to
-// the drive and measures again. Resolves the last measurement and the drive (undefined when no round ran).
-async function limited(run, base, first) {
+// Limiter rounds while the peak cap leaves the gain more than MASTER_AIM_LU short, measured again each time through
+// `measure(base)` (default: the voice chain). The first drive is the whole gain the target wants (as version 1 limits:
+// gain to the target, then limit), so the driven peaks surely reach the limiter's threshold; a drive of only the
+// shortfall can leave them under it, where the limiter changes nothing (the voice review's I2). Each later round adds
+// what is still short. Resolves the last measurement and the drive (undefined when no round ran).
+async function limited(run, base, first, measure = (b) => measureChain(run, b)) {
   let level = first;
   let drive;
-  for (let round = 0; round < LIMITER_ROUNDS && gainFor(level, base.loudness).shortDb > LOUDNESS_TOLERANCE_LU; round++) {
-    drive = hundredths((drive ?? 0) + gainFor(level, base.loudness).shortDb);
-    level = await measureChain(run, { ...base, drive });
+  for (let round = 0; round < LIMITER_ROUNDS && gainFor(level, base.loudness).shortDb > MASTER_AIM_LU; round++) {
+    drive = hundredths(drive === undefined ? base.loudness.lufs - level.lufs : drive + gainFor(level, base.loudness).shortDb);
+    level = await measure({ ...base, drive });
     if (!isMeasured(level)) throw new AudioError('voice master: the narration could not be measured through the limiter');
   }
   return { level, drive };
@@ -346,17 +371,162 @@ export async function masterVoice({ run, wav, out, filter, loudness }) {
   return { gainDb, limited: drive !== undefined, measured: true };
 }
 
+// ---- one mix: the voice, the cues and the music bed -------------------------------------------------------------------
+//
+// A film with cues or music is mastered as one mix: the voice through its chain as above (without a limiter of its own),
+// the cues and the bed set against the voice at its target level (each lowered by the voice's own gain to target, so
+// the static gain that follows lifts the voice to the target and leaves them where they sit relative to it), the bed at
+// BED_GAIN_DB under its duck, all summed, then the limiter on the sum when the ceiling would leave the mix more than
+// MASTER_AIM_LU short, padded and cut to the film's length, measured and written with one static gain, as a voice alone
+// is. With no voice the cues and bed are the mix and the static gain takes them toward the mode's target.
+
+const SILENT_SOUND_MESSAGE = 'sound master: the cues and music are silent (nothing in them reaches the -70 dB measurement gate)';
+const SILENT_SOUND_HINT = 'check that the music file has sound in it; the synthesised cues and beds always do, so report the film if it is not that';
+const SLOPE_DECIMALS = 6;
+const slope = fixed(SLOPE_DECIMALS);
+// ffmpeg refuses an expression much over 4,000 characters ("Missing ')' or too many args"; measured: 60 segment terms,
+// about 3,700 characters, pass, 150 fail), so the duck's terms are split across volume filters of at most this many.
+const DUCK_TERMS_PER_FILTER = 32;
+
+// Duck breakpoints (sound/duck.mjs) as gain terms of t in dB: one per segment that is not flat at 0 dB, each zero
+// outside its own [start, end) window, so the windows never overlap.
+function duckTerms(points) {
+  points.forEach((p) => { time(p.t); decibels(p.gainDb); }); // every number formats, or the call refuses it
+  const terms = [];
+  for (let k = 1; k < points.length; k++) {
+    const [p, n] = [points[k - 1], points[k]];
+    if (n.t <= p.t || (p.gainDb === 0 && n.gainDb === 0)) continue;
+    const rise = (n.gainDb - p.gainDb) / (n.t - p.t);
+    terms.push(`gte(t,${time(p.t)})*lt(t,${time(n.t)})*(${decibels(p.gainDb)}+(${slope(rise)})*(t-${time(p.t)}))`);
+  }
+  return terms;
+}
+
+// The duck as volume filters in series, each the sum of up to DUCK_TERMS_PER_FILTER terms: the terms' windows are
+// disjoint, so at any t at most one filter is not 0 dB and the product is exactly the breakpoints' curve.
+function duckFilters(points) {
+  const terms = duckTerms(points);
+  const filters = [];
+  for (let k = 0; k < terms.length; k += DUCK_TERMS_PER_FILTER) {
+    filters.push(`volume='pow(10,(${terms.slice(k, k + DUCK_TERMS_PER_FILTER).join('+')})/20)':eval=frame`);
+  }
+  return filters;
+}
+
+// The music's chain from input `index`: 48 kHz stereo, cut to the film, a fade from `fadeFrom` (a user's file), the bed
+// level and `offsetDb`, then the duck (1 ms frames, as the shaping steps).
+function musicChain(music, index, { duration, offsetDb }) {
+  const parts = [`[${index}:a]aresample=${MASTER_RATE}`, `aformat=sample_rates=${MASTER_RATE}:channel_layouts=stereo`, `atrim=end=${time(duration)}`];
+  if (music.fadeFrom !== null && music.fadeFrom !== undefined) parts.push(`afade=t=out:st=${time(music.fadeFrom)}:d=${time(MUSIC_FADE_SECONDS)}`);
+  parts.push(`volume=${decibels(BED_GAIN_DB + offsetDb)}dB`);
+  const duck = duckFilters(music.duck ?? []);
+  if (duck.length > 0) parts.push(`asetnsamples=n=${SHAPING_FRAME_SAMPLES}:p=0`, ...duck);
+  return `${parts.join(',')}[m]`;
+}
+
+// The inputs and the filter graph of a mix, ending in `tail` (the meter, or the static gain) at the label [out].
+function mixGraph({ voice, cues, music, duration, loudness, drive, offsetDb = 0 }, tail) {
+  const inputs = [];
+  const chains = [];
+  const labels = [];
+  if (voice) {
+    chains.push(`[${labels.length}:a]${masterChain({ filter: voice.filter, drive: undefined, loudness })}[v]`);
+    inputs.push(...ownWavInput(voice.wav));
+    labels.push('[v]');
+  }
+  if (cues) {
+    chains.push(`[${labels.length}:a]aformat=sample_rates=${MASTER_RATE}:channel_layouts=stereo,volume=${decibels(offsetDb)}dB[c]`);
+    inputs.push(...ownWavInput(cues.file));
+    labels.push('[c]');
+  }
+  if (music) {
+    chains.push(musicChain(music, labels.length, { duration, offsetDb }));
+    inputs.push(...(music.recording ? recordingInput(music.file) : ownWavInput(music.file)));
+    labels.push('[m]');
+  }
+  if (labels.length === 0) throw new RangeError('mixArgs: a mix needs a voice, cues or music');
+  const length = samplesOf(duration);
+  const sum = labels.length === 1 ? `${labels[0]}anull` : `${labels.join('')}amix=inputs=${labels.length}:normalize=0:duration=longest`;
+  const busLimiter = drive === undefined ? '' : `,${limiterFilter(drive, loudness)}`; // in a mix the limiter is on the sum
+  return { inputs, graph: `${chains.join(';')};${sum}${busLimiter},apad=whole_len=${length},atrim=end_sample=${length},${tail}[out]` };
+}
+
+/**
+ * The ffmpeg arguments of a mix pass. `voice` { wav, filter } (the voice track and its shaping) or none, `cues` { file }
+ * (the cue track, sound/synth.mjs renderCues: its cues at their own gains) or none, `music` { file, recording, fadeFrom,
+ * duck } or none (a bed WAV, or with `recording` a user's file opened through recordingInput; `duck` the breakpoints of
+ * sound/duck.mjs), `duration` the film's seconds, `offsetDb` the voice's gain to target lowered from the cues and bed
+ * (0 without a voice), `drive` the limiter (on the voice, or on the sum without one). Without `gainDb` a measuring pass
+ * (ebur128 on stderr); with it the master, written to `out` as a 48 kHz stereo WAV.
+ */
+export function mixArgs({ gainDb, out, ...mix }) {
+  const { inputs, graph } = mixGraph(mix, gainDb === undefined ? METER : `volume=${decibels(gainDb)}dB`);
+  if (gainDb === undefined) return [...MEASURE, ...inputs, '-filter_complex', graph, '-map', '[out]', ...NO_METADATA, '-f', 'null', '-'];
+  return [...QUIET, '-y', ...inputs, '-filter_complex', graph, '-map', '[out]', ...NO_METADATA, '-ar', String(MASTER_RATE), '-c:a', 'pcm_s16le', out];
+}
+
+// How far the cues and bed are lowered: the voice's own gain to its target (the target minus its measured loudness
+// through the chain), so they sit against the voice at its target level; 0 without a voice, or for a voice too quiet to
+// measure. A silent voice is refused.
+async function voiceOffset(run, voice, loudness) {
+  if (!voice) return 0;
+  const first = await measureChain(run, { wav: voice.wav, filter: voice.filter, loudness });
+  if (isSilent(first)) throw new AudioError(SILENT_MESSAGE, { hint: SILENT_HINT });
+  return isMeasured(first) ? -hundredths(loudness.lufs - first.lufs) : 0;
+}
+
+/**
+ * Masters one mix (mixArgs: `voice`, `cues`, `music`, `duration`) into `out` to `loudness`: measures it, then writes it
+ * with one static gain to the target, capped by the ceiling. The limiter, when the cap would leave the mix more than
+ * MASTER_AIM_LU short, is on the sum (limited's rounds, driven as for a voice alone), except for cues alone, which get
+ * none (judgeLevel's noVoice says so). A silent mix is refused; one too quiet to measure is written with no gain.
+ * Resolves `{ gainDb, measured }`.
+ */
+export async function masterMix({ run, out, loudness, ...parts }) {
+  const mix = { ...parts, loudness, offsetDb: await voiceOffset(run, parts.voice, loudness), drive: undefined };
+  const measure = (m) => measureWith(run, mixArgs(m), 'sound master');
+  const first = await measure(mix);
+  if (isSilent(first)) throw new AudioError(parts.voice ? SILENT_MESSAGE : SILENT_SOUND_MESSAGE, { hint: parts.voice ? SILENT_HINT : SILENT_SOUND_HINT });
+  if (!isMeasured(first)) {
+    await step(run, mixArgs({ ...mix, out, gainDb: 0 }), 'sound master');
+    return { gainDb: 0, measured: false };
+  }
+  // Cues alone: raised to the ceiling and no further, since a limiter would have to crush sparse transients to lift
+  // their integrated loudness.
+  const cuesAlone = !parts.voice && !parts.music;
+  const { level, drive } = cuesAlone ? { level: first, drive: undefined } : await limited(run, mix, first, measure);
+  const { gainDb } = gainFor(level, loudness);
+  await step(run, mixArgs({ ...mix, drive, out, gainDb }), 'sound master');
+  return { gainDb, measured: true };
+}
+
 // ---- the film's voice, end to end --------------------------------------------------------------------------------------
 
 const isBareName = (name) => typeof name === 'string' && name !== '' && name !== '.' && name !== '..' && path.basename(name) === name;
 
+// Throws when the shot WAV at `file` exists but is not a regular file: a symlink (which could reach outside the folder)
+// or anything special. A missing file is left for ffmpeg, whose failure names it.
+function checkRegular(file, name) {
+  let stat;
+  try {
+    stat = lstatSync(file);
+  } catch (err) {
+    if (err.code === 'ENOENT') return;
+    throw err;
+  }
+  if (!stat.isFile()) throw new AudioError(`voice: the shot WAV ${JSON.stringify(name)} is not a regular file (a symlink or a special file); it is not opened`);
+}
+
 // The shot WAVs of a sidecar as absolute paths beside it (null for a shot without narration). A sidecar names its WAVs
-// by bare file names only (sidecar.mjs wavName); anything else (a path, ".", "..", empty) is refused, never opened.
+// by bare file names only (sidecar.mjs wavName); anything else (a path, ".", "..", empty) is refused, never opened, and
+// so is a name that is a symlink or not a regular file.
 function shotWavs({ dir, sidecar }) {
   return sidecar.shots.map((shot) => {
     if (shot.wav === null) return { wav: null };
     if (!isBareName(shot.wav)) throw new AudioError(`voice: the sidecar names the WAV ${JSON.stringify(shot.wav)}, not a file beside it`);
-    return { wav: path.join(dir, shot.wav) };
+    const wav = path.join(dir, shot.wav);
+    checkRegular(wav, shot.wav);
+    return { wav };
   });
 }
 
@@ -372,23 +542,36 @@ function placedSidecar(sidecar, timeline) {
   };
 }
 
+// The film's voice track built in `workDir` and its shaping: { wav, filter }, or null when no shot has narration.
+async function builtVoice({ run, voice, timeline, workDir }) {
+  const recording = voice.recording;
+  const shots = recording === undefined ? shotWavs(voice) : [];
+  if (recording === undefined && shots.every((s) => s.wav === null)) return null;
+  const track = path.join(workDir, 'voice-track.wav');
+  await step(run, voiceTrackArgs({ shots, timeline, out: track, recording }), 'voice mix');
+  const sidecar = recording === undefined ? voice.sidecar : placedSidecar(voice.sidecar, timeline);
+  return { wav: track, filter: shapingFilter(sidecar, timeline) };
+}
+
 /**
  * Builds the film's voice track from `voice` on `timeline`, shapes and masters it to `loudness` in `workDir`, and
- * resolves the mastered WAV's path, or null when no shot has narration (then there is no voice to put in the film).
- * `voice` is what the voice stage made: { dir, sidecar } (a WAV per narrated shot), or { recording, sidecar } (the
- * absolute path of an author's own recording of the whole film, and its words in seconds from the file's start). Every
- * failure is an AudioError with the audio hint.
+ * resolves the mastered WAV's path, or null when there is nothing to put in the film. `voice` is what the voice stage
+ * made: { dir, sidecar } (a WAV per narrated shot), or { recording, sidecar } (the absolute path of an author's own
+ * recording of the whole film, and its words in seconds from the file's start), or undefined for a film without one.
+ * `cues` ({ file }) and `music` ({ file, recording, fadeFrom, duck }) make it one mix (masterMix); without them the voice
+ * alone is mastered as it always was (masterVoice). Every failure is an AudioError with the audio hint.
  */
-export async function masterTrack({ run, voice, timeline, loudness, workDir }) {
+export async function masterTrack({ run, voice, timeline, loudness, workDir, cues, music }) {
   try {
-    const recording = voice.recording;
-    const shots = recording === undefined ? shotWavs(voice) : [];
-    if (recording === undefined && shots.every((s) => s.wav === null)) return null;
-    const track = path.join(workDir, 'voice-track.wav');
-    const master = path.join(workDir, 'voice-master.wav');
-    await step(run, voiceTrackArgs({ shots, timeline, out: track, recording }), 'voice mix');
-    const sidecar = recording === undefined ? voice.sidecar : placedSidecar(voice.sidecar, timeline);
-    await masterVoice({ run, wav: track, out: master, filter: shapingFilter(sidecar, timeline), loudness });
+    const built = voice === undefined ? null : await builtVoice({ run, voice, timeline, workDir });
+    if (!cues && !music) {
+      if (built === null) return null;
+      const master = path.join(workDir, 'voice-master.wav');
+      await masterVoice({ run, wav: built.wav, out: master, filter: built.filter, loudness });
+      return master;
+    }
+    const master = path.join(workDir, 'sound-master.wav');
+    await masterMix({ run, out: master, loudness, voice: built ?? undefined, cues, music, duration: timeline.duration });
     return master;
   } catch (err) {
     throw asAudioError(err);
@@ -440,14 +623,24 @@ export async function muxVoice({ run, video, audio, out, duration }) {
  * A voice level (measureFile) against the mode's `loudness`: more than LOUDNESS_TOLERANCE_LU from the integrated
  * target, or a true peak over the ceiling, refuses the film (an AudioError whose hint says what the author can change,
  * since a rerun gives the same result); an unmeasured loudness (lufs null) is not judged. `subject` names what was
- * measured in the message. Returns `audio`.
+ * measured in the message. Returns `audio`. `noVoice`: the film has no voice, only cues and music, which masterMix
+ * raises as far as the ceiling allows (sparse cues and a peaky bed can stop short of the target there), so a level short
+ * of the target is not refused: `audio` comes back with NO_VOICE_NOTE as its note. Over the target or over the ceiling
+ * is refused either way. `tolerance` (LU, default LOUDNESS_TOLERANCE_LU): render.mjs judges the mastered WAV before
+ * capture with MASTER_AIM_LU, the master's own aim, and the finished file with the default, so a film that would fail
+ * late fails early.
  */
-export function judgeLevel(audio, loudness, subject = 'the finished film') {
-  if (audio.lufs !== null && audio.lufs < loudness.lufs - LOUDNESS_TOLERANCE_LU) {
-    throw new AudioError(`voice loudness: ${subject} measures ${audio.lufs} LUFS, more than ${LOUDNESS_TOLERANCE_LU} LU under the mode's target of ${loudness.lufs} LUFS`, { hint: LEVEL_SHORT_HINT });
+export function judgeLevel(audio, loudness, subject = 'the finished film', { noVoice = false, tolerance = LOUDNESS_TOLERANCE_LU } = {}) {
+  const short = audio.lufs !== null && audio.lufs < loudness.lufs - tolerance;
+  if (short && noVoice) {
+    if (audio.truePeakDb !== null && audio.truePeakDb > loudness.truePeakDb) judgeLevel({ ...audio, lufs: null }, loudness, subject);
+    return { ...audio, note: NO_VOICE_NOTE };
   }
-  if (audio.lufs !== null && audio.lufs > loudness.lufs + LOUDNESS_TOLERANCE_LU) {
-    throw new AudioError(`voice loudness: ${subject} measures ${audio.lufs} LUFS, more than ${LOUDNESS_TOLERANCE_LU} LU over the mode's target of ${loudness.lufs} LUFS`, { hint: LEVEL_OVER_HINT });
+  if (short) {
+    throw new AudioError(`voice loudness: ${subject} measures ${audio.lufs} LUFS, more than ${tolerance} LU under the mode's target of ${loudness.lufs} LUFS`, { hint: LEVEL_SHORT_HINT });
+  }
+  if (audio.lufs !== null && audio.lufs > loudness.lufs + tolerance) {
+    throw new AudioError(`voice loudness: ${subject} measures ${audio.lufs} LUFS, more than ${tolerance} LU over the mode's target of ${loudness.lufs} LUFS`, { hint: LEVEL_OVER_HINT });
   }
   if (audio.truePeakDb !== null && audio.truePeakDb > loudness.truePeakDb) {
     throw new AudioError(`voice loudness: ${subject} has a true peak of ${audio.truePeakDb} dBTP, over the mode's ceiling of ${loudness.truePeakDb} dBTP`, { hint: LEVEL_OVER_HINT });

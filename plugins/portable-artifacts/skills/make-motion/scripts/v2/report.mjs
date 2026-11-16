@@ -8,13 +8,18 @@
 // `timed` is 'estimated' or 'measured' (the timeline used), null before one was built. `voice` is
 // { cached, seconds, model } for a film whose voice was made (seconds: the narration's total length, the sum of its
 // shot WAVs; model: the sidecar's model record), or for an author's own recording { cached: false, seconds: the last
-// word's end in the file, model: null }; else null. `audio` is { lufs, truePeakDb } of the voice in the
-// rendered MP4, as measured in that file (ebur128), for a film whose voice was muxed into it, else null. What had been
+// word's end in the file, model: null }; else null. `audio` is { lufs, truePeakDb, note, cues, music } of the sound in
+// the rendered MP4, as measured in that file (ebur128), for a film whose voice or sound was muxed into it; for a film
+// with sound that was not rendered, the plan alone (lufs and truePeakDb null, note NOT_RENDERED_NOTE); else null.
+// `cues` is the number of cues planned, `music` { kind: 'bed' | 'file', bed, bpm, landed, cuts, short } or null (bpm
+// and landed null for a file with no steady beat; short when a file ends before the film). What had been
 // done by then
 // stays in it: the stages that ran, the findings already found. A film's own fault (it does not validate, the page
 // raises an error about it) is a finding, not an error.
 import { parseSay } from '../../engine/script/say.mjs';
 
+/** The audio note of a film whose sound was planned (the sound stage) but not rendered: it is measured in the film only. */
+export const NOT_RENDERED_NOTE = 'not rendered: the sound is measured in the finished film';
 const SECOND_DECIMALS = 2;
 const EN_DASH = '–';
 const secondsText = (n) => n.toFixed(SECOND_DECIMALS);
@@ -94,7 +99,24 @@ export function outlineOf(film, timeline) {
 export const outlineLines = (outline) => outline.map((s) => `${s.id}  ${s.show}  ${secondsText(s.start)}${EN_DASH}${secondsText(s.end)}s  "${s.narration}"`);
 
 const INTERRUPTED = 'interrupted'; // the error message of a run stopped through its signal (run.mjs failureOutcome)
-const timelineFailed = (stages) => stages.some((s) => s.name === 'timeline' && !s.ok);
+const timelineFailed = (stages) => stages.some((s) => (s.name === 'timeline' || s.name === 'sound') && !s.ok);
+
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+// The music part of the sound line: the bed and its tempo, or the file's, then how many cuts land on a beat.
+function musicText(music) {
+  const source = music.kind === 'bed' ? `bed ${music.bed}` : 'music file';
+  const tempo = music.bpm === null ? `${source} with no steady beat` : `${source} at ${music.bpm} bpm`;
+  const landed = music.landed === null ? '' : `, ${music.landed} of ${plural(music.cuts, 'cut')} on a beat`;
+  return `${tempo}${landed}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}`;
+}
+
+/** The text form's line for sound: the cue count, the bed or file and its tempo, the cuts on a beat; null for none. */
+export function soundLine(audio) {
+  if (audio === null || typeof audio?.cues !== 'number' || (audio.cues === 0 && !audio.music)) return null;
+  const cues = audio.cues === 0 ? 'no cues' : plural(audio.cues, 'cue');
+  return `sound: ${audio.music ? `${cues}, ${musicText(audio.music)}` : cues}`;
+}
 
 /**
  * The first line of the text form. `interrupted` or `failed` when the user or the machine stopped the run (its `error`);
@@ -119,5 +141,7 @@ export function formatText(report, { sheetsDir }) {
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
   const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${report.post}, ${report.msPerFrame.toFixed(1)} ms per frame); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
   lines.push(`frames: ${counts}`);
+  const sound = soundLine(report.audio);
+  if (sound !== null) lines.push(sound);
   return lines.join('\n');
 }

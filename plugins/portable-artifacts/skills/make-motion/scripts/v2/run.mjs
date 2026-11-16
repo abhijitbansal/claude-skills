@@ -1,4 +1,5 @@
-// The stages behind scripts/make.mjs, in order: validate, voice (only for a film with `voice`), timeline, review (the
+// The stages behind scripts/make.mjs, in order: validate, voice (only for a film with `voice`), timeline, sound (only
+// for a film with sound: cues planned from its events, a bed fitted to its cuts, a music file checked), review (the
 // sheets and the audit), render. One browser session serves review and render. runMake always returns a report
 // (report.mjs) and an exit code: 0 ok, 1 not ok (the film does not validate, its anchors fall outside their shots on
 // its measured timeline, a mechanical finding exists, or the page raised an error about it), 2 for trouble with the
@@ -7,9 +8,12 @@
 // to fix it),
 // 130 when stopped through `signal`. What was done before a stop stays in the report. It always closes what it opened,
 // never prints to stdout and never waits for input.
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { findFfmpeg, findFfprobe } from '../lib/ffmpeg.mjs';
+import { registries } from '../../engine/registry.mjs';
 import { PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
@@ -17,7 +21,7 @@ import { openSession, pageErrorMessage, machineMessage } from './session.mjs';
 import { writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
 import { sessionFindings } from './review.mjs';
-import { describeError, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
+import { NOT_RENDERED_NOTE, describeError, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
 const MS_PER_SECOND = 1000;
 const MILLIS_DECIMALS = 1000;
@@ -102,7 +106,7 @@ function outputPaths(options) {
 }
 
 // The stages that need the page: the sheets and the audit, then (unless --no-render) the video.
-async function reviewAndRender({ options, loaded, made, state, io: { signal, log } }) {
+async function reviewAndRender({ options, loaded, made, sound, state, io: { signal, log } }) {
   const { out, sheetsDir } = outputPaths(options);
   state.sheetsDir = sheetsDir;
   const session = await openSession(loaded);
@@ -114,7 +118,7 @@ async function reviewAndRender({ options, loaded, made, state, io: { signal, log
     if (!options.noRender) {
       const rendered = await stage(state, log, 'render', () => {
         log('make: render started');
-        return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined });
+        return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined });
       });
       Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, audio: rendered.audio });
     }
@@ -213,6 +217,103 @@ async function timelineFor(film, made, state, log) {
   }
 }
 
+// ---- the sound stage ----------------------------------------------------------------------------------------------------
+
+// The sound modules, loaded only for a film with sound: a film without any loads none of them.
+async function soundSteps() {
+  const [cues, bed, synth, duck] = await Promise.all([
+    import('./sound/cues.mjs'), import('./sound/bed.mjs'), import('./sound/synth.mjs'), import('./sound/duck.mjs'),
+  ]);
+  return { planCues: cues.planCues, ...bed, renderCues: synth.renderCues, duckEnvelope: duck.duckEnvelope };
+}
+
+// Whether `film` (defaults filled) has sound to make: not "sound": "off", and music, its own cue list, "sound": "on",
+// or a mode whose cues play by default.
+const wantsSound = (film) => film.sound !== 'off'
+  && (film.music !== undefined || Array.isArray(film.cues) || film.sound === 'on' || registries.modes.get(film.mode).cues === true);
+
+// A film error thrown by the cue plan (sound/cues.mjs): its message starts with the path of the cue at fault.
+const CUE_PATH_RE = /^(cues\[\d+\](?:\.[a-z]+)?): ([\s\S]+)$/;
+
+// The findings of an error the film is to blame for (a cue list it got wrong, a music file it named badly), or null
+// for anything else, which is the machine's trouble.
+function soundFindings(err) {
+  if (err instanceof SpecError) return err.errors.map(validationFinding);
+  const cue = typeof err?.message === 'string' ? CUE_PATH_RE.exec(err.message) : null;
+  return cue === null ? null : [validationFinding({ path: cue[1], message: cue[2] })];
+}
+
+const cutTimes = (timeline) => timeline.shots.slice(1).map((s) => s.start);
+const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+
+// A user's music file: its tempo from its beats (null without a steady beat) and how many cuts fall within a frame of one.
+function fileSummary(input, timeline, end) {
+  const beats = input.beats;
+  const cuts = cutTimes(timeline);
+  const landed = beats === null ? null : cuts.filter((c) => beats.some((b) => Math.abs(b - c) <= 1 / timeline.fps)).length;
+  const bpm = beats === null ? null : Math.round((60 / median(beats.slice(1).map((b, k) => b - beats[k]))) * 100) / 100;
+  return { kind: 'file', bed: null, bpm, landed, cuts: cuts.length, short: end.short };
+}
+
+// The film's music as data: a bed fitted to the cuts, or a user's file checked and probed (musicInput). Null for none.
+async function musicPlan(steps, film, timeline, specDir, signal) {
+  const music = film.music;
+  if (music === undefined) return null;
+  if (music.bed !== undefined) {
+    const grid = steps.fitBeatGrid(cutTimes(timeline), { bpm: music.bpm, seconds: timeline.duration, fps: timeline.fps });
+    return { bed: music.bed, grid, summary: { kind: 'bed', bed: music.bed, bpm: grid.bpm, landed: grid.landed, cuts: grid.cuts, short: false } };
+  }
+  const input = await steps.musicInput(film, specDir, { signal });
+  const end = steps.musicEnd(input.seconds, timeline.duration);
+  return { input, end, summary: fileSummary(input, timeline, end) };
+}
+
+// The word spans the bed ducks under (film seconds), for a film with a voice; none without one.
+const wordSpans = (film, timeline) => (film.voice === undefined ? []
+  : timeline.shots.flatMap((s) => s.words.map((w) => ({ start: s.start + w.start, end: s.start + w.end }))));
+
+// The cue track and the music written into `work` for the render: { cues, music } as renderFilm takes them, or null when
+// there is nothing to put in the film.
+async function soundFiles(steps, { film, timeline, cues, music, work }) {
+  const seconds = timeline.duration;
+  const cueTrack = cues.length === 0 ? null
+    : { file: await steps.renderCues(cues, { seconds, seed: film.seed, out: path.join(work, 'cues.wav') }).then((r) => r.file), count: cues.length };
+  let musicTrack = null;
+  if (music !== null) {
+    const duck = steps.duckEnvelope(wordSpans(film, timeline), { seconds });
+    musicTrack = music.input === undefined
+      ? { file: await steps.renderBed({ bed: music.bed, grid: music.grid, seconds, seed: film.seed, out: path.join(work, 'bed.wav') }), recording: false, fadeFrom: null, duck, summary: music.summary }
+      : { file: music.input.file, recording: true, fadeFrom: music.end.fadeFrom, duck, summary: music.summary };
+  }
+  return cueTrack === null && musicTrack === null ? null : { cues: cueTrack, music: musicTrack };
+}
+
+/**
+ * The sound stage, for a film with sound (wantsSound): the cue plan (sound/cues.mjs), the bed fitted to the cuts or the
+ * music file checked (sound/bed.mjs), recorded in the report's audio (planned, not yet measured); with `work` (a render
+ * follows) the cue and bed WAVs are written there. -> { sound } (renderFilm's plan, or null), or null when the film is
+ * at fault (its errors become findings: exit 1). Machine trouble (ffprobe or ffmpeg failing) and a stop propagate.
+ */
+async function makeSound(loaded, timeline, state, io, work) {
+  const { film, specDir } = loaded;
+  try {
+    return await stage(state, io.log, 'sound', async () => {
+      io.signal?.throwIfAborted();
+      const steps = await soundSteps();
+      const cues = steps.planCues(film, timeline);
+      const music = await musicPlan(steps, film, timeline, specDir, io.signal);
+      io.signal?.throwIfAborted();
+      state.audio = { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: cues.length, music: music?.summary ?? null };
+      return { sound: work === null ? null : await soundFiles(steps, { film, timeline, cues, music, work }) };
+    });
+  } catch (err) {
+    const findings = io.signal?.aborted ? null : soundFindings(err);
+    if (findings === null) throw err;
+    state.findings = findings;
+    return null;
+  }
+}
+
 async function execute(options, state, io) {
   const loaded = await validate(options, state, io.log);
   if (!loaded) return;
@@ -228,9 +329,17 @@ async function execute(options, state, io) {
     state.outline = outlineOf(film, timeline);
     return;
   }
-  if (!options.noRender) await findFfmpeg(); // fail before the browser starts, naming how to fix it
-  io.signal?.throwIfAborted();
-  await reviewAndRender({ options, loaded: { film, timeline, specDir }, made, state, io });
+  // The cue and bed WAVs live in a work folder of this run only, removed on every way out of it.
+  const work = wantsSound(film) && !options.noRender ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
+  try {
+    const planned = wantsSound(film) ? await makeSound(loaded, timeline, state, io, work) : { sound: null };
+    if (planned === null) return;
+    if (!options.noRender) await findFfmpeg(); // fail before the browser starts, naming how to fix it
+    io.signal?.throwIfAborted();
+    await reviewAndRender({ options, loaded: { film, timeline, specDir }, made, sound: planned.sound, state, io });
+  } finally {
+    if (work !== null) rmSync(work, { recursive: true, force: true });
+  }
 }
 
 /**

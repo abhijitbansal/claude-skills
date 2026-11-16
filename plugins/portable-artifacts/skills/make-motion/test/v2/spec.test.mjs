@@ -14,8 +14,8 @@ import { hintRefusals } from '../../scripts/v2/voice/calls.mjs';
 // instead of registering into the shared ones. The modes are data the validator
 // and the timeline read (mode choice, default look and format, pace).
 const STUB_MODES = [
-  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false },
-  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -14, truePeakDb: -1, lra: 9 }, cues: true },
+  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false, captions: false },
+  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -14, truePeakDb: -1, lra: 9 }, cues: true, captions: true },
 ];
 function stubRegistries({ modes = STUB_MODES } = {}) {
   const r = {
@@ -432,7 +432,7 @@ test('withFilmDefaults keeps what the author wrote', () => {
   assert.deepEqual(withFilmDefaults(written, registries), written);
 });
 test('a registered mode supplies its own default look and format', () => {
-  const regs = stubRegistries({ modes: [{ name: 'pro', defaultLook: 'pop', defaultFormat: '1:1', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false }] });
+  const regs = stubRegistries({ modes: [{ name: 'pro', defaultLook: 'pop', defaultFormat: '1:1', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false, captions: false }] });
   const out = withFilmDefaults({ version: 2, shots: [shotA] }, regs);
   assert.equal(out.look, 'pop');
   assert.equal(out.format, '1:1');
@@ -947,4 +947,51 @@ test('anchorSpanErrors checks every anchor against the timeline it is given, in 
   assert.match(errors[0].message, /^1\.6 resolves to 1\.6 s, outside the shot, which runs from 0 to [\d.]+ s/);
   const longer = { ...timeline, shots: timeline.shots.map((s) => ({ ...s, duration: s.duration + 1 })) };
   assert.deepEqual(anchorSpanErrors(spec, longer), [], 'inside a longer measured shot');
+});
+
+// ---- sound: "sound", "cues", "music", and "captions" (validated only here) ----
+
+const errorsAt = (spec) => check(spec).errors.map((e) => [e.path, e.message]);
+
+test('sound is "on" or "off", captions true or false; a misspelled field gets a did-you-mean', () => {
+  for (const extra of [{ sound: 'on' }, { sound: 'off' }, { captions: true }, { captions: false }]) assert.equal(check(film(extra)).ok, true, JSON.stringify(extra));
+  assert.deepEqual(errorsAt(film({ sound: 'loud' })), [['sound', 'must be one of "on", "off"']]);
+  assert.match(errorsAt(film({ captions: 'yes' }))[0].join(': '), /^captions: must be boolean/);
+  const misspelled = errorsAt(film({ sond: 'on' }));
+  assert.equal(misspelled[0][0], 'sond');
+  assert.match(misspelled[0][1], /did you mean "sound"/);
+});
+
+test('cues is a list of { at, cue }: at a number or an anchor, cue a name the synth knows', () => {
+  assert.equal(check(film({ cues: [{ at: 1.5, cue: 'pop' }, { at: 'word:hi+0.1', cue: 'click' }] })).ok, true);
+  assert.equal(check(film({ cues: [] })).ok, true);
+  const unknown = errorsAt(film({ cues: [{ at: 1, cue: 'poop' }] }));
+  assert.equal(unknown[0][0], 'cues[0].cue');
+  assert.match(unknown[0][1], /^must be one of "pop", "click", .*"marker"; did you mean "pop"\?/);
+  assert.deepEqual(errorsAt(film({ cues: [{ cue: 'pop' }] })).map(([p]) => p), ['cues[0].at']);
+  assert.match(errorsAt(film({ cues: [{ at: 1, cue: 'pop', cuee: 'x' }] }))[0].join(': '), /^cues\[0\]\.cuee: unknown property/);
+  assert.match(errorsAt(film({ cues: [{ at: { s: 1 }, cue: 'pop' }] }))[0].join(': '), /^cues\[0\]\.at: must be number,string/);
+  assert.match(errorsAt(film({ cues: 'pop' }))[0].join(': '), /^cues: must be array/);
+  assert.match(errorsAt(film({ cues: Array.from({ length: 65 }, () => ({ at: 1, cue: 'pop' })) }))[0].join(': '), /^cues: must NOT have more than 64 items/);
+});
+
+test('music is { bed, bpm? } or { src }: a bed the synth plays, a tempo from 60 to 180, a file inside the film folder', () => {
+  writeFileSync(path.join(specDir, 'track.mp3'), 'not really audio: the sound stage probes it');
+  for (const music of [{ bed: 'pulse' }, { bed: 'drift', bpm: 60 }, { bed: 'tape', bpm: 180 }, { src: 'track.mp3' }]) {
+    assert.equal(check(film({ music })).ok, true, JSON.stringify(music));
+  }
+  assert.match(errorsAt(film({ music: { bed: 'disco' } }))[0].join(': '), /^music\.bed: must be one of "pulse", "drift", "tape"/);
+  for (const bpm of [59, 181, '120']) assert.equal(errorsAt(film({ music: { bed: 'pulse', bpm } }))[0][0], 'music.bpm', String(bpm));
+  assert.match(errorsAt(film({ music: { bed: 'pulse', src: 'track.mp3' } }))[0].join(': '), /^music: has a bed and a src; use \{ "bed": "pulse" \}/);
+  assert.match(errorsAt(film({ music: { src: 'track.mp3', bpm: 120 } }))[0].join(': '), /^music: bpm sets the tempo of a bed; a file of your own keeps its own tempo/);
+  assert.match(errorsAt(film({ music: {} }))[0].join(': '), /^music: is empty; use/);
+  assert.match(errorsAt(film({ music: { bedd: 'pulse' } }))[0].join(': '), /^music\.bedd: unknown property; did you mean "bed"\?/);
+  assert.match(errorsAt(film({ music: { src: 'missing.mp3' } }))[0].join(': '), /^music\.src: .*missing\.mp3/);
+  assert.match(errorsAt(film({ music: { src: '../outside.mp3' } }))[0].join(': '), /^music\.src: /);
+});
+
+test('the beds the validator names are the beds sound/bed.mjs plays', async () => {
+  const { MUSIC_BEDS } = await import('../../scripts/v2/spec.mjs');
+  const { BEDS } = await import('../../scripts/v2/sound/bed.mjs');
+  assert.deepEqual([...MUSIC_BEDS], [...BEDS]);
 });

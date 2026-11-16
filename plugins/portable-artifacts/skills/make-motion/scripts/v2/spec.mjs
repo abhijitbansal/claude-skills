@@ -13,6 +13,7 @@ import { ACCEPTED_VOICES } from './voice/kokoro.mjs';
 import { RecordingWordsError, WHISPER_SHAPE, fromWhisper } from './voice/sidecar.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { resolveAnchor, anchorSeconds, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
+import { KNOWN_CUES } from './sound/synth.mjs';
 import { didYouMean, formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { REGION_PREFIX } from '../../engine/kinds/shared.mjs';
@@ -30,6 +31,11 @@ const HOLD_MIN = 1; // every shot lasts at least 1 s (engine/script/timing.mjs M
 const HOLD_MAX = 30;
 const ON_MAX = 8;
 const SPAN_DECIMALS = 2;
+const CUES_MAX = 64;
+const BPM_MIN = 60;
+const BPM_MAX = 180;
+/** The music beds a film may name: sound/bed.mjs BEDS, written out here because bed.mjs imports this file (spec.test checks they agree). */
+export const MUSIC_BEDS = Object.freeze(['pulse', 'drift', 'tape']);
 
 const V1_MESSAGE = 'this is a version 1 spec; make-motion 2 reads version 2 only. See references/migrating.md';
 const NOT_OBJECT_MESSAGE = 'a film must be a JSON object such as { "version": 2, "shots": [ ... ] }';
@@ -69,11 +75,40 @@ const VOICE_SCHEMA = {
   },
 };
 
+// The film's music: { bed, bpm? } (a synthesised bed, sound/bed.mjs) or { src } (a file of the author's own). checkMusic
+// says which shape is meant; the file is read when the sound is made.
+const MUSIC_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    bed: { enum: [...MUSIC_BEDS] },
+    bpm: { type: 'number', minimum: BPM_MIN, maximum: BPM_MAX },
+    src: { type: 'string', minLength: 1 },
+  },
+};
+
+// One cue of the film's own list: `at` a number of seconds or an anchor across the film (sound/cues.mjs resolves it
+// when the sound is made), `cue` a name the synth knows.
+const CUE_ITEM_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['at', 'cue'],
+  properties: {
+    at: { type: ['number', 'string'] },
+    cue: { enum: [...KNOWN_CUES] },
+  },
+};
+
 const ROOT_SCHEMA = {
   type: 'object',
   additionalProperties: false,
   required: ['shots'],
   properties: {
+    sound: { enum: ['on', 'off'] },
+    captions: { type: 'boolean' }, // whether captions are drawn (engine/captions); validated here only
+    music: MUSIC_SCHEMA, // checkMusic: one of the two shapes, a file inside the folder
+    // Items are not listed, as for shots: checkCueItems checks the first CUES_MAX.
+    cues: { type: 'array', maxItems: CUES_MAX },
     version: {}, // checked by checkVersion, which says what to write
     mode: { type: 'string' }, // checkMode: one of the registered modes, with a did-you-mean
     look: { type: 'string', minLength: 1 },
@@ -113,6 +148,7 @@ const SHOT_PROPERTIES = {
 // Ajv does not know must not turn a bad film into a crash.
 const ajv = new Ajv({ allErrors: true, strict: false, verbose: true });
 const checkRootSchema = ajv.compile(ROOT_SCHEMA);
+const checkCueItem = ajv.compile(CUE_ITEM_SCHEMA);
 // Used when the kind is missing or unknown: the kind's own fields are not known.
 const checkBaseShot = ajv.compile({ type: 'object', required: ['id'], properties: SHOT_PROPERTIES });
 const kindChecks = new WeakMap();
@@ -203,6 +239,29 @@ function checkVoice(spec) {
   const hint = didYouMean(voice.name, ACCEPTED_VOICES);
   const accepted = `${hint ? `did you mean "${hint}"? The` : 'the'} accepted voice is: ${ACCEPTED_VOICES.join(', ')}`;
   return [{ path: 'voice.name', message: `voice ${quote(voice.name)} is not available; ${accepted}` }];
+}
+
+// The film's own cues, the first CUES_MAX of them (the schema reports a longer list), each against CUE_ITEM_SCHEMA.
+function checkCueItems(spec) {
+  if (!Array.isArray(spec.cues)) return [];
+  return spec.cues.slice(0, CUES_MAX).flatMap((item, i) => schemaErrors(checkCueItem, item, pathJoin('cues', i)));
+}
+
+const MUSIC_SHAPES = 'use { "bed": "pulse" } (pulse, drift or tape, with an optional "bpm" from 60 to 180) for a synthesised bed, or { "src": "track.mp3" } for music of your own';
+
+// The music's shape (one of the two); a file of the author's own must be inside the folder (as a recording is: its
+// audio is probed when the sound is made). Unknown keys and wrong types are the schema's.
+function checkMusic(spec, specDir) {
+  const { music } = spec;
+  if (!isPlainObject(music)) return [];
+  const keys = Object.keys(music);
+  if (keys.some((key) => !Object.hasOwn(MUSIC_SCHEMA.properties, key))) return []; // the schema's did-you-mean says enough
+  if (keys.length === 0) return [{ path: 'music', message: `is empty; ${MUSIC_SHAPES}` }];
+  if (keys.includes('bed') && keys.includes('src')) return [{ path: 'music', message: `has a bed and a src; ${MUSIC_SHAPES}` }];
+  if (keys.includes('bpm') && !keys.includes('bed')) return [{ path: 'music', message: `bpm sets the tempo of a bed; a file of your own keeps its own tempo. ${MUSIC_SHAPES}` }];
+  if (typeof music.src !== 'string' || music.src === '') return [];
+  const read = recordingFile(music.src, 'music.src', specDir);
+  return read.error ? [read.error] : [];
 }
 
 function checkAccent(spec) {
@@ -702,6 +761,8 @@ function collectErrors(spec, specDir, regs) {
     ...checkMode(spec, regs),
     ...checkVoice(spec),
     ...checkRecording(spec, specDir),
+    ...checkMusic(spec, specDir),
+    ...checkCueItems(spec),
     ...checkAccent(spec),
     ...settings,
     ...checkShots(spec, ctx),

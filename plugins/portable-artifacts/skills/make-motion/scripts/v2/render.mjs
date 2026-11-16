@@ -3,9 +3,10 @@
 // takes JPEG at quality 98 (a grainy frame costs far less to encode as JPEG). A frame whose __stateKey equals the
 // previous frame's is not captured again: the previous picture is sent twice. The video is written to a partial file
 // beside the output and renamed when ffmpeg is done, so a stop or a failure leaves no half-written MP4 behind.
-// A voiced film's narration (voice/master.mjs) is mixed and mastered before the first frame is captured, so a broken
-// audio chain fails fast; after the encode it is muxed into a second partial file, video copied, and only that file is
-// renamed to the output. A film without a voice takes none of those steps: its video is exactly what it was before.
+// A film's sound (voice/master.mjs: its narration, and the cues and music bed of the run's sound plan) is mixed and
+// mastered before the first frame is captured, so a broken audio chain fails fast; after the encode it is muxed into a
+// second partial file, video copied, and only that file is renamed to the output. A film with neither a voice nor sound
+// takes none of those steps: its video is exactly what it was before.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -137,32 +138,43 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress }) {
   return captured;
 }
 
-// The mode's loudness targets for a voiced film's master (validateMode required them when the mode registered); a voiced
-// film rendered without its voice is refused, never rendered silent as if it had none.
-function loudnessFor(film, voice) {
-  if (voice === undefined) {
-    if (film.voice !== undefined) throw new Error('renderFilm: the film has a voice; pass the voice stage\'s result ({ dir, sidecar }) as `voice`');
-    return null;
-  }
+// Whether the run's sound plan has anything to put in the film: a cue track or music.
+const hasSound = (sound) => Boolean(sound?.cues) || Boolean(sound?.music);
+
+// The mode's loudness targets for a film with a voice or sound (validateMode required them when the mode registered); a
+// voiced film rendered without its voice is refused, never rendered silent as if it had none. null: nothing to master.
+function loudnessFor(film, voice, sound) {
+  if (voice === undefined && film.voice !== undefined) throw new Error('renderFilm: the film has a voice; pass the voice stage\'s result ({ dir, sidecar }) as `voice`');
+  if (voice === undefined && !hasSound(sound)) return null;
   return registries.modes.get(film.mode ?? DEFAULT_MODE).loudness;
 }
 
+// The report's audio: the level measured in the finished file, with what the sound plan put in it.
+const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, music: sound?.music?.summary ?? null });
+
 /**
  * @param {{ specPath?: string, out: string, exact?: boolean, onProgress?: (p: { frame: number, frames: number, captured: number }) => void,
- *   session?: object, signal?: AbortSignal, voice?: { dir: string, sidecar: object } }} opts a session (openSession) is
- *   used and left open when given; otherwise the film at specPath is loaded and opened here and closed after. exact: PNG
- *   capture (default: JPEG at quality 98). voice: what the voice stage made, required for a film with `voice`.
+ *   session?: object, signal?: AbortSignal, voice?: { dir: string, sidecar: object },
+ *   sound?: { cues: { file: string, count: number } | null, music: { file: string, recording: boolean, fadeFrom: number | null,
+ *   duck: object[], summary: object } | null } }} opts a session (openSession) is used and left open when given;
+ *   otherwise the film at specPath is loaded and opened here and closed after. exact: PNG capture (default: JPEG at quality
+ *   98). voice: what the voice stage made, required for a film with `voice`. sound: the run's sound plan (run.mjs: the cue
+ *   track and the music, as files in the run's work folder), mixed with the voice into one master (voice/master.mjs).
  * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number,
- *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null } | null }>} audio: the voice as measured
- *   in the finished file (lufs null, with a note, when it is too short to measure), null without a voice. A level more
- *   than 1 LU off the mode's target, or a true peak over its ceiling, fails the render (voice/master.mjs judgeLevel): the
- *   master WAV is judged before any frame is captured, and the finished file again after the mux.
+ *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null, cues: number, music: object | null } | null }>}
+ *   audio: the sound as measured in the finished file (lufs null, with a note, when it is too short to measure), with the
+ *   cue count and the music summary of the plan; null with neither a voice nor sound (and then the video is exactly what
+ *   it was: no audio step runs). A level more than 1 LU off the mode's target, or a true peak over its ceiling, fails
+ *   the render (voice/master.mjs judgeLevel): the master WAV is judged before any frame is captured, and the finished
+ *   file again after the mux.
  */
-export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice }) {
+export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice, sound }) {
   const ffmpeg = await findFfmpeg();
   const own = session === undefined;
   const loaded = own ? loadFilm(specPath) : null;
-  const loudness = loudnessFor(own ? loaded.film : session.film, voice);
+  const loudness = loudnessFor(own ? loaded.film : session.film, voice, sound);
+  const subject = voice === undefined ? 'the mastered sound' : 'the mastered narration';
+  const judgement = { noVoice: voice === undefined }; // cues and music alone may stop short of the target (judgeLevel)
   const open = own ? await openSession(loaded) : session;
   const partial = path.join(path.dirname(out), `.${path.basename(out)}.partial-${process.pid}.mp4`);
   const muxed = path.join(path.dirname(out), `.${path.basename(out)}.voice.partial-${process.pid}.mp4`);
@@ -175,13 +187,15 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     mkdirSync(path.dirname(out), { recursive: true });
     sweepPartials(path.dirname(out));
     if (steps !== null) work = mkdtempSync(path.join(tmpdir(), 'mm-voice-'));
-    const master = steps === null ? null : await steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work });
-    if (master !== null) steps.judgeLevel(await steps.measureFile({ run, file: master }), loudness, 'the mastered narration'); // before any frame is captured
+    const master = steps === null ? null : await steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work, cues: sound?.cues ?? undefined, music: sound?.music ?? undefined });
+    // Before any frame is captured, against the master's own aim (MASTER_AIM_LU), tighter than the finished file's: the
+    // AAC encode has room to move it, and a film that would fail after the capture fails here.
+    if (master !== null) steps.judgeLevel(await steps.measureFile({ run, file: master }), loudness, subject, { ...judgement, tolerance: steps.MASTER_AIM_LU });
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact })], signal);
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });
     await encoder.finish();
     encoder = null;
-    const audio = master === null ? null : steps.judgeLevel(await steps.muxVoice({ run, video: partial, audio: master, out: muxed, duration: open.timeline.duration }), loudness);
+    const audio = master === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run, video: partial, audio: master, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
     renameSync(audio === null ? partial : muxed, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
     const frames = open.timeline.frameCount;
