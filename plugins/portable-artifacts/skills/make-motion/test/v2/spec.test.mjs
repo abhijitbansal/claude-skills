@@ -475,6 +475,14 @@ test('loadFilm returns the film with defaults, its timeline and the spec folder'
   assert.deepEqual(out.timeline.shots.map((s) => s.id), ['a', 'b']);
   assert.equal(out.timeline.shots[1].duration, 2);
 });
+test('loadFilm says when the rules that judge time were not run: a voiced film waits for its measured timeline', () => {
+  const silent = writeFilm('timing-silent.json', { version: 2, shots: [{ id: 'a', show: 'statement', say: 'One file.' }] });
+  assert.equal(loadFilm(silent, { registries }).timingJudged, true);
+  const voiced = writeFilm('timing-voiced.json', { version: 2, voice: { name: 'af_heart' }, shots: [{ id: 'a', show: 'statement', say: 'One file.' }] });
+  const out = loadFilm(voiced, { registries });
+  assert.equal(out.timingJudged, false, 'anchors outside their shots and time-dependent kind rules are judged on the measured timeline (run.mjs)');
+  assert.equal(out.timeline.timed, 'estimated');
+});
 test('loadFilm honours the fps in the film', () => {
   const file = writeFilm('fps.json', { version: 2, fps: 60, shots: [{ id: 'a', show: 'statement', hold: 2 }] });
   assert.equal(loadFilm(file, { registries }).timeline.fps, 60);

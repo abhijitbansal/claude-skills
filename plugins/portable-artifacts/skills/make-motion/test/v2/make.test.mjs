@@ -13,6 +13,7 @@ import { registries } from '../../engine/registry.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { encoderArgs, ENCODER, sweepPartials } from '../../scripts/v2/render.mjs';
+import { formatText } from '../../scripts/v2/report.mjs';
 
 const MAKE = path.resolve(HERE, '../../../scripts/make.mjs');
 const FPS = 30;
@@ -240,6 +241,37 @@ test('text mode prints valid, a line per finding, then the sheets, output and fr
   assert.match(lines.at(-3), /^sheets: .+ \(1 file\)$/);
   assert.match(lines.at(-2), /^output: none/);
   assert.equal(lines.at(-1), 'frames: 30');
+});
+
+// The text verdict of a report from its stages and error alone (the rest of the report as a run that stopped early).
+const verdictOf = (stages, error = null, findings = []) => formatText({
+  stages: stages.map(([name, ok]) => ({ name, ok, seconds: 0 })), findings, timed: null, sheets: [], output: null, frames: 0,
+  ...(error ? { error } : {}),
+}, { sheetsDir: null }).split('\n')[0];
+
+test('the text verdict: invalid only when the film was rejected, failed or interrupted when the machine or the user stopped a valid one', () => {
+  assert.equal(verdictOf([['validate', true], ['timeline', true], ['review', true]]), 'valid');
+  assert.equal(verdictOf([['validate', false]]), 'invalid');
+  assert.equal(verdictOf([['validate', true], ['voice', true], ['timeline', false]]), 'invalid', 'anchors that fail on the measured timeline');
+  assert.equal(verdictOf([['validate', true], ['voice', false]]), 'invalid', 'a voice the film cannot be spoken with (a film error, no machine error)');
+  assert.equal(verdictOf([['validate', true], ['timeline', true], ['review', true], ['render', false]], { message: 'ffmpeg failed (exit 1)', hint: 'h' }), 'failed');
+  assert.equal(verdictOf([['validate', true], ['timeline', true], ['review', false]], { message: 'Target crashed', hint: 'h' }), 'failed');
+  assert.equal(verdictOf([['validate', true], ['voice', false]], { message: 'the optional voice package is not installed', hint: 'Run: x' }), 'failed');
+  assert.equal(verdictOf([['validate', true], ['timeline', true], ['review', true], ['render', false]], { message: 'interrupted', hint: '' }), 'interrupted');
+  assert.equal(verdictOf([['validate', true], ['timeline', true]], { message: 'interrupted', hint: '' }), 'interrupted');
+});
+
+test('a statement shot with only text opens on its first word after a hard cut, in a film without a voice', async (t) => {
+  if (!await needs(t)) return;
+  const film = { version: 2, mode: 'pro', shots: [
+    { id: 'one', show: 'statement', say: 'Every chart is a question.' },
+    { id: 'breath', show: 'statement', cut: 'cut', hold: 1.3, text: 'A breath.' },
+  ] };
+  writeFileSync(filmPath('text-only'), JSON.stringify(film));
+  const run = make([filmPath('text-only'), '--no-render', '--json', '--out', outPath('text-only')]);
+  const report = parse(run);
+  assert.deepEqual(report.findings.filter((f) => /opens on an empty frame/.test(f.message)), []);
+  assert.equal(run.status, 0, JSON.stringify(report.findings));
 });
 
 test('the mechanical gate fires: text forced off the canvas makes ok false and exit 1, and the MP4 is still rendered', async (t) => {

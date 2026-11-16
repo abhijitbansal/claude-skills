@@ -4,8 +4,10 @@
 
 const NON_WORD_RE = /[^\p{L}\p{N}]/gu;
 const DIGITS_RE = /^\d+$/;
-const NO_SAY_START = 0.2; // seconds: with no narration the first word lands here...
-const NO_SAY_STAGGER = 0.09; // ...and each next word this much later
+// With no narration the first word lands on the shot's first frame (a shot never opens on an empty frame, as a narrated
+// shot's first word does on a measured timeline); word i after it lands at NO_SAY_START + NO_SAY_STAGGER * i seconds.
+const NO_SAY_START = 0.2;
+const NO_SAY_STAGGER = 0.09;
 const SPELT_MAX = 99;
 const TEN = 10;
 const TEEN_END = 20;
@@ -65,12 +67,13 @@ export function align(shown, said) {
 /**
  * When each on-screen word lands: on the start of the spoken word it aligns with; an unmatched word lands with the
  * previous matched word, or the next one when none precedes it (the first spoken word when nothing matched). With no
- * narration words stagger NO_SAY_STAGGER apart from NO_SAY_START. Each entry is { at, spoken } with `spoken` the
+ * narration the first word lands at 0 and word i after it at NO_SAY_START + NO_SAY_STAGGER * i, never past the shot's
+ * end. Each entry is { at, spoken } with `spoken` the
  * index of the matched spoken word or null.
  */
 export function wordTimes(texts, timing) {
   const spoken = timing.words;
-  if (spoken.length === 0) return texts.map((_, i) => ({ at: Math.min(timing.duration, NO_SAY_START + NO_SAY_STAGGER * i), spoken: null }));
+  if (spoken.length === 0) return texts.map((_, i) => ({ at: i === 0 ? 0 : Math.min(timing.duration, NO_SAY_START + NO_SAY_STAGGER * i), spoken: null }));
   const matches = align(texts.map(wordForm), spoken.map((w) => wordForm(w.text)));
   return texts.map((_, i) => {
     if (matches[i] !== null) return { at: spoken[matches[i]].start, spoken: matches[i] };

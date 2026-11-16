@@ -9,6 +9,7 @@ import { ease } from '../../engine/time/ease.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { gridX } from '../../engine/looks/index.mjs';
 import { pulsePeaks, enterStarts } from '../../engine/kinds/statement.mjs';
+import { wordTimes } from '../../engine/kinds/words.mjs';
 import { pulseScale } from '../../engine/kinds/shared.mjs';
 import { landing } from '../../engine/devices/shared.mjs';
 import { subtreeBox } from './helpers/boxes.mjs';
@@ -327,7 +328,7 @@ test('pop stack: an emphasised word takes the accent with a flash of its fill, n
   for (const l of lines) for (const w of l.node.wordTracks) assert.equal(w.scale, undefined, 'no word scales in a stack');
 });
 
-test('viral ghost words on every statement: all words on screen in the opaque ghost colour (ink mixed 40% into paper) from the first frame, each lighting as spoken; with no say, in order 0.09 s apart from 0.2 s', () => {
+test('viral ghost words on every statement: all words on screen in the opaque ghost colour (ink mixed 40% into paper) from the first frame, each lighting as spoken; with no say, the first at the shot start, the rest 0.09 s apart from 0.2 s', () => {
   const shots = [{ id: 'one', show: 'statement', say: 'Your charts are *hiding* something.' }, { id: 'two', show: 'statement', say: 'No cloud. No *upload*.', cut: 'cut' },
     { id: 'three', show: 'statement', hold: 2, text: 'Three quiet words' }];
   const film = filmFor(shots, 'pop', '9:16');
@@ -343,7 +344,7 @@ test('viral ghost words on every statement: all words on screen in the opaque gh
   const upload = film.sampleShot(1, timeline.shots[1].duration).find((n) => n.id === 'two.text').children.flatMap((n) => n.words).at(-1);
   assert.equal(upload.fill, look.palette.accent, 'the emphasised word lights in the accent');
   const quiet = expandIn(filmOf(shots, 'pop', '9:16'), 2).nodes.find((n) => n.id === 'three.text').children.flatMap((n) => n.wordTracks);
-  quiet.forEach((w, i) => assert.equal(w.fill.points.at(-1).t, 0.2 + 0.09 * i + look.moves.emphasize.dur, `word ${i} lights 0.09 s after the one before, from 0.2 s`));
+  quiet.forEach((w, i) => assert.equal(w.fill.points.at(-1).t, noSayAt(i) + look.moves.emphasize.dur, `word ${i} lights at ${noSayAt(i)} s`));
 });
 
 test('pop kicker: an accent tag at scale step 2, flush left, 28 units over the first line, inside the safe zone; a tall stack shrinks to keep it there', () => {
@@ -367,9 +368,18 @@ test('pop kicker: an accent tag at scale step 2, flush left, 28 units over the f
   assert.ok(tallLines.every((l) => l.size < 400), 'smaller than the cap');
 });
 
-test('with no say, words stagger 0.09 s apart from 0.2 s', () => {
+// With no say: the first word lands on the shot's first frame (a shot never opens empty, as a narrated shot's first
+// word does on a measured timeline), the rest stagger 0.09 s apart from 0.2 s.
+const noSayAt = (i) => (i === 0 ? 0 : 0.2 + 0.09 * i);
+
+test('with no say, the first word lands at the shot start and the rest stagger 0.09 s apart from 0.2 s', () => {
   const { nodes } = expandShot({ id: 'a', show: 'statement', hold: 3, text: 'Three small words' });
-  textNode(nodes).wordTracks.forEach((w, i) => near(lastKey(w.opacity).t, 0.2 + 0.09 * i, `word ${i}`));
+  textNode(nodes).wordTracks.forEach((w, i) => near(lastKey(w.opacity).t, noSayAt(i), `word ${i}`));
+});
+
+test('wordTimes with no narration: the first word at 0, the rest from NO_SAY_START, never past the shot', () => {
+  assert.deepEqual(wordTimes(['A', 'quiet', 'breath.'], { words: [], duration: 2 }).map((w) => [w.at, w.spoken]), [0, 1, 2].map((i) => [noSayAt(i), null]));
+  assert.deepEqual(wordTimes(['A', 'b'], { words: [], duration: 0.1 }).map((w) => w.at), [0, 0.1]);
 });
 
 test('an on-screen word with no spoken match lands with the nearest earlier matched word', () => {

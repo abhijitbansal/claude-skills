@@ -432,7 +432,7 @@ export function anchorSpanErrors(film, timeline) {
 // The kind rules of each shot of a validated `film` with its anchors resolved on `timeline` (validateFilm ran them
 // without times for a voiced film, so only the rules that judge times can fail here).
 function timedKindErrors(film, timeline, regs) {
-  const look = typeof film.look === 'string' && regs.looks.has(film.look) ? regs.looks.get(film.look) : null;
+  const { look } = resolveLook(film, modeName(film, regs), regs); // as validateFilm chose it: the film's, else its mode's
   return film.shots.slice(0, SHOTS_MAX).flatMap((shot, index) => {
     if (!isPlainObject(shot) || typeof shot.show !== 'string' || !regs.kinds.has(shot.show)) return [];
     const entry = timeline.shots[index] ?? null;

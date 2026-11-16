@@ -150,7 +150,8 @@ async function makeVoice(film, options, state, io) {
       return checkedSidecar(await io.synthesise(film, { outDir: path.dirname(out), voice: film.voice.name, log: io.log, ...signal }), film);
     });
   } catch (err) {
-    if (!isFilmVoiceError(err)) throw err;
+    // A stop that raced the voice's own error is a stop (exit 130), whatever the error says.
+    if (!isFilmVoiceError(err) || io.signal?.aborted) throw err;
     state.findings = [voiceFinding(film, err)];
     return null;
   }
@@ -228,13 +229,13 @@ export function failureOutcome(err, signal) {
   return { exitCode: EXIT_MACHINE, error: machineError(err) };
 }
 
-// { message, hint } of machine trouble: an error's own one-line `hint` when it carries one (a voice error does) that its
-// message does not already say, else describeError's reading of its first line (a missing voice install's message is
-// its hint, "what. Run: how", and is split rather than said twice).
+// { message, hint } of machine trouble: an error's own one-line `hint` when it carries one (a voice error does), else
+// describeError's reading of its first line. A message that is exactly its hint (a missing voice install's: "what. Run:
+// how") is split by describeError rather than said twice; a message that merely mentions its hint keeps both.
 function machineError(err) {
   const message = machineMessage(err);
   const hint = typeof err?.hint === 'string' ? err.hint : '';
-  if (hint !== '' && !message.includes(hint)) return { message, hint };
+  if (hint !== '' && message !== hint) return { message, hint };
   return describeError(message);
 }
 

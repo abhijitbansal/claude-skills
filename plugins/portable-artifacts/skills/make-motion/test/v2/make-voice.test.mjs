@@ -11,7 +11,7 @@ import { PassThrough } from 'node:stream';
 import { HERE, browserAvailable } from './helpers/session.mjs';
 import { registries } from '../../engine/registry.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
-import { validateFilm } from '../../scripts/v2/spec.mjs';
+import { timedAnchorErrors, validateFilm } from '../../scripts/v2/spec.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { formatText } from '../../scripts/v2/report.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
@@ -157,7 +157,26 @@ test('a missing voice install is exit 2, ok false, with the install hint; nothin
   assert.equal(report.voice, null);
   assert.equal(report.output, null);
   assert.deepEqual(report.findings, []);
-  assert.equal(formatText(report, { sheetsDir: null }).split('\n')[0], 'invalid', 'a failed stage never reads as valid');
+  assert.equal(formatText(report, { sheetsDir: null }).split('\n')[0], 'failed', 'machine trouble: never valid, and not the film\'s fault');
+});
+
+test('a hint is dropped only when the message is exactly the hint, never because the message mentions it', async () => {
+  const fail = new VoiceSynthError('the voice worker said: run again later did not help', { kind: 'machine', hint: 'run again' });
+  const { report, exitCode } = await runVoiced(writeVoiced('voiced-hint-inside'), fakeSynthesiser({ fail }).synthesise);
+  assert.equal(exitCode, 2);
+  assert.deepEqual(report.error, { message: 'the voice worker said: run again later did not help', hint: 'run again' });
+});
+
+test('an interrupt that races a film voice error is an interruption: exit 130, not an invalid film', async () => {
+  const controller = new AbortController();
+  const synthesise = async () => {
+    controller.abort();
+    throw new VoiceSynthError('shot "hook": the narration has a character the voice cannot say', { kind: 'film', hint: 'h', shot: 'hook' });
+  };
+  const { report, exitCode } = await runVoiced(writeVoiced('voiced-race'), synthesise, {}, controller.signal);
+  assert.equal(exitCode, 130, JSON.stringify(report));
+  assert.deepEqual(report.error, { message: 'interrupted', hint: '' });
+  assert.deepEqual(report.findings, []);
 });
 
 test('machine trouble keeps its own hint; a timeout is machine trouble even when marked film', async () => {
@@ -338,4 +357,13 @@ test('two region events on a word pair the voice says as one are the real "same 
   assert.deepEqual(report.findings.map((f) => [f.kind, f.path]), [['mechanical', 'shots[0].on[1].at']]);
   assert.match(report.findings[0].message, SAME_TIME);
   assert.deepEqual(stagesOf(report), [['validate', true], ['voice', true], ['timeline', false]]);
+});
+
+test('timedAnchorErrors takes the look as the validator does: a film that names none gets its mode\'s, so no rule is skipped', () => {
+  const { look, ...unnamed } = clippingFilm('It costs $5 million.', ['word:2', 'word:3'], { voice: { name: 'af_heart' } });
+  assert.equal(look, 'pop', 'pop is viral\'s default look');
+  const timeline = buildTimeline(unnamed, { fps: FPS, words: sidecarWith([0.1, 0.3, 0.6, 0.6], 1.5)(unnamed).shots });
+  const errors = timedAnchorErrors(unnamed, timeline);
+  assert.deepEqual(errors.map((e) => e.path), ['shots[0].on[1].at']);
+  assert.match(errors[0].message, SAME_TIME);
 });

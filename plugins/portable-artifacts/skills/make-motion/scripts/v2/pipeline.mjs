@@ -36,9 +36,14 @@ function readFilmFile(specPath) {
   }
 }
 
-// loadFilm(specPath, { registries? }) -> { film, timeline, specDir }.
+// loadFilm(specPath, { registries? }) -> { film, timeline, specDir, timingJudged }.
 // Throws SpecError (carrying `errors`) for an invalid film, and a plain Error
 // naming the path for a file that cannot be read or parsed.
+// timingJudged is false for a film with a voice: its timeline here is the
+// estimate, and the checks that depend on where its words fall (each anchor
+// inside its shot, the kind rules that resolve anchors) were not run; they
+// belong to its measured timeline (spec.mjs timedAnchorErrors, which make.mjs
+// runs after the voice stage). True for a film without one: all were run.
 export function loadFilm(specPath, { registries = defaultRegistries } = {}) {
   const spec = readFilmFile(specPath);
   const specDir = path.dirname(path.resolve(specPath));
@@ -46,5 +51,5 @@ export function loadFilm(specPath, { registries = defaultRegistries } = {}) {
   if (!ok) throw new SpecError(errors);
   const film = withFilmDefaults(spec, registries);
   const timeline = buildTimeline(film, { fps: film.fps, modes: registries.modes });
-  return { film, timeline, specDir };
+  return { film, timeline, specDir, timingJudged: film.voice === undefined };
 }

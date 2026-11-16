@@ -93,14 +93,26 @@ export function outlineOf(film, timeline) {
 /** `<id>  <show>  <start>-<end>s  "<plain narration>"`, one line per shot (the range joined by an en dash). */
 export const outlineLines = (outline) => outline.map((s) => `${s.id}  ${s.show}  ${secondsText(s.start)}${EN_DASH}${secondsText(s.end)}s  "${s.narration}"`);
 
-// `valid` only when the film validated and no stage failed: a voice the film cannot be spoken with, anchors that fail on
-// the measured timeline, or trouble with the machine never read as valid.
-const isValid = (stages) => Boolean(stages.find((s) => s.name === 'validate')?.ok) && stages.every((s) => s.ok);
+const INTERRUPTED = 'interrupted'; // the error message of a run stopped through its signal (run.mjs failureOutcome)
 const timelineFailed = (stages) => stages.some((s) => s.name === 'timeline' && !s.ok);
 
-/** The text form of a report: `valid` or `invalid`, a line per finding, then where things went and the frame counts. */
+/**
+ * The first line of the text form. `interrupted` or `failed` when the user or the machine stopped the run (its `error`);
+ * otherwise `invalid` when the film was rejected: it did not validate, its voice could not be spoken from it (a film
+ * error), or its anchors failed on the measured timeline (each a failed stage with no error); else `valid`.
+ */
+function verdict(report) {
+  if (report.error) return report.error.message === INTERRUPTED ? INTERRUPTED : 'failed';
+  const validated = Boolean(report.stages.find((s) => s.name === 'validate')?.ok);
+  return validated && report.stages.every((s) => s.ok) ? 'valid' : 'invalid';
+}
+
+/**
+ * The text form of a report: `valid`, `invalid`, `failed` or `interrupted` (verdict), a line per finding, then where
+ * things went and the frame counts.
+ */
 export function formatText(report, { sheetsDir }) {
-  const lines = [isValid(report.stages) ? 'valid' : 'invalid'];
+  const lines = [verdict(report)];
   for (const f of report.findings) lines.push(`${f.kind}: ${f.path}: ${f.message}`);
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
