@@ -3,13 +3,15 @@
 // mastered to the mode's loudness, and muxed into the finished MP4 without touching its video.
 //
 // The argument builders are pure and take numbers only: no film string (a word's text, a shot id) reaches an ffmpeg
-// argument, and ffmpeg is always run with an argument array and no shell. Times are formatted here, to 1e-4 s.
+// argument, and ffmpeg is always run with an argument array and no shell. Every number in an argument goes through a
+// formatter that refuses a value that is not finite; times are formatted to 1e-4 s, decibels to 0.01.
 //
 // The track is built at 48 kHz (each shot's WAV resampled once), so a recording at a higher rate than Kokoro's 24 kHz
-// keeps its top octave. The master chain: high-pass, compressor, de-esser, then the shaping (after the compressor, so it
-// cannot take back the lift or the cut), then stereo, then loudnorm in linear mode (one gain, so the shaping's relative
-// levels survive). A pass 2 in which loudnorm falls back to dynamic mode is refused. A track whose peaks the gain to the
-// target would push over the ceiling goes through version 1's limiter stage first (scripts/lib/loudness.mjs).
+// keeps its top octave. The master chain: high-pass, compressor, de-esser, the limiter when one is needed, the shaping,
+// stereo, then one static gain. The gain is computed from an ebur128 measurement of the chain (the meter the finished film
+// is judged with): the target minus the measured loudness, capped so the true peak stays at the ceiling. No loudnorm:
+// its second pass refuses linear mode on ordinary films (a short line in a longer film measures a loudness range of 0),
+// and a static gain keeps the shaping's lift and cut exact on every path.
 //
 // Shaping: one `volume` filter per stage, its gain an expression of `t` evaluated once per audio frame, after
 // `asetnsamples` cuts the audio into 1 ms frames. Each stage is a trapezoid in decibels: 0 dB until RAMP_SECONDS
@@ -19,7 +21,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { narrationStart } from '../../../engine/script/timing.mjs';
 import { fileInput, parseLoudness } from '../../lib/ffmpeg.mjs';
-import { ceilingFor, limiterChain, parseLoudnormJson } from '../../lib/loudness.mjs';
+import { ceilingFor } from '../../lib/loudness.mjs';
 import { SAMPLE_RATE } from './words.mjs';
 
 export const LEVELS = Object.freeze({ emphasisDb: 2, asideDb: -3 });
@@ -28,12 +30,12 @@ export const VOICE_RATE = SAMPLE_RATE; // Kokoro's WAVs, as the sidecar names th
 export const MASTER_RATE = 48000;
 export const TRACK_RATE = MASTER_RATE; // the voice track, from the first mix to the master
 // The voice in the MP4: AAC at 48 kHz, 160 kbit/s, two channels. Stereo (the mono voice on both) because players and
-// platforms expect it and a later music bed is stereo; the master is made stereo before loudnorm measures it, so the
+// platforms expect it and a later music bed is stereo; the master is made stereo before it is measured, so the
 // loudness it reaches is the loudness of the file (a mono master copied to two channels would measure 3 LU louder).
 export const AAC_AUDIO = Object.freeze(['-c:a', 'aac', '-b:a', '160k', '-ar', String(MASTER_RATE), '-ac', '2']);
-/** The finished film's integrated loudness may miss the mode's target by this many LU; more is machine trouble. */
+/** The voice's integrated loudness may miss the mode's target by this many LU; more refuses the film. */
 export const LOUDNESS_TOLERANCE_LU = 1;
-export const UNMEASURED_NOTE = 'the narration is too short or too quiet for its loudness to be measured, so it was not normalised';
+export const UNMEASURED_NOTE = 'the narration is too short for its loudness to be measured, so it was not normalised';
 
 const SHAPING_FRAME_SAMPLES = 48; // 1 ms at 48 kHz: the gain expression steps once a frame
 const HIGHPASS_HZ = 80;
@@ -41,20 +43,27 @@ const HIGHPASS_HZ = 80;
 const COMPRESSOR = Object.freeze({ thresholdDb: -18, ratio: 2, attackMs: 20, releaseMs: 250 });
 // The de-esser: moderate intensity, its default reduction limit and split frequency.
 const DEESSER = Object.freeze({ intensity: 0.3, maxReduction: 0.5, frequency: 0.5 });
-const LOUDNORM_LRA_MAX = 50; // loudnorm's largest loudness range
-const LIMITER_ROUNDS = 3; // at most this many limiter measurements before pass 2 (a very peaky track needs more than one)
+const LIMITER_ROUNDS = 3; // at most this many limiter measurements (a very peaky track needs more than one)
+const LIMITER_HEADROOM_DB = 3; // the limiter holds the peaks this far under the ceiling (as version 1's limiter stage)
 const GATE_FLOOR_LUFS = -70; // ebur128's absolute gate: an integrated value at or under it measured nothing
+const GAIN_STEPS = 100; // gains in dB are kept to 0.01, as they are written
+const METER = 'ebur128=peak=true';
 const TIME_DECIMALS = 4;
 const DB_DECIMALS = 2;
 const LINEAR_DECIMALS = 6;
-const STDERR_KEEP = 200000; // loudnorm's JSON comes last; a long log keeps its tail
-const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
-const NORMALIZATION_RE = /"normalization_type"\s*:\s*"(\w+)"/g;
+const STDERR_KEEP = 200000; // ebur128's summary comes last; a long log keeps its tail
 const QUIET = Object.freeze(['-hide_banner', '-loglevel', 'error']);
-const MEASURE = Object.freeze(['-hide_banner', '-nostats']); // loudnorm and ebur128 print at info level
+const MEASURE = Object.freeze(['-hide_banner', '-nostats']); // ebur128 prints its summary at info level
 const NO_METADATA = Object.freeze(['-map_metadata', '-1']); // an input's tags never reach the log a measurement is read from
 export const AUDIO_HINT = 'ffmpeg could not mix, master or mux the narration; the words after "ffmpeg failed" are its own. '
-  + 'Check the disk space and that this ffmpeg has the highpass, acompressor, deesser, alimiter and loudnorm filters, then run again';
+  + 'Check the disk space and that this ffmpeg has the highpass, acompressor, deesser, alimiter and ebur128 filters, then run again';
+const SILENT_MESSAGE = 'voice master: the narration is silent (nothing in it reaches the -70 dB measurement gate), so there is nothing to put in the film';
+const SILENT_HINT = 'for a synthesised voice, delete the .voice folder beside the video so the narration is made again; '
+  + 'for your own recording, check that the file has sound in it';
+const LEVEL_SHORT_HINT = 'the narration\'s loudest moments are too loud for its average level: soften them (for your own recording, '
+  + 'record further from the microphone or remove pops and clicks), or use a mode with a lower target. A rerun gives the same result';
+const LEVEL_OVER_HINT = 'the voice came out louder than the mode allows, which the mastering should never do; '
+  + 'please report it with the film. A rerun gives the same result';
 
 const fixed = (decimals) => (n) => {
   if (!Number.isFinite(n)) throw new RangeError(`master: ${n} is not a finite number`);
@@ -62,17 +71,19 @@ const fixed = (decimals) => (n) => {
 };
 const time = fixed(TIME_DECIMALS);
 const decibels = fixed(DB_DECIMALS);
-const samplesOf = (seconds) => Math.round(seconds * TRACK_RATE);
+const linear = (db) => fixed(LINEAR_DECIMALS)(10 ** (db / 20));
+// Whole samples at the track rate, refusing a time that is not finite.
+const samplesOf = (seconds) => Number(fixed(0)(seconds * TRACK_RATE));
 
 class AudioError extends Error {
-  constructor(message, options) {
-    super(message, options);
+  constructor(message, { hint = AUDIO_HINT, cause } = {}) {
+    super(message, cause === undefined ? undefined : { cause });
     this.name = 'AudioError';
-    this.hint = AUDIO_HINT;
+    this.hint = hint;
   }
 }
 
-// Any failure inside the voice steps as an AudioError, so it carries the audio hint; a stop passes through as it is.
+// Any failure inside the voice steps as an AudioError, so it carries a hint; a stop passes through as it is.
 const asAudioError = (err) => (err instanceof AudioError || err?.name === 'AbortError' ? err : new AudioError(`voice: ${err?.message ?? err}`, { cause: err }));
 
 // ---- shaping -----------------------------------------------------------------------------------------------------------
@@ -153,43 +164,33 @@ export function voiceTrackArgs({ shots, timeline, out, recording }) {
 
 // ---- mastering ---------------------------------------------------------------------------------------------------------
 
-const dbToLinear = (db) => (10 ** (db / 20)).toFixed(LINEAR_DECIMALS);
-
-// The loudness range pass 2 is given: the mode's, or the measured range when it is wider (up to loudnorm's largest), so
-// a wide range alone never sends loudnorm to dynamic mode.
-const rangeFor = (loudness, measured) => Math.min(LOUDNORM_LRA_MAX, Math.max(loudness.lra, Math.ceil(Number(measured.input_lra))));
-
-function loudnormFilter(loudness, measured) {
-  const target = `loudnorm=I=${loudness.lufs}:TP=${ceilingFor(loudness.truePeakDb)}`;
-  if (measured === undefined) return `${target}:LRA=${loudness.lra}:print_format=json`;
-  return `${target}:LRA=${rangeFor(loudness, measured)}:measured_I=${measured.input_i}:measured_TP=${measured.input_tp}`
-    + `:measured_LRA=${measured.input_lra}:measured_thresh=${measured.input_thresh}:offset=${measured.target_offset}:linear=true:print_format=json`;
+// The limiter stage: `drive` dB of gain, then alimiter holding the peaks LIMITER_HEADROOM_DB under the ceiling (room for
+// the static gain to finish the job). `level=false` stops alimiter's own make-up gain; `latency=true` removes its
+// lookahead delay, so the voice stays where the timeline put it.
+function limiterFilter(drive, loudness) {
+  return `volume=${decibels(drive)}dB,alimiter=limit=${linear(ceilingFor(loudness.truePeakDb) - LIMITER_HEADROOM_DB)}:level=false:latency=true`;
 }
 
-// The same chain on every pass, so the measured values apply: high-pass, compressor, de-esser, the shaping, stereo at
-// 48 kHz, the limiter stage when there is one (`pre`), loudnorm (none for a track it cannot measure: `measured` null),
-// then 48 kHz again (loudnorm itself puts out 192 kHz).
-function masterChain({ filter, loudness, measured, pre }) {
-  const compressor = `acompressor=threshold=${dbToLinear(COMPRESSOR.thresholdDb)}:ratio=${COMPRESSOR.ratio}:attack=${COMPRESSOR.attackMs}:release=${COMPRESSOR.releaseMs}`;
+// The chain every pass shares: high-pass, compressor, de-esser, the limiter when there is one (`drive`), the shaping,
+// stereo at 48 kHz. The shaping comes after everything that changes level with level, so its lift and cut are exact.
+function masterChain({ filter, drive, loudness }) {
+  const compressor = `acompressor=threshold=${linear(COMPRESSOR.thresholdDb)}:ratio=${COMPRESSOR.ratio}:attack=${COMPRESSOR.attackMs}:release=${COMPRESSOR.releaseMs}`;
   const deesser = `deesser=i=${DEESSER.intensity}:m=${DEESSER.maxReduction}:f=${DEESSER.frequency}`;
-  const stereo = `aresample=${MASTER_RATE},aformat=channel_layouts=stereo`;
-  const normalise = measured === null ? [] : [pre, loudnormFilter(loudness, measured)];
-  return [`highpass=f=${HIGHPASS_HZ}`, compressor, deesser, filter, stereo, ...normalise, `aresample=${MASTER_RATE}`]
+  const limiter = drive === undefined ? '' : limiterFilter(drive, loudness);
+  return [`highpass=f=${HIGHPASS_HZ}`, compressor, deesser, limiter, filter, `aresample=${MASTER_RATE},aformat=channel_layouts=stereo`]
     .filter(Boolean).join(',');
 }
 
 /**
- * The ffmpeg arguments of a mastering pass over the voice track `wav`. `measured` undefined: a measuring pass (loudnorm
- * prints its JSON on stderr). `measured` pass 1's values: pass 2, which applies them in linear mode, prints the mode it
- * used, and writes `out`, a 48 kHz stereo WAV. `measured` null: a track loudnorm could not measure, written through the
- * chain without loudnorm. `filter` is the shaping chain; `pre` the limiter stage or undefined; `loudness` the mode's
- * { lufs, truePeakDb, lra }, the true peak aimed 0.5 dB under the target for the AAC encode (loudness.mjs ceilingFor).
+ * The ffmpeg arguments of a mastering pass over the voice track `wav`. Without `gainDb`: a measuring pass (ebur128 on
+ * stderr, the same meter the finished film is judged with). With `gainDb`: the master, the chain then one static gain,
+ * written to `out` as a 48 kHz stereo WAV. `filter` is the shaping chain; `drive` the limiter's drive in dB or undefined
+ * (with `loudness`, the mode's { lufs, truePeakDb }, for the limiter's ceiling).
  */
-export function masterArgs({ wav, out, filter, loudness, measured, pre }) {
-  const af = masterChain({ filter, loudness, measured, pre });
-  if (measured === undefined) return [...MEASURE, ...fileInput(wav), ...NO_METADATA, '-af', af, '-f', 'null', '-'];
-  const log = measured === null ? QUIET : MEASURE;
-  return [...log, '-y', ...fileInput(wav), ...NO_METADATA, '-af', af, '-ar', String(MASTER_RATE), '-c:a', 'pcm_s16le', out];
+export function masterArgs({ wav, out, filter, drive, loudness, gainDb }) {
+  const chain = masterChain({ filter, drive, loudness });
+  if (gainDb === undefined) return [...MEASURE, ...fileInput(wav), ...NO_METADATA, '-af', `${chain},${METER}`, '-f', 'null', '-'];
+  return [...QUIET, '-y', ...fileInput(wav), ...NO_METADATA, '-af', `${chain},volume=${decibels(gainDb)}dB`, '-ar', String(MASTER_RATE), '-c:a', 'pcm_s16le', out];
 }
 
 const lastLine = (text) => text.trim().split('\n').filter((l) => l.trim()).at(-1) ?? 'no output';
@@ -201,51 +202,59 @@ async function step(run, args, what) {
   return stderr;
 }
 
-// A measuring pass's values, each a plain number (they come from another program's output and go back into an
-// argument), or null when loudnorm measured nothing (a track too short or too quiet for it).
-function checkedMeasurement(stderr) {
-  const measured = parseLoudnormJson(stderr);
-  if (measured === null) throw new AudioError(`voice master: ffmpeg printed no loudness measurement (its last line: ${lastLine(stderr)})`);
-  if (!Number.isFinite(Number(measured.input_i))) return null;
-  const bad = Object.entries(measured).find(([, value]) => !PLAIN_NUMBER.test(value));
-  if (bad) throw new AudioError(`voice master: loudnorm measured ${bad[0]} as ${JSON.stringify(bad[1])}, not a number`);
-  return measured;
+// One measuring pass: { lufs, truePeak } as ebur128 reads the chain's output (-Infinity for nothing).
+async function measureChain(run, base) {
+  const stderr = await step(run, masterArgs(base), 'voice master');
+  const level = parseLoudness(stderr);
+  if (level === null) throw new AudioError(`voice master: ffmpeg printed no loudness measurement (its last line: ${lastLine(stderr)})`);
+  return level;
 }
 
-// True when the gain to the target would push the measured peak over the ceiling: linear loudnorm cannot apply it.
-const overCeiling = (measured, loudness) => Number(measured.input_tp) + (loudness.lufs - Number(measured.input_i)) > ceilingFor(loudness.truePeakDb);
+// Over the gate: the integrated loudness was measured; the true peak reached it (the track has sound at all).
+const isMeasured = ({ lufs }) => Number.isFinite(lufs) && lufs > GATE_FLOOR_LUFS;
+const isSilent = ({ truePeak }) => !(Number.isFinite(truePeak) && truePeak > GATE_FLOOR_LUFS);
+const hundredths = (n) => Math.round(n * GAIN_STEPS) / GAIN_STEPS;
 
-// Pass 2 must have run linear; dynamic mode would compress the shaping's lift and cut away.
-function checkLinear(stderr) {
-  const used = [...stderr.matchAll(NORMALIZATION_RE)].at(-1)?.[1];
-  if (used !== 'linear') {
-    throw new AudioError(`voice master: loudnorm normalised the narration in ${used ?? 'an unknown'} mode, not linear (dynamic mode would flatten the emphasis and aside levels)`);
+// The static gain to the target for a measured `level`, capped so the true peak stays at the ceiling, and by how much
+// the cap leaves it short of the target (0 or less: not short).
+function gainFor(level, loudness) {
+  const wanted = loudness.lufs - level.lufs;
+  const allowed = ceilingFor(loudness.truePeakDb) - level.truePeak;
+  return { gainDb: hundredths(Math.min(wanted, allowed)), shortDb: wanted - allowed };
+}
+
+// Limiter rounds while the peak cap leaves the gain more than LOUDNESS_TOLERANCE_LU short: each adds the shortfall to
+// the drive and measures again. Resolves the last measurement and the drive (undefined when no round ran).
+async function limited(run, base, first) {
+  let level = first;
+  let drive;
+  for (let round = 0; round < LIMITER_ROUNDS && gainFor(level, base.loudness).shortDb > LOUDNESS_TOLERANCE_LU; round++) {
+    drive = hundredths((drive ?? 0) + gainFor(level, base.loudness).shortDb);
+    level = await measureChain(run, { ...base, drive });
+    if (!isMeasured(level)) throw new AudioError('voice master: the narration could not be measured through the limiter');
   }
+  return { level, drive };
 }
 
 /**
- * Masters the voice track `wav` into `out` through `run(args) -> Promise<{ code, stderr }>` (ffmpegRunner): pass 1
- * measures; a track whose peaks the gain would push over the ceiling gets the limiter stage and is measured again
- * through it; pass 2 applies the measurement in linear mode, checked. A track loudnorm cannot measure is written without
- * it. Resolves `{ measured, limited }` (measured null for that track); rejects with ffmpeg's words and a hint.
+ * Masters the voice track `wav` into `out` through `run(args) -> Promise<{ code, stderr }>` (ffmpegRunner): it measures
+ * the chain, and writes it with one static gain to the mode's target, capped by the ceiling; the limiter runs first only
+ * when that cap would leave the result more than 1 LU short (at most LIMITER_ROUNDS rounds; what is still short is
+ * written, and the level judgement refuses it). A silent track (nothing over the gate) is refused; an audible track too
+ * short to measure is written with no gain. Resolves `{ gainDb, limited, measured }`.
  */
 export async function masterVoice({ run, wav, out, filter, loudness }) {
-  const base = { wav, out, filter, loudness };
-  let measured = checkedMeasurement(await step(run, masterArgs(base), 'voice master'));
-  if (measured === null) {
-    await step(run, masterArgs({ ...base, measured: null }), 'voice master');
-    return { measured: null, limited: false };
+  const base = { wav, filter, loudness };
+  const first = await measureChain(run, base);
+  if (isSilent(first)) throw new AudioError(SILENT_MESSAGE, { hint: SILENT_HINT });
+  if (!isMeasured(first)) {
+    await step(run, masterArgs({ ...base, out, gainDb: 0 }), 'voice master');
+    return { gainDb: 0, limited: false, measured: false };
   }
-  let pre;
-  let gain = 0;
-  for (let round = 0; round < LIMITER_ROUNDS && overCeiling(measured, loudness); round++) {
-    gain += loudness.lufs - Number(measured.input_i); // limiting lowers the loudness, so each round adds what is still missing
-    pre = limiterChain({ gain, truePeak: loudness.truePeakDb });
-    measured = checkedMeasurement(await step(run, masterArgs({ ...base, pre }), 'voice master'));
-    if (measured === null) throw new AudioError('voice master: loudnorm could not measure the narration through the limiter');
-  }
-  checkLinear(await step(run, masterArgs({ ...base, measured, pre }), 'voice master'));
-  return { measured, limited: pre !== undefined };
+  const { level, drive } = await limited(run, base, first);
+  const { gainDb } = gainFor(level, loudness);
+  await step(run, masterArgs({ ...base, out, drive, gainDb }), 'voice master');
+  return { gainDb, limited: drive !== undefined, measured: true };
 }
 
 // ---- the film's voice, end to end --------------------------------------------------------------------------------------
@@ -303,7 +312,7 @@ export function muxArgs({ video, audio, out, duration }) {
     '-t', time(duration), '-movflags', '+faststart', out];
 }
 
-const loudnessArgs = (file) => [...MEASURE, ...fileInput(file), '-map', '0:a:0', '-af', 'ebur128=peak=true', '-f', 'null', '-'];
+const loudnessArgs = (file) => [...MEASURE, ...fileInput(file), '-map', '0:a:0', '-af', METER, '-f', 'null', '-'];
 
 // ebur128's reading as the report's audio: an integrated value at the gate floor (or none) measured nothing.
 function levelOf({ lufs, truePeak }) {
@@ -312,15 +321,13 @@ function levelOf({ lufs, truePeak }) {
 }
 
 /**
- * Muxes the mastered voice `audio` into `video` as `out`, then measures the finished file: resolves
- * `{ lufs, truePeakDb, note }` as ebur128 reads them from `out`, never the targets echoed back (lufs null, with a note,
- * for a narration too short or too quiet to measure).
+ * The voice level of `file` (the master WAV, or the finished film's first audio stream) as ebur128 reads it:
+ * `{ lufs, truePeakDb, note }` (lufs null, with a note, for a narration too short to measure).
  */
-export async function muxVoice({ run, video, audio, out, duration }) {
+export async function measureFile({ run, file }) {
   try {
-    await step(run, muxArgs({ video, audio, out, duration }), 'voice mux');
-    const level = parseLoudness(await step(run, loudnessArgs(out), 'voice loudness'));
-    if (level === null) throw new AudioError('voice loudness: ffmpeg printed no ebur128 summary for the finished film');
+    const level = parseLoudness(await step(run, loudnessArgs(file), 'voice loudness'));
+    if (level === null) throw new AudioError(`voice loudness: ffmpeg printed no ebur128 summary for ${path.basename(file)}`);
     return levelOf(level);
   } catch (err) {
     throw asAudioError(err);
@@ -328,16 +335,33 @@ export async function muxVoice({ run, video, audio, out, duration }) {
 }
 
 /**
- * The finished film's voice level against the mode's `loudness`: more than LOUDNESS_TOLERANCE_LU from the integrated
- * target, or a true peak over the ceiling, is machine trouble (an AudioError with the hint); an unmeasured loudness
- * (lufs null) is not judged. Returns `audio`.
+ * Muxes the mastered voice `audio` into `video` as `out`, then measures the finished file: resolves
+ * `{ lufs, truePeakDb, note }` as ebur128 reads them from `out` (measureFile), never the targets echoed back.
  */
-export function judgeLevel(audio, loudness) {
-  if (audio.lufs !== null && Math.abs(audio.lufs - loudness.lufs) > LOUDNESS_TOLERANCE_LU) {
-    throw new AudioError(`voice loudness: the finished film measures ${audio.lufs} LUFS, more than ${LOUDNESS_TOLERANCE_LU} LU from the mode's target of ${loudness.lufs} LUFS`);
+export async function muxVoice({ run, video, audio, out, duration }) {
+  try {
+    await step(run, muxArgs({ video, audio, out, duration }), 'voice mux');
+  } catch (err) {
+    throw asAudioError(err);
+  }
+  return measureFile({ run, file: out });
+}
+
+/**
+ * A voice level (measureFile) against the mode's `loudness`: more than LOUDNESS_TOLERANCE_LU from the integrated
+ * target, or a true peak over the ceiling, refuses the film (an AudioError whose hint says what the author can change,
+ * since a rerun gives the same result); an unmeasured loudness (lufs null) is not judged. `subject` names what was
+ * measured in the message. Returns `audio`.
+ */
+export function judgeLevel(audio, loudness, subject = 'the finished film') {
+  if (audio.lufs !== null && audio.lufs < loudness.lufs - LOUDNESS_TOLERANCE_LU) {
+    throw new AudioError(`voice loudness: ${subject} measures ${audio.lufs} LUFS, more than ${LOUDNESS_TOLERANCE_LU} LU under the mode's target of ${loudness.lufs} LUFS`, { hint: LEVEL_SHORT_HINT });
+  }
+  if (audio.lufs !== null && audio.lufs > loudness.lufs + LOUDNESS_TOLERANCE_LU) {
+    throw new AudioError(`voice loudness: ${subject} measures ${audio.lufs} LUFS, more than ${LOUDNESS_TOLERANCE_LU} LU over the mode's target of ${loudness.lufs} LUFS`, { hint: LEVEL_OVER_HINT });
   }
   if (audio.truePeakDb !== null && audio.truePeakDb > loudness.truePeakDb) {
-    throw new AudioError(`voice loudness: the finished film has a true peak of ${audio.truePeakDb} dBTP, over the mode's ceiling of ${loudness.truePeakDb} dBTP`);
+    throw new AudioError(`voice loudness: ${subject} has a true peak of ${audio.truePeakDb} dBTP, over the mode's ceiling of ${loudness.truePeakDb} dBTP`, { hint: LEVEL_OVER_HINT });
   }
   return audio;
 }

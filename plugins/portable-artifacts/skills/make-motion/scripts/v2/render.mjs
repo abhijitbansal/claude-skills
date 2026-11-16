@@ -154,8 +154,9 @@ function loudnessFor(film, voice) {
  *   capture (default: JPEG at quality 98). voice: what the voice stage made, required for a film with `voice`.
  * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number,
  *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null } | null }>} audio: the voice as measured
- *   in the finished file (lufs null, with a note, when it is too short or too quiet to measure), null without a voice. A
- *   level more than 1 LU off the mode's target, or a true peak over its ceiling, fails the render (voice/master.mjs judgeLevel).
+ *   in the finished file (lufs null, with a note, when it is too short to measure), null without a voice. A level more
+ *   than 1 LU off the mode's target, or a true peak over its ceiling, fails the render (voice/master.mjs judgeLevel): the
+ *   master WAV is judged before any frame is captured, and the finished file again after the mux.
  */
 export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice }) {
   const ffmpeg = await findFfmpeg();
@@ -175,6 +176,7 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     sweepPartials(path.dirname(out));
     if (steps !== null) work = mkdtempSync(path.join(tmpdir(), 'mm-voice-'));
     const master = steps === null ? null : await steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work });
+    if (master !== null) steps.judgeLevel(await steps.measureFile({ run, file: master }), loudness, 'the mastered narration'); // before any frame is captured
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact })], signal);
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });
     await encoder.finish();
