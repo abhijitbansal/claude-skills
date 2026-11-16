@@ -219,12 +219,13 @@ async function timelineFor(film, made, state, log) {
 
 // ---- the sound stage ----------------------------------------------------------------------------------------------------
 
-// The sound modules, loaded only for a film with sound: a film without any loads none of them.
+// The sound stage's modules, loaded only for a film with sound. (The validator loads sound/synth.mjs for every film, for
+// its list of cue names: spec-sound.mjs KNOWN_CUES.)
 async function soundSteps() {
   const [cues, bed, synth, duck] = await Promise.all([
     import('./sound/cues.mjs'), import('./sound/bed.mjs'), import('./sound/synth.mjs'), import('./sound/duck.mjs'),
   ]);
-  return { planCues: cues.planCues, ...bed, renderCues: synth.renderCues, duckEnvelope: duck.duckEnvelope };
+  return { planCues: cues.planCues, ...bed, renderCues: synth.renderCues, duckEnvelope: duck.duckEnvelope, heardWordSpans: duck.heardWordSpans };
 }
 
 // Whether `film` (defaults filled) has sound to make: not "sound": "off", and music, its own cue list, "sound": "on",
@@ -247,10 +248,10 @@ const cutTimes = (timeline) => timeline.shots.slice(1).map((s) => s.start);
 const median = (xs) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 
 // A user's music file: its tempo from its beats (null without a steady beat) and how many cuts fall within a frame of one.
-function fileSummary(input, timeline, end) {
+function fileSummary(input, timeline, end, landEpsilon) {
   const beats = input.beats;
   const cuts = cutTimes(timeline);
-  const landed = beats === null ? null : cuts.filter((c) => beats.some((b) => Math.abs(b - c) <= 1 / timeline.fps)).length;
+  const landed = beats === null ? null : cuts.filter((c) => beats.some((b) => Math.abs(b - c) <= 1 / timeline.fps + landEpsilon)).length;
   const bpm = beats === null ? null : Math.round((60 / median(beats.slice(1).map((b, k) => b - beats[k]))) * 100) / 100;
   return { kind: 'file', bed: null, bpm, landed, cuts: cuts.length, short: end.short };
 }
@@ -263,24 +264,24 @@ async function musicPlan(steps, film, timeline, specDir, signal) {
     const grid = steps.fitBeatGrid(cutTimes(timeline), { bpm: music.bpm, seconds: timeline.duration, fps: timeline.fps });
     return { bed: music.bed, grid, summary: { kind: 'bed', bed: music.bed, bpm: grid.bpm, landed: grid.landed, cuts: grid.cuts, short: false } };
   }
-  const input = await steps.musicInput(film, specDir, { signal });
+  const input = await steps.musicInput(film, specDir, { signal, seconds: timeline.duration }); // silent for the film's length: refused
   const end = steps.musicEnd(input.seconds, timeline.duration);
-  return { input, end, summary: fileSummary(input, timeline, end) };
+  return { input, end, summary: fileSummary(input, timeline, end, steps.LAND_EPSILON) };
 }
 
-// The word spans the bed ducks under (film seconds), for a film with a voice; none without one.
-const wordSpans = (film, timeline) => (film.voice === undefined ? []
-  : timeline.shots.flatMap((s) => s.words.map((w) => ({ start: s.start + w.start, end: s.start + w.end }))));
 
 // The cue track and the music written into `work` for the render: { cues, music } as renderFilm takes them, or null when
 // there is nothing to put in the film.
 async function soundFiles(steps, { film, timeline, cues, music, work }) {
   const seconds = timeline.duration;
-  const cueTrack = cues.length === 0 ? null
-    : { file: await steps.renderCues(cues, { seconds, seed: film.seed, out: path.join(work, 'cues.wav') }).then((r) => r.file), count: cues.length };
+  // The count is of the cues the track holds: the plan holds every cue inside the film, so none is dropped today, but
+  // the report would say so if one were.
+  const rendered = cues.length === 0 ? null : await steps.renderCues(cues, { seconds, seed: film.seed, out: path.join(work, 'cues.wav') });
+  const cueTrack = rendered === null ? null : { file: rendered.file, count: cues.length - rendered.dropped };
   let musicTrack = null;
   if (music !== null) {
-    const duck = steps.duckEnvelope(wordSpans(film, timeline), { seconds });
+    // The bed ducks under the words as they are heard (sound/duck.mjs heardWordSpans), for a film with a voice only.
+    const duck = steps.duckEnvelope(film.voice === undefined ? [] : steps.heardWordSpans(timeline), { seconds });
     musicTrack = music.input === undefined
       ? { file: await steps.renderBed({ bed: music.bed, grid: music.grid, seconds, seed: film.seed, out: path.join(work, 'bed.wav') }), recording: false, fadeFrom: null, duck, summary: music.summary }
       : { file: music.input.file, recording: true, fadeFrom: music.end.fadeFrom, duck, summary: music.summary };
@@ -303,7 +304,8 @@ async function makeSound(loaded, timeline, state, io, work) {
       const cues = steps.planCues(film, timeline);
       const music = await musicPlan(steps, film, timeline, specDir, io.signal);
       io.signal?.throwIfAborted();
-      state.audio = { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: cues.length, music: music?.summary ?? null };
+      // Nothing planned is nothing to put in the film: no audio, as the render reports it (review Minor 10).
+      if (cues.length > 0 || music !== null) state.audio = { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: cues.length, music: music?.summary ?? null };
       return { sound: work === null ? null : await soundFiles(steps, { film, timeline, cues, music, work }) };
     });
   } catch (err) {

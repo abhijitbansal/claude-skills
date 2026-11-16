@@ -19,7 +19,7 @@ import { ERROR_MARKER, INSTALL_HINT, TRIM, encodeWav } from '../../scripts/v2/vo
 import {
   CODE_FILES, HASH_CONSTANTS, MODEL_PIN, WORKER_PATH, sourceHash, synthesiseFilm, voiceHash,
 } from '../../scripts/v2/voice/synth.mjs';
-import { readSidecar, sentencesOf, writeSidecar } from '../../scripts/v2/voice/sidecar.mjs';
+import { SIDECAR_MAX_BYTES, SidecarError, readSidecar, sentencesOf, writeSidecar } from '../../scripts/v2/voice/sidecar.mjs';
 import { EMBEDDED_VOCAB } from '../../scripts/v2/voice/tokens.mjs';
 import { LEAD, SAMPLE_RATE } from '../../scripts/v2/voice/words.mjs';
 import { MAX_IDS, planCalls } from '../../scripts/v2/voice/calls.mjs';
@@ -91,7 +91,7 @@ test('sourceHash changes when one byte of one source changes, and the code key c
     assert.notEqual(sourceHash([a, b]), before);
   });
   const names = CODE_FILES.map((f) => path.basename(f)).sort();
-  assert.deepEqual(names, ['calls.mjs', 'kokoro.mjs', 'phonemes.mjs', 'say.mjs', 'sidecar.mjs', 'tokens.mjs', 'words.mjs', 'worker.mjs']);
+  assert.deepEqual(names, ['calls.mjs', 'kokoro.mjs', 'phonemes.mjs', 'say.mjs', 'sidecar.mjs', 'spoken.mjs', 'tokens.mjs', 'words.mjs', 'worker.mjs']);
   assert.ok(CODE_FILES.every((f) => existsSync(f)), 'every hashed source exists');
 });
 
@@ -553,6 +553,41 @@ test('a .voice that is a symlink is never used or written through: the link is r
     const again = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn }));
     assert.deepEqual([again.cached, fake.calls.length], [false, 2], 'a valid entry behind a linked .voice is not a hit');
     assert.deepEqual(readdirSync(planted), [path.basename(made.dir)], 'the link\'s target is untouched');
+  });
+});
+
+test('a .voice that is a regular file is removed and a real folder made: a miss, not machine trouble (final review V2)', async () => {
+  await withScratch(async (outDir) => {
+    writeFileSync(path.join(outDir, '.voice'), 'not a folder');
+    const fake = fakeSpawn();
+    const lines = [];
+    const made = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, log: (l) => lines.push(l) }));
+    assert.equal(lstatSync(path.join(outDir, '.voice')).isDirectory(), true);
+    assert.equal(path.dirname(made.dir), path.join(outDir, '.voice'));
+    assert.equal(lines.filter((l) => l.includes(TRUST_MISS) && l.includes('.voice')).length, 1, lines.join('\n'));
+  });
+});
+
+test('a voice.json over the size cap is a miss, never read whole (final review V1)', async () => {
+  assert.equal(SIDECAR_MAX_BYTES, 4 * 1024 * 1024);
+  await withScratch((outDir) => missAfter(outDir, (dir) => {
+    const file = path.join(dir, 'voice.json');
+    writeFileSync(file, `${readFileSync(file, 'utf8')}${' '.repeat(SIDECAR_MAX_BYTES)}`); // still a valid sidecar, padded past the cap
+  }));
+});
+
+test('readSidecar refuses a FIFO without waiting on it, and a symlink without following it (final review V1, V4)', { timeout: 10000 }, async (t) => {
+  if (process.platform === 'win32') { t.skip('no FIFOs'); return; }
+  await withScratch(async (outDir) => {
+    const fifo = path.join(outDir, 'voice.json');
+    assert.equal(spawnSync('mkfifo', [fifo]).status, 0);
+    assert.throws(() => readSidecar(fifo), (err) => err instanceof SidecarError && /not a regular file/.test(err.message));
+    const real = path.join(outDir, 'real.json');
+    writeFileSync(real, '{}');
+    const link = path.join(outDir, 'link.json');
+    symlinkSync(real, link);
+    assert.throws(() => readSidecar(link), (err) => err instanceof SidecarError);
+    assert.deepEqual(readSidecar(real), {});
   });
 });
 

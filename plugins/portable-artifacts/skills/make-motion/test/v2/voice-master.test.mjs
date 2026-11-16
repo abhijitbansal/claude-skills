@@ -15,17 +15,19 @@ import { buildTimeline, narrationStart } from '../../engine/script/timing.mjs';
 import { parseSay } from '../../engine/script/say.mjs';
 import {
   LEVELS, RAMP_SECONDS, VOICE_RATE, TRACK_RATE, AAC_AUDIO, gainStages, shapingFilter, masterArgs, masterVoice, voiceTrackArgs, muxArgs, masterTrack, muxVoice,
-  judgeLevel, measureFile, AUDIO_HINT, MASTER_AIM_LU, mixArgs, recordingInput,
+  judgeLevel, measureFile, AUDIO_HINT, MASTER_AIM_LU, mixArgs, recordingInput, encodeArgs, encodeMaster,
 } from '../../scripts/v2/voice/master.mjs';
 import { ceilingFor } from '../../scripts/lib/loudness.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { renderFilm } from '../../scripts/v2/render.mjs';
+import { renderCues } from '../../scripts/v2/sound/synth.mjs';
 
 const FIXTURES = path.join(HERE, '..', 'fixtures', 'voice');
 const FILM = JSON.parse(readFileSync(path.join(FIXTURES, 'film-three-shots.json'), 'utf8'));
 const SIDECAR = JSON.parse(readFileSync(path.join(FIXTURES, 'sidecar-three-shots.json'), 'utf8'));
 const FPS = 30;
 const PRO = registries.modes.get('pro');
+const VIRAL = registries.modes.get('viral');
 const TIMELINE = buildTimeline(FILM, { fps: FPS, words: SIDECAR.shots });
 const TIME_TOLERANCE = 1e-9;
 
@@ -281,11 +283,49 @@ test('voiceTrackArgs places each narrated WAV at its shot\'s narration start in 
   assert.equal(args.at(-1), '/v/track.wav');
 });
 
-test('muxArgs copies the video and encodes the voice as AAC 48 kHz at 160 kbit/s, capped at the film length', () => {
+// A run for encodeMaster that answers each measurement with the next of `levels` ([lufs, truePeak]) and records the gain of
+// each encode (0 when it has none).
+function encodeRun(levels) {
+  const gains = [];
+  let k = 0;
+  const run = async (args) => {
+    if (args.includes('null')) {
+      const [lufs, peak] = levels[Math.min(k++, levels.length - 1)];
+      return { code: 0, stderr: `  I:         ${lufs} LUFS\n  True peak:\n    Peak:      ${peak} dBFS\n` };
+    }
+    const af = args.indexOf('-af');
+    gains.push(af < 0 ? 0 : Number(/volume=(-?[\d.]+)dB/.exec(args[af + 1])[1]));
+    return { code: 0, stderr: '' };
+  };
+  return { run, gains };
+}
+
+test('encodeMaster re-encodes at most twice, each time adding what the last encode fell short (final review I3)', async () => {
+  const { run, gains } = encodeRun([[-17, -10], [-15, -8], [-15, -6], [-15, -4]]); // viral: -14 LUFS, ceiling -1, so -1.5 for the raise
+  const encoded = await encodeMaster({ run, master: '/w/m.wav', out: '/w/m.m4a', duration: 4, loudness: VIRAL.loudness });
+  assert.deepEqual(gains, [0, 3, 4], 'the first encode, then +3 dB, then +1 more; no third re-encode');
+  assert.deepEqual([encoded.gainDb, encoded.level.lufs], [4, -15]);
+});
+
+test('encodeMaster raises an encode only as far as the true peak allows, and not at all on the ceiling (final review I3)', async () => {
+  const capped = encodeRun([[-17, -2.5], [-16, -1.5]]);
+  const raised = await encodeMaster({ run: capped.run, master: '/w/m.wav', out: '/w/m.m4a', duration: 4, loudness: VIRAL.loudness });
+  assert.deepEqual(capped.gains, [0, 1], '3 LU short, but the peak has 1 dB of room under ceilingFor(-1) = -1.5');
+  assert.equal(raised.gainDb, 1);
+  const onCeiling = encodeRun([[-17, -1.5]]);
+  assert.equal((await encodeMaster({ run: onCeiling.run, master: '/w/m.wav', out: '/w/m.m4a', duration: 4, loudness: VIRAL.loudness })).gainDb, 0);
+  assert.deepEqual(onCeiling.gains, [0], 'no room: no re-encode');
+});
+
+test('encodeArgs encodes the master WAV as AAC 48 kHz at 160 kbit/s, audio only, capped at the film length; muxArgs copies it and the video (final review I3)', () => {
   assert.deepEqual(AAC_AUDIO, ['-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2']);
-  const args = muxArgs({ video: '/o/v.mp4', audio: '/o/m.wav', out: '/o/f.mp4', duration: 8.4 });
+  const encode = encodeArgs({ master: '/w/m.wav', out: '/w/m.m4a', duration: 8.4 }).join(' ');
+  assert.match(encode, /-protocol_whitelist file -format_whitelist wav -f wav -i \/w\/m\.wav -map 0:a:0 .*-c:a aac -b:a 160k -ar 48000 -ac 2 -t 8\.4000 -f mp4 \/w\/m\.m4a$/);
+  assert.match(encodeArgs({ master: '/w/m.wav', out: '/w/m.m4a', duration: 8.4, gainDb: 1.6 }).join(' '), /-af volume=1\.60dB -c:a aac/);
+  const args = muxArgs({ video: '/o/v.mp4', audio: '/w/m.m4a', out: '/o/f.mp4', duration: 8.4 });
   const joined = args.join(' ');
-  assert.match(joined, /-map 0:v:0 -map 1:a:0 -c:v copy -c:a aac -b:a 160k -ar 48000 -ac 2/);
+  assert.match(joined, /-format_whitelist mov,mp4,m4a -f mov -i \/o\/v\.mp4 -protocol_whitelist file -format_whitelist mov,mp4,m4a -f mov -i \/w\/m\.m4a/, 'our own MP4s, opened as MP4 only (V5)');
+  assert.match(joined, /-map 0:v:0 -map 1:a:0 -c:v copy -c:a copy/);
   assert.match(joined, /-t 8\.4000/);
   assert.equal(args.at(-1), '/o/f.mp4');
 });
@@ -404,7 +444,7 @@ test('alignment after the whole chain: the word onsets decoded from the finished
   const run = realRun(ffmpeg);
   const master = await masterTrack({ run, voice: { dir: voiceDir, sidecar }, timeline, loudness: PRO.loudness, workDir: work });
   const out = path.join(work, 'film.mp4');
-  await muxVoice({ run, video, audio: master, out, duration: timeline.duration });
+  await muxVoice({ run, video, audio: (await encodeMaster({ run, master, out: path.join(work, 'sound.m4a'), duration: timeline.duration, loudness: PRO.loudness })).file, out, duration: timeline.duration });
   const decoded = path.join(work, 'decoded.wav');
   const r = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', out, '-map', '0:a:0', '-ac', '1', '-ar', String(TRACK_RATE), '-c:a', 'pcm_s16le', decoded]);
   assert.equal(r.status, 0, r.stderr);
@@ -583,7 +623,7 @@ test('masterTrack and muxVoice master tone bursts to the mode\'s loudness and mu
   const run = realRun(ffmpeg);
   const master = await masterTrack({ run, voice: { dir: voiceDir, sidecar: SIDECAR }, timeline: TIMELINE, loudness: PRO.loudness, workDir: work });
   assert.equal(master, path.join(work, 'voice-master.wav'));
-  const audio = await muxVoice({ run, video, audio: master, out, duration: TIMELINE.duration });
+  const audio = await muxVoice({ run, video, audio: (await encodeMaster({ run, master, out: path.join(work, 'sound.m4a'), duration: TIMELINE.duration, loudness: PRO.loudness })).file, out, duration: TIMELINE.duration });
   const { streams, format } = probe(out);
   const sound = streams.filter((s) => s.codec_type === 'audio');
   assert.equal(sound.length, 1);
@@ -663,7 +703,7 @@ test('an audible narration too short to measure is muxed, not failed: audio.lufs
   const run = realRun(ffmpeg);
   const master = await masterTrack({ run, voice: { dir: voiceDir, sidecar }, timeline, loudness: PRO.loudness, workDir: work });
   const out = path.join(work, 'film.mp4');
-  const audio = await muxVoice({ run, video: testVideo(ffmpeg, work, timeline.duration), audio: master, out, duration: timeline.duration });
+  const audio = await muxVoice({ run, video: testVideo(ffmpeg, work, timeline.duration), audio: (await encodeMaster({ run, master, out: path.join(work, 'sound.m4a'), duration: timeline.duration, loudness: PRO.loudness })).file, out, duration: timeline.duration });
   assert.equal(audio.lufs, null);
   assert.match(audio.note, /too short/);
   assert.deepEqual(judgeLevel(audio, PRO.loudness), audio);
@@ -701,6 +741,22 @@ test('renderFilm fails fast on cues ffmpeg cannot read: before any frame is capt
   assert.deepEqual(readdirSync(path.dirname(out)), [], 'no output and no partial file');
 });
 
+test('a voiced film with no narrated shot and sparse cues is judged as a film with no voice: raised to the ceiling, not refused as a peaky narration (final review)', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const seconds = 12;
+  const work = path.join(dir, 'no-narration');
+  mkdirSync(work, { recursive: true });
+  const cues = await renderCues([{ t: 3, cue: 'click', gainDb: -12, pan: 0 }, { t: 8, cue: 'pop', gainDb: -12, pan: 0 }], { seconds, seed: 1, out: path.join(work, 'cues.wav') });
+  const captured = new Error('a frame was asked for: the level was accepted');
+  const page = { evaluate: () => { throw captured; }, screenshot: () => { throw captured; } };
+  const timeline = { fps: FPS, duration: seconds, frameCount: seconds * FPS, shots: [{ id: 'a', index: 0, start: 0, end: seconds, duration: seconds, words: [], sentences: [] }] };
+  const session = { film: { mode: 'viral', voice: { name: 'af_heart' }, shots: [{ id: 'a', show: 'statement' }] }, timeline, info: { post: '2d' }, page };
+  const voice = { dir: work, sidecar: { shots: [{ id: 'a', wav: null, seconds: 0, sentences: [] }] } };
+  const err = await renderFilm({ out: path.join(work, 'out', 'film.mp4'), session, voice, sound: { cues: { file: cues.file, count: 2 }, music: null } }).then(() => null, (e) => e);
+  assert.equal(err, captured, `refused before capture: ${err?.message}`);
+});
+
 test('renderFilm refuses a voiced film given without its voice, before any frame or file, rather than render it silent', async (t) => {
   if (!await needFfmpeg(t)) return;
   const session = { film: { mode: 'pro', voice: { name: 'af_heart' }, shots: [] }, timeline: TIMELINE, info: { post: '2d' }, page: null };
@@ -731,7 +787,7 @@ test('renderFilm judges the mastered level before any frame is captured: a narra
   const out = path.join(dir, 'off-target', 'film.mp4');
   const err = await renderFilm({ out, session, voice: { dir: voiceDir, sidecar } }).then(() => null, (e) => e);
   assert.ok(err !== null, 'the render must be refused');
-  assert.match(err.message, /^voice loudness: the mastered narration measures -?[\d.]+ LUFS, more than 0\.5 LU under/, 'judged before capture with the master\'s own 0.5 LU aim');
+  assert.match(err.message, /^voice loudness: the mastered narration measures -?[\d.]+ LUFS, more than 1 LU under/, 'judged before capture on its AAC encode, with the finished file\'s 1 LU rule (final review I3)');
   assert.match(err.hint, /loudest moments/);
   assert.doesNotMatch(err.hint, /run again/);
   t.diagnostic(err.message);
@@ -887,7 +943,7 @@ function speechBand(seconds) {
   return raw.map((x) => (low += a * (x - low)));
 }
 
-test('I3: a noise-like voice that passes before capture also passes after the mux: the 0.5 LU aim leaves margin for the AAC encode', async (t) => {
+test('I3: a noise-like voice judged as its AAC encode before capture is judged the same after the mux', async (t) => {
   const ffmpeg = await needFfmpeg(t);
   if (!ffmpeg) return;
   const work = path.join(dir, 'i3');
@@ -895,9 +951,11 @@ test('I3: a noise-like voice that passes before capture also passes after the mu
   writeShotWavs(voiceDir, SIDECAR, (seconds) => speechBand(seconds));
   const run = realRun(ffmpeg);
   const master = await masterTrack({ run, voice: { dir: voiceDir, sidecar: SIDECAR }, timeline: TIMELINE, loudness: PRO.loudness, workDir: work });
-  const before = judgeLevel(await measureFile({ run, file: master }), PRO.loudness, 'the mastered narration', { tolerance: MASTER_AIM_LU });
+  const encoded = await encodeMaster({ run, master, out: path.join(work, 'sound.m4a'), duration: TIMELINE.duration, loudness: PRO.loudness });
+  const before = judgeLevel(encoded.level, PRO.loudness, 'the mastered narration');
   const video = testVideo(ffmpeg, work, TIMELINE.duration);
-  const after = judgeLevel(await muxVoice({ run, video, audio: master, out: path.join(work, 'film.mp4'), duration: TIMELINE.duration }), PRO.loudness);
+  const after = judgeLevel(await muxVoice({ run, video, audio: encoded.file, out: path.join(work, 'film.mp4'), duration: TIMELINE.duration }), PRO.loudness);
+  assert.deepEqual([after.lufs, after.truePeakDb], [before.lufs, before.truePeakDb]);
   t.diagnostic(`master ${before.lufs} LUFS, finished file ${after.lufs} LUFS`);
   assert.ok(Math.abs(after.lufs - PRO.loudness.lufs) <= 1, `${after.lufs} LUFS after the mux`);
 });

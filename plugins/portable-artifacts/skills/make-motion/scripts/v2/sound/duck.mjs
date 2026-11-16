@@ -1,5 +1,5 @@
 // The duck: how far the music bed is lowered while the voice speaks, as breakpoints of a gain curve in film time
-// (voice/master.mjs turns them into one volume expression). Pure: numbers in, numbers out.
+// (voice/master.mjs turns them into volume filters in series, up to 32 terms each). Pure: numbers in, numbers out.
 //
 // Each word span (joined with the next when they are closer than the release) is a trapezoid in decibels: 0 until
 // `attack` before the span, a straight ramp down to `depthDb` at its start, held to its end, a straight ramp back up
@@ -54,6 +54,15 @@ function crossing(p, n, { attack, release }) {
   if (n.a - attack >= p.b + release) return null;
   const t = (n.a + (attack * p.b) / release) / (1 + attack / release);
   return t > p.b && t < n.a ? t : null;
+}
+
+/**
+ * The words of `timeline` as they are heard, in film seconds: [{ start, end }] from each word's sound times
+ * (engine/script/timing.mjs soundStart, soundEnd: the voice's own, where the picture shows a shot's first word from the
+ * shot's first frame) plus its shot's start. What the bed ducks under.
+ */
+export function heardWordSpans(timeline) {
+  return timeline.shots.flatMap((s) => s.words.map((w) => ({ start: s.start + (w.soundStart ?? w.start), end: s.start + (w.soundEnd ?? w.end) })));
 }
 
 /**

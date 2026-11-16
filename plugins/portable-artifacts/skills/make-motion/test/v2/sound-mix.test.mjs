@@ -1,5 +1,5 @@
 // One mix (scripts/v2/voice/master.mjs with scripts/v2/sound/duck.mjs): the voice shaped as before, a music bed at
-// BED_GAIN_DB ducked under every word, cues at their own gains, summed, then the one static gain and the same level
+// BED_UNDER_VOICE_LU under the target (its loudness measured), ducked under every word, cues at their own gains, summed, then the one static gain and the same level
 // judgement. Tests that need ffmpeg (or a browser) skip without them (PA_REQUIRE_BROWSER=1 makes that a failure).
 // Run with --test-concurrency=1.
 import test, { before, after } from 'node:test';
@@ -11,7 +11,10 @@ import path from 'node:path';
 import { ffmpegOrNull, sessionOrNull } from './helpers/session.mjs';
 import { registries } from '../../engine/registry.mjs';
 import { duckEnvelope, DUCK_DEPTH_DB, DUCK_ATTACK, DUCK_RELEASE } from '../../scripts/v2/sound/duck.mjs';
-import { BED_GAIN_DB, NO_VOICE_NOTE, VOICE_RATE, mixArgs, masterTrack, measureFile, judgeLevel, recordingInput } from '../../scripts/v2/voice/master.mjs';
+import { BED_UNDER_VOICE_LU, NO_VOICE_NOTE, VOICE_RATE, encodeMaster, masterMix, mixArgs, masterTrack, measureFile, judgeLevel, muxArgs, muxVoice, recordingInput } from '../../scripts/v2/voice/master.mjs';
+import { renderBed } from '../../scripts/v2/sound/bed.mjs';
+import { mulberry32 } from '../../engine/seeded.mjs';
+import { parseLoudness } from '../../scripts/lib/ffmpeg.mjs';
 import { writeWav as writeStereoWav } from '../../scripts/v2/sound/wav.mjs';
 import { renderCues } from '../../scripts/v2/sound/synth.mjs';
 import { planCues } from '../../scripts/v2/sound/cues.mjs';
@@ -35,8 +38,8 @@ const assertPoints = (got, want) => {
   got.forEach((p, i) => assert.ok(near(p.t, want[i][0]) && near(p.gainDb, want[i][1]), `point ${i}: ${JSON.stringify(p)} vs ${want[i]}`));
 };
 
-test('the duck constants: -9 dB, 60 ms attack, 300 ms release; the bed sits at -18 dB', () => {
-  assert.deepEqual([DUCK_DEPTH_DB, DUCK_ATTACK, DUCK_RELEASE, BED_GAIN_DB], [-9, 0.06, 0.3, -18]);
+test('the duck constants: -9 dB, 60 ms attack, 300 ms release; the bed sits 18 LU under the target', () => {
+  assert.deepEqual([DUCK_DEPTH_DB, DUCK_ATTACK, DUCK_RELEASE, BED_UNDER_VOICE_LU], [-9, 0.06, 0.3, 18]);
 });
 
 test('two words 0.1 s apart make one dip: down over the attack before the first, up over the release after the last', () => {
@@ -74,13 +77,16 @@ test('no words: no duck; bad input is an error', () => {
 // ---- mixArgs: numbers and paths only ----
 
 test('mixArgs: a music file of the user\'s own is opened through recordingInput; a bed WAV and the cues as plain files', () => {
-  const args = mixArgs({ cues: { file: '/w/cues.wav' }, music: { file: '/film/track.mp3', recording: true, fadeFrom: 7, duck: [] }, duration: 8, loudness: PRO.loudness });
+  const args = mixArgs({ cues: { file: '/w/cues.wav' }, music: { file: '/film/track.mp3', recording: true, fadeFrom: 7, duck: [], lufs: -20 }, duration: 8, loudness: PRO.loudness });
   const joined = args.join(' ');
   assert.ok(joined.includes(recordingInput('/film/track.mp3').join(' ')), joined);
   assert.ok(args.includes('/w/cues.wav'));
   const graph = args[args.indexOf('-filter_complex') + 1];
+  assert.match(graph, /\[1:a\]asetpts=PTS-STARTPTS,aresample/, 'the music is timed from its first sample, not its stream timestamps (review Minor 3)');
   assert.match(graph, /afade=t=out:st=7\.0000:d=1\.0000/);
-  assert.match(graph, /volume=-18\.00dB/);
+  assert.match(graph, /volume=-14\.00dB/, 'from -20 LUFS to 18 LU under the -16 target');
+  const measuring = mixArgs({ music: { file: '/w/bed.wav', recording: false, fadeFrom: null, duck: [] }, duration: 8, loudness: PRO.loudness });
+  assert.match(measuring[measuring.indexOf('-filter_complex') + 1], /volume=0\.00dB/, 'without lufs: its own level, to be measured');
   assert.match(graph, /amix=inputs=2:normalize=0/);
 });
 
@@ -240,6 +246,77 @@ test('a duck of a hundred dips runs through ffmpeg (the expression is not too lo
   const args = mixArgs({ music: { file: bed, recording: false, fadeFrom: null, duck }, duration: seconds, loudness: PRO.loudness });
   const r = spawnSync(ffmpeg, args, { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr.slice(-400));
+});
+
+// ---- final review I3: the AAC the film ships is the AAC that was judged ----
+
+// The reviewer's noise-even voice (probe-c): full-band noise at 48 kHz in 0.33 s words every 0.45 s, as a hissy
+// recording of the author's own might be, with the word spans it ducks the bed under.
+function noiseVoice(file, seconds) {
+  const rng = mulberry32(5);
+  const xs = Float32Array.from({ length: seconds * RATE }, (_, i) => {
+    const t = i / RATE;
+    const n = rng() * 2 - 1;
+    return t - Math.floor(t / 0.45) * 0.45 < 0.33 ? 0.2 * n : 0;
+  });
+  writeMono(file, xs, RATE);
+  return Array.from({ length: Math.ceil(seconds / 0.45) }, (_, w) => ({ start: w * 0.45, end: Math.min(seconds, w * 0.45 + 0.33) }));
+}
+
+const blackVideo = (ffmpeg, file, seconds) => spawnSync(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `color=c=black:s=64x64:r=${FPS}:d=${seconds}`,
+  '-c:v', 'libx264', '-pix_fmt', 'yuv420p', file], { encoding: 'utf8' });
+
+for (const [name, mode] of [['viral', VIRAL], ['pro', PRO]]) {
+  test(`I3 (${name}): a noise voice over the tape bed is encoded to AAC before capture, raised by what AAC took, judged at 1 LU, and that same stream is muxed`, async (t) => {
+    const ffmpeg = await ffmpegOrNull();
+    if (!ffmpeg) { t.skip('no ffmpeg'); return; }
+    const folder = path.join(dir, `aac-${name}`);
+    mkdirSync(folder, { recursive: true });
+    const seconds = 12;
+    const run = realRun(ffmpeg);
+    const spans = noiseVoice(path.join(folder, 'voice.wav'), seconds);
+    const tape = await renderBed({ bed: 'tape', grid: { bpm: 100, offset: 0 }, seconds, seed: 3, out: path.join(folder, 'tape.wav') });
+    const master = path.join(folder, 'master.wav');
+    await masterMix({ run, out: master, loudness: mode.loudness, duration: seconds, voice: { wav: path.join(folder, 'voice.wav'), filter: '' },
+      music: { file: tape, recording: false, fadeFrom: null, duck: duckEnvelope(spans, { seconds }) } });
+    const encoded = await encodeMaster({ run, master, out: path.join(folder, 'master.m4a'), duration: seconds, loudness: mode.loudness });
+    assert.ok(encoded.gainDb > 0.5, `AAC took ${encoded.gainDb} dB, given back before capture`);
+    judgeLevel(encoded.level, mode.loudness, 'the encoded sound'); // the finished file's rule: within 1 LU, under the ceiling
+    assert.equal(blackVideo(ffmpeg, path.join(folder, 'video.mp4'), seconds).status, 0);
+    const shipped = await muxVoice({ run, video: path.join(folder, 'video.mp4'), audio: encoded.file, out: path.join(folder, 'film.mp4'), duration: seconds });
+    assert.deepEqual([shipped.lufs, shipped.truePeakDb], [encoded.level.lufs, encoded.level.truePeakDb], 'what was judged is what ships');
+    assert.deepEqual(muxArgs({ video: 'v.mp4', audio: 'a.m4a', out: 'o.mp4', duration: seconds }).filter((a, k, all) => all[k - 1] === '-c:a'), ['copy'], 'the mux copies the audio');
+  });
+}
+
+// ---- final review I4: the bed's level is a loudness against the target, not a gain on its samples ----
+
+// The integrated loudness of `file` between `from` and `to` seconds.
+function windowLufs(ffmpeg, file, from, to) {
+  const r = spawnSync(ffmpeg, ['-hide_banner', '-nostats', '-i', file, '-af', `atrim=${from}:${to},ebur128=peak=true`, '-f', 'null', '-'], { encoding: 'utf8' });
+  return parseLoudness(r.stderr).lufs;
+}
+
+test('I4: pulse, drift and tape sit within 1 LU of each other under the same voice, about BED_UNDER_VOICE_LU under the target', async (t) => {
+  const ffmpeg = await ffmpegOrNull();
+  if (!ffmpeg) { t.skip('no ffmpeg'); return; }
+  assert.equal(BED_UNDER_VOICE_LU, 18);
+  const seconds = 12;
+  const levels = {};
+  for (const bed of ['pulse', 'drift', 'tape']) {
+    const film = toneFilm(`bed-${bed}`, 0.3);
+    const timeline = { ...film.timeline, duration: seconds, frameCount: seconds * FPS };
+    const file = await renderBed({ bed, grid: { bpm: 100, offset: 0 }, seconds, seed: 3, out: path.join(film.folder, 'bed.wav') });
+    const master = await masterTrack({ run: realRun(ffmpeg), voice: film.voice, timeline, loudness: PRO.loudness, workDir: film.folder,
+      music: { file, recording: false, fadeFrom: null, duck: duckEnvelope(SENTENCES, { seconds }) } });
+    levels[bed] = windowLufs(ffmpeg, master, 5, 10.5); // after the last word's release, before the bed's fade
+  }
+  const spread = Math.max(...Object.values(levels)) - Math.min(...Object.values(levels));
+  t.diagnostic(`beds in the mix: ${JSON.stringify(levels)} LUFS`);
+  assert.ok(spread <= 1, `beds at ${JSON.stringify(levels)} LUFS: ${spread.toFixed(1)} LU apart`);
+  for (const [bed, lufs] of Object.entries(levels)) {
+    assert.ok(Math.abs(lufs - (PRO.loudness.lufs - BED_UNDER_VOICE_LU)) <= 2, `${bed} at ${lufs} LUFS, the target less 18 is ${PRO.loudness.lufs - BED_UNDER_VOICE_LU}`);
+  }
 });
 
 // ---- the finished film: browser render, cues muxed, video untouched ----

@@ -128,6 +128,12 @@ test('cuts outside the film are not counted; bad input is an error', () => {
 // ---- renderBed ----
 
 const GRID = Object.freeze({ bpm: 120, offset: 0.1 });
+// Each bed rendered once on GRID, whichever test asks first, so every test also runs alone (review Minor 30).
+const renderedBeds = new Map();
+const bedFile = (bed) => {
+  if (!renderedBeds.has(bed)) renderedBeds.set(bed, renderBed({ bed, grid: GRID, seconds: 6, seed: SEED, out: outFile(`bed-${bed}`) }));
+  return renderedBeds.get(bed);
+};
 
 test('renderBed writes a 48 kHz stereo WAV of the film length for each bed, peaking at most 0.5, through a temporary name', async () => {
   assert.deepEqual([...BEDS], ['pulse', 'drift', 'tape']);
@@ -144,7 +150,7 @@ test('renderBed writes a 48 kHz stereo WAV of the film length for each bed, peak
 
 test('every bed fades in over 0.5 s and out over 1 s', async () => {
   for (const bed of BEDS) {
-    const { left, right } = readWav(outFile(`bed-${bed}`));
+    const { left, right } = readWav(await bedFile(bed));
     const n = left.length;
     for (const xs of [left, right]) {
       assert.equal(xs[0], 0, `${bed} starts silent`);
@@ -157,7 +163,7 @@ test('every bed fades in over 0.5 s and out over 1 s', async () => {
 });
 
 test('the pulse bed puts a kick onset within 1 ms of every beat of the grid', async () => {
-  const { left } = readWav(outFile('bed-pulse'));
+  const { left } = readWav(await bedFile('pulse'));
   const period = 60 / GRID.bpm;
   const ms = RATE / 1000;
   const threshold = 0.01;
@@ -179,10 +185,10 @@ test('the same seed gives identical files; a different seed changes the noise of
   for (const bed of BEDS) {
     const again = outFile(`again-${bed}`);
     await renderBed({ bed, grid: GRID, seconds: 6, seed: SEED, out: again });
-    assert.deepEqual(readFileSync(again), readFileSync(outFile(`bed-${bed}`)), bed);
+    assert.deepEqual(readFileSync(again), readFileSync(await bedFile(bed)), bed);
   }
   await renderBed({ bed: 'tape', grid: GRID, seconds: 6, seed: SEED + 1, out: outFile('tape-other') });
-  assert.notDeepEqual(readFileSync(outFile('tape-other')), readFileSync(outFile('bed-tape')));
+  assert.notDeepEqual(readFileSync(outFile('tape-other')), readFileSync(await bedFile('tape')));
 });
 
 test('the drift pad changes its two notes on every bar', () => {
@@ -241,13 +247,48 @@ test('musicInput: a click track inside the film folder gives its real path, its 
   got.beats.slice(1).forEach((b, k) => assert.ok(Math.abs(b - got.beats[k] - 0.5) < 0.03, `beat gap ${b - got.beats[k]}`));
 });
 
-test('musicInput: silence has no beats (null), not an error', async (t) => {
+test('musicInput: a quiet tone is accepted and its loudness measured', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const dir = filmFolder('steady');
+  writeMonoWav(path.join(dir, 'tone.wav'), Array.from({ length: 6 * RATE }, (_, i) => 0.1 * Math.sin((2 * Math.PI * 440 * i) / RATE)));
+  const got = await musicInput(film('tone.wav'), dir, tools);
+  assert.ok(Number.isFinite(got.lufs) && got.lufs > -70 && got.lufs < -10, `lufs ${got.lufs}`);
+});
+
+test('musicInput: a silent music file is the film\'s mistake, a SpecError at music.src (final review I4)', async (t) => {
   const tools = await mediaTools(t);
   if (!tools) return;
   const dir = filmFolder('silent');
   writeMonoWav(path.join(dir, 'quiet.wav'), new Array(6 * RATE).fill(0));
-  const got = await musicInput(film('quiet.wav'), dir, tools);
-  assert.equal(got.beats, null);
+  await assert.rejects(() => musicInput(film('quiet.wav'), dir, tools), (err) => {
+    assert.ok(err instanceof SpecError, err.stack);
+    assert.equal(err.errors[0].path, 'music.src');
+    assert.match(err.errors[0].message, /^"quiet\.wav" has no sound/);
+    return true;
+  });
+});
+
+test('musicInput: ffmpeg that cannot run is machine trouble, not the film\'s mistake (review Minor 8)', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const dir = filmFolder('no-ffmpeg');
+  writeMonoWav(path.join(dir, 'tone.wav'), Array.from({ length: 2 * RATE }, (_, i) => 0.1 * Math.sin(i / 10)));
+  await assert.rejects(() => musicInput(film('tone.wav'), dir, { ffprobe: tools.ffprobe, ffmpeg: path.join(dir, 'no-such-ffmpeg') }), (err) => {
+    assert.ok(!(err instanceof SpecError), `a SpecError would blame the film: ${err.message}`);
+    assert.match(err.message, /ffmpeg could not measure "tone\.wav"/);
+    return true;
+  });
+});
+
+test('musicInput: a file silent for the film\'s length is refused too; sound only later does not count', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const dir = filmFolder('late');
+  writeMonoWav(path.join(dir, 'late.wav'), Array.from({ length: 10 * RATE }, (_, i) => (i > 8 * RATE ? 0.3 * Math.sin(i / 10) : 0)));
+  await assert.rejects(() => musicInput(film('late.wav'), dir, { ...tools, seconds: 5 }), (err) => err instanceof SpecError && err.errors[0].path === 'music.src');
+  const whole = await musicInput(film('late.wav'), dir, tools);
+  assert.ok(Number.isFinite(whole.lufs), 'measured over the whole file without seconds');
 });
 
 test('musicInput: a path out of the film folder or a missing file is a SpecError at music.src, before any tool runs', async () => {

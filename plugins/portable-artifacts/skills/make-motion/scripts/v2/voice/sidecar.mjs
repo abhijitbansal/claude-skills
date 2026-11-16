@@ -11,7 +11,8 @@
 // every `wav` null and every time in seconds from the first sample of that one file; `seconds` is the shot's last word
 // end in it. fromWhisper reads them from a Whisper word-timestamp JSON, the only words file accepted.
 import { randomUUID } from 'node:crypto';
-import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, constants as FS, fstatSync, openSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { isSpellable, spokenKey } from './spoken.mjs';
 import { parseSay } from '../../../engine/script/say.mjs';
 import { SAMPLE_RATE } from './words.mjs';
 
@@ -48,10 +49,32 @@ export function sentencesOf(tokens, words) {
   return sentences;
 }
 
-/** The parsed sidecar at `file`; an error naming the file when it cannot be read or is not JSON. */
+/** The largest voice.json read (a 60-shot film's is well under 1 MB); a bigger one is refused, never read whole. */
+export const SIDECAR_MAX_BYTES = 4 * 1024 * 1024;
+// Opened without waiting (a FIFO swapped in opens at once and is refused by fstat) and without following a link.
+const SIDECAR_OPEN_FLAGS = FS.O_RDONLY | (FS.O_NONBLOCK ?? 0) | (FS.O_NOFOLLOW ?? 0);
+
+// The text of the regular file `file`, through one descriptor: refused when it is not a regular file or is over the cap.
+function readCapped(file) {
+  const fd = openSync(file, SIDECAR_OPEN_FLAGS);
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) throw new Error('it is not a regular file (a FIFO, a device or a folder)');
+    if (stat.size > SIDECAR_MAX_BYTES) throw new Error(`it is ${stat.size} bytes, over the ${SIDECAR_MAX_BYTES}-byte cap`);
+    const buffer = Buffer.alloc(stat.size);
+    return buffer.toString('utf8', 0, readSync(fd, buffer, 0, stat.size, 0));
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * The parsed sidecar at `file`, read as a regular file of at most SIDECAR_MAX_BYTES without following a link or waiting
+ * on a FIFO (final review V1, V4); an error naming the file when it cannot be read or is not JSON.
+ */
 export function readSidecar(file) {
   try {
-    return JSON.parse(readFileSync(file, 'utf8'));
+    return JSON.parse(readCapped(file));
   } catch (err) {
     throw new SidecarError(`cannot read the voice sidecar ${file}: ${String(err?.message ?? err).split('\n')[0]}`, { cause: err });
   }
@@ -149,22 +172,26 @@ const MAX_RUN_ITEMS = 6; // (not say.mjs's MAX_RUN, which counts something else)
 // unmatched word and less than two, so one word added and another left out always beats moving the words between them
 // one place: the error names both instead of shifting any word onto its neighbour's time.
 const COST = Object.freeze({ unmatched: 2, substitute: 3 });
-// A substitution is allowed only between two words that plausibly are one word misheard: their keys (keyOf) at most
-// MAX_EDITS edits apart (Levenshtein, by code point) and at most 40% of the longer key's length, or the same number
-// written differently. Two edits admit "colour"/"color" (1 of 6) and "their"/"there" (2 of 5, exactly 40%); the share
-// refuses one short word for another ("is"/"as", 1 of 2; "form"/"from", 2 of 4). Any other pair is one word added and
-// one left out, both named: a word never takes its neighbour's time.
+// A substitution inside a run of them is allowed only between two words that plausibly are one word misheard: their
+// keys (keyOf) at most MAX_EDITS edits apart (Levenshtein, by code point) and at most 40% of the longer key's length, or
+// the same consonant skeleton of at least MIN_SKELETON letters (skeletonOf: "Abhijit"/"Abijeet", "form"/"from"). Two edits admit
+// "colour"/"color" (1 of 6) and "their"/"there" (2 of 5, exactly 40%); the share refuses one short word for another
+// ("is"/"as", 1 of 2). A word standing alone between exact matches may differ freely (loneGroupSpan). Any other pair is
+// one word added and one left out, both named: a word never takes its neighbour's time.
 const MAX_EDITS = 2;
 const SIMILAR_SHARE = Object.freeze({ edits: 2, chars: 5 }); // edits x 5 <= 2 x longer: at most 40%
 // Keys longer than this are never compared letter by letter (no spoken word is), so one cell's work stays bounded.
 const MAX_SIMILAR_CHARS = 32;
-const UNITS = 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen';
-const TENS = 'twenty thirty forty fifty sixty seventy eighty ninety';
-// The number words a recording may write for the say's digits ("ten" for "10"), one word for one token.
-const NUMBER_WORDS = new Map([
-  ...UNITS.split(' ').map((word, n) => [word, String(n)]),
-  ...TENS.split(' ').map((word, k) => [word, String(20 + 10 * k)]),
-]);
+// What a consonant skeleton drops: vowels and h (then doubled letters are collapsed). A skeleton under MIN_SKELETON
+// letters is no likeness: one letter makes most short words alike (is/as/so/us are "s", it/at/to/the are "t"), and an
+// empty one ("a", "I", "he") nothing at all. A short word alone still keeps its place (loneGroupSpan: "Lee" for "Li").
+const SKELETON_DROP_RE = /[aeiouh]/g;
+const MIN_SKELETON = 2;
+const DOUBLE_RE = /(.)\1+/g;
+// A run of words the alignment places together because they stand alone between exact matches (or a shot edge and an
+// exact match): one token for one word, two, or two tokens for one word ("Lee" for "Li", "all right" for "alright",
+// "don't" for "do not"). Every token of it takes the span of all its words.
+const LONE_SHAPES = new Set(['1:1', '1:2', '2:1']);
 // The table covers only the cells within BAND_MARGIN of the diagonals the two lengths allow (an offset of 0 to file
 // words - say tokens). A matching alignment leaves that range only through runs (several tokens for one word, or the
 // reverse) that drift more than BAND_MARGIN beyond the net difference; such a path is lost, which can only add unmatched
@@ -185,7 +212,8 @@ const NON_WORD_RE = /[^\p{L}\p{N}]/gu;
 const SILENT_RE = /^[\p{Pd}\p{Ps}\p{Pe}\p{Pi}\p{Pf}.,;:!?…'"]+$/u;
 /** The one shape a words file may have, as messages name it. */
 export const WHISPER_SHAPE = 'the JSON Whisper writes with word timestamps: { "segments": [{ "words": [{ "word", "start", "end" }] }] }';
-const UNMATCHED_ADVICE = 'make the say and the recording\'s words the same (a word the recording adds or leaves out cannot be placed)';
+const UNMATCHED_ADVICE = 'either side may be corrected: if the transcription is wrong, fix the word in the words file (only its times are used); '
+  + 'if the script is, fix the say (a word one side has and the other has not cannot be placed)';
 
 /** The words of a recording do not fit the film: an invalid film at voice.words (`path`). */
 export class RecordingWordsError extends SidecarError {
@@ -252,8 +280,8 @@ function stepOf(code) {
 
 // ---- similarity: which two different keys may be one word misheard -----------------------------------------------------
 
-// A key as a number's digits without leading zeros ("007" -> "7", "ten" -> "10"), or null when it is not a number.
-const numberOf = (key) => (/^\d+$/.test(key) ? key.replace(/^0+(?=\d)/, '') : NUMBER_WORDS.get(key) ?? null);
+// A key's consonant skeleton: vowels and h removed, doubled letters collapsed ("abhijit" -> "bjt", "lee" -> "l").
+const skeletonOf = (key) => key.replace(SKELETON_DROP_RE, '').replace(DOUBLE_RE, '$1');
 
 // The Levenshtein distance of two code-point arrays, or limit + 1 as soon as it must exceed `limit`. Only the cells
 // within `limit` of the diagonal are computed (any other is over the limit), so a call is O(limit x length). `rows` are
@@ -283,9 +311,9 @@ function editDistance(a, b, limit, rows) {
   return prev[m];
 }
 
-// Whether two keys ({ chars, number }) may be one word misheard (see MAX_EDITS).
+// Whether two keys ({ chars, skeleton }) may be one word misheard (see MAX_EDITS).
 function isSimilar(a, b, rows) {
-  if (a.number !== null && a.number === b.number) return true;
+  if (a.skeleton.length >= MIN_SKELETON && a.skeleton === b.skeleton) return true;
   const longer = Math.max(a.chars.length, b.chars.length);
   if (Math.abs(a.chars.length - b.chars.length) > MAX_EDITS || longer > MAX_SIMILAR_CHARS) return false;
   const edits = editDistance(a.chars, b.chars, MAX_EDITS, rows);
@@ -300,12 +328,19 @@ function similarity(keys) {
 
 // ---- the table: a band of cells around the diagonals, filled row by row -------------------------------------------------
 
-// Items with an id per distinct key, the running length of their keys (ends[k] = length of keys 0..k-1) and the keys
-// joined, so a run's joined text is one slice.
+// The running lengths of `keys` (ends[k] = length of keys 0..k-1) and the keys joined, so a run's joined text is one slice.
+function joined(keys) {
+  const ends = new Int32Array(keys.length + 1);
+  keys.forEach((key, k) => { ends[k + 1] = ends[k] + key.length; });
+  return { ends, text: keys.join('') };
+}
+
+// Items with an id per distinct key and one per distinct spoken key (spoken.mjs: "10%" and "ten percent" alike), each
+// joined as above: raw (ends, text) and spoken (spoken.ends, spoken.text).
 function sequence(items, idOf) {
-  const ends = new Int32Array(items.length + 1);
-  items.forEach((x, k) => { ends[k + 1] = ends[k] + x.key.length; });
-  return { items: items.map((x) => ({ ...x, id: idOf(x.key) })), ends, text: items.map((x) => x.key).join('') };
+  const spoken = items.map((x) => (isSpellable(x.text) ? spokenKey(x.text) : x.key));
+  const out = items.map((x, k) => ({ ...x, id: idOf(x.key), sid: idOf(spoken[k]), spellable: spoken[k] !== x.key, spoken: spoken[k] }));
+  return { items: out, ...joined(items.map((x) => x.key)), spoken: joined(spoken) };
 }
 
 // The tokens and words as sequences over one id space, and `similar(a, b)` on two ids.
@@ -314,7 +349,7 @@ function contextOf(tokens, words) {
   const idOf = (key) => { if (!ids.has(key)) ids.set(key, ids.size); return ids.get(key); };
   const T = sequence(tokens, idOf);
   const W = sequence(words, idOf);
-  const keys = [...ids.keys()].map((key) => ({ chars: Array.from(key), number: numberOf(key) }));
+  const keys = [...ids.keys()].map((key) => ({ chars: Array.from(key), skeleton: skeletonOf(key) }));
   return { T, W, similar: similarity(keys) };
 }
 
@@ -337,9 +372,9 @@ function sameText(a, s, b, t, n) {
 
 // The number of words q (minQ to MAX_RUN_ITEMS, ending at word j) whose keys joined are `length` long, or 0. Keys are never
 // empty, so at most one q has that length, and only its text is compared.
-function runWords(W, j, length, minQ) {
+function runWords(ends, j, length, minQ) {
   for (let q = minQ; q <= Math.min(MAX_RUN_ITEMS,j); q++) {
-    const joinedLength = W.ends[j] - W.ends[j - q];
+    const joinedLength = ends[j] - ends[j - q];
     if (joinedLength === length) return q;
     if (joinedLength > length) return 0;
   }
@@ -349,24 +384,52 @@ function runWords(W, j, length, minQ) {
 // The cheapest run of p tokens of one shot and q words (p + q of 3 or more) that ends at token i and word j and whose
 // joined text matches ("12,500" as " 12" ",500"; "$5 million." as one word): { code, cost }, or null. Joined texts that
 // match end alike, so a pair whose last keys do not is skipped at once; texts are compared only at equal lengths.
-function runAt({ T, W }, i, j, row) {
+function runAt(ctx, i, j, row) {
+  const { T, W } = ctx;
   const a = T.items[i - 1].key;
   const b = W.items[j - 1].key;
-  if (!a.endsWith(b) && !b.endsWith(a)) return null;
+  const raw = a.endsWith(b) || b.endsWith(a) ? rawRun(ctx, i, j, row) : null;
+  const spoken = T.items[i - 1].spellable || W.items[j - 1].spellable ? spokenRun(ctx, i, j, row) : null;
+  return spoken !== null && (raw === null || spoken.cost < raw.cost) ? spoken : raw;
+}
+
+const cheaper = (best, cost) => best === null || cost < best.cost;
+// Tokens p ending at token i that stay in one shot.
+const sameShot = (T, i, p) => T.items[i - p].shot === T.items[i - 1].shot;
+
+function rawRun({ T, W }, i, j, row) {
   let best = null;
-  for (let p = 1; p <= Math.min(MAX_RUN_ITEMS,i) && T.items[i - p].shot === T.items[i - 1].shot; p++) {
+  for (let p = 1; p <= Math.min(MAX_RUN_ITEMS, i) && sameShot(T, i, p); p++) {
     const length = T.ends[i] - T.ends[i - p];
-    const q = runWords(W, j, length, Math.max(1, 3 - p));
+    const q = runWords(W.ends, j, length, Math.max(1, 3 - p));
     if (q === 0) continue;
     const cost = row(i - p)[j - q];
-    if ((best === null || cost < best.cost) && sameText(T.text, T.ends[i - p], W.text, W.ends[j - q], length)) {
-      best = { code: runCode(p, q), cost };
-    }
+    if (cheaper(best, cost) && sameText(T.text, T.ends[i - p], W.text, W.ends[j - q], length)) best = { code: runCode(p, q), cost };
   }
   return best;
 }
 
-// The cheapest step into cell (i, j), packed. On a tie a match wins, then a run, then an unmatched token or word; a
+// A spellable token spoken as several words ("10%" as "ten percent"), or a spellable word as several tokens ("2024" as
+// "twenty twenty four"): the one item's spoken key against the others' spoken keys joined.
+function spokenRun({ T, W }, i, j, row) {
+  let best = null;
+  const token = T.items[i - 1];
+  const word = W.items[j - 1];
+  if (token.spellable) {
+    const q = runWords(W.spoken.ends, j, token.spoken.length, 2);
+    if (q > 0 && sameText(token.spoken, 0, W.spoken.text, W.spoken.ends[j - q], token.spoken.length)) best = { code: runCode(1, q), cost: row(i - 1)[j - q] };
+  }
+  if (!word.spellable) return best;
+  for (let p = 2; p <= Math.min(MAX_RUN_ITEMS, i) && sameShot(T, i, p); p++) {
+    const length = T.spoken.ends[i] - T.spoken.ends[i - p];
+    if (length > word.spoken.length) break;
+    const cost = row(i - p)[j - 1];
+    if (length === word.spoken.length && cheaper(best, cost) && sameText(T.spoken.text, T.spoken.ends[i - p], word.spoken, 0, length)) best = { code: runCode(p, 1), cost };
+  }
+  return best;
+}
+
+// The cheapest step into cell (i, j), packed. On a tie a match (or the same word spoken) wins, then a run, then an unmatched token or word; a
 // substitution only when strictly cheaper and only between similar words, so a tie is reported rather than substituted.
 function cheapest(ctx, i, j, row) {
   const up = row(i - 1);
@@ -377,9 +440,12 @@ function cheapest(ctx, i, j, row) {
   const a = ctx.T.items[i - 1].id;
   const b = ctx.W.items[j - 1].id;
   if (a === b) return up[j - 1] <= cost ? up[j - 1] * CODE_SPAN + STEP.match : cost * CODE_SPAN + code;
+  // The same word spoken ("10" and "ten") is a match too, but a run may still be cheaper ("0,500" as " 0" ",500").
+  const spokenAlike = ctx.T.items[i - 1].sid === ctx.W.items[j - 1].sid;
+  if (spokenAlike && up[j - 1] <= cost) { cost = up[j - 1]; code = STEP.match; }
   const run = runAt(ctx, i, j, row);
-  if (run !== null && run.cost <= cost) { cost = run.cost; code = run.code; }
-  if (up[j - 1] + COST.substitute < cost && ctx.similar(a, b)) { cost = up[j - 1] + COST.substitute; code = STEP.substitute; }
+  if (run !== null && (run.cost < cost || (run.cost === cost && code !== STEP.match))) { cost = run.cost; code = run.code; }
+  if (!spokenAlike && up[j - 1] + COST.substitute < cost && ctx.similar(a, b)) { cost = up[j - 1] + COST.substitute; code = STEP.substitute; }
   return cost * CODE_SPAN + code;
 }
 
@@ -425,7 +491,8 @@ function stepsOf(table, band, tokens, words) {
 let lastAlignment = { key: null, steps: null };
 
 function alignmentSteps(tokens, words, band) {
-  const key = JSON.stringify([tokens.map((t) => [t.shot, t.key]), words.map((w) => w.key)]);
+  // by text, not key: the spoken key reads what the key drops ("10%" and "10" have one key, not one spoken key)
+  const key = JSON.stringify([tokens.map((t) => [t.shot, t.text]), words.map((w) => w.text)]);
   if (lastAlignment.key !== key) {
     const steps = stepsOf(fillTable(contextOf(tokens, words), band), band, tokens.length, words.length);
     lastAlignment = { key, steps };
@@ -444,18 +511,73 @@ function align(tokens, words) {
   if (band.cells > MAX_ALIGN_CELLS) {
     refuse(`the says' ${tokens.length} words and the words file's ${words.length} are too many to align (more than ${MAX_ALIGN_CELLS} pairs to compare); check that the words file is this film's recording`);
   }
+  const steps = alignmentSteps(tokens, words, band);
   const spans = new Array(tokens.length).fill(null);
+  for (const step of steps) {
+    if (step.q === 0 || step.p === 0) continue;
+    const span = { start: words[step.j].start, end: words[step.j + step.q - 1].end };
+    for (let k = 0; k < step.p; k++) spans[step.i + k] = span;
+  }
   const missing = [];
   const extra = [];
-  for (const step of alignmentSteps(tokens, words, band)) {
-    if (step.kind === 'missing') missing.push(tokens[step.i]);
-    else if (step.kind === 'extra') extra.push({ ...words[step.j], shot: tokens[Math.max(0, step.i - 1)].shot });
-    else {
-      const span = { start: words[step.j].start, end: words[step.j + step.q - 1].end };
-      for (let k = 0; k < step.p; k++) spans[step.i + k] = span;
-    }
+  for (const group of inexactGroups(steps)) {
+    const span = loneGroupSpan(steps, group, tokens, words);
+    const members = steps.slice(group.from, group.to);
+    if (span !== null) members.forEach((s) => { if (s.p > 0) spans[s.i] = span; });
+    else members.forEach((s) => {
+      if (s.kind === 'missing') missing.push(tokens[s.i]);
+      if (s.kind === 'extra') extra.push({ ...words[s.j], shot: tokens[Math.max(0, s.i - 1)].shot });
+    });
   }
   return { spans, missing, extra };
+}
+
+const isExact = (step) => step.kind === 'match' || step.kind === 'run';
+
+// The maximal runs of steps that are not exact (a substitution, an unmatched token or word) holding at least one unmatched
+// one, as { from, to } indexes of `steps`. A run of substitutions alone is already placed (each pair alike).
+function inexactGroups(steps) {
+  const groups = [];
+  let from = null;
+  steps.forEach((step, k) => {
+    if (!isExact(step) && from === null) from = k;
+    if ((isExact(step) || k === steps.length - 1) && from !== null) {
+      const to = isExact(step) ? k : k + 1;
+      if (steps.slice(from, to).some((s) => s.kind === 'missing' || s.kind === 'extra')) groups.push({ from, to });
+      from = null;
+    }
+  });
+  return groups;
+}
+
+const EDGE = 'edge';
+
+// What stands beside a group in shot `shot`: EDGE (the film's start or end, or another shot), the exact step's keys, or
+// null for a step that is not exact (the group is then not alone).
+function sideOf(step, shot, tokens, words) {
+  if (step === undefined || tokens[Math.min(step.i, tokens.length - 1)].shot !== shot) return EDGE;
+  if (!isExact(step)) return null;
+  const items = [...tokens.slice(step.i, step.i + step.p), ...words.slice(step.j, step.j + step.q)];
+  return items.flatMap((x) => [x.key, spokenKey(x.text)]);
+}
+
+/**
+ * The span every token of an inexact group takes when the group stands alone (final review I2), else null: one token
+ * and one word, two, or two tokens and one word (LONE_SHAPES), its tokens in one shot, with an exact match on each side
+ * or a shot edge on one side and an exact match on the other, and no word of it the same as a word beside it (a word
+ * repeated beside one left out, "really really like" for "really like like", is one added and one left out). The
+ * error is then bounded to that one place: its tokens take the span of its words.
+ */
+function loneGroupSpan(steps, { from, to }, tokens, words) {
+  const members = steps.slice(from, to);
+  const own = members.filter((s) => s.p > 0).map((s) => tokens[s.i]);
+  const heard = members.filter((s) => s.q > 0).map((s) => words[s.j]);
+  if (!LONE_SHAPES.has(`${own.length}:${heard.length}`) || own.some((t) => t.shot !== own[0].shot)) return null;
+  const sides = [steps[from - 1], steps[to]].map((step) => sideOf(step, own[0].shot, tokens, words));
+  if (sides.includes(null) || sides.every((side) => side === EDGE)) return null;
+  const beside = new Set(sides.filter((side) => side !== EDGE).flat());
+  if ([...own, ...heard].some((x) => beside.has(x.key) || beside.has(spokenKey(x.text)))) return null;
+  return { start: heard[0].start, end: heard.at(-1).end };
 }
 
 // ---- the recording's words fitted to the film ---------------------------------------------------------------------------
@@ -523,10 +645,13 @@ function checkShotOrder(film, shots) {
 /**
  * The film's words in a recording, from a Whisper word-timestamp JSON (`segments[].words[] { word, start, end }`) -> a
  * recording sidecar (header). The spoken say tokens of every narrated shot and the file's words are aligned as two
- * sequences by their letters and digits (case and punctuation aside): a token and a word one to one; a run whose joined
- * text matches ("12,500" as " 12" ",500", "$5 million." as one word), whose tokens all take the run's span; or a word
- * misheard in its own place (at most MAX_EDITS edits and 40% of the longer word from the say's, or the same number
- * written differently), at the file's time for that place. A spaced dash takes a zero-length span.
+ * sequences by their letters and digits (case and punctuation aside), and by how they are spoken (spoken.mjs: "10%"
+ * and "ten percent", "$5" and "five dollars", "1st" and "first", either side): a token and a word one to one; a run
+ * whose joined text matches ("12,500" as " 12" ",500", "$5 million." as one word, "2024" as "twenty twenty four"),
+ * whose tokens all take the run's span; a word misheard in its own place (alike: at most MAX_EDITS edits and 40% of the
+ * longer word, or the same consonant skeleton), at the file's time for that place, however many in a row; or a word
+ * standing alone between exact matches, whatever it is, one word or two for one or two (loneGroupSpan: "Lee" for "Li",
+ * "don't" for "do not"). A spaced dash takes a zero-length span.
  * Emphasis, asides and sentences are the film's. Any word of the file with no partner in the say, or say word with none
  * in the file, is a RecordingWordsError naming the shot and listing those words on each side: a word is never moved onto
  * another's time. So is a film with no narrated shot, and word times that overlap across two shots.

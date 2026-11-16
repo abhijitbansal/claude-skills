@@ -38,7 +38,7 @@ const VOICE_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const WORKER_PATH = path.join(VOICE_DIR, 'worker.mjs');
 /** The sources whose bytes shape the sidecar and the WAVs: every voice module the worker loads, and say.mjs. */
 export const CODE_FILES = Object.freeze([
-  ...['words', 'calls', 'phonemes', 'tokens', 'kokoro', 'worker', 'sidecar'].map((name) => path.join(VOICE_DIR, `${name}.mjs`)),
+  ...['words', 'calls', 'phonemes', 'tokens', 'kokoro', 'worker', 'sidecar', 'spoken'].map((name) => path.join(VOICE_DIR, `${name}.mjs`)),
   path.resolve(VOICE_DIR, '../../../engine/script/say.mjs'),
 ]);
 /** Every constant from outside those sources that reaches the audio or the times (theirs are in the code hash too). */
@@ -69,7 +69,7 @@ const STDERR_TAIL_LINES = 20;
 const BYTES_PER_SAMPLE = 2;
 const ECHO_MAX = 120; // characters of a planted value quoted in a log line
 // A shot WAV's header is read without blocking: a FIFO swapped in after the lstat check cannot hang the run.
-const HEADER_OPEN_FLAGS = FS.O_RDONLY | (FS.O_NONBLOCK ?? 0);
+const HEADER_OPEN_FLAGS = FS.O_RDONLY | (FS.O_NONBLOCK ?? 0) | (FS.O_NOFOLLOW ?? 0); // a link swapped in after the lstat is not followed (final review V4)
 const MODEL_FIELDS = Object.freeze(Object.keys(MODEL_INFO));
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const RERUN_HINT = `run again; if it repeats, reinstall the voice package: ${optionalInstall('kokoro')}`;
@@ -229,7 +229,8 @@ function originProblem(sidecar, voice) {
 // not match the film) rather than trouble reading it (permissions, a full table).
 function isIncomplete(err) {
   const code = err?.cause?.code ?? err?.code;
-  return err instanceof SidecarError ? code === undefined || code === 'ENOENT' : code === 'ENOENT';
+  // ELOOP: voice.json became a link after its lstat (readSidecar opens without following one)
+  return err instanceof SidecarError ? code === undefined || code === 'ENOENT' || code === 'ELOOP' : code === 'ENOENT';
 }
 
 // The sidecar of the entry in `dir`, read only once the folder and the file are what they should be.
@@ -255,12 +256,15 @@ function readEntry(dir, film, { voice, outDir }) {
 }
 
 // A `.voice` that is a symlink (planted, or left by anyone) is never read or written through: the link itself is
-// removed, never its target, and the run goes on as a miss.
+// removed, never its target, and the run goes on as a miss. So is one that is a file or anything else not a folder
+// (final review V2): this module's own name, removed and made again as a folder.
 function unlinkedCacheRoot(cacheRoot, log) {
   const stat = fsStep(`look at ${cacheRoot}`, () => lstatOrNull(cacheRoot));
-  if (stat === null || !stat.isSymbolicLink()) return;
-  log(`voice: the cache folder ${cacheRoot} is a symlink and cannot be trusted; removing the link (not its target) and synthesising again`);
-  fsStep(`remove the link ${cacheRoot}`, () => unlinkSync(cacheRoot));
+  if (stat === null || stat.isDirectory()) return;
+  const what = stat.isSymbolicLink() ? 'a symlink' : 'not a folder (a file or a special file)';
+  const removed = stat.isSymbolicLink() ? 'the link (not its target)' : 'it';
+  log(`voice: the cache folder ${cacheRoot} is ${what} and cannot be trusted; removing ${removed} and synthesising again`);
+  fsStep(`remove ${cacheRoot}`, () => unlinkSync(cacheRoot));
 }
 
 // The cached sidecar, or null on a miss. An entry that is incomplete or cannot be trusted is logged once and removed

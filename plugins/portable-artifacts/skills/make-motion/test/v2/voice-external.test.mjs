@@ -17,7 +17,7 @@ import { RecordingWordsError, fromWhisper, sentencesOf } from '../../scripts/v2/
 import { parseSay } from '../../engine/script/say.mjs';
 import { WORDS_MAX_BYTES, validateFilm } from '../../scripts/v2/spec.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
-import { TRACK_RATE, masterTrack, muxVoice, recordingProblem, voiceTrackArgs } from '../../scripts/v2/voice/master.mjs';
+import { TRACK_RATE, encodeMaster, masterTrack, muxVoice, recordingProblem, voiceTrackArgs } from '../../scripts/v2/voice/master.mjs';
 import { findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 
 const FIXTURES = path.join(HERE, '..', 'fixtures', 'voice');
@@ -138,23 +138,87 @@ test('a word close to its say word (two edits, at most 40% of the longer) keeps 
   ], 'five close words in a row: no cap on a run');
 });
 
-test('the same number written differently keeps its place: digits against a number word, leading zeros aside', () => {
+test('the same number written differently keeps its place: digits against a number word, leading zeros aside; another number alone is a lone substitution (I2)', () => {
   assert.deepEqual(startsOf(spoken('Ten steps to 7 doors.'), '10 steps to 007 doors.'), [
     ['10', 0.5], ['steps', 0.9], ['to', 1.3], ['007', 1.7], ['doors.', 2.1],
   ]);
-  mismatch(spoken('Eleven steps.'), /the words file has "Eleven" \(0\.5 s\), which the say does not, and the say has "10"/, oneShot('10 steps.'));
+  assert.deepEqual(startsOf(spoken('Eleven steps.'), '10 steps.'), [['10', 0.5], ['steps.', 0.9]]);
 });
 
-test('a word that is not close to its say word is named on both sides, never timed in its place', () => {
+test('words in a row that are not close to their say words are named on both sides, never timed in their places', () => {
   mismatch(spoken('Every graph was the question.'), /^shot "only": the words file has "graph" \(0\.9 s\), "was" \(1\.3 s\), "the" \(1\.7 s\), which the say does not, and the say has "chart", "is", "a", which the words file does not/, oneShot('Every chart is a question.'));
-  mismatch(withWords((words) => { words[7].word = ' Ansa'; }), /^shot "open": the words file has "Ansa" \(2\.74 s\), which the say does not, and the say has "answer", which the words file does not/);
-  mismatch(spoken('Every from.'), /the words file has "from\." \(0\.9 s\).*the say has "form\."/, oneShot('Every form.'));
+  mismatch(withWords((words) => { words[6].word = ' a'; words[7].word = ' Ansa'; }), /^shot "open": the words file has "a" \(2\.62 s\), "Ansa" \(2\.74 s\), which the say does not, and the say has "the", "answer", which the words file does not/);
+  // Alone, any word keeps its place (I2): "Ansa" for "answer", "from" for "form".
+  assert.deepEqual(spans(fromWhisper(withWords((words) => { words[7].word = ' Ansa'; }), FILM).shots[0])[7], ['answer', 2.74, 3.1]);
+  assert.deepEqual(startsOf(spoken('Every from.'), 'Every form.'), [['Every', 0.5], ['form.', 0.9]]);
 });
 
 test('an extra word next to a missing one is never one substitution: the neighbour keeps its own time (review I4 probes)', () => {
   mismatch(spoken('we really like like it'), /^shot "only": the words file has "like" \(1\.[37] s\), which the say does not, and the say has "really", which the words file does not/, oneShot('we really really like it'));
   mismatch(spoken('p q r'), /^shot "only": the words file has "p" \(0\.5 s\), "q" \(0\.9 s\), "r" \(1\.3 s\), which the say does not, and the say has "aa", "bb", "cc"/, oneShot('aa bb cc'));
   mismatch(spoken('p q r the s t u the v w x the'), /"p" \(0\.5 s\), "q" \(0\.9 s\), "r" \(1\.3 s\), "s" \(2\.1 s\)/, oneShot('aa bb cc the dd ee ff the gg hh ii the'));
+});
+
+// ---- final review I2: honest recordings align ----
+
+// The reviewer's refused pairs (say, then the words file), each with the times its say words take. A word the file renders
+// as two (or two as one) shares their span.
+const HONEST = [
+  ['we okay now', 'we OK now', [['okay', 0.9, 1.2]]], // a lone substitution
+  ['ask Li now', 'ask Lee now', [['Li', 0.9, 1.2]]],
+  ['ask Abhijit now', 'ask Abijeet now', [['Abhijit', 0.9, 1.2]]],
+  ['I do not know', "I don't know", [['do', 0.9, 1.2], ['not', 0.9, 1.2], ['know', 1.3, 1.6]]], // two words as one, alone
+  ['I am here', "I'm here", [['I', 0.5, 0.8], ['am', 0.5, 0.8]]],
+  ['we are going to win', 'we are gonna win', [['going', 1.3, 1.6], ['to', 1.3, 1.6], ['win', 1.7, 2]]],
+  ['it is alright now', 'it is all right now', [['alright', 1.3, 2], ['now', 2.1, 2.4]]],
+  ['up 10% today', 'up ten percent today', [['10%', 0.9, 1.6], ['today', 1.7, 2]]], // spelled as spoken
+  ['pay $5 now', 'pay five dollars now', [['$5', 0.9, 1.6]]],
+  ['in 2024 we grew', 'in twenty twenty four we grew', [['2024', 0.9, 2], ['we', 2.1, 2.4]]],
+  ['3.5 million users', 'three point five million users', [['3.5', 0.5, 1.6], ['million', 1.7, 2]]],
+  ['Dr. Smith said', 'Doctor Smith said', [['Dr.', 0.5, 0.8]]],
+  ['the 1st time', 'the first time', [['1st', 0.9, 1.2]]],
+  ['take a seat', 'take the seat', [['a', 0.9, 1.2]]],
+  ['we met in May', 'we met an May', [['in', 1.3, 1.6]]],
+  // the other way round: the say spells it, the file writes digits and symbols
+  ['up ten percent today', 'up 10% today', [['ten', 0.9, 1.2], ['percent', 0.9, 1.2]]],
+  ['pay five dollars now', 'pay $5 now', [['five', 0.9, 1.2], ['dollars', 0.9, 1.2]]],
+  ['the first time', 'the 1st time', [['first', 0.9, 1.2]]],
+  ['in twenty twenty four we grew', 'in 2024 we grew', [['twenty', 0.9, 1.2], ['four', 0.9, 1.2]]],
+  // two in a row, each pair with the same consonant skeleton (Lakshmi/Laksmee is 3 edits: the skeleton is what admits it)
+  ['ask Abhijit Lakshmi now', 'ask Abijeet Laksmee now', [['Abhijit', 0.9, 1.2], ['Lakshmi', 1.3, 1.6]]],
+];
+
+for (const [say, file, expected] of HONEST) {
+  test(`I2: "${say}" aligns with a recording of "${file}"`, () => {
+    const placed = spans(fromWhisper(spoken(file), oneShot(say)).shots[0]);
+    for (const [text, start, end] of expected) {
+      assert.ok(placed.some(([t, s, e]) => t === text && Math.abs(s - start) < 1e-9 && Math.abs(e - end) < 1e-9), `${text} at ${start}-${end}: ${JSON.stringify(placed)}`);
+    }
+  });
+}
+
+test('I2: a lone substitution at a shot\'s edge aligns when the other side is an exact match; a shot\'s only word does not', () => {
+  const film = { ...FILM, shots: [{ id: 'a', show: 'statement', say: 'Hello there.' }, { id: 'b', show: 'statement', say: 'Li said yes.' }] };
+  assert.deepEqual(spans(fromWhisper(spoken('Hello there. Lee said yes.'), film).shots[1])[0], ['Li', 1.3, 1.6]);
+  const lone = { ...FILM, shots: [{ id: 'a', show: 'statement', say: 'Hello there.' }, { id: 'b', show: 'statement', say: 'Yes.' }] };
+  mismatch(spoken('Hello there. No.'), /the words file has "No\." \(1\.3 s\), which the say does not.*the say has "Yes\."/, lone);
+});
+
+test('I2: two different words in a row that are not alike, or a word added beside one left out, are still errors', () => {
+  mismatch(spoken('take the red seat'), /the words file has "the" \(0\.9 s\), "red" \(1\.3 s\), which the say does not, and the say has "a", "big"/, oneShot('take a big seat'));
+  mismatch(spoken('Eleven paces to 7 doors.'), /the words file has "Eleven" \(0\.5 s\), "paces" \(0\.9 s\).*the say has "10", "steps"/, oneShot('10 steps to 7 doors.'));
+  mismatch(spoken('Every um chart is a question today.'), /"um" \(0\.9 s\), which the say does not, and the say has "quiet"/, oneShot('Every chart is a quiet question today.'));
+  // A one-letter skeleton (is/as/so/us, it/at/to/the) is no likeness: short words in a row stay errors.
+  mismatch(spoken('at us in to go'), /the words file has "at" \(0\.5 s\), "us" \(0\.9 s\), "in" \(1\.3 s\), "to" \(1\.7 s\)/, oneShot('it is on the go'));
+  mismatch(spoken('it is so so good'), /the words file has "so" \(1\.3 s\).*the say has "is"/, oneShot('it is is so good'));
+});
+
+test('I2 (judgment call, pinned for the lead): a filler beside a lone substitution is taken into the one place, 1:2', () => {
+  assert.deepEqual(startsOf(spoken('take um the seat'), 'take a seat'), [['take', 0.5], ['a', 0.9], ['seat', 1.7]]);
+});
+
+test('I2: the error says either side may be corrected: the words file when the transcription is wrong, the say when the script is', () => {
+  mismatch(spoken('Every graph was the question.'), /fix the word in the words file.*fix the say/, oneShot('Every chart is a question.'));
 });
 
 // `count` distinct words, and Whisper's words for a list of texts: word k from 0.3 k s, 0.2 s long.
@@ -240,6 +304,17 @@ test('every word is heard in its own shot at its time in the recording, and show
       else assert.ok(shown === shot.start && (i === 0 || heard.start - shown <= RECORDING_LEAD + FRAME), `${shot.id}: the first word is shown from the shot's first frame, heard within the lead`);
     });
   });
+});
+
+test('I1: every word of a recording carries the time it is heard (soundStart, soundEnd), the first word of each shot too', () => {
+  const tl = recorded();
+  const file = fileWords();
+  tl.shots.forEach((shot, i) => file[i].forEach((heard, k) => {
+    const w = shot.words[k];
+    assert.ok(Math.abs(shot.start + w.soundStart - heard.start) < 1e-9 && Math.abs(shot.start + w.soundEnd - heard.end) < 1e-9, `${shot.id} word ${k}`);
+  }));
+  const firsts = tl.shots.filter((s) => s.words.length > 0 && s.index > 0);
+  assert.ok(firsts.some((s) => s.words[0].soundStart > s.words[0].start), 'a later shot\'s first word is heard after it is shown');
 });
 
 test('shots are whole frames back to back: a narrated shot starts RECORDING_LEAD before its first word, a say-less one just before the next', () => {
@@ -470,6 +545,12 @@ test('recordingProblem: one audio stream (a cover picture beside it is fine) wit
   assert.match(recordingProblem(probe({ streams: [audio, { type: 'video', attachedPic: false }] }), 11.9), /has a video stream besides its audio/);
   assert.match(recordingProblem({ format: 'dash', error: 'its format is not on the whitelist' }, 1), /is in the "dash" format, not plain audio/);
   assert.match(recordingProblem({ format: null, error: 'Invalid data found when processing input' }, 1), /cannot be read as audio \(Invalid data found/);
+  // A music file is named as one (review Minor 29), never as a recording.
+  const music = (edit) => recordingProblem(probe(edit), 0, { what: 'music file' });
+  assert.match(music({ streams: [] }), /has no audio stream; name the music file itself/);
+  assert.match(music({ streams: [audio, audio] }), /a music file must have exactly one/);
+  assert.match(recordingProblem({ format: 'hls', error: 'x' }, 0, { what: 'music file' }), /a music file must be WAV, MP3/);
+  assert.doesNotMatch(music({ streams: [audio, { type: 'video', attachedPic: false }] }), /recording/);
 });
 
 // A 12.5 s tone in `file` encoded with `codec` (null: ffmpeg's default for the extension); null when this ffmpeg lacks it.
@@ -617,7 +698,7 @@ test('alignment: each word onset decoded from the finished MP4 lies within 2 ms 
   const run = realRun(ffmpeg);
   const master = await masterTrack({ run, voice: { recording, sidecar }, timeline, loudness: PRO.loudness, workDir: work });
   const out = path.join(work, 'film.mp4');
-  await muxVoice({ run, video, audio: master, out, duration: timeline.duration });
+  await muxVoice({ run, video, audio: (await encodeMaster({ run, master, out: path.join(work, 'sound.m4a'), duration: timeline.duration, loudness: PRO.loudness })).file, out, duration: timeline.duration });
   const decoded = path.join(work, 'decoded.wav');
   const r = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', out, '-map', '0:a:0', '-ac', '1', '-ar', String(TRACK_RATE), '-c:a', 'pcm_s16le', decoded]);
   assert.equal(r.status, 0, r.stderr);

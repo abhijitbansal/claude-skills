@@ -10,6 +10,7 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { soundEvents } from '../../scripts/v2/sound/events.mjs';
 import { planCues, CUE_GAIN_DB, MIN_CUE_GAP } from '../../scripts/v2/sound/cues.mjs';
 import { KNOWN_CUES } from '../../scripts/v2/sound/synth.mjs';
+import { heardWordSpans } from '../../scripts/v2/sound/duck.mjs';
 
 const FPS = 30;
 const EPSILON = 1e-9;
@@ -345,6 +346,49 @@ test('a one-shot film has no cut events', () => {
   const timeline = { fps: FPS, duration: 2, frameCount: 60, timed: 'estimated', shots: [{ id: 'solo', index: 0, start: 0, end: 2, duration: 2, words: [word('Now.', 0.1, 0.4, true)], sentences: [] }] };
   assert.deepEqual(soundEvents(f, timeline), [{ kind: 'emphasis', t: 0.1, shot: 'solo' }]);
   assert.deepEqual(pairs(planCues(f, timeline)), [[0.1, 'pop']]);
+});
+
+// ---- the heard times (final review I1): sound reads when a word is heard, not when the picture shows it ----
+
+// A measured viral film: shot b's first word, *Big*, is heard `heardAt` s into its WAV (after an opening pause, or the
+// voice's lead-in), while the picture shows it from the shot's first frame.
+function heardFilm(heardAt, say = '*Big* news.') {
+  const film = { version: 2, mode: 'viral', voice: { name: 'af_heart' }, shots: [{ id: 'a', show: 'statement', say: 'One.' }, { id: 'b', show: 'statement', cut: 'cut', say }] };
+  const words = [
+    { id: 'a', wav: 'shot-0.wav', seconds: 1, sentences: [{ words: [{ text: 'One.', start: 0.1, end: 0.4 }] }] },
+    { id: 'b', wav: 'shot-1.wav', seconds: heardAt + 1.2, sentences: [{ words: [{ text: 'Big', start: heardAt, end: heardAt + 0.3 }, { text: 'news.', start: heardAt + 0.4, end: heardAt + 0.8 }] }] },
+  ];
+  const timeline = buildTimeline(film, { fps: FPS, words });
+  return { film, timeline, b: timeline.shots[1] };
+}
+const near = (a, b) => Math.abs(a - b) < 1e-6;
+
+for (const [label, heardAt, say] of [['a 0.5 s lead-in', 0.5, '*Big* news.'], ['an opening pause of 1 s', 1, '(1.0) *Big* news.']]) {
+  test(`I1, ${label}: the emphasis cue sounds when the word is heard, and the cut keeps its own cue`, () => {
+    const { film, timeline, b } = heardFilm(heardAt, say);
+    assert.equal(b.words[0].start, 0, 'the picture still shows the word from the shot start');
+    const emphasis = soundEvents(film, timeline).filter((e) => e.kind === 'emphasis' && e.shot === 'b');
+    assert.equal(emphasis.length, 1);
+    assert.ok(near(emphasis[0].t, b.start + heardAt), `emphasis at ${emphasis[0].t}, heard at ${b.start + heardAt}`);
+    const cues = planCues(film, timeline).filter((c) => c.t >= b.start - 1e-9);
+    assert.deepEqual(pairs(cues).map(([, cue]) => cue), ['click', 'pop'], JSON.stringify(cues));
+    assert.ok(near(cues[0].t, b.start) && near(cues[1].t, b.start + heardAt));
+  });
+
+  test(`I1, ${label}: an explicit word anchor and the duck follow the heard word`, () => {
+    const { film, timeline, b } = heardFilm(heardAt, say);
+    const [cue] = planCues({ ...film, cues: [{ at: 'word:Big', cue: 'ding' }] }, timeline);
+    assert.ok(near(cue.t, b.start + heardAt), `ding at ${cue.t}`);
+    const [onSentence] = planCues({ ...film, cues: [{ at: 'sentence:1', cue: 'ding' }] }, timeline);
+    assert.ok(near(onSentence.t, b.start + heardAt), `a cue on shot b's first sentence at ${onSentence.t}`);
+    const big = heardWordSpans(timeline).find((s) => s.start >= b.start - 1e-9);
+    assert.ok(near(big.start, b.start + heardAt) && near(big.end, b.start + heardAt + 0.3), JSON.stringify(big));
+  });
+}
+
+test('I1: on an estimated timeline the heard times are the shown times', () => {
+  const timeline = buildTimeline({ version: 2, shots: [{ id: 'a', show: 'statement', say: '(1.0) *Big* news.' }] }, { fps: FPS });
+  for (const w of timeline.shots[0].words) assert.deepEqual([w.soundStart, w.soundEnd], [w.start, w.end]);
 });
 
 // ---- determinism ----

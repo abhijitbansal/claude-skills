@@ -154,6 +154,17 @@ test('a riser anchored earlier than its length is cut at the film start, not mov
   assert.equal(Math.abs(left[Math.round(0.4 * RATE)]), peakOf(left), 'still peaks on its anchor');
 });
 
+test('a cue cut by the film\'s edge fades in or out there, never a step (review Minor 1)', async () => {
+  await renderCues([{ t: 0.05, cue: 'riser', gainDb: -12, pan: 0 }], { seconds: 2, seed: SEED, out: outFile('cut-head') });
+  const head = readWav(outFile('cut-head')).left;
+  assert.ok(Math.abs(head[0]) < 0.001, `the track starts on ${head[0]}`);
+  assert.ok(Math.abs(head[Math.round(0.05 * RATE)]) > 0.01, 'the riser is still heard up to its anchor');
+  await renderCues([{ t: 1.967, cue: 'sub', gainDb: -12, pan: 0 }], { seconds: 2, seed: SEED, out: outFile('cut-tail') });
+  const tail = readWav(outFile('cut-tail')).left;
+  assert.ok(Math.abs(tail.at(-1)) < 0.001, `the track ends on ${tail.at(-1)}`);
+  assert.ok(peakOf(tail) > 0.01, 'the sub sounds');
+});
+
 test('renderCues writes through a temporary name: when that name cannot be written, nothing appears at out', async () => {
   const out = outFile('blocked');
   mkdirSync(`${out}.partial`);

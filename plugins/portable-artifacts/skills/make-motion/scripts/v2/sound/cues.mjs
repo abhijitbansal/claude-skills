@@ -57,13 +57,16 @@ function cueFor(ev, sounds) {
 }
 
 // The whole film as one shot, for a film-level anchor: word and sentence indexes count across the film, in film seconds.
+// Each word as it is heard (soundStart, soundEnd), in film seconds; a sentence from its first word's heard start to its
+// last word's heard end. A cue is a sound, so it follows the voice, not the picture's start for a shot's first word.
 function filmShot(timeline) {
-  const shifted = (list, start) => list.map((x) => ({ ...x, start: x.start + start, end: x.end + start }));
+  const heard = (s) => s.words.map((w) => ({ ...w, start: s.start + (w.soundStart ?? w.start), end: s.start + (w.soundEnd ?? w.end) }));
+  const sentences = (s, words) => s.sentences.map((x) => ({ ...x, start: words[x.first]?.start ?? s.start + x.start, end: words[x.last]?.end ?? s.start + x.end }));
   return {
     id: FILM_SHOT_ID,
     duration: timeline.duration,
-    words: timeline.shots.flatMap((s) => shifted(s.words, s.start)),
-    sentences: timeline.shots.flatMap((s) => shifted(s.sentences, s.start)),
+    words: timeline.shots.flatMap(heard),
+    sentences: timeline.shots.flatMap((s) => sentences(s, heard(s))),
   };
 }
 

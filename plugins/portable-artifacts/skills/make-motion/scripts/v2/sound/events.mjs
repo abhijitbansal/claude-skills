@@ -4,7 +4,7 @@
 // An event is { kind, t, shot, cut?, device? }:
 //   cut       the first frame of each shot after the first (`cut` names the cut, default "cut")
 //   device    each `on` entry's resolved time (`device` is its `do`)
-//   emphasis  the first word of each run of emphasised words (one event per run)
+//   emphasis  the first word of each run of emphasised words (one event per run), when it is heard
 //   land      the moment a shot's figure reaches its value, for a kind that says when (its `landing(shot, timing)`)
 import { registries } from '../../../engine/registry.mjs';
 import '../../../engine/kinds/index.mjs';
@@ -32,11 +32,12 @@ function deviceEvents(shot, entry) {
   });
 }
 
-// One event at the start of each run of emphasised words.
+// One event at the start of each run of emphasised words, when its first word is heard (soundStart: the picture shows a
+// shot's first word from the shot's first frame, the voice speaks it later).
 function emphasisEvents(entry) {
   return entry.words
     .filter((w, k) => w.emphasis && !entry.words[k - 1]?.emphasis)
-    .map((w) => event({ kind: 'emphasis', t: entry.start + w.start, shot: entry.id }));
+    .map((w) => event({ kind: 'emphasis', t: entry.start + (w.soundStart ?? w.start), shot: entry.id }));
 }
 
 function landEvents(shot, entry, kinds) {

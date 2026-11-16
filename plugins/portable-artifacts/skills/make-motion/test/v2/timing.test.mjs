@@ -26,6 +26,8 @@ const FILM = readJson(path.join(FIXTURES, 'film-three-shots.json'));
 const SIDECAR = readJson(path.join(FIXTURES, 'sidecar-three-shots.json'));
 const flatWords = (sidecarShot) => sidecarShot.sentences.flatMap((s) => s.words);
 const measured = (words = SIDECAR.shots) => buildTimeline(FILM, { fps: FPS, words });
+// A timeline without the words' sound times (soundStart, soundEnd): what the picture reads.
+const pictureOnly = (tl) => ({ ...tl, shots: tl.shots.map((sh) => ({ ...sh, words: sh.words.map(({ soundStart, soundEnd, ...w }) => w) })) });
 
 // --- without words: byte-identical to before ---
 
@@ -33,9 +35,12 @@ for (const name of ['gate-desk', 'gate-pop']) {
   test(`without words the ${name} timeline deep-equals the one frozen before measured words existed`, () => {
     const { film } = loadFilm(path.join(SKILL, 'references/examples/v2', `${name}.json`));
     const frozen = readJson(path.join(FIXTURES, `timeline-${name}.json`));
-    assert.deepEqual(buildTimeline(film, { fps: film.fps }), frozen);
-    assert.deepEqual(buildTimeline(film, { fps: film.fps, words: undefined }), frozen);
-    assert.equal(JSON.stringify(buildTimeline(film, { fps: film.fps, words: undefined })), JSON.stringify(frozen), 'same keys in the same order');
+    // The picture is the frozen one; each word also carries its sound times (final review I1), equal to its shown times.
+    const tl = buildTimeline(film, { fps: film.fps });
+    assert.deepEqual(pictureOnly(tl), frozen);
+    assert.deepEqual(pictureOnly(buildTimeline(film, { fps: film.fps, words: undefined })), frozen);
+    assert.equal(JSON.stringify(pictureOnly(buildTimeline(film, { fps: film.fps, words: undefined }))), JSON.stringify(frozen), 'same keys in the same order');
+    for (const w of tl.shots.flatMap((sh) => sh.words)) assert.deepEqual([w.soundStart, w.soundEnd], [w.start, w.end], w.text);
   });
 }
 
@@ -49,7 +54,10 @@ test('with words the timeline is measured and each word time is the sidecar time
   const tl = measured();
   assert.equal(tl.timed, 'measured');
   SIDECAR.shots.forEach((sidecarShot, i) => {
-    const expected = flatWords(sidecarShot).map((w) => ({ text: w.text, start: w.start + NARRATION_LEAD, end: w.end + NARRATION_LEAD, emphasis: w.emphasis, aside: w.aside }));
+    const expected = flatWords(sidecarShot).map((w) => {
+      const [start, end] = [w.start + NARRATION_LEAD, w.end + NARRATION_LEAD];
+      return { text: w.text, start, end, soundStart: start, soundEnd: end, emphasis: w.emphasis, aside: w.aside };
+    });
     assert.deepEqual(tl.shots[i].words.slice(1), expected.slice(1), `shot ${sidecarShot.id}`);
     if (expected.length > 0) assert.deepEqual(tl.shots[i].words[0], { ...expected[0], start: 0 }, `shot ${sidecarShot.id}: first word`);
   });

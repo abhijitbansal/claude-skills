@@ -11,7 +11,7 @@ import { browserAvailable, ffmpegOrNull } from './helpers/session.mjs';
 import { findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 import { runMake } from '../../scripts/v2/run.mjs';
-import { formatText, NOT_RENDERED_NOTE } from '../../scripts/v2/report.mjs';
+import { formatText, NOT_RENDERED_NOTE, soundLine } from '../../scripts/v2/report.mjs';
 import { withFilmDefaults } from '../../scripts/v2/spec.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { planCues } from '../../scripts/v2/sound/cues.mjs';
@@ -66,6 +66,21 @@ test('--no-render on a viral film runs the sound stage before review and reports
   assert.ok(planned > 0);
   assert.deepEqual(report.audio, { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: planned, music: null });
   assert.match(formatText(report, { sheetsDir: '/s' }), new RegExp(`^sound: ${planned} cues$`, 'm'));
+});
+
+test('the sound line says nothing about cuts on a beat for a film with no cuts, rather than "0 of 0" (review Minor 13)', () => {
+  const bed = { kind: 'bed', bed: 'pulse', bpm: 108, landed: 0, cuts: 0, short: false };
+  assert.equal(soundLine({ cues: 0, music: bed }), 'sound: no cues, bed pulse at 108 bpm');
+  assert.equal(soundLine({ cues: 2, music: { ...bed, landed: 1, cuts: 3 } }), 'sound: 2 cues, bed pulse at 108 bpm, 1 of 3 cuts on a beat');
+});
+
+test('a viral film with nothing to plan reports no audio with --no-render, as its render would (review Minor 10)', async (t) => {
+  if (!await needsBrowser(t)) return;
+  const film = viral({ shots: [{ id: 'only', show: 'statement', text: 'Quiet.' }] });
+  assert.equal(planOf(film).cues.length, 0, 'nothing to plan');
+  const { report, exitCode } = await run(writeFilm('viral-quiet', film));
+  assert.equal(exitCode, 0, JSON.stringify(report.findings));
+  assert.equal(report.audio, null);
 });
 
 test('a pro film with no sound fields takes no sound stage and reports no audio', async (t) => {
@@ -138,6 +153,22 @@ test('a playlist as music.src is an invalid film at music.src, found by the prob
   assert.equal(exitCode, 1, JSON.stringify(report));
   assert.deepEqual(report.findings.map((f) => f.path), ['music.src']);
   assert.match(report.findings[0].message, /"music\.m3u8" is in the "hls" format, not plain audio/);
+  assert.deepEqual(stagesOf(report), [['validate', true], ['timeline', true], ['sound', false]]);
+});
+
+test('a silent music file is an invalid film at music.src from make, before anything is rendered (final review I4)', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const folder = path.join(dir, 'silent-music');
+  mkdirSync(folder, { recursive: true });
+  assert.equal(spawnSync(tools.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'anullsrc=r=48000:cl=mono', '-t', '20',
+    path.join(folder, 'quiet.wav')]).status, 0);
+  const specPath = path.join(folder, 'film.json');
+  writeFileSync(specPath, JSON.stringify(pro({ music: { src: 'quiet.wav' } })));
+  const { report, exitCode } = await run(specPath);
+  assert.equal(exitCode, 1, JSON.stringify(report));
+  assert.deepEqual(report.findings.map((f) => f.path), ['music.src']);
+  assert.match(report.findings[0].message, /"quiet\.wav" has no sound in its first [\d.]+ s, the film's length/);
   assert.deepEqual(stagesOf(report), [['validate', true], ['timeline', true], ['sound', false]]);
 });
 

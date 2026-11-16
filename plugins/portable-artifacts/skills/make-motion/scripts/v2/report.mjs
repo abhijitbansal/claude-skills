@@ -107,7 +107,7 @@ const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 function musicText(music) {
   const source = music.kind === 'bed' ? `bed ${music.bed}` : 'music file';
   const tempo = music.bpm === null ? `${source} with no steady beat` : `${source} at ${music.bpm} bpm`;
-  const landed = music.landed === null ? '' : `, ${music.landed} of ${plural(music.cuts, 'cut')} on a beat`;
+  const landed = music.landed === null || music.cuts === 0 ? '' : `, ${music.landed} of ${plural(music.cuts, 'cut')} on a beat`; // no cuts, no count
   return `${tempo}${landed}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}`;
 }
 

@@ -3,9 +3,10 @@
 // takes JPEG at quality 98 (a grainy frame costs far less to encode as JPEG). A frame whose __stateKey equals the
 // previous frame's is not captured again: the previous picture is sent twice. The video is written to a partial file
 // beside the output and renamed when ffmpeg is done, so a stop or a failure leaves no half-written MP4 behind.
-// A film's sound (voice/master.mjs: its narration, and the cues and music bed of the run's sound plan) is mixed and
-// mastered before the first frame is captured, so a broken audio chain fails fast; after the encode it is muxed into a
-// second partial file, video copied, and only that file is renamed to the output. A film with neither a voice nor sound
+// A film's sound (voice/master.mjs: its narration, and the cues and music bed of the run's sound plan) is mixed, mastered
+// and encoded to AAC before the first frame is captured, so a broken audio chain or a level the film would be refused
+// for fails fast; after the video encode the AAC is muxed into a second partial file, both streams copied, and only that
+// file is renamed to the output. A film with neither a voice nor sound
 // takes none of those steps: its video is exactly what it was before.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs';
@@ -165,16 +166,14 @@ const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, mu
  *   audio: the sound as measured in the finished file (lufs null, with a note, when it is too short to measure), with the
  *   cue count and the music summary of the plan; null with neither a voice nor sound (and then the video is exactly what
  *   it was: no audio step runs). A level more than 1 LU off the mode's target, or a true peak over its ceiling, fails
- *   the render (voice/master.mjs judgeLevel): the master WAV is judged before any frame is captured, and the finished
- *   file again after the mux.
+ *   the render (voice/master.mjs judgeLevel): the AAC encode of the master is judged before any frame is captured, and
+ *   the finished file again after the mux (the same stream, copied).
  */
 export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice, sound }) {
   const ffmpeg = await findFfmpeg();
   const own = session === undefined;
   const loaded = own ? loadFilm(specPath) : null;
   const loudness = loudnessFor(own ? loaded.film : session.film, voice, sound);
-  const subject = voice === undefined ? 'the mastered sound' : 'the mastered narration';
-  const judgement = { noVoice: voice === undefined }; // cues and music alone may stop short of the target (judgeLevel)
   const open = own ? await openSession(loaded) : session;
   const partial = path.join(path.dirname(out), `.${path.basename(out)}.partial-${process.pid}.mp4`);
   const muxed = path.join(path.dirname(out), `.${path.basename(out)}.voice.partial-${process.pid}.mp4`);
@@ -184,18 +183,25 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
   try {
     const steps = loudness === null ? null : await voiceSteps();
     const run = steps?.ffmpegRunner(ffmpeg, signal);
+    // A film with no narration (no voice, or a voice whose shots have no say) is cues and music alone, which may stop
+    // short of the target (judgeLevel noVoice).
+    const narrated = steps !== null && steps.hasNarration(voice);
+    const subject = narrated ? 'the mastered narration' : 'the mastered sound';
+    const judgement = { noVoice: !narrated };
     mkdirSync(path.dirname(out), { recursive: true });
     sweepPartials(path.dirname(out));
     if (steps !== null) work = mkdtempSync(path.join(tmpdir(), 'mm-voice-'));
     const master = steps === null ? null : await steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work, cues: sound?.cues ?? undefined, music: sound?.music ?? undefined });
-    // Before any frame is captured, against the master's own aim (MASTER_AIM_LU), tighter than the finished file's: the
-    // AAC encode has room to move it, and a film that would fail after the capture fails here.
-    if (master !== null) steps.judgeLevel(await steps.measureFile({ run, file: master }), loudness, subject, { ...judgement, tolerance: steps.MASTER_AIM_LU });
+    // Before any frame is captured: the master encoded to the AAC the film ships (raised by what AAC took from it), and
+    // that encode judged with the finished file's rule, so a film that would fail after the capture fails here. The mux
+    // copies this stream, so the judgement after it can no longer differ.
+    const encoded = master === null ? null : await steps.encodeMaster({ run, master, out: path.join(work, 'sound.m4a'), duration: open.timeline.duration, loudness });
+    if (encoded !== null) steps.judgeLevel(encoded.level, loudness, subject, judgement);
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact })], signal);
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });
     await encoder.finish();
     encoder = null;
-    const audio = master === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run, video: partial, audio: master, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
+    const audio = encoded === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run, video: partial, audio: encoded.file, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
     renameSync(audio === null ? partial : muxed, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
     const frames = open.timeline.frameCount;

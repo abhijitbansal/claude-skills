@@ -16,6 +16,7 @@ const CHANNELS = 2;
 const BYTES_PER_SAMPLE = 2;
 const SEED_LIMIT = 0xffffffff; // the largest seed the 32-bit generator tells apart
 const ONSET_SECONDS = 0.0005; // every voice rises from 0 over its first 0.5 ms, so it never starts on a step
+const EDGE_FADE_SECONDS = 0.004; // a voice cut by the film's start or end fades in or out over this, never a step
 const FNV_OFFSET = 0x811c9dc5;
 const FNV_PRIME = 0x01000193;
 
@@ -199,17 +200,29 @@ function checkCue(entry, i) {
   if (typeof pan !== 'number' || !(pan >= -1 && pan <= 1)) throw new RangeError(`${where}.pan must be a number from -1 to 1, got ${String(pan)}`);
 }
 
+// The gain at sample `i` of a voice kept from `from` to `to`: a linear fade in after a cut head and out before a cut
+// tail, over EDGE_FADE_SECONDS (1 elsewhere).
+function edgeGain(i, { from, to, cutHead, cutTail }) {
+  const fade = frames(EDGE_FADE_SECONDS);
+  const inGain = cutHead ? (i - from) / fade : 1;
+  const outGain = cutTail ? (to - 1 - i) / fade : 1;
+  return Math.max(0, Math.min(1, inGain, outGain));
+}
+
 // Adds `xs` into both channels from frame `start` (a riser's start may be before 0: its head is cut), at `gain`, panned
-// equal-power with the centre at unity in both channels (as version 1 pans).
+// equal-power with the centre at unity in both channels (as version 1 pans). A head or tail cut by the track's edge fades
+// there (edgeGain), so the track never starts or ends on a step.
 function addInto(left, right, xs, start, gain, pan) {
   const angle = ((pan + 1) * Math.PI) / 4;
   const gl = gain * Math.SQRT2 * Math.cos(angle);
   const gr = gain * Math.SQRT2 * Math.sin(angle);
   const from = Math.max(0, -start);
   const to = Math.min(xs.length, left.length - start);
+  const kept = { from, to, cutHead: from > 0, cutTail: to < xs.length };
   for (let i = from; i < to; i++) {
-    left[start + i] += xs[i] * gl;
-    right[start + i] += xs[i] * gr;
+    const x = xs[i] * edgeGain(i, kept);
+    left[start + i] += x * gl;
+    right[start + i] += x * gr;
   }
 }
 

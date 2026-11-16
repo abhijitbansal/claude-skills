@@ -6,11 +6,11 @@
 import { execFile } from 'node:child_process';
 import { mulberry32 } from '../../../engine/seeded.mjs';
 import { writeWav, WAV_RATE } from './wav.mjs';
-import { findFfmpeg, findFfprobe } from '../../lib/ffmpeg.mjs';
+import { findFfmpeg, findFfprobe, parseLoudness } from '../../lib/ffmpeg.mjs';
 import { pinkNoise } from '../../lib/cues.mjs';
 import { detectBeats, SAMPLE_RATE as BEAT_RATE, MAX_ANALYSIS_SECONDS } from '../../lib/beats.mjs';
 import { SpecError, recordingFile } from '../spec.mjs';
-import { probeRecording, recordingProblem, recordingInput } from '../voice/master.mjs';
+import { MUSIC_FADE_SECONDS, probeRecording, recordingProblem, recordingInput } from '../voice/master.mjs';
 
 const RATE = WAV_RATE; // the bed is synthesised at the rate wav.mjs writes
 const TWO_PI = 2 * Math.PI;
@@ -23,16 +23,22 @@ const MAX_TOLERANCE = 0.5;
 const SEARCH_BPM = Object.freeze([84, 132]); // the tempos searched when the film names none
 const BPM_STEP = 0.01; // tempo resolution of the search
 const DEFAULT_FPS = 30;
-const LAND_EPSILON = 1e-9; // so a cut exactly one frame from a beat lands
+export const LAND_EPSILON = 1e-9; // so a cut exactly one frame from a beat lands (run.mjs counts a file's beats with it too)
 const ROUNDING = 1e6; // bpm and offset are reported to 1e-6
 const BEATS_PER_BAR = 4;
 const MUSIC_PATH = 'music.src';
 /** detectBeats' confidence a user's music must reach for its beats to be used (version 1 beats.mjs's own default gate). */
 export const BEAT_MIN_CONFIDENCE = 0.5;
 /** Seconds of fade at the end of a user's music, where it ends or where the film does. */
-export const MUSIC_FADE_OUT = 1;
+export const MUSIC_FADE_OUT = MUSIC_FADE_SECONDS; // the mix's fade (voice/master.mjs): one value, so where it starts and how long it runs agree
 const DECODE_SLACK_BYTES = 1 << 20;
 const FLOAT_BYTES = 4;
+// ffmpeg's runs over a user's music (the beat decode, the loudness): longer than either takes on a long file, measured
+// at under 2 s for a 5 minute track on the development Mac; past it the run is machine trouble, not the film's.
+const MUSIC_TOOL_TIMEOUT_MS = 120000;
+const MEASURE_MAX_BUFFER = 1 << 20; // ebur128's summary on stderr; its frame lines are off (-nostats, no per-frame log)
+const GATE_FLOOR_LUFS = -70; // ebur128's absolute gate: an integrated value at or under it measured nothing
+const SECONDS_STEPS = 100; // a length in a message, to 0.01 s
 const FFPROBE_HINT = 'install ffmpeg with its ffprobe (they come together), or set FFPROBE_PATH to an ffprobe you trust';
 
 /** The synthesised beds a film may name. */
@@ -248,24 +254,49 @@ export async function renderBed({ bed, grid, seconds, seed, out }) {
 export const musicDecodeArgs = (file) => ['-v', 'error', '-nostdin', ...recordingInput(file), '-map', '0:a:0',
   '-t', String(MAX_ANALYSIS_SECONDS), '-ac', '1', '-ar', String(BEAT_RATE), '-f', 'f32le', 'pipe:1'];
 
-// The music decoded (musicDecodeArgs) as samples. A file that probed but will not decode is the film's problem, at music.src.
-function decodeMusic(ffmpeg, file, src, signal) {
-  const args = musicDecodeArgs(file);
-  const options = { encoding: 'buffer', maxBuffer: MAX_ANALYSIS_SECONDS * BEAT_RATE * FLOAT_BYTES + DECODE_SLACK_BYTES, signal };
+// ffmpeg over the music file -> { stdout, stderr }. ffmpeg itself refusing the file (a non-zero exit) is the film's
+// problem, a SpecError at music.src; ffmpeg not starting, killed (the timeout) or overflowing is machine trouble, as is a
+// stop (the signal's reason).
+function musicTool(ffmpeg, args, { src, what, maxBuffer, encoding, signal }) {
+  const options = { encoding, maxBuffer, signal, timeout: MUSIC_TOOL_TIMEOUT_MS };
   return new Promise((resolve, reject) => {
     execFile(ffmpeg, args, options, (err, stdout, stderr) => {
       if (err?.name === 'AbortError') return reject(err);
+      if (err && (typeof err.code !== 'number' || err.killed)) return reject(new Error(`ffmpeg could not ${what} ${JSON.stringify(src)}: ${err.message}`, { cause: err }));
       if (err) {
         const why = String(stderr ?? '').split('\n').find((line) => line.trim())?.trim() ?? err.message;
         return reject(new SpecError([{ path: MUSIC_PATH, message: `${JSON.stringify(src)} cannot be decoded: ${why}` }]));
       }
-      const count = Math.floor(stdout.length / FLOAT_BYTES);
-      return resolve(Float32Array.from({ length: count }, (_, i) => {
-        const v = stdout.readFloatLE(i * FLOAT_BYTES);
-        return Number.isFinite(v) ? v : 0;
-      }));
+      return resolve({ stdout, stderr: String(stderr ?? '') });
     });
   });
+}
+
+// The music decoded (musicDecodeArgs) as samples.
+async function decodeMusic(ffmpeg, file, src, signal) {
+  const maxBuffer = MAX_ANALYSIS_SECONDS * BEAT_RATE * FLOAT_BYTES + DECODE_SLACK_BYTES;
+  const { stdout } = await musicTool(ffmpeg, musicDecodeArgs(file), { src, what: 'decode', maxBuffer, encoding: 'buffer', signal });
+  const count = Math.floor(stdout.length / FLOAT_BYTES);
+  return Float32Array.from({ length: count }, (_, i) => {
+    const v = stdout.readFloatLE(i * FLOAT_BYTES);
+    return Number.isFinite(v) ? v : 0;
+  });
+}
+
+/** The ffmpeg arguments that measure the music `file`'s loudness (ebur128) over its first `seconds` (all of it without). */
+export const musicLoudnessArgs = (file, seconds) => ['-hide_banner', '-nostats', '-nostdin', ...recordingInput(file), '-map', '0:a:0',
+  ...(seconds === undefined ? [] : ['-t', String(seconds)]), '-map_metadata', '-1', '-af', 'ebur128=peak=true', '-f', 'null', '-'];
+
+// The music's integrated loudness over the part the film plays (LUFS). Nothing over the measurement gate there is the
+// film's mistake: a silent file under the voice would be mixed and reported as music (final review I4).
+async function musicLoudness(ffmpeg, file, src, seconds, signal) {
+  const { stderr } = await musicTool(ffmpeg, musicLoudnessArgs(file, seconds), { src, what: 'measure', maxBuffer: MEASURE_MAX_BUFFER, encoding: 'utf8', signal });
+  const lufs = parseLoudness(stderr)?.lufs;
+  if (!Number.isFinite(lufs) || lufs <= GATE_FLOOR_LUFS) {
+    const span = seconds === undefined ? '' : ` in its first ${Math.round(seconds * SECONDS_STEPS) / SECONDS_STEPS} s, the film's length`;
+    throw new SpecError([{ path: MUSIC_PATH, message: `${JSON.stringify(src)} has no sound${span}: nothing in it reaches the ${GATE_FLOOR_LUFS} LUFS measurement gate; name a file with music in it` }]);
+  }
+  return lufs;
 }
 
 // The detected beats, or null when there is no steady beat (no sound, too short, or confidence under the gate).
@@ -284,22 +315,25 @@ async function toolsFor({ ffmpeg, ffprobe }) {
 /**
  * A film's own music, `music: { src }` relative to `dir` (the film's folder): checked as a user's recording is (a regular,
  * readable file whose real path is inside the folder: spec.mjs recordingFile), probed by ffprobe before anything decodes
- * it (plain audio of an accepted format, one audio stream: voice/master.mjs probeRecording, recordingProblem), then decoded
- * through the same whitelists for beat detection (scripts/lib/beats.mjs detectBeats). -> { file: its real path (the only
- * path that may reach ffmpeg), seconds: its length, beats: seconds, or null with no steady beat }. A problem with the
- * file is a SpecError at music.src. `ffmpeg`, `ffprobe` default to the ones found on this machine.
+ * it (plain audio of an accepted format, one audio stream: voice/master.mjs probeRecording, recordingProblem), its
+ * loudness measured over its first `seconds` (the film's length; all of it without), then decoded through the same
+ * whitelists for beat detection (scripts/lib/beats.mjs detectBeats). -> { file: its real path (the only path that may
+ * reach ffmpeg), seconds: its length, lufs: its loudness, beats: seconds, or null with no steady beat }. A problem with
+ * the file, a silent one among them, is a SpecError at music.src. `ffmpeg`, `ffprobe` default to the ones found on
+ * this machine.
  */
-export async function musicInput(film, dir, { ffmpeg, ffprobe, signal } = {}) {
+export async function musicInput(film, dir, { ffmpeg, ffprobe, signal, seconds } = {}) {
   const src = film?.music?.src;
   if (typeof src !== 'string' || src === '') throw new TypeError('musicInput: the film\'s music has no src');
   const read = recordingFile(src, MUSIC_PATH, dir);
   if (read.error) throw new SpecError([read.error]);
   const tools = await toolsFor({ ffmpeg, ffprobe });
   const probe = await probeRecording({ ffprobe: tools.ffprobe, file: read.real, signal });
-  const problem = recordingProblem(probe, 0);
+  const problem = recordingProblem(probe, 0, { what: 'music file' });
   if (problem !== null) throw new SpecError([{ path: MUSIC_PATH, message: `${JSON.stringify(src)} ${problem}` }]);
+  const lufs = await musicLoudness(tools.ffmpeg, read.real, src, seconds, signal);
   const pcm = await decodeMusic(tools.ffmpeg, read.real, src, signal);
-  return { file: read.real, seconds: probe.duration, beats: detected(pcm) };
+  return { file: read.real, seconds: probe.duration, lufs, beats: detected(pcm) };
 }
 
 /**

@@ -75,7 +75,8 @@ function secondsForShot(shot, pace) {
     return { seconds: hold, words: [], sentences: [] };
   }
   const { tokens, trailingPause } = parsedSay(shot);
-  const words = estimateWords(tokens, { wpm: pace.wpm });
+  // An estimated word is heard when it is shown: its sound times are its times.
+  const words = estimateWords(tokens, { wpm: pace.wpm }).map((w) => ({ ...w, soundStart: w.start, soundEnd: w.end }));
   return {
     seconds: words.at(-1).end + trailingPause + pace.tail,
     words,
@@ -101,16 +102,21 @@ function measuredWords(shot, measured, index, tokens, offset = NARRATION_LEAD) {
   if (flat.length !== tokens.length) {
     throw new RangeError(`${where}: ${flat.length} words, the say of shot "${shot.id}" has ${tokens.length}`);
   }
-  // The times are the voice's; what is emphasised or an aside is the film's own say.
-  return flat.map((w, k) => ({ text: w.text, start: w.start + offset, end: w.end + offset, emphasis: tokens[k].emphasis, aside: tokens[k].aside }));
+  // The times are the voice's; what is emphasised or an aside is the film's own say. soundStart and soundEnd are where
+  // the word is heard and stay so when the picture moves its start (shownFromShotStart).
+  return flat.map((w, k) => {
+    const [start, end] = [w.start + offset, w.end + offset];
+    return { text: w.text, start, end, soundStart: start, soundEnd: end, emphasis: tokens[k].emphasis, aside: tokens[k].aside };
+  });
 }
 
 /**
  * A measured shot's words as the picture shows them: the first word from the shot's first frame (start 0), so a shot
- * never opens on an empty frame while its voice's lead-in plays; its sound still starts at its measured time (the mix
- * reads the sidecar, not these). So are the tokens that start with it: a run sharing its word ("$5 million" as one
+ * never opens on an empty frame while its voice's lead-in plays. Its sound still starts at its measured time: every word
+ * keeps its heard times in soundStart and soundEnd (what the cue plan, an explicit cue anchor and the duck read; the mix
+ * places the voice by the sidecar). So are the tokens that start with it: a run sharing its word ("$5 million" as one
  * word), or a spaced dash before it (a zero-length span at its start). Every other word keeps its measured time. An
- * anchor on the first word is the shot start.
+ * `on` anchor on the first word is the shot start.
  */
 const shownFromShotStart = (words) => words.map((w) => (w.start === words[0].start ? { ...w, start: 0 } : w));
 
@@ -273,7 +279,8 @@ function recordedTimeline(film, { fps, pace, words, cuts }) {
   let startFrame = 0;
   const entries = shots.map((shot, index) => {
     const start = startFrame / fps;
-    const local = shot.narrated ? shownFromShotStart(shot.words.map((w) => ({ ...w, start: w.start - start, end: w.end - start }))) : [];
+    const toShot = (w) => ({ ...w, start: w.start - start, end: w.end - start, soundStart: w.soundStart - start, soundEnd: w.soundEnd - start });
+    const local = shot.narrated ? shownFromShotStart(shot.words.map(toShot)) : [];
     startFrame += frames[index];
     return { id: shot.id, index, start, end: startFrame / fps, duration: frames[index] / fps, words: local, sentences: shot.narrated ? groupSentences(shot.tokens, local) : [] };
   });
