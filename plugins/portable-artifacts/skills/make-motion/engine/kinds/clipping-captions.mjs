@@ -10,6 +10,7 @@ import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
 import { slugNodes, SLUG } from './slug.mjs';
+import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import { CAP_HEIGHT, sizeAt, fontFor, setCase, inkBox, isEditorial, requireDevice, pinned, shownFrom, runInk, asTextCard } from './shared.mjs';
 
 // editorial caption: label caps at step 2 in ink2 (as the slug's kicker), wrapped to 4 columns, on a card whose left edge
@@ -73,14 +74,22 @@ function onScreen(canvas, cam, [x, y, w, h]) {
   return [cx + (x - cx) * cam.zoom - cam.x, cy + (y - cy) * cam.zoom - cam.y, w * cam.zoom, h * cam.zoom];
 }
 
+// Where a caption card may go: inside the margins, or inside the 9:16 safe zone's band (editorial.mjs).
+function editorialArea(ctx) {
+  const { look, canvas, unit } = ctx;
+  const bounds = editorialBounds(ctx);
+  if (bounds.safe) return { left: editorialSpan(ctx, 1, 1).x, top: bounds.top, right: editorialRight(ctx), bottom: bounds.bottom };
+  const margin = look.grid.margin * unit;
+  return { left: margin, top: margin, right: canvas.w - margin, bottom: canvas.h - margin };
+}
+
 // The caption card's tracks with a push added: its x and y move from where it rests to captionAfterPush's place over
 // the push (the push's keys and ease, starting no earlier than the card's own entrance has ended), and x then follows the
 // camera drift to the end of the shot, so the card stays under the region; pinned to the frame, it is never zoomed.
 function followTracks(card, box, ctx, { region, frame, push, camera }) {
   const { look, canvas, unit, timing } = ctx;
   const landed = push.at(-1), camAt = camera(landed.t), camEnd = camera(timing.duration);
-  const margin = look.grid.margin * unit;
-  const area = { left: margin, top: margin, right: canvas.w - margin, bottom: canvas.h - margin };
+  const area = editorialArea(ctx);
   const to = captionAfterPush({ region: onScreen(canvas, camAt, region), frame: onScreen(canvas, camAt, frame), size: { w: box[2], h: box[3] }, gutter: look.grid.gutter * unit, area });
   const [x0, y0] = [card.props.x, card.props.y], [x1, y1] = [x0 + to[0] - box[0], y0 + to[1] - box[1]];
   const rise = card.tracks.y ? card.tracks.y.points.map((p, i) => ({ t: p.t, v: p.v, ...(i > 0 ? { ease: look.moves.enter.ease } : {}) })) : [{ t: 0, v: y0 }];
@@ -97,11 +106,14 @@ function followTracks(card, box, ctx, { region, frame, push, camera }) {
 function cardCaption(shot, ctx, follow) {
   const { look, canvas, unit, seed, measure } = ctx;
   const font = fontFor(look, 'label', sizeAt(look, CARD_CAPTION.step, unit), unit);
-  const layout = layoutText({ text: setCase(look, 'label', shot.caption), font, maxWidth: gridSpan(look, canvas, 1, CARD_CAPTION.columns).w, measure });
+  const bounds = editorialBounds(ctx);
+  const maxWidth = bounds.safe ? editorialSpan(ctx, 1, CARD_CAPTION.columns).w : gridSpan(look, canvas, 1, CARD_CAPTION.columns).w;
+  const layout = layoutText({ text: setCase(look, 'label', shot.caption), font, maxWidth, measure });
   const ink = runInk(layout.lines[0], font, measure);
   const pad = SLUG.pad * unit;
   const w = layout.width + HALF * pad, h = HALF * pad + ink.up + layout.lines.at(-1).y - layout.lines[0].y;
-  const box = [gridX(look, canvas, CARD_CAPTION.column), canvas.h - look.grid.margin * unit - h, w, h];
+  // bottom left on column 2 between the margins; in the 9:16 safe zone, on its first column and the band's bottom
+  const box = bounds.safe ? [editorialSpan(ctx, 1, 1).x, bounds.bottom - h, w, h] : [gridX(look, canvas, CARD_CAPTION.column), canvas.h - look.grid.margin * unit - h, w, h];
   const id = `${shot.id}.caption.card`;
   const card = registries.devices.get('card').build({ id, box, at: look.moves.enter.dur, look, unit, seed }).nodes[0];
   const x = -w / HALF + pad - ink.left, y = -h / HALF + pad + ink.up - layout.lines[0].y;

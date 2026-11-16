@@ -1,163 +1,70 @@
-// The `glow` emphasis (engine/devices/glow.mjs): an emphasised word takes the accent as it is spoken, and behind each
-// run of adjacent emphasised words on a line sits one soft accent halo, a blurred pill path under the text. The halo is
-// a path, so the measured ink box the review reads (text nodes only, engine/review/frame.mjs) never includes it; it
-// stays inside the frame and off the neighbouring lines, and text over it keeps 3:1 against its brightest pixel.
+// The `glow` emphasis (engine/devices/glow.mjs): an emphasised word takes the accent as it is spoken and its glyphs
+// glow behind it (the draw layer's glyph shadow, props.glow on the text, a `glow` word track 0 to 1). No halo node, so
+// the ink box the review measures is the text's alone; the radius is a third of the cap height, capped at the safe
+// margin. test/v2/cosmos-glow-browser.test.mjs measures the contrast against the brightest glow pixel.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/looks/index.mjs';
-import '../../engine/fields/index.mjs';
-import { GLOW, glowFill, glowHalos } from '../../engine/devices/glow.mjs';
-import { layoutText } from '../../engine/text/layout.mjs';
-import { fontFor } from '../../engine/kinds/shared.mjs';
+import { glowFill, glowStyle } from '../../engine/devices/glow.mjs';
+import { fontFor, CAP_HEIGHT } from '../../engine/kinds/shared.mjs';
 import { sample } from '../../engine/time/track.mjs';
-import { mix } from '../../engine/fields/color.mjs';
-import { contrastRatio as contrast } from '../../shared/contrast.mjs';
+import { expandShot, expandIn, filmOf, all, textNode, FILLER } from './helpers/kinds.mjs';
 
 const cosmos = registries.looks.get('cosmos');
 const desk = registries.looks.get('desk');
 const pop = registries.looks.get('pop');
-const CANVAS = Object.freeze({ w: 1920, h: 1080 });
-// Nunito 800 ink, measured in Chromium 156 (.scratch/cosmos/metrics.mjs), given to every word: the worst case.
-const NUNITO = Object.freeze({ up: 0.716, down: 0.191 });
-const measure = (text, font) => {
-  const width = [...text].length * font.size * 0.55;
-  return { width, ascent: font.size * 0.9, descent: font.size * 0.25, inkAscent: NUNITO.up * font.size, inkDescent: NUNITO.down * font.size, inkLeft: 0.02 * font.size, inkRight: width - 0.02 * font.size };
-};
-const fieldPeak = registries.fields.get('cosmos').plan({ w: 1920, h: 1080, unit: 1, seed: 1, palette: cosmos.palette, params: {} }).peak;
+const SAFE_MARGIN_UNITS = 60; // template/formats.mjs SAFE_MARGIN_PX at 1080
 
-// A placed text (as statement composes it) and the per-word times and timing words that say which are emphasised.
-function placedText(text, { size = 136, x = 242, y = 300, maxWidth = 1400, emphasised = [], look = cosmos, canvas = CANVAS } = {}) {
-  const font = fontFor(look, 'display', size, 1);
-  const layout = layoutText({ text, font, maxWidth, measure });
-  const words = layout.lines.flatMap((l) => l.words);
-  const times = words.map((w, i) => ({ at: 0.4 * (i + 1), spoken: i }));
-  const timing = { words: words.map((w, i) => ({ text: w.text, emphasis: emphasised.includes(i) })) };
-  return { placed: Object.freeze({ x, y, layout, font }), times, ctx: { look, timing, measure, canvas, unit: 1 } };
-}
-const bboxOf = (d) => {
-  const n = d.match(/-?\d+(?:\.\d+)?/g).map(Number);
-  const xs = n.filter((_, i) => i % 2 === 0), ys = n.filter((_, i) => i % 2 === 1);
-  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
-};
-// A halo is a soft-edged group of rings (devices/shared.mjs softRoundedRect), outermost first.
-const outer = (halo) => bboxOf(halo.children[0].props.d);
-const inner = (halo) => bboxOf(halo.children.at(-1).props.d);
-const stacked = (halo) => 1 - halo.children.reduce((left, ring) => left * (1 - ring.props.opacity), 1);
-
-test('glowFill: the word turns from ink to the accent over the look\'s emphasize move from when it is spoken', () => {
-  const { fill } = glowFill(cosmos, 2);
-  assert.equal(sample(fill, 0), cosmos.palette.ink);
-  assert.equal(sample(fill, 2), cosmos.palette.ink);
-  assert.equal(sample(fill, 2 + cosmos.moves.emphasize.dur), cosmos.palette.accent);
-  assert.equal(sample(fill, 9), cosmos.palette.accent);
+test('glowFill: the word turns from ink to the accent and its glow rises from 0 to 1 over the emphasize move from when it is spoken', () => {
+  const { fill, glow } = glowFill(cosmos, 2);
+  const end = 2 + cosmos.moves.emphasize.dur;
+  assert.deepEqual([sample(fill, 0), sample(fill, 2), sample(fill, end)], [cosmos.palette.ink, cosmos.palette.ink, cosmos.palette.accent]);
+  assert.deepEqual([sample(glow, 0), sample(glow, 2), sample(glow, end)], [0, 0, 1]);
 });
 
-test('glowHalos: none in a look whose emphasis is not the glow (desk, pop), none when nothing is emphasised', () => {
-  for (const look of [desk, pop]) {
-    const { placed, times, ctx } = placedText('Scale changes everything', { emphasised: [2], look });
-    assert.deepEqual(glowHalos('s', placed, times, ctx), []);
-  }
-  const { placed, times, ctx } = placedText('Scale changes everything');
-  assert.deepEqual(glowHalos('s', placed, times, ctx), []);
+test('glowStyle: cosmos gives a warm glow at a third of the cap height; desk and pop give none', () => {
+  const font = fontFor(cosmos, 'display', 136, 1);
+  assert.deepEqual(glowStyle(cosmos, font, 1), { glow: { color: '#ffb040', alpha: 0.65, radius: (CAP_HEIGHT * 136) / 3 } });
+  for (const look of [desk, pop]) assert.deepEqual(glowStyle(look, fontFor(look, 'display', 136, 1), 1), {});
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(cosmos.glow.color.slice(i, i + 2), 16));
+  assert.ok(r > g && g > b, 'warm: more red than green, more green than blue');
 });
 
-test('glowHalos: one halo per run of adjacent emphasised words on a line, a soft accent pill under the text, no blur filter', () => {
-  const { placed, times, ctx } = placedText('one two three four five six seven', { size: 76, maxWidth: 1600, emphasised: [1, 2, 5] });
-  assert.equal(placed.layout.lines.length, 1);
-  const halos = glowHalos('s', placed, times, ctx);
-  assert.deepEqual(halos.map((n) => n.id), ['s.glow0', 's.glow1']);
-  for (const halo of halos) {
-    assert.equal(halo.type, 'group');
-    assert.equal(halo.props.under, true);
-    assert.ok(halo.children.every((ring) => ring.type === 'path' && ring.props.fill === cosmos.palette.accent && ring.props.blur === undefined));
-    assert.ok(Math.abs(stacked(halo) - GLOW.alpha) < 1e-9, `whole at GLOW.alpha: ${stacked(halo)}`);
-    const [, , w, h] = outer(halo);
-    assert.ok(w > h, 'a pill');
-    assert.ok(outer(halo)[1] < inner(halo)[1], 'a soft edge round the core');
+test('glowStyle: the radius never passes the safe margin, so the glow of a text inside the safe area stays in the frame', () => {
+  for (const unit of [0.5, 1, 2]) {
+    for (const size of [76, 136, 232, 300, 420]) {
+      const { glow } = glowStyle(cosmos, fontFor(cosmos, 'display', size * unit, unit), unit);
+      assert.ok(glow.radius <= SAFE_MARGIN_UNITS * unit + 1e-9, `${size}@${unit}: ${glow.radius}`);
+    }
   }
 });
 
-test('glowHalos: the halo is whole only along the run\'s middle, inside its ink, and soft from there to past the ink', () => {
-  const size = 136;
-  const { placed, times, ctx } = placedText('Scale changes everything', { size, emphasised: [2] });
-  const [halo] = glowHalos('s', placed, times, ctx);
-  const line = placed.layout.lines.find((l) => l.words.some((w) => w.index === 2)), baseline = placed.y + line.y;
-  const [, iy, , ih] = inner(halo), [, oy, , oh] = outer(halo);
-  assert.ok(iy > baseline - NUNITO.up * size && iy + ih < baseline + NUNITO.down * size, 'the whole core sits inside the ink');
-  assert.ok(oy < baseline - NUNITO.up * size && oy + oh > baseline + NUNITO.down * size, 'the soft edge reaches past the ink');
-  const PATH_PRECISION = 0.01;
-  assert.ok(Math.abs((baseline - NUNITO.up * size) - oy - GLOW.reach * size) <= PATH_PRECISION, 'GLOW.reach past the ink');
+const SHOT = { id: 's', show: 'statement', say: 'Scale changes *everything* we know.' };
+const glowWords = (text) => text.wordTracks.map((w, i) => (w.glow ? i : -1)).filter((i) => i >= 0);
+
+test('a cosmos statement: its hero carries props.glow, only the emphasised word glows, and no halo or extra node is built', () => {
+  const { nodes } = expandShot(SHOT, 'cosmos', '16:9');
+  const text = textNode(nodes, 's.text');
+  assert.equal(text.props.glow.color, '#ffb040');
+  const words = text.props.layout.lines.flatMap((l) => l.words);
+  assert.deepEqual(glowWords(text), [words.findIndex((w) => w.text === 'everything')]);
+  assert.equal(all(nodes).filter((n) => n.type === 'text').length, 1, 'one text node: the glow is not a node');
+  assert.equal(all(nodes).some((n) => /glow/.test(n.id)), false);
 });
 
-test('glowHalos: a long run on a line is one halo, its rings whole only where they all overlap', () => {
-  const { placed, times, ctx } = placedText('one two three', { size: 76, emphasised: [0, 1, 2] });
-  const halos = glowHalos('s', placed, times, ctx);
-  assert.equal(halos.length, 1);
-  for (const halo of halos) {
+test('a viral cosmos hook (read from frame 0): the emphasised word lights to the accent with its glow', () => {
+  const { nodes } = expandIn(filmOf([SHOT], 'cosmos', '9:16', { mode: 'viral' }));
+  const text = textNode(nodes, 's.text');
+  assert.equal(glowWords(text).length, 1);
+  const second = expandIn(filmOf([FILLER, SHOT], 'cosmos', '9:16', { mode: 'viral' }), 1);
+  assert.equal(glowWords(textNode(second.nodes, 's.text')).length, 1);
+});
+
+test('desk and pop statements carry no glow', () => {
+  for (const [look, format] of [['desk', '16:9'], ['pop', '9:16']]) {
+    const text = textNode(expandShot(SHOT, look, format).nodes);
+    assert.equal(text.props.glow, undefined, look);
+    assert.ok(text.wordTracks.every((w) => w.glow === undefined), look);
   }
-});
-
-test('glowHalos: no text node comes back and the placed text is not changed, so the ink box the review measures is the text\'s alone', () => {
-  const { placed, times, ctx } = placedText('Scale changes everything', { emphasised: [2] });
-  const before = JSON.stringify(placed);
-  const halos = glowHalos('s', placed, times, ctx);
-  const every = (nodes) => nodes.flatMap((n) => [n, ...every(n.children)]);
-  assert.ok(every(halos).every((n) => n.type !== 'text'));
-  assert.equal(JSON.stringify(placed), before);
-});
-
-test('glowHalos: a halo fades in from when its first word is spoken, whole after the emphasize move', () => {
-  const { placed, times, ctx } = placedText('Scale changes everything', { emphasised: [2] });
-  const [halo] = glowHalos('s', placed, times, ctx);
-  const at = times[2].at;
-  assert.equal(sample(halo.tracks.opacity, 0), 0);
-  assert.equal(sample(halo.tracks.opacity, at), 0);
-  assert.equal(sample(halo.tracks.opacity, at + cosmos.moves.emphasize.dur), 1);
-});
-
-test('glowHalos: the halo holds the run\'s ink and its soft edge never touches the line above or below, at 76, 136 and 232 units', () => {
-  for (const size of [76, 136, 232]) {
-    // a canvas large enough that no clip to the frame shortens a halo: this test is about the lines
-    const { placed, times, ctx } = placedText('aaa bbb ccc ddd eee fff ggg hhh', { size, maxWidth: size * 3.5, x: 200, y: 200 + size, emphasised: [0, 1, 2, 3, 4, 5, 6, 7], canvas: { w: 4000, h: 4000 } });
-    assert.ok(placed.layout.lines.length >= 3, `${size}: several lines`);
-    const halos = glowHalos('s', placed, times, ctx);
-    assert.equal(halos.length, placed.layout.lines.length);
-    halos.forEach((halo, k) => {
-      const [, oy, , oh] = outer(halo);
-      const baseline = placed.y + placed.layout.lines[k].y;
-      assert.ok(oy <= baseline - NUNITO.up * size && oy + oh >= baseline + NUNITO.down * size, `${size} line ${k}: the glow covers the ink`);
-      const next = placed.layout.lines[k + 1], prev = placed.layout.lines[k - 1];
-      if (next) assert.ok(oy + oh < placed.y + next.y - NUNITO.up * size, `${size} line ${k}: off the line below`);
-      if (prev) assert.ok(oy > placed.y + prev.y + NUNITO.down * size, `${size} line ${k}: off the line above`);
-    });
-  }
-});
-
-test('glowHalos: the glow never leaves the frame, even for a word set against its edge', () => {
-  const { placed, times, ctx } = placedText('Edge', { x: 4, y: 140, size: 136, emphasised: [0] });
-  const [halo] = glowHalos('s', placed, times, ctx);
-  const [x, y, w, h] = outer(halo);
-  assert.ok(x >= 0 && y >= 0 && x + w <= CANVAS.w && y + h <= CANVAS.h, `[${x}, ${y}, ${w}, ${h}]`);
-});
-
-// Canvas compositing in sRGB, per channel in 0..1: source-over b + a (s - b), screen b + a s (1 - b).
-const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
-const toHex = (cs) => `#${cs.map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0')).join('')}`;
-const composite = (backdrop, source, alpha, blend) => {
-  const b = channels(backdrop), s = channels(source);
-  return toHex(b.map((bc, i) => (blend === 'screen' ? bc + alpha * s[i] * (1 - bc) : bc + alpha * (s[i] - bc))));
-};
-
-test('the halo is screened, so it only brightens; the accent word and an ink neighbour keep 3:1 against its brightest pixel', () => {
-  const { placed, times, ctx } = placedText('Scale changes everything', { emphasised: [2] });
-  const [halo] = glowHalos('s', placed, times, ctx);
-  assert.equal(halo.props.blend, 'screen');
-  const brightest = halo.children.reduce((b, ring) => composite(b, ring.props.fill, ring.props.opacity, halo.props.blend), fieldPeak);
-  assert.ok(contrast(brightest, '#000000') > contrast(fieldPeak, '#000000'), 'brighter than the field');
-  for (const key of ['accent', 'ink']) {
-    const ratio = contrast(cosmos.palette[key], brightest);
-    assert.ok(ratio >= 3, `${key} on ${brightest}: ${ratio.toFixed(2)}`);
-  }
-  assert.equal(mix(fieldPeak, fieldPeak, 0.5), fieldPeak);
 });

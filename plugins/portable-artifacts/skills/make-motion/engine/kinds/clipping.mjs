@@ -11,7 +11,7 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track, sample } from '../time/track.mjs';
-import { landing, pathPoints } from '../devices/shared.mjs';
+import { landing, pathPoints, roundedRect, colourOf } from '../devices/shared.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { regionMark } from './region-mark.mjs';
 import { closeUpPlan, closeUps } from './close-ups.mjs';
@@ -53,8 +53,12 @@ const DEGREES_TO_RADIANS = Math.PI / 180;
 const HALF = 2;
 const NO_ROOM = Object.freeze({ above: 0, below: 0 });
 
-// The look lays the picture on a taped card (desk's paper collage).
-const hasCard = (look) => look.devices?.card?.edge === 'taped';
+// The look lays the picture on a card: desk's taped paper, or a look whose clipping data says so (cosmos: its rounded
+// card, look.kinds.clipping.card).
+const hasCard = (look) => look.devices?.card?.edge === 'taped' || look.kinds?.clipping?.card === true;
+// The picture group's turn in an editorial composition: the look's (look.kinds.clipping.turn), else EDITORIAL_TURN.
+const editorialTurn = (look) => look.kinds?.clipping?.turn ?? EDITORIAL_TURN;
+const GLOW_ALPHA = 0.5; // the card's glow at its edge, before the blur spreads it (screened)
 
 // A point in the picture group's local space carried to canvas pixels: turned by `turn` degrees about the centre.
 function toCanvas(centre, turn, [x, y]) {
@@ -77,9 +81,17 @@ function pictureParts(shot, ctx, { w, h, hero, crop }) {
   const devices = registries.devices;
   const base = { at: 0, look, unit, seed };
   const pad = CARD_PAD * unit;
-  const card = hasCard(look) ? devices.get('card').build({ ...base, id: `${hero}.card`, box: [-w / HALF - pad, -h / HALF - pad, w + HALF * pad, h + HALF * pad] }).nodes : [];
+  const cardBox = [-w / HALF - pad, -h / HALF - pad, w + HALF * pad, h + HALF * pad];
+  const card = hasCard(look) ? devices.get('card').build({ ...base, id: `${hero}.card`, box: cardBox }).nodes : [];
   const cutout = devices.get('cutout').build({ ...base, id: `${hero}.cutout`, box: [-w / HALF, -h / HALF, w, h], image }).nodes;
-  return [...card, ...cutout];
+  // the card's soft glow edge (look.kinds.clipping.glow, units of blur): the card's shape with an accent canvas shadow
+  // (draw.mjs path glow, a smooth falloff), screened so it only brightens; the card covers its fill
+  const reach = (look.kinds?.clipping?.glow ?? 0) * unit;
+  const shape = roundedRect(...cardBox, (look.devices.card.radius ?? 0) * unit);
+  const glow = card.length > 0 && reach > 0
+    ? [node('path', `${hero}.glow`, { d: shape, fill: colourOf(look, look.devices.card.fill ?? 'paper'), blend: 'screen', glow: { color: look.palette.accent, alpha: GLOW_ALPHA, radius: reach } })]
+    : [];
+  return [...glow, ...card, ...cutout];
 }
 
 // When the whole picture's entrance ends: the enter move, shortened to end one frame before a close-up switch that
@@ -117,7 +129,8 @@ function pictureGroup(shot, ctx, { hero, centre, children, hideAt }) {
   if (enters && editorial) tracks.y = landing(end, move, centre[1] + RISE * unit, centre[1]);
   if (enters && !editorial) tracks.scale = landing(end, { ...move, ease: FADE_EASE }, POP_FROM, 1);
   else if (enters && move.scale !== undefined) tracks.scale = landing(end, move, move.scale, 1);
-  const props = { x: centre[0], y: centre[1], layer: true, ...(editorial ? { rotate: EDITORIAL_TURN } : {}) };
+  const turn = editorialTurn(look);
+  const props = { x: centre[0], y: centre[1], layer: true, ...(editorial && turn !== 0 ? { rotate: turn } : {}) };
   return node('group', hero, props, { tracks, children });
 }
 
@@ -145,6 +158,9 @@ function centreOf(ctx, room = NO_ROOM, h = 0, w = 0) {
     // evenly into the slack withinReach left above and below
     return [rect.cx, top <= area.top ? area.top + area.h / HALF : top + h / HALF];
   }
+  // in the platform safe zone on a tall frame: the composition rect's centre (its band)
+  const safe = compositionRect(ctx);
+  if (safe.safe) return [safe.cx, safe.cy];
   const [fx, fy] = isWide(canvas) ? CENTRE.wide : CENTRE.tall;
   const { bottom, band } = editorialRoom(ctx);
   const turnedHalf = (h + Math.sin(TURN_ALLOWANCE) * w) / HALF;
@@ -321,7 +337,7 @@ function pictureLayout(shot, ctx, room) {
   const hero = heroId(shot, 'image');
   const parts = pictureParts(shot, ctx, { w, h, hero, crop });
   const tilt = parts.find((n) => n.id === `${hero}.cutout`)?.props.rotate ?? 0;
-  const turn = (isEditorial(look) ? EDITORIAL_TURN : 0) + tilt;
+  const turn = (isEditorial(look) ? editorialTurn(look) : 0) + tilt;
   const reach = isEditorial(look) ? null : enterReach(ctx);
   const centre = centreOf({ ...ctx, shot }, room, reach === null ? h : reachHeight(w, h, turn, reach), w);
   // a region (fractions of the whole image) in the drawn picture's own space, through the crop when there is one

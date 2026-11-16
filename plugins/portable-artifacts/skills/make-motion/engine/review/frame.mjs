@@ -430,7 +430,8 @@ function wordRules(texts, ctx) {
   if (Number.isFinite(maxHookWords) && ctx.isFirstShot && opening.length > 0) {
     const hero = opening.reduce((best, t) => (t.size > best.size ? t : best));
     const stack = hero.node.props?.stack;
-    const parts = stack === undefined ? [hero] : texts.filter((t) => t.node.props?.stack === stack);
+    // the stack's lines in the hero's role: a size class may also hold body text (a compare card's points), not the hook
+    const parts = stack === undefined ? [hero] : texts.filter((t) => t.node.props?.stack === stack && t.role === hero.role);
     const count = parts.reduce((sum, t) => sum + shownWords(t.node, wordsOf(t.node.layout)).length, 0);
     if (count > maxHookWords) out.push(finding(ctx, CREATIVE, 'hook-words', hero.node.id, `the opening statement has ${count} words; a ${name} hook takes at most ${maxHookWords}`, hero.role));
   }

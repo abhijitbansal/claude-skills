@@ -1,4 +1,4 @@
-// Looks for the v2 engine. Importing this file registers `desk`, `pop` and the experimental `cosmos` in registries.looks
+// Looks for the v2 engine. Importing this file registers `desk`, `pop` and `cosmos` in registries.looks
 // (once: a second evaluation of this file leaves the registry as it is). Looks are frozen plain data plus pure functions;
 // the grid helpers and applyAccent live here. Pure and DOM-free. The fields a look names (`paper`, `halftone`, `cosmos`)
 // are registered by engine/fields/index.mjs, which whoever draws the look imports.

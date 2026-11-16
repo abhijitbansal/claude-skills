@@ -11,13 +11,30 @@ import '../fields/index.mjs';
 const DEFAULT_TEXT_FILL = '#ffffff';
 const DEFAULT_STROKE_WIDTH = 1;
 const HALF = 2;
+const HEX_RADIX = 16;
 
 // Sampled values are not clamped (an overshoot ease can leave 0..1), so opacity, draw and reveal are clamped here.
 const unit01 = (v) => Math.min(1, Math.max(0, v));
 
 // ---- text ----
 
-function drawWord(ctx, line, word, tracks, baseFill) {
+// A word's glyph glow: its own glyphs blurred (canvas shadow) in glow.color at `share` of glow.alpha, under the word.
+// The shadow is a blur of the glyph mask alone, so it hugs the letters and costs about what the word does.
+function drawGlow(ctx, text, x, glow, share) {
+  withGlow(ctx, glow, share, () => ctx.fillText(text, x, 0));
+}
+
+// Runs paint() with a canvas shadow of glow.color at `share` of glow.alpha, glow.radius px of blur, then clears it.
+function withGlow(ctx, glow, share, paint) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(glow.color.slice(i, i + HALF), HEX_RADIX));
+  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${glow.alpha * share})`;
+  ctx.shadowBlur = glow.radius;
+  paint();
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+}
+
+function drawWord(ctx, line, word, tracks, baseFill, glow) {
   const opacity = unit01(tracks.opacity);
   if (opacity <= 0) return;
   ctx.save();
@@ -25,19 +42,21 @@ function drawWord(ctx, line, word, tracks, baseFill) {
   ctx.translate(line.x + word.x + word.width / HALF + tracks.x, line.y + tracks.y);
   ctx.scale(tracks.scale, tracks.scale);
   ctx.fillStyle = tracks.fill ?? baseFill;
+  const share = unit01(tracks.glow ?? 0);
+  if (glow && share > 0) drawGlow(ctx, word.text, -word.width / HALF, glow, share);
   ctx.fillText(word.text, -word.width / HALF, 0);
   ctx.restore();
 }
 
 function drawText(ctx, n) {
-  const { layout, font, fill = DEFAULT_TEXT_FILL } = n.props;
+  const { layout, font, fill = DEFAULT_TEXT_FILL, glow } = n.props;
   if (!layout || !font) throw new Error(`text node "${n.id}" needs props.layout and props.font`);
   applyFont(ctx, font, { tracked: true });
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
   for (const line of layout.lines) {
     // words has an entry only for each wordTracks entry; a word beyond them is untouched (opacity 1, no offset)
-    for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index] }, fill);
+    for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index] }, fill, glow);
   }
 }
 
@@ -59,13 +78,16 @@ function strokeTrimmed(ctx, path, length, draw) {
   ctx.setLineDash([]);
 }
 
+// props.glow ({ color, alpha, radius }) on a filled path: a soft light round its edge, the canvas shadow of its fill
+// (a smooth blur, so no steps), drawn under the fill.
 function drawPath(ctx, n) {
-  const { fill, stroke, strokeWidth = DEFAULT_STROKE_WIDTH, lineCap = 'round' } = n.props;
+  const { fill, stroke, strokeWidth = DEFAULT_STROKE_WIDTH, lineCap = 'round', glow } = n.props;
   const { path, length } = shapeOf(n);
   const draw = unit01(n.draw);
   if (fill && draw >= 1) {
     ctx.fillStyle = fill;
-    ctx.fill(path);
+    if (glow) withGlow(ctx, glow, 1, () => ctx.fill(path));
+    else ctx.fill(path);
   }
   if (!stroke) return;
   ctx.strokeStyle = stroke;

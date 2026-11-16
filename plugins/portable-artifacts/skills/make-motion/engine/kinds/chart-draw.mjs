@@ -5,7 +5,7 @@
 // legend). A bar or column scale that does not start at 0 draws a broken-axis mark and says its baseline. Pure, DOM-free.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { landing, isHand, colourOf, polyline } from '../devices/shared.mjs';
+import { landing, isHand, colourOf, polyline, at2, roundedRect } from '../devices/shared.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, unionBox, markerAccent, isWide } from './shared.mjs';
 import { valueText } from './chart-scale.mjs';
 import { chartData, valueScale, columnMarks, barMarks } from './chart-marks.mjs';
@@ -22,6 +22,7 @@ const CLAMP_ROOM = 1.5; // widths between two thinned labels' centres: room for 
 const BREAK = Object.freeze({ size: 9, gap: 5 }); // units: the two strokes of a broken-axis mark
 const MAX_DECIMALS = 3;
 const HALF = 2;
+const GLOW_ALPHA = 0.6; // the highlighted mark's light at its edge, before the blur spreads it (screened, so it only brightens)
 
 /** The plot's style from look.kinds.chart (`data`) and the palette. */
 export function chartStyle(ctx, data) {
@@ -32,6 +33,9 @@ export function chartStyle(ctx, data) {
     gap: data.gap * unit, line: data.line * unit, refWidth: data.ref * unit, axisWidth: data.axis * unit, dim: data.dim, refs: data.refs,
     mark: colourOf(look, 'ink'), accent: markerAccent(look), text: colourOf(look, 'ink2'), strong: colourOf(look, 'ink'), rule: colourOf(look, 'rule'),
     step: isHand(look) ? look.moves.draw.step : undefined,
+    // look data a chart may carry (cosmos): `marks`, palette keys the columns and bars take in turn (else ink); `round`,
+    // the far ends' corner radius in units; `glow`, units of soft accent light round the highlighted column or bar
+    marks: data.marks ? data.marks.map((key) => colourOf(look, key)) : null, round: data.round ? data.round * unit : 0, glow: data.glow ? data.glow * unit : 0,
   };
 }
 
@@ -74,16 +78,35 @@ function markPath(across, length, horizontal) {
   return polyline(horizontal ? [[0, -h], [length, -h], [length, h], [0, h]] : [[-h, 0], [h, 0], [h, length], [-h, length]], true);
 }
 
-// One column or bar: the ink mark growing from the baseline (dimming at the highlight unless it is the highlighted one)
-// and, for the highlighted one, its accent copy arriving then.
+// The same rectangle with its far end rounded (both far corners at `radius`, at most half the width or the length).
+function roundPath(across, length, horizontal, radius) {
+  const h = across / HALF, s = Math.sign(length) || -1, r = Math.min(radius, h, Math.abs(length));
+  if (horizontal) {
+    return `M${at2([0, -h])}L${at2([length - s * r, -h])}Q${at2([length, -h])} ${at2([length, -h + r])}L${at2([length, h - r])}Q${at2([length, h])} ${at2([length - s * r, h])}L${at2([0, h])}Z`;
+  }
+  return `M${at2([-h, 0])}L${at2([-h, length - s * r])}Q${at2([-h, length])} ${at2([-h + r, length])}L${at2([h - r, length])}Q${at2([h, length])} ${at2([h, length - s * r])}L${at2([h, 0])}Z`;
+}
+
+// The highlighted mark's light (style.glow, px of blur): its full-grown box with an accent canvas shadow (draw.mjs path
+// glow, a smooth falloff), screened, arriving with it; the accent copy covers its fill.
+function markGlow(id, look, style, { x, y, across, length, horizontal }, at) {
+  const box = horizontal ? [x + Math.min(0, length), y - across / HALF, Math.abs(length), across] : [x - across / HALF, y + Math.min(0, length), across, Math.abs(length)];
+  const d = roundedRect(...box, Math.min(style.round, across / HALF));
+  return node('path', id, { d, fill: style.accent, blend: 'screen', glow: { color: style.accent, alpha: GLOW_ALPHA, radius: style.glow } }, { tracks: arriveAt(look, at) });
+}
+
+// One column or bar: the mark growing from the baseline (dimming at the highlight unless it is the highlighted one), in
+// ink or the look's mark colours in turn, and, for the highlighted one, its accent copy (and its light) arriving then.
 function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, times, hl }) {
   const { look } = ctx;
   const win = growWindow(k, n, times.growEnd);
   const grow = landing(win.end, { ease: look.moves.enter.ease, dur: win.dur }, 0, 1, style.step);
-  const d = markPath(across, length, horizontal);
+  const d = style.round > 0 ? roundPath(across, length, horizontal, style.round) : markPath(across, length, horizontal);
   const scale = horizontal ? { scaleX: grow } : { scaleY: grow };
   const dims = hl >= 0 && k !== hl ? dimTracks(look, times.highlightAt, style.dim) : {};
-  const out = [node('path', `${shot.id}.mark.${k}`, { d, fill: style.mark, x, y }, { tracks: { ...scale, ...dims }, step: style.step })];
+  const fill = style.marks ? style.marks[k % style.marks.length] : style.mark;
+  const out = [node('path', `${shot.id}.mark.${k}`, { d, fill, x, y }, { tracks: { ...scale, ...dims }, step: style.step })];
+  if (k === hl && style.glow > 0) out.push(markGlow(`${shot.id}.mark.${k}.glow`, look, style, { x, y, across, length, horizontal }, times.highlightAt));
   if (k === hl) out.push(node('path', `${shot.id}.mark.${k}.accent`, { d, fill: style.accent, x, y }, { tracks: arriveAt(look, times.highlightAt) }));
   return out;
 }

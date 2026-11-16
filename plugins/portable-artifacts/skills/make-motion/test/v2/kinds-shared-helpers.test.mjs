@@ -41,9 +41,10 @@ const KIND_FILES = Object.freeze({
   free: [], statement: [], number: [], end: [], list: [], quote: [], compare: [], chart: [],
   clipping: ['close-ups.mjs', 'region-mark.mjs'],
 });
-const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'slug.mjs', 'words.mjs']);
+// editorial.mjs: the editorial family's columns and bounds, canvas or 9:16 safe zone (its own module: see its header)
+const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'slug.mjs', 'words.mjs', 'editorial.mjs']);
 
-test('no kind imports another kind\'s file: what several kinds use lives in shared.mjs, stack.mjs, slug.mjs or words.mjs', async () => {
+test('no kind imports another kind\'s file: what several kinds use lives in shared.mjs, stack.mjs, slug.mjs, words.mjs or editorial.mjs', async () => {
   const { readdirSync } = await import('node:fs');
   const files = readdirSync(kindsDir).filter((f) => f.endsWith('.mjs') && f !== 'index.mjs' && !SHARED_MODULES.includes(f));
   const owner = (file) => Object.keys(KIND_FILES).find((kind) => file === `${kind}.mjs` || file.startsWith(`${kind}-`) || KIND_FILES[kind].includes(file));

@@ -6,7 +6,8 @@ export const NODE_TYPES = Object.freeze(['group', 'text', 'path', 'image', 'fiel
 export const TRACK_NAMES = Object.freeze(['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotate', 'opacity', 'draw', 'reveal', 'blur']);
 // `ghost` is never drawn: above 0 it marks a word not yet spoken in a mode that reads from frame 0 (kinds/shared.mjs
 // ghostTracks), so the contrast rule leaves it alone (engine/review/contrast.mjs).
-export const WORD_TRACK_NAMES = Object.freeze(['opacity', 'x', 'y', 'scale', 'fill', 'ghost']);
+// `glow` (0 to 1) lights a word's glyph glow, the text's props.glow ({ color, alpha, radius }), to that share of its alpha.
+export const WORD_TRACK_NAMES = Object.freeze(['opacity', 'x', 'y', 'scale', 'fill', 'ghost', 'glow']);
 
 const COLOUR_WORD_TRACKS = Object.freeze(['fill']);
 const created = new WeakSet();

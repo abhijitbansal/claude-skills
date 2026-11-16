@@ -9,7 +9,7 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { gridSpan } from '../looks/index.mjs';
+import { editorialSpan, editorialBounds } from './editorial.mjs';
 import { landing, isHand, colourOf, smoothPath, polyline, pathPoints } from '../devices/shared.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, fitInBox, numeralLayout, cardOf, cardGroup } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
@@ -164,14 +164,18 @@ function dimScrim(id, card, look, at, { lifts = false } = {}) {
 // The cards' boxes: side by side on a wide frame, stacked on a tall one, centred.
 function cardBoxes(ctx, data, height, below = 0) {
   const { look, canvas, unit } = ctx;
-  const span = gridSpan(look, canvas, 1, look.grid.columns);
+  const span = editorialSpan(ctx, 1, look.grid.columns);
   const gap = data.gap * look.grid.gutter * unit, margin = Math.max(look.grid.margin * unit, below);
   if (isWide(canvas)) {
     const w = (span.w - gap) / HALF;
     const top = Math.max(margin, Math.min(data.centre * canvas.h - height / HALF, canvas.h - margin - height));
     return [[span.x, top, w, height], [span.x + w + gap, top, w, height]];
   }
-  const top = Math.max(margin, (canvas.h - (HALF * height + gap)) / HALF);
+  // on a tall frame in the platform safe zone: centred in the composition band (editorial.mjs)
+  const bounds = editorialBounds(ctx);
+  const top = bounds.safe
+    ? Math.max(bounds.top, below, bounds.at(data.centre) - (HALF * height + gap) / HALF)
+    : Math.max(margin, (canvas.h - (HALF * height + gap)) / HALF);
   return [[span.x, top, span.w, height], [span.x, top + height + gap, span.w, height]];
 }
 
@@ -208,13 +212,18 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
   const { look, canvas, unit, seed } = ctx;
   const wide = isWide(canvas);
   const margin = look.grid.margin * unit, gap = data.gap * look.grid.gutter * unit, pad = data.pad * unit;
-  const span = gridSpan(look, canvas, 1, look.grid.columns);
+  const span = editorialSpan(ctx, 1, look.grid.columns);
   const cardW = wide ? (span.w - gap) / HALF : span.w;
   // a slug (the shot's kicker) takes the top: the cards start a gutter under it
   const slug = slugBox(shot, ctx);
   const below = slug === null ? 0 : slug.inked[1] + slug.inked[3] + look.grid.gutter * unit;
+  const bounds = editorialBounds(ctx);
   const lost = Math.max(0, below - margin);
-  const avail = (wide ? canvas.h - HALF * margin - lost : (canvas.h - HALF * margin - gap - lost) / HALF) - HALF * pad;
+  // the height the cards share: the frame less its margins, or, in the platform safe zone, the composition band
+  const band = bounds.bottom - Math.max(bounds.top, below);
+  const avail = bounds.safe
+    ? (wide ? band : (band - gap) / HALF) - HALF * pad
+    : (wide ? canvas.h - HALF * margin - lost : (canvas.h - HALF * margin - gap - lost) / HALF) - HALF * pad;
   const room = pictureRoom(shot, ctx, data, cardW - HALF * pad, avail);
   const top = room === null ? 0 : room.h + room.gap;
   const set = fitSides(shot, ctx, data, cardW - HALF * pad, avail - top);

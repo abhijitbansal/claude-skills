@@ -12,6 +12,7 @@ import { track } from '../time/track.mjs';
 import { layoutText, unclean } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { landing } from '../devices/shared.mjs';
+import { glowFill, glowStyle } from '../devices/glow.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
@@ -22,6 +23,7 @@ import { wordTimes } from './words.mjs';
 import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { composeStack, stackNodes } from './stack.mjs';
+import { editorialSpan, editorialBounds } from './editorial.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
@@ -69,14 +71,15 @@ function highlightTogether(text, ctx) {
 // `tradeFloor`: the fit gives up size for a better break (fitText) only down to this size; `clear` (slugClearance, or
 // null): the fit prefers a layout whose block, so placed, stays off it.
 function fitEditorial(text, ctx, to, tradeFloor, clear) {
-  const { look, canvas, unit } = ctx;
-  const span = gridSpan(look, canvas, FIRST_COLUMN, to);
+  const { look, unit } = ctx;
+  const span = editorialSpan(ctx, FIRST_COLUMN, to);
+  const bounds = editorialBounds(ctx);
   const min = sizeAt(look, DESK.fromStep, unit), max = DESK.max * unit;
   const font = fontFor(look, 'display', max, unit);
-  const place = (layout, at) => ({ layout, font: at, x: span.x, y: DESK.centre * canvas.h - (inkSpan(layout).top + inkSpan(layout).bottom) / HALF, span });
+  const place = (layout, at) => ({ layout, font: at, x: span.x, y: bounds.at(DESK.centre) - (inkSpan(layout).top + inkSpan(layout).bottom) / HALF, span });
   const accept = clear ? (layout) => !overlaps(clear, blockInk(place(layout, { ...font, size: layout.size }), ctx.measure)) : undefined;
   const opts = { text, font, maxWidth: span.w, align: 'left', measure: ctx.measure, optical: true, together: highlightTogether(text, ctx), accept };
-  const fitted = fitDisplay(opts, { min, max, maxHeight: DESK.height * canvas.h, maxLines: look.maxLines.display, tradeFloor }, look, unit);
+  const fitted = fitDisplay(opts, { min, max, maxHeight: bounds.height(DESK.height), maxLines: look.maxLines.display, tradeFloor }, look, unit);
   return place(fitted.layout, fitted.font);
 }
 
@@ -102,9 +105,8 @@ function slugClearance(slug, ctx) {
 
 // `placed` moved down until its block clears `clear` (slugClearance), as far as the bottom margin allows (never up).
 function dropBelow(placed, clear, ctx) {
-  const { look, canvas, unit, measure } = ctx;
-  const block = blockInk(placed, measure);
-  const room = Math.max(0, canvas.h - look.grid.margin * unit - (block[1] + block[3]));
+  const block = blockInk(placed, ctx.measure);
+  const room = Math.max(0, editorialBounds(ctx).bottom - (block[1] + block[3]));
   return { ...placed, y: placed.y + Math.min(room, clear[1] + clear[3] - block[1]) };
 }
 
@@ -215,9 +217,13 @@ function wordTracksFor(words, times, ctx, matched) {
   return words.map((w, i) => {
     const { at, spoken } = times[i];
     const emphasised = spoken !== null && timing.words[spoken].emphasis;
-    if (hook) return hookTracks(look, at, emphasised ? look.palette.accent : look.palette.ink, recolour ? peaks.get(w.word.index) : undefined);
+    if (hook) {
+      const lit = hookTracks(look, at, emphasised ? look.palette.accent : look.palette.ink, recolour ? peaks.get(w.word.index) : undefined);
+      return look.emphasis === 'glow' && emphasised ? { ...lit, glow: glowFill(look, at).glow } : lit;
+    }
     const tracks = matched ? {} : enterTracks(look, unit, at);
     if (recolour && !matched && look.moves.enter.scale !== undefined) tracks.scale = landing(at, look.moves.enter, starts.get(w.word.index), 1);
+    if (look.emphasis === 'glow' && emphasised) return { ...tracks, ...glowFill(look, at) };
     if (!recolour || !emphasised) return tracks;
     return {
       ...tracks,
@@ -279,6 +285,7 @@ function expandStatement(shot, ctx) {
   const span = look.emphasis === 'highlight' ? highlightLines(placed.layout, times, timing) : undefined;
   const text = node('text', hero, {
     x: placed.x, y: placed.y, layout: placed.layout, font: placed.font, fill: look.palette.ink, role: 'hero', ...(span === undefined ? {} : { highlightLines: span }),
+    ...glowStyle(look, placed.font, unit),
   }, {
     wordTracks: wordTracksFor(words, times, ctx, matched),
   });

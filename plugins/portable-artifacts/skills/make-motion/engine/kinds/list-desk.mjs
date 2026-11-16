@@ -9,7 +9,8 @@
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { gridSpan } from '../looks/index.mjs';
+import { roundedRect } from '../devices/shared.mjs';
+import { editorialSpan, editorialBounds } from './editorial.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, inkExtent, capBox, unionBox, driftReach, arrivesMatched, overlaps, stepUnder,
 } from './shared.mjs';
@@ -81,17 +82,50 @@ function fitItems(items, span, room, ctx, data, hasSmall) {
 }
 
 
-// The room the list has: between the margins, starting under the slug's card when the card is over the list's columns.
+// The room the list has: between the margins (editorial.mjs: the band, on a tall frame in the safe zone), starting under
+// the slug's card when the card is over the list's columns.
 function roomFor(slug, span, ctx) {
   const { look, canvas, unit } = ctx;
   const margin = look.grid.margin * unit;
-  const bottom = canvas.h - margin;
-  if (slug === null) return { top: margin, bottom };
+  const bounds = editorialBounds(ctx);
+  const bottom = bounds.bottom;
+  if (slug === null) return { top: bounds.top, bottom };
   const by = SLUG_CLEAR * look.grid.gutter * unit, drift = driftReach(look, unit);
   const [x, y, w, h] = slug.inked;
   const clear = [x - by - drift, y - by, w + HALF * (by + drift), h + HALF * by];
   const columns = [span.x - margin, 0, span.w + margin, canvas.h];
-  return overlaps(clear, columns) ? { top: Math.max(margin, clear[1] + clear[3]), bottom } : { top: margin, bottom };
+  return overlaps(clear, columns) ? { top: Math.max(bounds.top, clear[1] + clear[3]), bottom } : { top: bounds.top, bottom };
+}
+
+// The dot rail (look.kinds.list.dots: { column, radius, line } in units): a dot per item on its first line's cap middle,
+// in a column at the span's left, joined by a thin rail; ink2 always, and lit in the accent with a soft halo while its
+// item is current (from its arrival to the next's). The rail and each dot arrive with their item's entrance opacity.
+const DOT = Object.freeze({ halo: 2.4, haloAlpha: 0.28, railAlpha: 0.5 });
+function dotRail(id, centres, times, dots, ctx) {
+  const { look, unit } = ctx;
+  const r = dots.radius * unit;
+  const circle = ([cx, cy], radius) => roundedRect(cx - radius, cy - radius, HALF * radius, HALF * radius, radius);
+  // `peak` from item k's arrival until the next item's, 0 before and after
+  const lit = (k, peak) => {
+    const { dur } = look.moves.emphasize;
+    const keys = [{ t: 0, v: 0 }, { t: times[k], v: 0 }, { t: times[k] + dur, v: peak, ease: DIM_EASE }];
+    if (times[k + 1] !== undefined) keys.push({ t: times[k + 1], v: peak }, { t: times[k + 1] + dur, v: 0, ease: DIM_EASE });
+    return track(keys);
+  };
+  const shown = (k) => enterTracks(look, unit, times[k], { y: 0 }).opacity;
+  const railW = dots.line * unit;
+  // the rail grows with the list: the segment to dot k arrives with item k
+  const rail = centres.slice(1).map(([x, y], k) => {
+    const from = centres[k][1];
+    return node('path', `${id}.rail${k}`, { d: roundedRect(x - railW / HALF, from, railW, Math.max(1, y - from), 0), fill: look.palette.ink2 }, {
+      tracks: { opacity: track(shown(k + 1).points.map((p, i) => ({ t: p.t, v: p.v * DOT.railAlpha, ...(i > 0 ? { ease: look.moves.enter.ease } : {}) }))) },
+    });
+  });
+  return [...rail, ...centres.flatMap((c, k) => [
+    node('path', `${id}.dot${k}`, { d: circle(c, r), fill: look.palette.ink2 }, { tracks: { opacity: shown(k) } }),
+    node('path', `${id}.halo${k}`, { d: circle(c, r * DOT.halo), fill: look.palette.accent, blend: 'screen' }, { tracks: { opacity: lit(k, DOT.haloAlpha) } }),
+    node('path', `${id}.lit${k}`, { d: circle(c, r), fill: look.palette.accent }, { tracks: { opacity: lit(k, 1) } }),
+  ])];
 }
 
 // A word track that holds ink until `dimAt` (never, when undefined), then turns to ink2.
@@ -122,13 +156,16 @@ function figureNode(id, k, size, { right, baseline, stack }, ctx) {
 export function expandDeskList(shot, ctx, data, times, hero) {
   const { look, canvas, unit } = ctx;
   const items = itemsOf(shot).map((item) => ({ ...item, text: setCase(look, 'display', item.text) }));
-  const numbered = isNumbered(shot);
+  const dots = data.dots;
+  // a look with a dot rail marks every item with its dot, so no figures
+  const numbered = isNumbered(shot) && !dots;
   const staged = shot.title === undefined ? shot : { ...shot, kicker: shot.title };
-  const span = gridSpan(look, canvas, FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
-  const room = roomFor(slugBox(staged, ctx), span, ctx);
+  const grid = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
+  const span = dots ? { x: grid.x + dots.column * unit, w: grid.w - dots.column * unit } : grid;
+  const room = roomFor(slugBox(staged, ctx), grid, ctx);
   const set = fitItems(items, span, room.bottom - room.top, ctx, data, numbered || items.some((i) => i.note !== null));
   const matched = arrivesMatched(shot, ctx);
-  const children = [], itemBoxes = [];
+  const children = [], itemBoxes = [], centres = [];
   let cursor = room.top + (room.bottom - room.top - set.height) / HALF; // the next cap line
   set.parts.forEach((part, k) => {
     const id = `${shot.id}.item${k}`;
@@ -139,6 +176,7 @@ export function expandDeskList(shot, ctx, data, times, hero) {
       tracks: enter(times[k], y), wordTracks: part.layout.lines.flatMap((line) => line.words.map(() => dim)),
     }));
     itemBoxes.push(unionBox(part.layout.lines.map((line) => capBox(span.x + line.x, y + line.y, line.width, set.size))));
+    if (dots) centres.push([grid.x + dots.radius * unit, y + part.layout.lines[0].y - (CAP_HEIGHT * set.size) / HALF]);
     let last = y + part.layout.lines.at(-1).y;
     if (numbered) {
       // on the item's first baseline, its ink a gutter before the item; ink while its item is current, then ink2 with it
@@ -154,5 +192,6 @@ export function expandDeskList(shot, ctx, data, times, hero) {
     }
     cursor = last + data.gap * set.size;
   });
-  return { nodes: slugNodes(staged, ctx), group: node('group', hero, {}, { children }), itemBoxes, wrappers: null };
+  const rail = dots ? dotRail(shot.id, centres, times, dots, ctx) : [];
+  return { nodes: slugNodes(staged, ctx), group: node('group', hero, {}, { children: [...rail, ...children] }), itemBoxes, wrappers: null };
 }

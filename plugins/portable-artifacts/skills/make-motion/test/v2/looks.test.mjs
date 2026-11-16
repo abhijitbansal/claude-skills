@@ -26,8 +26,8 @@ const ACCENT_SAMPLE = '#ff6600';
 const lookNames = () => registries.looks.names();
 const closeTo = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`);
 
-test('desk and pop are registered, in showreel order', () => {
-  assert.deepEqual(lookNames(), ['desk', 'pop']);
+test('desk, pop and cosmos are registered, in showreel order', () => {
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
   assert.equal(registries.looks.get('desk').name, 'desk');
   assert.equal(registries.looks.get('pop').name, 'pop');
@@ -305,7 +305,7 @@ test('mode values are the brief values', () => {
 test('registering twice is harmless: a second evaluation of the index does not throw', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?again'));
   await assert.doesNotReject(() => import('../../engine/modes/index.mjs?again'));
-  assert.deepEqual(lookNames(), ['desk', 'pop']);
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
 });
 
@@ -354,7 +354,7 @@ test('the validator reads each look cuts: punch is pop only, match is desk only'
 
 test('an unknown look still lists the real ones', () => {
   const r = validate({ version: 2, look: 'dsk', shots: shots(undefined) });
-  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop)' }]);
+  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos)' }]);
 });
 
 test('every look names its composition: desk is editorial, pop is a stack', () => {
@@ -435,10 +435,11 @@ test('a look added to the shared registry is checked as it is added: a missing s
 
 // ---- captions: the caption style is look data (engine/captions) ----
 
-test('desk captions with the lower style and pop with the stack style; each style has a summary, a zone and a compose', () => {
+test('desk captions with the lower style, pop with the stack style and cosmos with the pill; each style has a summary, a zone and a compose', () => {
   assert.equal(registries.looks.get('desk').captions, 'lower');
   assert.equal(registries.looks.get('pop').captions, 'stack');
-  assert.deepEqual(registries.captions.names(), ['lower', 'stack']);
+  assert.equal(registries.looks.get('cosmos').captions, 'pill');
+  assert.deepEqual(registries.captions.names(), ['lower', 'stack', 'pill']);
   for (const name of registries.captions.names()) {
     const style = registries.captions.get(name);
     assert.equal(typeof style.summary, 'string', `${name} summary`);
@@ -450,7 +451,7 @@ test('desk captions with the lower style and pop with the stack style; each styl
 test('a look added to the shared registry must name a registered caption style', () => {
   const desk = registries.looks.get('desk');
   assert.throws(() => registries.looks.add('test-no-captions', { ...desk, name: 'test-no-captions', captions: undefined }),
-    /look "test-no-captions": captions must name a caption style \(have: lower, stack\), got undefined/);
+    /look "test-no-captions": captions must name a caption style \(have: lower, stack, pill\), got undefined/);
   assert.throws(() => registries.looks.add('test-bad-captions', { ...desk, name: 'test-bad-captions', captions: 'lowr' }),
     /look "test-bad-captions": unknown caption style "lowr"; did you mean "lower"\?/);
   assert.equal(registries.looks.has('test-no-captions'), false);
@@ -458,8 +459,8 @@ test('a look added to the shared registry must name a registered caption style',
 
 // ---- kinds: the composition data a look gives the kinds that need it (engine/kinds/end.mjs, list.mjs) ----
 
-test('desk and pop carry frozen composition data for the end, list, quote and compare kinds', () => {
-  for (const name of ['desk', 'pop']) {
+test('desk, pop and cosmos carry frozen composition data for the end, list, quote and compare kinds', () => {
+  for (const name of ['desk', 'pop', 'cosmos']) {
     const { kinds } = registries.looks.get(name);
     assert.ok(Object.isFrozen(kinds), `${name} kinds frozen`);
     for (const kind of ['end', 'list', 'quote', 'compare', 'chart']) {

@@ -600,6 +600,14 @@ test('the viral hook rule counts every word of a stack, not only its largest lin
   assert.match(hook.message, /has 8 words/);
 });
 
+test('the viral hook rule counts the hero lines of a stack, not body text sharing its size class (a compare card\'s points)', () => {
+  const title = stackLine(0, 300, 100, 2);
+  const points = { ...textNode({ id: 's.points', size: 100, x: 200, y: 450, words: 6, role: 'body' }), props: { ...textNode({ id: 's.points', size: 100, x: 200, y: 450, words: 6, role: 'body' }).props, stack: 's' } };
+  const group = { type: 'group', id: 's', depth: 0, props: {}, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: [title, points], bbox: [0, 0, 0, 0] };
+  const findings = auditFrame([group], ctx({ look: registries.looks.get('pop'), mode: 'viral', isFirstShot: true }));
+  assert.equal(findings.find((f) => f.rule === 'hook-words'), undefined, 'two hero words; the six body words are not the hook');
+});
+
 test('a line set flush by its ink is inside the safe area when its measured ink is: lineInk left and right', () => {
   const safe = safeRectFor(CANVAS, registries.looks.get('desk'));
   const n = textNode({ id: 't', size: 132, x: safe.left - 6, y: 300, words: 2 });

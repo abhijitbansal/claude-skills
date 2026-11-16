@@ -1,6 +1,7 @@
 // Captions (design 9.3): the spoken words of a narrated shot whose kind does not show its own words (a kind declares
 // `showsWords: true`; statement and number do), drawn in the look's caption style. Importing this file registers the
-// styles `lower` (desk) and `stack` (pop) in registries.captions (once: a second evaluation leaves the registry as it is);
+// styles `lower` (desk), `stack` (pop) and `pill` (cosmos) in registries.captions (once: a second evaluation leaves the
+// registry as it is);
 // a style added to that registry must be { summary, zone, compose } (validateCaptionStyle).
 //
 // A caption style is { summary, zone(ctx) -> [x, y, w, h], compose(words, ctx) -> nodes }: `zone` is the canvas-pixel
@@ -23,6 +24,7 @@ import { pathPoints } from '../devices/shared.mjs';
 import { compositionRect } from '../kinds/shared.mjs';
 import { lower } from './lower.mjs';
 import { stack } from './stack.mjs';
+import { pill } from './pill.mjs';
 
 export { CAPTION_HOLD, captionGroups, groupTimes } from './groups.mjs';
 
@@ -155,6 +157,6 @@ if (!addStyle.validatesStyles) {
   registries.captions.add = checkedAdd;
 }
 
-for (const style of [lower, stack]) {
+for (const style of [lower, stack, pill]) {
   if (!registries.captions.has(style.name)) registries.captions.add(style.name, Object.freeze(style));
 }

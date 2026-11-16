@@ -80,7 +80,7 @@ test('compare: the example validates in both looks; a side missing its title, an
 test('compare: a look with no data for the kind refuses it; expand says so', () => {
   const desk = registries.looks.get('desk');
   if (!registries.looks.has('test-no-compare')) registries.looks.add('test-no-compare', { ...desk, name: 'test-no-compare', kinds: {} });
-  assert.deepEqual(errorsOf(EXAMPLE(), 'pro', { look: 'test-no-compare' }), [{ path: 'shots[0].show', message: 'kind "compare" is not supported by look "test-no-compare"; the looks that support it: desk, pop' }]);
+  assert.deepEqual(errorsOf(EXAMPLE(), 'pro', { look: 'test-no-compare' }), [{ path: 'shots[0].show', message: 'kind "compare" is not supported by look "test-no-compare"; the looks that support it: desk, pop, cosmos' }]);
   assert.throws(() => expandIn(filmOf([EXAMPLE()], 'test-no-compare')), /look "test-no-compare" has no data for kind "compare"/);
 });
 

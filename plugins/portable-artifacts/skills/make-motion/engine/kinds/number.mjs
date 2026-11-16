@@ -8,11 +8,14 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { ease } from '../time/ease.mjs';
 import { layoutText, numeralAdvance } from '../text/layout.mjs';
-import { gridSpan, gridX } from '../looks/index.mjs';
-import { entrance, colourOf } from '../devices/shared.mjs';
+import { gridX } from '../looks/index.mjs';
+import { entrance, colourOf, roundedRect } from '../devices/shared.mjs';
+import { glowStyle } from '../devices/glow.mjs';
+import { track } from '../time/track.mjs';
+import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, setCase, inkBox, shownFrom,
-  isEditorial, heroProblems, fieldNode, enterTracks, pulseScale, runInk,
+  isEditorial, heroProblems, fieldNode, enterTracks, pulseScale, runInk, inkExtent,
   defaultCamera, onDevices, placeDevices, deviceCamera, openingLanding, plainTag, formatValue, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 
@@ -28,6 +31,7 @@ const DELTA_MAX = 24;
 const KICKER_MAX = 40;
 const DECIMALS_MAX = 3;
 const FIGURE_STEP = 5;
+const ALL_DIGITS = '0123456789'; // every glyph a count shows, for the figure's tallest ink
 const AFFIX_SHARE = 0.45; // prefix and suffix size, of the figure size
 const AFFIX_GAP = 0.04; // em of the figure between the figure and a prefix or suffix
 const COUNT_FALLBACK = 0.6; // of the shot: when the count lands with no spoken number
@@ -212,7 +216,7 @@ function figureGroup(shot, ctx, fig, { left, baseline, tracks }) {
     ...(fig.prefix ? [node('text', `${hero}.prefix`, { x: left - gx, y: affixY(fig.prefix), layout: fig.prefix, font: fig.small, fill: look.palette.ink, role: 'affix' })] : []),
     node('text', `${hero}.digits`, {
       x: digitsX - gx, y: baseline - fig.digits.ascent - gy, layout: fig.digits.layout, font: fig.font, fill: look.palette.ink, role: 'hero',
-      steps: fig.digits.steps, advance: fig.digits.advance,
+      steps: fig.digits.steps, advance: fig.digits.advance, ...(fig.digits.glowProps ?? {}),
     }, { wordTracks: fig.digits.wordTracks }),
     ...(fig.suffix ? [node('text', `${hero}.suffix`, { x: inkRight + AFFIX_GAP * fig.size - gx, y: affixY(fig.suffix), layout: fig.suffix, font: fig.small, fill: look.palette.ink, role: 'affix' })] : []),
   ];
@@ -233,6 +237,39 @@ function placedTag(ctx, id, text, at, place) {
 }
 
 // ---- desk ----
+
+// The orbit ring (look.kinds.number.ring: { pad, width }, pad a share of the figure's cap height, width units) round
+// the figure row's cap box, in the accent with round caps, drawing on clockwise from the top as the figure counts (from
+// its start to its landing), whole once it lands. An ellipse when it holds the box's corners (one or two digits);
+// otherwise a stadium, whose round ends hold them (pad at least (sqrt 2 - 1) / 2 of the height), so a wide figure keeps
+// its width plus a pad each side and the ring never crosses a glyph.
+const BEZIER_CIRCLE = 0.5523;
+const ringPad = (ring, size) => ring.pad * CAP_HEIGHT * size;
+const holdsCorners = (w, h, rx, ry) => (w / HALF / rx) ** 2 + (h / HALF / ry) ** 2 <= 1;
+function ellipsePath(cx, cy, rx, ry) {
+  const kx = BEZIER_CIRCLE * rx, ky = BEZIER_CIRCLE * ry;
+  const p = (px, py) => `${Math.round(px * 100) / 100} ${Math.round(py * 100) / 100}`;
+  return `M${p(cx, cy - ry)}C${p(cx + kx, cy - ry)} ${p(cx + rx, cy - ky)} ${p(cx + rx, cy)}C${p(cx + rx, cy + ky)} ${p(cx + kx, cy + ry)} ${p(cx, cy + ry)}`
+    + `C${p(cx - kx, cy + ry)} ${p(cx - rx, cy + ky)} ${p(cx - rx, cy)}C${p(cx - rx, cy - ky)} ${p(cx - kx, cy - ry)} ${p(cx, cy - ry)}`;
+}
+function orbitRing(shot, ctx, { left, width, baseline, size }, times, ring) {
+  if (!ring) return [];
+  const { look, unit } = ctx;
+  const h = CAP_HEIGHT * size, y = baseline - h, pad = ringPad(ring, size);
+  const rx = width / HALF + pad, ry = h / HALF + pad;
+  const d = holdsCorners(width, h, rx, ry)
+    ? ellipsePath(left + width / HALF, y + h / HALF, rx, ry)
+    : roundedRect(left - pad, y - pad, width + HALF * pad, h + HALF * pad, ry);
+  const draw = track([{ t: 0, v: 0 }, { t: times.start, v: 0 }, { t: Math.max(times.start + 1 / ctx.fps, times.land), v: 1, ease: look.moves.count.ease }]);
+  return [node('path', `${shot.id}.ring`, { d, stroke: look.palette.accent, strokeWidth: ring.width * unit, lineCap: 'round' }, { tracks: { draw } })];
+}
+
+// The figure with its glyph glow (devices/glow.mjs) lighting as it lands.
+function glowingFigure(fig, ctx, times) {
+  const { look, unit } = ctx;
+  const glow = track([{ t: 0, v: 0 }, { t: times.land, v: 0 }, { t: times.land + look.moves.emphasize.dur, v: 1, ease: look.moves.emphasize.ease }]);
+  return { ...fig, digits: { ...fig.digits, wordTracks: fig.digits.wordTracks.map((w) => ({ ...w, glow })), glowProps: glowStyle(look, fig.font, unit) } };
+}
 
 // The number of digits in the final value: one or two take the larger cap.
 const digitCount = (steps) => steps.at(-1).text.replace(NOT_DIGIT, '').length;
@@ -256,11 +293,11 @@ function plainDelta(ctx, id, words, { left, top, maxWidth, at }) {
 }
 
 // The label in the display face at scale step `step`, in ink, with its ink starting at `left`, wrapped to the right
-// margin (look review 1: mono capitals at headline size read as borrowed from another system).
-function deskLabel(shot, ctx, left, step) {
-  const { look, canvas, unit, measure } = ctx;
+// edge `right` (look review 1: mono capitals at headline size read as borrowed from another system).
+function deskLabel(shot, ctx, left, step, right) {
+  const { look, unit, measure } = ctx;
   const font = fontFor(look, 'display', sizeAt(look, step, unit), unit);
-  const layout = layoutText({ text: setCase(look, 'display', shot.label), font, maxWidth: gridX(look, canvas, RIGHT_EDGE) - left, measure });
+  const layout = layoutText({ text: setCase(look, 'display', shot.label), font, maxWidth: right - left, measure });
   const ink = firstLineInk(layout, font, measure);
   // up: first line's ink top to the last baseline
   return { font, layout, x: left - ink.left, up: ink.up + layout.lines.at(-1).y - layout.lines[0].y };
@@ -274,36 +311,67 @@ function deskLabel(shot, ctx, left, step) {
 // otherwise it goes under it, the label's ink DESK.underGap below the baseline, all inside the bottom margin; a label
 // too long for that at step 4, or too large beside a narrow figure, is set a step smaller, down to DESK.labelFromStep, so
 // the figure keeps its top margin and is at least MIN_HERO_RATIO times the label.
+// The desk figure, fitted to its span: columns 2 to DESK.toWide / toTall. Inside the 9:16 safe zone: the whole safe
+// width (columns 1 to the last), less the orbit ring's pad on the right when the look draws one, and on the left as
+// much of it as would bring the ring nearer the frame edge than half the grid margin (the ring may reach into the
+// platform's left band, which carries no platform buttons; the right band does); a look may let the
+// figure go down to scale step `fromStep` (look.kinds.number.fromStep), never under MIN_HERO_RATIO times the delta. The
+// pad grows with the size, so the figure is fitted twice: the second fit, inside the first one's pad, is no larger.
+function deskFigure(shot, ctx, { bounds, ring, maxSize, steps }) {
+  const { look, canvas, unit } = ctx;
+  if (!bounds.safe) {
+    const span = editorialSpan(ctx, 2, isWide(canvas) ? DESK.toWide : DESK.toTall);
+    return { left: span.x, span, fig: figureAt(shot, ctx, { maxWidth: span.w, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize, steps }) };
+  }
+  const deltaFloor = shot.delta === undefined ? 0 : Math.ceil(MIN_HERO_RATIO * sizeAt(look, DELTA.step, unit)) + 1;
+  const minSize = Math.max(sizeAt(look, look.kinds?.number?.fromStep ?? FIGURE_STEP, unit), deltaFloor);
+  const span = editorialSpan(ctx, 1, look.grid.columns);
+  const first = figureAt(shot, ctx, { maxWidth: span.w, minSize, maxSize, steps });
+  if (!ring) return { left: span.x, span, fig: first };
+  const pad = ringPad(ring, first.size);
+  const leftReserve = Math.max(0, pad - (span.x - (look.grid.margin * unit) / HALF));
+  const inner = { x: span.x + leftReserve, w: span.w - pad - leftReserve };
+  return { left: inner.x, span: inner, fig: figureAt(shot, ctx, { maxWidth: inner.w, minSize, maxSize, steps }) };
+}
+
 function deskParts(shot, ctx, steps, times) {
   const { look, canvas, unit } = ctx;
-  const span = gridSpan(look, canvas, 2, isWide(canvas) ? DESK.toWide : DESK.toTall);
-  const left = span.x;
+  const extra = look.kinds?.number ?? {}; // look data a number may carry (cosmos): besideGap, ring, glow
+  const bounds = editorialBounds(ctx);
+  const rightEdge = bounds.safe ? editorialRight(ctx) : gridX(look, canvas, RIGHT_EDGE);
   const maxSize = (digitCount(steps) <= SHORT_DIGITS ? DESK.maxShort : DESK.max) * unit;
-  const fig = figureAt(shot, ctx, { maxWidth: span.w, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize, steps });
+  const { left, span, fig } = deskFigure(shot, ctx, { bounds, ring: extra.ring, maxSize, steps });
   const beside = fig.total < span.w / HALF;
-  const blockLeft = beside ? left + fig.total + DESK.besideGap * unit : left; // where the label's and delta's ink start
+  // where the label's and delta's ink start: beside, its gap clear of the orbit ring's pad as well
+  const besideGap = (extra.besideGap ?? DESK.besideGap) * unit + (extra.ring ? ringPad(extra.ring, fig.size) : 0);
+  const blockLeft = beside ? left + fig.total + besideGap : left;
   const labelAt = times.land + look.moves.enter.dur;
-  const deltaAt = (top) => plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: blockLeft, top, maxWidth: gridX(look, canvas, RIGHT_EDGE) - blockLeft, at: labelAt + DELTA_LAG });
+  const deltaAt = (top) => plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: blockLeft, top, maxWidth: rightEdge - blockLeft, at: labelAt + DELTA_LAG });
   const probe = shot.delta === undefined ? null : deltaAt(0);
   const deltaUp = probe === null ? 0 : DESK.deltaGap * unit + probe.box[3] - probe.descent; // label baseline to delta baseline
+  // under the figure, the label clears the orbit ring's padding as well (the ring reaches that far below the figure)
+  const underGap = DESK.underGap * unit + (extra.ring ? ringPad(extra.ring, fig.size) : 0);
   const placeAt = (step) => {
-    const label = deskLabel(shot, ctx, blockLeft, step);
-    const below = beside ? 0 : DESK.underGap * unit + label.up + deltaUp + (probe?.descent ?? WORD_DESCENT * label.font.size);
-    return { label, baseline: Math.min(DESK.baseline * canvas.h, canvas.h - look.grid.margin * unit - below) };
+    const label = deskLabel(shot, ctx, blockLeft, step, rightEdge);
+    const below = beside ? 0 : underGap + label.up + deltaUp + (probe?.descent ?? WORD_DESCENT * label.font.size);
+    return { label, baseline: Math.min(bounds.at(DESK.baseline), bounds.bottom - below) };
   };
   // the figure keeps its top margin and stays MIN_HERO_RATIO times the label (the review hero rule)
-  const clearsTop = ({ label, baseline }) => baseline - CAP_HEIGHT * fig.size >= look.grid.margin * unit && fig.size >= MIN_HERO_RATIO * label.font.size;
+  // in the safe zone the digits' own ink (a round 0 6 8 9 rises over the cap line) is held under the band's top
+  const figUp = bounds.safe ? inkExtent(ALL_DIGITS, fig.font, ctx.measure).up : CAP_HEIGHT * fig.size;
+  const clearsTop = ({ label, baseline }) => baseline - figUp >= bounds.top && fig.size >= MIN_HERO_RATIO * label.font.size;
   let placed = placeAt(DESK.labelStep);
   for (let step = DESK.labelStep - 1; step >= DESK.labelFromStep && !clearsTop(placed); step--) placed = placeAt(step);
   const { label, baseline } = placed;
   // the label's last baseline: over the delta, which sits on the figure baseline (beside), or under the figure
-  const labelBaseline = beside ? baseline - deltaUp : baseline + DESK.underGap * unit + label.up;
+  const labelBaseline = beside ? baseline - deltaUp : baseline + underGap + label.up;
   const y = labelBaseline - label.layout.lines.at(-1).y;
   const fade = times.matched ? {} : { opacity: openingLanding(shot, ctx, times.start + look.moves.enter.dur, look.moves.enter, 0, 1) };
-  const figure = figureGroup(shot, ctx, fig, { left, baseline, tracks: fade });
+  const figure = figureGroup(shot, ctx, extra.glow ? glowingFigure(fig, ctx, times) : fig, { left, baseline, tracks: fade });
   const labelNode = node('text', `${shot.id}.label`, { x: label.x, y, layout: label.layout, font: label.font, fill: look.palette.ink, role: 'label' }, { tracks: enterTracks(look, unit, labelAt, { y }) });
   const boxes = { value: figure.box, label: inkBox(label.x, y, label.layout) };
-  const nodes = [figure.group, labelNode];
+  const ringBox = { left: figure.box[0], width: figure.box[2], baseline, size: fig.size };
+  const nodes = [...orbitRing(shot, ctx, ringBox, times, extra.ring), figure.group, labelNode];
   if (probe === null) return { nodes, boxes, hero: figure.hero };
   const delta = deltaAt(labelBaseline + DESK.deltaGap * unit);
   return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };

@@ -6,7 +6,7 @@ import '../modes/index.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { fitText, layoutText } from '../text/layout.mjs';
-import { landing, entrance, colourOf, polyline } from '../devices/shared.mjs';
+import { landing, entrance, colourOf, polyline, scrimColour } from '../devices/shared.mjs';
 import { BAND_HEIGHT } from '../devices/highlight.mjs';
 import { ease } from '../time/ease.mjs';
 import { aloneFromFrame } from '../cuts/index.mjs';
@@ -676,7 +676,7 @@ function scrimPath(outlines, hole) {
  * @param {{ id: string, cover: number[][][], hole?: number[], at: number, dur: number, opacity?: number, ease?: string, look: object }} p
  */
 export function paperScrim({ id, cover, hole, at, dur, opacity = SCRIM, from = 0, ease = SCRIM_EASE, look }) {
-  return node('path', id, { d: scrimPath(cover, hole), fill: colourOf(look, 'paper') }, {
+  return node('path', id, { d: scrimPath(cover, hole), fill: scrimColour(look) }, {
     tracks: { opacity: landing(at, { ease, dur }, from, opacity) },
   });
 }

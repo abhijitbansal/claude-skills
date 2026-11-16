@@ -9,12 +9,16 @@ import { layoutText } from '../text/layout.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
 import { pathPoints } from '../devices/shared.mjs';
 import { sizeAt, fontFor, setCase, isEditorial, inkExtent, asTextCard } from './shared.mjs';
+import { editorialBounds, editorialRight } from './editorial.mjs';
 
 export const SLUG = Object.freeze({ top: 0.14, turn: 3, pad: 30, gap: 18, numeralStep: 3, kickerStep: 2, digits: 2, maxColumns: 3 });
 const TEXT_COLUMN = 2; // the column a text block starts on: the slug's right margin is as wide as the text's left one
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const NO_WRAP = 1e6;
 const HALF = 2;
+
+// The slug's turn in degrees: the look's (look.slug.turn: cosmos sets its rounded chip square), else SLUG.turn.
+const turnOf = (look) => look.slug?.turn ?? SLUG.turn;
 
 /** Does this shot carry a slug? An editorial look that styles a card, and a kicker. */
 export const hasSlug = (shot, look) => shot.kicker !== undefined && isEditorial(look) && Object.hasOwn(look.devices ?? {}, 'card');
@@ -58,11 +62,11 @@ function turnBy([x, y], deg) {
 }
 
 // The canvas box of the card's paper and tape strips (not its shadow), the card turned exactly SLUG.turn about (cx, cy).
-function inkedBox(card, cx, cy) {
+function inkedBox(card, cx, cy, turn) {
   const inked = card.children.filter((n) => n.id.endsWith('.paper') || n.props.tape === true);
   const points = inked.flatMap((n) => pathPoints(n.props.d).map((p) => {
     const [x, y] = turnBy(p, n.props.rotate ?? 0);
-    const [tx, ty] = turnBy([x + (n.props.x ?? 0), y + (n.props.y ?? 0)], SLUG.turn);
+    const [tx, ty] = turnBy([x + (n.props.x ?? 0), y + (n.props.y ?? 0)], turn);
     return [cx + tx, cy + ty];
   }));
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
@@ -74,11 +78,15 @@ function inkedBox(card, cx, cy) {
 export function slugBox(shot, ctx) {
   if (!hasSlug(shot, ctx.look)) return null;
   const { w, h } = slugParts(shot, ctx);
-  const box = [ctx.canvas.w - gridX(ctx.look, ctx.canvas, TEXT_COLUMN) - w, SLUG.top * ctx.canvas.h, w, h];
-  const a = SLUG.turn * DEGREES_TO_RADIANS;
+  // on a tall frame in the platform safe zone: the top right of the composition band (editorial.mjs)
+  const bounds = editorialBounds(ctx);
+  const right = bounds.safe ? editorialRight(ctx) : ctx.canvas.w - gridX(ctx.look, ctx.canvas, TEXT_COLUMN);
+  const box = [right - w, bounds.safe ? bounds.top : SLUG.top * ctx.canvas.h, w, h];
+  const turn = turnOf(ctx.look);
+  const a = turn * DEGREES_TO_RADIANS;
   const tw = w * Math.cos(a) + h * Math.sin(a), th = w * Math.sin(a) + h * Math.cos(a);
   const cx = box[0] + w / HALF, cy = box[1] + h / HALF;
-  return { box, turned: [cx - tw / HALF, cy - th / HALF, tw, th], inked: inkedBox(slugCard(shot, ctx, box), cx, cy) };
+  return { box, turned: [cx - tw / HALF, cy - th / HALF, tw, th], inked: inkedBox(slugCard(shot, ctx, box), cx, cy, turn) };
 }
 
 /** The slug's nodes: one group (the card's entrance, turned exactly +3 degrees) holding the card and the two lines. */
@@ -100,5 +108,6 @@ export function slugNodes(shot, ctx) {
   });
   // the card's own hand tilt is replaced: the slug turns exactly SLUG.turn in every shot
   // pinned to the frame (props.fixed): the slug stands still through a drift or a push, the same in every shot
-  return [node('group', id, { ...card.props, rotate: SLUG.turn, fixed: true }, { tracks: card.tracks, children: [...asTextCard(id, card.children), numeral, kicker] })];
+  const turn = turnOf(look);
+  return [node('group', id, { ...card.props, ...(turn === 0 ? {} : { rotate: turn }), fixed: true }, { tracks: card.tracks, children: [...asTextCard(id, card.children), numeral, kicker] })];
 }

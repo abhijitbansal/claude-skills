@@ -1,7 +1,7 @@
-// The `cosmos` look's base data (engine/looks/cosmos.mjs): registered and validated, experimental (resolvable by name but
-// left out of every listing until it has its kinds data, devices and captions), the brief's values, a sound for every
-// event, contrast of every colour it draws with against the field at its darkest, lightest and lifted points, and the
-// rules test/v2/looks.test.mjs applies to every listed look, repeated here because an experimental look is not listed.
+// The `cosmos` look's base data (engine/looks/cosmos.mjs): registered, validated and listed (its kinds data, devices
+// and captions have landed; the experimental-look wrapper still hides a look that sets the flag), the brief's values, a
+// sound for every event, contrast of every colour it draws with against the field at its darkest, lightest and lifted
+// points, and the rules test/v2/looks.test.mjs applies to every listed look.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -36,18 +36,29 @@ test('cosmos is registered, validated, frozen, and resolvable by name', () => {
   assert.ok(isFrozenDeep(look()));
 });
 
-test('cosmos is experimental: left out of the look names, --list looks and unknown-look hints; desk and pop stay listed', () => {
-  assert.equal(look().experimental, true);
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop']);
-  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop']);
-  assert.throws(() => registries.looks.get('cosmo'), { message: 'unknown look "cosmo" (have: desk, pop)' });
-  assert.throws(() => registries.looks.get('dsk'), { message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop)' });
-  assert.deepEqual(kindSupportProblems('end', look()), [{ path: 'show', message: 'kind "end" is not supported by look "cosmos"; the looks that support it: desk, pop' }]);
+test('cosmos is listed: in the look names, --list looks and unknown-look hints, and supports every kind desk does', () => {
+  assert.equal(look().experimental, undefined);
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
+  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos']);
+  assert.throws(() => registries.looks.get('cosmo'), { message: 'unknown look "cosmo"; did you mean "cosmos"? (have: desk, pop, cosmos)' });
+  const desk = registries.looks.get('desk');
+  const kinds = registries.kinds.names().filter((kind) => kindSupportProblems(kind, desk).length === 0);
+  assert.deepEqual(kinds, ['end', 'list', 'quote', 'compare', 'chart'], 'the kinds that need look data, all of which desk has');
+  for (const kind of kinds) assert.deepEqual(kindSupportProblems(kind, look()), [], kind);
+});
+
+test('the experimental flag still hides a look from every listing while it resolves by name', () => {
+  registries.looks.add('test-experimental', { ...cosmosDefinition, name: 'test-experimental', experimental: true });
+  assert.equal(registries.looks.has('test-experimental'), true);
+  assert.equal(registries.looks.get('test-experimental').name, 'test-experimental');
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
+  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos']);
+  assert.throws(() => registries.looks.get('test-experimentl'), { message: 'unknown look "test-experimentl" (have: desk, pop, cosmos)' });
 });
 
 test('a second evaluation of the looks index keeps one wrapper and the same listing', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?cosmos-again'));
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop']);
+  assert.deepEqual(registries.looks.names().filter((n) => !n.startsWith('test-')), ['desk', 'pop', 'cosmos']);
   assert.equal(registries.looks.has('cosmos'), true);
 });
 
@@ -86,17 +97,16 @@ test('composition, emphasis, field, camera, cuts, grain, captions and modes', ()
   assert.deepEqual([...l.modes], ['pro', 'viral']);
 });
 
-test('motion: smooth in-out curves with a small overshoot, entrances scale from 0.92 with a fade, nothing steps', () => {
+test('motion: smooth curves, entrances scale from 0.92 with a fade and a small overshoot that never backs off first, nothing steps', () => {
   const { moves } = look();
   assert.equal(moves.enter.scale, 0.92);
   assert.equal(moves.enter.dist, undefined, 'entrances scale, they do not travel');
-  for (const [key, move] of Object.entries(moves)) {
-    assert.equal(move.step, undefined, `${key} is smooth, not stepped`);
-    assert.match(move.ease, /^inOut/, `${key} eases in and out`);
-  }
+  for (const [key, move] of Object.entries(moves)) assert.equal(move.step, undefined, `${key} is smooth, not stepped`);
+  for (const key of ['exit', 'emphasize', 'draw', 'count']) assert.match(moves[key].ease, /^inOut/, `${key} eases in and out`);
   const curve = ease(moves.enter.ease);
-  const peak = Math.max(...Array.from({ length: 101 }, (_, i) => curve(i / 100)));
-  assert.ok(peak > 1 && peak < 1.15, `a small overshoot: ${peak.toFixed(3)}`);
+  const samples = Array.from({ length: 101 }, (_, i) => curve(i / 100));
+  assert.ok(Math.max(...samples) > 1 && Math.max(...samples) < 1.15, `a small overshoot: ${Math.max(...samples).toFixed(3)}`);
+  assert.ok(Math.min(...samples) >= 0, 'never below its start: a fading entrance is never held at nothing');
 });
 
 test('sounds are the brief values, one for every registered cut, device and kind event device', () => {

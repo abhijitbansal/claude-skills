@@ -18,6 +18,8 @@ const COMBOS = Object.freeze([
   { mode: 'pro', look: 'desk', format: '9:16' },
   { mode: 'viral', look: 'pop', format: '16:9' },
   { mode: 'viral', look: 'pop', format: '9:16' },
+  { mode: 'pro', look: 'cosmos', format: '16:9' },
+  { mode: 'viral', look: 'cosmos', format: '9:16' },
 ]);
 
 // A striped PNG, built by hand so a browser can decode it: a stand-in screenshot.

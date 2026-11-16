@@ -10,8 +10,10 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { gridSpan, gridX, kindData, kindSupportProblems } from '../looks/index.mjs';
-import { entrance } from '../devices/shared.mjs';
+import { gridX, kindData, kindSupportProblems } from '../looks/index.mjs';
+import { entrance, roundedRect } from '../devices/shared.mjs';
+import { track } from '../time/track.mjs';
+import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase,
@@ -71,7 +73,9 @@ function cardParts(shot, ctx, data, block) {
 // The card's unturned box (right edge mirroring the text margin, bottom on the bottom margin) and its box once turned.
 function cardBox(parts, ctx, data) {
   const { look, canvas, unit } = ctx;
-  const right = canvas.w - gridX(look, canvas, FIRST_COLUMN), bottom = canvas.h - look.grid.margin * unit;
+  // in the platform safe zone on a tall frame: the bottom right of the composition band (editorial.mjs)
+  const bounds = editorialBounds(ctx);
+  const right = bounds.safe ? editorialRight(ctx) : canvas.w - gridX(look, canvas, FIRST_COLUMN), bottom = bounds.bottom;
   const box = [right - parts.w, bottom - parts.h, parts.w, parts.h];
   const a = Math.abs(data.turn) * DEGREES_TO_RADIANS;
   const tw = parts.w * Math.cos(a) + parts.h * Math.sin(a), th = parts.w * Math.sin(a) + parts.h * Math.cos(a);
@@ -88,7 +92,7 @@ function clearCard(card, block, y, ctx) {
   const clear = [cx - by, cy - by, cw + HALF * by, ch + HALF * by];
   if (!blockParts(block, y).some((box) => overlaps(clear, box))) return card;
   const under = Math.max(...blockParts(block, y).map((box) => box[1] + box[3])) + by;
-  const top = Math.min(under, canvas.h - look.grid.margin * unit - card.box[3]);
+  const top = Math.min(under, editorialBounds(ctx).bottom - card.box[3]);
   const dx = block.span.x - card.box[0], dy = top - card.box[1];
   return { box: [card.box[0] + dx, top, card.box[2], card.box[3]], turned: [cx + dx, cy + dy, cw, ch] };
 }
@@ -106,7 +110,20 @@ function cardNodes(shot, ctx, parts, placed, data) {
     x: left - parts.mark.ink.left, y: markTop + parts.mark.ink.up - parts.mark.layout.lines[0].y, layout: parts.mark.layout, font: parts.mark.font,
     fill: look.palette.ink, role: 'mark',
   })];
-  return [cardGroup(card, id, [...picture, ...mark], { rotate: data.turn, fixed: true })];
+  return [cardGroup(card, id, [...picture, ...mark], { rotate: data.turn, fixed: true }), ...ringNodes(id, placed.box, ctx, data)];
+}
+
+// The slow ring (look.kinds.end.ring: { gap, width, dur } in units and seconds): a rounded outline `gap` outside the
+// mark's card, in the accent with round caps, drawing on over `dur` once the card has entered, pinned to the frame.
+function ringNodes(id, [x, y, w, h], ctx, data) {
+  if (!data.ring) return [];
+  const { look, unit } = ctx;
+  const gap = data.ring.gap * unit;
+  const radius = (look.devices.card?.radius ?? 0) * unit + gap;
+  const start = look.moves.enter.dur;
+  const d = roundedRect(x - gap, y - gap, w + HALF * gap, h + HALF * gap, Math.min(radius, (h + HALF * gap) / HALF));
+  const draw = track([{ t: 0, v: 0 }, { t: start, v: 0 }, { t: start + data.ring.dur, v: 1, ease: look.moves.draw.ease }]);
+  return [node('path', `${id}.ring`, { d, stroke: look.palette.accent, strokeWidth: data.ring.width * unit, lineCap: 'round', fixed: true }, { tracks: { draw } })];
 }
 
 // ---- desk: the title and the ask ----
@@ -116,10 +133,10 @@ function cardNodes(shot, ctx, parts, placed, data) {
 // top, bottom } with top the title's first cap line and bottom the block's last baseline (relative to y).
 function deskBlock(shot, ctx, data) {
   const { look, canvas, unit, measure } = ctx;
-  const span = gridSpan(look, canvas, FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
+  const span = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
   const min = sizeAt(look, data.fromStep, unit), max = data.max * unit;
   const opts = { text: setCase(look, 'display', titleOf(shot)), font: fontFor(look, 'display', max, unit), maxWidth: span.w, align: 'left', measure, optical: true };
-  const title = fitDisplay(opts, { min, max, maxHeight: data.height * canvas.h, maxLines: look.maxLines.display }, look, unit);
+  const title = fitDisplay(opts, { min, max, maxHeight: editorialBounds(ctx).height(data.height), maxLines: look.maxLines.display }, look, unit);
   const size = title.font.size;
   const top = title.layout.lines[0].y - CAP_HEIGHT * size;
   const last = title.layout.lines.at(-1).y;
@@ -148,8 +165,9 @@ function blockParts(block, y) {
 // Where the block's top-left sits: its middle at data.centre of the height, moved up off the card (grown by CARD_CLEAR
 // gutters, and across by the camera drift) as far as the top margin allows.
 function deskY(block, card, ctx, data) {
-  const { look, canvas, unit } = ctx;
-  const y = data.centre * canvas.h - (block.top + block.bottom) / HALF;
+  const { look, unit } = ctx;
+  const bounds = editorialBounds(ctx);
+  const y = bounds.at(data.centre) - (block.top + block.bottom) / HALF;
   if (card === null) return y;
   const by = CARD_CLEAR * look.grid.gutter * unit, drift = driftReach(look, unit);
   const [cx, cy, cw, ch] = card.turned;
@@ -157,7 +175,7 @@ function deskY(block, card, ctx, data) {
   const hit = blockParts(block, y).filter((box) => overlaps(clear, box));
   if (hit.length === 0) return y;
   const up = Math.max(...hit.map((box) => box[1] + box[3] - clear[1]));
-  return Math.max(look.grid.margin * unit - block.top, y - up);
+  return Math.max(bounds.top - block.top, y - up);
 }
 
 function expandDesk(shot, ctx, data, times) {
