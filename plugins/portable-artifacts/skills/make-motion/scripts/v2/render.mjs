@@ -13,7 +13,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { findFfmpeg } from '../lib/ffmpeg.mjs';
 import { registries } from '../../engine/registry.mjs';
-import { validateLoudness } from '../../engine/modes/index.mjs';
+import '../../engine/modes/index.mjs'; // registers the modes whose loudness a voiced film is mastered to
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
 
@@ -137,17 +137,14 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress }) {
   return captured;
 }
 
-// The mode's loudness targets for a voiced film's master; a voiced film rendered without its voice is refused, never
-// rendered silent as if it had none.
+// The mode's loudness targets for a voiced film's master (validateMode required them when the mode registered); a voiced
+// film rendered without its voice is refused, never rendered silent as if it had none.
 function loudnessFor(film, voice) {
   if (voice === undefined) {
     if (film.voice !== undefined) throw new Error('renderFilm: the film has a voice; pass the voice stage\'s result ({ dir, sidecar }) as `voice`');
     return null;
   }
-  const name = film.mode ?? DEFAULT_MODE;
-  const mode = registries.modes.get(name);
-  validateLoudness({ ...mode, name });
-  return mode.loudness;
+  return registries.modes.get(film.mode ?? DEFAULT_MODE).loudness;
 }
 
 /**
@@ -156,7 +153,9 @@ function loudnessFor(film, voice) {
  *   used and left open when given; otherwise the film at specPath is loaded and opened here and closed after. exact: PNG
  *   capture (default: JPEG at quality 98). voice: what the voice stage made, required for a film with `voice`.
  * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number,
- *   audio: { lufs: number, truePeakDb: number } | null }>} audio: the voice as measured in the finished file, null without one
+ *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null } | null }>} audio: the voice as measured
+ *   in the finished file (lufs null, with a note, when it is too short or too quiet to measure), null without a voice. A
+ *   level more than 1 LU off the mode's target, or a true peak over its ceiling, fails the render (voice/master.mjs judgeLevel).
  */
 export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice }) {
   const ffmpeg = await findFfmpeg();
@@ -180,7 +179,7 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });
     await encoder.finish();
     encoder = null;
-    const audio = master === null ? null : await steps.muxVoice({ run, video: partial, audio: master, out: muxed, duration: open.timeline.duration });
+    const audio = master === null ? null : steps.judgeLevel(await steps.muxVoice({ run, video: partial, audio: master, out: muxed, duration: open.timeline.duration }), loudness);
     renameSync(audio === null ? partial : muxed, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
     const frames = open.timeline.frameCount;

@@ -14,7 +14,8 @@ import { registries } from '../../engine/registry.mjs';
 import { buildTimeline, narrationStart } from '../../engine/script/timing.mjs';
 import { parseSay } from '../../engine/script/say.mjs';
 import {
-  LEVELS, RAMP_SECONDS, VOICE_RATE, AAC_AUDIO, gainStages, shapingFilter, masterArgs, masterVoice, voiceTrackArgs, muxArgs, masterTrack, muxVoice,
+  LEVELS, RAMP_SECONDS, VOICE_RATE, TRACK_RATE, AAC_AUDIO, gainStages, shapingFilter, masterArgs, masterVoice, voiceTrackArgs, muxArgs, masterTrack, muxVoice,
+  judgeLevel,
 } from '../../scripts/v2/voice/master.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { renderFilm } from '../../scripts/v2/render.mjs';
@@ -26,8 +27,9 @@ const FPS = 30;
 const PRO = registries.modes.get('pro');
 const VIRAL = registries.modes.get('viral');
 const TIMELINE = buildTimeline(FILM, { fps: FPS, words: SIDECAR.shots });
-const MEASURED = Object.freeze({ input_i: '-27.31', input_tp: '-9.80', input_lra: '4.20', input_thresh: '-37.60', target_offset: '0.12' });
-const MEASURE_STDERR = `[Parsed_loudnorm_0 @ 0x1] \n{\n\t"input_i" : "-27.31",\n\t"input_tp" : "-9.80",\n\t"input_lra" : "4.20",\n\t"input_thresh" : "-37.60",\n\t"output_i" : "-16.0",\n\t"target_offset" : "0.12"\n}\n`;
+const MEASURED = Object.freeze({ input_i: '-27.31', input_tp: '-19.80', input_lra: '4.20', input_thresh: '-37.60', target_offset: '0.12' });
+const MEASURE_STDERR = `[Parsed_loudnorm_0 @ 0x1] \n{\n\t"input_i" : "-27.31",\n\t"input_tp" : "-19.80",\n\t"input_lra" : "4.20",\n\t"input_thresh" : "-37.60",\n\t"output_i" : "-16.0",\n\t"target_offset" : "0.12"\n}\n`;
+const APPLY_LINEAR = '[Parsed_loudnorm_1 @ 0x2] \n{\n\t"input_i" : "-27.31",\n\t"output_i" : "-16.02",\n\t"normalization_type" : "linear",\n\t"target_offset" : "0.12"\n}\n';
 const TIME_TOLERANCE = 1e-9;
 
 let dir;
@@ -135,12 +137,26 @@ test('masterArgs: high-pass at 80 Hz, a compressor, a de-esser, then loudnorm at
   assert.deepEqual(measure.slice(-3), ['-f', 'null', '-']);
   const apply = masterArgs({ wav: '/w/voice.wav', out: '/w/master.wav', filter: '', loudness: VIRAL.loudness, measured: MEASURED });
   const af2 = apply[apply.indexOf('-af') + 1];
-  assert.match(af2, /loudnorm=I=-14:TP=-1.5:LRA=9:measured_I=-27.31:measured_TP=-9.80:measured_LRA=4.20:measured_thresh=-37.60:offset=0.12:linear=true/);
+  assert.match(af2, /loudnorm=I=-14:TP=-1.5:LRA=9:measured_I=-27.31:measured_TP=-19.80:measured_LRA=4.20:measured_thresh=-37.60:offset=0.12:linear=true:print_format=json/);
   assert.equal(apply.at(-1), '/w/master.wav');
   assert.ok(apply.includes('48000'), 'the master is written at 48 kHz, never left at loudnorm\'s 192 kHz');
-  const shaped = masterArgs({ wav: '/w/voice.wav', out: '/w/master.wav', filter: shapingFilter(SIDECAR, TIMELINE), loudness: PRO.loudness });
-  const af3 = shaped[shaped.indexOf('-af') + 1];
-  assert.ok(af3.indexOf('volume=') < af3.indexOf('highpass'), 'the shaping comes first');
+  const wide = masterArgs({ wav: '/w/voice.wav', out: '/w/master.wav', filter: '', loudness: VIRAL.loudness, measured: { ...MEASURED, input_lra: '12.30' } });
+  assert.match(wide[wide.indexOf('-af') + 1], /LRA=13:measured_I/, 'a range wider than the mode\'s is let through, so loudnorm stays linear');
+  const unmeasured = masterArgs({ wav: '/w/voice.wav', out: '/w/master.wav', filter: '', loudness: PRO.loudness, measured: null });
+  assert.doesNotMatch(unmeasured[unmeasured.indexOf('-af') + 1], /loudnorm/, 'a track loudnorm cannot measure is not normalised');
+});
+
+test('the shaping comes after the compressor and the de-esser and before loudnorm, so neither takes back the lift', () => {
+  const shaped = masterArgs({ wav: '/w/voice.wav', out: '/w/master.wav', filter: shapingFilter(SIDECAR, TIMELINE), loudness: PRO.loudness, measured: MEASURED });
+  const af = shaped[shaped.indexOf('-af') + 1];
+  assert.ok(af.indexOf('deesser') < af.indexOf('volume=') && af.indexOf('volume=') < af.indexOf('loudnorm'), af);
+});
+
+test('input metadata never reaches a measurement: the track and both passes drop it', () => {
+  const track = voiceTrackArgs({ shots: [{ wav: '/v/shot-0.wav' }], timeline: TIMELINE_AT(0), out: '/v/t.wav' });
+  const measure = masterArgs({ wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness });
+  const apply = masterArgs({ wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness, measured: MEASURED });
+  for (const args of [track, measure, apply]) assert.ok(args.join(' ').includes('-map_metadata -1'), args.join(' '));
 });
 
 test('no film string reaches an argument: a word text with a quote and a filter separator is never written', () => {
@@ -162,17 +178,41 @@ test('no film string reaches an argument: a word text with a quote and a filter 
   assert.match(filter, /^[\w=.,:'()+\-*/ ]*$/, 'only numbers, names and expression syntax');
 });
 
-test('masterVoice runs the measure pass, then the apply pass with the measured values, in that order', async () => {
+// A fake ffmpeg that answers each pass with the stderr in `answers`, in order, and records the arguments.
+function fakeRunner(answers) {
   const calls = [];
   const run = async (args) => {
     calls.push(args);
-    return calls.length === 1 ? { code: 0, stderr: MEASURE_STDERR } : { code: 0, stderr: '' };
+    return { code: 0, stderr: answers[calls.length - 1] ?? '' };
   };
-  const measured = await masterVoice({ run, wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness });
+  return { run, calls };
+}
+
+test('masterVoice runs the measure pass, then the apply pass with the measured values, and checks that loudnorm stayed linear', async () => {
+  const { run, calls } = fakeRunner([MEASURE_STDERR, APPLY_LINEAR]);
+  const result = await masterVoice({ run, wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness });
   assert.equal(calls.length, 2);
   assert.match(calls[0].join(' '), /print_format=json/);
-  assert.match(calls[1].join(' '), /measured_I=-27.31:measured_TP=-9.80:measured_LRA=4.20:measured_thresh=-37.60:offset=0.12/);
-  assert.deepEqual(measured, MEASURED);
+  assert.match(calls[1].join(' '), /measured_I=-27.31:measured_TP=-19.80:measured_LRA=4.20:measured_thresh=-37.60:offset=0.12/);
+  assert.deepEqual(result, { measured: MEASURED, limited: false });
+});
+
+test('masterVoice refuses a pass 2 in which loudnorm fell back to dynamic mode: the emphasis and aside levels would not survive', async () => {
+  const { run } = fakeRunner([MEASURE_STDERR, APPLY_LINEAR.replace('"linear"', '"dynamic"')]);
+  await assert.rejects(masterVoice({ run, wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness }),
+    (err) => /dynamic/.test(err.message) && err.hint.length > 0);
+});
+
+test('a track whose peaks the gain would push over the ceiling is limited first and measured again, then applied linear through the limiter', async () => {
+  const peaky = MEASURE_STDERR.replace('"-19.80"', '"-3.10"');
+  const limited = MEASURE_STDERR.replace('"-27.31"', '"-17.90"').replace('"-19.80"', '"-5.00"');
+  const { run, calls } = fakeRunner([peaky, limited, APPLY_LINEAR]);
+  const result = await masterVoice({ run, wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness });
+  assert.equal(calls.length, 3);
+  assert.doesNotMatch(calls[0].join(' '), /alimiter/);
+  assert.match(calls[1].join(' '), /volume=11\.31dB,alimiter=.*loudnorm=.*print_format=json/, 'the gain to the target, then the limiter, then loudnorm measures');
+  assert.match(calls[2].join(' '), /alimiter=.*loudnorm=.*measured_I=-17.90:measured_TP=-5.00/);
+  assert.equal(result.limited, true);
 });
 
 test('masterVoice fails with ffmpeg\'s own words and a hint when a pass fails or prints no measurement', async () => {
@@ -181,22 +221,42 @@ test('masterVoice fails with ffmpeg\'s own words and a hint when a pass fails or
     (err) => /ffmpeg failed \(exit 1\): No such filter: deesser/.test(err.message) && typeof err.hint === 'string' && err.hint.length > 0);
   const mute = async () => ({ code: 0, stderr: 'nothing\n' });
   await assert.rejects(masterVoice({ run: mute, wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness }), /no loudness measurement/);
-  const silent = async () => ({ code: 0, stderr: MEASURE_STDERR.replace('"-27.31"', '"-inf"') });
-  await assert.rejects(masterVoice({ run: silent, wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness }), /silent/);
+});
+
+test('a track loudnorm cannot measure (too short or too quiet) is written without normalisation, never failed or forced', async () => {
+  const { run, calls } = fakeRunner([MEASURE_STDERR.replace('"-27.31"', '"-inf"'), '']);
+  const result = await masterVoice({ run, wav: '/w/v.wav', out: '/w/m.wav', filter: '', loudness: PRO.loudness });
+  assert.deepEqual(result, { measured: null, limited: false });
+  assert.equal(calls.length, 2);
+  assert.doesNotMatch(calls[1].join(' '), /loudnorm/);
+  assert.equal(calls[1].at(-1), '/w/m.wav');
+});
+
+test('judgeLevel: more than 1 LU from the target, or a true peak over the ceiling, is machine trouble with a hint; an unmeasurable track passes with its note', () => {
+  const ok = { lufs: -16.6, truePeakDb: -2.1, note: null };
+  assert.deepEqual(judgeLevel(ok, PRO.loudness), ok);
+  assert.throws(() => judgeLevel({ ...ok, lufs: -17.2 }, PRO.loudness), (err) => /-17\.2 LUFS.*1 LU.*-16/.test(err.message) && err.hint.length > 0);
+  assert.throws(() => judgeLevel({ ...ok, lufs: -14.8 }, PRO.loudness), /-14\.8 LUFS/);
+  assert.throws(() => judgeLevel({ ...ok, truePeakDb: -1.2 }, PRO.loudness), (err) => /true peak of -1\.2 dBTP.*-1\.5/.test(err.message) && err.hint.length > 0);
+  const quiet = { lufs: null, truePeakDb: -60, note: 'x' };
+  assert.deepEqual(judgeLevel(quiet, PRO.loudness), quiet);
 });
 
 // ---- the voice track and the mux arguments ----
 
-test('voiceTrackArgs places each narrated WAV at its shot\'s narration start in whole samples, mixes without normalising, pads to the film', () => {
+test('voiceTrackArgs places each narrated WAV at its shot\'s narration start in whole 48 kHz samples, mixes without normalising, pads to the film', () => {
   const shots = [{ wav: '/v/shot-0.wav' }, { wav: null }, { wav: '/v/shot-2.wav' }];
   const args = voiceTrackArgs({ shots, timeline: TIMELINE, out: '/v/track.wav' });
   const graph = args[args.indexOf('-filter_complex') + 1];
   const inputs = args.filter((a, i) => args[i - 1] === '-i');
   assert.deepEqual(inputs, ['/v/shot-0.wav', '/v/shot-2.wav'], 'a shot without narration is no input');
+  assert.equal(TRACK_RATE, 48000);
+  assert.equal(graph.match(/aformat=sample_rates=48000:channel_layouts=mono/g).length, 2, 'each WAV resampled once, to 48 kHz');
   const delays = [...graph.matchAll(/adelay=delays=(\d+)S:all=1/g)].map((m) => Number(m[1]));
-  assert.deepEqual(delays, [Math.round(narrationStart(TIMELINE.shots[0]) * VOICE_RATE), Math.round(narrationStart(TIMELINE.shots[2]) * VOICE_RATE)]);
+  assert.deepEqual(delays, [Math.round(narrationStart(TIMELINE.shots[0]) * TRACK_RATE), Math.round(narrationStart(TIMELINE.shots[2]) * TRACK_RATE)]);
   assert.match(graph, /amix=inputs=2:duration=longest:normalize=0/);
-  const length = Math.round(TIMELINE.duration * VOICE_RATE);
+  assert.ok(args.join(' ').includes(`-ar ${TRACK_RATE} -ac 1`));
+  const length = Math.round(TIMELINE.duration * TRACK_RATE);
   assert.match(graph, new RegExp(`apad=whole_len=${length}`));
   assert.match(graph, new RegExp(`atrim=end_sample=${length}`));
   assert.equal(args.at(-1), '/v/track.wav');
@@ -273,7 +333,20 @@ function onsets(samples, rate, threshold = 0.3, quiet = 0.05) {
 
 const wavPaths = (voiceDir, sidecar) => sidecar.shots.map((s) => ({ wav: s.wav === null ? null : path.join(voiceDir, s.wav) }));
 
-test('alignment: every click of the voice track lies within one frame of its word\'s time on the measured timeline', async (t) => {
+// Track samples are placed exactly; 1 ms allows one 24 kHz sample of rounding plus the resampler.
+const RAW_TOLERANCE = 0.001;
+
+// The word starts of a timeline in film seconds, from the timeline itself (shot start plus measured word).
+const filmStarts = (timeline) => timeline.shots.flatMap((shot) => shot.words.map((w) => shot.start + w.start));
+
+// Asserts each onset within `tolerance` of its word; returns the largest offset, in seconds.
+function assertClicksAt(heard, expected, tolerance) {
+  assert.equal(heard.length, expected.length, `onsets heard at ${heard.map((s) => s.toFixed(4))}`);
+  heard.forEach((s, k) => assert.ok(Math.abs(s - expected[k]) <= tolerance, `onset ${k} at ${s.toFixed(4)} s, its word at ${expected[k].toFixed(4)} s`));
+  return Math.max(...heard.map((s, k) => Math.abs(s - expected[k])));
+}
+
+test('alignment: every click of the voice track lies within 1 ms of its word\'s time on the measured timeline', async (t) => {
   const ffmpeg = await needFfmpeg(t);
   if (!ffmpeg) return;
   const sidecar = fakeSidecar(ALIGN_FILM);
@@ -284,13 +357,59 @@ test('alignment: every click of the voice track lies within one frame of its wor
   const r = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', ...voiceTrackArgs({ shots: wavPaths(voiceDir, sidecar), timeline, out })]);
   assert.equal(r.status, 0, r.stderr);
   const { samples, rate } = readWav(out);
-  assert.equal(rate, VOICE_RATE);
-  assert.ok(Math.abs(samples.length / rate - timeline.duration) < 1 / VOICE_RATE + 1e-9, 'the track is exactly the film long');
-  const expected = timeline.shots.flatMap((shot) => shot.words.map((w) => shot.start + w.start));
-  const heard = onsets(samples, rate);
-  assert.equal(heard.length, expected.length, `clicks heard at ${heard.map((s) => s.toFixed(3))}`);
+  assert.equal(rate, TRACK_RATE);
+  assert.ok(Math.abs(samples.length / rate - timeline.duration) < 1 / TRACK_RATE + 1e-9, 'the track is exactly the film long');
+  const expected = filmStarts(timeline);
   assert.ok(expected[0] > 2.4, 'the first word waits for the long held shot');
-  heard.forEach((s, k) => assert.ok(Math.abs(s - expected[k]) <= 1 / FPS, `click ${k} at ${s.toFixed(4)} s, its word at ${expected[k].toFixed(4)} s`));
+  const worst = assertClicksAt(onsets(samples, rate), expected, RAW_TOLERANCE);
+  t.diagnostic(`largest click offset in the raw track: ${(worst * 1000).toFixed(3)} ms`);
+});
+
+// Through the compressor, the limiter, loudnorm's 192 kHz round trip, the AAC encode and its decode: the largest offset
+// measured on ffmpeg 8.1.1 was 0.06 ms (the test prints it), so 1 ms leaves room for AAC pre-echo and nothing more.
+const ALIGN_TOLERANCE = 0.001;
+const ONSET_FRACTION = 0.05;
+
+// Word onsets are tone bursts here, not clicks: a track of 5 ms clicks in silence is so peaky that the limiter cannot
+// bring it to the target in three rounds (measured: -28.3, -27.1, -23.4 LUFS for a -16 target), which no voice is.
+test('alignment after the whole chain: the word onsets decoded from the finished MP4 lie within 1 ms of their words on the timeline', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const sidecar = fakeSidecar(ALIGN_FILM);
+  const work = path.join(dir, 'align-mux');
+  const voiceDir = path.join(work, 'voice');
+  writeBurstWavs(voiceDir, sidecar);
+  const timeline = buildTimeline(ALIGN_FILM, { fps: FPS, words: sidecar.shots });
+  const video = testVideo(ffmpeg, work, timeline.duration);
+  const run = realRun(ffmpeg);
+  const master = await masterTrack({ run, voice: { dir: voiceDir, sidecar }, timeline, loudness: PRO.loudness, workDir: work });
+  const out = path.join(work, 'film.mp4');
+  await muxVoice({ run, video, audio: master, out, duration: timeline.duration });
+  const decoded = path.join(work, 'decoded.wav');
+  const r = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', out, '-map', '0:a:0', '-ac', '1', '-ar', String(TRACK_RATE), '-c:a', 'pcm_s16le', decoded]);
+  assert.equal(r.status, 0, r.stderr);
+  const { samples, rate } = readWav(decoded);
+  const peak = samples.reduce((m, s) => Math.max(m, Math.abs(s)), 0);
+  // 5% of the peak: the gaps between bursts are silent, and a higher threshold is crossed partway up a burst's first
+  // cycle (half the peak read 3.5 ms late on one word: the detector's bias, not the track's).
+  const worst = assertClicksAt(onsets(samples, rate, peak * ONSET_FRACTION), filmStarts(timeline), ALIGN_TOLERANCE);
+  t.diagnostic(`largest onset offset after master and mux: ${(worst * 1000).toFixed(2)} ms`);
+});
+
+test('a 48 kHz recording keeps its top octave: a 15 kHz tone comes through the voice track at its own level', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const work = path.join(dir, 'top-octave');
+  mkdirSync(work, { recursive: true });
+  const input = path.join(work, 'shot-0.wav');
+  const high = Float32Array.from({ length: TRACK_RATE }, (_, i) => 0.25 * Math.sin((2 * Math.PI * 15000 * i) / TRACK_RATE));
+  writeWav(input, high, TRACK_RATE);
+  const out = path.join(work, 'track.wav');
+  const r = ffmpegRun(ffmpeg, voiceTrackArgs({ shots: [{ wav: input }], timeline: TIMELINE_AT(0), out }));
+  assert.equal(r.status, 0, r.stderr);
+  const { samples, rate } = readWav(out);
+  const level = db(rms(samples, rate, 0.1, 0.9) / rms(high, TRACK_RATE, 0.1, 0.9));
+  assert.ok(Math.abs(level) < 0.5, `15 kHz at ${level.toFixed(2)} dB of its input`);
 });
 
 // RMS of `samples` between from and to seconds.
@@ -303,21 +422,59 @@ function rms(samples, rate, from, to) {
 }
 const db = (ratio) => 20 * Math.log10(ratio);
 
+// A steady 440 Hz tone at the track rate, `amplitude` peak, `seconds` long.
+const toneOf = (amplitude, seconds) => Float32Array.from({ length: Math.round(seconds * TRACK_RATE) }, (_, i) => amplitude * Math.sin((2 * Math.PI * 440 * i) / TRACK_RATE));
+
+// The emphasised and the aside word of the fixture film, in film seconds, from the timeline itself (its shot start plus
+// the measured word), not from the code under test.
+function shapedWords() {
+  const filmWord = (flag) => TIMELINE.shots.flatMap((shot) => shot.words.filter((w) => w[flag]).map((w) => ({ start: shot.start + w.start, end: shot.start + w.end })));
+  return { emphasis: filmWord('emphasis')[0], aside: filmWord('aside')[0] };
+}
+
+// A short test video, mpeg4 (a codec the mux would never pick, so a re-encode cannot hide), `seconds` long.
+function testVideo(ffmpeg, work, seconds) {
+  mkdirSync(work, { recursive: true });
+  const video = path.join(work, 'video.mp4');
+  const made = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', `color=c=gray:s=320x180:r=${FPS}:d=${seconds}`, '-c:v', 'mpeg4', '-q:v', '5', video]);
+  assert.equal(made.status, 0, made.stderr);
+  return video;
+}
+
+// A tone at -12 dBFS RMS: speech level, over the compressor's -18 dBFS threshold.
+const LOUD_TONE_PEAK = Math.SQRT2 * 10 ** (-12 / 20);
+const LEVEL_TOLERANCE_DB = 0.3;
+
+test('the emphasis lift and the aside cut survive the whole mastering chain: +2 and -3 dB on a tone at -12 dBFS RMS', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const work = path.join(dir, 'levels');
+  mkdirSync(work, { recursive: true });
+  const wav = path.join(work, 'track.wav');
+  const out = path.join(work, 'master.wav');
+  writeWav(wav, toneOf(LOUD_TONE_PEAK, TIMELINE.duration), TRACK_RATE);
+  const result = await masterVoice({ run: realRun(ffmpeg), wav, out, filter: shapingFilter(SIDECAR, TIMELINE), loudness: PRO.loudness });
+  assert.equal(result.limited, false);
+  const { samples, rate } = readWav(out);
+  const base = rms(samples, rate, 0.3, 0.6);
+  const { emphasis, aside } = shapedWords();
+  const inside = (s) => db(rms(samples, rate, s.start + 0.01, s.end - 0.01) / base);
+  assert.ok(Math.abs(inside(emphasis) - LEVELS.emphasisDb) <= LEVEL_TOLERANCE_DB, `emphasis ${inside(emphasis).toFixed(2)} dB`);
+  assert.ok(Math.abs(inside(aside) - LEVELS.asideDb) <= LEVEL_TOLERANCE_DB, `aside ${inside(aside).toFixed(2)} dB`);
+});
+
 test('shaping in film time: a steady tone is 2 dB up inside the emphasised word, 3 dB down inside the aside, unchanged outside', async (t) => {
   const ffmpeg = await needFfmpeg(t);
   if (!ffmpeg) return;
-  const tone = Float32Array.from({ length: Math.round(TIMELINE.duration * VOICE_RATE) }, (_, i) => 0.25 * Math.sin((2 * Math.PI * 440 * i) / VOICE_RATE));
+  const tone = toneOf(0.25, TIMELINE.duration);
   const input = path.join(dir, 'tone.wav');
   const out = path.join(dir, 'tone-shaped.wav');
-  writeWav(input, tone);
+  writeWav(input, tone, TRACK_RATE);
   const r = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', input, '-af', shapingFilter(SIDECAR, TIMELINE), '-c:a', 'pcm_s16le', out]);
   assert.equal(r.status, 0, r.stderr);
   const { samples, rate } = readWav(out);
   const base = rms(tone, rate, 0.1, 0.5);
-  // The windows from the timeline itself (its shot start plus the measured word), not from the code under test.
-  const filmWord = (flag) => TIMELINE.shots.flatMap((shot) => shot.words.filter((w) => w[flag]).map((w) => ({ start: shot.start + w.start, end: shot.start + w.end })));
-  const [emphasis] = filmWord('emphasis');
-  const [aside] = filmWord('aside');
+  const { emphasis, aside } = shapedWords();
   assert.ok(aside.start > 4, 'the aside is in the third shot, after the held one');
   const inside = (s) => db(rms(samples, rate, s.start + 0.01, s.end - 0.01) / base);
   const outside = (s) => db(rms(samples, rate, s.start - RAMP_SECONDS - 0.06, s.start - RAMP_SECONDS - 0.01) / base);
@@ -360,9 +517,7 @@ test('masterTrack and muxVoice master tone bursts to the mode\'s loudness and mu
   const work = path.join(dir, 'mux');
   const voiceDir = path.join(work, 'voice');
   writeBurstWavs(voiceDir, SIDECAR);
-  const video = path.join(work, 'video.mp4');
-  const made = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', `color=c=gray:s=320x180:r=${FPS}:d=${TIMELINE.duration}`, '-c:v', 'mpeg4', '-q:v', '5', video]);
-  assert.equal(made.status, 0, made.stderr); // mpeg4, a codec the mux would never pick: a re-encode cannot hide
+  const video = testVideo(ffmpeg, work, TIMELINE.duration);
   const out = path.join(work, 'film.mp4');
   const run = realRun(ffmpeg);
   const master = await masterTrack({ run, voice: { dir: voiceDir, sidecar: SIDECAR }, timeline: TIMELINE, loudness: PRO.loudness, workDir: work });
@@ -381,6 +536,29 @@ test('masterTrack and muxVoice master tone bursts to the mode\'s loudness and mu
   assert.ok(Math.abs(level.lufs - PRO.loudness.lufs) <= 1, `integrated ${level.lufs} LUFS, target ${PRO.loudness.lufs}`);
   assert.ok(level.truePeak <= PRO.loudness.truePeakDb + 0.1, `true peak ${level.truePeak}`);
   assert.ok(Math.abs(audio.lufs - level.lufs) < 0.05 && Math.abs(audio.truePeakDb - level.truePeak) < 0.05, 'what is reported is what the file measures');
+  assert.equal(audio.note, null);
+  assert.deepEqual(judgeLevel(audio, PRO.loudness), audio, 'on target: judged fine');
+});
+
+test('a narration too quiet to measure is muxed, not failed: audio.lufs null with a note, and judgeLevel lets it through', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const work = path.join(dir, 'quiet');
+  const voiceDir = path.join(work, 'voice');
+  const sidecar = fakeSidecar(ALIGN_FILM);
+  mkdirSync(voiceDir, { recursive: true });
+  for (const shot of sidecar.shots.filter((s) => s.wav !== null)) {
+    writeWav(path.join(voiceDir, shot.wav), Float32Array.from({ length: Math.round(shot.seconds * VOICE_RATE) }, (_, i) => 0.0001 * Math.sin((2 * Math.PI * 200 * i) / VOICE_RATE)));
+  }
+  const timeline = buildTimeline(ALIGN_FILM, { fps: FPS, words: sidecar.shots });
+  const run = realRun(ffmpeg);
+  const master = await masterTrack({ run, voice: { dir: voiceDir, sidecar }, timeline, loudness: PRO.loudness, workDir: work });
+  const out = path.join(work, 'film.mp4');
+  const audio = await muxVoice({ run, video: testVideo(ffmpeg, work, timeline.duration), audio: master, out, duration: timeline.duration });
+  assert.equal(audio.lufs, null);
+  assert.match(audio.note, /too short or too quiet/);
+  assert.deepEqual(judgeLevel(audio, PRO.loudness), audio);
+  assert.equal(probe(out).streams.filter((s) => s.codec_type === 'audio').length, 1);
 });
 
 test('masterTrack of a voiced film whose shots have no WAV at all is null: there is no voice to put in, and ffmpeg is not run', async () => {
@@ -391,9 +569,12 @@ test('masterTrack of a voiced film whose shots have no WAV at all is null: there
   assert.equal(calls.length, 0);
 });
 
-test('a sidecar WAV name that is not a bare file name beside it is refused before ffmpeg runs', async () => {
-  const sidecar = { version: 1, sampleRate: VOICE_RATE, shots: [{ id: 'a', wav: '../elsewhere.wav', seconds: 1, sentences: [] }] };
-  await assert.rejects(masterTrack({ run: async () => assert.fail('ffmpeg must not run'), voice: { dir: '/v', sidecar }, timeline: TIMELINE_AT(0), loudness: PRO.loudness, workDir: '/w' }), /not a file beside it/);
+test('a sidecar WAV name that is not a bare file name beside it (a path, ".", "..", empty) is refused before ffmpeg runs', async () => {
+  for (const wav of ['../elsewhere.wav', '.', '..', '', 'a/b.wav']) {
+    const sidecar = { version: 1, sampleRate: VOICE_RATE, shots: [{ id: 'a', wav, seconds: 1, sentences: [] }] };
+    await assert.rejects(masterTrack({ run: async () => assert.fail('ffmpeg must not run'), voice: { dir: '/v', sidecar }, timeline: TIMELINE_AT(0), loudness: PRO.loudness, workDir: '/w' }),
+      (err) => /not a file beside it/.test(err.message) && err.hint.length > 0, JSON.stringify(wav));
+  }
 });
 
 test('renderFilm refuses a voiced film given without its voice, before any frame or file, rather than render it silent', async (t) => {
@@ -443,6 +624,7 @@ test('make renders a voiced film with its mastered voice (report.audio measured)
   assert.deepEqual(probe(out).streams.map((s) => s.codec_type), ['video', 'audio'], 'the voiced film has its voice');
   const level = integratedLoudness(ffmpeg, out);
   assert.ok(Math.abs(report.audio.lufs - level.lufs) < 0.05 && Math.abs(report.audio.truePeakDb - level.truePeak) < 0.05);
+  assert.equal(report.audio.note, null);
   assert.ok(Math.abs(level.lufs - PRO.loudness.lufs) <= 1, `${level.lufs} LUFS`);
   assert.deepEqual(readdirSync(path.dirname(out)).filter((name) => name.includes('.partial-')), [], 'no partial file is left');
 
