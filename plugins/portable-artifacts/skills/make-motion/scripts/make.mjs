@@ -3,7 +3,7 @@
 // the MP4. Read the JSON with --json (one object on stdout on every path, progress on stderr).
 //
 //   node scripts/make.mjs <film.json> [--out <file.mp4>] [--json] [--no-render | --sheets-only] [--exact] [--outline]
-//   node scripts/make.mjs --list kinds|looks|modes|devices|cuts|fields [--json]
+//   node scripts/make.mjs --list kinds|looks|modes|devices|cuts|fields [--all] [--json]   (--all: experimental looks too)
 //
 // Exit 0: the film is valid and has no mechanical finding. Exit 1: it is invalid, or a mechanical finding exists (the
 // MP4 is still rendered when the film validated), or the page raised an error about it. Exit 2: a usage error or trouble
@@ -24,7 +24,7 @@ const say = (text) => process.stdout.write(`${text}\n`);
 const log = (line) => process.stderr.write(`${line}\n`);
 
 function printList(options) {
-  const entries = listEntries(options.list);
+  const entries = listEntries(options.list, { all: options.all });
   if (!options.json) return say(formatList(options.list, entries));
   const common = options.list === 'kinds' ? { common: COMMON_SHOT_FIELDS } : {};
   return say(JSON.stringify({ ok: true, list: options.list, ...common, entries }));

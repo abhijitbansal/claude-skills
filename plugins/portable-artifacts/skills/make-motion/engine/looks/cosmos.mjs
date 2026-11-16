@@ -22,6 +22,9 @@ export const cosmos = {
   name: 'cosmos',
   summary: 'Flat vector science explainer: deep navy to violet, saturated shapes, one glowing accent and a rounded sans. Serves pro and viral.',
   modes: ['pro', 'viral'],
+  // parked after gate review 3 (the sun drawn on the orbit's edge, not at its centre): a film that names cosmos still
+  // validates and renders, but the look is left out of every listing (looks/index.mjs; --list looks --all shows it)
+  experimental: true,
   fonts: {
     display: { family: 'Nunito', weight: 800, width: 'normal' },
     text: { family: 'Nunito', weight: 600, width: 'normal' },

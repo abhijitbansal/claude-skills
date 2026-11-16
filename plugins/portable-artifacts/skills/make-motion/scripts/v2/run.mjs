@@ -21,7 +21,7 @@ import { openSession, pageErrorMessage, machineMessage } from './session.mjs';
 import { writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
 import { sessionFindings } from './review.mjs';
-import { NOT_RENDERED_NOTE, describeError, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
+import { NOT_RENDERED_NOTE, describeError, experimentalLook, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
 const MS_PER_SECOND = 1000;
 const MILLIS_DECIMALS = 1000;
@@ -322,6 +322,12 @@ async function execute(options, state, io) {
   state.validated = true;
   io.signal?.throwIfAborted(); // validation is synchronous (an own recording's word alignment included): a stop sent during it lands here
   const { film, specDir } = loaded;
+  // a parked look renders as any other; the run says so once, and the report carries it (never a finding)
+  const parked = experimentalLook(film);
+  if (parked) {
+    state.look = parked;
+    io.log(`make: look "${parked.name}" is experimental: it renders, but it is not one of the listed looks and may change`);
+  }
   const made = film.voice === undefined ? null
     : film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io);
   if (film.voice !== undefined && made === null) return;

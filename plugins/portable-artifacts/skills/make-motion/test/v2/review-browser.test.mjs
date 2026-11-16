@@ -18,8 +18,6 @@ const COMBOS = Object.freeze([
   { mode: 'pro', look: 'desk', format: '9:16' },
   { mode: 'viral', look: 'pop', format: '16:9' },
   { mode: 'viral', look: 'pop', format: '9:16' },
-  { mode: 'pro', look: 'cosmos', format: '16:9' },
-  { mode: 'viral', look: 'cosmos', format: '9:16' },
 ]);
 
 // A striped PNG, built by hand so a browser can decode it: a stand-in screenshot.
@@ -62,10 +60,7 @@ for (const { mode, look, format } of COMBOS) {
       const film = { version: 2, mode, look, format, fps: FPS, seed: 3, shots: [exampleFor(entry, look)] };
       const session = await open(t, film); if (!session) return;
       const findings = await reviewFilm({ session });
-      // a kind that left out a secondary line to keep the look's minimum size says so (rule 'dropped', a look with a
-      // secondary floor only): that is the kind working as designed, not a defect
-      const kept = findings.filter((f) => !(f.rule === 'dropped' && look === 'cosmos'));
-      assert.deepEqual(kept.map((f) => `${f.kind}: ${f.message}`), []);
+      assert.deepEqual(findings.map((f) => `${f.kind}: ${f.message}`), []);
       assert.deepEqual(session.errors, []);
     });
   }

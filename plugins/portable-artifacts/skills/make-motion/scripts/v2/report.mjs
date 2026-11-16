@@ -17,6 +17,7 @@
 // stays in it: the stages that ran, the findings already found. A film's own fault (it does not validate, the page
 // raises an error about it) is a finding, not an error.
 import { parseSay } from '../../engine/script/say.mjs';
+import { resolveLook } from '../../engine/graph/film.mjs';
 
 /** The audio note of a film whose sound was planned (the sound stage) but not rendered: it is measured in the film only. */
 export const NOT_RENDERED_NOTE = 'not rendered: the sound is measured in the finished film';
@@ -56,7 +57,16 @@ export const reviewFinding = ({ kind, shot, path, message, t }) => ({ kind, shot
 /** A finding about the page or the post pass rather than about a shot. */
 export const pageFinding = (kind, message) => ({ kind, shot: null, path: '', message });
 
-/** The report of a run in its state `state` (see run.mjs), with every key present. */
+/**
+ * A film's look when it is experimental (parked: registered, rendered, left out of every listing): { name,
+ * experimental: true } for the report's `look` field, else null (a listed look adds nothing to the report).
+ */
+export function experimentalLook(film) {
+  const look = resolveLook(film);
+  return look.experimental === true ? { name: look.name, experimental: true } : null;
+}
+
+/** The report of a run in its state `state` (see run.mjs), with every key present (`look` only for an experimental look). */
 export function reportOf(state) {
   const mechanical = state.findings.some((f) => f.kind === 'mechanical');
   return {
@@ -76,6 +86,7 @@ export function reportOf(state) {
     bytes: state.bytes,
     mbps: state.mbps,
     findings: state.findings,
+    ...(state.look ? { look: state.look } : {}),
     ...(state.error === null ? {} : { error: state.error }),
   };
 }

@@ -3,7 +3,7 @@
 import { parseCli, UsageError } from '../../shared/cli.mjs';
 
 export const LIST_NAMES = Object.freeze(['kinds', 'looks', 'modes', 'devices', 'cuts', 'fields']);
-export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render']);
+export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all']);
 const USAGE = `node scripts/make.mjs <film.json>; accepted flags: ${FLAGS.join(', ')}; exit codes: 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted`;
 const OPTIONS = Object.freeze({
   out: { type: 'string' },
@@ -13,11 +13,12 @@ const OPTIONS = Object.freeze({
   list: { type: 'string' },
   exact: { type: 'boolean' },
   'no-render': { type: 'boolean' },
+  all: { type: 'boolean' },
 });
 
 /**
  * @param {string[]} argv the arguments after the script name
- * @returns {{ specPath: string | null, out: string | null, json: boolean, noRender: boolean, outline: boolean, list: string | null, exact: boolean }}
+ * @returns {{ specPath: string | null, out: string | null, json: boolean, noRender: boolean, outline: boolean, list: string | null, exact: boolean, all: boolean }}
  * @throws {UsageError} for an unknown or misspelled flag, a bad --list value, a missing or extra film path, or an --out that is not .mp4
  */
 export function parseMakeArgs(argv) {
@@ -25,6 +26,7 @@ export function parseMakeArgs(argv) {
   if (values.list !== undefined && !LIST_NAMES.includes(values.list)) {
     throw new UsageError(`--list takes one of: ${LIST_NAMES.join(', ')}; got "${values.list}"`);
   }
+  if (values.all === true && values.list === undefined) throw new UsageError('--all only goes with --list (--list looks --all also shows the experimental looks)');
   if (values.list === undefined && positionals.length !== 1) {
     throw new UsageError(`give the path of one film .json file (got ${positionals.length}); usage: ${USAGE}`);
   }
@@ -39,5 +41,6 @@ export function parseMakeArgs(argv) {
     outline: values.outline === true,
     list: values.list ?? null,
     exact: values.exact === true,
+    all: values.all === true,
   };
 }

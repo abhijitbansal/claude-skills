@@ -87,8 +87,8 @@
     {
       "id": "close",
       "show": "end",
-      "say": "Now look up.",
-      "ask": "The Sun is 8 minutes away",
+      "say": "Light is old.",
+      "ask": "8 minutes old",
       "mark": "cosmos"
     }
   ]

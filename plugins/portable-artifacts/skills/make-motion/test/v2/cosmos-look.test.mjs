@@ -1,5 +1,5 @@
-// The `cosmos` look's base data (engine/looks/cosmos.mjs): registered, validated and listed (its kinds data, devices
-// and captions have landed; the experimental-look wrapper still hides a look that sets the flag), the brief's values, a
+// The `cosmos` look's base data (engine/looks/cosmos.mjs): registered and validated, parked as experimental after gate
+// review 3 (the experimental-look wrapper hides it from every listing), the brief's values, a
 // sound for every event, contrast of every colour it draws with against the field at its darkest, lightest and lifted
 // points, and the rules test/v2/looks.test.mjs applies to every listed look.
 import { test, before, after } from 'node:test';
@@ -36,11 +36,11 @@ test('cosmos is registered, validated, frozen, and resolvable by name', () => {
   assert.ok(isFrozenDeep(look()));
 });
 
-test('cosmos is listed: in the look names, --list looks and unknown-look hints, and supports every kind desk does', () => {
-  assert.equal(look().experimental, undefined);
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
-  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos']);
-  assert.throws(() => registries.looks.get('cosmo'), { message: 'unknown look "cosmo"; did you mean "cosmos"? (have: desk, pop, cosmos)' });
+test('cosmos is parked (experimental since gate review 3): out of the look names and --list looks, still supporting every kind desk does', () => {
+  assert.equal(look().experimental, true);
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop']);
+  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop']);
+  assert.throws(() => registries.looks.get('cosmo'), { message: 'unknown look "cosmo" (have: desk, pop)' });
   const desk = registries.looks.get('desk');
   const kinds = registries.kinds.names().filter((kind) => kindSupportProblems(kind, desk).length === 0);
   assert.deepEqual(kinds, ['end', 'list', 'quote', 'compare', 'chart'], 'the kinds that need look data, all of which desk has');
@@ -51,14 +51,14 @@ test('the experimental flag still hides a look from every listing while it resol
   registries.looks.add('test-experimental', { ...cosmosDefinition, name: 'test-experimental', experimental: true });
   assert.equal(registries.looks.has('test-experimental'), true);
   assert.equal(registries.looks.get('test-experimental').name, 'test-experimental');
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
-  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos']);
-  assert.throws(() => registries.looks.get('test-experimentl'), { message: 'unknown look "test-experimentl" (have: desk, pop, cosmos)' });
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop']);
+  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop']);
+  assert.throws(() => registries.looks.get('test-experimentl'), { message: 'unknown look "test-experimentl" (have: desk, pop)' });
 });
 
 test('a second evaluation of the looks index keeps one wrapper and the same listing', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?cosmos-again'));
-  assert.deepEqual(registries.looks.names().filter((n) => !n.startsWith('test-')), ['desk', 'pop', 'cosmos']);
+  assert.deepEqual(registries.looks.names().filter((n) => !n.startsWith('test-')), ['desk', 'pop']);
   assert.equal(registries.looks.has('cosmos'), true);
 });
 

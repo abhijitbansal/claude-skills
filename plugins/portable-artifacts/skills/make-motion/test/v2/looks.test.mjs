@@ -26,8 +26,8 @@ const ACCENT_SAMPLE = '#ff6600';
 const lookNames = () => registries.looks.names();
 const closeTo = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`);
 
-test('desk, pop and cosmos are registered, in showreel order', () => {
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos']);
+test('desk and pop are the listed looks, in showreel order (cosmos is parked: look-experimental.test.mjs)', () => {
+  assert.deepEqual(lookNames(), ['desk', 'pop']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
   assert.equal(registries.looks.get('desk').name, 'desk');
   assert.equal(registries.looks.get('pop').name, 'pop');
@@ -305,7 +305,7 @@ test('mode values are the brief values', () => {
 test('registering twice is harmless: a second evaluation of the index does not throw', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?again'));
   await assert.doesNotReject(() => import('../../engine/modes/index.mjs?again'));
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos']);
+  assert.deepEqual(lookNames(), ['desk', 'pop']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
 });
 
@@ -354,7 +354,7 @@ test('the validator reads each look cuts: punch is pop only, match is desk only'
 
 test('an unknown look still lists the real ones', () => {
   const r = validate({ version: 2, look: 'dsk', shots: shots(undefined) });
-  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos)' }]);
+  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop)' }]);
 });
 
 test('every look names its composition: desk is editorial, pop is a stack', () => {

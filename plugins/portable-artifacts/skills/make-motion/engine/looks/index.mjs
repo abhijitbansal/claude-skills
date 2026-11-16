@@ -215,6 +215,7 @@ if (!looks.names.hidesExperimental) {
   const getAny = looks.get;
   const listedNames = () => allNames().filter((name) => getAny(name).experimental !== true);
   listedNames.hidesExperimental = true;
+  listedNames.all = allNames;
   looks.names = listedNames;
   looks.get = (name) => {
     if (looks.has(name)) return getAny(name);
@@ -223,6 +224,9 @@ if (!looks.names.hidesExperimental) {
     return listed.get(name); // throws the registry's own message, naming only the listed looks
   };
 }
+
+/** Every registered look's name, the experimental ones included (--list looks --all). */
+export const allLookNames = () => registries.looks.names.all();
 
 for (const definition of [desk, pop, cosmos]) {
   if (!registries.looks.has(definition.name)) registries.looks.add(definition.name, deepFreeze(definition));

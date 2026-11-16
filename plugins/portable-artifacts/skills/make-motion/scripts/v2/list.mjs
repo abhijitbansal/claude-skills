@@ -1,7 +1,7 @@
 // --list: what the engine has registered, for an author (or a model) that has to write a film. Every entry has a name
 // and a one-line summary; a kind also lists its own fields with their types and gives one example shot as JSON.
 import { registries } from '../../engine/registry.mjs';
-import '../../engine/looks/index.mjs';
+import { allLookNames } from '../../engine/looks/index.mjs';
 import '../../engine/modes/index.mjs';
 import '../../engine/kinds/index.mjs';
 import '../../engine/cuts/index.mjs';
@@ -31,16 +31,17 @@ function kindFields(kind) {
 
 function entryOf(listName, name) {
   const def = registries[listName].get(name);
-  const entry = { name, summary: def.summary ?? '' };
+  const entry = { name, summary: def.summary ?? '', ...(def.experimental === true ? { experimental: true } : {}) };
   if (listName === 'kinds') return { ...entry, fields: kindFields(def), example: def.example ?? null };
   return entry;
 }
 
 /**
  * @param {'kinds' | 'looks' | 'modes' | 'devices' | 'cuts' | 'fields'} listName
+ * @param {{ all?: boolean }} [options] all: the experimental looks too (--list looks --all), each with experimental: true
  * @returns {{ name: string, summary: string, fields?: { name: string, type: string, required: boolean }[], example?: object | null }[]}
  */
-export const listEntries = (listName) => registries[listName].names().map((name) => entryOf(listName, name));
+export const listEntries = (listName, { all = false } = {}) => (all && listName === 'looks' ? allLookNames() : registries[listName].names()).map((name) => entryOf(listName, name));
 
 const fieldText = (f) => `${f.name}${f.required ? '*' : ''}: ${f.type}`;
 
@@ -49,7 +50,7 @@ export function formatList(listName, entries) {
   const head = [`${listName} (${entries.length})`];
   if (listName === 'kinds') head.push(`every shot also takes: ${COMMON_SHOT_FIELDS.map(fieldText).join(', ')} (* required; give say or hold, not both)`);
   const blocks = entries.map((e) => {
-    const lines = [`${e.name}  ${e.summary}`];
+    const lines = [`${e.name}  ${e.experimental ? '(experimental) ' : ''}${e.summary}`];
     if (e.fields) lines.push(`  fields: ${e.fields.map(fieldText).join(', ') || 'none of its own'}`);
     if (e.example) lines.push(`  example: ${JSON.stringify(e.example)}`);
     return lines.join('\n');

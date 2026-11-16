@@ -206,3 +206,17 @@ Three independent look reviews, each by a fresh reviewer who saw only the contac
 Decision (controller, under the owner rule for the unattended run): no kind failed in either look, so none is parked. The fix items of review 3 are not done and are listed in `docs/decisions-pending.md` and in `.superpowers/sdd/2026-11-16-pa2-shot-kinds-a/look-review-3.md`. The reviewers passed different shots each time, so a pass count is one reviewer judging one render, not a trend.
 
 Known weak points a viewer will see: final states hold too briefly before the film ends; a single-digit number rolls up from a bare grey 0; pop on tall frames still leaves the lower 35 to 55 percent of the frame empty (type is limited by width); desk sets too much in small mono for phone size; the desk chart plot is squat.
+
+## The cosmos look — 2026-11-16: PARKED as experimental
+
+Gate films: `references/examples/v2/gate-cosmos.json` (pro, 16:9, 7 shots) and `gate-cosmos-viral.json` (viral, 9:16, 6 shots). Both render valid with no mechanical or creative findings (controller, real voice model, commit d97c07d; whole v2 suite 1831 tests, 1831 pass). Render cost against desk: 1.20 times per frame on these films (implementer, one run each); on a still shot the drifting stars stop held frames from being reused (2.13 times per output frame, measured at Task 2).
+
+Three independent look reviews, each by a fresh reviewer who saw only the contact sheets:
+
+| Review | 16:9 | 9:16 | Shots failing | After it |
+|---|---|---|---|---|
+| 1 | not yet | not yet | compare in both (equal cards for an 11 to 1 scale) | revision 1: sun motif, compare drawn to scale, OKLab fades |
+| 2 | not yet | not yet | 16:9 compare; 9:16 number and chart | revision 2: one sun drawn as light, tall-frame compositions, minimum secondary size |
+| 3 | not yet | not yet | 16:9 number and compare; 9:16 number | none: the two revision rounds are used |
+
+Decision (controller, under the owner rule for the unattended run): the look is parked. It stays on the branch marked experimental: a film can name it, but it is left out of the looks list and of the docs. What review 3 blocks on: the sun is drawn on the edge of the orbit ellipse instead of at its centre (a science error in the composition the controller asked for); the to-scale compare is complete on its first frame and static; the Earth group sits outside title-safe; the sun is drawn two ways. What the reviewers credited: the two films hold together as one; gold used only for light is an idea with character; the vertical hook passed in review 2. Frames: `.scratch/cosmos/gate-r0`, `gate-r1c`, `gate-r2c` (scratch, not committed). Reviews: `.superpowers/sdd/2026-11-16-pa2-look-cosmos/gate-review-1.md` to `gate-review-3.md`.

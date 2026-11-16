@@ -142,3 +142,11 @@ The cut-over plan (docs/superpowers/plans/2026-11-16-pa2-cutover.md) deletes the
 - Default taken for the unattended run: do the parts that remove nothing a user has (Task 1: version 2 stands on its own files; the voice half of Task 4: drop kokoro-js and @huggingface/transformers from optional/voice, which version 2 no longer imports). Do NOT delete version 1 (Tasks 2, 3, 5, 6) until the owner says so or the remaining kinds and looks exist.
 - Options for the owner: (a) wait for the remaining kinds and looks, then cut over (the design order); (b) cut over now and list every dropped feature in migrating.md and the CHANGELOG; (c) ship version 2 beside version 1 behind the spec version field for one release.
 - The plan lists 12 smaller decisions with defaults (shiki and atlas packages, optional/cutout, the sketch template, version number timing, site clips).
+
+## The cosmos look is parked (2026-11-16)
+
+Three independent reviewers said "not yet" for both gate films; the last after both allowed revision rounds. The look is on the branch as experimental (not listed, not documented). Record: docs/superpowers/plans/2026-11-15-pa2-gate-report.md.
+
+- Default: leave it parked; the other four looks (ledger, keynote, poster, marker) are not started.
+- If the owner wants it finished, the shortest path from review 3: put the sun at the orbit centre (or draw a Sun to Earth line instead of an orbit), give the to-scale compare a reveal and one alignment axis, draw the sun one way everywhere, keep gold off orbit strokes, drop the quote card. The reviewers agree the films already hold together and that gold-only-for-light is the idea to keep.
+- Copy of the vertical gate film (mine): "Now look up." beside a sun reads as advice to look at the Sun; change it before the film is shown to anyone.
