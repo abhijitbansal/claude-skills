@@ -23,6 +23,7 @@ const TITLE_MAX = 60;
 const POINT_MAX = 60;
 const POINTS_MAX = 3;
 const VALUE_TEXT_MAX = 9; // characters as set: a value is one numeral line that holds the hero size on a desk card
+const RATIO_LABEL_MAX = 16; // characters: the ratio and its label on one line at hero size
 const VALUE_LIMIT = 1e15; // as number.mjs: larger figures lose integer precision
 
 const SIDE_SCHEMA = Object.freeze({
@@ -112,6 +113,8 @@ registries.kinds.add(KIND, {
       right: SIDE_SCHEMA,
       mode: { enum: ['versus', 'before-after'] },
       kicker: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: KICKER_MAX },
+      // what follows the printed ratio when a look draws scale (compare-discs.mjs): '×' when absent, '× wider' says the relation
+      ratioLabel: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: RATIO_LABEL_MAX },
       hero: HERO_SCHEMA,
     },
   },

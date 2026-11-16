@@ -66,7 +66,7 @@ test('a second evaluation of the looks index keeps one wrapper and the same list
 
 test('palette: deep navy to violet field, ink, ink2, the glow accent, accent2 and two shape colours', () => {
   assert.deepEqual({ ...look().palette }, {
-    paper: '#2a1a5e', deep: '#0b1030', ink: '#f4f1ff', ink2: '#a9a4d6', accent: '#ffd166', accent2: '#4de2c5',
+    paper: '#2a1a5e', deep: '#0b1030', ink: '#f4f1ff', ink2: '#a9a4d6', accent: '#ffd166', accent2: '#a9a4d6',
     shape: '#ff6b9a', shape2: '#6ea8ff', rule: '#3d3478',
   });
 });

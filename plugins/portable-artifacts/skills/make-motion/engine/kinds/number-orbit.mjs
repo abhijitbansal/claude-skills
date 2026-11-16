@@ -1,14 +1,12 @@
 // The number kind's orbit (look.kinds.number.orbit, cosmos): a tilted ellipse round the figure, large enough to leave
 // air round its cap box, faint from the first frame, with a small bright dot that circles it once as the figure counts
 // (from the count's start to its landing) and keeps circling slowly to the end of the shot; the ellipse brightens as
-// the figure lands, and the look's sun sits at its focus. Pure and DOM-free.
+// the figure lands. The kind sets it so the look's sun stands at a focus (number-sky.mjs). Pure and DOM-free.
 //
 // orbit data: { tilt (degrees), ratio (minor / major axis), air (share past the box's corners), width (units of
 // stroke), dot (units of radius), faint and lit (the ellipse's opacity before and after the landing) }.
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { CAP_HEIGHT } from './shared.mjs';
-import { sunNodes } from '../devices/sun.mjs';
 
 const HALF = 2;
 const DEGREES_TO_RADIANS = Math.PI / 180;
@@ -18,7 +16,6 @@ const DOT_GLOW = 2.5; // the dot's light, in dot radii of blur
 const DOT_GLOW_ALPHA = 0.9;
 const ROUND = 100; // path coordinates to 0.01 px
 const REST_TURN = 24; // degrees a second the dot keeps circling after the count lands: the orbit never stops
-const SUN_SHARE = 1.1; // the sun's radius, of the orbit's minor half axis
 
 /**
  * The orbit round a box { width, height } (its cap box, centred): its tilt, the ellipse's half axes a and b in its own
@@ -52,27 +49,24 @@ function ellipsePath(a, b) {
 }
 
 /**
- * The orbit's nodes round the figure's cap box (left edge, width, baseline, size in px): a group at the box's centre,
- * turned by the tilt, holding the ellipse and the dot. The dot rides a circle of radius a squashed to the ratio (so it
- * follows the ellipse exactly); it is itself an ellipse 1 / ratio tall, so it shows round.
+ * The orbit's nodes about its centre (x, y px): a group there, turned by the geometry's tilt, holding the ellipse (half
+ * axes a across and b up its own frame: b > a stands tall) and the dot. The dot rides a circle of radius a stretched
+ * to b / a up (so it follows the ellipse exactly, starting at its top); it is itself drawn a / b tall, so it shows round.
+ * The group carries its axes (props.axes) for the kinds that place things by its foci.
  */
-export function orbitNodes(id, ctx, { left, width, baseline, size }, times, orbit, geometry) {
+export function orbitNodes(id, ctx, { x, y }, times, orbit, { a, b, tilt }) {
   const { look, unit, fps } = ctx;
-  const height = CAP_HEIGHT * size;
-  const { a, b, tilt } = geometry;
   const lit = look.moves.emphasize;
   const opacity = track([{ t: 0, v: orbit.faint }, { t: times.land, v: orbit.faint }, { t: times.land + lit.dur, v: orbit.lit, ease: lit.ease }]);
   const ring = node('path', `${id}.orbit.ring`, { d: ellipsePath(a, b), stroke: look.palette.accent, strokeWidth: orbit.width * unit, lineCap: 'round' }, { tracks: { opacity } });
   const r = orbit.dot * unit;
   const dot = node('path', `${id}.orbit.dot`, {
-    d: ellipsePath(r, r / orbit.ratio), x: 0, y: -a,
+    d: ellipsePath(r, (r * a) / b), x: 0, y: -a,
     fill: look.palette.ink, glow: { color: look.palette.accent, alpha: DOT_GLOW_ALPHA, radius: DOT_GLOW * r },
   });
   const landed = Math.max(times.start + 1 / fps, times.land), end = Math.max(landed, ctx.timing.duration);
   const turn = track([{ t: 0, v: 0 }, { t: times.start, v: 0 }, { t: landed, v: FULL_TURN, ease: look.moves.count.ease }, { t: end, v: FULL_TURN + REST_TURN * (end - landed) }]);
   const spin = node('group', `${id}.orbit.spin`, {}, { tracks: { rotate: turn }, children: [dot] });
-  const squash = node('group', `${id}.orbit.path`, { scaleY: orbit.ratio }, { children: [spin] });
-  // the light source at the ellipse's focus (look.sun): the figure's orbit is round a sun
-  const sun = sunNodes(`${id}.orbit.sun`, look, { cx: -Math.sqrt(Math.max(0, a * a - b * b)), cy: 0, r: SUN_SHARE * b });
-  return [node('group', `${id}.orbit`, { x: left + width / HALF, y: baseline - height / HALF, rotate: tilt }, { children: [...sun, ring, squash] })];
+  const squash = node('group', `${id}.orbit.path`, { scaleY: b / a }, { children: [spin] });
+  return [node('group', `${id}.orbit`, { x, y, rotate: tilt, axes: { a, b } }, { children: [ring, squash] })];
 }

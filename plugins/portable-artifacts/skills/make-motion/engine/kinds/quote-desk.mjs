@@ -20,6 +20,7 @@ import {
 } from './shared.mjs';
 import { track } from '../time/track.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
+import { secondarySize, heroFloor } from './secondary.mjs';
 import { OPEN_MARK, CLOSE_MARK, quotationOf, attributionOf } from './quote-text.mjs';
 
 const FIRST_COLUMN = 2;
@@ -57,13 +58,16 @@ function attributionLayout(shot, ctx, font, maxWidth) {
 // A layout with no line of a single word (a one-line layout passes).
 const noLoneLine = (layout) => layout.lines.length < HALF || layout.lines.every((line) => line.words.length > 1);
 
-// The attribution's scale step: the largest of data.attrSteps the quotation stays MIN_HERO_RATIO times, else the smallest.
+// The attribution's scale step: the largest of data.attrSteps the quotation stays MIN_HERO_RATIO times, else the smallest;
+// never under the look's secondary floor (kinds/secondary.mjs: the quotation is fitted to keep the ratio over it).
 function attrSize(look, data, size, unit) {
-  return sizeAt(look, stepUnder(look, data.attrSteps, unit, [{ size, ratio: MIN_HERO_RATIO }]), unit);
+  return secondarySize(look, unit, sizeAt(look, stepUnder(look, data.attrSteps, unit, [{ size, ratio: MIN_HERO_RATIO }]), unit));
 }
 
-// The card's contents laid out from its top left: { quote, attr, textX, textY, attrX, attrY, ruleY, w, h }.
-function cardLayout(shot, ctx, data, { span, plan, room }) {
+// The card's contents laid out from its top left: { quote, attr, textX, textY, attrX, attrY, ruleY, w, h, dropped }. With
+// `keep` false the attribution is left out (kinds/secondary.mjs: the quotation could not keep the hero ratio over it at
+// the look's floor) and the quotation fitted as if it had none.
+function cardLayout(shot, ctx, data, { span, plan, room, keep = true }) {
   const { look, unit, measure } = ctx;
   const pad = data.pad * unit;
   // the text edge: `pad` in, or further when the opening mark (at the largest size) would hang off the paper; with a
@@ -76,13 +80,14 @@ function cardLayout(shot, ctx, data, { span, plan, room }) {
   const drop = plan === null ? 0 : plan.drop;
   const attrMax = sizeAt(look, Math.max(...data.attrSteps), unit);
   const pillY = data.pill ? HALF * data.pill.padY * attrMax : 0;
-  const maxHeight = room - HALF * pad - drop - markDrop(data.max * unit) - (data.attrGap * data.max * unit + (CAP_HEIGHT + WORD_DESCENT) * attrMax + pillY);
+  const attrRoom = keep ? data.attrGap * data.max * unit + (CAP_HEIGHT + WORD_DESCENT) * attrMax + pillY : 0;
+  const maxHeight = room - HALF * pad - drop - markDrop(data.max * unit) - attrRoom;
   // with a large mark the closing mark is large too (closeMarkNode), not inline; short sentences one per line (sentenceLines)
   const body = sentenceLines(setCase(look, 'display', quotationOf(shot)), data.sentenceLines);
   const text = `${markFont ? '' : OPEN_MARK}${body}${markFont ? '' : CLOSE_MARK}`;
   // breaks by sense, no line of one word: the fit trades size for a layout without one, down to its floor (fitText)
   const opts = { text, font: fontFor(look, 'display', data.max * unit, unit), maxWidth: width, align: 'left', measure, optical: true, accept: noLoneLine };
-  const min = MIN_HERO_RATIO * sizeAt(look, Math.min(...data.attrSteps), unit);
+  const min = Math.max(MIN_HERO_RATIO * sizeAt(look, Math.min(...data.attrSteps), unit), keep ? heroFloor(look, unit) : 0);
   const quote = fitDisplay(opts, { min, max: data.max * unit, maxHeight: Math.max(1, maxHeight), maxLines: data.maxLines, tradeFloor: min }, look, unit);
   const size = quote.font.size;
   const font = fontFor(look, 'label', attrSize(look, data, size, unit), unit);
@@ -93,14 +98,14 @@ function cardLayout(shot, ctx, data, { span, plan, room }) {
   const textY = pad + drop + markDrop(size) + CAP_HEIGHT * size - quote.layout.lines[0].y;
   const capLine = textY + quote.layout.lines.at(-1).y + data.attrGap * size + (pill ? pill.y : 0);
   const attrY = capLine + CAP_HEIGHT * font.size - layout.lines[0].y;
-  const textBottom = attrY + layout.lines.at(-1).y + WORD_DESCENT * font.size + (pill ? pill.y : 0);
+  const textBottom = keep ? attrY + layout.lines.at(-1).y + WORD_DESCENT * font.size + (pill ? pill.y : 0) : textY + quote.layout.lines.at(-1).y + WORD_DESCENT * size;
   // the card wraps its text: as wide as its longest line or the attribution row, with the portrait's share kept
   const close = markFont ? closePlace({ ...markFont, size: data.mark * size }, look.grid.gutter * unit, { quote, width, capLine }, measure) : null;
   const closeEnd = close?.under === false ? quote.layout.width + close.gap + close.width : 0;
   const bottom = Math.max(textBottom, close?.under ? close.bottom : 0);
   const content = Math.max(...quote.layout.lines.map((l) => Math.max(0, l.x + l.width)), closeEnd, ruleW + gap + layout.width + (pill ? pill.x : 0));
   return {
-    quote, attr: { font, layout }, textX: edge, textY, attrX: edge + ruleW + gap, attrY, pill, capLine,
+    dropped: keep ? [] : ['attribution'], quote, attr: { font, layout }, textX: edge, textY, attrX: edge + ruleW + gap, attrY, pill, capLine,
     ruleY: capLine + (CAP_HEIGHT * font.size) / HALF - (RULE_THICKNESS * unit) / HALF, ruleW,
     mark: markFont ? { font: { ...markFont, size: data.mark * size }, x: pad, top: pad + drop } : null, close,
     w: Math.min(span.w, edge + content + pad + (plan === null ? 0 : plan.reserve)), h: bottom + pad,
@@ -183,7 +188,7 @@ function cardChildren(shot, ctx, lay, times) {
   const matched = arrivesMatched(shot, ctx);
   const placed = { x: ox + lay.textX, y: oy + lay.textY, layout: lay.quote.layout, font: lay.quote.font };
   const lines = highlightLines(placed.layout, times.words, ctx.timing);
-  const quote = node('text', `${shot.id}.text`, { ...placed, fill: look.palette.ink, role: 'hero', ...(lines === undefined ? {} : { highlightLines: lines }) }, {
+  const quote = node('text', `${shot.id}.text`, { ...placed, fill: look.palette.ink, role: 'hero', ...(lines === undefined ? {} : { highlightLines: lines }), ...(lay.dropped.length ? { dropped: lay.dropped } : {}) }, {
     wordTracks: times.words.map(({ at }) => (matched ? {} : enterTracks(look, unit, at))),
   });
   const attrY = oy + lay.attrY, ruleY = oy + lay.ruleY;
@@ -196,7 +201,7 @@ function cardChildren(shot, ctx, lay, times) {
   });
   const mark = lay.mark ? [markNode(shot, ctx, lay, ox, oy, times.words[0]?.at ?? 0)] : [];
   const close = lay.close ? [closeMarkNode(shot, ctx, lay, ox, oy, times.words.at(-1)?.at ?? 0)] : [];
-  const attribution = lay.pill ? [pillNode(shot, ctx, lay, ox, oy, times.by), by] : [rule, by];
+  const attribution = lay.dropped.length ? [] : lay.pill ? [pillNode(shot, ctx, lay, ox, oy, times.by), by] : [rule, by];
   return { children: [...highlightBands(shot.id, placed, times.words, ctx, 'quote'), ...mark, quote, ...close, ...attribution], placed, attrY };
 }
 
@@ -235,9 +240,13 @@ export function expandDeskQuote(shot, ctx, data, times, hero) {
   const bounds = editorialBounds(ctx);
   const topLimit = (bounds.safe ? bounds.top : margin) + (plan === null ? 0 : plan.h + plan.keyline - plan.overlapY);
   const bottom = bounds.safe ? bounds.bottom : canvas.h - margin;
-  const lay = cardLayout(shot, ctx, data, { span, plan, room: bottom - topLimit });
+  const held = cardLayout(shot, ctx, data, { span, plan, room: bottom - topLimit });
+  // the attribution goes when the quotation cannot keep the hero ratio over it at the secondary floor
+  const lay = held.quote.layout.overflow && heroFloor(look, unit) > 0 ? cardLayout(shot, ctx, data, { span, plan, room: bottom - topLimit, keep: false }) : held;
   const top = Math.max(topLimit, Math.min((bounds.safe ? bounds.at(data.centre) : data.centre * canvas.h) - lay.h / HALF, bottom - lay.h));
-  const box = [span.x, top, lay.w, lay.h];
+  // a look may centre the card across the grid (data.centred, cosmos: a card on the margin left the frame lopsided)
+  const grid = editorialSpan(ctx, 1, look.grid.columns);
+  const box = [data.centred ? grid.x + (grid.w - lay.w) / HALF : span.x, top, lay.w, lay.h];
   // the card is on the desk from the shot's first frame (its words arrive as spoken): a shot never opens on the field alone
   const card = cardOf(ctx, hero, box, 0);
   const { children, placed, attrY } = cardChildren(shot, ctx, lay, times);
@@ -246,8 +255,8 @@ export function expandDeskQuote(shot, ctx, data, times, hero) {
   const words = wordBoxes(placed.layout, cx + placed.x, cy + placed.y);
   const attr = lay.attr.layout;
   const boxes = {
-    text: unionBox(words), ...Object.fromEntries(words.map((b, i) => [`word:${i}`, b])),
-    by: capBox(cx - lay.w / HALF + lay.attrX, cy + attrY + attr.lines[0].y, attr.width, attr.size),
+    card: box, text: unionBox(words), ...Object.fromEntries(words.map((b, i) => [`word:${i}`, b])),
+    ...(lay.dropped.length ? {} : { by: capBox(cx - lay.w / HALF + lay.attrX, cy + attrY + attr.lines[0].y, attr.width, attr.size) }),
   };
   if (plan === null) return { nodes: [group], boxes };
   // over the wrapped card's corner: `overlap` of its width in, or more where the frame margin asks (never more than the

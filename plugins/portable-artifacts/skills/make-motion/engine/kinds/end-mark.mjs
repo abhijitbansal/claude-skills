@@ -1,58 +1,65 @@
 // The end kind as a real end card (look.kinds.end.wordmark, cosmos): the closing line centred across the grid, the ask
-// under it, and the shot's mark set as a wordmark in the display weight, the look's sun behind it and a ring centred on
-// it that draws on and is complete `hold` seconds before the shot ends, so the last frames hold the finished card. The
-// whole block sits on the composition band's optical centre. Pure and DOM-free.
+// under it clear of the line's descenders at no less than the look's secondary floor (kinds/secondary.mjs), and the
+// shot's mark set as a wordmark in the display weight: no outline round it (a pill read as a button), frame furniture
+// (the brand's running mark: the review's sizes and hero rules leave it out). The look's sun
+// stands on its anchored place for the format (sun.mjs), lighting as the mark arrives. The block sits on the
+// composition band's optical centre. When the line cannot be set large enough to keep the hero ratio over an ask at the
+// floor, the ask is left out and the title says so (props.dropped). Pure and DOM-free.
 //
-// wordmark data: { titleHeight (share of the band), markShare (of the title size), askGap and gap (em of the title),
-// pad (em of the mark: the ring's room round the mark's ink, doubled across), ring: { width units, hold s }, sun: {
-// share of the ring's width, strength }, centre (share of the band) }.
+// wordmark data: { titleHeight (share of the band), markShare (of the title size), askGap and gap (em of the title:
+// the ask's room under the line's descenders, the mark's under the ask), sun: { strength }, centre (share of the band) }.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { roundedRect } from '../devices/shared.mjs';
-import { track } from '../time/track.mjs';
-import { sunNodes } from '../devices/sun.mjs';
+import { sunNodes, sunAnchor } from '../devices/sun.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
-import { CAP_HEIGHT, sizeAt, fontFor, setCase, fitDisplay, enterTracks, runInk, unionBox, wordBoxes, heroId } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, fitDisplay, enterTracks, runInk, unionBox, wordBoxes, heroId } from './shared.mjs';
+import { secondarySize, heroFloor } from './secondary.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
 const HALF = 2;
 const ASK_MARGIN = 1.03; // the ask a hair under a third of the title, so rounding never takes it over the hero ratio
-const MIN_DRAW = 0.3; // seconds: the shortest the ring may take to draw on
+const DESCENDER = 0.25; // em: how far the display face's descenders reach under the baseline
 
-// The block's three texts laid out (title, ask or null, mark), centred on the span.
-function layouts(shot, ctx, data, title, span) {
+// The title fitted between `min` and the kind's max across the span.
+function fitTitle(shot, ctx, data, title, span, min) {
   const { look, unit, measure } = ctx;
-  const wm = data.wordmark;
   const max = data.max * unit;
   const opts = { text: setCase(look, 'display', title), font: fontFor(look, 'display', max, unit), maxWidth: span.w, align: 'center', measure, optical: true };
-  const fit = fitDisplay(opts, { min: sizeAt(look, data.fromStep, unit), max, maxHeight: editorialBounds(ctx).height(wm.titleHeight), maxLines: look.maxLines.display }, look, unit);
-  const askFont = fontFor(look, 'label', fit.font.size / (MIN_HERO_RATIO * ASK_MARGIN), unit);
-  const ask = shot.ask === undefined ? null : { font: askFont, layout: layoutText({ text: setCase(look, 'label', shot.ask), font: askFont, maxWidth: span.w, align: 'center', measure }) };
-  const markFont = fontFor(look, 'display', fit.font.size * wm.markShare, unit);
-  const mark = { font: markFont, layout: layoutText({ text: shot.mark, font: markFont, maxWidth: span.w, align: 'center', measure }) };
-  return { title: fit, ask, mark };
+  return fitDisplay(opts, { min: Math.min(min, max), max, maxHeight: editorialBounds(ctx).height(data.wordmark.titleHeight), maxLines: look.maxLines.display }, look, unit);
 }
 
-// Each text's baseline offset from the title's first cap line, and the ring's box (relative), stacked down.
+// The block's three texts laid out (title, ask or null, mark), centred on the span, and what was left out.
+function layouts(shot, ctx, data, title, span) {
+  const { look, unit, measure } = ctx;
+  const plain = sizeAt(look, data.fromStep, unit);
+  // with an ask, the title at least the hero floor so the ask can stand at the secondary floor; else the ask goes
+  const held = shot.ask === undefined ? null : fitTitle(shot, ctx, data, title, span, Math.max(plain, heroFloor(look, unit)));
+  const keepsAsk = held !== null && !held.layout.overflow;
+  const fit = keepsAsk ? held : fitTitle(shot, ctx, data, title, span, plain);
+  const askFont = fontFor(look, 'label', secondarySize(look, unit, fit.font.size / (MIN_HERO_RATIO * ASK_MARGIN)), unit);
+  const ask = keepsAsk ? { font: askFont, layout: layoutText({ text: setCase(look, 'label', shot.ask), font: askFont, maxWidth: span.w, align: 'center', measure }) } : null;
+  const markFont = fontFor(look, 'display', secondarySize(look, unit, fit.font.size * data.wordmark.markShare), unit);
+  const mark = { font: markFont, layout: layoutText({ text: shot.mark, font: markFont, maxWidth: span.w, align: 'center', measure }) };
+  return { title: fit, ask, mark, dropped: shot.ask !== undefined && !keepsAsk ? ['ask'] : [] };
+}
+
+// Each text's baseline offset from the title's first cap line, stacked down: the ask under the descenders.
 function stack(set, data, ctx) {
   const wm = data.wordmark;
   const size = set.title.font.size, t = set.title.layout;
   const titleY = CAP_HEIGHT * size - t.lines[0].y;
-  let bottom = titleY + t.lines.at(-1).y;
+  let bottom = titleY + t.lines.at(-1).y + DESCENDER * size;
   const askY = set.ask === null ? null : bottom + wm.askGap * size + CAP_HEIGHT * set.ask.font.size - set.ask.layout.lines[0].y;
-  if (askY !== null) bottom = askY + set.ask.layout.lines.at(-1).y;
+  if (askY !== null) bottom = askY + set.ask.layout.lines.at(-1).y + WORD_DESCENT * set.ask.font.size;
   const m = set.mark, ink = runInk(m.layout.lines[0], m.font, ctx.measure);
-  const pad = wm.pad * m.font.size;
-  const ringTop = bottom + wm.gap * size;
-  const markY = ringTop + pad + ink.up - m.layout.lines[0].y;
-  // runInk is in the layout's space (the centred line's offset included)
-  const ring = { left: ink.left - HALF * pad, top: ringTop, w: ink.right - ink.left + HALF * HALF * pad, h: ink.up + ink.down + HALF * pad };
-  return { titleY, askY, markY, ring, height: ringTop + ring.h };
+  const markTop = bottom + wm.gap * size;
+  const markY = markTop + ink.up - m.layout.lines[0].y;
+  return { titleY, askY, markY, height: markTop + ink.up + ink.down, ink };
 }
 
 /** The wordmark end card: { nodes, boxes, hero }. */
 export function expandWordmark(shot, ctx, data, times, title) {
-  const { look, unit, timing, fps } = ctx;
+  const { look, unit } = ctx;
   const wm = data.wordmark;
   const span = editorialSpan(ctx, 1, look.grid.columns);
   const bounds = editorialBounds(ctx);
@@ -60,10 +67,10 @@ export function expandWordmark(shot, ctx, data, times, title) {
   const at = stack(set, data, ctx);
   const top = Math.max(bounds.top, bounds.at(wm.centre) - at.height / HALF);
   const x = span.x, hero = heroId(shot, 'title');
-  const titleNode = node('text', hero, { x, y: top + at.titleY, layout: set.title.layout, font: set.title.font, fill: look.palette.ink, role: 'hero' }, {
-    wordTracks: times.title.map((w) => enterTracks(look, unit, w.at)),
-  });
-  const markAt = times.ask ?? times.title.at(-1)?.at ?? 0;
+  const titleNode = node('text', hero, {
+    x, y: top + at.titleY, layout: set.title.layout, font: set.title.font, fill: look.palette.ink, role: 'hero', ...(set.dropped.length ? { dropped: set.dropped } : {}),
+  }, { wordTracks: times.title.map((w) => enterTracks(look, unit, w.at)) });
+  const markAt = (set.ask === null ? undefined : times.ask) ?? times.title.at(-1)?.at ?? 0;
   const nodes = [titleNode];
   const words = wordBoxes(set.title.layout, x, top + at.titleY);
   const boxes = { title: unionBox(words), ...Object.fromEntries(words.map((box, i) => [`word:${i}`, box])) };
@@ -73,13 +80,8 @@ export function expandWordmark(shot, ctx, data, times, title) {
     boxes.ask = unionBox(wordBoxes(set.ask.layout, x, y));
   }
   const markY = top + at.markY;
-  nodes.push(node('text', `${shot.id}.mark.text`, { x, y: markY, layout: set.mark.layout, font: set.mark.font, fill: look.palette.ink, role: 'mark' }, { tracks: enterTracks(look, unit, markAt, { y: markY }) }));
-  const r = at.ring, ringBox = [x + r.left, top + r.top, r.w, r.h];
-  const start = markAt + look.moves.enter.dur;
-  const done = Math.min(timing.duration - 1 / fps, Math.max(start + MIN_DRAW, timing.duration - wm.ring.hold));
-  const draw = track([{ t: 0, v: 0 }, { t: start, v: 0 }, { t: done, v: 1, ease: look.moves.draw.ease }]);
-  const ring = node('path', `${shot.id}.mark.ring`, { d: roundedRect(...ringBox, r.h / HALF), stroke: look.palette.accent, strokeWidth: wm.ring.width * unit, lineCap: 'round' }, { tracks: { draw } });
-  const sun = sunNodes(`${shot.id}.mark.sun`, look, { cx: ringBox[0] + r.w / HALF, cy: ringBox[1] + r.h / HALF, r: wm.sun.share * r.w, strength: wm.sun.strength, at: markAt });
-  boxes.mark = ringBox;
-  return { nodes: [...sun, ...nodes, ring], boxes, hero };
+  nodes.push(node('text', `${shot.id}.mark.text`, { x, y: markY, layout: set.mark.layout, font: set.mark.font, fill: look.palette.ink, role: 'mark', furniture: true }, { tracks: enterTracks(look, unit, markAt, { y: markY }) }));
+  boxes.mark = [x + at.ink.left, markY + set.mark.layout.lines[0].y - at.ink.up, at.ink.right - at.ink.left, at.ink.up + at.ink.down];
+  const sun = sunNodes(`${shot.id}.sun`, look, { ...sunAnchor(look, ctx), strength: wm.sun.strength, at: markAt });
+  return { nodes: [...sun, ...nodes], boxes, hero };
 }

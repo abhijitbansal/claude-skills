@@ -11,6 +11,7 @@ import { valueText } from './chart-scale.mjs';
 import { chartData, valueScale, columnMarks, barMarks } from './chart-marks.mjs';
 import { chartTimes } from './chart-time.mjs';
 import { label, labelWidth, arriveAt } from './chart-labels.mjs';
+import { secondarySize, secondaryFloor } from './secondary.mjs';
 
 const MAX_STAGGER = 0.08; // seconds between one mark starting to grow and the next
 const STAGGER_SHARE = 0.3; // of the growth, at most, taken by the staggers together
@@ -29,7 +30,8 @@ export function chartStyle(ctx, data) {
   const { look, unit } = ctx;
   return {
     // labelScale on a wide frame: look review 2 found the desk's step-2 labels unreadable on the 16:9 phone tile
-    font: fontFor(look, 'label', (isWide(ctx.canvas) ? data.labelScale ?? 1 : 1) * sizeAt(look, data.labelStep, unit), unit),
+    // never under the look's secondary floor (kinds/secondary.mjs)
+    font: fontFor(look, 'label', secondarySize(look, unit, (isWide(ctx.canvas) ? data.labelScale ?? 1 : 1) * sizeAt(look, data.labelStep, unit)), unit),
     gap: data.gap * unit, line: data.line * unit, refWidth: data.ref * unit, axisWidth: data.axis * unit, dim: data.dim, refs: data.refs,
     mark: colourOf(look, 'ink'), accent: markerAccent(look), text: colourOf(look, 'ink2'), strong: colourOf(look, 'ink'), rule: colourOf(look, 'rule'),
     step: isHand(look) ? look.moves.draw.step : undefined,
@@ -41,6 +43,8 @@ export function chartStyle(ctx, data) {
     axis: data.direct !== true, fill: data.fill,
     // `dimTo`: a palette key the other marks turn to at the highlight (cosmos: the one lavender dim), not an alpha
     dimTo: data.dimTo ? colourOf(look, data.dimTo) : null,
+    // `labelsAbove` 'tall' (cosmos): on a tall frame each bar's label sits over it, so the bars take the full width
+    labelsAbove: data.labelsAbove === 'tall' && !isWide(ctx.canvas),
   };
 }
 
@@ -159,7 +163,7 @@ export function axisGutter(shot, ctx, style, scale, refs) {
 // category fits `width`, so every column keeps its label (thinning them dropped every other one at 9:16).
 function directFont(ctx, font, keys, width) {
   const widest = Math.max(...keys.map((key) => labelWidth(ctx, font, key)));
-  return widest <= width ? font : { ...font, size: (font.size * width) / widest };
+  return widest <= width ? font : { ...font, size: Math.max(secondaryFloor(ctx.look, ctx.unit), (font.size * width) / widest) };
 }
 
 /** Columns in `area`: { nodes, boxes, plot, highlight } (highlight: { index, text } of the highlighted value, or null). */
@@ -214,19 +218,29 @@ export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom
   return { nodes: [...nodes, ...values, ...labels], boxes, plot, highlight: hl >= 0 ? { index: hl, text: valueText(data.items[hl].value, decimals, shot.unit) } : null, times };
 }
 
-/** Bars in `area`, labels in a left column, values at the bar ends: { nodes, boxes, plot, highlight }. */
+// A bar with its label over it (style.labelsAbove): its band split into the label's row and, under it, the bar at
+// `fill` of the rest; labelY is the label's baseline.
+function liftBar(m, size, gap, fill) {
+  const top = m.y - m.band / HALF, row = (CAP_HEIGHT + WORD_DESCENT) * size + gap / HALF, room = m.band - row;
+  return { ...m, y: top + row + room / HALF, height: room * fill, labelY: top + CAP_HEIGHT * size };
+}
+
+/** Bars in `area`, labels in a left column (or over each bar), values at the bar ends: { nodes, boxes, plot, highlight }. */
 export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
   const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing);
   const { font, gap } = style;
   const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
   const hl = highlightIndex(shot, data), decimals = valueDecimals(data.items.map((i) => i.value));
-  const labelCol = Math.min(area.w * BAR_LABELS_MAX, Math.max(...data.items.map((it) => labelWidth(ctx, font, it.key))));
+  const above = style.labelsAbove;
+  // with labels over the bars (and values on their row) the bars take the area's whole width
+  const labelCol = above ? -gap : Math.min(area.w * BAR_LABELS_MAX, Math.max(...data.items.map((it) => labelWidth(ctx, font, it.key))));
   const valueCol = Math.max(...data.items.map((it) => labelWidth(ctx, font, valueText(it.value, decimals, shot.unit), true)));
   const rows = (style.refs ? 1 : 0) + (isBroken(shot) ? 1 : 0); // tick labels, then the baseline label on a row of its own
   const below = rows === 0 ? 0 : gap + rows * ink + (rows - 1) * (gap / HALF);
-  const plot = { x: area.x + labelCol + gap, y: area.y + headroom, w: Math.max(1, area.w - labelCol - gap - valueCol - gap), h: Math.max(1, area.h - below - headroom) };
+  const plot = { x: area.x + labelCol + gap, y: area.y + headroom, w: Math.max(1, area.w - labelCol - gap - (above ? 0 : valueCol + gap)), h: Math.max(1, area.h - below - headroom) };
   const xOf = (v) => plot.x + ((Math.min(scale.hi, Math.max(scale.lo, v)) - scale.lo) / (scale.hi - scale.lo)) * plot.w;
-  const marks = barMarks(data.items, plot, scale, style.fill);
+  const grown = barMarks(data.items, plot, scale, style.fill);
+  const marks = above ? grown.map((m) => liftBar(m, font.size, gap, style.fill)) : grown;
   const nodes = [], values = [], labels = [], boxes = {};
   const tickY = plot.y + plot.h + gap + CAP_HEIGHT * font.size;
   if (style.refs) {
@@ -252,11 +266,15 @@ export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 
     if (!highlighted || valueOnHighlight) {
       const grown = growWindow(m.index, marks.length, times.growEnd).end;
       const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, grown);
-      const v = label(ctx, { id: `${shot.id}.value.${m.index}`, text: valueText(m.value, decimals, shot.unit), font, x: Math.max(m.tip, m.base) + gap, y: mid, fill: highlighted ? style.strong : style.text, numeric: true, tracks });
+      const text = valueText(m.value, decimals, shot.unit);
+      // with the label over the bar, the value on the label's row, ending at the bar's end (never over the label)
+      const at = above ? { x: Math.max(m.tip - labelWidth(ctx, font, text, true), plot.x + labelWidth(ctx, font, m.key) + gap * HALF), y: m.labelY } : { x: Math.max(m.tip, m.base) + gap, y: mid };
+      const v = label(ctx, { id: `${shot.id}.value.${m.index}`, text, font, x: at.x, y: at.y, fill: highlighted ? style.strong : style.text, numeric: true, tracks });
       values.push(v.node);
       parts.push(v.box);
     }
-    const piece = label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: plot.x - gap, y: mid, align: 'right', fill: style.text, maxWidth: labelCol, lines: rowH >= HALF * ink ? CATEGORY_LINES : 1 });
+    const piece = above ? label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: plot.x, y: m.labelY, fill: style.text })
+      : label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: plot.x - gap, y: mid, align: 'right', fill: style.text, maxWidth: labelCol, lines: rowH >= HALF * ink ? CATEGORY_LINES : 1 });
     labels.push(piece.node);
     boxes[`mark:${m.index}`] = unionBox([...parts, piece.box]); // a device around the bar goes around its labels
   });

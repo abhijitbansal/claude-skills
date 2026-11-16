@@ -18,12 +18,16 @@ export const FPS = 30;
 export const EPS = 1e-6;
 // A fake measure with ink, as the page's canvas reports it: capitals and b d f h k l t reach 0.74 em, other letters
 // 0.5 em; g j p q y descend 0.22 em; the ink starts 0.02 em in and ends 0.02 em before the advance.
+// a quotation mark's ink floats above the baseline, as the browser measures it (a negative descent): about a third of
+// an em tall from a cap-high top
+const QUOTES = /^[\u201c\u201d"]+$/;
+const QUOTE_FLOAT = 0.42;
 export const inkUp = (text) => (/[A-Z0-9bdfhklt]/.test(text) ? 0.74 : 0.5);
 export const measure = (text, font) => {
   const width = [...text].length * font.size * 0.55;
   return {
     width, ascent: font.size * 0.8, descent: font.size * 0.2,
-    inkAscent: inkUp(text) * font.size, inkDescent: (/[gjpqy]/.test(text) ? 0.22 : 0) * font.size, inkLeft: 0.02 * font.size, inkRight: width - 0.02 * font.size,
+    inkAscent: inkUp(text) * font.size, inkDescent: (QUOTES.test(text) ? -QUOTE_FLOAT : /[gjpqy]/.test(text) ? 0.22 : 0) * font.size, inkLeft: 0.02 * font.size, inkRight: width - 0.02 * font.size,
   };
 };
 export const IMAGES = new Map([['shot.png', { width: 1600, height: 1000 }]]);

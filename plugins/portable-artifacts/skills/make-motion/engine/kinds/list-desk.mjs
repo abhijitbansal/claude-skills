@@ -205,7 +205,10 @@ export function expandDeskList(shot, ctx, given, times, hero) {
   const set = fitItems(items, span, room.bottom - room.top, ctx, data, numbered || items.some((i) => i.note !== null));
   const matched = arrivesMatched(shot, ctx);
   const children = [], itemBoxes = [], centres = [];
-  let cursor = room.top + (room.bottom - room.top - set.height) / HALF; // the next cap line
+  // on a tall frame a look may spread the items down the whole room (fillTall, cosmos: the path runs the content band)
+  const spare = Math.max(0, room.bottom - room.top - set.height);
+  const spread = !isWide(canvas) && data.fillTall && set.parts.length > 1 ? spare / (set.parts.length - 1) : 0;
+  let cursor = room.top + (spread > 0 ? 0 : spare / HALF); // the next cap line
   set.parts.forEach((part, k) => {
     const id = `${shot.id}.item${k}`;
     const y = cursor + CAP_HEIGHT * set.size - part.layout.lines[0].y;
@@ -229,7 +232,7 @@ export function expandDeskList(shot, ctx, given, times, hero) {
       }));
       last = noteY + part.note.lines.at(-1).y;
     }
-    cursor = last + data.gap * set.size;
+    cursor = last + data.gap * set.size + spread;
   });
   const rail = dots ? dotRail(shot.id, centres, times, { ...dots, previews: data.previews }, ctx) : [];
   return { nodes: slugged ? slugNodes(staged, ctx) : [], group: node('group', hero, {}, { children: [...rail, ...children] }), itemBoxes, wrappers: null };

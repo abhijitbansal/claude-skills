@@ -23,7 +23,8 @@ export { formatValue } from './shared.mjs'; // where it lives now
 import { NUMBER_WORDS, ONES, TENS } from './words.mjs';
 import { stackArea, centredTop } from './stack.mjs';
 import { slugNodes } from './slug.mjs';
-import { orbitGeometry, orbitNodes, WIDE_SHARE } from './number-orbit.mjs';
+import { skyParts } from './number-sky.mjs';
+import { hasSun } from '../devices/sun.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
 const AFFIX_MAX = 8;
@@ -126,6 +127,14 @@ export function countSteps({ value, decimals, start, land, rate, curve }) {
     if (steps.length === 0 || shown !== steps.at(-1).text) steps.push({ t: k === 0 ? 0 : start + ((land - start) * k) / frames, text: shown });
   }
   return steps;
+}
+
+// A count that never stands on a bare zero (look.kinds.number.fromFirst, cosmos: a 0 with its unit read as a wrong
+// value on the first frame): its zero steps dropped, the first non-zero one shown from the shot's first frame.
+const ZERO = /^0([.,]0*)?$/;
+export function fromFirstStep(steps) {
+  const kept = steps.filter((s) => !ZERO.test(s.text));
+  return kept.length === 0 ? steps : kept.map((s, i) => (i === 0 ? { ...s, t: 0 } : s));
 }
 
 // One text node holding every step's digits: each digit centred in a fixed advance, separators at their own width.
@@ -295,55 +304,41 @@ function deskLabel(shot, ctx, left, step, right) {
 // the figure keeps its top margin and is at least MIN_HERO_RATIO times the label.
 // The desk figure, fitted to its span: columns 2 to DESK.toWide / toTall, or inside the 9:16 safe zone the whole safe
 // width (columns 1 to the last), where a look may let the figure go down to scale step `fromStep`
-// (look.kinds.number.fromStep), never under MIN_HERO_RATIO times the delta. With an orbit (number-orbit.mjs) the group
-// is centred across the whole grid (columns 1 to the last) and the orbit kept inside it: the figure is fitted, refitted
-// smaller in proportion when its orbit is too wide, and at the size floor set in an upright orbit (WIDE_SHARE).
-function deskFigure(shot, ctx, { bounds, orbit, maxSize, steps }) {
-  const { look, canvas, unit } = ctx;
+// (look.kinds.number.fromStep), never under MIN_HERO_RATIO times the delta. (A look with an orbit and a sun composes
+// the number round the sun instead: number-sky.mjs.)
+function figureFloor(shot, ctx, bounds) {
+  const { look, unit } = ctx;
   const deltaFloor = shot.delta === undefined ? 0 : Math.ceil(MIN_HERO_RATIO * sizeAt(look, DELTA.step, unit)) + 1;
-  const minSize = bounds.safe ? Math.max(sizeAt(look, look.kinds?.number?.fromStep ?? FIGURE_STEP, unit), deltaFloor) : sizeAt(look, FIGURE_STEP, unit);
-  const span = bounds.safe ? editorialSpan(ctx, 1, look.grid.columns) : editorialSpan(ctx, 2, isWide(canvas) ? DESK.toWide : DESK.toTall);
-  if (orbit) return orbitFigure(shot, ctx, { span: editorialSpan(ctx, 1, look.grid.columns), orbit, minSize, maxSize, steps });
-  return { left: span.x, span, fig: figureAt(shot, ctx, { maxWidth: span.w, minSize, maxSize, steps }) };
+  return bounds.safe ? Math.max(sizeAt(look, look.kinds?.number?.fromStep ?? FIGURE_STEP, unit), deltaFloor) : sizeAt(look, FIGURE_STEP, unit);
 }
 
-// The figure in an orbit centred in `span`, the orbit inside it; when the orbit is too wide for that, it may reach half a
-// margin in from the frame's left edge (the platform's left band carries no buttons), the group set as far left as needed.
-function orbitFigure(shot, ctx, { span, orbit, minSize, maxSize, steps }) {
-  const right = span.x + span.w, minLeft = (ctx.look.grid.margin * ctx.unit) / HALF, room = right - minLeft;
-  const first = figureAt(shot, ctx, { maxWidth: span.w, minSize, maxSize, steps });
-  const geometryOf = (fig) => orbitGeometry({ width: fig.total, height: CAP_HEIGHT * fig.size }, orbit, room / HALF);
-  const share = Math.min(1, room / (HALF * orbitGeometry({ width: first.total, height: CAP_HEIGHT * first.size }, orbit).hx));
-  let fig = share < 1 ? figureAt(shot, ctx, { maxWidth: first.total * share, minSize, maxSize, steps }) : first;
-  // at the size floor a tilted orbit cannot fit: the figure takes up to WIDE_SHARE of the room in an upright one
-  if (fig.size <= minSize + 1) fig = figureAt(shot, ctx, { maxWidth: Math.min(first.total, WIDE_SHARE * room), minSize, maxSize, steps });
-  const geometry = geometryOf(fig);
-  const reach = geometry.hx - fig.total / HALF;
-  const left = Math.min(Math.max(span.x + (span.w - fig.total) / HALF, minLeft + reach), right - reach - fig.total);
-  return { left, span: { x: left, w: right - left }, fig, geometry };
+function deskFigure(shot, ctx, { bounds, maxSize, steps }) {
+  const { look, canvas } = ctx;
+  const span = bounds.safe ? editorialSpan(ctx, 1, look.grid.columns) : editorialSpan(ctx, 2, isWide(canvas) ? DESK.toWide : DESK.toTall);
+  return { left: span.x, span, fig: figureAt(shot, ctx, { maxWidth: span.w, minSize: figureFloor(shot, ctx, bounds), maxSize, steps }) };
 }
 
 function deskParts(shot, ctx, steps, times) {
   const { look, canvas, unit } = ctx;
   const extra = look.kinds?.number ?? {}; // look data a number may carry (cosmos): besideGap, orbit, glow, fromStep
   const bounds = editorialBounds(ctx);
+  // with an orbit and a sun the number is composed round the sun (number-sky.mjs)
+  if (extra.orbit && hasSun(look)) {
+    const maxSky = (digitCount(steps) <= SHORT_DIGITS ? DESK.maxShort : DESK.max) * unit;
+    return skyParts(shot, ctx, steps, times, { figureAt, figureGroup, glowingFigure, plainDelta }, { minSize: figureFloor(shot, ctx, bounds), maxSize: maxSky });
+  }
   const rightEdge = bounds.safe ? editorialRight(ctx) : gridX(look, canvas, RIGHT_EDGE);
   const maxSize = (digitCount(steps) <= SHORT_DIGITS ? DESK.maxShort : DESK.max) * unit;
-  const { left, span, fig, geometry } = deskFigure(shot, ctx, { bounds, orbit: extra.orbit, maxSize, steps });
-  // how far the orbit reaches past the figure's cap box: right of it, and under its baseline
-  const orbit = geometry ?? null;
-  const past = orbit ? { x: orbit.hx - fig.total / HALF, y: orbit.hy - (CAP_HEIGHT * fig.size) / HALF } : { x: 0, y: 0 };
-  // where the label's and delta's ink start: beside, its gap clear of the orbit as well
-  const besideGap = (extra.besideGap ?? DESK.besideGap) * unit + past.x;
-  // beside when the figure is under half the span and leaves a quarter of it for the label (an orbit's reach can eat it)
+  const { left, span, fig } = deskFigure(shot, ctx, { bounds, maxSize, steps });
+  const besideGap = (extra.besideGap ?? DESK.besideGap) * unit;
+  // beside when the figure is under half the span and leaves a quarter of it for the label
   const beside = fig.total < span.w / HALF && rightEdge - (left + fig.total + besideGap) >= span.w / BESIDE_ROOM;
   const blockLeft = beside ? left + fig.total + besideGap : left;
   const labelAt = times.land + look.moves.enter.dur;
   const deltaAt = (top) => plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: blockLeft, top, maxWidth: rightEdge - blockLeft, at: labelAt + DELTA_LAG });
   const probe = shot.delta === undefined ? null : deltaAt(0);
   const deltaUp = probe === null ? 0 : DESK.deltaGap * unit + probe.box[3] - probe.descent; // label baseline to delta baseline
-  // under the figure, the label clears the orbit as well (it reaches that far below the baseline)
-  const underGap = DESK.underGap * unit + past.y;
+  const underGap = DESK.underGap * unit;
   const placeAt = (step) => {
     const label = deskLabel(shot, ctx, blockLeft, step, rightEdge);
     // in the safe zone the label's real descenders (from the Sun to you) stay over the band's bottom
@@ -361,13 +356,11 @@ function deskParts(shot, ctx, steps, times) {
   // the label's last baseline: over the delta, which sits on the figure baseline (beside), or under the figure
   const labelBaseline = beside ? baseline - deltaUp : baseline + underGap + label.up;
   const y = labelBaseline - label.layout.lines.at(-1).y;
-  // with an orbit the figure opens in ink, counting (never a grey figure fading in)
-  const fade = times.matched || orbit ? {} : { opacity: openingLanding(shot, ctx, times.start + look.moves.enter.dur, look.moves.enter, 0, 1) };
+  const fade = times.matched ? {} : { opacity: openingLanding(shot, ctx, times.start + look.moves.enter.dur, look.moves.enter, 0, 1) };
   const figure = figureGroup(shot, ctx, extra.glow ? glowingFigure(fig, ctx, times) : fig, { left, baseline, tracks: fade });
   const labelNode = node('text', `${shot.id}.label`, { x: label.x, y, layout: label.layout, font: label.font, fill: look.palette.ink, role: 'label' }, { tracks: enterTracks(look, unit, labelAt, { y }) });
   const boxes = { value: figure.box, label: inkBox(label.x, y, label.layout) };
-  const orbitBox = { left: figure.box[0], width: figure.box[2], baseline, size: fig.size };
-  const nodes = [...(orbit ? orbitNodes(shot.id, ctx, orbitBox, times, extra.orbit, orbit) : []), figure.group, labelNode];
+  const nodes = [figure.group, labelNode];
   if (probe === null) return { nodes, boxes, hero: figure.hero };
   const delta = deltaAt(labelBaseline + DESK.deltaGap * unit);
   return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };
@@ -439,7 +432,8 @@ function expandNumber(given, ctx) {
   const start = Math.max(0, land - Math.max(look.moves.count.dur, MIN_COUNT));
   // The count changes at the look's own rhythm: a hand look (desk) on its 12 fps step, a crisp one (pop) every frame.
   const rate = look.moves.draw.step ?? fps;
-  const steps = countSteps({ value: shot.value, decimals: shot.decimals ?? 0, start, land, rate, curve: ease(look.moves.count.ease) });
+  const counted = countSteps({ value: shot.value, decimals: shot.decimals ?? 0, start, land, rate, curve: ease(look.moves.count.ease) });
+  const steps = look.kinds?.number?.fromFirst ? fromFirstStep(counted) : counted;
   const times = { land, start, matched: arrivesMatched(shot, ctx) };
   const parts = isEditorial(look) ? deskParts(shot, ctx, steps, times) : popParts(shot, ctx, steps, times);
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'value' });

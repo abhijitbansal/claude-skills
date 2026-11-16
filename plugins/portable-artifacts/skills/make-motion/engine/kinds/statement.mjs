@@ -13,7 +13,7 @@ import { layoutText, unclean } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { landing } from '../devices/shared.mjs';
 import { glowFill, glowStyle } from '../devices/glow.mjs';
-import { sunNodes } from '../devices/sun.mjs';
+import { sunNodes, sunAnchor, hasSun } from '../devices/sun.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
@@ -312,7 +312,7 @@ function expandStatement(shot, ctx) {
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'text', behind });
   const firstAt = times.length > 0 ? Math.min(look.moves.enter.dur, times[0].at) : 0;
-  const base = [fieldNode(shot, ctx), ...statementSun(shot, ctx, times, boxes), ...kickerNodes(shot, ctx, placed, firstAt), ...highlightBands(shot.id, placed, times, ctx, 'statement'), text];
+  const base = [fieldNode(shot, ctx), ...statementSun(shot, ctx, times), ...kickerNodes(shot, ctx, placed, firstAt), ...highlightBands(shot.id, placed, times, ctx, 'statement'), text];
   return {
     nodes: placeDevices(base, devices),
     camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],
@@ -322,18 +322,15 @@ function expandStatement(shot, ctx) {
   };
 }
 
-// The look's sun behind the emphasised words (look.sun, kinds.statement.sun: { share of the frame's short side, offset
-// of the radius to the right of the phrase, strength }): large and low, off to one side so the words take their light
-// from it, lighting as the first of them is spoken. [] without a sun or an emphasis.
-function statementSun(shot, ctx, times, boxes) {
-  const { look, canvas, timing } = ctx;
+// The look's sun on its anchored place for the format (sun.mjs sunAnchor: the same sky at every cut), its bloom times
+// kinds.statement.sun.strength, lighting as the first emphasised word is spoken (the words take their light from it), or
+// with the first word when none is. [] without a sun.
+function statementSun(shot, ctx, times) {
+  const { look, timing } = ctx;
   const data = look.kinds?.statement?.sun;
-  const lit = times.map((t, i) => ({ ...t, i })).filter(({ spoken }) => spoken !== null && timing.words[spoken].emphasis);
-  if (!data || lit.length === 0) return [];
-  const [x, y, w, h] = unionBox(lit.map(({ i }) => boxes[`word:${i}`]));
-  const r = data.share * Math.min(canvas.w, canvas.h);
-  const cx = Math.min(canvas.w, x + w + data.offset * r);
-  return sunNodes(`${shot.id}.sun`, look, { cx, cy: y + h / HALF, r, strength: data.strength, at: lit[0].at });
+  if (!data || !hasSun(look) || times.length === 0) return [];
+  const lit = times.find(({ spoken }) => spoken !== null && timing.words[spoken].emphasis) ?? times[0];
+  return sunNodes(`${shot.id}.sun`, look, { ...sunAnchor(look, ctx), strength: data.strength, at: lit.at });
 }
 
 // Emphasis is a pointer, not a paint job: in a highlight look a statement whose emphasised words are EMPHASIS_SHARE of

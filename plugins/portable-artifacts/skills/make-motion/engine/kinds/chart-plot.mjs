@@ -6,8 +6,10 @@ import { drawDonut } from './chart-donut.mjs';
 
 /** The plot of `shot` in `area` ({ x, y, w, h }), its marks kept `headroom` px under the area's top: { nodes, boxes, plot, highlight, times }. */
 export function drawPlot(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
-  if (shot.type === 'column') return drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom });
-  if (shot.type === 'bar') return drawBars(shot, ctx, style, area, { valueOnHighlight, headroom });
+  // a look that sets bar labels over the bars on a tall frame (style.labelsAbove) draws its columns there as such bars:
+  // four columns across a phone's width cannot carry labels at the look's secondary floor
+  if (shot.type === 'column' && !style.labelsAbove) return drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom });
+  if (shot.type === 'bar' || shot.type === 'column') return drawBars(shot, ctx, style, area, { valueOnHighlight, headroom });
   if (shot.type === 'donut') return drawDonut(shot, ctx, style, area, { valueOnHighlight });
   return drawSeries(shot, ctx, style, area, { valueOnHighlight, area: shot.type === 'area', headroom });
 }

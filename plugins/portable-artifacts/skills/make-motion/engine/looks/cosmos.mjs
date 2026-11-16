@@ -29,8 +29,9 @@ export const cosmos = {
   },
   // paper is the field's LIGHTER end (violet), deep its darker top: the review's contrast rule reads the field as its
   // paper, so it measures text against the worse end. shape and shape2 are the two mark colours of charts and compare.
+  // No second hue: accent2 (a key every look carries) is the lavender, so gold stays the one colour of light.
   palette: {
-    paper: '#2a1a5e', deep: '#0b1030', ink: '#f4f1ff', ink2: '#a9a4d6', accent: '#ffd166', accent2: '#4de2c5',
+    paper: '#2a1a5e', deep: '#0b1030', ink: '#f4f1ff', ink2: '#a9a4d6', accent: '#ffd166', accent2: '#a9a4d6',
     shape: '#ff6b9a', shape2: '#6ea8ff', rule: '#3d3478',
   },
   scale: [32, 46, 76, 136, 232],
@@ -47,6 +48,9 @@ export const cosmos = {
   // on a tall frame a statement may take five lines: Nunito is wide, and in four the hook was set at 90 px (15% of the frame)
   maxLinesTall: { display: 6 },
   wordsPerLine: { text: 12 },
+  // one minimum size for secondary text (labels, units, source, attribution, ask: kinds/secondary.mjs), 1.6 times the
+  // smallest the kinds set before it (32 units), so it reads on a phone tile; heroes keep 3 times over it
+  secondary: { min: 52 },
   // the gradient deep -> paper, a soft lift behind the hero, a slow bloom of light low on the field at 8% (depth from
   // light), two drifting star layers and a few larger soft stars nearer the camera (glints: depth), a faint vignette
   // (engine/fields/cosmos.mjs)
@@ -65,9 +69,14 @@ export const cosmos = {
   // emphasised ones lighting by the glow as they are spoken
   hookInk: true,
   glow: { color: '#ffb040', alpha: 0.45, capShare: 1 / 3, maxRadius: 24 },
-  // the light source (engine/devices/sun.mjs): one warm soft disc the kinds place with intent (orbit focus, list path
-  // start, behind a statement's emphasis, behind the end mark); a radial gradient, no blur filter
-  sun: { color: '#ffc861', alpha: 0.55, core: 0.22, lift: 0.8 },
+  // the light source (engine/devices/sun.mjs): one sun drawn as light (a hot near-white core, the accent gold body and a
+  // deeper gold limb, a bloom falling to nothing), anchored per format for the statement, number and end kinds
+  // (frame-left on 16:9, high and centred on 9:16), at the list path's start, and at scale as the compare's large disc
+  sun: {
+    core: '#fff7e3', color: '#ffd166', limb: '#ffbe3d', disc: 0.3, bloom: 0.42, lift: 0.8,
+    anchor: { wide: { x: 0.075, y: 0.5, r: 240 }, tall: { x: 0.5, y: 0.1, r: 220 } },
+    body: { bloom: 0.08 },
+  },
   moves: {
     enter: { ease: SMOOTH, dur: 0.55, scale: 0.92 },
     exit: { ease: PLAIN, dur: 0.3 },
@@ -111,7 +120,7 @@ export const cosmos = {
     // that fits, emphasised phrases kept whole (`together`); on a tall one from column `tallFrom`, up to `tallHeight` of the
     // band; the look's sun behind the emphasis (`sun`: share of the short side, offset of its radius right of the
     // phrase, strength)
-    statement: { toWide: 12, linesWide: 2, together: true, tallFrom: 1, tallHeight: 0.92, sun: { share: 0.62, offset: 0.15, strength: 1 } },
+    statement: { toWide: 11, linesWide: 2, together: true, tallFrom: 1, tallHeight: 0.92, sun: { strength: 1 } },
     // clipping (optional data, clipping.mjs): the picture on the look's rounded `card`, square (`turn` 0), with a soft
     // accent `glow` (units of blur) round the card, and a region's marker frame round-cornered (`mark`: radius, width units)
     clipping: { card: true, turn: 0, glow: 26, mark: { radius: 18, width: 6 } },
@@ -120,36 +129,39 @@ export const cosmos = {
     // until the landing then lit, a `dot`-unit bright dot circling once as the figure counts), the figure's glyph `glow`
     // as it lands, the label `besideGap` units clear of the orbit, and the figure down to scale step `fromStep` (a
     // three-digit figure in the 9:16 safe zone); `affix` 'baseline': a unit
-    // sits on the figure's baseline (never an exponent); `countAlign` 'right': a count grows leftward from the unit
-    number: { orbit: { tilt: -14, ratio: 0.42, air: 0.1, width: 4, dot: 9, faint: 0.4, lit: 0.9 }, glow: true, besideGap: 64, fromStep: 4, affix: 'baseline', countAlign: 'right' },
+    // sits on the figure's baseline (never an exponent); `countAlign` 'right': a count grows leftward from the unit;
+    // `fromFirst`: a count opens on its first non-zero step; `orbit.sky`: the composition round the sun (number-sky.mjs)
+    number: { orbit: { tilt: -14, ratio: 0.42, air: 0.1, width: 4, dot: 14, faint: 0.4, lit: 0.9, sky: { labelStep: 3, labelGap: 40, wide: { top: 0.07, bottom: 0.93 }, tall: { across: 0.98, low: 0.3, fit: 0.9 } } }, glow: true, besideGap: 64, fromStep: 4, affix: 'baseline', countAlign: 'right', fromFirst: true },
     // end: as desk's, square (`turn` 0), and a slow `ring` round the mark's chip (end.mjs ringNodes: `gap` and `width`
     // units, drawing on over `dur` s); from step 3 so the closing line fits the narrow 9:16 safe zone
     end: { fromStep: 3, max: 280, toWide: 11, toTall: 12, height: 0.56, centre: 0.5, askGap: 0.42, askSteps: [2, 3], markSteps: [1, 2], turn: 0, ring: { gap: 14, width: 3, dur: 1.6 },
-      // a real end card (end-mark.mjs): the line centred, the mark a wordmark in the display weight at `markShare` of the title,
-      // the sun behind it, a ring centred on it complete `ring.hold` s before the end; the shot's tail at least `tail` s
-      // after the last word (engine/script/timing.mjs) so the finished card holds
-      wordmark: { tail: 2.8, titleHeight: 0.42, markShare: 0.5, askGap: 0.4, gap: 0.55, pad: 0.45, centre: 0.46, ring: { width: 4, hold: 1.5 }, sun: { share: 0.75, strength: 0.8 } } },
+      // a real end card (end-mark.mjs): the line centred, the ask `askGap` em under its descenders, the mark a wordmark in
+      // the display weight at `markShare` of the title with no outline, the sun on its anchor; the shot's tail at least
+      // `tail` s after the last word (engine/script/timing.mjs) so the finished card holds
+      wordmark: { tail: 2.8, titleHeight: 0.42, markShare: 0.5, askGap: 0.35, gap: 0.55, centre: 0.5, sun: { strength: 0.8 } } },
     // list: as desk's, with a dot rail in place of figures (list-desk.mjs dotRail): a dot per item in a `column` units
     // wide at the span's left, `radius` units, on a rail `line` units wide; the current item's dot lit in the accent; the
     // items shown from frame 0 in ink2 and lit while current (`previews`), no slug badge (`slug` false), light travelling
-    // down the rail from the sun at its start (`dots.light`: sun radius units, strength), wider spacing on tall (`gapTall`)
-    list: { fromStep: 3, max: 180, toWide: 11, toTall: 12, maxLines: 3, gap: 0.75, gapTall: 1.5, roomTall: 0.9, noteGap: 0.3, smallSteps: [1, 2], previews: true, slug: false, dots: { column: 72, radius: 13, line: 6, light: { sun: 160, strength: 0.7 } } },
+    // down the rail from the sun at its start (`dots.light`: sun radius units, strength), on a tall frame spread down the
+    // content band (`fillTall`, within `roomTall` of it) so the path runs its height
+    list: { fromStep: 3, max: 180, toWide: 11, toTall: 12, maxLines: 3, gap: 0.75, gapTall: 1.5, roomTall: 0.9, fillTall: true, noteGap: 0.3, smallSteps: [1, 2], previews: true, slug: false, dots: { column: 72, radius: 13, line: 6, light: { sun: 160, strength: 0.7 } } },
     // quote: as desk's, with large accent opening and closing marks `mark` times the quotation's size, short sentences one
     // per line (`sentenceLines`), the attribution plain lavender text (`attrFill`, no rule), the card growing with the text
     // (`grow`)
-    quote: { toWide: 10, fromTall: 1, toTall: 12, centre: 0.5, pad: 56, max: 200, maxLines: 8, attrGap: 0.55, rule: 0, ruleGap: 0, attrSteps: [1, 2], portrait: 0.28, overlap: 0.3, mark: 2.4, sentenceLines: { words: 6 }, attrFill: 'ink2', grow: true },
+    quote: { toWide: 12, fromTall: 1, toTall: 12, centre: 0.5, pad: 40, max: 200, maxLines: 8, attrGap: 0.35, rule: 0, ruleGap: 0, attrSteps: [1, 2], portrait: 0.28, overlap: 0.3, mark: 1.6, sentenceLines: { words: 6 }, attrFill: 'ink2', centred: true },
     // compare: as desk's, with the vs as a pill (`vs`), the values in the accent (`valueAccent`), points without a dash
     // (`plainPoints`), the cards at least `fill` of the height they could take with their copy centred, on the optical
     // centre (`centre`), and the spoken card's rim light (`rim`: alpha, blur units) moving to the other card at the turn
     // with two numeric values the compare draws scale (compare-discs.mjs `discs`): discs in the true ratio, the smaller at
-    // least `minDot` units, the larger at `fill` of the room or off the frame from `edge`, the ratio printed from `showFrom`
-    compare: { discs: { minDot: 28, fill: 0.8, wide: { edge: 0.56, smallAt: 0.42, bigLabelAt: 0.8 }, tall: { edge: 0.66, smallAt: 0.3 }, showFrom: 5, gap: 22, valueStep: 4, titleStep: 2, ratioStep: 5 }, vs: 'pill', valueAccent: true, plainPoints: true, fill: 0.62, rim: { alpha: 0.45, blur: 34 }, gap: 6, centre: 0.46, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointStep: 2, pointScale: 1, picture: 0.4, pictureGap: 32 },
+    // least `minDot` units with a `ring`, the larger the sun at scale off the frame from `edge`, one headline with it
+    compare: { discs: { minDot: 28, fill: 0.8, wide: { edge: 0.56 }, tall: { edge: 0.62 }, gap: 12, valueStep: 3, ratioStep: 4, ring: { gap: 14, width: 4 } }, vs: 'pill', valueAccent: true, plainPoints: true, fill: 0.62, rim: { alpha: 0.45, blur: 34 }, gap: 6, centre: 0.46, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointStep: 2, pointScale: 1, picture: 0.4, pictureGap: 32 },
     // chart: as desk's, the marks in a shape colour (`marks`: one series, one colour; alternating read as categories),
     // far ends rounded at `round` units (half the width read as domes, rendered), and the highlighted mark in the accent with `glow` units of soft light round it
     // (chart-draw.mjs); every mark labelled directly (`direct`, `refs` false: no axis, gridlines or ticks), marks `fill` of
-    // their band, labels at step 2, the source small at step 1 and `sourceGap` gaps apart; the marks in accent2 teal, gold only
-    // the highlighted one, the others turning to the one lavender dim (`dimTo`)
-    chart: { titleToWide: 11, titleToTall: 12, titleMax: 140, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 0.88, sourceStep: 1, sourceGap: 5, gap: 14, line: 6, ref: 2, axis: 3, dim: 0.65, refs: false, direct: true, fill: 0.8, dimTo: 'ink2', marks: ['accent2'], round: 16, glow: 22 },
+    // their band, labels at step 2, the source at step 1 (both at least the secondary floor) and `sourceGap` gaps apart; the
+    // marks grow in the lavender, gold only the highlighted one (`dimTo`: the others stay the one lavender dim); on a tall
+    // frame each bar's label over it so the bars take the full safe width (`labelsAbove`)
+    chart: { titleToWide: 11, titleToTall: 12, titleMax: 168, titleLines: 4, titleGap: 56, labelStep: 2, labelScale: 0.88, sourceStep: 1, sourceGap: 5, gap: 14, line: 6, ref: 2, axis: 3, dim: 0.65, refs: false, direct: true, fill: 0.8, dimTo: 'ink2', marks: ['ink2'], labelsAbove: 'tall', round: 16, glow: 22 },
   },
   post: { grain: 0.01, halftone: 0, bloom: 0 },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.

@@ -8,7 +8,10 @@ import { gridX } from '../looks/index.mjs';
 import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, fitDisplay, capBox, runInk, inkExtent } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
+import { layoutText } from '../text/layout.mjs';
+import { secondarySize, secondaryFloor } from './secondary.mjs';
 import { chartStyle } from './chart-draw.mjs';
+import { chartData } from './chart-marks.mjs';
 import { drawPlot, captionTop } from './chart-plot.mjs';
 import { label, labelWidth } from './chart-labels.mjs';
 import { SLUG } from './slug.mjs';
@@ -16,14 +19,16 @@ import { SLUG } from './slug.mjs';
 const FIRST_COLUMN = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
 const SOURCE_PREFIX = 'Source: ';
-const SOURCE_GAP = 3; // gaps between the plot's lowest label and the source line
+const HERO_MARGIN = 1.03; // the claim a hair over three times the labels, so rounding never takes it under
+const SOURCE_GAP = 3;
+const BARRED = Object.freeze(['bar', 'column']); // the types drawn as labelled bars on a tall cosmos frame (chart-plot.mjs) // gaps between the plot's lowest label and the source line
 
 // The claim: fitted, flush left on column 2, its cap line where a statement's slug sits (SLUG.top of the height).
 function titleNode(shot, ctx, data, labelSize) {
   const { look, canvas, unit, measure } = ctx;
   const span = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.titleToWide : data.titleToTall);
   const opts = { text: setCase(look, 'display', shot.title), font: fontFor(look, 'display', data.titleMax * unit, unit), maxWidth: span.w, align: 'left', measure };
-  const fit = fitDisplay(opts, { min: MIN_HERO_RATIO * labelSize, max: data.titleMax * unit, maxHeight: canvas.h, maxLines: data.titleLines }, look, unit);
+  const fit = fitDisplay(opts, { min: HERO_MARGIN * MIN_HERO_RATIO * labelSize, max: data.titleMax * unit, maxHeight: canvas.h, maxLines: data.titleLines }, look, unit);
   const bounds = editorialBounds(ctx);
   // where a statement's slug sits, or the top of the composition band in the platform safe zone (editorial.mjs)
   const top = bounds.safe ? bounds.top : Math.max(look.grid.margin * unit, SLUG.top * canvas.h);
@@ -35,14 +40,22 @@ function titleNode(shot, ctx, data, labelSize) {
   return { node: textNode, bottom, box: capBox(span.x, y + fit.layout.lines[0].y, fit.layout.width, fit.font.size) };
 }
 
-// The source line's font: the label face at data.sourceStep, set smaller in proportion when the line is wider than
-// `width` (the 9:16 safe zone's width), so it never runs out of the platform safe zone.
+// The source line's font: the label face at data.sourceStep (never under the look's secondary floor), set smaller in
+// proportion when the line is wider than `width` (the 9:16 safe zone's width), down to that floor; a line still too
+// wide there wraps (`wrap`: its lines' extra height, which the line is raised by).
 function sourceFontFor(ctx, data, text, width) {
-  const { look, unit } = ctx;
-  const font = fontFor(look, 'label', sizeAt(look, data.sourceStep, unit), unit);
+  const { look, unit, measure } = ctx;
+  const font = fontFor(look, 'label', secondarySize(look, unit, sizeAt(look, data.sourceStep, unit)), unit);
   const wide = text === '' ? 0 : labelWidth(ctx, font, text);
-  return wide <= width ? font : fontFor(look, 'label', (font.size * width) / wide, unit);
+  if (wide <= width) return { font, wrap: 0 };
+  const scaled = fontFor(look, 'label', Math.max(secondaryFloor(look, unit), (font.size * width) / wide), unit);
+  if (labelWidth(ctx, scaled, text) <= width) return { font: scaled, wrap: 0 };
+  const lines = layoutText({ text, font: scaled, maxWidth: width, measure }).lines;
+  return { font: scaled, wrap: lines.at(-1).y - lines[0].y, maxWidth: width };
 }
+
+// A text node carrying the lines its kind left out (props.dropped: the review's 'dropped' rule).
+const withDropped = (n, what) => node(n.type, n.id, { ...n.props, dropped: what }, { tracks: n.tracks, wordTracks: n.wordTracks });
 
 /** The desk chart: { nodes, boxes } with the chart group carrying the hero id. */
 export function expandDeskChart(shot, ctx, data, hero) {
@@ -59,19 +72,25 @@ export function expandDeskChart(shot, ctx, data, hero) {
   const sourceText = shot.source === undefined ? '' : `${SOURCE_PREFIX}${shot.source}`;
   // equal outer margins: the plot's right edge as far in from the right as its left edge is from the left
   const right = bounds.safe ? editorialRight(ctx) : wide ? canvas.w - left : gridX(look, canvas, RIGHT_EDGE);
-  const sourceFont = sourceFontFor(ctx, data, sourceText, bounds.safe ? right - left : Infinity);
+  const { font: sourceFont, wrap, maxWidth: sourceWidth } = sourceFontFor(ctx, data, sourceText, bounds.safe ? right - left : Infinity);
   // over a caption band; in the safe zone its ink (its descenders) ends at the band's bottom
   const down = bounds.safe && shot.source !== undefined ? inkExtent(sourceText, sourceFont, ctx.measure).down : WORD_DESCENT * font.size;
-  const sourceBaseline = Math.min(bounds.bottom, caption - gap) - down;
-  const source = shot.source === undefined ? null
-    : label(ctx, { id: `${shot.id}.source`, text: sourceText, font: sourceFont, x: bounds.safe ? left : gridX(look, canvas, FIRST_COLUMN), y: sourceBaseline, fill: style.text, asWritten: true });
-  const floor = Math.min(source === null ? bounds.bottom : source.box[1] - (data.sourceGap ?? SOURCE_GAP) * gap, caption) - gap;
+  const sourceBaseline = Math.min(bounds.bottom, caption - gap) - down - wrap;
+  const sourced = shot.source === undefined ? null
+    : label(ctx, { id: `${shot.id}.source`, text: sourceText, font: sourceFont, x: bounds.safe ? left : gridX(look, canvas, FIRST_COLUMN), y: sourceBaseline, fill: style.text, asWritten: true, ...(wrap > 0 ? { maxWidth: sourceWidth, lines: 2 } : {}) });
   const area = { x: left, y: title.bottom + data.titleGap * unit, w: right - left, h: 0 };
-  const plotArea = { ...area, h: Math.max(1, floor - area.y) };
+  const floorOf = (src) => Math.min(src === null ? bounds.bottom : src.box[1] - (data.sourceGap ?? SOURCE_GAP) * gap, caption) - gap;
+  // bars with their labels over them need rows that show a bar; when they cannot have them, the source line (the least
+  // important secondary line) goes and the title says so (kinds/secondary.mjs)
+  const barred = style.labelsAbove && BARRED.includes(shot.type);
+  const rowNeed = () => chartData(shot).items.length * ((CAP_HEIGHT + WORD_DESCENT + 1) * font.size + gap);
+  const drops = barred && sourced !== null && floorOf(sourced) - area.y < rowNeed();
+  const source = drops ? null : sourced;
+  const plotArea = { ...area, h: Math.max(1, floorOf(source) - area.y) };
   const plot = drawPlot(shot, ctx, style, plotArea, { valueOnHighlight: true });
   const group = node('group', hero, {}, { children: plot.nodes });
   return {
-    nodes: [title.node, group, ...(source === null ? [] : [source.node])],
+    nodes: [drops ? withDropped(title.node, ['source']) : title.node, group, ...(source === null ? [] : [source.node])],
     boxes: { chart: [plotArea.x, plotArea.y, plotArea.w, plotArea.h], title: title.box, ...plot.boxes },
   };
 }

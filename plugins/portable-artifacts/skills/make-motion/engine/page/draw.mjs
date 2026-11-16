@@ -97,12 +97,13 @@ function glowOnly(ctx, path, glow) {
 
 // props.glow ({ color, alpha, radius, only }) on a filled path: a soft light round its edge, the canvas shadow of its
 // fill (a smooth blur, so no steps), drawn under the fill; with `only`, the light without the fill.
-// props.radial ({ r, color, stops: [[at, alpha]...] }) on a path: it is filled with a radial gradient about the node's
-// origin, color at each stop's alpha out to r, instead of props.fill: a soft disc of light with no blur filter.
+// props.radial ({ r, color, stops: [[at, alpha, stopColor?]...] }) on a path: it is filled with a radial gradient about
+// the node's origin, each stop's colour (its own, else `color`) at its alpha out to r, instead of props.fill: a soft
+// disc of light with no blur filter (a hot core, a limb and a bloom are stops of one gradient).
 function radialFill(ctx, { r, color, stops }) {
-  const [red, green, blue] = [1, 3, 5].map((i) => parseInt(color.slice(i, i + HALF), HEX_RADIX));
+  const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + HALF), HEX_RADIX)).join(', ');
   const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, r);
-  for (const [at, alpha] of stops) gradient.addColorStop(at, `rgba(${red}, ${green}, ${blue}, ${alpha})`);
+  for (const [at, alpha, stopColor] of stops) gradient.addColorStop(at, `rgba(${rgb(stopColor ?? color)}, ${alpha})`);
   return gradient;
 }
 

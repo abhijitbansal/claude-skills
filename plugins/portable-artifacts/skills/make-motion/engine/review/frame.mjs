@@ -337,6 +337,10 @@ function hierarchyRules(all, ctx) {
     const ratio = contrast.at(-1).at(-1) / contrast[0][0];
     if (ratio < MIN_HERO_RATIO - EPSILON) out.push(finding(ctx, CREATIVE, 'hero', '', `the hero text is only ${ratio.toFixed(1)} times the smallest; make it at least ${MIN_HERO_RATIO} times larger`));
   }
+  // a kind that left out a secondary line to keep its secondary text at the look's floor says so (kinds/secondary.mjs)
+  for (const { node } of all.filter((t) => Array.isArray(t.node.props?.dropped) && t.node.props.dropped.length > 0)) {
+    out.push(finding(ctx, CREATIVE, 'dropped', node.id, `"${node.id}" left out its ${node.props.dropped.join(' and ')}: the frame cannot hold its hero at ${MIN_HERO_RATIO} times the look's minimum secondary size; shorten the copy to keep it`));
+  }
   return out;
 }
 
