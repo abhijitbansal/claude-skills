@@ -126,3 +126,11 @@ Each has a default the work proceeds on; all are one-value changes in mode data 
   cut-out package.
 - **cache-clock keep-warm ceiling is per session and resets if the ledger file is deleted.** Default: documented;
   a machine-wide ceiling would need a shared ledger.
+
+## Shot kinds, first wave: look review 3 leftovers (2026-11-16)
+
+Both all-kinds films got "ship after fixes" from the third independent reviewer; no kind failed. The two allowed revision rounds are used, so these are open. Default: ship the kinds as they are and fix the first group in the next fix wave; the owner may ask for more.
+
+- Fix in the next wave (defects, not taste): the last shot of a film holds its final state for under half a second (hold 1.5 to 2 s); a number under 10 opens on a bare grey 0 and the digit jitters sideways as it counts (land on the value, or count with fixed advances); desk chart plot is about 20 percent of the frame height (make it about twice as tall, drop the axis and gridlines when marks are labelled directly, no olive frame in the colour change); desk compare arrow tail meets the left card; desk quote text nearly touches the card edge; pop quote breaks "FALLS / SHORT" and sets the last line smaller; pop list items come out at different sizes; a pop clipping caption sits under the picture shadow; several first frames show half-entered parts.
+- Owner taste: pop on tall frames leaves the lower 35 to 55 percent empty in most shots (type is width-limited; options: allow word-per-line breaks for short hooks, or centre the block lower); every statement, quote and end card uses the same grey-to-ink word reveal; desk mono labels are small at phone size (raising them breaks the 3x hero rule on some frames).
+- Copy of the example films (mine): "nine kinds of shot" over a film that shows eight; "every stage added tests" over running totals; a quote attributed to the product; asks that name no destination.

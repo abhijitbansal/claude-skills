@@ -190,3 +190,19 @@ Whole version 2 suite with the real voice model, controller run on the same tree
 Director's note from the desk sheet: with captions on, a clipping that also carries the author's own caption line shows two taped cards side by side, which reads as clutter. The example film drops the author's line; the engine allows both and the review does not object. Captions are opt-in in every mode: on by default they changed the approved pop test film.
 
 For the owner's listening pass: cue level against the voice, the bed's ducking under words, whether the bed helps or distracts, caption timing.
+
+## Shot kinds, first wave (end, list, quote, compare, chart) — 2026-11-16
+
+Two films use every shipped kind: `references/examples/v2/kinds-desk.json` (pro, 16:9) and `kinds-pop.json` (viral, 9:16). Both render valid with no mechanical or creative findings (controller, real voice model, commit 9ea68e6; whole v2 suite 1755 tests, 1755 pass).
+
+Three independent look reviews, each by a fresh reviewer who saw only the contact sheets:
+
+| Review | Desk | Pop | After it |
+|---|---|---|---|
+| 1 | ship after fixes (3 of 8 shots pass) | ship after fixes (2 of 8 pass) | revision 1, 14 rulings |
+| 2 | ship after fixes (2 of 8 pass) | not yet: five of eight vertical shots left 39 to 56 percent of the frame empty | revision 2, 13 rulings, then a two-item polish |
+| 3 | ship after fixes (1 pass, 7 fix, 0 fail) | ship after fixes (2 pass, 6 fix, 0 fail) | none: the two revision rounds are used |
+
+Decision (controller, under the owner rule for the unattended run): no kind failed in either look, so none is parked. The fix items of review 3 are not done and are listed in `docs/decisions-pending.md` and in `.superpowers/sdd/2026-11-16-pa2-shot-kinds-a/look-review-3.md`. The reviewers passed different shots each time, so a pass count is one reviewer judging one render, not a trend.
+
+Known weak points a viewer will see: final states hold too briefly before the film ends; a single-digit number rolls up from a bare grey 0; pop on tall frames still leaves the lower 35 to 55 percent of the frame empty (type is limited by width); desk sets too much in small mono for phone size; the desk chart plot is squat.
