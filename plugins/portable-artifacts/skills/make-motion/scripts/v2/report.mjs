@@ -7,7 +7,8 @@
 // ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, a voice that cannot be made, an interrupt).
 // `timed` is 'estimated' or 'measured' (the timeline used), null before one was built. `voice` is
 // { cached, seconds, model } for a film whose voice was made (seconds: the narration's total length, the sum of its
-// shot WAVs; model: the sidecar's model record), else null. `audio` is { lufs, truePeakDb } of the voice in the
+// shot WAVs; model: the sidecar's model record), or for an author's own recording { cached: false, seconds: the last
+// word's end in the file, model: null }; else null. `audio` is { lufs, truePeakDb } of the voice in the
 // rendered MP4, as measured in that file (ebur128), for a film whose voice was muxed into it, else null. What had been
 // done by then
 // stays in it: the stages that ran, the findings already found. A film's own fault (it does not validate, the page

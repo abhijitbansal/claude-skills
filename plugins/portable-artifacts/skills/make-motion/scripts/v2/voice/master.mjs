@@ -135,9 +135,13 @@ export function shapingFilter(sidecar, timeline) {
  * The ffmpeg arguments that build the film's voice track at 48 kHz mono: each shot of `shots` (one per timeline shot,
  * `{ wav }` an absolute path or null) with a WAV is resampled once to 48 kHz and delayed to its shot's narration start in
  * whole samples, the inputs are mixed without normalisation, and the track is padded and cut to the film's length.
+ * `recording` (an absolute path) is an author's own recording of the whole film instead: one input at film time 0, its
+ * words already where the timeline put them (engine/script/timing.mjs recordedTimeline), resampled the same way.
  */
-export function voiceTrackArgs({ shots, timeline, out }) {
-  const placed = shots.map((s, i) => ({ wav: s.wav, delay: samplesOf(narrationStart(timeline.shots[i])) })).filter((s) => s.wav !== null);
+export function voiceTrackArgs({ shots, timeline, out, recording }) {
+  const placed = recording === undefined
+    ? shots.map((s, i) => ({ wav: s.wav, delay: samplesOf(narrationStart(timeline.shots[i])) })).filter((s) => s.wav !== null)
+    : [{ wav: recording, delay: 0 }];
   if (placed.length === 0) throw new RangeError('voiceTrackArgs: no shot has a narration WAV');
   const length = samplesOf(timeline.duration);
   const chains = placed.map((s, k) => `[${k}:a]aformat=sample_rates=${TRACK_RATE}:channel_layouts=mono,adelay=delays=${s.delay}S:all=1[v${k}]`);
@@ -258,19 +262,35 @@ function shotWavs({ dir, sidecar }) {
   });
 }
 
+// A recording's words (`sidecar`, seconds from the start of the one file, which is film time) as the shaping reads them:
+// each shot's words from its narration start, since gainStages adds that start. The sound's own times, not the
+// timeline's (which shows each shot's first word from the shot's first frame).
+function placedSidecar(sidecar, timeline) {
+  return {
+    shots: sidecar.shots.map((shot, i) => {
+      const from = narrationStart(timeline.shots[i]);
+      return { sentences: [{ words: wordsOf(shot).map((w) => ({ ...w, start: w.start - from, end: w.end - from })) }] };
+    }),
+  };
+}
+
 /**
- * Builds the film's voice track from `voice` ({ dir, sidecar }: what the voice stage made) on `timeline`, shapes and
- * masters it to `loudness` in `workDir`, and resolves the mastered WAV's path, or null when no shot has narration (then
- * there is no voice to put in the film). Every failure is an AudioError with the audio hint.
+ * Builds the film's voice track from `voice` on `timeline`, shapes and masters it to `loudness` in `workDir`, and
+ * resolves the mastered WAV's path, or null when no shot has narration (then there is no voice to put in the film).
+ * `voice` is what the voice stage made: { dir, sidecar } (a WAV per narrated shot), or { recording, sidecar } (the
+ * absolute path of an author's own recording of the whole film, and its words in seconds from the file's start). Every
+ * failure is an AudioError with the audio hint.
  */
 export async function masterTrack({ run, voice, timeline, loudness, workDir }) {
   try {
-    const shots = shotWavs(voice);
-    if (shots.every((s) => s.wav === null)) return null;
+    const recording = voice.recording;
+    const shots = recording === undefined ? shotWavs(voice) : [];
+    if (recording === undefined && shots.every((s) => s.wav === null)) return null;
     const track = path.join(workDir, 'voice-track.wav');
     const master = path.join(workDir, 'voice-master.wav');
-    await step(run, voiceTrackArgs({ shots, timeline, out: track }), 'voice mix');
-    await masterVoice({ run, wav: track, out: master, filter: shapingFilter(voice.sidecar, timeline), loudness });
+    await step(run, voiceTrackArgs({ shots, timeline, out: track, recording }), 'voice mix');
+    const sidecar = recording === undefined ? voice.sidecar : placedSidecar(voice.sidecar, timeline);
+    await masterVoice({ run, wav: track, out: master, filter: shapingFilter(sidecar, timeline), loudness });
     return master;
   } catch (err) {
     throw asAudioError(err);

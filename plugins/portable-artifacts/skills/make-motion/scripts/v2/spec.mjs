@@ -2,7 +2,7 @@
 // every error is { path, message }: the path names the field ("shots[0].show")
 // and the message says what to write instead. validateFilm collects every error
 // it can and never throws for a bad film.
-import { realpathSync, statSync } from 'node:fs';
+import { accessSync, constants as fsConstants, readFileSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
@@ -10,6 +10,7 @@ import { validateMode } from '../../engine/modes/index.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
 import { hintRefusals } from './voice/calls.mjs';
 import { ACCEPTED_VOICES } from './voice/kokoro.mjs';
+import { RecordingWordsError, WHISPER_SHAPE, fromWhisper } from './voice/sidecar.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { resolveAnchor, anchorSeconds, AnchorError, echoValue, showValue } from '../../engine/script/anchors.mjs';
 import { didYouMean, formatAjvErrors, pathJoin } from '../../shared/errors.mjs';
@@ -572,6 +573,97 @@ function checkMatchCuts(spec, regs) {
   });
 }
 
+// --- an author's own recording: voice { src, words } ---
+
+// A Whisper word-timestamp JSON for a long film runs to a few MB; past this it is not one, and reading it costs time.
+export const WORDS_MAX_BYTES = 16 * 1024 * 1024;
+
+const isRecordingVoice = (voice) => isPlainObject(voice) && Object.keys(voice).length === 2
+  && typeof voice.src === 'string' && voice.src !== '' && typeof voice.words === 'string' && voice.words !== '';
+
+// { real } (the file's real path, inside the spec folder and readable) or { error } at `at`: the same rules as a
+// picture's src (relative, inside the folder after links are followed, a file that exists).
+function recordingFile(value, at, specDir) {
+  const problem = srcProblem(value, specDir);
+  if (problem) return { error: { path: at, message: problem } };
+  try {
+    const real = realpathSync(path.resolve(specDir, value));
+    accessSync(real, fsConstants.R_OK);
+    return { real };
+  } catch (err) {
+    return { error: { path: at, message: `cannot read ${quote(value)}: ${errorCode(err)}` } };
+  }
+}
+
+// The parsed words file at `real`, or { error } at voice.words.
+function wordsJson(real, value) {
+  try {
+    const size = statSync(real).size;
+    if (size > WORDS_MAX_BYTES) return { error: { path: 'voice.words', message: `${quote(value)} is ${size} bytes; a words file can be at most ${WORDS_MAX_BYTES} bytes` } };
+    return { json: JSON.parse(readFileSync(real, 'utf8')) };
+  } catch (err) {
+    const why = err instanceof SyntaxError ? `is not valid JSON: ${err.message}` : `cannot be read: ${errorCode(err)}`;
+    return { error: { path: 'voice.words', message: `${quote(value)} ${why}; it must be ${WHISPER_SHAPE}` } };
+  }
+}
+
+/**
+ * A film's own recording, `voice: { src, words }` with paths relative to `specDir`: -> { src, sidecar }, `src` the
+ * recording's real path (inside the folder, readable) and `sidecar` its words fitted to the film (voice/sidecar.mjs
+ * fromWhisper: the words file is Whisper's word-timestamp JSON). Throws a SpecError at voice.src and voice.words for a
+ * path that leaves the folder, a missing or
+ * unreadable file, words that are not JSON, or words that do not fit the film's says. The audio itself is read only
+ * when the film is rendered (ffmpeg decodes it there).
+ */
+export function readRecording(spec, specDir) {
+  const { src, words } = spec.voice;
+  const audio = recordingFile(src, 'voice.src', specDir);
+  const file = recordingFile(words, 'voice.words', specDir);
+  const errors = [audio.error, file.error].filter(Boolean);
+  let sidecar = null;
+  const parsed = file.error ? null : wordsJson(file.real, words);
+  if (parsed?.error) errors.push(parsed.error);
+  if (parsed?.json !== undefined) {
+    try {
+      sidecar = fromWhisper(parsed.json, spec);
+    } catch (err) {
+      if (!(err instanceof RecordingWordsError)) throw err;
+      errors.push({ path: err.path, message: err.message });
+    }
+  }
+  if (errors.length > 0) throw new SpecError(errors);
+  return { src: audio.real, sidecar };
+}
+
+// The shots as the words can be fitted to them: an array of objects with string ids whose says all parse. Otherwise
+// their own errors are reported and the words are not looked at.
+function saysReady(spec) {
+  if (!Array.isArray(spec.shots) || spec.shots.length > SHOTS_MAX) return false;
+  return spec.shots.every((shot) => {
+    if (!isPlainObject(shot) || typeof shot.id !== 'string') return false;
+    if (shot.say === undefined) return true;
+    if (!isParsableSay(shot.say)) return false;
+    try {
+      parseSay(shot.say);
+      return true;
+    } catch (err) {
+      if (err instanceof SayError) return false;
+      throw err;
+    }
+  });
+}
+
+function checkRecording(spec, specDir) {
+  if (!isRecordingVoice(spec.voice) || !saysReady(spec)) return [];
+  try {
+    readRecording(spec, specDir);
+    return [];
+  } catch (err) {
+    if (!(err instanceof SpecError)) throw err;
+    return err.errors;
+  }
+}
+
 function collectErrors(spec, specDir, regs) {
   if (!isPlainObject(spec)) return [{ path: '', message: NOT_OBJECT_MESSAGE }];
   if (Array.isArray(spec.scenes) || spec.version === 1) return [{ path: '', message: V1_MESSAGE }];
@@ -581,6 +673,7 @@ function collectErrors(spec, specDir, regs) {
     ...schemaErrors(checkRootSchema, spec, ''),
     ...checkMode(spec, regs),
     ...checkVoice(spec),
+    ...checkRecording(spec, specDir),
     ...checkAccent(spec),
     ...settings,
     ...checkShots(spec, ctx),

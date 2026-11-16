@@ -336,8 +336,9 @@ const wavPaths = (voiceDir, sidecar) => sidecar.shots.map((s) => ({ wav: s.wav =
 // Track samples are placed exactly; 1 ms allows one 24 kHz sample of rounding plus the resampler.
 const RAW_TOLERANCE = 0.001;
 
-// The word starts of a timeline in film seconds, from the timeline itself (shot start plus measured word).
-const filmStarts = (timeline) => timeline.shots.flatMap((shot) => shot.words.map((w) => shot.start + w.start));
+// When each word is heard in the film: its shot's narration start on the timeline plus its time in the sidecar. (The
+// timeline's own words are what the picture shows; a shot's first word is shown from the shot's first frame.)
+const filmStarts = (timeline, sidecar) => timeline.shots.flatMap((shot, i) => flatWords(sidecar.shots[i]).map((w) => narrationStart(shot) + w.start));
 
 // Asserts each onset within `tolerance` of its word; returns the largest offset, in seconds.
 function assertClicksAt(heard, expected, tolerance) {
@@ -359,7 +360,7 @@ test('alignment: every click of the voice track lies within 1 ms of its word\'s 
   const { samples, rate } = readWav(out);
   assert.equal(rate, TRACK_RATE);
   assert.ok(Math.abs(samples.length / rate - timeline.duration) < 1 / TRACK_RATE + 1e-9, 'the track is exactly the film long');
-  const expected = filmStarts(timeline);
+  const expected = filmStarts(timeline, sidecar);
   assert.ok(expected[0] > 2.4, 'the first word waits for the long held shot');
   const worst = assertClicksAt(onsets(samples, rate), expected, RAW_TOLERANCE);
   t.diagnostic(`largest click offset in the raw track: ${(worst * 1000).toFixed(3)} ms`);
@@ -392,7 +393,7 @@ test('alignment after the whole chain: the word onsets decoded from the finished
   const peak = samples.reduce((m, s) => Math.max(m, Math.abs(s)), 0);
   // 5% of the peak: the gaps between bursts are silent, and a higher threshold is crossed partway up a burst's first
   // cycle (half the peak read 3.5 ms late on one word: the detector's bias, not the track's).
-  const worst = assertClicksAt(onsets(samples, rate, peak * ONSET_FRACTION), filmStarts(timeline), ALIGN_TOLERANCE);
+  const worst = assertClicksAt(onsets(samples, rate, peak * ONSET_FRACTION), filmStarts(timeline, sidecar), ALIGN_TOLERANCE);
   t.diagnostic(`largest onset offset after master and mux: ${(worst * 1000).toFixed(2)} ms`);
 });
 

@@ -882,6 +882,8 @@ test('a film whose mode lacks voice data, or has it out of range, is an error at
 
 test('voice accepts the synthesised shape and the own-recording shape', () => {
   assert.deepEqual(check(film({ voice: { name: 'af_heart' } })), { ok: true, errors: [] });
+  writeFileSync(path.join(specDir, 'vo.wav'), 'RIFF');
+  writeFileSync(path.join(specDir, 'vo.json'), JSON.stringify({ segments: [{ words: [{ word: ' Hi.', start: 0.2, end: 0.5 }] }] }));
   assert.deepEqual(check(film({ voice: { src: 'vo.wav', words: 'vo.json' } })), { ok: true, errors: [] });
 });
 test('a misspelled voice key gets a did-you-mean at its path', () => {

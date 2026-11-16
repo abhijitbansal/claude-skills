@@ -45,13 +45,27 @@ test('the fixture sidecar is a valid sidecar of the fixture film', () => {
   assert.doesNotThrow(() => validateSidecar(SIDECAR, FILM));
 });
 
-test('with words the timeline is measured and each word time is the sidecar time from the shot start', () => {
+test('with words the timeline is measured and each word time is the sidecar time from the shot start, the first word aside', () => {
   const tl = measured();
   assert.equal(tl.timed, 'measured');
   SIDECAR.shots.forEach((sidecarShot, i) => {
     const expected = flatWords(sidecarShot).map((w) => ({ text: w.text, start: w.start + NARRATION_LEAD, end: w.end + NARRATION_LEAD, emphasis: w.emphasis, aside: w.aside }));
-    assert.deepEqual(tl.shots[i].words, expected, `shot ${sidecarShot.id}`);
+    assert.deepEqual(tl.shots[i].words.slice(1), expected.slice(1), `shot ${sidecarShot.id}`);
+    if (expected.length > 0) assert.deepEqual(tl.shots[i].words[0], { ...expected[0], start: 0 }, `shot ${sidecarShot.id}: first word`);
   });
+});
+
+test('a measured shot shows its first word from its first frame: its visual start is the shot start, its sound follows', () => {
+  const tl = measured();
+  SIDECAR.shots.forEach((sidecarShot, i) => {
+    if (sidecarShot.wav === null) return;
+    assert.ok(flatWords(sidecarShot)[0].start > 0, `the fixture's first word of ${sidecarShot.id} is heard after the shot starts`);
+    assert.equal(tl.shots[i].start + tl.shots[i].words[0].start, tl.shots[i].start, `${sidecarShot.id}: the first word is shown from the shot's start`);
+    assert.equal(anchorSeconds('word:0', tl.shots[i]), 0, `${sidecarShot.id}: an anchor on the first word is the shot's start`);
+    assert.equal(tl.shots[i].sentences[0].start, 0, `${sidecarShot.id}: so is the first sentence`);
+  });
+  const estimated = buildTimeline(FILM, { fps: FPS });
+  assert.deepEqual(estimated.shots[0].words, buildTimeline(FILM, { fps: FPS, words: undefined }).shots[0].words, 'the estimated path is unchanged');
 });
 
 test('word:<n>, word:<text> and sentence:<n> anchors resolve to the measured times', () => {
@@ -94,7 +108,7 @@ test('measured sentences carry start, end and the indexes of their first and las
   const open = measured().shots[0];
   assert.deepEqual(open.sentences, SIDECAR.shots[0].sentences.map((s, k, all) => {
     const first = all.slice(0, k).reduce((n, x) => n + x.words.length, 0);
-    return { start: s.start, end: s.end, first, last: first + s.words.length - 1 };
+    return { start: k === 0 ? 0 : s.start, end: s.end, first, last: first + s.words.length - 1 }; // the first word shows from the shot start
   }));
 });
 

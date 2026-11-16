@@ -10,9 +10,9 @@
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { findFfmpeg } from '../lib/ffmpeg.mjs';
-import { buildTimeline } from '../../engine/script/timing.mjs';
+import { PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
 import { loadFilm } from './pipeline.mjs';
-import { SpecError, timedAnchorErrors } from './spec.mjs';
+import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
 import { openSession, pageErrorMessage, machineMessage } from './session.mjs';
 import { writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
@@ -29,9 +29,7 @@ const EXIT_INTERRUPTED = 130;
 const PAGE_PREFIX = 'page: '; // a finding about the page itself (sessionFindings, failureOutcome)
 const VOICE_SECONDS_STEPS = 1e4; // the report's voice.seconds, rounded as the sidecar's times are
 const SIDECAR_MISMATCH_HINT = 'run again; if it keeps happening, delete the .voice folder beside the video so the voice is made afresh';
-// describeError splits this at ". " into its message and its hint.
-const OWN_VOICE_MESSAGE = 'voice from your own recording ({ src, words }) is not built yet. '
-  + 'Write "voice": { "name": "af_heart" } to synthesise the narration, or remove "voice" for a film without narration';
+const roundSeconds = (seconds) => Math.round(seconds * VOICE_SECONDS_STEPS) / VOICE_SECONDS_STEPS;
 
 // The real synthesiser, loaded only for a voiced film: a silent film never loads the synthesiser or its child process.
 const synthesiseFilm = async (film, options) => (await import('./voice/synth.mjs')).synthesiseFilm(film, options);
@@ -147,7 +145,6 @@ async function makeVoice(film, options, state, io) {
   let made;
   try {
     made = await stage(state, io.log, 'voice', async () => {
-      if (film.voice.name === undefined) throw new Error(OWN_VOICE_MESSAGE);
       const { out } = outputPaths(options);
       const signal = io.signal === undefined ? {} : { signal: io.signal };
       return checkedSidecar(await io.synthesise(film, { outDir: path.dirname(out), voice: film.voice.name, log: io.log, ...signal }), film);
@@ -158,8 +155,26 @@ async function makeVoice(film, options, state, io) {
     return null;
   }
   const seconds = made.sidecar.shots.reduce((sum, shot) => sum + shot.seconds, 0);
-  state.voice = { cached: made.cached, seconds: Math.round(seconds * VOICE_SECONDS_STEPS) / VOICE_SECONDS_STEPS, model: made.sidecar.model };
+  state.voice = { cached: made.cached, seconds: roundSeconds(seconds), model: made.sidecar.model };
   return made;
+}
+
+// An author's own recording (`voice: { src, words }`): nothing is synthesised. Its two files are read again, inside the
+// film's folder, and its words fitted to the film (spec.mjs readRecording); a problem is the film's (findings, exit 1)
+// and null is returned. -> { recording, sidecar, cached: false }, `recording` the file's real path (the only path that
+// reaches ffmpeg) and `sidecar` its words in seconds from its start. voice.seconds is the narration's length in the
+// file: its last word end.
+async function recordVoice(film, specDir, state, log) {
+  let read;
+  try {
+    read = await stage(state, log, 'voice', () => readRecording(film, specDir));
+  } catch (err) {
+    if (!(err instanceof SpecError)) throw err;
+    state.findings = err.errors.map(validationFinding);
+    return null;
+  }
+  state.voice = { cached: false, seconds: roundSeconds(Math.max(0, ...read.sidecar.shots.map((s) => s.seconds))), model: null };
+  return { recording: read.src, sidecar: read.sidecar, cached: false };
 }
 
 // The timeline the film is drawn with: measured from the sidecar when there is one, and then everything about its
@@ -169,14 +184,14 @@ async function makeVoice(film, options, state, io) {
 async function timelineFor(film, made, state, log) {
   try {
     return await stage(state, log, 'timeline', () => {
-      const timeline = buildTimeline(film, { fps: film.fps, words: made?.sidecar.shots });
+      const timeline = buildTimeline(film, { fps: film.fps, words: made?.sidecar.shots, recording: made?.recording !== undefined });
       Object.assign(state, { timed: timeline.timed, frames: timeline.frameCount });
       const errors = made ? timedAnchorErrors(film, timeline) : [];
       if (errors.length > 0) throw new SpecError(errors);
       return timeline;
     });
   } catch (err) {
-    if (!(err instanceof SpecError)) throw err;
+    if (!(err instanceof SpecError) && !(err instanceof PlacementError)) throw err;
     state.findings = err.errors.map(validationFinding);
     return null;
   }
@@ -187,7 +202,8 @@ async function execute(options, state, io) {
   if (!loaded) return;
   state.validated = true;
   const { film, specDir } = loaded;
-  const made = film.voice === undefined ? null : await makeVoice(film, options, state, io);
+  const made = film.voice === undefined ? null
+    : film.voice.name === undefined ? await recordVoice(film, specDir, state, io.log) : await makeVoice(film, options, state, io);
   if (film.voice !== undefined && made === null) return;
   io.signal?.throwIfAborted(); // the voice can take minutes, and a cache hit returns whatever the signal
   const timeline = await timelineFor(film, made, state, io.log);

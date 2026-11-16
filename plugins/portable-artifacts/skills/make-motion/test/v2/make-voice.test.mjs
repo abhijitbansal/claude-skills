@@ -188,15 +188,40 @@ test('a film voice error naming no shot is reported at voice, whatever its messa
   assert.deepEqual(report.findings.map((f) => f.path), ['voice']);
 });
 
-test('a voice from your own recording ({ src, words }) is not built yet: exit 2, and the synthesiser is not called', async () => {
+// The words of VOICED_SHOTS as Whisper would write them for a recording of the whole film.
+const OWN_WORDS = { segments: [{ words: [
+  [' Every', 0.3], [' row', 0.6], [' has', 0.9], [' a', 1.1], [' source.', 1.3], [' Four', 2.6], [' hundred', 2.9], [' rows.', 3.3],
+].map(([word, start]) => ({ word, start, end: Math.round((start + 0.25) * 100) / 100 })) }] };
+
+test('a voice from your own recording ({ src, words }) is never synthesised: its words time the film; a missing words file is an invalid film', async () => {
   const fake = fakeSynthesiser();
-  const specPath = writeVoiced('voiced-own', { voice: { src: 'vo.wav', words: 'vo.json' } });
-  const { report, exitCode } = await runVoiced(specPath, fake.synthesise);
-  assert.equal(exitCode, 2);
-  assert.equal(report.ok, false);
-  assert.match(report.error.message, /own recording .*is not built yet/);
-  assert.match(report.error.hint, /"name": "af_heart"/);
-  assert.equal(fake.calls.length, 0);
+  writeFileSync(path.join(dir, 'vo.wav'), 'RIFF');
+  writeFileSync(path.join(dir, 'vo.json'), JSON.stringify(OWN_WORDS));
+  const own = await runVoiced(writeVoiced('voiced-own', { voice: { src: 'vo.wav', words: 'vo.json' } }), fake.synthesise, { outline: true });
+  assert.equal(own.exitCode, 0, JSON.stringify(own.report));
+  assert.equal(own.report.timed, 'measured');
+  assert.deepEqual(own.report.voice, { cached: false, seconds: 3.55, model: null });
+  assert.equal(fake.calls.length, 0, 'nothing is synthesised');
+  const missing = await runVoiced(writeVoiced('voiced-own-missing', { voice: { src: 'vo.wav', words: 'gone.json' } }), fake.synthesise);
+  assert.equal(missing.exitCode, 1);
+  assert.deepEqual(missing.report.findings.map((f) => f.path), ['voice.words']);
+  assert.deepEqual(stagesOf(missing.report), [['validate', false]]);
+});
+
+test('a narrated statement shot after a hard cut opens on its first word, though the voice starts a little after the shot', async (t) => {
+  if (!await needs(t)) return;
+  const lateStart = (film) => {
+    const sidecar = fakeSidecar(film);
+    const shifted = (w) => ({ ...w, start: w.start + 0.075, end: w.end + 0.075 }); // the lead-in a real voice keeps
+    return { ...sidecar, shots: sidecar.shots.map((s) => ({ ...s, seconds: s.seconds + 0.075, sentences: s.sentences.map((x) => ({ ...x, start: x.start + 0.075, end: x.end + 0.075, words: x.words.map(shifted) })) })) };
+  };
+  const shots = [
+    { id: 'one', show: 'statement', say: 'Every chart is a question.' },
+    { id: 'two', show: 'statement', cut: 'cut', say: 'The answer arrives on time.' },
+  ];
+  const { report, exitCode } = await runVoiced(writeVoiced('voiced-first-frame', {}, shots), fakeSynthesiser({ sidecarOf: lateStart }).synthesise);
+  assert.deepEqual(report.findings.filter((f) => /opens on an empty frame/.test(f.message)), []);
+  assert.equal(exitCode, 0, JSON.stringify(report.findings));
 });
 
 test('an anchor valid on estimated times but outside its shot on measured ones is an invalid film: exit 1, path form', async () => {
