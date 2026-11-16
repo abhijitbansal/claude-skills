@@ -28,8 +28,16 @@ export const measure = (text, font) => {
 };
 export const IMAGES = new Map([['shot.png', { width: 1600, height: 1000 }]]);
 export const canvasOf = (format) => ({ w: FORMATS[format].size[0], h: FORMATS[format].size[1] });
-// The platform safe zone as the stage passes it (template/formats.mjs safeInsets with the viral zone).
-export const viralOf = (canvas) => safeInsets([canvas.w, canvas.h], VIRAL_SAFE_ZONE);
+// The platform safe zone as the stage passes it (template/formats.mjs safeInsets with the viral zone)...
+export const platformOf = (canvas) => safeInsets([canvas.w, canvas.h], VIRAL_SAFE_ZONE);
+// ...and the area pop composes in on 9:16: its sides, with pop's band (look revision 2) for the top and bottom. Passed
+// as the stage's insets it gives the same composition (compositionRect applies the band), and tests judge against it.
+export const viralOf = (canvas) => {
+  const zone = platformOf(canvas);
+  const band = registries.looks.get('pop').band;
+  if (!band || canvas.h <= canvas.w) return zone;
+  return { ...zone, top: Math.max(zone.top, band.top * canvas.h), bottom: canvas.h - band.bottom * canvas.h };
+};
 export const modeOf = (look) => (look === 'pop' ? 'viral' : 'pro');
 
 export const filmOf = (shots, look = 'desk', format = '16:9', extra = {}) => ({ version: 2, mode: modeOf(look), look, format, fps: FPS, seed: 1, shots, ...extra });

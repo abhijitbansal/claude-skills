@@ -32,6 +32,9 @@ const AFFIX_SHARE = 0.45; // prefix and suffix size, of the figure size
 const AFFIX_GAP = 0.04; // em of the figure between the figure and a prefix or suffix
 const COUNT_FALLBACK = 0.6; // of the shot: when the count lands with no spoken number
 const MAX_COUNT_STEPS = 24; // distinct values a count may show on its way up
+const BY_ONES = 20; // a whole number under this counts 0, 1, 2 ... to it
+const MIN_COUNT = 0.5; // seconds: the least a count runs, landing no earlier than this into the shot
+const LABEL_ROOM = 1.2; // seconds a shot keeps after the count lands, for the label to arrive and settle
 const STEP_EPSILON = 1e-6;
 // desk figure: up to 820 units for one or two digits (560 for more) across columns 2 to 9 (2 to 11 when not wide),
 // baseline at 72%; the label in ink at step 4 over the delta, the delta's cap line 24 units under the label's baseline,
@@ -41,8 +44,8 @@ const DESK = Object.freeze({ max: 560, maxShort: 820, toWide: 9, toTall: 11, bas
 // (step 2 at the least) 40 under the baseline; the delta's cap line 16 under the label tag; a kicker tag at step 2, 28
 // over the figure's cap line
 const POP = Object.freeze({ max: 760, maxShort: 900, tagGap: 40, tagStep: 3, tagFromStep: 2, deltaGap: 16, kickerStep: 2, kickerGap: 28 });
-// the delta in either look: label caps at step 2 in ink2, on no plate
-const DELTA = Object.freeze({ step: 2, text: 'ink2' });
+// the delta in either look: label caps at step 3 in ink2, on no plate
+const DELTA = Object.freeze({ step: 3, text: 'ink2' }); // step 3: 1.25 times the label step or more (look review 2)
 const SHORT_DIGITS = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
 const FIT_EPSILON = 1e-6;
@@ -103,6 +106,10 @@ function partial(value, share, decimals) {
 // final one included), a step equal to the one before it merged into it. Each step shows from its time until the next
 // one's, so exactly one is visible at any moment.
 export function countSteps({ value, decimals, start, land, rate, curve }) {
+  // a small whole number counts by ones (look review 2: a count of 0 then 9 never read as counting), evenly
+  if (decimals === 0 && Number.isInteger(value) && value > 0 && value < BY_ONES) {
+    return Array.from({ length: value + 1 }, (_, k) => ({ t: k === 0 ? 0 : start + ((land - start) * k) / value, text: formatValue(k, 0) }));
+  }
   // floor, not ceil: the steps never come faster than `rate` (STEP_EPSILON keeps 0.6 s * 30 from flooring to 17)
   const frames = Math.min(MAX_COUNT_STEPS - 1, Math.max(1, Math.floor((land - start) * rate + STEP_EPSILON)));
   const final = formatValue(value, decimals);
@@ -304,6 +311,17 @@ function deskParts(shot, ctx, steps, times) {
 
 // ---- pop ----
 
+// The area shrunk toward the frame's centre so that a camera punch the shot asks for (an `on` punch: a zoom about the
+// frame's centre) keeps the block inside it at its peak (look review 2's taller band reaches near the safe edges).
+function punchRoom(area, shot, ctx) {
+  if (!(shot.on ?? []).some((e) => e.do === 'punch')) return area;
+  const zoom = ctx.look.devices.punch?.scale ?? 1;
+  const cx = ctx.canvas.w / HALF, cy = ctx.canvas.h / HALF;
+  const left = cx - (cx - area.left) / zoom, top = cy - (cy - area.top) / zoom;
+  const right = cx + (area.left + area.w - cx) / zoom, bottom = cy + (area.top + area.h - cy) / zoom;
+  return { left, top, w: right - left, h: bottom - top };
+}
+
 // pop: the figure flush left on the stack's edge, filling the available width (the platform safe width on 9:16,
 // columns 1 to 12 otherwise) between scale step 5 and POP.maxShort units for one or two digits (POP.max for more); the
 // label a tag at step 3 POP.tagGap under its baseline; the delta plain label caps (plainDelta) POP.deltaGap under that;
@@ -311,9 +329,8 @@ function deskParts(shot, ctx, steps, times) {
 // flush left, the block centred in the available height.
 function popParts(shot, ctx, steps, times) {
   const { look, unit } = ctx;
-  const area = stackArea(ctx);
-  const maxSize = (digitCount(steps) <= SHORT_DIGITS ? POP.maxShort : POP.max) * unit;
-  const fig = figureAt(shot, ctx, { maxWidth: area.w, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize, steps });
+  const area = punchRoom(stackArea(ctx), shot, ctx);
+  const widest = (digitCount(steps) <= SHORT_DIGITS ? POP.maxShort : POP.max) * unit;
   const labelAt = times.land + look.moves.enter.dur;
   const style = look.devices.tag ?? {};
   const tagOf = (id, words, top, at, [fromStep, toStep]) => plainTag(ctx, id, words, {
@@ -326,6 +343,10 @@ function popParts(shot, ctx, steps, times) {
   const kickerH = shot.kicker === undefined ? 0 : kickerTag(0).box[3] + POP.kickerGap * unit;
   const labelH = labelTag(0).box[3];
   const deltaH = shot.delta === undefined ? 0 : POP.deltaGap * unit + deltaTag(0).box[3];
+  // the figure no taller than the area leaves it, with room for a punch's scale (a tall band no longer caps it by width)
+  const room = (area.h - kickerH - POP.tagGap * unit - labelH - deltaH) / (CAP_HEIGHT * (look.devices.punch?.scale ?? 1));
+  const maxSize = Math.max(sizeAt(look, FIGURE_STEP, unit), Math.min(widest, room));
+  const fig = figureAt(shot, ctx, { maxWidth: area.w, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize, steps });
   const blockH = kickerH + CAP_HEIGHT * fig.size + POP.tagGap * unit + labelH + deltaH;
   const baseline = centredTop(area, blockH, ctx) + kickerH + CAP_HEIGHT * fig.size; // on the optical centre when tall
   const enterAt = times.start + look.moves.enter.dur;
@@ -347,8 +368,11 @@ function expandNumber(given, ctx) {
   const { look, timing, unit, fps } = ctx;
   // A negative value with a prefix reads "-$5": the minus goes in front of the prefix and the figure counts its size.
   const shot = given.value < 0 && given.prefix !== undefined ? { ...given, value: -given.value, prefix: `-${given.prefix}` } : given;
-  const land = landingOf(shot, timing);
-  const start = Math.max(0, land - look.moves.count.dur);
+  // a count spoken at the very start still runs for MIN_COUNT seconds, so it is seen counting (look review 2), unless
+  // that would leave the label under LABEL_ROOM seconds to land and hold before the shot ends
+  const spoken = landingOf(shot, timing);
+  const land = Math.max(spoken, Math.min(MIN_COUNT, timing.duration - LABEL_ROOM));
+  const start = Math.max(0, land - Math.max(look.moves.count.dur, MIN_COUNT));
   // The count changes at the look's own rhythm: a hand look (desk) on its 12 fps step, a crisp one (pop) every frame.
   const rate = look.moves.draw.step ?? fps;
   const steps = countSteps({ value: shot.value, decimals: shot.decimals ?? 0, start, land, rate, curve: ease(look.moves.count.ease) });

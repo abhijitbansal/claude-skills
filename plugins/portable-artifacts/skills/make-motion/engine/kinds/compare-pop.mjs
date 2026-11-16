@@ -9,13 +9,16 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
+import { landing } from '../devices/shared.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, fitInBox, numeralLayout } from './shared.mjs';
 import { STACK, composeStack, stackNodes, stackArea, restack } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
 
-const TAGS = Object.freeze({ versus: ['A', 'B'], 'before-after': ['BEFORE', 'AFTER'] });
+// a side's tag, a label line of its own over the title (look review 2: "B" over "A SCRIPT" read as "B A SCRIPT")
+const TAGS = Object.freeze({ versus: ['OPTION A', 'OPTION B'], 'before-after': ['BEFORE', 'AFTER'] });
+const TURN_BAR = Object.freeze({ width: 0.24, height: 14 }); // the turn's accent bar: a share of the stack width, units tall
 const HALF = 2;
 const SHARE_PASSES = 2;
 
@@ -123,5 +126,19 @@ export function expandPopCompare(shot, ctx, data, { turn, both }) {
   for (let pass = 0; both && pass < SHARE_PASSES; pass++) parts = partsAt(Math.min(...parts.map((p) => p.largest)));
   const opacity = (k) => (both ? dimTrack(ctx.look, data, k, turn) : shownFrom(spans[k][0], spans[k][1]));
   const wrappers = parts.map((p, k) => ({ id: p.id, tracks: { opacity: opacity(k) }, children: p.children }));
-  return { wrappers, boxes: { left: parts[0].box, right: parts[1].box } };
+  const boxes = { left: parts[0].box, right: parts[1].box };
+  if (!both) return { wrappers, boxes };
+  const bar = turnBar(shot, ctx, areas[0], boxes, turn);
+  return { wrappers, boxes: { ...boxes, turn: bar.box }, extra: [bar.node] };
+}
+
+// Both sides on one frame: the turn marked by the accent bar midway between the blocks, flush left, punched in at the
+// turn (look review 2: a dim alone did not read as the handover).
+function turnBar(shot, ctx, area, { left, right }, turn) {
+  const { look, unit } = ctx;
+  const w = TURN_BAR.width * area.w, h = TURN_BAR.height * unit;
+  const y = (left[1] + left[3] + right[1]) / HALF - h / HALF;
+  const box = [area.left, y, w, h];
+  const d = `M${area.left} ${y}h${w}v${h}h${-w}Z`;
+  return { box, node: node('path', `${shot.id}.turn`, { d, fill: look.palette.accent }, { tracks: { opacity: landing(turn, look.moves.enter, 0, 1) } }) };
 }

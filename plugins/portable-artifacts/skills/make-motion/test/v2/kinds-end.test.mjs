@@ -175,40 +175,31 @@ test('desk end: a picture sits on the card where the mark would, at most a sixth
 
 // ---- pop ----
 
-test('pop end at 16:9 (hand computed): the mark a tag over the stack, the title lines flush left on 72 filling the width to 1848, the ask the last line in the accent 32 units under the title, the block centred on 540', () => {
-  const { nodes, ctx } = expandShot(EXAMPLE(), 'pop', '16:9');
+test('pop end at 16:9: the mark a tag over the stack, the title lines flush left on 72 at two sizes inside 1848, the ask an accent tag 40 units under the title (look revision 2), the block centred on 540', () => {
+  const { nodes, ctx, boxes } = expandShot(EXAMPLE(), 'pop', '16:9');
   const look = ctx.look;
   const group = nodes.find((n) => n.id === 'close.title');
   assert.equal(group.type, 'group');
-  const lines = group.children.filter((n) => n.id !== 'close.title.ask');
-  const ask = group.children.at(-1);
-  assert.equal(ask.id, 'close.title.ask');
-  // each line fills the width (or stops at the stack's cap, or is held within the look's ratio of a neighbour), unless
-  // the whole block was set smaller to fit the height
+  const lines = group.children;
   const tag = nodes.find((n) => n.id === 'close.kicker');
   const plate = plateBox(tag);
-  const blockHeight = lineInk(ask).baseline - plate[1];
-  // set smaller to fill the 936 px: the block then ends at the bottom of the ask's box, its descent under the baseline
-  const shrunk = Math.abs(blockHeight + 0.12 * ask.props.font.size - 936) < 1e-6;
+  const small = Math.min(...lines.map((m) => m.props.font.size));
   for (const line of lines) {
     const ink = lineInk(line);
     assert.ok(Math.abs(ink.left - 72) <= 1, `${line.id} flush left at ${ink.left}`);
-    const held = lines.some((m) => m !== line && Math.abs(line.props.font.size - m.props.font.size * look.stack.ratio) < 1e-6);
-    assert.ok(ink.right <= 1848 + 1 && (shrunk || held || line.props.font.size >= STACK.max - EPS || ink.right >= 1847), `${line.id} fills the width: ${ink.right}`);
+    assert.ok(ink.right <= 1848 + 1, `${line.id} inside the columns`);
+    assert.ok(Math.abs(line.props.font.size - small) < 1e-6 || Math.abs(line.props.font.size - small * look.stack.ratio) < 1e-6, `${line.id}: one of two sizes`);
     assert.equal(line.props.stack, 'close.title');
   }
-  assert.ok(shrunk, 'hand computed: at full width the three lines, the tag and the ask need more than the 936 px between the margins, so the block is set smaller to fill them');
-  assert.equal(ask.props.fill, look.palette.accent, 'the ask in the accent');
-  assert.equal(ask.props.stack, 'close.title', 'one stack: one size class');
-  assert.ok(ask.props.font.size >= look.scale[2] - EPS && ask.props.font.size <= look.scale[3] + EPS, `ask size ${ask.props.font.size}`);
-  const askInk = lineInk(ask);
-  assert.ok(Math.abs(askInk.left - 72) <= 1, 'the ask flush left');
+  const askPlate = all(nodes).find((n) => n.id === 'close.ask.plate');
+  assert.equal(askPlate.props.fill, look.palette.accent, 'the ask on an accent plate');
+  near(boxes.ask[0], 72, 'the ask flush left');
   const lastBaseline = lineInk(lines.at(-1)).baseline;
-  near(askInk.baseline - 0.74 * ask.props.font.size, lastBaseline + 32, 'the ask cap line 32 units under the last title line');
+  assert.ok(boxes.ask[1] >= lastBaseline + 40 - 1, 'the ask 40 units or more under the last baseline');
   near(plate[0], 72, 'the tag flush left');
   const firstTop = lineInk(lines[0]).baseline - 0.74 * lines[0].props.font.size;
   near(firstTop - (plate[1] + plate[3]), STACK.kickerGap, 'the tag over the first line');
-  near((plate[1] + askInk.baseline + 0.12 * ask.props.font.size) / 2, 540, 'the block, to the bottom of the ask\'s box, centred in the available height');
+  assert.ok(Math.abs((plate[1] + boxes.ask[1] + boxes.ask[3]) / 2 - 540) < 40, 'the block centred in the available height, near 540');
 });
 
 test('pop end at 9:16 stays inside the platform safe zone', () => {
@@ -329,7 +320,9 @@ test('end: a title too long for the frame is a fit (overflow) problem on the tit
   assert.equal(textNode(desk.nodes, 'close.title').props.layout.overflow, true, 'desk: the review reports it as a creative overflow');
   const pop = expandShot(long, 'pop', '9:16');
   const lines = pop.nodes.find((n) => n.id === 'close.title').children;
-  assert.ok(lines.some((n) => n.props.layout.overflow === true), 'pop: a line set under the stack floor says so');
+  // look revision 2: the taller band may hold it; a line under the stack floor still says so
+  const floor = pop.ctx.look.scale[2];
+  assert.ok(lines.every((n) => n.props.font.size >= floor - EPS || n.props.layout.overflow === true), 'pop: a line set under the stack floor says so');
   const insets = viralOf(pop.canvas);
   inside(pop.boxes.ask, insets, pop.canvas, 'pop ask');
   const [, top, , h] = pop.boxes.title;

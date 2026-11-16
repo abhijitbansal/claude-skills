@@ -70,12 +70,14 @@ test('pop clipping: cutout only, upright, centred on the safe zone at no more th
   const pic = nodes.find((n) => n.id === hero);
   assert.equal(pic.props.rotate ?? 0, 0);
   near(pic.props.x, safe.left + safeW / 2);
-  near(pic.props.y, (safe.top + canvas.h - safe.bottom) / 2);
+  // on the band's optical centre (45%), or its middle when the picture's reach meets the edge (look revisions 1, 2)
+  const h = canvas.h - safe.top - safe.bottom;
+  assert.ok(pic.props.y >= safe.top + 0.45 * h - 1e-6 && pic.props.y <= safe.top + h / 2 + 1e-6, `y ${pic.props.y}`);
   // the fix pass (F5): smaller than 92% where its keyline and shadow at the spring's peak would leave the safe zone
   // (kinds-clipping-focus.test.mjs checks the reach)
   assert.ok(all([pic]).find((n) => n.type === 'image').props.w <= 0.92 * safeW + EPS, 'width');
   assert.ok(!all([pic]).some((n) => n.id.includes('card')));
-  near(sample(pic.tracks.scale, 0), ctx.look.moves.enter.scale);
+  near(sample(pic.tracks.scale, 0), 0.9, 'grows from 0.9, whole from frame 0 (look revision 2)');
 });
 
 test('pop establishing picture on a vertical format: a 4:5 crop of the source, as tall as the image allows, centred on the first targeted region', () => {
@@ -128,7 +130,7 @@ test('a region box is the region inside the drawn picture, through its rotation'
   desk.boxes['region:query'].forEach((v, i) => near(v, want[i], `desk ${i}`));
 });
 
-test('a mark on a region goes over the picture, and the desk camera pushes until the region fills 58% of the width and no more than 36% of the height (zoom 1.2 to 3.2)', () => {
+test('a mark on a region goes over the picture, and the desk camera pushes until the region fills 72% of the width and no more than 70% of the height without a caption (zoom 1.2 to 3.2)', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
     on: [{ at: 'word:query', do: 'circle', target: 'region:query' }] };
   for (const format of ['16:9', '9:16']) {
@@ -138,7 +140,7 @@ test('a mark on a region goes over the picture, and the desk camera pushes until
     const push = camera.find((layer) => layer.some((k) => k.zoom !== undefined));
     const at = Math.max(timing.words[4].start, 0.6 + 0.9); // the first shot shows the whole picture for 0.6 s before a push of 0.9 s
     const rect = ctx.look.grid ? { w: canvas.w, h: canvas.h } : null; // desk composes on the whole canvas
-    const want = Math.min(3.2, Math.max(1.2, Math.min((0.58 * rect.w) / boxes['region:query'][2], (0.36 * rect.h) / boxes['region:query'][3])));
+    const want = Math.min(3.2, Math.max(1.2, Math.min((0.72 * rect.w) / boxes['region:query'][2], (0.7 * rect.h) / boxes['region:query'][3])));
     near(push.at(-1).t, at, `${format} lands on the event`);
     near(push.at(-1).zoom, want, `${format} zoom`);
     assert.equal(push.at(-1).ease, ctx.look.moves.enter.ease);
@@ -242,7 +244,7 @@ test('pop: the whole picture until the first region event, then a hard switch to
   near(image.props.w / image.props.h, (0.3 * 1600) / (0.2 * 1000), 'the region keeps its shape');
   const cutoutGroup = close.children.find((n) => n.id === 'c.close0.cutout');
   near(cutoutGroup.props.x, safe.left + safeW / 2);
-  near(cutoutGroup.props.y, safe.top + safeH / 2);
+  assert.ok(cutoutGroup.props.y >= safe.top + 0.45 * safeH - 1e-6 && cutoutGroup.props.y <= safe.top + safeH / 2 + 1e-6, 'on the optical centre, or the middle');
   const punch = ctx.look.devices.punch.scale;
   const switchKeys = (expandShot(POP_SHOT, 'pop', '9:16').camera).flat().filter((k) => k.zoom === punch);
   assert.ok(switchKeys.some((k) => Math.abs(k.t - at) < 1e-6), 'the switch lands with a punch');

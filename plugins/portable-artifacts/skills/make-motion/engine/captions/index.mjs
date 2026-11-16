@@ -105,8 +105,8 @@ const captioned = (kind, ctx) => kind.showsWords !== true && ctx.timing.words.le
 
 /**
  * The ctx a shot's kind composes in. A captioned shot whose look composes inside the platform safe zone (compositionRect
- * safe: pop on 9:16) gives up the caption zone at the bottom of that zone, and a gutter over it: they come off the
- * bottom of ctx.viralInsets, so the picture, the clipping's own caption and the rest keep clear of the captions. Any
+ * safe: pop on 9:16) gives up the caption zone at the bottom of that zone, and a gutter over it: ctx.captionRoom, which
+ * compositionRect takes off the bottom, so the picture, the clipping's own caption and the rest keep clear of the captions. Any
  * other shot composes in `ctx` as it is.
  * @param {object} film @param {object} kind @param {object} ctx the shot's ctx (shotContext)
  */
@@ -116,7 +116,7 @@ export function kindContext(film, kind, ctx) {
   if (!rect.safe) return ctx;
   const zone = registries.captions.get(ctx.look.captions).zone(ctx);
   const room = rect.top + rect.h - zone[1] + ctx.look.grid.gutter * ctx.unit;
-  return room > 0 ? { ...ctx, viralInsets: { ...ctx.viralInsets, bottom: ctx.viralInsets.bottom + room } } : ctx;
+  return room > 0 ? { ...ctx, captionRoom: room } : ctx; // compositionRect takes it off the bottom
 }
 
 /**

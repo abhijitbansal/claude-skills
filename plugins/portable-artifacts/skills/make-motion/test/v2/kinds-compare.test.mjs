@@ -108,7 +108,8 @@ test('desk compare at 16:9: two cards side by side on the grid, the same size an
   assert.equal(lt.props.font.size, rt.props.font.size, 'both titles at one size');
   assert.equal(lt.props.role, 'hero');
   const points = textNode(left.children, 'c.left.points');
-  assert.ok(lt.props.font.size >= 3 * points.props.font.size - EPS, 'titles three times the points');
+  assert.ok(lt.props.font.size >= 2 * points.props.font.size - EPS, 'titles twice the points (look revision 2: one size class with them)');
+  assert.equal(points.props.stack, lt.props.stack, 'title and points one size class');
   assert.equal(all(right.children).filter((n) => n.id === 'c.right.points').length, 0, 'no points on the right');
 });
 
@@ -192,7 +193,7 @@ test('desk compare: a one-word side against a thirty-word title keeps both cards
 // ---- pop ----
 
 test('pop compare on a wide frame: one side at a time, a hard cut at the turn; each a stack with its title as the hero under an A / B tag (BEFORE / AFTER for before-after); both seen', () => {
-  for (const [mode, tags] of [['versus', ['A', 'B']], ['before-after', ['BEFORE', 'AFTER']]]) {
+  for (const [mode, tags] of [['versus', [['OPTION', 'A'], ['OPTION', 'B']]], ['before-after', [['BEFORE'], ['AFTER']]]]) {
     const { nodes, timing, canvas, ctx } = expandShot(SIDES({ mode }), 'pop', '16:9'); // a tall frame shows both (look revision 1)
     const turn = compareTurn(timing);
     const left = all(nodes).find((n) => n.id === 'c.left'), right = all(nodes).find((n) => n.id === 'c.right');
@@ -202,7 +203,7 @@ test('pop compare on a wide frame: one side at a time, a hard cut at the turn; e
     assert.equal(opacity(right, turn), 1);
     [left, right].forEach((side, k) => {
       const tag = all(side.children).find((n) => n.id === `${side.id}.kicker.text`);
-      assert.deepEqual(tag.props.layout.lines[0].words.map((w) => w.text), [tags[k]]);
+      assert.deepEqual(tag.props.layout.lines.flatMap((l) => l.words.map((w) => w.text)), tags[k]); // OPTION A / B since look revision 2
       const stack = side.children.find((n) => n.id === `${side.id}.title`);
       assert.ok(stack.children.every((n) => n.props.role === 'hero' && n.props.stack === `${side.id}.title`));
     });

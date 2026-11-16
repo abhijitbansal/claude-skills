@@ -247,7 +247,10 @@ test('F5 pop establishing picture: as large as the safe area allows at the sprin
   const boxes = entranceTimes(film.look.moves.enter.dur).map((t) => subtreeBox(film.sampleAt(t), 'c.image.cutout'));
   const lowest = Math.max(...boxes.map(bottom)), rightmost = Math.max(...boxes.map((b) => b[0] + b[2]));
   // the picture reaches within 2 px of the safe edge it fits against: the bottom for a tall window, else the right
-  assert.ok(safe.bottom - lowest < 2 || safe.right - rightmost < 2, `the reach ${lowest}, ${rightmost} against the safe bottom ${safe.bottom} and right ${safe.right}`);
+  // or held at 92% of the safe width (its own cap) when the reach leaves room (look revision 2: no overshoot)
+  const image = all(film.sampleAt(3).filter((n) => n.id === 'c.image')).find((n) => n.type === 'image');
+  const capped = Math.abs(image.props.w - 0.92 * (safe.right - safe.left)) < 1e-6;
+  assert.ok(capped || safe.bottom - lowest < 2 || safe.right - rightmost < 2, `the reach ${lowest}, ${rightmost} against the safe bottom ${safe.bottom} and right ${safe.right}`);
 });
 
 test('the paper scrim is shared (region-mark.mjs paperScrim): the clipping\'s own at 0.8 with the region cut out, another kind\'s at the opacity it asks, whole', async () => {

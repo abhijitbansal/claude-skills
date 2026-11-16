@@ -14,6 +14,8 @@ import { SLUG } from './slug.mjs';
 
 const FIRST_COLUMN = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
+const SOURCE_PREFIX = 'Source: ';
+const SOURCE_GAP = 3; // gaps between the plot's lowest label and the source line
 
 // The claim: fitted, flush left on column 2, its cap line where a statement's slug sits (SLUG.top of the height).
 function titleNode(shot, ctx, data, labelSize) {
@@ -33,16 +35,21 @@ export function expandDeskChart(shot, ctx, data, hero) {
   const { look, canvas, unit } = ctx;
   const style = chartStyle(ctx, data);
   const { font, gap } = style;
-  const title = titleNode(shot, ctx, data, sizeAt(look, data.labelStep, unit));
+  const title = titleNode(shot, ctx, data, font.size); // three times the labels as set (labelScale)
   const margin = look.grid.margin * unit;
   const caption = captionTop(ctx);
   const wide = isWide(canvas);
   const left = gridX(look, canvas, wide ? FIRST_COLUMN : 1);
-  const sourceBaseline = (wide ? canvas.h - margin : Math.min(canvas.h - margin, caption - gap)) - WORD_DESCENT * font.size;
+  const sourceBaseline = Math.min(canvas.h - margin, caption - gap) - WORD_DESCENT * font.size; // over a caption band
+  // the source line: smaller than the labels, in ink2, as written after "Source: ", a clear gap under the plot (look
+  // review 2: in the labels' style right under them it read as a second row of categories)
+  const sourceFont = fontFor(look, 'label', sizeAt(look, data.sourceStep, unit), unit);
   const source = shot.source === undefined ? null
-    : label(ctx, { id: `${shot.id}.source`, text: shot.source, font, x: gridX(look, canvas, FIRST_COLUMN), y: sourceBaseline, fill: style.text });
-  const floor = Math.min(source === null ? canvas.h - margin : source.box[1] - gap, caption) - gap;
-  const area = { x: left, y: title.bottom + data.titleGap * unit, w: gridX(look, canvas, RIGHT_EDGE) - left, h: 0 };
+    : label(ctx, { id: `${shot.id}.source`, text: `${SOURCE_PREFIX}${shot.source}`, font: sourceFont, x: gridX(look, canvas, FIRST_COLUMN), y: sourceBaseline, fill: style.text, asWritten: true });
+  const floor = Math.min(source === null ? canvas.h - margin : source.box[1] - SOURCE_GAP * gap, caption) - gap;
+  // equal outer margins: the plot's right edge as far in from the right as its left edge is from the left
+  const right = wide ? canvas.w - left : gridX(look, canvas, RIGHT_EDGE);
+  const area = { x: left, y: title.bottom + data.titleGap * unit, w: right - left, h: 0 };
   const plotArea = { ...area, h: Math.max(1, floor - area.y) };
   const plot = drawPlot(shot, ctx, style, plotArea, { valueOnHighlight: true });
   const group = node('group', hero, {}, { children: plot.nodes });

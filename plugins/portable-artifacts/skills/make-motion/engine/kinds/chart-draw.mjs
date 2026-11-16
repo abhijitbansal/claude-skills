@@ -6,7 +6,7 @@
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { landing, isHand, colourOf, polyline } from '../devices/shared.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, unionBox, markerAccent } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, unionBox, markerAccent, isWide } from './shared.mjs';
 import { valueText } from './chart-scale.mjs';
 import { chartData, valueScale, columnMarks, barMarks } from './chart-marks.mjs';
 import { chartTimes } from './chart-time.mjs';
@@ -27,7 +27,8 @@ const HALF = 2;
 export function chartStyle(ctx, data) {
   const { look, unit } = ctx;
   return {
-    font: fontFor(look, 'label', sizeAt(look, data.labelStep, unit), unit),
+    // labelScale on a wide frame: look review 2 found the desk's step-2 labels unreadable on the 16:9 phone tile
+    font: fontFor(look, 'label', (isWide(ctx.canvas) ? data.labelScale ?? 1 : 1) * sizeAt(look, data.labelStep, unit), unit),
     gap: data.gap * unit, line: data.line * unit, refWidth: data.ref * unit, axisWidth: data.axis * unit, dim: data.dim, refs: data.refs,
     mark: colourOf(look, 'ink'), accent: markerAccent(look), text: colourOf(look, 'ink2'), strong: colourOf(look, 'ink'), rule: colourOf(look, 'rule'),
     step: isHand(look) ? look.moves.draw.step : undefined,

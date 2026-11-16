@@ -45,6 +45,9 @@ function shotAsset(shot, kind, assets) {
   };
 }
 
+// Does a shot count among the film's numbered shots? Its kind says so: `numbered` true, or a function of the shot.
+const isNumbered = (kind, shot) => (typeof kind.numbered === 'function' ? kind.numbered(shot) === true : kind.numbered === true);
+
 /**
  * The ctx a kind's expand(shot, ctx) gets for shot `index`. `assets` maps a src to its picture (anything with a size).
  * `viralInsets` is the platform safe zone for this canvas (template/formats.mjs safeInsets with VIRAL_SAFE_ZONE),
@@ -69,7 +72,8 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
     captions: captionsOn(film, registries.modes.get(film.mode ?? DEFAULT_MODE)), // whether the film shows captions
     asset: shotAsset(shot, kind, assets),
     // the shot's 1-based place among the film's numbered shots (kinds with `numbered: true`): what a slug shows
-    ordinal: film.shots.slice(0, index + 1).filter((s) => registries.kinds.has(s.show) && registries.kinds.get(s.show).numbered === true).length,
+    // (a kind's `numbered` may be a function of the shot: a compare counts only when it shows a slug)
+    ordinal: film.shots.slice(0, index + 1).filter((s) => registries.kinds.has(s.show) && isNumbered(registries.kinds.get(s.show), s)).length,
   };
 }
 

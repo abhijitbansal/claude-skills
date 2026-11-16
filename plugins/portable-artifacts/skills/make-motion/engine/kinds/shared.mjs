@@ -28,8 +28,9 @@ export const RESERVED_IDS = Object.freeze([FIELD_ID]);
 /** The prefix of a target that names one of a clipping's regions. */
 export const REGION_PREFIX = 'region:';
 const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
-// the region fills `share` of the width, and at most `tall` of the height (room under or over it for a caption card)
-const PUSH = Object.freeze({ share: 0.58, tall: 0.36, min: 1.2, max: 3.2, dur: 0.9 });
+// the region fills `share` of the width (look review 2: at 0.58 the payoff was too small on the phone), at most `tall`
+// of the height when a caption card needs room under or over it, else `full` of it
+const PUSH = Object.freeze({ share: 0.72, tall: 0.36, full: 0.7, min: 1.2, max: 3.2, dur: 0.9 });
 const PUSH_OVERSHOOT = 1.2; // a spring ease can carry the push this far past its target; the pan limit allows for it
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
 const FORCE_MARK = '|';
@@ -72,8 +73,13 @@ export function compositionRect(ctx) {
   if (!viralInsets || !servesPlatformMode(look) || !isPortrait916(canvas)) {
     return { left: 0, top: 0, w: canvas.w, h: canvas.h, cx: canvas.w / HALF, cy: canvas.h / HALF, safe: false };
   }
-  const w = canvas.w - viralInsets.left - viralInsets.right, h = canvas.h - viralInsets.top - viralInsets.bottom;
-  return { left: viralInsets.left, top: viralInsets.top, w, h, cx: viralInsets.left + w / HALF, cy: viralInsets.top + h / HALF, safe: true };
+  // a look's band (look.band: shares of the height) sets the top and bottom inside the platform sides (look review 2:
+  // the safe zone's own bottom left the lower half of a vertical frame empty)
+  const top = look.band ? Math.max(viralInsets.top, look.band.top * canvas.h) : viralInsets.top;
+  // ctx.captionRoom: what a captioned shot gives up for its captions (captions/index.mjs kindContext)
+  const bottom = (look.band ? look.band.bottom * canvas.h : canvas.h - viralInsets.bottom) - (ctx.captionRoom ?? 0);
+  const w = canvas.w - viralInsets.left - viralInsets.right, h = bottom - top;
+  return { left: viralInsets.left, top, w, h, cx: viralInsets.left + w / HALF, cy: top + h / HALF, safe: true };
 }
 
 /** A shot that arrives on a match cut keeps its hero on screen from the first frame: no entrance. */
@@ -358,10 +364,10 @@ const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
  * to c + (x - c) zoom - pan, so pan = c + (boxCentre - c) zoom - target; the drift's own pan at the landing time is
  * taken off, since the camera adds the layers.
  */
-export function pushLayer(ctx, box, at, { below = -Infinity } = {}) {
+export function pushLayer(ctx, box, at, { below = -Infinity, caption = false } = {}) {
   const { look, canvas, unit, timing } = ctx;
   const rect = compositionRect(ctx);
-  const zoom = clampTo(Math.min((PUSH.share * rect.w) / box[2], (PUSH.tall * rect.h) / box[3]), PUSH.min, PUSH.max);
+  const zoom = clampTo(Math.min((PUSH.share * rect.w) / box[2], ((caption ? PUSH.tall : PUSH.full) * rect.h) / box[3]), PUSH.min, PUSH.max);
   const drift = driftReach(look, unit);
   const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
   const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx) - driftAt(look, timing, unit, at);

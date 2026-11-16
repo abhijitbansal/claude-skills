@@ -23,6 +23,9 @@ export const endsSentence = (word) => SENTENCE_END.test(word);
 // Words a line of a headline never ends on when another break exists: articles, short prepositions, conjunctions.
 const WEAK_ENDS = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'by', 'for', 'from', 'with', 'as', 'into', 'onto', 'via', 'and', 'or', 'but', 'nor']);
 const STACK_WEAK_COST = 1.1; // a stack line ending on one: more than one more line
+const STACK_COMMA_COST = 2; // a comma inside a stack line (not at its end): more than one more line and a short last word
+const STACK_ORPHAN_COST = 1.1; // a first line of one word in a sentence of three words or more
+const INNER_COMMA = /[,;:]$/;
 // a line ending on one costs maxWidth^2 / this: more than any slack or an off-point break, less than a one-word line (a
 // line of one word is no balanced break, so 'Built on / your machine.' stays when the only other choice leaves a word alone)
 const WEAK_DIVISOR = 2;
@@ -78,6 +81,7 @@ function lineEnds(ctx, i) {
 
 const STACK_MAX_WORDS = 3;
 const STACK_LONG_LETTERS = 12; // a line of more letters than this holds at most 2 words...
+const STACK_LONG_SENTENCE = 15; // ...or of more than this when the line ends a sentence ("NOT SHIPPED WEAK." stays whole)
 const STACK_LONG_COST = 100; // ...which is all but a rule: this outweighs any other choice
 const STACK_LINE_COST = 1; // fewer lines are preferred
 const STACK_OFF_POINT_COST = 0.75; // a break away from a preferred point
@@ -100,10 +104,13 @@ export function stackLines(words) {
   const ctx = buildContext(words, words.map(() => 0), 0, Infinity, []);
   const cost = (i, k) => {
     const letters = words.slice(i, k).reduce((sum, w) => sum + letterCount(w), 0);
-    const long = k - i > 2 && letters > STACK_LONG_LETTERS ? STACK_LONG_COST : 0;
+    const limit = SENTENCE_END.test(bare(words[k - 1])) ? STACK_LONG_SENTENCE : STACK_LONG_LETTERS;
+    const long = k - i > 2 && letters > limit ? STACK_LONG_COST : 0;
     const alone = k - i === 1 && letters <= STACK_SHORT_LETTERS ? STACK_ALONE_COST : 0;
     const weak = k < n && ctx.weak[k - 1] && !ctx.forced[k - 1] ? STACK_WEAK_COST : 0;
-    return STACK_LINE_COST + long + alone + weak + (ctx.preferred(k) ? 0 : STACK_OFF_POINT_COST);
+    const comma = words.slice(i, k - 1).some((w) => INNER_COMMA.test(bare(w))) ? STACK_COMMA_COST : 0;
+    const orphan = i === 0 && k === 1 && n > 2 ? STACK_ORPHAN_COST : 0;
+    return STACK_LINE_COST + long + alone + weak + comma + orphan + (ctx.preferred(k) ? 0 : STACK_OFF_POINT_COST);
   };
   const best = new Array(n + 1).fill(Infinity);
   const choice = new Array(n + 1).fill(n);

@@ -129,7 +129,8 @@ test('ruling 13: a viral hook may use the full safe width and up to 40% of the s
   const area = stackArea(hook.ctx);
   const [, top, , h] = hook.boxes.text;
   assert.ok(Math.min(...sizes(hook)) >= Math.min(...sizes(later)) - 1e-6, `no line smaller: hook ${sizes(hook).map(Math.round)} against ${sizes(later).map(Math.round)}`);
-  assert.ok(h >= 1.6 * later.boxes.text[3], `the hook block ${Math.round(h)} at least 1.6 times the later one ${Math.round(later.boxes.text[3])}`);
+  // look revision 2: every stack now grows to fill its band, so the hook is no smaller than a later statement
+  assert.ok(h >= later.boxes.text[3] - 1e-6, `the hook block ${Math.round(h)} at least the later one ${Math.round(later.boxes.text[3])}`);
   // the limit holds the lines' ink; the text box reaches a word's descent past the last baseline
   assert.ok(h <= pop.stack.hook * area.h + 0.15 * Math.max(...sizes(hook)), `the hook block ${Math.round(h)} within ${pop.stack.hook} of ${area.h}`);
   assert.ok(top >= area.top - 1e-6);
@@ -225,19 +226,6 @@ test('ruling 7: a desk clipping opens close: the picture 70% of a wide frame, or
   const [x, y, w, h] = boxes.image;
   const clear = x + w <= slug[0] || slug[0] + slug[2] <= x || y + h <= slug[1] || slug[1] + slug[3] <= y;
   assert.ok(clear, `picture ${boxes.image.map(Math.round)} clear of the slug ${slug.map(Math.round)}`);
-});
-
-test('a pop end ask too long for one line at its smallest size wraps by sense into lines of one size, inside the safe area', () => {
-  const shot = { id: 'close', show: 'end', say: 'Write the script. Ship the film.', ask: 'Get make motion today', mark: 'make-motion' };
-  const { nodes, boxes, ctx } = expandShot(shot, 'pop', '9:16');
-  const asks = all(nodes).filter((n) => n.type === 'text' && /^close\.title\.ask\d*$/.test(n.id));
-  assert.ok(asks.length >= 2, `wrapped: ${asks.map((n) => n.id)}`);
-  assert.ok(asks.every((n) => !n.props.layout.overflow), 'every line fits');
-  assert.equal(new Set(asks.map((n) => n.props.font.size)).size, 1, 'one size');
-  const area = stackArea(ctx);
-  const [x, y, w, h] = boxes.ask;
-  assert.ok(x >= area.left - 1e-6 && x + w <= area.left + area.w + 1 && y + h <= area.top + area.h + 1, `ask ${boxes.ask.map(Math.round)} inside`);
-  assert.equal(registries.kinds.get('end').nodeField(shot, 'close.title.ask1'), 'ask');
 });
 
 test('ruling 11: the two sides of a tall pop compare share one title size and one points size (at most 3 sizes on the frame)', () => {

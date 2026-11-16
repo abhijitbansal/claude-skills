@@ -289,10 +289,13 @@ test('pop stack: lines by sense, each filling the safe width, capped at 400 unit
   assert.deepEqual(lines.map((l) => l.text), ['YOUR CHARTS', 'ARE HIDING', 'SOMETHING.']);
   // hand-computed: "SOMETHING." is 10 glyphs of 0.55 em tracked -0.02 em; its ink runs from 0.02 em to
   // 5.5 - 0.02 - 9 x 0.02 = 5.3 em, so 5.28 em wide; fitted 0.5 px inside the 765 px width: 764.5 / 5.28 = 144.792 px
-  near(lines[2].size, 764.5 / 5.28, 'SOMETHING. hand-computed size');
+  // look revision 2: two sizes, the smallest fitted line's and the ratio times it; SOMETHING. alone fits at 144.792 px
+  // (764.5 / 5.28, hand computed) but sits at the smaller size, the one a narrower line set
+  const small = Math.min(...lines.map((l) => l.size));
+  assert.ok(lines[2].size <= 764.5 / 5.28 + EPS, 'SOMETHING. never past its hand-computed fit');
   for (const l of lines) {
-    const held = lines.some((m) => m !== l && Math.abs(l.size - m.size * ctx.look.stack.ratio) < 1e-6);
-    assert.ok(Math.abs(l.right - l.left - width) <= 1 || Math.abs(l.size - 400) < EPS || held, `${l.text}: ink ${l.right - l.left} fills ${width}, 400 units, or the ratio`);
+    assert.ok(Math.abs(l.size - small) < 1e-6 || Math.abs(l.size - small * ctx.look.stack.ratio) < 1e-6, `${l.text}: one of two sizes`);
+    assert.ok(l.right - l.left <= width + 1, `${l.text}: inside the width`);
     near(l.left, left, `${l.text}: flush left on the safe edge`);
     assert.equal(l.node.props.font.wordSpace, 0.18);
     assert.equal(l.node.props.stack, 'a.text', 'every line names its stack');
@@ -312,7 +315,10 @@ test('pop stack: lines by sense, each filling the safe width, capped at 400 unit
   const look = registries.looks.get('pop'), wideCanvas = canvasOf('16:9');
   for (const l of wide) {
     near(l.left, gridX(look, wideCanvas, 1), 'columns 1 to 12: left');
-    assert.ok(Math.abs(l.right - gridX(look, wideCanvas, 13)) <= 1 || Math.abs(l.size - 400) < EPS, `${l.text} fills columns 1 to 12 or is capped`);
+    // two sizes (look revision 2): a line fills the columns, is capped, or sits at the stack's smaller size
+    const small = Math.min(...wide.map((m) => m.size));
+    assert.ok(Math.abs(l.right - gridX(look, wideCanvas, 13)) <= 1 || Math.abs(l.size - 400) < EPS || Math.abs(l.size - small) < 1e-6, `${l.text} fills columns 1 to 12, is capped or is the smaller size`);
+    assert.ok(l.right <= gridX(look, wideCanvas, 13) + 1);
   }
 });
 

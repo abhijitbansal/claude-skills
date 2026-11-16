@@ -18,6 +18,7 @@ import { expandPopCompare } from './compare-pop.mjs';
 export { compareTurn, valueText } from './compare-text.mjs';
 
 const KIND = 'compare';
+const KICKER_MAX = 40; // characters: a slug's kicker
 const TITLE_MAX = 60;
 const POINT_MAX = 60;
 const POINTS_MAX = 3;
@@ -52,14 +53,14 @@ function sideProblems(shot) {
 
 // Each `on` device, inside the side it aims at when the composition hides sides (pop), else on the frame. Nothing goes
 // behind: the sides are opaque cards in desk (a band under them would be hidden), and pop styles no highlight on text.
-function assemble(shot, ctx, { nodes, wrappers, boxes, hero }) {
+function assemble(shot, ctx, { nodes, wrappers, boxes, hero, extra = [] }) {
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'left' });
   if (wrappers === undefined) return { nodes: placeDevices(nodes, devices), devices };
   const children = wrappers.map((w, k) => node('group', w.id, {}, {
     tracks: w.tracks, children: [...w.children, ...devices.filter((d) => d.target === SIDES[k]).flatMap((d) => d.nodes)],
   }));
   const loose = devices.filter((d) => !SIDES.includes(d.target));
-  return { nodes: placeDevices([node('group', hero, {}, { children })], loose), devices };
+  return { nodes: placeDevices([node('group', hero, {}, { children: [...children, ...extra] })], loose), devices };
 }
 
 // When a side is on screen in shot seconds, or null for a target that is not a side.
@@ -110,6 +111,7 @@ registries.kinds.add(KIND, {
       left: SIDE_SCHEMA,
       right: SIDE_SCHEMA,
       mode: { enum: ['versus', 'before-after'] },
+      kicker: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: KICKER_MAX },
       hero: HERO_SCHEMA,
     },
   },
@@ -130,7 +132,7 @@ registries.kinds.add(KIND, {
   review: (shot, { look, timing, at, canvas }) => hiddenOnFindings(shot, { timing, at }, (target) => sideWindow(shot, timing, target, look, canvas)),
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...sideProblems(shot), ...kindSupportProblems(KIND, look)],
   expand: expandCompare,
-  numbered: false, // no slug
+  numbered: (shot) => shot.kicker !== undefined, // with a kicker, a slug (desk) that counts among the numbered shots
   showsWords: true, // its sides restate the narration: never captioned (engine/captions)
   // the second side's arrival as a device event named `turn`, in shot seconds (for the cue plan: scripts/v2/sound/events.mjs)
   events: (shot, timing) => [{ kind: 'device', device: 'turn', t: compareTurn(timing) }],

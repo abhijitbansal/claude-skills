@@ -26,9 +26,9 @@ export function labelWidth(ctx, font, text, numeric = false) {
  * overflow, the review's fit finding, as is a label its caller could not keep apart from its neighbours (`crowded`).
  * -> { node, box } with box the ink-ish rectangle (cap line to descent) in px.
  */
-export function label(ctx, { id, text, font, x, y, align = 'left', fill, role = 'label', at, maxWidth, lines = 1, numeric = false, tracks, crowded = false }) {
+export function label(ctx, { id, text, font, x, y, align = 'left', fill, role = 'label', at, maxWidth, lines = 1, numeric = false, tracks, crowded = false, asWritten = false }) {
   const { look, measure } = ctx;
-  const shown = numeric ? text : setCase(look, 'label', text);
+  const shown = numeric || asWritten ? text : setCase(look, 'label', text);
   const centred = align === 'center' && maxWidth !== undefined && !numeric; // wrapped lines centre in maxWidth
   let layout = numeric ? numeralLayout(shown, font, measure)
     : layoutText({ text: shown, font, maxWidth: maxWidth ?? NO_WRAP, align: centred ? 'center' : 'left', measure });

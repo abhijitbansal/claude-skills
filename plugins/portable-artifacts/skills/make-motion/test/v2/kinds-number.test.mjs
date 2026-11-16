@@ -108,12 +108,12 @@ test('desk number: a one-digit figure up to 820 units, baseline at 72%, flush le
   assert.ok(!all([delta]).some((n) => n.type === 'path'), 'no plate');
   const deltaText = all([delta]).find((n) => n.type === 'text');
   assert.equal(deltaText.props.font.family, look.fonts.label.family);
-  assert.equal(deltaText.props.font.size, look.scale[1], 'scale step 2');
+  assert.equal(deltaText.props.font.size, look.scale[2], 'scale step 3 (look revision 2)');
   assert.equal(deltaText.props.fill, look.palette.ink2);
   assert.deepEqual(deltaText.props.layout.lines.flatMap((l) => l.words.map((w) => w.text)), ['ONE', 'JSON', 'FILE', 'EACH']);
   near(boxes.delta[0], labelInk, 'delta ink flush with the label ink');
   // bottom-aligned: the delta's last baseline on the figure baseline, the label's baseline 24 units over the delta's cap line
-  near(boxes.delta[1] + boxes.delta[3] - 0.12 * 44, baseline, 'the delta sits on the figure baseline');
+  near(boxes.delta[1] + boxes.delta[3] - 0.12 * 72, baseline, 'the delta sits on the figure baseline');
   const labelBaseline = label.props.y + label.props.layout.lines.at(-1).y;
   near(boxes.delta[1] - labelBaseline, 24, 'the label over the delta, 24 units from its baseline to the delta cap line');
   // reading order: 5, then SKILLS, then ONE JSON FILE EACH
@@ -184,7 +184,7 @@ test('pop number: the figure fills the safe width up to 900 units, flush left; l
   assert.ok(!all([delta]).some((n) => n.type === 'path'), 'no plate');
   const deltaText = all([delta]).find((n) => n.type === 'text');
   assert.equal(deltaText.props.fill, look.palette.ink2);
-  assert.equal(deltaText.props.font.size, look.scale[1], 'scale step 2');
+  assert.equal(deltaText.props.font.size, look.scale[2], 'scale step 3 (look revision 2)');
   assert.equal(deltaText.props.font.family, look.fonts.label.family);
   assert.ok(deltaText.props.layout.lines[0].words.every((w) => w.text === w.text.toUpperCase()), 'label caps');
   const deltaBox = boxes.delta;

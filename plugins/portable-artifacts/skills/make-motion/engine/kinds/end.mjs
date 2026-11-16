@@ -11,17 +11,16 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridSpan, gridX, kindData, kindSupportProblems } from '../looks/index.mjs';
-import { entrance, landing } from '../devices/shared.mjs';
+import { entrance } from '../devices/shared.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase, capBox,
+  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase,
   isEditorial, heroProblems, fieldNode, enterTracks, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk,
-  ghostTracks, driftReach,
-  plainSay, endTimes, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup,
+  driftReach,
+  plainSay, endTimes, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup, plainTag,
 } from './shared.mjs';
 import { SLUG } from './slug.mjs';
-import { STACK, stackArea, composeStack, stackNodes, restack, fittedLine } from './stack.mjs';
-import { stackLines } from '../text/breaks.mjs';
+import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
 const KIND = 'end';
@@ -177,36 +176,16 @@ function expandDesk(shot, ctx, data, times) {
 
 // ---- pop ----
 
-// A word's tracks in a stack line: a ghost lit when spoken (a mode that reads from frame 0), else a fade on its time.
-function stackWordTracks(look, at, lit, { ghost, matched }) {
-  if (ghost) return ghostTracks(look, at, lit);
-  return matched ? {} : { opacity: landing(at, look.moves.enter, 0, 1) };
-}
-
-// The ask's lines: one line fitted to the width, or, when even its smallest size is too wide, its words broken by sense
-// (stackLines, else a word a line) into lines that share the smallest of their fitted sizes.
-function askLines(text, width, limits, ctx) {
-  const one = fittedLine(text, width, limits, ctx);
-  const words = text.split(/\s+/);
-  if (!one.layout.overflow || words.length < 2) return [one];
-  const sensed = stackLines(words);
-  // a stack line may hold the whole ask (stackLines ignores widths): then a word a line
-  const rows = (sensed.length > 1 ? sensed : words.map((_, i) => [i])).map((row) => row.map((i) => words[i]).join(' '));
-  const size = Math.min(...rows.map((row) => fittedLine(row, width, limits, ctx).font.size));
-  return rows.map((row) => fittedLine(row, width, { min: size, max: size }, ctx));
-}
-
-// The room the ask's lines take under the stack: the gap, each line's ink and the gaps between them, to the bottom of the
-// last line's box (a word's descent), so a stack set low keeps the whole box inside.
-const askRoomOf = (lines, gap) => gap + lines.reduce((sum, l, k) => sum + l.ink.up + (k === lines.length - 1 ? Math.max(l.ink.down, WORD_DESCENT * l.font.size) : l.ink.down + STACK.gap * l.font.size), 0);
-
 function expandPop(shot, ctx, data, times) {
   const { look, unit } = ctx;
   const area = stackArea(ctx);
-  const asks = shot.ask === undefined ? null
-    : askLines(setCase(look, 'display', shot.ask), area.w, { min: sizeAt(look, data.askFromStep, unit), max: sizeAt(look, data.askToStep, unit) }, ctx);
+  // the ask is an action (look review 2): the look's tag in the accent, one line at data.askStep, under the stack
+  const askTag = (top, at) => plainTag(ctx, `${shot.id}.ask`, shot.ask, {
+    left: area.left, top, maxWidth: area.w, at, fromStep: data.askStep, toStep: data.askStep, fill: 'accent', text: 'paper', snap: true,
+  });
+  const askProbe = shot.ask === undefined ? null : askTag(0, 0);
   const picture = shot.src === undefined ? null : pictureSize(ctx.asset(shot.src), ctx.canvas);
-  const askRoom = asks === null ? 0 : askRoomOf(asks, data.askGap * unit);
+  const askRoom = askProbe === null ? 0 : data.askGap * unit + askProbe.box[3];
   const above = picture === null ? 0 : picture.h + STACK.kickerGap * unit;
   const staged = { ...shot, kicker: shot.mark };
   const placed = restack(composeStack(setCase(look, 'display', titleOf(shot)), staged, ctx), ctx, { above, below: askRoom });
@@ -216,20 +195,12 @@ function expandPop(shot, ctx, data, times) {
   const built = stackNodes(staged, ctx, placed, { times: stackTimes, hero, ...flags });
   const boxes = { title: built.boxes.text, ...Object.fromEntries(Object.entries(built.boxes).filter(([k]) => k.startsWith('word:'))) };
   let group = built.group;
-  if (asks !== null) {
+  const askNodes = [];
+  if (askProbe !== null) {
     const last = placed.lines.at(-1);
-    let under = last.baseline + last.ink.down + data.askGap * unit;
-    const askBoxes = [];
-    const askNodes = asks.map((ask, k) => {
-      const baseline = under + ask.ink.up;
-      under = baseline + ask.ink.down + STACK.gap * ask.font.size;
-      askBoxes.push(capBox(area.left, baseline, ask.width, ask.font.size));
-      return node('text', `${hero}.ask${k === 0 ? '' : k}`, { x: area.left - ask.ink.left, y: baseline - ask.layout.lines[0].y, layout: ask.layout, font: ask.font, fill: look.palette.accent, role: 'hero', stack: hero }, {
-        wordTracks: ask.layout.lines[0].words.map(() => stackWordTracks(look, times.ask, look.palette.accent, flags)),
-      });
-    });
-    group = node('group', hero, {}, { children: [...group.children, ...askNodes] });
-    boxes.ask = unionBox(askBoxes);
+    const tag = askTag(last.baseline + last.ink.down + data.askGap * unit, times.ask);
+    askNodes.push(...tag.nodes);
+    boxes.ask = tag.box;
   }
   const top = placed.kicker === null ? placed.lines[0].baseline - placed.lines[0].ink.up : placed.kicker.top;
   if (placed.kicker !== null) boxes.mark = tagBox(ctx, `${shot.id}.kicker`, shot.mark, placed.kicker.left, placed.kicker.top);
@@ -240,7 +211,7 @@ function expandPop(shot, ctx, data, times) {
     pictures.push(entrance({ id: `${shot.id}.picture`, at: look.moves.enter.dur, look, unit, cx: area.left + picture.w / HALF, cy: py + picture.h / HALF, children: [image] }));
     boxes.mark = boxes.mark ?? [area.left, py, picture.w, picture.h];
   }
-  return { nodes: [...pictures, ...built.kicker, group], boxes, hero };
+  return { nodes: [...pictures, ...built.kicker, group, ...askNodes], boxes, hero };
 }
 
 // ---- the kind ----
@@ -307,7 +278,7 @@ registries.kinds.add(KIND, {
   // shot has no title, which then shows its say); undefined for any other node (the mark)
   nodeField: (shot, id) => {
     const hero = heroId(shot, 'title');
-    if (shot.ask !== undefined && (id === `${shot.id}.ask` || /^\d*$/.test(id.startsWith(`${hero}.ask`) ? id.slice(`${hero}.ask`.length) : 'x'))) return 'ask';
+    if (shot.ask !== undefined && (id === `${shot.id}.ask` || id.startsWith(`${shot.id}.ask.`) || id === `${hero}.ask`)) return 'ask';
     if (shot.mark !== undefined && (id.startsWith(`${shot.id}.mark.`) || id.startsWith(`${shot.id}.kicker`))) return 'mark';
     if (id === hero || id.startsWith(`${hero}.`)) return shot.title !== undefined ? 'title' : 'say';
     return undefined;

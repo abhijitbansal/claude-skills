@@ -46,6 +46,8 @@ const SLUG_CLEAR = 1; // gutters between a slug card and a pushed region's frame
 const FRAME_REACH = 24; // units a region's marker frame reaches past the region (gap, stroke and hand overshoot)
 const OPENING_OPACITY = 0.5; // the least of the picture shown on the first frame of a shot that opens on a hard cut
 const FADE_EASE = 'outCubic'; // the picture's fade where the look's enter ease overshoots (a spring)
+const POP_FROM = 0.9; // a centred picture's scale on its first frame, growing to 1 with no overshoot
+const REACH_SLACK = 1; // px a picture keeps inside its area, for path coordinates rounded to 0.01
 const CENTRE = Object.freeze({ wide: [0.54, 0.52], tall: [0.5, 0.46] }); // editorial; centred uses the composition centre
 const DEGREES_TO_RADIANS = Math.PI / 180;
 const HALF = 2;
@@ -108,10 +110,13 @@ function pictureGroup(shot, ctx, { hero, centre, children, hideAt }) {
   const enters = !arrivesMatched(shot, ctx) && end > 0;
   // the fade keeps the move's time but never its overshoot: a spring would carry the opacity past 1 and back below it
   const fadeMove = easePeak(move.ease) > 1 ? { ...move, ease: FADE_EASE } : move;
-  const fade = enters ? openingLanding(shot, ctx, end, fadeMove, 0, 1, OPENING_OPACITY) : track([{ t: 0, v: 1 }]);
+  // a centred (pop) picture is whole from its first frame and grows in without overshoot (look review 2: a grey,
+  // half-faded first frame read as near black); the editorial one fades as it rises
+  const fade = enters && editorial ? openingLanding(shot, ctx, end, fadeMove, 0, 1, OPENING_OPACITY) : track([{ t: 0, v: 1 }]);
   const tracks = { opacity: hiddenFrom(fade, hideAt, fadeMove.ease) };
   if (enters && editorial) tracks.y = landing(end, move, centre[1] + RISE * unit, centre[1]);
-  if (enters && move.scale !== undefined) tracks.scale = landing(end, move, move.scale, 1);
+  if (enters && !editorial) tracks.scale = landing(end, { ...move, ease: FADE_EASE }, POP_FROM, 1);
+  else if (enters && move.scale !== undefined) tracks.scale = landing(end, move, move.scale, 1);
   const props = { x: centre[0], y: centre[1], layer: true, ...(editorial ? { rotate: EDITORIAL_TURN } : {}) };
   return node('group', hero, props, { tracks, children });
 }
@@ -132,7 +137,9 @@ function centreOf(ctx, room = NO_ROOM, h = 0, w = 0) {
   const { look, canvas } = ctx;
   if (!isEditorial(look)) {
     const rect = compositionRect(ctx);
-    const area = { top: rect.top + room.above, h: rect.h - room.above - room.below };
+    // the area the picture was sized for (availableArea): the margins too when the rect is the whole canvas
+    const inset = rect.safe ? 0 : look.grid.margin * ctx.unit;
+    const area = { top: rect.top + inset + room.above, h: rect.h - HALF * inset - room.above - room.below };
     const top = centredTop(area, h, ctx);
     // a picture tall enough to meet the area's top on the optical centre keeps the middle: its spring then overshoots
     // evenly into the slack withinReach left above and below
@@ -221,23 +228,22 @@ function withinReach(ctx, size, room) {
   if (isEditorial(ctx.look)) return size;
   const { peak, edge } = enterReach(ctx);
   const available = availableArea(ctx, room);
-  const fit = Math.min(1, (available.w / peak - edge) / size.w, (available.h / peak - edge) / size.h);
+  const fit = Math.min(1, ((available.w - REACH_SLACK) / peak - edge) / size.w, ((available.h - REACH_SLACK) / peak - edge) / size.h);
   return { w: size.w * fit, h: size.h * fit };
 }
 
 // The enter spring's peak scale and the keyline and shadow's reach past the picture's edge (px).
 function enterReach(ctx) {
   const { look, unit } = ctx;
-  const move = look.moves.enter;
-  const peak = move.scale === undefined ? 1 : Math.max(1, move.scale + (1 - move.scale) * easePeak(move.ease));
-  return { peak, edge: HALF * (look.keyline + Math.max(look.shadow.dx, look.shadow.dy)) * unit, keyline: look.keyline * unit };
+  // a centred picture grows in without overshoot (pictureGroup), so it reaches no further than at rest
+  return { peak: 1, edge: HALF * (look.keyline + Math.max(look.shadow.dx, look.shadow.dy)) * unit, keyline: look.keyline * unit };
 }
 
 // How tall a picture w x h turned `turn` degrees stands at the spring's peak: its keyline outside both edges and its
 // shadow past one.
 function reachHeight(w, h, turn, { peak, edge, keyline }) {
   const a = Math.abs((turn * Math.PI) / DEGREES_HALF_TURN);
-  return (w * Math.sin(a) + h * Math.cos(a) + 2 * edge + keyline) * peak;
+  return (w * Math.sin(a) + h * Math.cos(a) + 2 * edge + keyline) * peak + HALF * REACH_SLACK;
 }
 
 // The picture's drawn size: plainSize, kept inside the available area through its entrance (withinReach).
@@ -375,7 +381,7 @@ function expandClipping(given, ctx) {
   // a slug card stays clear of the pushed region: its frame's top a gutter (and the frame's own reach) under the card
   const slug = slugBox(shot, ctx);
   const below = slug === null ? -Infinity : slug.inked[1] + slug.inked[3] + (SLUG_CLEAR * look.grid.gutter + FRAME_REACH) * unit;
-  const push = pushed && laid.boxes[pushed.target] ? pushLayer(ctx, laid.boxes[pushed.target], ctx.at(pushed.at), { below }) : null;
+  const push = pushed && laid.boxes[pushed.target] ? pushLayer(ctx, laid.boxes[pushed.target], ctx.at(pushed.at), { below, caption: shot.caption !== undefined }) : null;
   const drift = defaultCamera(look, timing, unit);
   const pins = pinnedParts(shot, ctx, laid, followOf(laid, pushed, push, drift));
   const boxes = { ...laid.boxes, ...pins.boxes };

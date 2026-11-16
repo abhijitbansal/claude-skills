@@ -39,8 +39,11 @@ export const pop = {
   composition: 'stack',
   // the stack: no line more than `ratio` times its neighbour (lines fill by size only); on a tall frame the block's
   // middle on `centre` of the composition area's height, its optical centre (a wide frame centres it)
-  // and a viral hook (the first statement) set a word a line when that is larger, within `hook` of the height
-  stack: { ratio: 1.35, centre: 0.45, hook: 0.4 },
+  // and a viral hook (the first statement) set a word a line when that is larger, within `hook` of the height; a stack
+  // shorter than `grow` of its area is broken finer (more lines, larger type) until it reaches it; at most two sizes
+  stack: { ratio: 1.35, centre: 0.45, hook: 0.4, grow: 0.55 },
+  // on 9:16 the composition band, as shares of the height, inside the platform sides (look review 2)
+  band: { top: 0.15, bottom: 0.75 },
   // emphasis recolours a word; the stack's size contrast is the hierarchy, so nothing scales
   emphasis: 'recolor',
   moves: {
@@ -76,9 +79,9 @@ export const pop = {
   // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs, quote.mjs, compare.mjs, chart.mjs);
   // sizes are units or 1-based scale steps.
   kinds: {
-    // end: a stack (the mark as its tag), the ask its last line in the accent, fitted to the width from step `askFromStep`
-    // to `askToStep` (so the title stays the larger), its cap line `askGap` under the last title line
-    end: { askFromStep: 3, askToStep: 4, askGap: 32 },
+    // end: a stack (the mark as its tag), the ask an action: the look's tag in the accent at step `askStep`, `askGap`
+    // under the last title line (look review 2: as a last headline line it did not read as an action)
+    end: { askStep: 3, askGap: 40 },
     // list: one item at a time as a stack under a count tag; a note in the text face at the largest of `smallSteps` the
     // stack stays three times, its cap line `noteGap` under the item
     list: { noteGap: 32, smallSteps: [1, 2] },

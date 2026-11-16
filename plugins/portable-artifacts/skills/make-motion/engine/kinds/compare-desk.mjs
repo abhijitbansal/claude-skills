@@ -3,7 +3,7 @@
 // balance. On each, `pad` in: the value as a numeral (when both sides have one: one size, one colour, neither styled as
 // better), the title in the display face and the points in the text face, all sides at one size each: the largest
 // title size from `titleMax` down that sets every title in at most `titleLines` lines and fits the card, with the points
-// at the largest of `pointSteps` the hero stays three times. The left card is on the desk from the first frame, the
+// at `pointScale` times step `pointStep` in the display serif. The left card is on the desk from the first frame, the
 // right one lands on the turn; from the turn the left one goes under a paper scrim at the look's focus dim, and a
 // hand-drawn vs (versus) or an arrow (before-after) draws on between them. Pure, DOM-free.
 import { registries } from '../registry.mjs';
@@ -11,10 +11,11 @@ import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { landing, isHand, colourOf, smoothPath, polyline, pathPoints } from '../devices/shared.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, stepUnder, fitInBox, numeralLayout, cardOf, cardGroup } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, fitInBox, numeralLayout, cardOf, cardGroup } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
 import { paperScrim } from './shared.mjs';
+import { slugBox, slugNodes } from './slug.mjs';
 
 const EPSILON = 1e-6;
 const HALF = 2;
@@ -29,10 +30,11 @@ const POINT_TITLE_RATIO = 2; // the title stays at least this many times the poi
 const DEFAULT_STROKE = 5; // units, when the look's arrow has no width
 const DEFAULT_DIM = 0.55; // the scrim's opacity for a look whose devices name no focus dim (desk's own is 0.55)
 
-// The points' size: the largest of data.pointSteps the hero stays MIN_HERO_RATIO times and the title POINT_TITLE_RATIO
-// times (a numeral as the hero must not leave the points beside the title at almost its size), else the smallest.
+// The points' size: data.pointScale times scale step data.pointStep (look review 2: they must read on the phone tile),
+// never more than the title over POINT_TITLE_RATIO nor a numeral hero over MIN_HERO_RATIO. A side's title and points are
+// one size class (props.stack), so the hero rule judges the card, not the points against its title.
 function pointSize(look, data, { hero, title }, unit) {
-  return sizeAt(look, stepUnder(look, data.pointSteps, unit, [{ size: hero, ratio: MIN_HERO_RATIO }, { size: title, ratio: POINT_TITLE_RATIO }]), unit);
+  return Math.min(data.pointScale * sizeAt(look, data.pointStep, unit), title / POINT_TITLE_RATIO, hero > title ? hero / MIN_HERO_RATIO : Infinity);
 }
 
 // Both values on one line at one size: the largest up to valueMax that both fit `width`. A value is never set wider
@@ -58,7 +60,8 @@ function sidesAt(shot, ctx, data, { size, width, values }) {
   const { look, unit, measure } = ctx;
   const titleFont = fontFor(look, 'display', size, unit);
   const hero = Math.max(size, values ? values.size : 0);
-  const pointFont = fontFor(look, 'text', pointSize(look, data, { hero, title: size }, unit), unit);
+  // the points in the display serif (look review 2: the grotesque was a face used nowhere else)
+  const pointFont = fontFor(look, 'display', pointSize(look, data, { hero, title: size }, unit), unit);
   return SIDES.map((k, i) => {
     const title = layoutText({ text: setCase(look, 'display', shot[k].title), font: titleFont, maxWidth: width, measure });
     const text = pointsText(shot[k]);
@@ -71,22 +74,13 @@ function sidesAt(shot, ctx, data, { size, width, values }) {
   });
 }
 
-// The sides fitted (fitSidesAt) with the points at data.pointSteps; when nothing fits there, with the points down at
-// data.pointFloorStep before a title is flagged (look revision 1 raised the points to the label step for the phone tile).
-function fitSides(shot, ctx, data, width, height) {
-  const first = fitSidesAt(shot, ctx, data, width, height);
-  if (!first.sides.some((s) => s.title.overflow) || data.pointFloorStep === undefined) return first;
-  const smaller = fitSidesAt(shot, ctx, { ...data, pointSteps: [data.pointFloorStep] }, width, height);
-  return smaller.sides.some((s) => s.title.overflow) ? first : smaller;
-}
-
 // The largest title size that sets every title in data.titleLines lines and fits `height`; else the floor, flagged on
 // the side with the most title lines.
-function fitSidesAt(shot, ctx, data, width, height) {
+function fitSides(shot, ctx, data, width, height) {
   const { look, unit } = ctx;
   const values = valueSet(shot, ctx, data, width);
   const hasPoints = SIDES.some((k) => pointsText(shot[k]) !== null);
-  const floor = Math.max(sizeAt(look, data.titleFromStep, unit), hasPoints ? MIN_HERO_RATIO * sizeAt(look, Math.min(...data.pointSteps), unit) : 0);
+  const floor = Math.max(sizeAt(look, data.titleFromStep, unit), hasPoints ? POINT_TITLE_RATIO * data.pointScale * sizeAt(look, data.pointStep, unit) : 0);
   const fits = (set) => set.every((s) => s.title.lines.length <= data.titleLines && s.title.width <= width + EPSILON && s.height <= height + EPSILON);
   // breaks by sense: the largest size with no title line of one word, else the largest that fits at all
   const noLone = (set) => set.every((s) => s.title.lines.length < HALF || s.title.lines.every((line) => line.words.length > 1));
@@ -129,17 +123,19 @@ function sideTexts(shot, ctx, data, side, { w, h, at, top }) {
   const pad = data.pad * unit, ox = -w / HALF + pad;
   let cursor = -h / HALF + pad + top; // the next cap line
   const out = [];
-  const place = (id, layout, font, fill, role) => {
+  const copy = `${shot.id}.${side.key}.copy`; // the size class of a side's title and points
+  const place = (id, layout, font, fill, role, stack) => {
     const y = cursor + CAP_HEIGHT * font.size - layout.lines[0].y;
-    out.push(node('text', id, { x: ox, y, layout, font, fill, role }, { tracks: enterTracks(look, unit, at, { y }) }));
+    out.push(node('text', id, { x: ox, y, layout, font, fill, role, ...(stack ? { stack } : {}) }, { tracks: enterTracks(look, unit, at, { y }) }));
     return y + layout.lines.at(-1).y; // the last baseline
   };
   const id = `${shot.id}.${side.key}`;
   if (side.value !== null) cursor = place(`${id}.value`, side.value, fontFor(look, 'display', side.value.size, unit), look.palette.ink, 'hero') + data.valueGap * side.value.size;
-  const last = place(`${id}.title`, side.title, side.titleFont, look.palette.ink, 'hero');
+  const grouped = side.points !== null && side.value === null ? copy : undefined;
+  const last = place(`${id}.title`, side.title, side.titleFont, look.palette.ink, 'hero', grouped);
   if (side.points !== null) {
     cursor = last + data.titleGap * side.titleFont.size;
-    place(`${id}.points`, side.points, side.pointFont, look.palette.ink, 'body');
+    place(`${id}.points`, side.points, side.pointFont, look.palette.ink, 'body', grouped);
   }
   return out;
 }
@@ -166,10 +162,10 @@ function dimScrim(id, card, look, at, { lifts = false } = {}) {
 }
 
 // The cards' boxes: side by side on a wide frame, stacked on a tall one, centred.
-function cardBoxes(ctx, data, height) {
+function cardBoxes(ctx, data, height, below = 0) {
   const { look, canvas, unit } = ctx;
   const span = gridSpan(look, canvas, 1, look.grid.columns);
-  const gap = data.gap * look.grid.gutter * unit, margin = look.grid.margin * unit;
+  const gap = data.gap * look.grid.gutter * unit, margin = Math.max(look.grid.margin * unit, below);
   if (isWide(canvas)) {
     const w = (span.w - gap) / HALF;
     const top = Math.max(margin, Math.min(data.centre * canvas.h - height / HALF, canvas.h - margin - height));
@@ -214,11 +210,15 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
   const margin = look.grid.margin * unit, gap = data.gap * look.grid.gutter * unit, pad = data.pad * unit;
   const span = gridSpan(look, canvas, 1, look.grid.columns);
   const cardW = wide ? (span.w - gap) / HALF : span.w;
-  const avail = (wide ? canvas.h - HALF * margin : (canvas.h - HALF * margin - gap) / HALF) - HALF * pad;
+  // a slug (the shot's kicker) takes the top: the cards start a gutter under it
+  const slug = slugBox(shot, ctx);
+  const below = slug === null ? 0 : slug.inked[1] + slug.inked[3] + look.grid.gutter * unit;
+  const lost = Math.max(0, below - margin);
+  const avail = (wide ? canvas.h - HALF * margin - lost : (canvas.h - HALF * margin - gap - lost) / HALF) - HALF * pad;
   const room = pictureRoom(shot, ctx, data, cardW - HALF * pad, avail);
   const top = room === null ? 0 : room.h + room.gap;
   const set = fitSides(shot, ctx, data, cardW - HALF * pad, avail - top);
-  const boxes = cardBoxes(ctx, data, Math.max(...set.sides.map((s) => s.height)) + top + HALF * pad);
+  const boxes = cardBoxes(ctx, data, Math.max(...set.sides.map((s) => s.height)) + top + HALF * pad, below);
   const cards = set.sides.map((side, i) => {
     const id = `${shot.id}.${side.key}`, at = 0; // both cards from frame 0, the unspoken one dimmed
     const card = cardOf(ctx, id, boxes[i], at);
@@ -229,5 +229,5 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
     return cardGroup(card, id, [...picture, ...texts, ...scrim]);
   });
   const group = node('group', hero, {}, { children: cards });
-  return { nodes: [group, ...betweenMarks(shot, ctx, boxes, turn)], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };
+  return { nodes: [...slugNodes(shot, ctx), group, ...betweenMarks(shot, ctx, boxes, turn)], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };
 }

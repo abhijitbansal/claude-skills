@@ -104,7 +104,8 @@ function dimTrack(look, dimAt) {
 // A figure's size: the small parts' size, never under data.figureStep (look review 1: a figure at step 1 vanished on the
 // phone tile). A figure belongs to its item: items and figures are one size class (props.stack, the hero id), so the
 // sizes and hero rules judge the items, not a figure against them.
-const figureSize = (set, ctx, data) => Math.max(set.small, sizeAt(ctx.look, data.figureStep, ctx.unit));
+// look review 2: at step 2 a figure was a third of its item and still read as a footnote: data.figureShare of the item.
+const figureSize = (set, ctx, data) => Math.max(set.small, sizeAt(ctx.look, data.figureStep, ctx.unit), data.figureShare * set.size);
 
 // A figure: the item's number as written in the label face (1 to 12, never 01), `size` px, its ink ending `right`, on
 // `baseline`.

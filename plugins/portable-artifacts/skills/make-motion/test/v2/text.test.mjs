@@ -277,7 +277,7 @@ test('a font with wordSpace sets that many em between words instead of the measu
   assert.equal(plain.lines[0].words[1].x - plain.lines[0].words[0].width, 50, 'without it, the measured space');
 });
 
-test('stackLines: at most 3 words a line, 2 when a line would pass 12 letters, | honoured, breaks by sense', () => {
+test('stackLines: at most 3 words a line, 2 when a line would pass 12 letters (15 for a line ending a sentence), | honoured, breaks by sense', () => {
   const rows = (text) => stackLines(text.split(/\s+/)).map((r) => r.map((i) => text.split(/\s+/)[i]).join(' '));
   assert.deepEqual(rows('NO CLOUD.| NO ACCOUNT.| NO UPLOAD.'), ['NO CLOUD.|', 'NO ACCOUNT.|', 'NO UPLOAD.']);
   assert.deepEqual(rows('YOUR CHARTS ARE HIDING SOMETHING.'), ['YOUR CHARTS', 'ARE HIDING', 'SOMETHING.']);
@@ -287,7 +287,7 @@ test('stackLines: at most 3 words a line, 2 when a line would pass 12 letters, |
     for (const row of stackLines(words)) {
       assert.ok(row.length <= 3, `${text}: ${row.length} words on a line`);
       const letters = row.map((i) => words[i].replace(/[^\p{L}\p{N}]/gu, '')).join('').length;
-      assert.ok(row.length <= 2 || letters <= 12, `${text}: 3 words and ${letters} letters`);
+      assert.ok(row.length <= 2 || letters <= 12 || (letters <= 15 && /[.!?]$/.test(words[row.at(-1)])), `${text}: 3 words and ${letters} letters`);
     }
   }
   assert.deepEqual(stackLines([]), []);

@@ -85,19 +85,21 @@ function kickerHeight(shot, ctx) {
   return probe.boxes.tag[3];
 }
 
-// Lines fill the width by size only, and no line is more than look.stack.ratio times a neighbour of the same stack: a
-// short line that would grow past it is set smaller (still flush left), never stretched.
+// Lines fill the width by size only, never stretched, at two sizes: the smallest fitted size and look.stack.ratio times
+// it (a line that would grow past that is set at it, still flush left).
 function keepRatio(lines, rows, words, ctx) {
   const ratio = ctx.look.stack?.ratio;
   if (!Number.isFinite(ratio) || lines.length < 2) return lines;
-  let sizes = lines.map((l) => l.font.size);
-  for (let pass = 0; pass < lines.length; pass++) {
-    sizes = sizes.map((s, k) => Math.min(s, ...[sizes[k - 1], sizes[k + 1]].filter(Number.isFinite).map((n) => n * ratio)));
-  }
-  return lines.map((line, k) => (sizes[k] < line.font.size ? lineAt(rows[k].map((i) => bare(words[i])), sizes[k], ctx) : line));
+  // two sizes (look review 2: line-by-line fitting read as auto-fit): the smallest fitted size, and the ratio times it
+  // for every line that fits that large
+  const small = Math.min(...lines.map((l) => l.font.size));
+  const hero = small * ratio;
+  return lines.map((line, k) => lineAt(rows[k].map((i) => bare(words[i])), line.font.size >= hero - EPSILON ? hero : small, ctx));
 }
 
+
 const HOOK_MAX_WORDS = 4; // a hook this short may be set a word a line
+const SHORT_ALONE = 4; // letters: a word this short never gets a line to itself when a stack grows
 const CEILING_STEPS = 20; // bisection steps for a hook's size ceiling: well under a pixel
 
 // A hook (a viral film's first statement) may be set a word a line when that sets it larger: the larger of the stack's
@@ -128,6 +130,38 @@ function hookLines(words, own, fitted, area, ctx) {
   return candidates.reduce((best, c) => (smallest(c) > smallest(best) + EPSILON ? c : best));
 }
 
+// A stack shorter than look.stack.grow of its area is broken finer: each line of more than one word is split by sense
+// (stackLines on its own words, else in two), one pass at a time, until the block reaches the share, a word sits on
+// each line, or the next set would be too tall for the area (look review 2: type fills the width, then the height).
+function grownLines(words, own, fitted, area, ctx) {
+  const share = ctx.look.stack?.grow;
+  if (!Number.isFinite(share) || isWide(ctx.canvas)) return own; // a wide frame has the height already
+  let best = own;
+  for (let pass = 0; pass < words.length && blockHeight(best.lines) < share * area.h; pass++) {
+    const rows = best.rows.flatMap((row) => (row.length < HALF ? [row] : splitRow(row, words)));
+    if (rows.length === best.rows.length) break;
+    const lines = fitted(rows);
+    if (blockHeight(lines) > area.h) break;
+    best = { rows, lines };
+  }
+  return best;
+}
+
+// A row of word indexes in two or more by sense (stackLines on its own words), else in two at its middle; kept whole
+// when a part would end on a weak word (breaks.mjs isWeakEnd) or be one short word alone.
+function splitRow(row, words) {
+  const plain = (i) => bare(words[i]);
+  const short = (part) => part.length === 1 && plain(part[0]).replace(/[^\p{L}\p{N}]/gu, '').length <= SHORT_ALONE;
+  const valid = (parts) => !parts.some(short) && !parts.slice(0, -1).some((part) => isWeakEnd(plain(part.at(-1))));
+  const sub = stackLines(row.map((i) => words[i])).map((r) => r.map((j) => row[j]));
+  if (sub.length > 1 && valid(sub)) return sub;
+  // else the first two-way cut, from the middle outward, that leaves no short word alone and no weak line end
+  const middle = Math.ceil(row.length / HALF);
+  const cuts = Array.from({ length: row.length - 1 }, (_, k) => k + 1).sort((a, b) => Math.abs(a - middle) - Math.abs(b - middle));
+  const cut = cuts.find((c) => valid([row.slice(0, c), row.slice(c)]));
+  return cut === undefined ? [row] : [row.slice(0, cut), row.slice(cut)];
+}
+
 /**
  * Where a block `height` tall starts in `area`: on a tall frame its middle on look.stack.centre of the area (its
  * optical centre), kept inside it; on a wide frame, and in a look without one, its middle on the area's middle.
@@ -150,6 +184,7 @@ export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = fa
   let rows = stackLines(words);
   let lines = fitted(rows);
   if (hook) ({ rows, lines } = hookLines(words, { rows, lines }, fitted, area, ctx));
+  else ({ rows, lines } = grownLines(words, { rows, lines }, fitted, area, ctx));
   const tag = kickerHeight(shot, ctx);
   const above = tag === 0 ? 0 : tag + STACK.kickerGap * unit;
   for (let i = 0; i < SHRINK_PASSES && blockHeight(lines) + above > area.h; i++) {
