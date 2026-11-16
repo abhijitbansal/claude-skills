@@ -60,6 +60,8 @@ import { pop } from './pop.mjs';
  *   (checked by validateLook as the look registers); which names a synth knows is scripts/v2/sound's to check
  * @property {string} captions  the caption style, a name in registries.captions (engine/captions): how the spoken words
  *   of a narrated shot that does not show its own words are drawn (checked by validateLook as the look registers)
+ * @property {Record<string, object>} [kinds]  composition data per shot kind, for the kinds that read it (end, list):
+ *   a look without an entry for such a kind does not support it, and a film asking for it is invalid (kindSupportProblems)
  */
 
 export { unitOf as unit };
@@ -131,15 +133,50 @@ function captionsError(name, style, captions) {
   return null;
 }
 
+const isPlainObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+// The errors of a look's `kinds` (absent, or an object of kind names to objects of composition data).
+function kindsErrors(name, kinds) {
+  if (kinds === undefined) return [];
+  if (!isPlainObject(kinds)) return [`look "${name}": kinds must be an object of kind names to their data, got ${String(kinds)}`];
+  return Object.entries(kinds).filter(([, data]) => !isPlainObject(data))
+    .map(([kind, data]) => `look "${name}": kinds.${kind} must be an object, got ${String(data)}`);
+}
+
+/** Does `look` carry composition data for `kind` (look.kinds[kind])? */
+export const supportsKind = (look, kind) => isPlainObject(look?.kinds) && isPlainObject(look.kinds[kind]);
+
+const lookNamesFor = (kind, looks) => looks.names().filter((name) => supportsKind(looks.get(name), kind));
+
+/**
+ * A kind's validate rule for the look a film uses: when `look` has no data for `kind`, one problem at the shot's `show`
+ * naming the looks (in `looks`, default the shared registry) that have it; none for a look that does, or no look at all
+ * (an unknown look has its own error).
+ * @returns {{ path: string, message: string }[]}
+ */
+export function kindSupportProblems(kind, look, looks = registries.looks) {
+  if (!look || supportsKind(look, kind)) return [];
+  const have = lookNamesFor(kind, looks);
+  return [{ path: 'show', message: `kind "${kind}" is not supported by look "${look.name}"; the looks that support it: ${have.join(', ') || 'none'}` }];
+}
+
+/** look.kinds[kind], or throws naming the look, the kind and the looks that have data for it. */
+export function kindData(look, kind, looks = registries.looks) {
+  if (supportsKind(look, kind)) return look.kinds[kind];
+  throw new Error(`look "${look.name}" has no data for kind "${kind}"; the looks that support it: ${lookNamesFor(kind, looks).join(', ') || 'none'}`);
+}
+
 /**
  * Throws a RangeError naming the look and the field when its `sounds` is missing, or does not name a cue (or null) for
  * every cut in `cuts` and every device in `devices` (registries; default the shared ones), and for emphasis and land; or
- * when its `captions` does not name a style in `captions` (default the shared caption styles registry).
- * Returns the look, so it can be used inline.
+ * when its `captions` does not name a style in `captions` (default the shared caption styles registry); or when its
+ * `kinds`, given, is not an object of objects. Returns the look, so it can be used inline.
  */
 export function validateLook(look, { cuts = registries.cuts, devices = registries.devices, captions = registries.captions } = {}) {
   const caption = captionsError(look.name, look.captions, captions);
   if (caption !== null) throw new RangeError(caption);
+  const kinds = kindsErrors(look.name, look.kinds);
+  if (kinds.length > 0) throw new RangeError(kinds.join('\n'));
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {
     throw new RangeError(`look "${name}": sounds must be { cut, device, emphasis, land }, got ${String(sounds)}`);

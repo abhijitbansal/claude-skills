@@ -67,6 +67,15 @@ export const pop = {
   captions: 'stack',
   // halftone 0: pop's own field is already a halftone, and the post pass would dot the pictures too (see the Look typedef)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
+  // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs); sizes are units or 1-based scale steps.
+  kinds: {
+    // end: a stack (the mark as its tag), the ask its last line in the accent, fitted to the width from step `askFromStep`
+    // to `askToStep` (so the title stays the larger), its cap line `askGap` under the last title line
+    end: { askFromStep: 3, askToStep: 4, askGap: 32 },
+    // list: one item at a time as a stack under a count tag; a note in the text face at the largest of `smallSteps` the
+    // stack stays three times, its cap line `noteGap` under the item
+    list: { noteGap: 32, smallSteps: [1, 2] },
+  },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null },

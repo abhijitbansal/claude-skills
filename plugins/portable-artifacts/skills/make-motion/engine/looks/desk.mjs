@@ -69,6 +69,23 @@ export const desk = {
   captions: 'lower',
   // 0.02: the paper field already carries the texture; more grain is noise a 20 s film pays for in megabytes (round 4 measurements)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
+  // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs); sizes are units, shares of the frame,
+  // em of the text they follow, or 1-based scale steps.
+  kinds: {
+    // end: the closing line fitted to columns 2 to `toWide` (`toTall` on vertical formats) from step `fromStep` to `max`,
+    // at most `height` of the frame; the ask in the text face `askGap` em of the title under its last baseline, at the
+    // largest of `askSteps` the title stays three times; the block centred at `centre` of the height; the mark in the
+    // display face at `markStep` on a taped card turned `turn` degrees, its right edge mirroring the text margin, its
+    // bottom on the bottom margin
+    end: { fromStep: 4, max: 300, toWide: 11, toTall: 11, height: 0.56, centre: 0.5, askGap: 0.42, askSteps: [2, 3], markStep: 3, turn: -3 },
+    // list: the items in the display face down columns 2 to `toWide` (`toTall`), all at one size from step `fromStep` to
+    // `max`, each at most `maxLines` lines, `gap` em from one item's last baseline to the next one's cap line (more than
+    // the 0.4 em between the lines of one item, so the items read apart); a note in the text face and the figures in the
+    // label face at the largest of `smallSteps` the items stay three times, a note's cap line `noteGap` em of the item
+    // under its last baseline, the figures hanging in the margin a gutter before the items; the block centred in the room
+    // the slug leaves
+    list: { fromStep: 3, max: 180, toWide: 11, toTall: 11, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2] },
+  },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'paper', slide: 'paper', punch: null, match: null },

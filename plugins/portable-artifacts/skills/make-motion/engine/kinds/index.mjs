@@ -7,3 +7,5 @@ import './free.mjs';
 import './statement.mjs';
 import './number.mjs';
 import './clipping.mjs';
+import './end.mjs';
+import './list.mjs';

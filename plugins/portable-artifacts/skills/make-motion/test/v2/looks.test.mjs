@@ -10,7 +10,7 @@ import { facesFor } from '../../engine/page/fonts-shared.mjs';
 import '../../engine/fields/index.mjs';
 import '../../engine/looks/index.mjs';
 import '../../engine/modes/index.mjs';
-import { applyAccent, gridX, gridSpan, unit } from '../../engine/looks/index.mjs';
+import { applyAccent, gridX, gridSpan, unit, validateLook } from '../../engine/looks/index.mjs';
 import { unitOf } from '../../engine/units.mjs';
 import { FORMATS } from '../../template/formats.mjs';
 import { contrastRatio as contrast } from '../../shared/contrast.mjs';
@@ -447,4 +447,26 @@ test('a look added to the shared registry must name a registered caption style',
   assert.throws(() => registries.looks.add('test-bad-captions', { ...desk, name: 'test-bad-captions', captions: 'lowr' }),
     /look "test-bad-captions": unknown caption style "lowr"; did you mean "lower"\?/);
   assert.equal(registries.looks.has('test-no-captions'), false);
+});
+
+// ---- kinds: the composition data a look gives the kinds that need it (engine/kinds/end.mjs, list.mjs) ----
+
+test('desk and pop carry frozen composition data for the end and list kinds', () => {
+  for (const name of ['desk', 'pop']) {
+    const { kinds } = registries.looks.get(name);
+    assert.ok(Object.isFrozen(kinds), `${name} kinds frozen`);
+    for (const kind of ['end', 'list']) {
+      assert.equal(typeof kinds[kind], 'object', `${name} kinds.${kind}`);
+      assert.ok(Object.isFrozen(kinds[kind]), `${name} kinds.${kind} frozen`);
+    }
+  }
+});
+
+test('a look may leave kinds out; when it has kinds, each entry must be an object', () => {
+  const desk = registries.looks.get('desk');
+  const { kinds: _gone, ...bare } = desk;
+  const plain = { ...bare, name: 'test-bare' };
+  assert.equal(validateLook(plain), plain, 'no kinds: valid (such a look supports only the kinds that need no look data)');
+  assert.throws(() => validateLook({ ...desk, name: 'test-kinds-list', kinds: ['end'] }), /look "test-kinds-list": kinds must be an object of kind names to their data, got end/);
+  assert.throws(() => validateLook({ ...desk, name: 'test-kinds-entry', kinds: { end: 3 } }), /look "test-kinds-entry": kinds\.end must be an object, got 3/);
 });

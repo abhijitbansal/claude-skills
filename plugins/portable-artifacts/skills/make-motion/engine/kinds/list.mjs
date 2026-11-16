@@ -1,0 +1,126 @@
+// The `list` kind: points or numbered steps, one per sentence. Items arrive one per sentence of the say when the counts
+// match, else spread evenly over the spoken words, else (no say) at equal intervals of the hold; the first always on the
+// shot's first frame. Each arrival is a `device` event named `item` for the cue plan (the kind's `events` hook). An
+// editorial composition (desk) sets the title on the slug and every arrived item down the left columns in the display
+// face, the current one in ink and earlier ones in ink2, figures hanging in the margin when numbered (list-desk.mjs); a
+// stack (pop) shows one item at a time as a stack under a count tag, "2 / 5" (list-pop.mjs). How each look composes it
+// is look data (look.kinds.list). Its review: more than MAX_ITEMS items, or an item over MAX_WORDS words, is advice.
+// Pure and DOM-free.
+import { registries } from '../registry.mjs';
+import { node } from '../graph/node.mjs';
+import { kindData, kindSupportProblems } from '../looks/index.mjs';
+import {
+  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
+} from './shared.mjs';
+import { itemsOf } from './list-items.mjs';
+import { expandDeskList } from './list-desk.mjs';
+import { expandPopList } from './list-pop.mjs';
+
+const KIND = 'list';
+export const MAX_ITEMS = 6; // the review's limit; the schema allows up to ITEMS_LIMIT so the advice can be given
+export const MAX_WORDS = 12; // words in one item, the review's limit
+const ITEMS_LIMIT = 12;
+const ITEM_MAX = 120;
+const NOTE_MAX = 80;
+const TITLE_MAX = 40;
+const ITEM_PREFIX = 'item:';
+
+/**
+ * When each item arrives, in shot seconds: item k on sentence k when there are as many sentences as items; otherwise on
+ * spoken word round(k * words / items); with no narration, or fewer spoken words than items (two items would share a
+ * word and one would never be seen), at k * duration / items. The first item is always at 0, so the shot never opens on
+ * an empty frame.
+ */
+export function listTimes(shot, timing) {
+  const n = shot.items.length;
+  const { words, sentences, duration } = timing;
+  if (words.length < n && sentences.length !== n) return Array.from({ length: n }, (_, k) => (k * duration) / n);
+  if (sentences.length === n) return sentences.map((s, k) => (k === 0 ? 0 : s.start));
+  return Array.from({ length: n }, (_, k) => (k === 0 ? 0 : words[Math.min(words.length - 1, Math.round((k * words.length) / n))].start));
+}
+
+// Each `on` device, put inside the item it aims at when the composition hides items (pop: an item leaves with its
+// devices), else on the frame. `wrappers`: per item { id, tracks, children } or null.
+function assemble(shot, ctx, parts) {
+  const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'items', behind: parts.behind });
+  const itemOf = (target) => (typeof target === 'string' && target.startsWith(ITEM_PREFIX) ? Number(target.slice(ITEM_PREFIX.length)) : null);
+  if (parts.wrappers === null) return { nodes: placeDevices([...parts.nodes, parts.group], devices), devices };
+  const inside = (k) => devices.filter((d) => itemOf(d.target) === k).flatMap((d) => d.nodes);
+  const children = parts.wrappers.map((w, k) => node('group', w.id, {}, { tracks: w.tracks, children: [...w.children, ...inside(k)] }));
+  const group = node('group', parts.hero, {}, { children });
+  const loose = devices.filter((d) => itemOf(d.target) === null);
+  return { nodes: placeDevices([...parts.nodes, group], loose), devices };
+}
+
+function expandList(shot, ctx) {
+  const { look, timing, unit } = ctx;
+  const data = kindData(look, KIND);
+  const times = listTimes(shot, timing);
+  const hero = heroId(shot, 'items');
+  const built = isEditorial(look) ? expandDeskList(shot, ctx, data, times, hero) : expandPopList(shot, ctx, data, times, hero);
+  const boxes = { items: unionBox(built.itemBoxes), ...Object.fromEntries(built.itemBoxes.map((box, k) => [`${ITEM_PREFIX}${k}`, box])) };
+  const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
+  const { nodes, devices } = assemble(shot, ctx, { ...built, boxes, behind, hero });
+  return {
+    nodes: [fieldNode(shot, ctx), ...nodes],
+    camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],
+    boxes,
+    hero,
+    background: look.palette.paper,
+  };
+}
+
+// Advice about the list itself: too many items to hold, or an item too long to read as a point.
+function listReview(shot, { timing }) {
+  const out = shot.items.length > MAX_ITEMS
+    ? [{ path: 'items', at: 0, message: `${shot.items.length} items is more than a list holds; split the list (${MAX_ITEMS} at most)` }]
+    : [];
+  const times = listTimes(shot, timing);
+  itemsOf(shot).forEach((item, k) => {
+    const count = wordsOf(item.text).length;
+    if (count > MAX_WORDS) out.push({ path: `items.${k}`, at: times[k], message: `item ${k} has ${count} words; cut words (${MAX_WORDS} at most)` });
+  });
+  return out;
+}
+
+const ITEM_SCHEMA = Object.freeze({
+  anyOf: [
+    { type: 'string', minLength: 1, maxLength: ITEM_MAX },
+    {
+      type: 'object',
+      required: ['text'],
+      additionalProperties: false,
+      properties: { text: { type: 'string', minLength: 1, maxLength: ITEM_MAX }, note: { type: 'string', minLength: 1, maxLength: NOTE_MAX } },
+    },
+  ],
+});
+
+registries.kinds.add(KIND, {
+  summary: 'Points or numbered steps, one item per sentence: a column that builds item by item with earlier items dimmed (desk), or one item at a time as a stack under a count tag (pop). An item may carry a short note.',
+  example: {
+    id: 'how', show: 'list', title: 'How it works', style: 'steps',
+    say: 'Write the film as JSON. Render it in one command. Share the MP4.',
+    items: ['Write the film as JSON', 'Render it in one command', 'Share the MP4'],
+  },
+  schema: {
+    required: ['items'],
+    properties: {
+      items: { type: 'array', minItems: 2, maxItems: ITEMS_LIMIT, items: ITEM_SCHEMA },
+      title: { type: 'string', minLength: 1, maxLength: TITLE_MAX },
+      numbered: { type: 'boolean' },
+      style: { enum: ['points', 'steps'] },
+      hero: HERO_SCHEMA,
+    },
+  },
+  srcFields: [],
+  heroTarget: 'items',
+  targets: (shot) => ['items', ...(Array.isArray(shot.items) ? shot.items.map((_, k) => `${ITEM_PREFIX}${k}`) : [])],
+  ids: (shot) => [heroId(shot, 'items')],
+  validate: (shot, { look } = {}) => [...heroProblems(shot), ...kindSupportProblems(KIND, look)],
+  expand: expandList,
+  review: listReview,
+  // each item's arrival as a device event named `item`, in shot seconds (for the cue plan: scripts/v2/sound/events.mjs)
+  events: (shot, timing) => listTimes(shot, timing).map((t) => ({ kind: 'device', device: 'item', t })),
+  numbered: true, // the title is a slug in desk, which shows the shot's place among the numbered shots
+  showsWords: true, // its narration is the picture: never captioned (engine/captions)
+});
