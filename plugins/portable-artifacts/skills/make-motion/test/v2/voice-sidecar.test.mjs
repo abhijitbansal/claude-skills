@@ -135,6 +135,13 @@ test('validateSidecar rejects a word text that differs from the say at its full 
   rejects((d) => { d.shots[0].sentences[1].words[2].text = 'moved.'; }, 'shots[0].sentences[1].words[2].text');
 });
 
+test('validateSidecar rejects emphasis or an aside that the film\'s say does not mark, or leaves out one it does (review Minor 11)', () => {
+  rejects((d) => { d.shots[0].sentences[0].words[0].emphasis = true; }, 'shots[0].sentences[0].words[0].emphasis');
+  rejects((d) => { d.shots[0].sentences[0].words[2].emphasis = false; }, 'shots[0].sentences[0].words[2].emphasis');
+  rejects((d) => { d.shots[2].sentences[0].words[0].aside = true; }, 'shots[2].sentences[0].words[0].aside');
+  rejects((d) => { delete d.shots[2].sentences[0].words[1].aside; }, 'shots[2].sentences[0].words[1].aside');
+});
+
 test('validateSidecar rejects a word that ends before it starts, or outside its wav', () => {
   rejects((d) => { d.shots[2].sentences[0].words[0].end = -1; }, 'shots[2].sentences[0].words[0].end');
   rejects((d) => { d.shots[2].sentences[0].words[1].end = 5; }, 'shots[2].sentences[0].words[1].end');

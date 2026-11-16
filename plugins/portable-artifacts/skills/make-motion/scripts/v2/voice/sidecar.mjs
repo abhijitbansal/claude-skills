@@ -95,6 +95,10 @@ function checkShotWords(shot, where, tokens) {
   shot.sentences.forEach((sentence, s) => sentence.words.forEach((w, i) => {
     const at = `${where}.sentences[${s}].words[${i}]`;
     if (w?.text !== tokens[k].text) fail(`${at}.text`, `expected ${JSON.stringify(tokens[k].text)} (the film's say), got ${JSON.stringify(w?.text)}`);
+    // The mix shapes emphasis and asides from the sidecar and the picture from the film: they must agree.
+    for (const mark of ['emphasis', 'aside']) {
+      if (w[mark] !== tokens[k][mark]) fail(`${at}.${mark}`, `expected ${tokens[k][mark]} (the film's say), got ${JSON.stringify(w[mark])}`);
+    }
     checkWord(w, at, shot.seconds);
     k++;
   }));
@@ -122,8 +126,8 @@ function checkShot(shot, filmShot, index) {
 
 /**
  * Throws a SidecarError `<path>: <message>` at the first place `data` does not match `film`: the version, the sample
- * rate, the shot count and ids, a wav for each narrated shot (null otherwise), the word count and each word's text
- * against the film's `say`, and word times inside their shot. Returns `data`.
+ * rate, the shot count and ids, a wav for each narrated shot (null otherwise), the word count and each word's text,
+ * emphasis and aside against the film's `say`, and word times inside their shot. Returns `data`.
  */
 export function validateSidecar(data, film) {
   if (data?.version !== SIDECAR_VERSION) fail('version', `expected ${SIDECAR_VERSION}, got ${JSON.stringify(data?.version)}`);
@@ -140,15 +144,39 @@ export function validateSidecar(data, film) {
 /** Where a film's recording words are named; every RecordingWordsError is reported there. */
 export const WORDS_PATH = 'voice.words';
 // Up to this many tokens and words on each side of a run whose joined text matches ("12,500" as " 12" ",500").
-const MAX_RUN = 6;
+const MAX_RUN_ITEMS = 6; // (not say.mjs's MAX_RUN, which counts something else)
 // The alignment's costs. A substitution (a word the recording renders differently, in its own place) costs more than one
 // unmatched word and less than two, so one word added and another left out always beats moving the words between them
 // one place: the error names both instead of shifting any word onto its neighbour's time.
 const COST = Object.freeze({ unmatched: 2, substitute: 3 });
-// More substitutions than this in a row are not misheard words but different ones: they are reported as unmatched.
-const MAX_SUBSTITUTIONS = 3;
-/** The alignment table's cells, (spoken say tokens + 1) x (file words + 1), at most: 32 MiB, one byte each. */
-export const MAX_ALIGN_CELLS = 2 ** 25;
+// A substitution is allowed only between two words that plausibly are one word misheard: their keys (keyOf) at most
+// MAX_EDITS edits apart (Levenshtein, by code point) and at most 40% of the longer key's length, or the same number
+// written differently. Two edits admit "colour"/"color" (1 of 6) and "their"/"there" (2 of 5, exactly 40%); the share
+// refuses one short word for another ("is"/"as", 1 of 2; "form"/"from", 2 of 4). Any other pair is one word added and
+// one left out, both named: a word never takes its neighbour's time.
+const MAX_EDITS = 2;
+const SIMILAR_SHARE = Object.freeze({ edits: 2, chars: 5 }); // edits x 5 <= 2 x longer: at most 40%
+// Keys longer than this are never compared letter by letter (no spoken word is), so one cell's work stays bounded.
+const MAX_SIMILAR_CHARS = 32;
+const UNITS = 'zero one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen';
+const TENS = 'twenty thirty forty fifty sixty seventy eighty ninety';
+// The number words a recording may write for the say's digits ("ten" for "10"), one word for one token.
+const NUMBER_WORDS = new Map([
+  ...UNITS.split(' ').map((word, n) => [word, String(n)]),
+  ...TENS.split(' ').map((word, k) => [word, String(20 + 10 * k)]),
+]);
+// The table covers only the cells within BAND_MARGIN of the diagonals the two lengths allow (an offset of 0 to file
+// words - say tokens). A matching alignment leaves that range only through runs (several tokens for one word, or the
+// reverse) that drift more than BAND_MARGIN beyond the net difference; such a path is lost, which can only add unmatched
+// words (a refusal), never accept a film that would otherwise fail.
+const BAND_MARGIN = 128;
+/**
+ * The alignment table's cells at most (4 MiB, one byte each): 5000 say words against 5000 file words take 1.3 M. A
+ * words file that needs more is refused at voice.words. Measured on the development Mac (arm64, Node 24): 5000 x 5000 in 33-173 ms, the
+ * slowest crafted input found under the cap in about 0.5 s (synchronous).
+ */
+export const MAX_ALIGN_CELLS = 2 ** 22;
+const INF = 2 ** 29; // the cost of a cell outside the band
 const ECHO_MAX = 40; // characters of a word quoted in a message
 const LIST_MAX = 10; // words listed for each side of a shot in a message
 const NON_WORD_RE = /[^\p{L}\p{N}]/gu;
@@ -213,124 +241,213 @@ function whisperWords(json) {
 const STEP = Object.freeze({ match: 1, substitute: 2, missing: 3, extra: 4 });
 const RUN_BASE = 8;
 const CODE_SPAN = 64; // every step code is under this, so a cell packs as cost * CODE_SPAN + code
-const runCode = (p, q) => RUN_BASE + (p - 1) * MAX_RUN + (q - 1);
+const runCode = (p, q) => RUN_BASE + (p - 1) * MAX_RUN_ITEMS + (q - 1);
 
 function stepOf(code) {
-  if (code >= RUN_BASE) return { kind: 'run', p: Math.floor((code - RUN_BASE) / MAX_RUN) + 1, q: ((code - RUN_BASE) % MAX_RUN) + 1 };
+  if (code >= RUN_BASE) return { kind: 'run', p: Math.floor((code - RUN_BASE) / MAX_RUN_ITEMS) + 1, q: ((code - RUN_BASE) % MAX_RUN_ITEMS) + 1 };
   if (code === STEP.missing) return { kind: 'missing', p: 1, q: 0 };
   if (code === STEP.extra) return { kind: 'extra', p: 0, q: 1 };
   return { kind: code === STEP.match ? 'match' : 'substitute', p: 1, q: 1 };
 }
 
-const joined = (items, from, count) => items.slice(from, from + count).map((x) => x.key).join('');
+// ---- similarity: which two different keys may be one word misheard -----------------------------------------------------
+
+// A key as a number's digits without leading zeros ("007" -> "7", "ten" -> "10"), or null when it is not a number.
+const numberOf = (key) => (/^\d+$/.test(key) ? key.replace(/^0+(?=\d)/, '') : NUMBER_WORDS.get(key) ?? null);
+
+// The Levenshtein distance of two code-point arrays, or limit + 1 as soon as it must exceed `limit`. Only the cells
+// within `limit` of the diagonal are computed (any other is over the limit), so a call is O(limit x length). `rows` are
+// two scratch rows of at least b.length + 1 cells, owned by the caller.
+function editDistance(a, b, limit, rows) {
+  const over = limit + 1;
+  let head = 0;
+  while (head < a.length && head < b.length && a[head] === b[head]) head++;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && a[a.length - 1 - tail] === b[b.length - 1 - tail]) tail++;
+  const n = a.length - head - tail; // what is left of each once their common start and end are set aside
+  const m = b.length - head - tail;
+  let [prev, cur] = rows;
+  for (let j = 0; j <= m; j++) prev[j] = Math.min(j, over);
+  for (let i = 1; i <= n; i++) {
+    cur.fill(over, 0, m + 1);
+    cur[0] = Math.min(i, over);
+    let best = cur[0];
+    for (let j = Math.max(1, i - limit); j <= Math.min(m, i + limit); j++) {
+      const same = a[head + i - 1] === b[head + j - 1];
+      cur[j] = Math.min(over, prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (same ? 0 : 1));
+      best = Math.min(best, cur[j]);
+    }
+    if (best > limit) return over;
+    [prev, cur] = [cur, prev];
+  }
+  return prev[m];
+}
+
+// Whether two keys ({ chars, number }) may be one word misheard (see MAX_EDITS).
+function isSimilar(a, b, rows) {
+  if (a.number !== null && a.number === b.number) return true;
+  const longer = Math.max(a.chars.length, b.chars.length);
+  if (Math.abs(a.chars.length - b.chars.length) > MAX_EDITS || longer > MAX_SIMILAR_CHARS) return false;
+  const edits = editDistance(a.chars, b.chars, MAX_EDITS, rows);
+  return edits <= MAX_EDITS && edits * SIMILAR_SHARE.chars <= SIMILAR_SHARE.edits * longer;
+}
+
+// isSimilar on two ids of `keys`, with two scratch rows of this alignment's own.
+function similarity(keys) {
+  const rows = [new Int32Array(MAX_SIMILAR_CHARS + 1), new Int32Array(MAX_SIMILAR_CHARS + 1)];
+  return (a, b) => isSimilar(keys[a], keys[b], rows);
+}
+
+// ---- the table: a band of cells around the diagonals, filled row by row -------------------------------------------------
+
+// Items with an id per distinct key, the running length of their keys (ends[k] = length of keys 0..k-1) and the keys
+// joined, so a run's joined text is one slice.
+function sequence(items, idOf) {
+  const ends = new Int32Array(items.length + 1);
+  items.forEach((x, k) => { ends[k + 1] = ends[k] + x.key.length; });
+  return { items: items.map((x) => ({ ...x, id: idOf(x.key) })), ends, text: items.map((x) => x.key).join('') };
+}
+
+// The tokens and words as sequences over one id space, and `similar(a, b)` on two ids.
+function contextOf(tokens, words) {
+  const ids = new Map();
+  const idOf = (key) => { if (!ids.has(key)) ids.set(key, ids.size); return ids.get(key); };
+  const T = sequence(tokens, idOf);
+  const W = sequence(words, idOf);
+  const keys = [...ids.keys()].map((key) => ({ chars: Array.from(key), number: numberOf(key) }));
+  return { T, W, similar: similarity(keys) };
+}
+
+// The band of t + 1 rows: row i spans words from(i) to to(i); `at(i, j)` is a cell's index; `cells` the band's size.
+function bandOf(t, w) {
+  const lo = Math.min(0, w - t) - BAND_MARGIN;
+  const hi = Math.max(0, w - t) + BAND_MARGIN;
+  const from = (i) => Math.max(0, i + lo);
+  const to = (i) => Math.min(w, i + hi);
+  const base = new Float64Array(t + 2);
+  for (let i = 0; i <= t; i++) base[i + 1] = base[i] + to(i) - from(i) + 1;
+  return { from, to, cells: base[t + 1], at: (i, j) => base[i] + j - from(i) };
+}
+
+// Whether `a` from index `s` and `b` from index `t` agree for `n` code units (no string is built).
+function sameText(a, s, b, t, n) {
+  for (let k = 0; k < n; k++) if (a.charCodeAt(s + k) !== b.charCodeAt(t + k)) return false;
+  return true;
+}
+
+// The number of words q (minQ to MAX_RUN_ITEMS, ending at word j) whose keys joined are `length` long, or 0. Keys are never
+// empty, so at most one q has that length, and only its text is compared.
+function runWords(W, j, length, minQ) {
+  for (let q = minQ; q <= Math.min(MAX_RUN_ITEMS,j); q++) {
+    const joinedLength = W.ends[j] - W.ends[j - q];
+    if (joinedLength === length) return q;
+    if (joinedLength > length) return 0;
+  }
+  return 0;
+}
 
 // The cheapest run of p tokens of one shot and q words (p + q of 3 or more) that ends at token i and word j and whose
 // joined text matches ("12,500" as " 12" ",500"; "$5 million." as one word): { code, cost }, or null. Joined texts that
-// match end alike, so a pair whose last keys do not is skipped at once.
-function runAt(tokens, words, i, j, row) {
-  const a = tokens[i - 1].key;
-  const b = words[j - 1].key;
+// match end alike, so a pair whose last keys do not is skipped at once; texts are compared only at equal lengths.
+function runAt({ T, W }, i, j, row) {
+  const a = T.items[i - 1].key;
+  const b = W.items[j - 1].key;
   if (!a.endsWith(b) && !b.endsWith(a)) return null;
   let best = null;
-  for (let p = 1; p <= Math.min(MAX_RUN, i) && tokens[i - p].shot === tokens[i - 1].shot; p++) {
-    const left = joined(tokens, i - p, p);
-    for (let q = Math.max(1, 3 - p); q <= Math.min(MAX_RUN, j); q++) {
-      const cost = row(i - p)[j - q];
-      if ((best === null || cost < best.cost) && joined(words, j - q, q) === left) best = { code: runCode(p, q), cost };
+  for (let p = 1; p <= Math.min(MAX_RUN_ITEMS,i) && T.items[i - p].shot === T.items[i - 1].shot; p++) {
+    const length = T.ends[i] - T.ends[i - p];
+    const q = runWords(W, j, length, Math.max(1, 3 - p));
+    if (q === 0) continue;
+    const cost = row(i - p)[j - q];
+    if ((best === null || cost < best.cost) && sameText(T.text, T.ends[i - p], W.text, W.ends[j - q], length)) {
+      best = { code: runCode(p, q), cost };
     }
   }
   return best;
 }
 
 // The cheapest step into cell (i, j), packed. On a tie a match wins, then a run, then an unmatched token or word; a
-// substitution only when strictly cheaper, so a tie is reported rather than substituted.
-function cheapest(tokens, words, i, j, row) {
+// substitution only when strictly cheaper and only between similar words, so a tie is reported rather than substituted.
+function cheapest(ctx, i, j, row) {
   const up = row(i - 1);
   const cur = row(i);
   let cost = up[j] + COST.unmatched;
   let code = STEP.missing;
   if (cur[j - 1] + COST.unmatched < cost) { cost = cur[j - 1] + COST.unmatched; code = STEP.extra; }
-  if (tokens[i - 1].id === words[j - 1].id) return up[j - 1] <= cost ? up[j - 1] * CODE_SPAN + STEP.match : cost * CODE_SPAN + code;
-  const run = runAt(tokens, words, i, j, row);
+  const a = ctx.T.items[i - 1].id;
+  const b = ctx.W.items[j - 1].id;
+  if (a === b) return up[j - 1] <= cost ? up[j - 1] * CODE_SPAN + STEP.match : cost * CODE_SPAN + code;
+  const run = runAt(ctx, i, j, row);
   if (run !== null && run.cost <= cost) { cost = run.cost; code = run.code; }
-  if (up[j - 1] + COST.substitute < cost) { cost = up[j - 1] + COST.substitute; code = STEP.substitute; }
+  if (up[j - 1] + COST.substitute < cost && ctx.similar(a, b)) { cost = up[j - 1] + COST.substitute; code = STEP.substitute; }
   return cost * CODE_SPAN + code;
 }
 
-// The edit-distance table of `tokens` against `words`: the step into every cell (row-major, words + 1 wide). Costs are
-// kept for the last MAX_RUN + 1 rows only, which is all a run reaches back.
-function fillTable(tokens, words) {
-  const width = words.length + 1;
-  const steps = new Uint8Array((tokens.length + 1) * width);
-  const rows = Array.from({ length: MAX_RUN + 1 }, () => new Int32Array(width));
-  const row = (i) => rows[i % rows.length];
-  for (let j = 1; j < width; j++) { row(0)[j] = j * COST.unmatched; steps[j] = STEP.extra; }
-  for (let i = 1; i <= tokens.length; i++) {
+// A cell of the first row or column: every word so far extra, or every token so far missing.
+const edgeCell = (i, j) => (i + j) * COST.unmatched * CODE_SPAN + (i === 0 ? (j === 0 ? 0 : STEP.extra) : STEP.missing);
+
+// The step into every cell of the band. Costs are kept for the last MAX_RUN_ITEMS + 1 rows only (all a run reaches
+// back), INF outside each row's span; a row's slot is reset to INF over the span it held before it is reused.
+function fillTable(ctx, band) {
+  const ring = Array.from({ length: MAX_RUN_ITEMS + 1 }, () => new Int32Array(ctx.W.items.length + 1).fill(INF));
+  const row = (i) => ring[i % ring.length];
+  const steps = new Uint8Array(band.cells);
+  for (let i = 0; i <= ctx.T.items.length; i++) {
+    const stale = i - ring.length;
+    if (stale >= 0) row(i).fill(INF, band.from(stale), band.to(stale) + 1);
     const cur = row(i);
-    cur[0] = i * COST.unmatched;
-    steps[i * width] = STEP.missing;
-    for (let j = 1; j < width; j++) {
-      const packed = cheapest(tokens, words, i, j, row);
+    for (let j = band.from(i); j <= band.to(i); j++) {
+      const packed = i === 0 || j === 0 ? edgeCell(i, j) : cheapest(ctx, i, j, row);
       cur[j] = Math.floor(packed / CODE_SPAN);
-      steps[i * width + j] = packed % CODE_SPAN;
+      steps[band.at(i, j)] = packed % CODE_SPAN;
     }
   }
   return steps;
 }
 
 // The steps of the cheapest alignment, first to last, each with the token (i) and word (j) it starts at.
-function stepsOf(table, width, tokens, words) {
+function stepsOf(table, band, tokens, words) {
   const steps = [];
   let i = tokens;
   let j = words;
   while (i > 0 || j > 0) {
-    const step = stepOf(table[i * width + j]);
+    const step = stepOf(table[band.at(i, j)]);
     i -= step.p;
     j -= step.q;
-    steps.push({ ...step, i, j });
+    steps.push(Object.freeze({ ...step, i, j }));
   }
-  return steps.reverse();
+  return Object.freeze(steps.reverse());
 }
 
-const unmatchedPair = (s) => [{ kind: 'missing', p: 1, q: 0, i: s.i, j: s.j }, { kind: 'extra', p: 0, q: 1, i: s.i + 1, j: s.j }];
+// The last alignment, by the keys it was computed from. Validation and the voice stage fit the same words to the same
+// film in one run; the table is the only part of that work that grows with the product of their lengths, so it is
+// built once. The steps hold indexes only (frozen); texts and times are read afresh by each caller.
+let lastAlignment = { key: null, steps: null };
 
-// The steps with every run of more than MAX_SUBSTITUTIONS substitutions in a row turned into a missing token and an extra
-// word each: a whole different phrase of the same length is reported, never timed word for word.
-function capSubstitutions(steps) {
-  const out = [];
-  for (let k = 0; k < steps.length;) {
-    let end = k;
-    while (end < steps.length && steps[end].kind === 'substitute') end++;
-    if (end === k) {
-      out.push(steps[k]);
-      k++;
-      continue;
-    }
-    const run = steps.slice(k, end);
-    out.push(...(run.length > MAX_SUBSTITUTIONS ? run.flatMap(unmatchedPair) : run));
-    k = end;
+function alignmentSteps(tokens, words, band) {
+  const key = JSON.stringify([tokens.map((t) => [t.shot, t.key]), words.map((w) => w.key)]);
+  if (lastAlignment.key !== key) {
+    const steps = stepsOf(fillTable(contextOf(tokens, words), band), band, tokens.length, words.length);
+    lastAlignment = { key, steps };
   }
-  return out;
+  return lastAlignment.steps;
 }
 
 /**
  * The spoken say tokens of every narrated shot in film order (`{ shot, k, key, text }`) aligned with the recording's
- * words as two sequences (an edit-distance alignment on their keys): `{ spans, missing, extra }`, spans[t] the file span
- * of token t (every token of a run shares one), `missing` the tokens with no word, `extra` the words with no token, each
- * with the shot it falls in (the shot of the token before it, else the first).
+ * words as two sequences (a banded edit-distance alignment on their keys): `{ spans, missing, extra }`, spans[t] the
+ * file span of token t (every token of a run shares one), `missing` the tokens with no word, `extra` the words with no
+ * token, each with the shot it falls in (the shot of the token before it, else the first).
  */
 function align(tokens, words) {
-  const cells = (tokens.length + 1) * (words.length + 1);
-  if (cells > MAX_ALIGN_CELLS) {
-    refuse(`the says' ${tokens.length} words and the words file's ${words.length} are too many to match (at most ${MAX_ALIGN_CELLS} pairs); check that the words file is this film's recording`);
+  const band = bandOf(tokens.length, words.length);
+  if (band.cells > MAX_ALIGN_CELLS) {
+    refuse(`the says' ${tokens.length} words and the words file's ${words.length} are too many to align (more than ${MAX_ALIGN_CELLS} pairs to compare); check that the words file is this film's recording`);
   }
-  const ids = new Map();
-  const id = (key) => { if (!ids.has(key)) ids.set(key, ids.size); return ids.get(key); };
-  const table = fillTable(tokens.map((t) => ({ ...t, id: id(t.key) })), words.map((w) => ({ ...w, id: id(w.key) })));
   const spans = new Array(tokens.length).fill(null);
   const missing = [];
   const extra = [];
-  for (const step of capSubstitutions(stepsOf(table, words.length + 1, tokens.length, words.length))) {
+  for (const step of alignmentSteps(tokens, words, band)) {
     if (step.kind === 'missing') missing.push(tokens[step.i]);
     else if (step.kind === 'extra') extra.push({ ...words[step.j], shot: tokens[Math.max(0, step.i - 1)].shot });
     else {
@@ -408,8 +525,8 @@ function checkShotOrder(film, shots) {
  * recording sidecar (header). The spoken say tokens of every narrated shot and the file's words are aligned as two
  * sequences by their letters and digits (case and punctuation aside): a token and a word one to one; a run whose joined
  * text matches ("12,500" as " 12" ",500", "$5 million." as one word), whose tokens all take the run's span; or a word
- * rendered differently, in its own place, at the file's time for that place (up to MAX_SUBSTITUTIONS in a row). A
- * spaced dash takes a zero-length span.
+ * misheard in its own place (at most MAX_EDITS edits and 40% of the longer word from the say's, or the same number
+ * written differently), at the file's time for that place. A spaced dash takes a zero-length span.
  * Emphasis, asides and sentences are the film's. Any word of the file with no partner in the say, or say word with none
  * in the file, is a RecordingWordsError naming the shot and listing those words on each side: a word is never moved onto
  * another's time. So is a film with no narrated shot, and word times that overlap across two shots.
@@ -430,5 +547,7 @@ export function fromWhisper(json, film) {
     return { id: shot.id, wav: null, seconds: placed.at(-1).end, sentences: sentencesOf(plan, placed) };
   });
   checkShotOrder(film, shots);
+  // sampleRate is the format's fixed value (validateSidecar requires it); a recording's own rate is not recorded here,
+  // and nothing on this path reads the field: every time is in seconds from the file's first sample.
   return { version: SIDECAR_VERSION, model: null, voice: null, sampleRate: SAMPLE_RATE, shots };
 }

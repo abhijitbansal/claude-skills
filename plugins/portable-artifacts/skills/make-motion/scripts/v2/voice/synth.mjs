@@ -1,6 +1,10 @@
 // A film's narration as WAVs and a sidecar of word times, cached by a hash of everything that shapes them.
 // Files live in <outDir>/.voice/<hash>/: voice.json (the sidecar) and shot-<index>.wav per shot with sound.
-// A hit reads and checks the entry and starts nothing; a corrupt or incomplete entry is removed and made again.
+// A hit reads and checks the entry and starts nothing. The entry's key is a hash of public inputs, so anyone who can
+// write beside the output can plant one: it is trusted only when the folders are real folders inside the output folder,
+// the sidecar is a regular file that matches the film, the pinned model and the voice asked for, and every shot WAV is a
+// regular file holding exactly the 24 kHz mono 16-bit PCM WAV the sidecar implies. Anything else (a corrupt, incomplete
+// or planted entry) is removed and made again; a `.voice` that is a symlink is unlinked, its target never touched.
 // A miss fetches and checks the pinned model here, then runs `node worker.mjs <job.json>` through spawn (an argument
 // array, never a shell; the film's text is only ever inside the job file) in a staging folder of its own, which is
 // renamed into place when the worker succeeds and removed on every other path. This process never imports the
@@ -13,7 +17,8 @@ import { spawn as spawnChild } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import {
-  closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync, statSync, writeFileSync,
+  closeSync, constants as FS, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, realpathSync,
+  renameSync, rmSync, unlinkSync, writeFileSync,
 } from 'node:fs';
 import path from 'node:path';
 import { createInterface } from 'node:readline';
@@ -23,10 +28,10 @@ import { VOICE_SPEED_MAX, VOICE_SPEED_MIN } from '../../../engine/modes/index.mj
 import { optionalInstall } from '../../lib/doctor-hint.mjs';
 import { OPTIONAL_ROOT } from '../../lib/optional.mjs';
 import { ASIDE_SPEED_FACTOR, MAX_IDS } from './calls.mjs';
-import { STYLE_DIM, checkVoice } from './kokoro.mjs';
+import { MODEL_INFO, STYLE_DIM, checkVoice } from './kokoro.mjs';
 import { VOICE_MODEL, ensureVoiceModel, voiceModelDir } from './model.mjs';
 import { SIDECAR_FILE, SIDECAR_VERSION, SidecarError, readSidecar, validateSidecar } from './sidecar.mjs';
-import { ERROR_MARKER, INSTALL_HINT, JOB_VERSION, SILENCE_QUANTUM_SAMPLES, TRIM } from './worker.mjs';
+import { ERROR_MARKER, INSTALL_HINT, JOB_VERSION, SILENCE_QUANTUM_SAMPLES, TRIM, WAV_HEADER_BYTES, wavHeader } from './worker.mjs';
 import { END_CAP_FRAMES, FRAME_SAMPLES, LEAD, SAMPLE_RATE } from './words.mjs';
 
 const VOICE_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -61,8 +66,11 @@ export const DEFAULT_TIMEOUT_SECONDS = 600;
 const DEFAULT_MODE = 'pro';
 const MS_PER_SECOND = 1000;
 const STDERR_TAIL_LINES = 20;
-const WAV_HEADER_BYTES = 44;
 const BYTES_PER_SAMPLE = 2;
+const ECHO_MAX = 120; // characters of a planted value quoted in a log line
+// A shot WAV's header is read without blocking: a FIFO swapped in after the lstat check cannot hang the run.
+const HEADER_OPEN_FLAGS = FS.O_RDONLY | (FS.O_NONBLOCK ?? 0);
+const MODEL_FIELDS = Object.freeze(Object.keys(MODEL_INFO));
 const SHA256_HEX = /^[0-9a-f]{64}$/;
 const RERUN_HINT = `run again; if it repeats, reinstall the voice package: ${optionalInstall('kokoro')}`;
 const FS_HINT = 'check that the output folder is writable and the disk has space, then run again';
@@ -156,63 +164,117 @@ function lockHash(runtime) {
   return sha256Hex(readFileSync(file));
 }
 
-// The sample count in a 16-bit WAV's header, or -1 when the file has no data chunk where encodeWav puts it.
-function wavSamples(file) {
-  const header = Buffer.alloc(WAV_HEADER_BYTES);
-  const fd = openSync(file, 'r');
+// The lstat of `file` (never following a link), or null when nothing is there.
+function lstatOrNull(file) {
   try {
-    const read = readSync(fd, header, 0, WAV_HEADER_BYTES, 0);
-    return read === WAV_HEADER_BYTES && header.toString('ascii', 36, 40) === 'data' ? header.readUInt32LE(40) / BYTES_PER_SAMPLE : -1;
+    return lstatSync(file);
+  } catch (err) {
+    if (err.code === 'ENOENT') return null;
+    throw err;
+  }
+}
+
+const echo = (value) => {
+  const text = String(JSON.stringify(value));
+  return text.length > ECHO_MAX ? `${text.slice(0, ECHO_MAX)}...` : text;
+};
+
+// The first WAV_HEADER_BYTES bytes of a regular file, or null when it is not one or is shorter.
+function readHeader(file) {
+  const fd = openSync(file, HEADER_OPEN_FLAGS);
+  try {
+    if (!fstatSync(fd).isFile()) return null;
+    const header = Buffer.alloc(WAV_HEADER_BYTES);
+    return readSync(fd, header, 0, WAV_HEADER_BYTES, 0) === WAV_HEADER_BYTES ? header : null;
   } finally {
     closeSync(fd);
   }
 }
 
-// Why a shot's WAV is not complete (missing, a header that disagrees with the sidecar, or a body shorter or longer
-// than its header), or null.
+// Why a shot's WAV cannot be trusted, or null. It must be a regular file (lstat: not a symlink, a FIFO or a device)
+// exactly as long as the sidecar's `seconds` implies, starting with the very header encodeWav writes for that many
+// samples: RIFF/WAVE, PCM, 24000 Hz, mono, 16-bit, its RIFF and data sizes matching the file's length.
 function wavProblem(dir, shot) {
   if (shot.wav === null) return null;
-  const file = path.join(dir, shot.wav);
-  if (!existsSync(file)) return `${shot.wav} is missing`;
-  const expected = Math.round(shot.seconds * SAMPLE_RATE);
-  const samples = wavSamples(file);
-  if (samples !== expected) return `${shot.wav} holds ${samples} samples, the sidecar says ${expected}`;
-  const bytes = statSync(file).size;
-  const wanted = WAV_HEADER_BYTES + expected * BYTES_PER_SAMPLE;
-  return bytes === wanted ? null : `${shot.wav} is ${bytes} bytes, its header says ${wanted}`;
+  const stat = lstatOrNull(path.join(dir, shot.wav));
+  if (stat === null) return `${shot.wav} is missing`;
+  if (!stat.isFile()) return `${shot.wav} is not a regular file (a symlink, a FIFO, a device or a folder)`;
+  const samples = Math.round(shot.seconds * SAMPLE_RATE);
+  const wanted = WAV_HEADER_BYTES + samples * BYTES_PER_SAMPLE;
+  if (stat.size !== wanted) return `${shot.wav} is ${stat.size} bytes; a WAV of the sidecar's ${shot.seconds} s is ${wanted}`;
+  const header = readHeader(path.join(dir, shot.wav));
+  const isExact = header !== null && header.equals(wavHeader(samples, SAMPLE_RATE));
+  return isExact ? null : `${shot.wav} does not start with the header of a ${SAMPLE_RATE} Hz mono 16-bit PCM WAV of ${samples} samples`;
+}
+
+// Why the entry folder cannot be trusted, or null: it must be a folder of its own (not a symlink), inside the output
+// folder by real path. The cache folder above it is never a symlink here (unlinkedCacheRoot ran first).
+function folderProblem(dir, outDir) {
+  const stat = lstatSync(dir);
+  if (stat.isSymbolicLink() || !stat.isDirectory()) return 'the entry is not a folder of its own (a symlink or another kind of file)';
+  return realpathSync(dir).startsWith(`${realpathSync(outDir)}${path.sep}`) ? null : `the entry's real path lies outside ${outDir}`;
+}
+
+// Why the sidecar's origin cannot be trusted, or null: a synthesised entry names the pinned model (MODEL_INFO's id,
+// commit, file and hash, nothing more) and the voice asked for.
+function originProblem(sidecar, voice) {
+  const { model } = sidecar;
+  const isPinned = model !== null && typeof model === 'object' && !Array.isArray(model)
+    && Object.keys(model).length === MODEL_FIELDS.length && MODEL_FIELDS.every((key) => model[key] === MODEL_INFO[key]);
+  if (!isPinned) return `its model ${echo(model)} is not the pinned ${MODEL_INFO.id} at ${MODEL_INFO.commit}`;
+  return sidecar.voice === voice ? null : `its voice ${echo(sidecar.voice)} is not ${echo(voice)}`;
 }
 
 // Whether an error reading an entry means the entry is incomplete (a missing file, a sidecar that is not JSON or does
-// not match the film) rather than trouble reading it (permissions, a folder where a file should be, a full table).
+// not match the film) rather than trouble reading it (permissions, a full table).
 function isIncomplete(err) {
   const code = err?.cause?.code ?? err?.code;
   return err instanceof SidecarError ? code === undefined || code === 'ENOENT' : code === 'ENOENT';
 }
 
-// { sidecar } when the entry in `dir` is complete and matches the film, else { problem }. Trouble reading it is
+// The sidecar of the entry in `dir`, read only once the folder and the file are what they should be.
+function trustedSidecar(dir, outDir, film) {
+  const file = path.join(dir, SIDECAR_FILE);
+  const problem = folderProblem(dir, outDir)
+    ?? (lstatSync(file).isFile() ? null : `${SIDECAR_FILE} is not a regular file (a symlink, a FIFO, a device or a folder)`);
+  return problem === null ? { sidecar: validateSidecar(readSidecar(file), film) } : { problem };
+}
+
+// { sidecar } when the entry in `dir` can be trusted and matches the film, else { problem }. Trouble reading it is
 // machine trouble, not a reason to throw the entry away.
-function readEntry(dir, film) {
+function readEntry(dir, film, { voice, outDir }) {
   try {
-    const sidecar = validateSidecar(readSidecar(path.join(dir, SIDECAR_FILE)), film);
-    const problem = sidecar.shots.map((shot) => wavProblem(dir, shot)).find((p) => p !== null);
-    return problem === undefined ? { sidecar } : { problem };
+    const { sidecar, problem } = trustedSidecar(dir, outDir, film);
+    if (problem) return { problem };
+    const found = originProblem(sidecar, voice) ?? sidecar.shots.map((shot) => wavProblem(dir, shot)).find((p) => p !== null);
+    return found ? { problem: found } : { sidecar };
   } catch (err) {
     if (isIncomplete(err)) return { problem: err.message };
     throw machine(`the voice cache entry ${dir} cannot be read: ${err.message}`, FS_HINT, { cause: err });
   }
 }
 
-// The cached sidecar, or null on a miss. A corrupt or incomplete entry is logged once and removed: it is this
-// module's own cache and can always be made again.
-function cachedSidecar(dir, film, log) {
-  if (!existsSync(dir)) return null;
-  const { sidecar, problem } = readEntry(dir, film);
+// A `.voice` that is a symlink (planted, or left by anyone) is never read or written through: the link itself is
+// removed, never its target, and the run goes on as a miss.
+function unlinkedCacheRoot(cacheRoot, log) {
+  const stat = fsStep(`look at ${cacheRoot}`, () => lstatOrNull(cacheRoot));
+  if (stat === null || !stat.isSymbolicLink()) return;
+  log(`voice: the cache folder ${cacheRoot} is a symlink and cannot be trusted; removing the link (not its target) and synthesising again`);
+  fsStep(`remove the link ${cacheRoot}`, () => unlinkSync(cacheRoot));
+}
+
+// The cached sidecar, or null on a miss. An entry that is incomplete or cannot be trusted is logged once and removed
+// (a link is unlinked, its target left alone): it is this module's own cache and can always be made again.
+function cachedSidecar(dir, film, { voice, outDir, log }) {
+  unlinkedCacheRoot(path.dirname(dir), log);
+  if (fsStep(`look at ${dir}`, () => lstatOrNull(dir)) === null) return null;
+  const { sidecar, problem } = readEntry(dir, film, { voice, outDir });
   if (sidecar) {
     log(`voice: cached in ${dir}`);
     return sidecar;
   }
-  log(`voice: the cache entry ${dir} is incomplete (${problem}); removing it and synthesising again`);
-  fsStep(`remove the incomplete cache entry ${dir}`, () => rmSync(dir, { recursive: true, force: true }));
+  log(`voice: the cache entry ${dir} is incomplete or cannot be trusted (${problem}); removing it and synthesising again`);
+  fsStep(`remove the cache entry ${dir}`, () => rmSync(dir, { recursive: true, force: true }));
   return null;
 }
 
@@ -234,7 +296,9 @@ function sweepStaleStaging(cacheRoot, log) {
   const now = Date.now();
   for (const name of readdirSync(cacheRoot)) {
     const folder = path.join(cacheRoot, name);
-    if (!isStaging(name) || now - statSync(folder).mtimeMs <= STALE_STAGING_MS) continue;
+    // Another run may remove its own staging folder between the listing and this look: then there is nothing to sweep.
+    const stat = isStaging(name) ? lstatOrNull(folder) : null;
+    if (stat === null || now - stat.mtimeMs <= STALE_STAGING_MS) continue;
     log(`voice: removing ${folder}, left by an earlier run that did not finish`);
     rmSync(folder, { recursive: true, force: true });
   }
@@ -286,6 +350,16 @@ function workerError(code, signal, tail) {
   return machine(last ? `${what}: ${last}` : what, RERUN_HINT, { exitCode: code, signal });
 }
 
+// The last STDERR_TAIL_LINES lines kept as they come: -> { tail, keepTail(line) }.
+function tailKeeper() {
+  const tail = [];
+  const keepTail = (line) => {
+    tail.push(line);
+    if (tail.length > STDERR_TAIL_LINES) tail.shift();
+  };
+  return { tail, keepTail };
+}
+
 /**
  * Runs the worker on `jobFile` through `spawn` (child_process.spawn's signature). Its stdout lines go to `log` as they
  * come. Resolves on exit 0; rejects with its classified error, or, when it has not finished after `timeoutSeconds`,
@@ -301,11 +375,7 @@ function runWorker(spawn, jobFile, { timeoutSeconds, log, signal }) {
     let timer = null;
     let grace = null;
     let child = null;
-    const tail = [];
-    const keepTail = (line) => {
-      tail.push(line);
-      if (tail.length > STDERR_TAIL_LINES) tail.shift();
-    };
+    const { tail, keepTail } = tailKeeper();
     const settle = (fn, value) => {
       if (settled) return;
       settled = true;
@@ -347,13 +417,14 @@ function runWorker(spawn, jobFile, { timeoutSeconds, log, signal }) {
   });
 }
 
-// Moves the finished staging folder into place. When a concurrent run published the same entry first, its entry is
-// kept (it is checked like any other).
+// Moves the finished staging folder into place. When a concurrent run published the same entry first (ENOTEMPTY or
+// EEXIST on POSIX, EPERM on Windows, with the entry then present), its entry is kept (it is checked like any other).
 function publish(staging, dir) {
   try {
     renameSync(staging, dir);
   } catch (err) {
-    if (err.code !== 'ENOTEMPTY' && err.code !== 'EEXIST') throw err;
+    const isTaken = ['ENOTEMPTY', 'EEXIST', 'EPERM'].includes(err.code) && lstatOrNull(dir) !== null;
+    if (!isTaken) throw err;
   }
 }
 
@@ -440,12 +511,12 @@ export async function synthesiseFilm(film, options = {}) {
   const runtime = options.runtime ?? path.join(OPTIONAL_ROOT, 'voice');
   const modelDir = options.modelDir ?? voiceModelDir();
   const dir = path.join(outDir, CACHE_DIR, voiceHash(film, { voice, runtimeLock: lockHash(runtime) }));
-  const cached = cachedSidecar(dir, film, log);
+  const cached = cachedSidecar(dir, film, { voice, outDir, log });
   if (cached) return { dir, sidecar: cached, cached: true };
   throwIfAborted(signal);
   await untilAborted(ensureModelFirst(ensureModel, modelDir, options.offline ?? false, log), signal);
   await synthesiseInto(dir, film, { voice, runtime, modelDir, spawn, log, timeoutSeconds, signal });
-  const made = readEntry(dir, film);
+  const made = readEntry(dir, film, { voice, outDir });
   if (!made.sidecar) throw machine(`the voice worker finished, but its output in ${dir} is incomplete: ${made.problem}`, RERUN_HINT);
   return { dir, sidecar: made.sidecar, cached: false };
 }

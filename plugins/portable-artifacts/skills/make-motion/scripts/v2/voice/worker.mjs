@@ -25,14 +25,15 @@ import { SIDECAR_FILE, SIDECAR_VERSION, roundTime, sentencesOf, wavName, writeSi
 import { VoiceTextError, loadVocab } from './tokens.mjs';
 import { FRAME_SAMPLES, SAMPLE_RATE, framesOf, wordTimes } from './words.mjs';
 
-/** Silences are whole milliseconds, so a shot's length is exact at the sidecar's 1e-4 s (model audio is 600-sample frames). */
-export const SILENCE_QUANTUM_SAMPLES = SAMPLE_RATE / 1000;
 const SAMPLES_PER_MS = SAMPLE_RATE / 1000;
+/** Silences are whole milliseconds, so a shot's length is exact at the sidecar's 1e-4 s (model audio is 600-sample frames). */
+export const SILENCE_QUANTUM_SAMPLES = SAMPLES_PER_MS;
 /**
  * The lead pad is cut up to this long before the call's first word start (by the start rule). Measured onsets run at
- * most 31 ms before that start (.scratch/voice/pad-onset.mjs, 18 calls), so 75 ms keeps every onset.
+ * most 31 ms before that start (.scratch/voice/pad-onset.mjs, 18 calls); at 75 ms the accuracy script's smallest margin
+ * between the cut and a measured onset was 26 ms (on "So,"), so the keep was raised to 110 ms (team-lead ruling).
  */
-export const LEAD_KEEP_MS = 75;
+export const LEAD_KEEP_MS = 110;
 const LEAD_KEEP_SAMPLES = LEAD_KEEP_MS * SAMPLES_PER_MS;
 /** Linear fade in at the cut (5 ms), so a trim cannot click. */
 export const FADE_SAMPLES = 5 * SAMPLES_PER_MS;
@@ -46,7 +47,7 @@ export const ERROR_MARKER = 'voice-error ';
 const RUNTIME_PACKAGE = 'onnxruntime-node';
 const EXIT_FILM = 1;
 const EXIT_MACHINE = 2;
-const WAV_HEADER_BYTES = 44;
+export const WAV_HEADER_BYTES = 44;
 const PCM_MAX = 32767;
 const PCM_MIN = -32768;
 const REINSTALL = `reinstall the voice package: ${optionalInstall('kokoro')}`;
@@ -78,10 +79,13 @@ export function classifyError(err, stage, shot) {
   return { kind: 'machine', message: oneLine(err), hint: STAGE_HINTS[stage] ?? STAGE_HINTS.synth };
 }
 
-/** `samples` (floats in -1..1, clamped) as a mono 16-bit PCM WAV at `sampleRate`. */
-export function encodeWav(samples, sampleRate) {
-  const dataBytes = samples.length * 2;
-  const buf = Buffer.alloc(WAV_HEADER_BYTES + dataBytes);
+/**
+ * The 44-byte header of a mono 16-bit PCM WAV of `sampleCount` samples at `sampleRate`: the only header encodeWav writes,
+ * and the one a cached shot WAV must start with byte for byte (synth.mjs).
+ */
+export function wavHeader(sampleCount, sampleRate) {
+  const dataBytes = sampleCount * 2;
+  const buf = Buffer.alloc(WAV_HEADER_BYTES);
   buf.write('RIFF', 0, 'ascii');
   buf.writeUInt32LE(WAV_HEADER_BYTES - 8 + dataBytes, 4);
   buf.write('WAVEfmt ', 8, 'ascii');
@@ -94,6 +98,13 @@ export function encodeWav(samples, sampleRate) {
   buf.writeUInt16LE(16, 34); // bits per sample
   buf.write('data', 36, 'ascii');
   buf.writeUInt32LE(dataBytes, 40);
+  return buf;
+}
+
+/** `samples` (floats in -1..1, clamped) as a mono 16-bit PCM WAV at `sampleRate`. */
+export function encodeWav(samples, sampleRate) {
+  const buf = Buffer.alloc(WAV_HEADER_BYTES + samples.length * 2);
+  wavHeader(samples.length, sampleRate).copy(buf);
   samples.forEach((s, i) => buf.writeInt16LE(Math.max(PCM_MIN, Math.min(PCM_MAX, Math.round(s * PCM_MAX))), WAV_HEADER_BYTES + i * 2));
   return buf;
 }

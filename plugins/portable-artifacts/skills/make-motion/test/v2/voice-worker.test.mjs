@@ -10,12 +10,15 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync,
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { SayError } from '../../engine/script/say.mjs';
+import { SayError, parseSay } from '../../engine/script/say.mjs';
 import { STYLE_DIM, openKokoro } from '../../scripts/v2/voice/kokoro.mjs';
-import { MAX_IDS } from '../../scripts/v2/voice/calls.mjs';
-import { ERROR_MARKER, INSTALL_HINT, classifyError, runJob } from '../../scripts/v2/voice/worker.mjs';
+import { MAX_IDS, planCalls } from '../../scripts/v2/voice/calls.mjs';
+import {
+  ERROR_MARKER, FADE_SAMPLES, INSTALL_HINT, LEAD_KEEP_MS, SILENCE_QUANTUM_SAMPLES, classifyError, encodeWav, runJob, sidecarShot,
+  synthesiseShot, trimPads,
+} from '../../scripts/v2/voice/worker.mjs';
 import { CODE_FILES, WORKER_PATH, synthesiseFilm } from '../../scripts/v2/voice/synth.mjs';
-import { VoiceTextError } from '../../scripts/v2/voice/tokens.mjs';
+import { EMBEDDED_VOCAB, VoiceTextError } from '../../scripts/v2/voice/tokens.mjs';
 import { SAMPLE_RATE } from '../../scripts/v2/voice/words.mjs';
 import { VOICE_MODEL, voiceModelDir } from '../../scripts/v2/voice/model.mjs';
 import { OPTIONAL_ROOT } from '../../scripts/lib/optional.mjs';
@@ -317,4 +320,186 @@ test('integration: a film error after the runtime has loaded is kind film, exit 
       return true;
     });
   });
+});
+
+// ---------- the worker's shot assembly, with a fake model ----------
+
+// A stand-in phonemizer: each word's letters, lower case, with g (not in the vocab) spelt k.
+const fakePhonemize = async (text) => [text.split(/\s+/).filter(Boolean).map((w) => w.toLowerCase().replace(/[^a-z]/g, '').replace(/g/g, 'k')).join(' ')];
+
+// A stand-in model: 12 frames for the lead pad, 2 for every other token; the waveform is exactly that long.
+const fakeSpeak = async ({ ids }) => {
+  const durations = Float32Array.from(ids, (_, k) => (k === 0 ? 12 : 2));
+  const frames = durations.reduce((a, b) => a + b, 0);
+  return { waveform: new Float32Array(frames * 600).fill(0.1), durations };
+};
+const shotDeps = { speak: fakeSpeak, phonemize: fakePhonemize, vocab: EMBEDDED_VOCAB, speed: 1, emphasisPause: 0 };
+
+test('a pause inserts its silence and advances the next call\'s word times (hand-computed)', async () => {
+  // "Wait (0.4) now.": speech [Wait], silence 0.4 s, speech [now.].
+  // Call 1 ids [0 w a i t 0]: frames 12+2*5 = 22 = 13200 samples untrimmed. Call 2 [0 n o w . 0]: 13200 untrimmed.
+  // Untrimmed first-word start: raw 12 * 600 = 7200, lead -119 + 12 * 12 = 25 ms = 600 samples -> 6600.
+  // Lead pad cut: 6600 - 110 ms (2640) = 3960, inside the 12-frame (7200-sample) pad. The tail pad is left.
+  // So each call is 13200 - 3960 = 9240 samples and its times move 3960 earlier.
+  // Wait: start 6600 - 3960 = 2640 = 0.11 s; last in its call: end (cum 18 + 2) * 600 = 12000 - 3960 = 8040 = 0.335 s.
+  // Silence 0.4 s = 9600. now.: offset 9240 + 9600 = 18840; start 2640 + 18840 = 21480 = 0.895 s;
+  //       followed by punctuation: end (cum 16 + 2) * 600 = 10800 - 3960 = 6840, + 18840 = 25680 = 1.07 s.
+  const shot = await synthesiseShot({ id: 's', say: 'Wait (0.4) now.' }, shotDeps);
+  assert.equal(shot.samples.length, 9240 + 9600 + 9240);
+  assert.equal(shot.entry.seconds, 1.17);
+  assert.deepEqual(shot.entry.sentences, [{
+    start: 0.11,
+    end: 1.07,
+    words: [
+      { text: 'Wait', start: 0.11, end: 0.335, emphasis: false, aside: false },
+      { text: 'now.', start: 0.895, end: 1.07, emphasis: false, aside: false },
+    ],
+  }]);
+  assert.ok(shot.samples.slice(9240, 9240 + 9600).every((v) => v === 0), 'the written pause is exactly 0.4 s of zeros');
+});
+
+test('emphasis and aside are recorded per word, the aside call runs faster, and sentences split at sentence ends', async () => {
+  const speeds = [];
+  const speak = async (call) => {
+    speeds.push(call.speed);
+    return fakeSpeak(call);
+  };
+  const shot = await synthesiseShot({ id: 's', say: 'It *is* here. Done, _quietly_.' }, { ...shotDeps, speak });
+  const words = shot.entry.sentences.flatMap((s) => s.words);
+  assert.deepEqual(words.map((w) => [w.text, w.emphasis, w.aside]), [
+    ['It', false, false], ['is', true, false], ['here.', false, false], ['Done,', false, false], ['quietly.', false, true],
+  ]);
+  assert.equal(shot.entry.sentences.length, 2);
+  assert.deepEqual(speeds, [1, 1, 1 / 0.85]);
+  for (const w of words) assert.ok(w.end > w.start && w.start >= 0 && w.end <= shot.entry.seconds, JSON.stringify(w));
+});
+
+// A stand-in model with a 20-frame lead pad and a 15-frame tail pad, 2 frames per phoneme token, and a waveform whose
+// every sample is 0.5, so the cut lengths and the fades are visible.
+const padSpeak = async ({ ids }) => {
+  const durations = Float32Array.from(ids, (_, k) => (k === 0 ? 20 : k === ids.length - 1 ? 15 : 2));
+  const frames = durations.reduce((a, b) => a + b, 0);
+  return { waveform: new Float32Array(frames * 600).fill(0.5), durations };
+};
+
+test('trimPads cuts the lead pad up to LEAD_KEEP_MS before the first word, fades the cut in, and leaves the tail pad whole', () => {
+  // Frames [20, 2, 2, 2, 2, 15] = 43 frames = 25800 samples. First word start (untrimmed) 9096 (raw 12000 minus the
+  // call-start lead max(0, -119 + 12 * 20) = 121 ms = 2904 samples). Cut: 9096 - 110 ms (2640) = 6456, inside the
+  // 20-frame (12000-sample) pad. The tail pad is not cut.
+  assert.equal(LEAD_KEEP_MS, 110);
+  const frames = [20, 2, 2, 2, 2, 15];
+  const waveform = new Float32Array(43 * 600).fill(0.5);
+  const { samples, cutFront } = trimPads(waveform, frames, 9096);
+  assert.equal(cutFront, 6456);
+  assert.equal(samples.length, 25800 - 6456);
+  assert.equal(9096 - cutFront, 2640, 'the first word starts 110 ms into the trimmed call');
+  assert.equal(samples[0], 0, 'fade in starts at silence');
+  assert.equal(samples[FADE_SAMPLES], 0.5, 'full level after the 5 ms fade');
+  assert.ok(samples[FADE_SAMPLES / 2] > 0 && samples[FADE_SAMPLES / 2] < 0.5, 'the fade is a ramp');
+  assert.equal(samples.at(-1), 0.5, 'the tail is not cut, so it is not faded');
+  assert.equal(waveform[0], 0.5, 'the model output is not changed in place');
+});
+
+test('trimPads never cuts past the pad\'s end, and does not cut (or fade) when the first word is within LEAD_KEEP_MS of the start', () => {
+  const frames = [3, 2, 2, 2];
+  const waveform = new Float32Array(9 * 600).fill(0.5);
+  const late = trimPads(waveform, frames, 5000);
+  assert.equal(late.cutFront, 1800, 'at most the whole 3-frame pad, never into the first phoneme');
+  const early = trimPads(waveform, frames, 1000);
+  assert.equal(early.cutFront, 0, 'a pad shorter than the keep is not cut');
+  assert.equal(early.samples.length, 9 * 600);
+  assert.equal(early.samples[0], 0.5, 'no cut in front, so no fade there');
+});
+
+test('a 20-frame lead and 15-frame tail pad call is trimmed in front only and its word times shift by the samples cut', async () => {
+  // "Wait." ids [0 w a i t . 0], frames [20, 2, 2, 2, 2, 2, 15] = 45 frames = 27000 samples.
+  // Untrimmed: Wait raw 12000, lead 121 ms = 2904 -> 9096; followed by punctuation: end (cum[t] = 20 + 2 + 2 + 2 = 26,
+  // plus 2) * 600 = 16800. Cut front 9096 - 2640 = 6456; the tail pad is kept.
+  // Call = 27000 - 6456 = 20544 samples. Wait: 9096 - 6456 = 2640 = 0.11 s to 16800 - 6456 = 10344 = 0.431 s.
+  const shot = await synthesiseShot({ id: 's', say: 'Wait.' }, { ...shotDeps, speak: padSpeak });
+  assert.equal(shot.samples.length, 20544);
+  assert.deepEqual(shot.entry.sentences[0].words, [{ text: 'Wait.', start: 0.11, end: 0.431, emphasis: false, aside: false }]);
+});
+
+test('a skip planned by the real planCalls adds no samples and sits at the end of the call before it', async () => {
+  // "One. - . Two." -> tokens "One.", "-." (the lone "." joins the dash), "Two."; "-." ends a sentence and has nothing
+  // speakable, so planCalls makes it a skip. Each call [0 . . . . 0] is 22 frames = 13200 samples untrimmed, minus the
+  // 3960-sample lead cut (6600 - 2640) = 9240. The skip sits at 9240 = 0.385 s; total 18480.
+  const { tokens } = parseSay('One. - . Two.');
+  assert.deepEqual(tokens.map((t) => t.text), ['One.', '-.', 'Two.']);
+  const items = planCalls(tokens, { speed: 1, emphasisPause: 0, countIds: () => 6 });
+  assert.deepEqual(items.map((i) => i.kind), ['speech', 'skip', 'speech']);
+  const shot = await synthesiseShot({ id: 's', say: 'One. - . Two.' }, shotDeps);
+  const words = shot.entry.sentences.flatMap((s) => s.words);
+  assert.equal(shot.samples.length, 18480);
+  assert.deepEqual(words[1], { text: '-.', start: 0.385, end: 0.385, emphasis: false, aside: false });
+});
+
+test('a dash inside a call (the real planner) is a zero-length word at the next word\'s start, and the call is still trimmed', async () => {
+  // "Wait. - now." plans as speech [Wait.] then speech [-, now.]. Call 1 [0 w a i t . 0] = 24 frames = 14400 samples,
+  // lead cut 6600 - 2640 = 3960 -> 10440. Call 2 phonemes "now." (the dash has none) [0 n o w . 0] = 22 frames = 13200,
+  // cut 3960 -> 9240, from 10440: now. 10440 + 2640 = 13080 = 0.545 s to 10440 + (16 + 2) * 600 - 3960 = 17280 = 0.72 s;
+  // the dash sits at now.'s start. Total 10440 + 9240 = 19680. Wait. ends at 12000 - 3960 = 8040 = 0.335 s.
+  const shot = await synthesiseShot({ id: 's', say: 'Wait. - now.' }, shotDeps);
+  const words = shot.entry.sentences.flatMap((s) => s.words);
+  assert.equal(shot.samples.length, 19680);
+  assert.deepEqual(words.map((w) => [w.text, w.start, w.end]), [['Wait.', 0.11, 0.335], ['-', 0.545, 0.545], ['now.', 0.545, 0.72]]);
+});
+
+test('a shot without say, or whose say has nothing speakable, gets no WAV: wav null, 0 s', async () => {
+  const silent = await synthesiseShot({ id: 'hold', say: null }, shotDeps);
+  assert.deepEqual([silent.samples, silent.entry], [null, { id: 'hold', seconds: 0, sentences: [] }]);
+  assert.deepEqual(sidecarShot(1, silent), { shot: { id: 'hold', wav: null, seconds: 0, sentences: [] }, wav: null });
+  const shot = await synthesiseShot({ id: 'dash', say: '-' }, shotDeps);
+  assert.equal(shot.samples.length, 0);
+  const { shot: entry, wav } = sidecarShot(4, shot);
+  assert.equal(wav, null, 'no file is written');
+  assert.deepEqual(entry, { id: 'dash', wav: null, seconds: 0, sentences: [{ start: 0, end: 0, words: [{ text: '-', start: 0, end: 0, emphasis: false, aside: false }] }] });
+  const spoken = sidecarShot(4, await synthesiseShot({ id: 'one', say: 'One.' }, shotDeps));
+  assert.equal(spoken.shot.wav, 'shot-4.wav');
+  assert.equal(spoken.wav.toString('ascii', 0, 4), 'RIFF');
+});
+
+test('model output with a sample that is not a finite number, or frames that miss its length, is an error', async () => {
+  const withNaN = async (call) => {
+    const out = await fakeSpeak(call);
+    const waveform = Float32Array.from(out.waveform);
+    waveform[700] = Number.NaN;
+    return { ...out, waveform };
+  };
+  await assert.rejects(synthesiseShot({ id: 'open', say: 'Wait now.' }, { ...shotDeps, speak: withNaN }), /shot "open".*not a finite number/);
+  const short = async (call) => {
+    const out = await fakeSpeak(call);
+    return { ...out, waveform: out.waveform.subarray(0, out.waveform.length - 600) };
+  };
+  await assert.rejects(synthesiseShot({ id: 'open', say: 'Wait now.' }, { ...shotDeps, speak: short }), /shot "open".*frames/);
+});
+
+test('every word lies inside its shot\'s WAV after trimming, across calls, silences and asides', async () => {
+  const shot = await synthesiseShot({ id: 's', say: 'One more time. Then, (0.4) _quietly_, we go on and on.' }, { ...shotDeps, speak: padSpeak });
+  const words = shot.entry.sentences.flatMap((s) => s.words);
+  assert.equal(words.length, 10);
+  for (const w of words) assert.ok(w.start >= 0 && w.end >= w.start && w.end <= shot.entry.seconds, JSON.stringify(w));
+  assert.equal(Math.round(shot.entry.seconds * SAMPLE_RATE), shot.samples.length);
+});
+
+test('a silence is rounded to whole milliseconds, so seconds times 24000 is the sample count', async () => {
+  assert.equal(SILENCE_QUANTUM_SAMPLES, 24);
+  // 0.0513 s is 1231.2 samples; whole milliseconds make it 51 ms = 1224 samples.
+  const shot = await synthesiseShot({ id: 's', say: 'Wait (0.0513) now.' }, shotDeps);
+  assert.equal(shot.samples.length, 9240 + 1224 + 9240);
+  assert.equal(Math.round(shot.entry.seconds * SAMPLE_RATE), shot.samples.length);
+});
+
+test('encodeWav writes a 24 kHz mono 16-bit PCM WAV with clamped samples', () => {
+  const wav = encodeWav(Float32Array.from([0, 1, -1, 0.5, 2]), SAMPLE_RATE);
+  assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
+  assert.equal(wav.toString('ascii', 8, 16), 'WAVEfmt ');
+  assert.equal(wav.readUInt16LE(20), 1);
+  assert.equal(wav.readUInt16LE(22), 1);
+  assert.equal(wav.readUInt32LE(24), 24000);
+  assert.equal(wav.readUInt16LE(34), 16);
+  assert.equal(wav.toString('ascii', 36, 40), 'data');
+  assert.equal(wav.readUInt32LE(40), 10);
+  assert.deepEqual([0, 1, 2, 3, 4].map((i) => wav.readInt16LE(44 + i * 2)), [0, 32767, -32767, 16384, 32767]);
 });

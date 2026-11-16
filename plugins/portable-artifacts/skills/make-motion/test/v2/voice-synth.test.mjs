@@ -5,16 +5,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  chmodSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, utimesSync,
+  writeFileSync,
+} from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import { parseSay } from '../../engine/script/say.mjs';
-import { ACCEPTED_VOICES, editCall, planShotCalls, prepareCall } from '../../scripts/v2/voice/kokoro.mjs';
-import {
-  ERROR_MARKER, FADE_SAMPLES, INSTALL_HINT, LEAD_KEEP_MS, SILENCE_QUANTUM_SAMPLES, TRIM, encodeWav, sidecarShot,
-  synthesiseShot, trimPads,
-} from '../../scripts/v2/voice/worker.mjs';
+import { ACCEPTED_VOICES, MODEL_INFO, editCall, planShotCalls, prepareCall } from '../../scripts/v2/voice/kokoro.mjs';
+import { ERROR_MARKER, INSTALL_HINT, TRIM, encodeWav } from '../../scripts/v2/voice/worker.mjs';
 import {
   CODE_FILES, HASH_CONSTANTS, MODEL_PIN, WORKER_PATH, sourceHash, synthesiseFilm, voiceHash,
 } from '../../scripts/v2/voice/synth.mjs';
@@ -131,7 +132,7 @@ function writeWorkerOutput(job) {
     writeFileSync(path.join(job.dir, `shot-${index}.wav`), encodeWav(new Float32Array(tokens.length * 12000), SAMPLE_RATE));
     return { id: shot.id, wav: `shot-${index}.wav`, seconds: tokens.length * 0.5, sentences: sentencesOf(tokens, words) };
   });
-  writeSidecar(path.join(job.dir, 'voice.json'), { version: 1, model: { id: 'm', commit: 'c', file: 'f', sha256: 's' }, voice: job.voice, sampleRate: 24000, shots });
+  writeSidecar(path.join(job.dir, 'voice.json'), { version: 1, model: { ...MODEL_INFO }, voice: job.voice, sampleRate: 24000, shots });
 }
 
 // A spawn that behaves like the worker: one progress line, then (after `beforeExit`) either the output files and exit
@@ -366,15 +367,19 @@ test('a file-system failure in the parent (no .voice folder can be made) is mach
   });
 });
 
-test('an entry that cannot be read for a reason other than being incomplete is machine trouble, and is not removed', async () => {
+test('an entry that cannot be read for a reason other than being incomplete is machine trouble, and is not removed', async (t) => {
+  if (process.platform === 'win32' || process.getuid?.() === 0) { t.skip('needs POSIX permissions and a user other than root'); return; }
   await withScratch(async (outDir) => {
     const fake = fakeSpawn();
     const { dir } = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn }));
-    rmSync(path.join(dir, 'voice.json'));
-    mkdirSync(path.join(dir, 'voice.json'));
-    await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn })), (err) => err.kind === 'machine');
-    assert.equal(existsSync(path.join(dir, 'shot-0.wav')), true, 'the entry was left for a person to look at');
-    assert.equal(fake.calls.length, 1);
+    chmodSync(path.join(dir, 'voice.json'), 0o000);
+    try {
+      await assert.rejects(synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn })), (err) => err.kind === 'machine' && /EACCES/.test(err.message));
+      assert.equal(existsSync(path.join(dir, 'shot-0.wav')), true, 'the entry was left for a person to look at');
+      assert.equal(fake.calls.length, 1);
+    } finally {
+      chmodSync(path.join(dir, 'voice.json'), 0o644);
+    }
   });
 });
 
@@ -411,6 +416,152 @@ test('a corrupt or incomplete cache entry is a miss: one log line, the entry rem
     const fifth = await run();
     assert.deepEqual([fifth.cached, fake.calls.length], [false, 5], 'a truncated body under a full header is incomplete too');
   });
+});
+
+// ---------- a cache entry is trusted only after it is checked (review I1) ----------
+
+// FILM's shot 0 has 6 words, so the fake worker gives it 3 s: 72000 samples.
+const SHOT0_SAMPLES = 72000;
+const TRUST_MISS = 'cannot be trusted';
+
+// A real entry made through the fake worker, then `tamper(dir)`; the next run must be a miss: one log line naming the
+// entry, a second spawn and a fresh entry. -> the second run's result.
+async function missAfter(outDir, tamper) {
+  const fake = fakeSpawn();
+  const lines = [];
+  const run = () => synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, log: (l) => lines.push(l) }));
+  const { dir } = await run();
+  tamper(dir);
+  lines.length = 0;
+  const again = await run();
+  assert.deepEqual([again.cached, fake.calls.length], [false, 2], 'a miss: synthesised again');
+  assert.equal(lines.filter((l) => l.includes(TRUST_MISS) && l.includes(dir)).length, 1, lines.join('\n'));
+  assert.equal(lstatSync(path.join(again.dir, 'shot-0.wav')).isFile(), true, 'the fresh entry has a regular WAV');
+  return again;
+}
+
+// An ffconcat script under a shot WAV's name, padded to the length the sidecar implies, with "data" and that size at
+// bytes 36 to 43, where a 44-byte WAV header keeps them (the review's planted file).
+function concatPosingAsWav(samples) {
+  const size = Buffer.alloc(4);
+  size.writeUInt32LE(samples * 2);
+  const head = 'ffconcat version 1.0\n';
+  const start = Buffer.concat([Buffer.from(head + '#'.padEnd(36 - head.length, 'x')), Buffer.from('data'), size, Buffer.from("\nfile 'seg.wav'\n#")]);
+  return Buffer.concat([start, Buffer.alloc(44 + samples * 2 - start.length, 0x78)]);
+}
+
+test('a cached sidecar whose model is not the pinned one, or whose voice is not the one asked for, is a miss', async () => {
+  const edits = [
+    (s) => ({ ...s, model: null }),
+    (s) => ({ ...s, model: { ...s.model, sha256: '0'.repeat(64) } }),
+    (s) => ({ ...s, model: { ...s.model, commit: 'main' } }),
+    (s) => ({ ...s, model: { ...s.model, extra: true } }),
+    (s) => ({ ...s, voice: 'af_bella' }),
+  ];
+  for (const edit of edits) {
+    await withScratch((outDir) => missAfter(outDir, (dir) => {
+      const file = path.join(dir, 'voice.json');
+      writeFileSync(file, JSON.stringify(edit(readSidecar(file))));
+    }));
+  }
+});
+
+test('a shot WAV that is an ffconcat script padded to look like the WAV the sidecar names is a miss (review I1 probe)', async () => {
+  await withScratch(async (outDir) => {
+    const outside = path.join(outDir, 'outside.wav');
+    writeFileSync(outside, encodeWav(new Float32Array(2400).fill(0.5), SAMPLE_RATE));
+    await missAfter(outDir, (dir) => {
+      writeFileSync(path.join(dir, 'shot-0.wav'), concatPosingAsWav(SHOT0_SAMPLES));
+      symlinkSync(outside, path.join(dir, 'seg.wav'));
+    });
+  });
+});
+
+test('a shot WAV that is a symlink, even to a valid WAV of the right length, is a miss, and the link\'s target is untouched', async () => {
+  await withScratch(async (outDir) => {
+    const outside = path.join(outDir, 'outside.wav');
+    await missAfter(outDir, (dir) => {
+      renameSync(path.join(dir, 'shot-0.wav'), outside);
+      symlinkSync(outside, path.join(dir, 'shot-0.wav'));
+    });
+    assert.equal(readFileSync(outside).length, 44 + SHOT0_SAMPLES * 2);
+  });
+});
+
+test('a WAV header glued in front of other content is a miss: the data size must match the file\'s length', async () => {
+  await withScratch((outDir) => missAfter(outDir, (dir) => {
+    const header = encodeWav(new Float32Array(SHOT0_SAMPLES), SAMPLE_RATE).subarray(0, 44);
+    writeFileSync(path.join(dir, 'shot-0.wav'), Buffer.concat([header, Buffer.from("ffconcat version 1.0\nfile 'seg.wav'\n")]));
+  }));
+});
+
+test('a shot WAV whose header is not RIFF/WAVE PCM, 24000 Hz, mono, 16-bit (the length still right) is a miss', async () => {
+  const valid = () => encodeWav(new Float32Array(SHOT0_SAMPLES), SAMPLE_RATE);
+  const variants = {
+    'another rate': () => encodeWav(new Float32Array(SHOT0_SAMPLES), 44100),
+    'not RIFF': () => { const b = valid(); b.write('RIFX', 0, 'ascii'); return b; },
+    'a RIFF size off by one': () => { const b = valid(); b.writeUInt32LE(b.readUInt32LE(4) + 1, 4); return b; },
+    'float, not PCM': () => { const b = valid(); b.writeUInt16LE(3, 20); return b; },
+    'stereo': () => { const b = valid(); b.writeUInt16LE(2, 22); b.writeUInt32LE(96000, 28); b.writeUInt16LE(4, 32); return b; },
+    '8-bit': () => { const b = valid(); b.writeUInt16LE(8, 34); return b; },
+  };
+  for (const [name, make] of Object.entries(variants)) {
+    await withScratch((outDir) => missAfter(outDir, (dir) => writeFileSync(path.join(dir, 'shot-0.wav'), make())))
+      .catch((err) => { throw new Error(`${name}: ${err.message}`, { cause: err }); });
+  }
+});
+
+test('a sidecar that is a symlink, even to a valid sidecar, is a miss', async () => {
+  await withScratch(async (outDir) => {
+    const outside = path.join(outDir, 'outside.json');
+    await missAfter(outDir, (dir) => {
+      renameSync(path.join(dir, 'voice.json'), outside);
+      symlinkSync(outside, path.join(dir, 'voice.json'));
+    });
+    assert.equal(existsSync(outside), true);
+  });
+});
+
+test('an entry folder that is a symlink, even to a valid entry, is a miss: the link is removed, its target untouched', async () => {
+  await withScratch(async (outDir) => {
+    const elsewhere = path.join(outDir, 'elsewhere');
+    const again = await missAfter(outDir, (dir) => {
+      renameSync(dir, elsewhere);
+      symlinkSync(elsewhere, dir);
+    });
+    assert.deepEqual(readdirSync(elsewhere).sort(), ['shot-0.wav', 'shot-2.wav', 'voice.json'], 'the target was not emptied');
+    assert.equal(lstatSync(again.dir).isDirectory(), true);
+  });
+});
+
+test('a .voice that is a symlink is never used or written through: the link is removed and a real folder made', async () => {
+  await withScratch(async (outDir) => {
+    const elsewhere = path.join(outDir, 'elsewhere');
+    mkdirSync(elsewhere);
+    symlinkSync(elsewhere, path.join(outDir, '.voice'));
+    const fake = fakeSpawn();
+    const lines = [];
+    const made = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn, log: (l) => lines.push(l) }));
+    assert.deepEqual(readdirSync(elsewhere), [], 'nothing was staged or published through the link');
+    assert.equal(lstatSync(path.join(outDir, '.voice')).isSymbolicLink(), false);
+    assert.equal(path.dirname(made.dir), path.join(outDir, '.voice'));
+    assert.equal(lines.filter((l) => l.includes(TRUST_MISS) && l.includes('.voice')).length, 1, lines.join('\n'));
+
+    const planted = path.join(outDir, 'planted');
+    renameSync(path.join(outDir, '.voice'), planted);
+    symlinkSync(planted, path.join(outDir, '.voice'));
+    const again = await synthesiseFilm(FILM, opts(outDir, { spawn: fake.spawn }));
+    assert.deepEqual([again.cached, fake.calls.length], [false, 2], 'a valid entry behind a linked .voice is not a hit');
+    assert.deepEqual(readdirSync(planted), [path.basename(made.dir)], 'the link\'s target is untouched');
+  });
+});
+
+test('a shot WAV that is a FIFO is a miss, found without opening it', { timeout: 10000 }, async (t) => {
+  if (process.platform === 'win32') { t.skip('no FIFOs'); return; }
+  await withScratch((outDir) => missAfter(outDir, (dir) => {
+    rmSync(path.join(dir, 'shot-0.wav'));
+    assert.equal(spawnSync('mkfifo', [path.join(dir, 'shot-0.wav')]).status, 0);
+  }));
 });
 
 test('a runtime folder without a lockfile is machine trouble with the install hint, and nothing starts', async () => {
@@ -604,183 +755,4 @@ test('planShotCalls passes a skip item through without model input', async () =>
   assert.deepEqual(plan[1], { kind: 'skip', tokens: [1] });
   assert.equal(plan[0].input.kept, 'wait');
   assert.equal(plan[2].input.kept, 'now.');
-});
-
-// ---------- the worker's shot assembly, with a fake model ----------
-
-// A stand-in model: 12 frames for the lead pad, 2 for every other token; the waveform is exactly that long.
-const fakeSpeak = async ({ ids }) => {
-  const durations = Float32Array.from(ids, (_, k) => (k === 0 ? 12 : 2));
-  const frames = durations.reduce((a, b) => a + b, 0);
-  return { waveform: new Float32Array(frames * 600).fill(0.1), durations };
-};
-const shotDeps = { speak: fakeSpeak, phonemize: fakePhonemize, vocab: EMBEDDED_VOCAB, speed: 1, emphasisPause: 0 };
-
-test('a pause inserts its silence and advances the next call\'s word times (hand-computed)', async () => {
-  // "Wait (0.4) now.": speech [Wait], silence 0.4 s, speech [now.].
-  // Call 1 ids [0 w a i t 0]: frames 12+2*5 = 22 = 13200 samples untrimmed. Call 2 [0 n o w . 0]: 13200 untrimmed.
-  // Untrimmed first-word start: raw 12 * 600 = 7200, lead -119 + 12 * 12 = 25 ms = 600 samples -> 6600.
-  // Lead pad cut: 6600 - 75 ms (1800) = 4800, inside the 12-frame (7200-sample) pad. The tail pad is left.
-  // So each call is 13200 - 4800 = 8400 samples and its times move 4800 earlier.
-  // Wait: start 6600 - 4800 = 1800 = 0.075 s; last in its call: end (cum 18 + 2) * 600 = 12000 - 4800 = 7200 = 0.3 s.
-  // Silence 0.4 s = 9600. now.: offset 8400 + 9600 = 18000; start 1800 + 18000 = 19800 = 0.825 s;
-  //       followed by punctuation: end (cum 16 + 2) * 600 = 10800 - 4800 = 6000, + 18000 = 24000 = 1 s.
-  const shot = await synthesiseShot({ id: 's', say: 'Wait (0.4) now.' }, shotDeps);
-  assert.equal(shot.samples.length, 8400 + 9600 + 8400);
-  assert.equal(shot.entry.seconds, 1.1);
-  assert.deepEqual(shot.entry.sentences, [{
-    start: 0.075,
-    end: 1,
-    words: [
-      { text: 'Wait', start: 0.075, end: 0.3, emphasis: false, aside: false },
-      { text: 'now.', start: 0.825, end: 1, emphasis: false, aside: false },
-    ],
-  }]);
-  assert.ok(shot.samples.slice(8400, 8400 + 9600).every((v) => v === 0), 'the written pause is exactly 0.4 s of zeros');
-});
-
-test('emphasis and aside are recorded per word, the aside call runs faster, and sentences split at sentence ends', async () => {
-  const speeds = [];
-  const speak = async (call) => {
-    speeds.push(call.speed);
-    return fakeSpeak(call);
-  };
-  const shot = await synthesiseShot({ id: 's', say: 'It *is* here. Done, _quietly_.' }, { ...shotDeps, speak });
-  const words = shot.entry.sentences.flatMap((s) => s.words);
-  assert.deepEqual(words.map((w) => [w.text, w.emphasis, w.aside]), [
-    ['It', false, false], ['is', true, false], ['here.', false, false], ['Done,', false, false], ['quietly.', false, true],
-  ]);
-  assert.equal(shot.entry.sentences.length, 2);
-  assert.deepEqual(speeds, [1, 1, 1 / 0.85]);
-  for (const w of words) assert.ok(w.end > w.start && w.start >= 0 && w.end <= shot.entry.seconds, JSON.stringify(w));
-});
-
-// A stand-in model with a 20-frame lead pad and a 15-frame tail pad, 2 frames per phoneme token, and a waveform whose
-// every sample is 0.5, so the cut lengths and the fades are visible.
-const padSpeak = async ({ ids }) => {
-  const durations = Float32Array.from(ids, (_, k) => (k === 0 ? 20 : k === ids.length - 1 ? 15 : 2));
-  const frames = durations.reduce((a, b) => a + b, 0);
-  return { waveform: new Float32Array(frames * 600).fill(0.5), durations };
-};
-
-test('trimPads cuts the lead pad up to LEAD_KEEP_MS before the first word, fades the cut in, and leaves the tail pad whole', () => {
-  // Frames [20, 2, 2, 2, 2, 15] = 43 frames = 25800 samples. First word start (untrimmed) 9096 (raw 12000 minus the
-  // call-start lead max(0, -119 + 12 * 20) = 121 ms = 2904 samples). Cut: 9096 - 75 ms (1800) = 7296, inside the
-  // 20-frame (12000-sample) pad. The tail pad is not cut.
-  assert.equal(LEAD_KEEP_MS, 75);
-  const frames = [20, 2, 2, 2, 2, 15];
-  const waveform = new Float32Array(43 * 600).fill(0.5);
-  const { samples, cutFront } = trimPads(waveform, frames, 9096);
-  assert.equal(cutFront, 7296);
-  assert.equal(samples.length, 25800 - 7296);
-  assert.equal(9096 - cutFront, 1800, 'the first word starts 75 ms into the trimmed call');
-  assert.equal(samples[0], 0, 'fade in starts at silence');
-  assert.equal(samples[FADE_SAMPLES], 0.5, 'full level after the 5 ms fade');
-  assert.ok(samples[FADE_SAMPLES / 2] > 0 && samples[FADE_SAMPLES / 2] < 0.5, 'the fade is a ramp');
-  assert.equal(samples.at(-1), 0.5, 'the tail is not cut, so it is not faded');
-  assert.equal(waveform[0], 0.5, 'the model output is not changed in place');
-});
-
-test('trimPads never cuts past the pad\'s end, and does not cut (or fade) when the first word is within LEAD_KEEP_MS of the start', () => {
-  const frames = [3, 2, 2, 2];
-  const waveform = new Float32Array(9 * 600).fill(0.5);
-  const late = trimPads(waveform, frames, 5000);
-  assert.equal(late.cutFront, 1800, 'at most the whole 3-frame pad, never into the first phoneme');
-  const early = trimPads(waveform, frames, 1000);
-  assert.equal(early.cutFront, 0, 'a pad shorter than the keep is not cut');
-  assert.equal(early.samples.length, 9 * 600);
-  assert.equal(early.samples[0], 0.5, 'no cut in front, so no fade there');
-});
-
-test('a 20-frame lead and 15-frame tail pad call is trimmed in front only and its word times shift by the samples cut', async () => {
-  // "Wait." ids [0 w a i t . 0], frames [20, 2, 2, 2, 2, 2, 15] = 45 frames = 27000 samples.
-  // Untrimmed: Wait raw 12000, lead 121 ms = 2904 -> 9096; followed by punctuation: end (cum[t] = 20 + 2 + 2 + 2 = 26,
-  // plus 2) * 600 = 16800. Cut front 9096 - 1800 = 7296; the tail pad is kept.
-  // Call = 27000 - 7296 = 19704 samples. Wait: 9096 - 7296 = 1800 = 0.075 s to 16800 - 7296 = 9504 = 0.396 s.
-  const shot = await synthesiseShot({ id: 's', say: 'Wait.' }, { ...shotDeps, speak: padSpeak });
-  assert.equal(shot.samples.length, 19704);
-  assert.deepEqual(shot.entry.sentences[0].words, [{ text: 'Wait.', start: 0.075, end: 0.396, emphasis: false, aside: false }]);
-});
-
-test('a skip planned by the real planCalls adds no samples and sits at the end of the call before it', async () => {
-  // "One. - . Two." -> tokens "One.", "-." (the lone "." joins the dash), "Two."; "-." ends a sentence and has nothing
-  // speakable, so planCalls makes it a skip. Each call [0 . . . . 0] is 22 frames = 13200 samples untrimmed, minus the
-  // 4800-sample lead cut (6600 - 1800) = 8400. The skip sits at 8400 = 0.35 s; total 16800.
-  const { tokens } = parseSay('One. - . Two.');
-  assert.deepEqual(tokens.map((t) => t.text), ['One.', '-.', 'Two.']);
-  const items = planCalls(tokens, { speed: 1, emphasisPause: 0, countIds: () => 6 });
-  assert.deepEqual(items.map((i) => i.kind), ['speech', 'skip', 'speech']);
-  const shot = await synthesiseShot({ id: 's', say: 'One. - . Two.' }, shotDeps);
-  const words = shot.entry.sentences.flatMap((s) => s.words);
-  assert.equal(shot.samples.length, 16800);
-  assert.deepEqual(words[1], { text: '-.', start: 0.35, end: 0.35, emphasis: false, aside: false });
-});
-
-test('a dash inside a call (the real planner) is a zero-length word at the next word\'s start, and the call is still trimmed', async () => {
-  // "Wait. - now." plans as speech [Wait.] then speech [-, now.]. Call 1 [0 w a i t . 0] = 24 frames = 14400 samples,
-  // lead cut 6600 - 1800 = 4800 -> 9600. Call 2 phonemes "now." (the dash has none) [0 n o w . 0] = 22 frames = 13200,
-  // cut 4800 -> 8400, from 9600: now. 9600 + 1800 = 11400 = 0.475 s to 9600 + (16 + 2) * 600 - 4800 = 15600 = 0.65 s;
-  // the dash sits at now.'s start. Total 9600 + 8400 = 18000 (the review's probe 3 gave the same values).
-  const shot = await synthesiseShot({ id: 's', say: 'Wait. - now.' }, shotDeps);
-  const words = shot.entry.sentences.flatMap((s) => s.words);
-  assert.equal(shot.samples.length, 18000);
-  assert.deepEqual(words.map((w) => [w.text, w.start, w.end]), [['Wait.', 0.075, 0.3], ['-', 0.475, 0.475], ['now.', 0.475, 0.65]]);
-});
-
-test('a shot without say, or whose say has nothing speakable, gets no WAV: wav null, 0 s', async () => {
-  const silent = await synthesiseShot({ id: 'hold', say: null }, shotDeps);
-  assert.deepEqual([silent.samples, silent.entry], [null, { id: 'hold', seconds: 0, sentences: [] }]);
-  assert.deepEqual(sidecarShot(1, silent), { shot: { id: 'hold', wav: null, seconds: 0, sentences: [] }, wav: null });
-  const shot = await synthesiseShot({ id: 'dash', say: '-' }, shotDeps);
-  assert.equal(shot.samples.length, 0);
-  const { shot: entry, wav } = sidecarShot(4, shot);
-  assert.equal(wav, null, 'no file is written');
-  assert.deepEqual(entry, { id: 'dash', wav: null, seconds: 0, sentences: [{ start: 0, end: 0, words: [{ text: '-', start: 0, end: 0, emphasis: false, aside: false }] }] });
-  const spoken = sidecarShot(4, await synthesiseShot({ id: 'one', say: 'One.' }, shotDeps));
-  assert.equal(spoken.shot.wav, 'shot-4.wav');
-  assert.equal(spoken.wav.toString('ascii', 0, 4), 'RIFF');
-});
-
-test('model output with a sample that is not a finite number, or frames that miss its length, is an error', async () => {
-  const withNaN = async (call) => {
-    const out = await fakeSpeak(call);
-    const waveform = Float32Array.from(out.waveform);
-    waveform[700] = Number.NaN;
-    return { ...out, waveform };
-  };
-  await assert.rejects(synthesiseShot({ id: 'open', say: 'Wait now.' }, { ...shotDeps, speak: withNaN }), /shot "open".*not a finite number/);
-  const short = async (call) => {
-    const out = await fakeSpeak(call);
-    return { ...out, waveform: out.waveform.subarray(0, out.waveform.length - 600) };
-  };
-  await assert.rejects(synthesiseShot({ id: 'open', say: 'Wait now.' }, { ...shotDeps, speak: short }), /shot "open".*frames/);
-});
-
-test('every word lies inside its shot\'s WAV after trimming, across calls, silences and asides', async () => {
-  const shot = await synthesiseShot({ id: 's', say: 'One more time. Then, (0.4) _quietly_, we go on and on.' }, { ...shotDeps, speak: padSpeak });
-  const words = shot.entry.sentences.flatMap((s) => s.words);
-  assert.equal(words.length, 10);
-  for (const w of words) assert.ok(w.start >= 0 && w.end >= w.start && w.end <= shot.entry.seconds, JSON.stringify(w));
-  assert.equal(Math.round(shot.entry.seconds * SAMPLE_RATE), shot.samples.length);
-});
-
-test('a silence is rounded to whole milliseconds, so seconds times 24000 is the sample count', async () => {
-  assert.equal(SILENCE_QUANTUM_SAMPLES, 24);
-  // 0.0513 s is 1231.2 samples; whole milliseconds make it 51 ms = 1224 samples.
-  const shot = await synthesiseShot({ id: 's', say: 'Wait (0.0513) now.' }, shotDeps);
-  assert.equal(shot.samples.length, 8400 + 1224 + 8400);
-  assert.equal(Math.round(shot.entry.seconds * SAMPLE_RATE), shot.samples.length);
-});
-
-test('encodeWav writes a 24 kHz mono 16-bit PCM WAV with clamped samples', () => {
-  const wav = encodeWav(Float32Array.from([0, 1, -1, 0.5, 2]), SAMPLE_RATE);
-  assert.equal(wav.toString('ascii', 0, 4), 'RIFF');
-  assert.equal(wav.toString('ascii', 8, 16), 'WAVEfmt ');
-  assert.equal(wav.readUInt16LE(20), 1);
-  assert.equal(wav.readUInt16LE(22), 1);
-  assert.equal(wav.readUInt32LE(24), 24000);
-  assert.equal(wav.readUInt16LE(34), 16);
-  assert.equal(wav.toString('ascii', 36, 40), 'data');
-  assert.equal(wav.readUInt32LE(40), 10);
-  assert.deepEqual([0, 1, 2, 3, 4].map((i) => wav.readInt16LE(44 + i * 2)), [0, 32767, -32767, 16384, 32767]);
 });

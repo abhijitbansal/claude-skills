@@ -81,7 +81,7 @@ test('the film\'s say decides emphasis, asides and the sentences, not the record
 });
 
 test('a misheard word keeps its place: one word for one token, at the recording\'s time', () => {
-  const misheard = withWords((words) => { words[7].word = ' Ansa'; });
+  const misheard = withWords((words) => { words[7].word = ' Anser'; });
   assert.deepEqual(spans(fromWhisper(misheard, FILM).shots[0])[7], ['answer', 2.74, 3.1]);
 });
 
@@ -127,10 +127,61 @@ test('an extra word right before a missing one is named too: two substitutions n
   mismatch(spoken('Every chart is um a question.'), /the words file has "um" \(1\.7 s\), which the say does not, and the say has "quiet", which the words file does not/, film);
 });
 
-test('up to three misheard words in a row keep their places; more in a row are different words, named, not substituted', () => {
-  const misheard = fromWhisper(spoken('Every graph was the question.'), oneShot('Every chart is a question.'));
-  assert.deepEqual(spans(misheard.shots[0]).map(([text, start]) => [text, start]), [['Every', 0.5], ['chart', 0.9], ['is', 1.3], ['a', 1.7], ['question.', 2.1]]);
-  mismatch(spoken('Some graph was the answer.'), /^shot "only": the words file has "Some" \(0\.5 s\), "graph" \(0\.9 s\), "was" \(1\.3 s\), "the" \(1\.7 s\), "answer\." \(2\.1 s\), which the say does not, and the say has "Every", "chart", "is", "a", "question\."/, oneShot('Every chart is a question.'));
+const startsOf = (json, say) => spans(fromWhisper(json, oneShot(say)).shots[0]).map(([text, start]) => [text, start]);
+
+test('a word close to its say word (two edits, at most 40% of the longer) keeps its place, however many in a row', () => {
+  assert.deepEqual(startsOf(spoken('The color of there favorite theater.'), 'The colour of their favourite theatre.'), [
+    ['The', 0.5], ['colour', 0.9], ['of', 1.3], ['their', 1.7], ['favourite', 2.1], ['theatre.', 2.5],
+  ]);
+  assert.deepEqual(startsOf(spoken('There color flavor favorite theater.'), 'Their colour, flavour, favourite theatre.'), [
+    ['Their', 0.5], ['colour,', 0.9], ['flavour,', 1.3], ['favourite', 1.7], ['theatre.', 2.1],
+  ], 'five close words in a row: no cap on a run');
+});
+
+test('the same number written differently keeps its place: digits against a number word, leading zeros aside', () => {
+  assert.deepEqual(startsOf(spoken('Ten steps to 7 doors.'), '10 steps to 007 doors.'), [
+    ['10', 0.5], ['steps', 0.9], ['to', 1.3], ['007', 1.7], ['doors.', 2.1],
+  ]);
+  mismatch(spoken('Eleven steps.'), /the words file has "Eleven" \(0\.5 s\), which the say does not, and the say has "10"/, oneShot('10 steps.'));
+});
+
+test('a word that is not close to its say word is named on both sides, never timed in its place', () => {
+  mismatch(spoken('Every graph was the question.'), /^shot "only": the words file has "graph" \(0\.9 s\), "was" \(1\.3 s\), "the" \(1\.7 s\), which the say does not, and the say has "chart", "is", "a", which the words file does not/, oneShot('Every chart is a question.'));
+  mismatch(withWords((words) => { words[7].word = ' Ansa'; }), /^shot "open": the words file has "Ansa" \(2\.74 s\), which the say does not, and the say has "answer", which the words file does not/);
+  mismatch(spoken('Every from.'), /the words file has "from\." \(0\.9 s\).*the say has "form\."/, oneShot('Every form.'));
+});
+
+test('an extra word next to a missing one is never one substitution: the neighbour keeps its own time (review I4 probes)', () => {
+  mismatch(spoken('we really like like it'), /^shot "only": the words file has "like" \(1\.[37] s\), which the say does not, and the say has "really", which the words file does not/, oneShot('we really really like it'));
+  mismatch(spoken('p q r'), /^shot "only": the words file has "p" \(0\.5 s\), "q" \(0\.9 s\), "r" \(1\.3 s\), which the say does not, and the say has "aa", "bb", "cc"/, oneShot('aa bb cc'));
+  mismatch(spoken('p q r the s t u the v w x the'), /"p" \(0\.5 s\), "q" \(0\.9 s\), "r" \(1\.3 s\), "s" \(2\.1 s\)/, oneShot('aa bb cc the dd ee ff the gg hh ii the'));
+});
+
+// `count` distinct words, and Whisper's words for a list of texts: word k from 0.3 k s, 0.2 s long.
+const manyWords = (count, word = (k) => `w${k}x`) => Array.from({ length: count }, (_, k) => word(k));
+const roundTo = (index) => Math.round(index * 0.3 * 1e4) / 1e4;
+const whisperOf = (texts) => ({ segments: [{ words: texts.map((w, k) => ({ word: ` ${w}`, start: roundTo(k), end: roundTo(k) + 0.2 })) }] });
+
+test('a long film aligns: 5000 say words against 5500 file words, one misheard, 500 numbers split in two', () => {
+  const says = manyWords(5000, (k) => (k % 10 === 0 ? `${k},500` : `w${k}x`));
+  const file = says.flatMap((w, k) => (k % 10 === 0 ? [`${k}`, ',500'] : [k === 2501 ? 'w2501y' : w]));
+  const film = oneShot(says.join(' '));
+  const words = wordsOf(fromWhisper(whisperOf(file), film).shots[0]);
+  assert.equal(words.length, 5000);
+  assert.deepEqual([words[2501].text, words[2501].start], ['w2501x', roundTo(2501 + 251)]);
+  assert.deepEqual([words[4990].text, words[4990].start], ['4990,500', roundTo(4990 + 499)], 'the last split number keeps its own time');
+});
+
+test('the worst crafted alignment (7800 tokens "aa" against 4200 words "a") is an error within seconds, not a minute', () => {
+  const film = { ...FILM, shots: Array.from({ length: 60 }, (_, s) => ({ id: `s${s}`, show: 'statement', say: Array(130).fill('aa').join(' ') })) };
+  const started = performance.now();
+  assert.throws(() => fromWhisper(whisperOf(Array(4200).fill('a')), film), (err) => err instanceof RecordingWordsError);
+  assert.ok(performance.now() - started < 5000, `${Math.round(performance.now() - started)} ms`);
+});
+
+test('a words file too large to align against the says is an invalid film at voice.words that says so', () => {
+  const film = oneShot(manyWords(3000).join(' '));
+  mismatch(whisperOf(manyWords(9000, (k) => `v${k}`)), /too many to align/, film);
 });
 
 test('a symbol on its own has no sound: the error says to write the spoken word', () => {
