@@ -173,3 +173,20 @@ What this supports, in the reviewer's words: on the held-out fixture lines, for 
 Known in the numbers: one mispaired word at -250 ms in the speed 1 headline (the median is robust to it); the speed 1.1 sample sits exactly on the minimum of 12; an error confined to a single line can still pass the median gate; the smallest margin between the lead-in trim's cut and a measured voice onset is 26 ms (on "So,").
 
 The first version of the script reported 9 ms too, and a review showed it would have reported the same for a one-word shift. That version's figure was never published.
+
+After the whole-plan review's fix wave the lead-in kept before a shot's first word went from 75 to 110 ms. Re-measured by the controller at speed 1: the held-out figure is unchanged (n=13, median 9 ms, p90 27 ms), and the smallest margin between the trim's cut and a measured voice onset is now 61 ms (was 26 ms).
+
+## Sound (plan `2026-11-16-pa2-sound-captions.md`, record of 16 November 2026)
+
+Rendered by the controller through the real optional install, `node scripts/make.mjs references/examples/v2/sound-<look>.json --json`. Nobody has listened yet.
+
+| Film | Exit | Findings | Frames | Cues | Bed (fitted tempo, cuts on a beat) | Audio (measured in the finished file) | Size |
+|---|---|---|---|---|---|---|---|
+| sound-desk (voice, cues on, drift bed, captions on) | 0 | 0 | 556 | 5 | 94.48 bpm asked 92, 3 of 4 | -16.1 LUFS, true peak -4.6 dB | 11.26 MB |
+| sound-pop (voice, cues by default, pulse bed) | 0 | 0 | 409 | 10 | 124.37 bpm asked 124, 3 of 4 | -14.0 LUFS, true peak -3.5 dB | 6.39 MB |
+
+Whole version 2 suite with the real voice model, controller run on the same tree: 1373 tests, 1373 pass.
+
+Director's note from the desk sheet: with captions on, a clipping that also carries the author's own caption line shows two taped cards side by side, which reads as clutter. The example film drops the author's line; the engine allows both and the review does not object. Captions are opt-in in every mode: on by default they changed the approved pop test film.
+
+For the owner's listening pass: cue level against the voice, the bed's ducking under words, whether the bed helps or distracts, caption timing.

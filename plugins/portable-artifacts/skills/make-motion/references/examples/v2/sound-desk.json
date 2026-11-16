@@ -1,0 +1,53 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "voice": { "name": "af_heart" },
+  "sound": "on",
+  "music": { "bed": "drift", "bpm": 92 },
+  "captions": true,
+  "look": "desk",
+  "format": "16:9",
+  "seed": 7,
+  "shots": [
+    {
+      "id": "problem",
+      "show": "statement",
+      "kicker": "The problem",
+      "say": "Most dashboards can't tell you where a number *came from*."
+    },
+    {
+      "id": "proof",
+      "show": "clipping",
+      "cut": "cut",
+      "src": "clipping.png",
+      "kicker": "The proof",
+      "say": "This dashboard is different. It shows the query behind every chart.",
+      "regions": { "query": [0.58, 0.14, 0.37, 0.24] },
+      "on": [{ "at": "word:query", "do": "highlight", "target": "region:query" }]
+    },
+    {
+      "id": "how",
+      "show": "statement",
+      "cut": "cut",
+      "kicker": "How it works",
+      "say": "The model writes *one small file*. Scripts do the rest."
+    },
+    {
+      "id": "count",
+      "show": "number",
+      "cut": "cut",
+      "kicker": "In numbers",
+      "say": "Five skills. One file each.",
+      "value": 5,
+      "label": "skills",
+      "delta": "one JSON file each"
+    },
+    {
+      "id": "close",
+      "show": "statement",
+      "cut": "cut",
+      "kicker": "The point",
+      "say": "Built on your machine. *Nothing* leaves it."
+    }
+  ]
+}
