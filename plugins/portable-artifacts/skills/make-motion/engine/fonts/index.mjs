@@ -24,6 +24,8 @@ export const FONTS = deepFreeze([
   { family: 'Fraunces Text', file: FRAUNCES_FILE, of: 'Fraunces', fixed: { opsz: 9 }, axes: { wght: [100, 900], SOFT: [0, 100] }, reach: { ...NO_REACH, wght: true, opsz: true } },
   { family: 'Fraunces Display', file: FRAUNCES_FILE, of: 'Fraunces', fixed: { opsz: 144 }, axes: { wght: [100, 900], SOFT: [0, 100] }, reach: { ...NO_REACH, wght: true, opsz: true } },
   { family: 'Archivo', file: 'archivo-latin-standard-normal.woff2', axes: { wght: [100, 900], wdth: [62, 125] }, reach: { ...NO_REACH, wght: true, wdth: true } },
+  // the cosmos look's rounded sans: a weight axis only
+  { family: 'Nunito', file: 'nunito-latin-wght-normal.woff2', axes: { wght: [200, 1000] }, reach: { ...NO_REACH, wght: true } },
 ]);
 
 // ctx.fontStretch takes these keywords and nothing else (a percentage is ignored), so canvas width moves in these

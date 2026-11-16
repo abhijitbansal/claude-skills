@@ -105,6 +105,19 @@ All three change canvas text in both families (hashes differ):
   65, 70 or 75 percent (nearest, 70: 466 differing pixels), so it is probably the font's own small-cap glyphs
   and not a synthesised fallback. That is not proven, and the comparison is probe only (no test).
 
+## Nunito (the `cosmos` look)
+
+Added with the `cosmos` look: Nunito 5.3.0 (`@fontsource-variable/nunito`, Latin, upright), one axis, `wght`
+200-1000. The same check as above, repeated for it in the same Chromium **156.0.8078.4**:
+`test/v2/fonts-browser.test.mjs` draws "Rag" at weight 200 and at 1000 through `ctx.font` and the drawings differ, so
+canvas reaches its weight axis (`reach.wght` true; the other three flags false, as it has no other axis). The stage
+loads it through `facesFor` with no page error or blocked request (the same test). A specimen drawn on the cosmos
+field at 32 to 232 px and weights 600, 700 and 800 (`.scratch/cosmos/probe.mjs`, probe only) shows the three
+weights distinctly.
+
+Not measured: every FONTS entry carries the `100 900` weight descriptor (`fontFaces`), so a requested weight above
+900 may stop at 900 rather than reach the face's 1000. The look uses 600 to 800, inside both ranges.
+
 ## What this means for the looks
 
 - Animate `wght` freely in both faces.
@@ -115,3 +128,4 @@ All three change canvas text in both families (hashes differ):
 - Fraunces `SOFT`: two values (`Fraunces`, `Fraunces Soft`); a crossfade between two draws is the only way to
   animate it through `ctx`, or use the element-CSS route.
 - Never rely on a percentage in `ctx.fontStretch`.
+- Nunito: animate `wght` freely between 200 and 900; it has no other axis.

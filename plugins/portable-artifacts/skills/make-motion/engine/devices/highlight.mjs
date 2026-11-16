@@ -4,10 +4,19 @@
 // In a hand look (desk) it is an uneven band: corners jittered and each long edge a
 // shallow two-segment curve; in a crisp look (pop) it is an exact rectangle. Either way it wipes in left to right
 // (`reveal`): landing on `at`, or, over a run of words, following them (the optional `stops` param: [{ at, x }], the
-// landing time and right edge of each word) so the band is never longer than the words on screen. Pure and DOM-free.
+// landing time and right edge of each word) so the band is never longer than the words on screen.
+// A look whose highlight style says `shape: 'pill'` (cosmos) gets a glow pill instead: the band is a pill of the style's
+// colour at its `alpha`, wiping in the same way, with a soft copy of it behind (`<id>.glow`, also under: the band in
+// `glowColor` at `glowAlpha`, composited with `glowBlend` when given, its edge falling off over the style's `glow`
+// units, capped at GLOW_REACH_SHARE of the band's height so it stays in the line gap a display line height leaves)
+// that stays dark until the band is whole and then lights up over the look's emphasize move. Cosmos sets a deep pill
+// with a screened accent glow round it: a neon pill. The
+// soft edge is stacked rings (shared.mjs softRoundedRect), not a blur filter. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { checkParams, isHand, styleOf, colourOf, deviceRng, spread, landing, polyline, at2, styledBy } from './shared.mjs';
+import {
+  checkParams, isHand, styleOf, colourOf, deviceRng, spread, landing, polyline, roundedRect, softRoundedRect, at2, styledBy,
+} from './shared.mjs';
 
 export const BAND_HEIGHT = 1.18; // of the box height: the band is this much taller than the box it is given
 const DEFAULT_WOBBLE = 3; // units: the corner jitter when the look gives none
@@ -59,10 +68,37 @@ function revealFollowing(stops, { x, w }, reach, move, step) {
   return track(keys);
 }
 
+export const GLOW_REACH_SHARE = 0.08; // the glow's soft edge reaches at most this share of the band's height past it
+const DEFAULT_GLOW = 24; // units of soft edge, when a pill style names none
+const DEFAULT_PILL_ALPHA = 0.28;
+const DEFAULT_GLOW_ALPHA = 0.25;
+
+// The glow pill: the band as a pill wiping in like a crisp band, and its soft copy behind fading in by the time the
+// band is whole (the last stop's landing, or `at`).
+function pillHighlight({ id, box, at, look, unit, stops }, style) {
+  const [x, y, w, h] = box;
+  const band = h * BAND_HEIGHT;
+  const rect = [x, y - (band - h) / 2, w, band];
+  const fill = colourOf(look, style.color ?? 'accent');
+  const following = Array.isArray(stops) && stops.length > 0;
+  const reveal = following ? revealFollowing(stops, { x, w }, 0, look.moves.draw, undefined) : landing(at, look.moves.draw, 0, 1);
+  const whole = following ? stops.at(-1).at : at;
+  const reach = Math.min((style.glow ?? DEFAULT_GLOW) * unit, GLOW_REACH_SHARE * band);
+  const glow = softRoundedRect({
+    id: `${id}.glow`, rect, pill: true, reach, alpha: style.glowAlpha ?? DEFAULT_GLOW_ALPHA, fill: colourOf(look, style.glowColor ?? style.color ?? 'accent'),
+    props: { under: true, ...(style.glowBlend === undefined ? {} : { blend: style.glowBlend }) },
+    // dark until the band is whole (a glow ahead of the wipe showed its core under the words), then it lights up
+    opts: { tracks: { opacity: track([{ t: 0, v: 0 }, { t: whole, v: 0 }, { t: whole + look.moves.emphasize.dur, v: 1, ease: look.moves.emphasize.ease }]) } },
+  });
+  const pillBand = node('path', id, { d: roundedRect(...rect, band / 2), fill, under: true, opacity: style.alpha ?? DEFAULT_PILL_ALPHA }, { tracks: { reveal } });
+  return { nodes: [glow, pillBand] };
+}
+
 function buildHighlight(params) {
   const { id, box, at, look, unit, seed } = checkParams('highlight', params, ['stops']);
   const { stops } = params;
   const style = styleOf(look, 'highlight');
+  if (style.shape === 'pill') return pillHighlight({ id, box, at, look, unit, stops }, style);
   const [x, y, w, h] = box;
   const band = h * BAND_HEIGHT;
   const area = [x, y - (band - h) / 2, w, band];

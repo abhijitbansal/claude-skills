@@ -70,6 +70,13 @@ export function colourOf(look, key) {
   throw new Error(`colour must be a palette key (${Object.keys(look.palette).join(', ')}) or #rrggbb, got ${JSON.stringify(key)}`);
 }
 
+/**
+ * The colour a scrim (the dim laid over what recedes: a clipping's surroundings, compare's unspoken side) is made of:
+ * the palette key or #rrggbb the look names in `devices.focus.scrim` (cosmos: its deep navy, a field-coloured scrim on
+ * a dark field), else the look's paper (desk, pop: the paper scrim).
+ */
+export const scrimColour = (look) => colourOf(look, look.devices?.focus?.scrim ?? 'paper');
+
 // ---- seeded noise ----
 
 function hashString(text) {
@@ -154,6 +161,30 @@ export function smoothPath(points) {
     return `C${at2(c1)} ${at2(c2)} ${at2(p2)}`;
   });
   return `M${at2(points[0])}${segments.join('')}`;
+}
+
+export const SOFT_RINGS = 8; // rings in a soft edge: steps of a seventh of the reach, too fine to see at glow sizes
+
+/** The alpha of each of `rings` stacked layers so that where all of them overlap the result is `alpha` (source-over). */
+export const ringAlpha = (alpha, rings = SOFT_RINGS) => 1 - (1 - alpha) ** (1 / rings);
+
+/**
+ * A soft-edged rounded rectangle drawn without a blur filter (a canvas blur is a full filter pass per node, about 7 ms
+ * a frame each at glow sizes): one group `id` holding SOFT_RINGS rounded rectangles `<id>.ring<i>`, the first (drawn
+ * first, behind) `reach` px past [x, y, w, h] on every side and each next one a step smaller, the last the rectangle
+ * itself, each at ringAlpha(alpha). So the rectangle shows `alpha` and the edge falls off to nothing over `reach`.
+ * `radius` is the corner radius of the rectangle itself (it grows with each ring); `pill` makes every ring a pill.
+ * `props` and `opts` (tracks) go on the group.
+ */
+export function softRoundedRect({ id, rect: [x, y, w, h], radius = 0, pill = false, reach, alpha, fill, props = {}, opts = {} }) {
+  const each = ringAlpha(alpha);
+  const rings = Array.from({ length: SOFT_RINGS }, (_, i) => {
+    const grow = (reach * (SOFT_RINGS - 1 - i)) / Math.max(1, SOFT_RINGS - 1);
+    const rw = w + HALF * grow, rh = h + HALF * grow;
+    const d = roundedRect(x - grow, y - grow, rw, rh, pill ? rh / HALF : radius + grow);
+    return node('path', `${id}.ring${i}`, { d, fill, opacity: each });
+  });
+  return node('group', id, props, { ...opts, children: rings });
 }
 
 /** A closed rectangle with rounded corners of radius r, in M L Q form. */

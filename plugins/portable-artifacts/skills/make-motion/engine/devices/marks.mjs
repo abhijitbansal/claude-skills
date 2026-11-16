@@ -2,7 +2,8 @@
 // (`draw` 0 to 1). In a hand look (desk) the path runs through control points moved by seeded offsets and is drawn
 // as one continuous pen stroke that overshoots the target a little, stepping at the look's frame rate; in a crisp
 // look (pop) it is exact geometry with butt ends. The wobble is baked into `d` (not the draw layer's `rough`), so a
-// different seed draws a different mark. Pure and DOM-free.
+// different seed draws a different mark. A mark's style may name its `cap` (cosmos: 'round', smooth strokes with round
+// ends and a round arrow head); without one a hand mark is round and a crisp one butt. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import {
   checkParams, isHand, styleOf, colourOf, deviceRng, spread, landing, polyline, smoothPath, at2, styledBy,
@@ -61,7 +62,7 @@ function markNode({ id, d, look, unit, at, name, fallbackColour }) {
     d,
     stroke: colourOf(look, style.color ?? fallbackColour),
     strokeWidth: (style.width ?? DEFAULT_WIDTH) * unit,
-    lineCap: hand ? 'round' : 'butt',
+    lineCap: style.cap ?? (hand ? 'round' : 'butt'),
   };
   const step = hand ? look.moves.draw.step : undefined;
   return { nodes: [node('path', id, props, { tracks: { draw: landing(at, look.moves.draw, 0, 1, step) }, step })] };

@@ -1,10 +1,11 @@
 // The `tag` device: a small coloured label in caps. One group (the object entrance) holding the plate and a text
 // node set in the look's label font at scale step 1. The tag measures its own text, so `build` needs `measure`, and
 // it returns its measured box in `boxes.tag` ([x, y, w, h] in canvas pixels, top left at the given box's top left)
-// so a caller can place things beside it; the given box's own size is not used. Pure and DOM-free.
+// so a caller can place things beside it; the given box's own size is not used. A look whose tag style says
+// `shape: 'pill'` (cosmos) gets a pill plate: a rounded rectangle whose radius is half its height. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { checkParams, isHand, styleOf, colourOf, deviceRng, spread, entrance, polyline, styledBy } from './shared.mjs';
+import { checkParams, isHand, styleOf, colourOf, deviceRng, spread, entrance, polyline, roundedRect, styledBy } from './shared.mjs';
 
 const PAD_X = 18; // units
 const PAD_Y = 10; // units
@@ -33,7 +34,9 @@ function buildTag(params) {
   const style = styleOf(look, 'tag'), rng = deviceRng(seed, id, 'tag');
   const jitter = (p) => (isHand(look) ? [p[0] + spread(rng, CORNER_JITTER * unit), p[1] + spread(rng, CORNER_JITTER * unit)] : p);
   const plate = node('path', `${id}.plate`, {
-    d: polyline([[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]].map(jitter), true),
+    d: style.shape === 'pill'
+      ? roundedRect(-w / HALF, -h / HALF, w, h, h / HALF)
+      : polyline([[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]].map(jitter), true),
     fill: colourOf(look, style.fill ?? DEFAULT_FILL),
   });
   const label = node('text', `${id}.text`, {

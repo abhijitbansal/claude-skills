@@ -1,8 +1,8 @@
-// Looks for the v2 engine. Importing this file registers `desk` and `pop` in registries.looks (once: a second
-// evaluation of this file leaves the registry as it is). Looks are frozen plain data plus pure functions; the grid
-// helpers and applyAccent live here. Pure and DOM-free. The fields a look names (`paper`, `halftone`) are
-// registered by engine/fields/index.mjs, which whoever draws the look imports.
-import { registries } from '../registry.mjs';
+// Looks for the v2 engine. Importing this file registers `desk`, `pop` and the experimental `cosmos` in registries.looks
+// (once: a second evaluation of this file leaves the registry as it is). Looks are frozen plain data plus pure functions;
+// the grid helpers and applyAccent live here. Pure and DOM-free. The fields a look names (`paper`, `halftone`, `cosmos`)
+// are registered by engine/fields/index.mjs, which whoever draws the look imports.
+import { createRegistry, registries } from '../registry.mjs';
 import { unitOf } from '../units.mjs';
 // A look must name a sound for every registered cut and device, so they are registered before any look is.
 import '../cuts/index.mjs';
@@ -11,6 +11,7 @@ import '../devices/index.mjs';
 import '../captions/index.mjs';
 import { desk } from './desk.mjs';
 import { pop } from './pop.mjs';
+import { cosmos } from './cosmos.mjs';
 
 /**
  * A move in a look's motion grammar. `dur` is seconds; `dist` is a travel in units; `step` (fps) makes a hand
@@ -27,6 +28,8 @@ import { pop } from './pop.mjs';
  * A complete art direction. Everything is in units (1 unit = short side / 1080 px) unless it says em, seconds or fps.
  * @typedef {object} Look
  * @property {string} name
+ * @property {boolean} [experimental]  true: registered, so a film can name it, but left out of every listing (the
+ *   registry's names(), --list looks, unknown-look hints, the looks a kind error names) until it is finished
  * @property {string[]} modes  the modes this look serves
  * @property {{ display: Font, text: Font, label: Font }} fonts
  * @property {{ paper: string, ink: string, ink2: string, accent: string, accent2: string, rule: string }} palette  #rrggbb
@@ -203,6 +206,24 @@ if (!addLook.validatesLooks) {
   registries.looks.add = checkedAdd;
 }
 
-for (const definition of [desk, pop]) {
+// An experimental look (look.experimental) resolves by name like any other (has, get) but is left out of every listing:
+// the registry's names() and the unknown-name message of get() show only the finished looks. Wrapped here, once, as
+// `add` is above.
+const looks = registries.looks;
+if (!looks.names.hidesExperimental) {
+  const allNames = looks.names;
+  const getAny = looks.get;
+  const listedNames = () => allNames().filter((name) => getAny(name).experimental !== true);
+  listedNames.hidesExperimental = true;
+  looks.names = listedNames;
+  looks.get = (name) => {
+    if (looks.has(name)) return getAny(name);
+    const listed = createRegistry('look');
+    for (const shown of listedNames()) listed.add(shown, null);
+    return listed.get(name); // throws the registry's own message, naming only the listed looks
+  };
+}
+
+for (const definition of [desk, pop, cosmos]) {
   if (!registries.looks.has(definition.name)) registries.looks.add(definition.name, deepFreeze(definition));
 }
