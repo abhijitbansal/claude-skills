@@ -164,3 +164,32 @@ test('ruling 10: a desk push-in ends with the region at 70% of the frame width o
   const push = camera.find((layer) => layer.some((k) => k.zoom !== undefined && k.zoom > 1));
   assert.ok(push.at(-1).zoom * boxes['region:query'][2] >= 0.7 * canvas.w - 1e-6, `${Math.round(push.at(-1).zoom * boxes['region:query'][2])} of ${canvas.w}`);
 });
+
+test('polish 1: desk list figures in the display serif at the item size, dimming with their item', () => {
+  const desk = registries.looks.get('desk');
+  const shot = { id: 'l', show: 'list', title: 'How it works', style: 'steps', items: ['Write the shots as JSON', 'Run one command', 'Get an MP4'], say: 'Write the shots as JSON. Run one command. Get an MP4.' };
+  for (const format of ['16:9', '9:16']) {
+    const { nodes } = expandShot(shot, 'desk', format);
+    const item = all(nodes).find((n) => n.id === 'l.item0');
+    const fig = all(nodes).find((n) => n.id === 'l.figure0');
+    assert.equal(fig.props.font.family, desk.fonts.display.family);
+    assert.equal(fig.props.font.size, item.props.font.size, `${format}: same size`);
+    assert.ok(fig.props.x + fig.props.layout.width <= item.props.x, 'hung left');
+    assert.ok(fig.props.x >= 0, 'on the frame');
+  }
+});
+
+test('polish 2: the desk end ask is one third of the title, in the label face, clear of the mark card', () => {
+  const desk = registries.looks.get('desk');
+  for (const format of ['16:9', '9:16']) {
+    const { nodes, boxes } = expandShot({ id: 'e', show: 'end', say: 'Write the script. The engine does the rest.', ask: 'Write your first film', mark: 'make-motion' }, 'desk', format);
+    const title = all(nodes).find((n) => n.id === 'e.title');
+    const ask = all(nodes).find((n) => n.id === 'e.ask');
+    assert.equal(ask.props.font.family, desk.fonts.label.family);
+    assert.ok(Math.abs(ask.props.font.size - title.props.font.size / 3) <= 1, `${format}: ${ask.props.font.size} vs ${title.props.font.size}`);
+    const [ax, ay, aw, ah] = boxes.ask, [mx, my, mw, mh] = boxes.mark;
+    assert.ok(ax + aw <= mx || mx + mw <= ax || ay + ah <= my || my + mh <= ay, `${format}: ask ${boxes.ask.map(Math.round)} clear of the mark ${boxes.mark.map(Math.round)}`);
+    const [tx, ty, tw, th] = boxes.title;
+    assert.ok(tx + tw <= mx || mx + mw <= tx || ty + th <= my || my + mh <= ty, `${format}: title clear of the mark`);
+  }
+});

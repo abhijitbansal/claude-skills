@@ -164,7 +164,7 @@ test('ruling 4: desk list figures are at least the label step, in ink, hung in t
     assert.equal(figures.length, 3);
     for (const f of figures) {
       assert.ok(f.props.font.size >= deskStep(2) - 1e-6, `${format}: figure ${f.props.font.size}`);
-      assert.ok([registries.looks.get('desk').palette.ink, registries.looks.get('desk').palette.accent].includes(f.props.fill));
+      assert.equal(f.props.fill, registries.looks.get('desk').palette.ink2, 'ink2, turning ink with its item (director\'s note)');
       assert.ok(f.props.x + f.props.layout.width <= item.props.x, 'hung in the margin');
     }
   }

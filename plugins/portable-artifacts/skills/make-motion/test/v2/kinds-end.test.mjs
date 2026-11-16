@@ -110,7 +110,7 @@ test('desk end at 16:9 (hand computed): title flush left on column 2 at 242, the
   const ask = textNode(nodes, 'close.ask');
   assert.equal(ask.props.font.family, look.fonts.label.family, 'the ask in the label face (look revision 1)');
   const askSize = ask.props.font.size;
-  assert.ok([look.scale[1], look.scale[2]].includes(askSize), `ask at step 2 or 3: ${askSize}`);
+  near(askSize, size / 3, 'the ask a third of the title (director\'s note)');
   assert.ok(size >= 3 * askSize - EPS, 'the title is at least three times the ask');
   assert.equal(ask.props.x, 242);
   const titleLast = title.props.y + title.props.layout.lines.at(-1).y;

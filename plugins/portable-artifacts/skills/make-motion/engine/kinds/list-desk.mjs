@@ -101,22 +101,18 @@ function dimTrack(look, dimAt) {
   return track([{ t: 0, v: ink }, { t: dimAt, v: ink }, { t: dimAt + look.moves.emphasize.dur, v: ink2, ease: DIM_EASE }]);
 }
 
-// A figure's size: the small parts' size, never under data.figureStep (look review 1: a figure at step 1 vanished on the
-// phone tile). A figure belongs to its item: items and figures are one size class (props.stack, the hero id), so the
-// sizes and hero rules judge the items, not a figure against them.
-// look review 2: at step 2 a figure was a third of its item and still read as a footnote: data.figureShare of the item.
-const figureSize = (set, ctx, data) => Math.max(set.small, sizeAt(ctx.look, data.figureStep, ctx.unit), data.figureShare * set.size);
-
-// A figure: the item's number as written in the label face (1 to 12, never 01), `size` px, its ink ending `right`, on
-// `baseline`.
+// A figure: the item's number as written (1 to 12, never 01) in the display serif at the item's own size (director's
+// note after look review 2: smaller mono figures still read as footnote marks; at the item's size there is no new size
+// on the frame), its ink ending `right` so the figures form one column, on the item's first baseline. Figures and items
+// are one size class (props.stack, the hero id).
 function figureNode(id, k, size, { right, baseline, stack }, ctx) {
   const { look, unit, measure } = ctx;
   const text = String(k + 1);
-  const font = fontFor(look, 'label', size, unit);
+  const font = fontFor(look, 'display', size, unit);
   const layout = layoutText({ text, font, maxWidth: NO_WRAP, measure });
   const ink = inkExtent(text, font, measure);
   const y = baseline - layout.lines[0].y;
-  return { node: node('text', id, { x: right - ink.right, y, layout, font, fill: look.palette.ink, role: 'label', stack }), y };
+  return { node: node('text', id, { x: right - ink.right, y, layout, font, fill: look.palette.ink2, role: 'label', stack }), y };
 }
 
 /**
@@ -145,11 +141,8 @@ export function expandDeskList(shot, ctx, data, times, hero) {
     itemBoxes.push(unionBox(part.layout.lines.map((line) => capBox(span.x + line.x, y + line.y, line.width, set.size))));
     let last = y + part.layout.lines.at(-1).y;
     if (numbered) {
-      // centred on the first line's cap height: a figure a third of the item's size reads as a footnote mark on its
-      // baseline and as a superscript on its cap line (both viewed on the rendered sheets), as a list marker centred
-      const middle = y + part.layout.lines[0].y - (CAP_HEIGHT * set.size) / HALF;
-      const size = figureSize(set, ctx, data);
-      const figure = figureNode(`${shot.id}.figure${k}`, k, size, { right: span.x - look.grid.gutter * unit, baseline: middle + (CAP_HEIGHT * size) / HALF, stack: hero }, ctx);
+      // on the item's first baseline, its ink a gutter before the item; ink while its item is current, then ink2 with it
+      const figure = figureNode(`${shot.id}.figure${k}`, k, set.size, { right: span.x - look.grid.gutter * unit, baseline: y + part.layout.lines[0].y, stack: hero }, ctx);
       children.push(node(figure.node.type, figure.node.id, figure.node.props, { tracks: enter(times[k], figure.y), wordTracks: [dim] }));
     }
     if (part.note !== null) {

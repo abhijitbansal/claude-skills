@@ -87,7 +87,7 @@ export const desk = {
     // label face at the largest of `smallSteps` the items stay three times, a note's cap line `noteGap` em of the item
     // under its last baseline, the figures hanging in the margin a gutter before the items; the block centred in the room
     // the slug leaves
-    list: { fromStep: 3, max: 180, toWide: 11, toTall: 11, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2], figureStep: 2, figureShare: 0.45 },
+    list: { fromStep: 3, max: 180, toWide: 11, toTall: 11, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2] },
     // quote: a taped card from column 2, at most to `toWide` (on tall frames from `fromTall` to `toTall`, the measure a
     // quotation needs to break without one-word lines) and wrapped to its text, centred at `centre` of the height; the
     // quotation `pad` in (more when its hanging opening mark needs it), in the display face up to `max`, at most `maxLines` lines, its opening mark hanging; the attribution's cap line

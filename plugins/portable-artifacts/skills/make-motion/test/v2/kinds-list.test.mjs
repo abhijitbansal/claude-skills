@@ -128,14 +128,13 @@ test('desk list at 16:9 (hand computed): items flush left on column 2 at 242, on
   assert.deepEqual(textNode(slug.children, 'how.kicker').props.layout.lines.flatMap((l) => l.words.map((w) => w.text)), ['HOW', 'IT', 'WORKS']);
   for (const [k, item] of items.entries()) {
     const figure = textNode(nodes, `how.figure${k}`);
-    assert.equal(figure.props.font.family, look.fonts.label.family, 'figures in the label face');
+    assert.equal(figure.props.font.family, look.fonts.display.family, 'figures in the display serif (director\'s note)');
     assert.deepEqual(figure.props.layout.lines[0].words.map((w) => w.text), [String(k + 1)]);
-    assert.ok(figure.props.font.size >= look.scale[1] - EPS, 'a figure at the label step or larger (look revision 1)');
+    assert.equal(figure.props.font.size, item.props.font.size, 'a figure at its item\'s size');
     assert.equal(figure.props.stack, hero, 'a figure is one size class with the items');
     // one digit: the fake measure's ink ends 0.02 em before its 0.55 em advance (tracking runs only between glyphs)
     near(figure.props.x + 0.53 * figure.props.font.size, 218, `figure ${k} ink ends at 218`);
-    const middleOf = (n) => n.props.y + n.props.layout.lines[0].y - 0.35 * n.props.font.size;
-    near(middleOf(figure), middleOf(item), `figure ${k} centred on the item's first cap height`);
+    near(figure.props.y + figure.props.layout.lines[0].y, item.props.y + item.props.layout.lines[0].y, `figure ${k} on the item's first baseline`);
   }
 });
 

@@ -79,6 +79,20 @@ function cardBox(parts, ctx, data) {
   return { box, turned: [cx - tw / HALF, cy - th / HALF, tw, th] };
 }
 
+// The card kept clear of the block: where it is (bottom right), or, when the block set at y still meets it there, moved
+// under the block's last line, flush with its left edge, a gutter (and the drift) below, as low as the margin allows.
+function clearCard(card, block, y, ctx) {
+  const { look, canvas, unit } = ctx;
+  const by = CARD_CLEAR * look.grid.gutter * unit + driftReach(look, unit);
+  const [cx, cy, cw, ch] = card.turned;
+  const clear = [cx - by, cy - by, cw + HALF * by, ch + HALF * by];
+  if (!blockParts(block, y).some((box) => overlaps(clear, box))) return card;
+  const under = Math.max(...blockParts(block, y).map((box) => box[1] + box[3])) + by;
+  const top = Math.min(under, canvas.h - look.grid.margin * unit - card.box[3]);
+  const dx = block.span.x - card.box[0], dy = top - card.box[1];
+  return { box: [card.box[0] + dx, top, card.box[2], card.box[3]], turned: [cx + dx, cy + dy, cw, ch] };
+}
+
 // The card's nodes: one group (the card's entrance, turned exactly data.turn, pinned to the frame) holding the card, the
 // picture and the mark (judged like any text: it is the film's own sign-off, not a running head).
 function cardNodes(shot, ctx, parts, placed, data) {
@@ -97,10 +111,6 @@ function cardNodes(shot, ctx, parts, placed, data) {
 
 // ---- desk: the title and the ask ----
 
-// The ask's scale step: the largest of data.askSteps that keeps the title MIN_HERO_RATIO times its size (else the smallest).
-function askStepFor(look, data, titleSize, unit) {
-  return stepUnder(look, data.askSteps, unit, [{ size: titleSize, ratio: MIN_HERO_RATIO }]);
-}
 
 // The title fitted to columns 2..toWide (toTall on vertical formats) and the ask under it, at y = 0: { title, ask, span,
 // top, bottom } with top the title's first cap line and bottom the block's last baseline (relative to y).
@@ -115,7 +125,9 @@ function deskBlock(shot, ctx, data) {
   const last = title.layout.lines.at(-1).y;
   if (shot.ask === undefined) return { title, ask: null, span, top, bottom: last };
   // the ask in the label face (look review 1: a small grotesque line read as off-system and vanished on the phone tile)
-  const font = fontFor(look, 'label', sizeAt(look, askStepFor(look, data, size, unit), unit), unit);
+  // a third of the title, the largest the hero rule allows (director's note after look review 2: the step-2 ask was
+  // lost on the phone tile); the title is the hero, the ask the second size, the mark the third
+  const font = fontFor(look, 'label', size / MIN_HERO_RATIO, unit);
   const layout = layoutText({ text: setCase(look, 'label', shot.ask), font, maxWidth: span.w, measure });
   const y = last + data.askGap * size + CAP_HEIGHT * font.size - layout.lines[0].y;
   return { title, ask: { font, layout, y }, span, top, bottom: y + layout.lines.at(-1).y };
@@ -152,8 +164,9 @@ function expandDesk(shot, ctx, data, times) {
   const { look, unit } = ctx;
   const block = deskBlock(shot, ctx, data);
   const parts = cardParts(shot, ctx, data, block);
-  const card = parts === null ? null : cardBox(parts, ctx, data);
-  const x = block.span.x, y = deskY(block, card, ctx, data);
+  const placed = parts === null ? null : cardBox(parts, ctx, data);
+  const x = block.span.x, y = deskY(block, placed, ctx, data);
+  const card = placed === null ? null : clearCard(placed, block, y, ctx); // under the block when the corner meets it
   const hero = heroId(shot, 'title');
   const matched = arrivesMatched(shot, ctx);
   const title = node('text', hero, { x, y, layout: block.title.layout, font: block.title.font, fill: look.palette.ink, role: 'hero' }, {
