@@ -89,6 +89,30 @@ The look gate closed on the owner's choice of one targeted fix pass and no fourt
 - **Sheet labels and slug text are about 5 px tall at phone size in `desk`.** Default: accepted as furniture; nothing
   essential is set in them.
 
+## make-motion 2 voice and sound: where the build differs from the design (2026-11-16)
+
+Each has a default the work proceeds on; all are one-value changes in mode data unless noted.
+
+- **Captions in the viral mode.** The design (section 7) says on by default.
+  - **A (default, shipped):** opt-in in every mode (`"captions": true`). On by default they changed the approved `pop`
+    test film (a smaller picture, spoken-word captions beside the author's own caption line), which would have
+    bypassed the look gate.
+  - **B:** on by default in viral, after the `pop` clipping composition is revised to make room and re-reviewed.
+- **Pause before an emphasised word.** The design (6.2, 9.2) asks for a short pause before it.
+  - **A (default, shipped):** no pause and no call split; emphasis is stress promotion, a 2 dB lift and the picture's
+    own emphasis. Each split restarts the voice's prosody.
+  - **B:** `emphasisPause` above 0 in mode data (built, off). Decide after listening.
+- **Voice pace.** The design says 1.08 in viral and 0.96 in pro. Shipped: 1.1 and 1.0 (`voiceSpeed`). Decide after
+  listening.
+- **Music duck depth.** The design says 8 dB in viral and 10 dB in pro. Shipped: 9 dB in both, one constant. Default:
+  keep until the listening pass; then move it into mode data if the two modes should differ.
+- **Loudness true-peak ceilings.** As designed (-1 and -1.5 dBTP). No decision needed.
+- **Motion of a music bed against cuts.** The design says cuts land on beats. For a voiced film the cuts are fixed by
+  the narration, so the bed's tempo and phase are fitted to them and the report says how many cuts landed (3 of 4 in
+  both example films). Default: keep; the alternative is to let a bed nudge shot tails, which changes film length.
+- **Word-timing claim for the README.** The only sentence the measurement supports is in the gate record's Voice
+  section. Default: use it verbatim, or say nothing.
+
 ## Parked from the same branch (2026-11-15)
 
 - **Docs site typography lint findings** ("single font", "flat type hierarchy" on feature pages) come from the shared
