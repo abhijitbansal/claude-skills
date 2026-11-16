@@ -141,3 +141,35 @@ Director's check of the sheets: the high finding is gone (the cut into `count` i
 The gate is closed on the owner's decision. Remaining look findings from the third review are follow-ups for the showreel plan.
 
 Trend over three independent reviews: desk ship-after-fixes, ship-after-fixes, ship-after-fixes (high findings fell to one, in a cut the director chose); pop not-yet, ship-after-fixes, ship.
+
+## Voice (plan `2026-11-15-pa2-voice-sync.md`, record of 16 November 2026)
+
+Machine: Apple M4 Pro, macOS, Node 24.7.0, ffmpeg 8.1.1. Model: `onnx-community/Kokoro-82M-v1.0-ONNX-timestamped` at commit `dd4401a9`, `model_quantized.onnx` SHA-256 `c0c02b32…1132c`, voice `af_heart`. Nobody has listened to any of this audio yet.
+
+### Voiced films, rendered by the controller through the real optional install
+
+Command: `node scripts/make.mjs references/examples/v2/voiced-<look>.json --json` (after `npm ci --ignore-scripts` in `optional/voice`; the model was downloaded and hash-checked on first use).
+
+| Film | Exit | Findings | Timed | Voice | Frames | Audio (measured in the finished file) |
+|---|---|---|---|---|---|---|
+| voiced-desk | 0 | 0 | measured | 17.4 s | 546 | -16.2 LUFS, true peak -2.0 dB (target -16, ceiling -1.5) |
+| voiced-pop | 0 | 0 | measured | 13.2 s | 399 | -14.0 LUFS, true peak -3.2 dB (target -14, ceiling -1); measured before the last mastering change, not re-rendered since |
+
+The first real render exposed a defect no test had: on measured times two shots opened on an empty frame after a hard cut. The film's own review reported it; a shot's first narrated word is now shown from the shot's first frame.
+
+### Word timing
+
+Command: `node scripts/v2/voice/accuracy.mjs --json --speed <n>` with the local runtime and model.
+
+| Figure | Speed 1 (controller run) | Speed 1.1 (implementer run) |
+|---|---|---|
+| Held-out lines, words that follow a silence, shot-first words excluded | n=13, median 9 ms, p90 27 ms, max 250 ms | n=12, median 7 ms, p90 18 ms, max 21 ms |
+| Self-check on the same audio: +100 ms, -100 ms except first words, label one word back, one word forward (median) | 98, 104, 278, 113 ms | 97, 103, 141, 109 ms |
+| Mid-phrase s and sh onsets, against chance at -150 and +200 ms | 10 ms against 34 and 75 | 9 ms against 34 and 69 |
+| Emphasised mid-phrase words, against chance | 13 ms against 51 and 96 | 19 ms against 37 and 63 (weak) |
+
+What this supports, in the reviewer's words: on the held-out fixture lines, for the word starts that follow a silence, the predicted start was a median 9 ms from the onset ffmpeg's silence detector found. What it does not support: per-word sync for all words; "independent" without saying the start constants were fitted with this same detector (on the other fixture lines, one voice); mid-phrase or emphasised figures quoted as accuracy; word ends; the own-recording path; anything implying a person listened.
+
+Known in the numbers: one mispaired word at -250 ms in the speed 1 headline (the median is robust to it); the speed 1.1 sample sits exactly on the minimum of 12; an error confined to a single line can still pass the median gate; the smallest margin between the lead-in trim's cut and a measured voice onset is 26 ms (on "So,").
+
+The first version of the script reported 9 ms too, and a review showed it would have reported the same for a one-word shift. That version's figure was never published.
