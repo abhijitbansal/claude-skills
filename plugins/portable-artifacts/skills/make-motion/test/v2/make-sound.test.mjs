@@ -165,6 +165,18 @@ test('the run\'s sound work folder is removed when the sound stage fails a film 
   assert.deepEqual(readdirSync(isolated).filter((name) => name.startsWith('mm-sound-')), []);
 });
 
+test('an interrupt that arrives during validation stops the run right after it: exit 130, no later stage', async () => {
+  const controller = new AbortController();
+  controller.abort();
+  const synthesise = async () => assert.fail('the voice stage must not run after an interrupt');
+  const voiced = pro({ voice: { name: 'af_heart' } });
+  const { report, exitCode } = await run(writeFilm('aborted-early', voiced), {}, { signal: controller.signal, synthesise });
+  assert.equal(exitCode, 130);
+  assert.deepEqual(report.error, { message: 'interrupted', hint: '' });
+  assert.deepEqual(stagesOf(report), [['validate', true]]);
+  assert.equal(report.timed, null, 'no timeline was built');
+});
+
 test('--outline takes no sound stage', async () => {
   const { report, exitCode } = await run(writeFilm('outline', viral({ music: { bed: 'tape' } })), { outline: true, noRender: false });
   assert.equal(exitCode, 0);

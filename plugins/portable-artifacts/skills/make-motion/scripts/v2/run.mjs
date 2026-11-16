@@ -318,6 +318,7 @@ async function execute(options, state, io) {
   const loaded = await validate(options, state, io.log);
   if (!loaded) return;
   state.validated = true;
+  io.signal?.throwIfAborted(); // validation is synchronous (an own recording's word alignment included): a stop sent during it lands here
   const { film, specDir } = loaded;
   const made = film.voice === undefined ? null
     : film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io);
