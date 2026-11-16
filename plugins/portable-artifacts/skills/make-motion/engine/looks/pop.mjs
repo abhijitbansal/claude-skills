@@ -64,4 +64,11 @@ export const pop = {
   },
   // halftone 0: pop's own field is already a halftone, and the post pass would dot the pictures too (see the Look typedef)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
+  // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
+  sounds: {
+    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null },
+    device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact' },
+    emphasis: 'pop',
+    land: 'sub',
+  },
 };

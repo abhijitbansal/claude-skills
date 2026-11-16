@@ -17,7 +17,7 @@ import { auditFrame } from '../../engine/review/frame.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 
-const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 } });
+const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false });
 const SAY = 'One two three four five six.';
 const FPS = 30;
 
@@ -196,4 +196,26 @@ test('a mode added to the shared registry must carry its loudness: without it, i
   assert.throws(() => registries.modes.add('test-no-loudness', { ...bare, name: 'test-no-loudness' }), /mode "test-no-loudness": loudness must be \{ lufs, truePeakDb, lra \}/);
   assert.equal(registries.modes.has('test-no-loudness'), false);
   assert.throws(() => registries.modes.add('test-loud', { ...SLOW, name: 'test-loud', loudness: { lufs: 0, truePeakDb: -1, lra: 9 } }), /loudness\.lufs must be/);
+});
+
+// ---- sound: whether cues play by default is mode data (scripts/v2/sound/cues.mjs reads it) ----
+
+test('pro plays no cues by default and viral does: cues false and true', () => {
+  assert.equal(registries.modes.get('pro').cues, false);
+  assert.equal(registries.modes.get('viral').cues, true);
+});
+
+test('a mode whose cues is missing or not a boolean fails validateMode, naming the mode and the field', () => {
+  assert.doesNotThrow(() => validateMode({ ...SLOW, cues: true }));
+  for (const cues of [undefined, null, 0, 1, 'true', 'on']) {
+    assert.throws(() => validateMode({ ...SLOW, cues }), /mode "test-slow": cues must be true or false/, String(cues));
+  }
+  const { cues: _cues, voiceSpeed: _speed, ...bare } = SLOW;
+  assert.throws(() => validateMode({ ...bare, name: 'test-slow' }), /voiceSpeed must be/, 'the voice data is still reported first');
+});
+
+test('a mode added to the shared registry must say whether it plays cues: without it, it cannot register', () => {
+  const { cues: _cues, ...bare } = SLOW;
+  assert.throws(() => registries.modes.add('test-no-cues', { ...bare, name: 'test-no-cues' }), /mode "test-no-cues": cues must be true or false, got undefined/);
+  assert.equal(registries.modes.has('test-no-cues'), false);
 });

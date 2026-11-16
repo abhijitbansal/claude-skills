@@ -4,6 +4,9 @@
 // registered by engine/fields/index.mjs, which whoever draws the look imports.
 import { registries } from '../registry.mjs';
 import { unitOf } from '../units.mjs';
+// A look must name a sound for every registered cut and device, so they are registered before any look is.
+import '../cuts/index.mjs';
+import '../devices/index.mjs';
 import { desk } from './desk.mjs';
 import { pop } from './pop.mjs';
 
@@ -50,6 +53,9 @@ import { pop } from './pop.mjs';
  *   runs over the WHOLE frame, pictures and clippings included: a halftone or a bloom above 0 dots or glows a screenshot
  *   as it does the paper, and without WebGL2 only the grain is applied (the review says so). Use halftone only for a look
  *   whose pictures should carry it; a look with a halftone field (pop) keeps it 0
+ * @property {{ cut: Record<string, string | null>, device: Record<string, string | null>, emphasis: string | null,
+ *   land: string | null }} sounds  the cue each event makes, or null for none: one entry per registered cut and device
+ *   (checked by validateLook as the look registers); which names a synth knows is scripts/v2/sound's to check
  */
 
 export { unitOf as unit };
@@ -98,6 +104,47 @@ export function applyAccent(look, accent) {
     palette: Object.freeze({ ...look.palette, accent }),
     shadow: Object.isFrozen(shadow) ? shadow : Object.freeze(shadow),
   });
+}
+
+const isCueOrNull = (value) => value === null || (typeof value === 'string' && value !== '');
+
+// The errors of one sounds table (`cut` or `device`): an entry for each of `names`, a cue name or null.
+function tableErrors(name, table, part, names) {
+  if (table === null || typeof table !== 'object') return [`look "${name}": sounds.${part} must be an object, got ${String(table)}`];
+  return names.filter((key) => !isCueOrNull(table[key]))
+    .map((key) => `look "${name}": sounds.${part}.${key} must be a cue name or null, got ${String(table[key])}`);
+}
+
+/**
+ * Throws a RangeError naming the look and the field when its `sounds` is missing, or does not name a cue (or null) for
+ * every cut in `cuts` and every device in `devices` (registries; default the shared ones), and for emphasis and land.
+ * Returns the look, so it can be used inline.
+ */
+export function validateLook(look, { cuts = registries.cuts, devices = registries.devices } = {}) {
+  const { name, sounds } = look;
+  if (sounds === null || typeof sounds !== 'object') {
+    throw new RangeError(`look "${name}": sounds must be { cut, device, emphasis, land }, got ${String(sounds)}`);
+  }
+  const errors = [
+    ...tableErrors(name, sounds.cut, 'cut', cuts.names()),
+    ...tableErrors(name, sounds.device, 'device', devices.names()),
+    ...['emphasis', 'land'].filter((key) => !isCueOrNull(sounds[key]))
+      .map((key) => `look "${name}": sounds.${key} must be a cue name or null, got ${String(sounds[key])}`),
+  ];
+  if (errors.length > 0) throw new RangeError(errors.join('\n'));
+  return look;
+}
+
+// Every look added to the shared registry is checked as it is added, as modes are (engine/modes/index.mjs): the
+// registry's `add` for looks is wrapped here, once (a second evaluation of this file keeps the first wrapper).
+const addLook = registries.looks.add;
+if (!addLook.validatesLooks) {
+  const checkedAdd = (name, look) => {
+    validateLook({ ...look, name });
+    addLook(name, look);
+  };
+  checkedAdd.validatesLooks = true;
+  registries.looks.add = checkedAdd;
 }
 
 for (const definition of [desk, pop]) {

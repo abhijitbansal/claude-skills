@@ -2,7 +2,7 @@
 // evaluation leaves the registry as it is). A mode is behaviour; the look it names is appearance.
 //
 // Mode = { name, defaultLook, defaultFormat, wpm, tail, maxStillSeconds, hookFromFrameZero, maxLineWords?, maxHookWords?,
-//          platformSafeZone?, captions: boolean, voiceSpeed, emphasisPause }
+//          platformSafeZone?, captions: boolean, voiceSpeed, emphasisPause, loudness, cues: boolean }
 // Voice data (both REQUIRED: a mode without them cannot be registered; checked by validateMode, never decided from a
 // mode's name):
 //   voiceSpeed     Kokoro speed of the narration, VOICE_SPEED_MIN to VOICE_SPEED_MAX (the range the start rule was measured on)
@@ -11,6 +11,8 @@
 // Loudness (REQUIRED, checked by validateMode like the voice data):
 //   loudness      { lufs, truePeakDb, lra }: the voice master's integrated target (LUFS_MIN to LUFS_MAX), its true-peak
 //                  ceiling (TRUE_PEAK_MIN to TRUE_PEAK_MAX dBTP) and loudnorm's loudness range (LRA_MIN to LRA_MAX LU)
+// Sound (REQUIRED, checked by validateMode last, after the voice data and loudness):
+//   cues          true: sound cues play unless the film says "sound": "off"; false: only when it says "sound": "on"
 import { registries } from '../registry.mjs';
 import { pro } from './pro.mjs';
 import { viral } from './viral.mjs';
@@ -59,6 +61,9 @@ export function validateMode(mode) {
     throw new RangeError(`mode "${name}": emphasisPause must be a number of seconds from 0 to ${EMPHASIS_PAUSE_MAX}, got ${String(emphasisPause)}`);
   }
   validateLoudness(mode);
+  if (typeof mode.cues !== 'boolean') {
+    throw new RangeError(`mode "${name}": cues must be true or false, got ${String(mode.cues)}`);
+  }
   return mode;
 }
 

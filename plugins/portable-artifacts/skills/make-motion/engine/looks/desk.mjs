@@ -67,4 +67,11 @@ export const desk = {
   },
   // 0.02: the paper field already carries the texture; more grain is noise a 20 s film pays for in megabytes (round 4 measurements)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
+  // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
+  sounds: {
+    cut: { cut: 'paper', slide: 'paper', punch: null, match: null },
+    device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null },
+    emphasis: null,
+    land: 'click',
+  },
 };

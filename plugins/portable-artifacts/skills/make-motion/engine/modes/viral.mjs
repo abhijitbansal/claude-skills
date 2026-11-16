@@ -18,4 +18,5 @@ export const viral = {
   voiceSpeed: 1.1, // Kokoro speed of the narration (0.8 to 1.25, checked by validateMode)
   emphasisPause: 0, // seconds of silence before an emphasised word; 0: emphasis neither splits a call nor pauses
   loudness: Object.freeze({ lufs: -14, truePeakDb: -1, lra: 9 }), // the voice master's targets (scripts/v2/voice/master.mjs)
+  cues: true, // sound cues play by default; "sound": "off" silences them (scripts/v2/sound/cues.mjs)
 };

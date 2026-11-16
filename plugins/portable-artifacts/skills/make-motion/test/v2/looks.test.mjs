@@ -371,3 +371,57 @@ test('revision 1 look data: desk display line height 1.1; pop word space, recolo
   assert.deepEqual({ ...pop.devices.cutout }, { keylineColor: '#ffffff', emphasis: { shadow: 'accent', offset: 18 } });
   assert.equal(Object.hasOwn(pop.devices, 'highlight'), false, 'pop still does not style the highlight device');
 });
+
+// ---- sounds: which cue each event makes is look data (scripts/v2/sound/cues.mjs reads it) ----
+
+test('desk sounds are the brief values: paper cuts and slides, marker hand marks, a paper card, a click on the landing', () => {
+  const { sounds } = registries.looks.get('desk');
+  assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null });
+  assert.deepEqual({ ...sounds.device }, {
+    highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null,
+  });
+  assert.equal(sounds.emphasis, null);
+  assert.equal(sounds.land, 'click');
+});
+
+test('pop sounds are the brief values: click, whoosh and impact cuts, a pop highlight, an impact punch, a pop on emphasis, a sub on the landing', () => {
+  const { sounds } = registries.looks.get('pop');
+  assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null });
+  assert.deepEqual({ ...sounds.device }, {
+    highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact',
+  });
+  assert.equal(sounds.emphasis, 'pop');
+  assert.equal(sounds.land, 'sub');
+});
+
+test('every look names a sound (or null) for exactly the registered cuts and devices, and its sounds are frozen', () => {
+  assert.deepEqual(registries.cuts.names().sort(), [...KNOWN_CUTS].sort(), 'the look index registers the cuts it checks against');
+  assert.equal(registries.devices.names().length, 9, 'the look index registers the devices it checks against');
+  for (const name of lookNames()) {
+    const { sounds } = registries.looks.get(name);
+    assert.deepEqual(Object.keys(sounds.cut).sort(), registries.cuts.names().sort(), `${name} sounds.cut`);
+    assert.deepEqual(Object.keys(sounds.device).sort(), registries.devices.names().sort(), `${name} sounds.device`);
+    assert.ok(Object.isFrozen(sounds) && Object.isFrozen(sounds.cut) && Object.isFrozen(sounds.device), `${name} sounds frozen`);
+  }
+});
+
+test('a look added to the shared registry is checked as it is added: a missing sound for a registered cut or device cannot register', () => {
+  const desk = registries.looks.get('desk');
+  const without = (part, key) => {
+    const { [key]: _gone, ...rest } = desk.sounds[part];
+    return { ...desk.sounds, [part]: rest };
+  };
+  assert.throws(() => registries.looks.add('test-no-match-sound', { ...desk, name: 'test-no-match-sound', sounds: without('cut', 'match') }),
+    /look "test-no-match-sound": sounds\.cut\.match must be a cue name or null, got undefined/);
+  assert.equal(registries.looks.has('test-no-match-sound'), false);
+  assert.throws(() => registries.looks.add('test-no-tag-sound', { ...desk, name: 'test-no-tag-sound', sounds: without('device', 'tag') }),
+    /look "test-no-tag-sound": sounds\.device\.tag must be a cue name or null, got undefined/);
+  assert.throws(() => registries.looks.add('test-no-sounds', { ...desk, name: 'test-no-sounds', sounds: undefined }),
+    /look "test-no-sounds": sounds must be \{ cut, device, emphasis, land \}, got undefined/);
+  assert.throws(() => registries.looks.add('test-bad-land', { ...desk, name: 'test-bad-land', sounds: { ...desk.sounds, land: 3 } }),
+    /look "test-bad-land": sounds\.land must be a cue name or null, got 3/);
+  assert.throws(() => registries.looks.add('test-no-emphasis', { ...desk, name: 'test-no-emphasis', sounds: { ...desk.sounds, emphasis: undefined } }),
+    /look "test-no-emphasis": sounds\.emphasis must be a cue name or null, got undefined/);
+  registries.looks.add('test-sounded', { ...desk, name: 'test-sounded' });
+  assert.equal(registries.looks.get('test-sounded').sounds.land, 'click');
+});

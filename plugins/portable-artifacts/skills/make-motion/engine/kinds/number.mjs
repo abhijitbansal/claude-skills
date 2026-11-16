@@ -410,5 +410,7 @@ registries.kinds.add('number', {
   ids: (shot) => [heroId(shot, 'value')],
   validate: heroProblems,
   expand: expandNumber,
+  // Shot-local seconds at which the figure reaches its value, as expand lands it (read by scripts/v2/sound/events.mjs).
+  landing: (shot, timing) => countLanding(timing, shot.value, shot.decimals ?? 0),
   numbered: true, // counts toward the slug numbers of a film
 });
