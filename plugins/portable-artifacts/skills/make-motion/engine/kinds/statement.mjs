@@ -402,5 +402,6 @@ registries.kinds.add('statement', {
   expand: expandStatement,
   review: emphasisFindings,
   numbered: true, // a slug shows its place among the film's numbered shots
+  showsWords: true, // its narration is the picture: never captioned (engine/captions)
   hookText: true, // as a viral film's first shot, all of its hero's words are on screen on frame 0 (review hookFindings)
 });

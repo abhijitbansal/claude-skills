@@ -47,7 +47,7 @@ test('add rejects an empty or non-string name', () => {
 });
 
 test('registries holds one registry per extension point, each labelled', () => {
-  assert.deepEqual(Object.keys(registries), ['kinds', 'looks', 'modes', 'devices', 'moves', 'cuts', 'fields']);
+  assert.deepEqual(Object.keys(registries), ['kinds', 'looks', 'modes', 'devices', 'moves', 'cuts', 'fields', 'captions']);
   assert.throws(() => registries.looks.get('nope'), /unknown look "nope"/);
   assert.throws(() => registries.kinds.get('nope'), /unknown kind "nope"/);
   assert.throws(() => registries.devices.get('nope'), /unknown device "nope"/);

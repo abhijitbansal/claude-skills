@@ -416,4 +416,5 @@ registries.kinds.add('number', {
   expand: expandNumber,
   landing: landingOf, // when the figure reaches its value, as expand lands it (read by scripts/v2/sound/events.mjs)
   numbered: true, // counts toward the slug numbers of a film
+  showsWords: true, // the figure, its label and delta restate the narration: never captioned (engine/captions)
 });

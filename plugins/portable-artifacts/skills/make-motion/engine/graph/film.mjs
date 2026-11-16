@@ -1,5 +1,6 @@
 // A whole film as frames: buildFilm expands every shot once through its kind, places it on the global clock, applies
-// each shot's camera, and runs the cut that brings a shot in over its first `dur` seconds. sampleAt(t) is a pure
+// each shot's camera, and runs the cut that brings a shot in over its first `dur` seconds. A captioned film (its
+// `captions`, else its mode's) adds each narrated shot's captions after the kind's nodes (engine/captions). sampleAt(t) is a pure
 // function of t (nothing is cached between calls that could depend on their order). Pure and DOM-free: the caller
 // passes the canvas size, the text measure and the loaded pictures' sizes.
 import { registries } from '../registry.mjs';
@@ -11,6 +12,7 @@ import { applyAccent, gridX } from '../looks/index.mjs';
 import { unitOf } from '../units.mjs';
 import { srcsOfShot } from '../assets.mjs';
 import { resolveAnchor } from '../script/anchors.mjs';
+import { captionsOn, shotCaptions, kindContext } from '../captions/index.mjs';
 import { sampleGraph } from './sample.mjs';
 import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs';
 
@@ -108,11 +110,19 @@ function heroBox(n, rest) {
 
 // ---- shots ----
 
+// The shot's nodes: its kind's, then its captions (drawn last, pinned over everything) when the film is captioned.
+function withCaptions(out, shot, kind, ctx, film) {
+  if (!captionsOn(film, ctx.mode)) return out.nodes;
+  const captions = shotCaptions(shot, ctx, { kind, hero: out.hero ?? null, filmStart: ctx.timing.start, nodes: out.nodes });
+  return captions.length === 0 ? out.nodes : [...out.nodes, ...captions];
+}
+
 function expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets }) {
   const shot = film.shots[index];
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
-  const out = kind.expand(shot, shotContext({ film, index, timeline, canvas, measure, assets, look, viralInsets }));
+  const ctx = shotContext({ film, index, timeline, canvas, measure, assets, look, viralInsets });
+  const out = kind.expand(shot, kindContext(film, kind, ctx)); // a captioned shot's kind keeps clear of the captions
   if (!out || !Array.isArray(out.nodes)) throw new Error(`kind "${shot.show}" must return { nodes: [...] } for shot "${shot.id}"`);
   const heroNode = out.hero === undefined ? undefined : out.nodes.find((n) => n.id === out.hero);
   const box = kind.heroTarget === undefined ? undefined : out.boxes?.[kind.heroTarget];
@@ -120,7 +130,7 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
   return {
     start: timing.start,
     duration: timing.duration,
-    nodes: out.nodes,
+    nodes: withCaptions(out, shot, kind, ctx, film),
     cam: cameraOf(out.camera, canvas, `shot "${shot.id}"`),
     background: out.background ?? DEFAULT_BACKGROUND,
     hero: heroNode && box ? { id: heroNode.id, box, pose: heroNode.props } : null,

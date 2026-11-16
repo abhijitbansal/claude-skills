@@ -14,7 +14,7 @@ export const viral = {
   hookFromFrameZero: true, // the first shot reads from frame 0: all its words on screen, each taking its colour when spoken
   maxHookWords: 7, // the review: an opening statement of more words is a creative finding (absent: no limit)
   platformSafeZone: true, // a look serving this mode composes inside the platform safe zone on 9:16 (kinds/shared.mjs)
-  captions: true, // reserved: no caption track is drawn yet
+  captions: false, // captions are opt-in in every mode for now: a film shows them only when it says "captions": true
   voiceSpeed: 1.1, // Kokoro speed of the narration (0.8 to 1.25, checked by validateMode)
   emphasisPause: 0, // seconds of silence before an emphasised word; 0: emphasis neither splits a call nor pauses
   loudness: Object.freeze({ lufs: -14, truePeakDb: -1, lra: 9 }), // the voice master's targets (scripts/v2/voice/master.mjs)

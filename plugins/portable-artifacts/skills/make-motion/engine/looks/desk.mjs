@@ -65,6 +65,8 @@ export const desk = {
     focus: { dim: 0.55 },
     route: { color: 'accent2', width: 4, pins: true, step: HAND_STEP },
   },
+  // The caption style (registries.captions, engine/captions): label caps on a taped paper card, low on the grid.
+  captions: 'lower',
   // 0.02: the paper field already carries the texture; more grain is noise a 20 s film pays for in megabytes (round 4 measurements)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.

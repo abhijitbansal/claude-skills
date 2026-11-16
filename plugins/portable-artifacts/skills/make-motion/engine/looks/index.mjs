@@ -7,6 +7,8 @@ import { unitOf } from '../units.mjs';
 // A look must name a sound for every registered cut and device, so they are registered before any look is.
 import '../cuts/index.mjs';
 import '../devices/index.mjs';
+// ...and a look must name a caption style, so the styles are registered before any look is.
+import '../captions/index.mjs';
 import { desk } from './desk.mjs';
 import { pop } from './pop.mjs';
 
@@ -56,6 +58,8 @@ import { pop } from './pop.mjs';
  * @property {{ cut: Record<string, string | null>, device: Record<string, string | null>, emphasis: string | null,
  *   land: string | null }} sounds  the cue each event makes, or null for none: one entry per registered cut and device
  *   (checked by validateLook as the look registers); which names a synth knows is scripts/v2/sound's to check
+ * @property {string} captions  the caption style, a name in registries.captions (engine/captions): how the spoken words
+ *   of a narrated shot that does not show its own words are drawn (checked by validateLook as the look registers)
  */
 
 export { unitOf as unit };
@@ -115,12 +119,27 @@ function tableErrors(name, table, part, names) {
     .map((key) => `look "${name}": sounds.${part}.${key} must be a cue name or null, got ${String(table[key])}`);
 }
 
+// The error of a look's `captions` (a name in `captions`, the caption styles registry), or null.
+function captionsError(name, style, captions) {
+  if (typeof style !== 'string' || style === '') return `look "${name}": captions must name a caption style (have: ${captions.names().join(', ')}), got ${String(style)}`;
+  if (captions.has(style)) return null;
+  try {
+    captions.get(style); // throws for a name it does not have
+  } catch (err) {
+    return `look "${name}": ${err.message}`; // the registry's own message: the unknown name and the close one
+  }
+  return null;
+}
+
 /**
  * Throws a RangeError naming the look and the field when its `sounds` is missing, or does not name a cue (or null) for
- * every cut in `cuts` and every device in `devices` (registries; default the shared ones), and for emphasis and land.
+ * every cut in `cuts` and every device in `devices` (registries; default the shared ones), and for emphasis and land; or
+ * when its `captions` does not name a style in `captions` (default the shared caption styles registry).
  * Returns the look, so it can be used inline.
  */
-export function validateLook(look, { cuts = registries.cuts, devices = registries.devices } = {}) {
+export function validateLook(look, { cuts = registries.cuts, devices = registries.devices, captions = registries.captions } = {}) {
+  const caption = captionsError(look.name, look.captions, captions);
+  if (caption !== null) throw new RangeError(caption);
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {
     throw new RangeError(`look "${name}": sounds must be { cut, device, emphasis, land }, got ${String(sounds)}`);

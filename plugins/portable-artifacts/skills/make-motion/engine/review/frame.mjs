@@ -32,6 +32,15 @@
 // leaves them out, and the distinct-sizes rule leaves out affixes. Frame furniture (props.furniture: the texts of a slug
 // card or a caption card) is left out of both.
 //
+// Spoken captions. A text with props.caption (engine/captions: { zone, end, hero, emphasis }) is a caption of the spoken
+// words, and four mechanical rules judge it: once landed, its ink outside its zone (caption-zone) or over the ink of the
+// hero (the pictures and texts of the node with id `hero`, not the paper or shadow they are mounted on) or of any picture
+// on screen (caption-hero; a picture standing at 1.2 times its size or more, as a camera push leaves it, or covering 80%
+// of the canvas or more, is the frame's ground and is not judged); on screen more than 0.3 s after its last word ends at
+// film second `end` (caption-late, against ctx.t); and, on any frame, an emphasised word clipped by its zone
+// (caption-clipped, a pulse included). A clipping's own caption carries no props.caption and is judged by the general
+// rules; the card-overlap and overlap rules keep the two apart.
+//
 // What escapes. The audit looks at sampled frames (scripts/v2/review.mjs), and an unlanded text is not judged, so a defect
 // that is on screen for less than the sampling step (0.25 s: 7 frames at 30 fps) and falls between two samples can
 // escape, and so can one that exists only while a text is still arriving, pulsing or being pushed by the camera when
@@ -125,6 +134,17 @@ function inkBox(n, hidden) {
   const part = union((kept.length > 0 ? kept : boxes).map((b) => b.ink));
   const sx = whole[2] > 0 ? bbox[2] / whole[2] : 1, sy = whole[3] > 0 ? bbox[3] / whole[3] : 1;
   return [bbox[0] + (part[0] - whole[0]) * sx, bbox[1] + (part[1] - whole[1]) * sy, part[2] * sx, part[3] * sy];
+}
+
+// The ink of each word of a text on screen, in canvas pixels, as { word, box }: each word's local ink mapped to the
+// canvas as inkBox maps the whole text (a word scaled by its track is boxed at that scale).
+function wordInks(n) {
+  const { layout, bbox } = n;
+  const metrics = { ascent: layout.lines[0].y, descent: layout.height - layout.lines.at(-1).y };
+  const boxes = layout.lines.flatMap((line, k) => line.words.map((word) => ({ word, ...wordBoxes(n, line, k, word, metrics) })));
+  const whole = union(boxes.map((b) => b.whole));
+  const sx = whole[2] > 0 ? bbox[2] / whole[2] : 1, sy = whole[3] > 0 ? bbox[3] / whole[3] : 1;
+  return boxes.map((b) => ({ word: b.word, box: [bbox[0] + (b.ink[0] - whole[0]) * sx, bbox[1] + (b.ink[1] - whole[1]) * sy, b.ink[2] * sx, b.ink[3] * sy] }));
 }
 
 // The words of a text at opacity 0 on this frame: not on screen, so neither in its ink nor waited for. A word shown on
@@ -414,6 +434,84 @@ function wordRules(texts, ctx) {
   return out;
 }
 
+// ---- spoken captions (props.caption, set by engine/captions: { zone, end, hero, emphasis }) ----
+
+const CAPTION_LATE_SECONDS = 0.3; // a caption may stay this long after its last word ends
+// A picture covering this share of the canvas or more (a full-bleed picture), or standing at GROUND_ZOOM or more of its
+// size (the camera pushing in on it: the smallest push is 1.2, kinds/shared.mjs PUSH.min; a punch is 1.08), is the
+// frame's ground, not a figure a caption could cover: captions sit over it as subtitles sit over video.
+const GROUND_SHARE = 0.8;
+const GROUND_ZOOM = 1.2;
+
+const isSpokenCaption = (t) => t.node.props?.caption !== null && typeof t.node.props?.caption === 'object';
+const outsideBox = ([x, y, w, h], [zx, zy, zw, zh], slack) => x < zx - slack || y < zy - slack || x + w > zx + zw + slack || y + h > zy + zh + slack;
+const overlapBy = (a, b) => Math.min(Math.min(a[0] + a[2], b[0] + b[2]) - Math.max(a[0], b[0]), Math.min(a[1] + a[3], b[1] + b[3]) - Math.max(a[1], b[1]));
+
+// The share of the canvas a box covers.
+function canvasShare([x, y, w, h], canvas) {
+  const across = Math.max(0, Math.min(x + w, canvas.w) - Math.max(x, 0)), down = Math.max(0, Math.min(y + h, canvas.h) - Math.max(y, 0));
+  return (across * down) / (canvas.w * canvas.h);
+}
+
+// What a caption must keep off, as { id, box }: the ink of the hero (the node with the hero's id: the pictures and texts
+// inside it, by their measured ink, or the node itself when it is a path or a picture; never the paper, tape or shadow it
+// is mounted on) and every visible picture, less any that fills the frame (GROUND_SHARE). `inks`: text id -> ink box.
+function figuresOf(sampled, heroId, canvas, inks) {
+  const found = [];
+  const walk = (n, opacity, scale, inHero) => {
+    const o = opacity * (n.opacity ?? 1), s = scale * scaleOf(n);
+    if (o <= 0) return;
+    const hero = inHero || n.id === heroId;
+    const box = n.type === 'text' ? inks.get(n.id) : n.bbox;
+    const counts = n.type === 'image' || (hero && n.type === 'text') || (n.id === heroId && n.type === 'path');
+    const ground = s >= GROUND_ZOOM - EPSILON || (isBox(box) && canvasShare(box, canvas) >= GROUND_SHARE);
+    if (counts && isBox(box) && !ground) found.push({ id: n.id, box });
+    (n.children ?? []).forEach((child) => walk(child, o, s, hero));
+  };
+  (Array.isArray(sampled) ? sampled : []).forEach((n) => walk(n, 1, 1, false));
+  return found;
+}
+
+// Rules 1 and 2: a landed caption whose ink leaves its zone, or lies over the hero's ink or a picture by more than
+// OVERLAP_UNITS both ways.
+function captionPlaceRules(captions, sampled, ctx, unit, inks) {
+  return captions.filter((t) => t.landed).flatMap((t) => {
+    const { zone, hero } = t.node.props.caption;
+    const id = t.node.id;
+    const out = [];
+    if (isBox(zone) && outsideBox(t.ink, zone, SAFE_TOLERANCE_UNITS * unit)) out.push(finding(ctx, MECHANICAL, 'caption-zone', id, `caption "${id}" is outside its caption zone; cut words from the group or move the zone`, t.role));
+    const over = figuresOf(sampled, hero, ctx.canvas, inks).find((f) => overlapBy(t.ink, f.box) > OVERLAP_UNITS * unit + EPSILON);
+    if (over) out.push(finding(ctx, MECHANICAL, 'caption-hero', `${id}|${over.id}`, `caption "${id}" covers "${over.id}"; captions never cover the hero or a picture: move the zone or make the picture smaller`, t.role));
+    return out;
+  });
+}
+
+// Rule 3: a caption on screen more than CAPTION_LATE_SECONDS after its last word ends (ctx.t and caption.end are film
+// seconds; a frame without ctx.t is not judged).
+function captionLateRules(captions, ctx) {
+  if (!Number.isFinite(ctx.t)) return [];
+  return captions.filter((t) => ctx.t - t.node.props.caption.end > CAPTION_LATE_SECONDS + EPSILON).map((t) => finding(ctx, MECHANICAL, 'caption-late', t.node.id,
+    `caption "${t.node.id}" is still on screen ${(ctx.t - t.node.props.caption.end).toFixed(2)} s after its last word ends; it must leave within ${CAPTION_LATE_SECONDS} s`, t.role));
+}
+
+// Rule 4: on any frame (a pulse included), an emphasised word on screen whose ink leaves the caption's zone.
+function captionClipRules(captions, ctx, unit) {
+  return captions.flatMap((t) => {
+    const { zone, emphasis } = t.node.props.caption;
+    if (!isBox(zone) || !Array.isArray(emphasis) || emphasis.length === 0) return [];
+    const hidden = hiddenNow(t.node);
+    const clipped = wordInks(t.node).find(({ word, box }) => emphasis.includes(word.index) && !hidden.has(word.index) && outsideBox(box, zone, SAFE_TOLERANCE_UNITS * unit));
+    if (!clipped) return [];
+    return [finding(ctx, MECHANICAL, 'caption-clipped', t.node.id, `in caption "${t.node.id}" the emphasised word "${clipped.word.text}" is clipped by its caption zone; keep room in the layout for its peak scale`, t.role)];
+  });
+}
+
+function captionRules(texts, sampled, ctx, unit) {
+  const captions = texts.filter(isSpokenCaption);
+  const inks = new Map(texts.map((t) => [t.node.id, t.ink]));
+  return [...captionPlaceRules(captions, sampled, ctx, unit, inks), ...captionLateRules(captions, ctx), ...captionClipRules(captions, ctx, unit)];
+}
+
 // Does a node show anything of its own? A text with a word above opacity 0 (or no word tracks), a path with its fill
 // finished or some of its stroke drawn, an image; a group shows only through its children. `reveal` 0 hides all.
 function showsItself(n) {
@@ -466,5 +564,5 @@ export function auditFrame(sampled, ctx) {
   const lost = unmeasured.map((id) => finding(ctx, MECHANICAL, 'measure', id, `${id}: could not be measured`));
   const opening = ctx.opensShot === true ? openingFindings(sampled, ctx) : [];
   const contrast = contrastFindings(texts, sampled, ctx, (kind, rule, node, message, role) => finding(ctx, kind, rule, node, message, role));
-  return [...lost, ...opening, ...contrast, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit)];
+  return [...lost, ...opening, ...contrast, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit), ...captionRules(texts, sampled, ctx, unit)];
 }

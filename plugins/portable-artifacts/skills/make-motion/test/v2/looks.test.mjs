@@ -292,7 +292,7 @@ test('mode values are the brief values', () => {
   // Compared field by field: a mode also carries `summary`, the one-line text make.mjs --list prints.
   const brief = {
     pro: { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, maxStillSeconds: 6, captions: false },
-    viral: { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, maxStillSeconds: 3, captions: true },
+    viral: { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, maxStillSeconds: 3, captions: false },
   };
   for (const [name, values] of Object.entries(brief)) {
     const mode = registries.modes.get(name);
@@ -424,4 +424,27 @@ test('a look added to the shared registry is checked as it is added: a missing s
     /look "test-no-emphasis": sounds\.emphasis must be a cue name or null, got undefined/);
   registries.looks.add('test-sounded', { ...desk, name: 'test-sounded' });
   assert.equal(registries.looks.get('test-sounded').sounds.land, 'click');
+});
+
+// ---- captions: the caption style is look data (engine/captions) ----
+
+test('desk captions with the lower style and pop with the stack style; each style has a summary, a zone and a compose', () => {
+  assert.equal(registries.looks.get('desk').captions, 'lower');
+  assert.equal(registries.looks.get('pop').captions, 'stack');
+  assert.deepEqual(registries.captions.names(), ['lower', 'stack']);
+  for (const name of registries.captions.names()) {
+    const style = registries.captions.get(name);
+    assert.equal(typeof style.summary, 'string', `${name} summary`);
+    assert.equal(typeof style.zone, 'function', `${name} zone`);
+    assert.equal(typeof style.compose, 'function', `${name} compose`);
+  }
+});
+
+test('a look added to the shared registry must name a registered caption style', () => {
+  const desk = registries.looks.get('desk');
+  assert.throws(() => registries.looks.add('test-no-captions', { ...desk, name: 'test-no-captions', captions: undefined }),
+    /look "test-no-captions": captions must name a caption style \(have: lower, stack\), got undefined/);
+  assert.throws(() => registries.looks.add('test-bad-captions', { ...desk, name: 'test-bad-captions', captions: 'lowr' }),
+    /look "test-bad-captions": unknown caption style "lowr"; did you mean "lower"\?/);
+  assert.equal(registries.looks.has('test-no-captions'), false);
 });

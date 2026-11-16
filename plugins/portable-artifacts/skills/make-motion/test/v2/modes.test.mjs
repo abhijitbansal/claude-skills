@@ -17,7 +17,7 @@ import { auditFrame } from '../../engine/review/frame.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 
-const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false });
+const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false, captions: false });
 const SAY = 'One two three four five six.';
 const FPS = 30;
 
@@ -218,4 +218,21 @@ test('a mode added to the shared registry must say whether it plays cues: withou
   const { cues: _cues, ...bare } = SLOW;
   assert.throws(() => registries.modes.add('test-no-cues', { ...bare, name: 'test-no-cues' }), /mode "test-no-cues": cues must be true or false, got undefined/);
   assert.equal(registries.modes.has('test-no-cues'), false);
+});
+
+// ---- captions: whether a narrated shot that does not show its own words is captioned is mode data (engine/captions) ----
+
+test('a mode whose captions is missing or not a boolean fails validateMode, naming the mode and the field, after cues', () => {
+  assert.doesNotThrow(() => validateMode({ ...SLOW, captions: true }));
+  for (const captions of [undefined, null, 0, 1, 'true', 'on']) {
+    assert.throws(() => validateMode({ ...SLOW, captions }), /mode "test-slow": captions must be true or false/, String(captions));
+  }
+  const { captions: _captions, cues: _cues, ...bare } = SLOW;
+  assert.throws(() => validateMode({ ...bare, name: 'test-slow' }), /cues must be true or false/, 'cues is still reported first');
+});
+
+test('a mode added to the shared registry must say whether it captions: without it, it cannot register', () => {
+  const { captions: _captions, ...bare } = SLOW;
+  assert.throws(() => registries.modes.add('test-no-captions', { ...bare, name: 'test-no-captions' }), /mode "test-no-captions": captions must be true or false, got undefined/);
+  assert.equal(registries.modes.has('test-no-captions'), false);
 });

@@ -30,4 +30,5 @@ export const registries = {
   moves: createRegistry('move'),
   cuts: createRegistry('cut'),
   fields: createRegistry('field'),
+  captions: createRegistry('caption style'),
 };

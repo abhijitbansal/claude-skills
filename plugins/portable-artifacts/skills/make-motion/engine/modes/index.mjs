@@ -13,6 +13,9 @@
 //                  ceiling (TRUE_PEAK_MIN to TRUE_PEAK_MAX dBTP) and loudnorm's loudness range (LRA_MIN to LRA_MAX LU)
 // Sound (REQUIRED, checked by validateMode last, after the voice data and loudness):
 //   cues          true: sound cues play unless the film says "sound": "off"; false: only when it says "sound": "on"
+// Captions (REQUIRED, checked by validateMode after cues):
+//   captions      true: a narrated shot whose kind does not show its own words is captioned unless the film says
+//                  "captions": false; false: only when it says "captions": true (engine/captions/index.mjs)
 import { registries } from '../registry.mjs';
 import { pro } from './pro.mjs';
 import { viral } from './viral.mjs';
@@ -63,6 +66,9 @@ export function validateMode(mode) {
   validateLoudness(mode);
   if (typeof mode.cues !== 'boolean') {
     throw new RangeError(`mode "${name}": cues must be true or false, got ${String(mode.cues)}`);
+  }
+  if (typeof mode.captions !== 'boolean') {
+    throw new RangeError(`mode "${name}": captions must be true or false, got ${String(mode.captions)}`);
   }
   return mode;
 }

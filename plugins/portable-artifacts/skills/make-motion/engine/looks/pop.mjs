@@ -62,6 +62,9 @@ export const pop = {
     // emphasis: a highlight on a close-up turns its hard shadow to `shadow` and grows it to `offset` units; no frame
     cutout: { keylineColor: '#ffffff', emphasis: { shadow: 'accent', offset: 18 } },
   },
+  // The caption style (registries.captions, engine/captions): display caps flush left on the stack edge, low in the
+  // platform safe zone, a few words at a time, the spoken word in the accent.
+  captions: 'stack',
   // halftone 0: pop's own field is already a halftone, and the post pass would dot the pictures too (see the Look typedef)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
