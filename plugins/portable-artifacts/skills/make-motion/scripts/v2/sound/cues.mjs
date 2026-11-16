@@ -18,10 +18,8 @@ const CUE_PAN = 0;
 const TIE_RANK = Object.freeze({ cut: 0, emphasis: 1, device: 2, land: 3 });
 const EXPLICIT_RANK = 0;
 const FILM_SHOT_ID = 'film';
-// An explicit cue's `at` may name its shot: "shot:<id>:<anchor>", the anchor then read in that shot as an `on` event's is
-// (shot ids have no colon, so the first colon after the id ends it).
-const SHOT_PREFIX_RE = /^shot:([^:]*):([\s\S]*)$/;
-// "word:<text>" (any word form but the index one, "word:<n>" with an optional offset): it must name its shot.
+// "word:<text>" (any word form but the index one, "word:<n>" with an optional offset): across the whole film it must name
+// one shot's word, or the cue says to use the index form.
 const WORD_TEXT_RE = /^word:(?!\d+(?:[+-](?:\d+(?:\.\d+)?|\.\d+))?$)([\s\S]+)$/;
 const OFFSET_RE = /[+-](?:\d+(?:\.\d+)?|\.\d+)$/;
 const NON_WORD_RE = /[^\p{L}\p{N}]/gu;
@@ -70,32 +68,37 @@ function filmShot(timeline) {
 }
 
 const letters = (text) => text.replace(NON_WORD_RE, '').toLowerCase();
-const quotedList = (names) => names.map((n) => `"${n}"`).join(', ').replace(/, ([^,]*)$/, ' and $1');
+const listed = (items, last) => (items.length === 1 ? items[0] : `${items.slice(0, -1).join(', ')} ${last} ${items.at(-1)}`);
 
-// Why "word:<text>" unprefixed cannot stand in an explicit list: it must name its shot. The message says which shots
-// speak the word (`text` whole, or without a trailing offset, as anchors.mjs reads it) and what to write.
-function unnamedWordMessage(at, text, timeline) {
-  const tries = [text, text.replace(OFFSET_RE, '')].map(letters).filter(Boolean);
-  const wanted = tries.find((w) => timeline.shots.some((s) => s.words.some((word) => letters(word.text) === w)));
-  const shots = wanted === undefined ? [] : timeline.shots.filter((s) => s.words.some((word) => letters(word.text) === wanted)).map((s) => s.id);
-  const lead = 'a word named by its text must name its shot';
-  if (shots.length === 0) return `${lead} as "shot:<id>:${at}", and no shot says "${text}"`;
-  if (shots.length === 1) return `${lead}: write "shot:${shots[0]}:${at}"`;
-  return `${lead}: "${text}" is spoken in shots ${quotedList(shots)}; write "shot:${shots[0]}:${at}"`;
+// The words across the film matching `text` (whole, else without a trailing offset, as anchors.mjs reads a word anchor),
+// each with its film-wide index and shot: { word, offset, hits }.
+function wordMatches(text, timeline) {
+  const flat = timeline.shots.flatMap((s) => s.words.map((w) => ({ shot: s.id, text: w.text })));
+  const tries = [[text, ''], [text.replace(OFFSET_RE, ''), OFFSET_RE.exec(text)?.[0] ?? '']];
+  for (const [word, offset] of tries) {
+    const wanted = letters(word);
+    const hits = wanted === '' ? [] : flat.map((w, index) => ({ ...w, index })).filter((w) => letters(w.text) === wanted);
+    if (hits.length > 0) return { word, offset, hits };
+  }
+  return { word: text, offset: '', hits: [] };
 }
 
-// The film second an explicit cue's `at` names, before any clamp: "shot:<id>:<anchor>" in that shot, a number or any
-// other anchor across the whole film (filmShot), but never an unprefixed "word:<text>".
+// Throws when "word:<text>" names words in more than one shot: the cue cannot tell which is meant. The message names the
+// first such word of each shot by its index across the film, the word:<n> form anchors.mjs already reads.
+function checkUnambiguous(text, timeline) {
+  const { word, offset, hits } = wordMatches(text, timeline);
+  const shots = [...new Set(hits.map((h) => h.shot))];
+  if (shots.length <= 1) return;
+  const choices = shots.map((id) => hits.find((h) => h.shot === id)).map((h) => `word:${h.index}${offset} (in "${h.shot}")`);
+  throw new AnchorError(`"${word}" is spoken in more than one shot (${listed(shots.map((s) => `"${s}"`), 'and')}); `
+    + `name the one you mean by its place in the film: ${listed(choices, 'or')}`);
+}
+
+// The film second an explicit cue's `at` names, before any clamp: a number or an anchor across the whole film
+// (filmShot); a word named by its text only when one shot speaks it.
 function explicitSeconds(at, timeline, wholeFilm) {
-  const prefixed = typeof at === 'string' ? SHOT_PREFIX_RE.exec(at) : null;
-  if (prefixed) {
-    const [, id, anchor] = prefixed;
-    const entry = timeline.shots.find((s) => s.id === id);
-    if (entry === undefined) throw new AnchorError(`no shot ${JSON.stringify(id)}; the shots are: ${timeline.shots.map((s) => s.id).join(', ')}`);
-    return entry.start + anchorSeconds(anchor, entry);
-  }
   const word = typeof at === 'string' ? WORD_TEXT_RE.exec(at) : null;
-  if (word) throw new AnchorError(unnamedWordMessage(at, word[1], timeline));
+  if (word) checkUnambiguous(word[1], timeline);
   return anchorSeconds(at, wholeFilm);
 }
 
@@ -146,8 +149,8 @@ function placed(cues, timeline) {
 /**
  * The cue list of `film` on `timeline`: [{ t, cue, gainDb, pan }], t in film seconds. Empty when the film says
  * "sound": "off". The film's own `cues` list ([{ at, cue }]) replaces the planned cues and plays in any mode: `at` is
- * film seconds, an anchor across the whole film (word:<n> and sentence:<n> count across it), or "shot:<id>:<anchor>"
- * read in that shot; a word named by its text must name its shot. Without one, cues are planned only when the mode's
+ * film seconds or an anchor across the whole film (word:<n> and sentence:<n> count across it); a word named by its text
+ * must be spoken in one shot only, else word:<n> names it. Without one, cues are planned only when the mode's
  * `cues` is true or the film says "sound": "on". Either way the look's sounds are checked. `looks` and `modes` are the
  * registries (default: the shared ones). An unknown cue name is an error listing the known names.
  */

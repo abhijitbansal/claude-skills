@@ -4,15 +4,15 @@
 // recordingInput). The bed's samples come only from engine/seeded.mjs and arithmetic: the same grid, length and seed give
 // the same bytes. No clock, no Math.random; child processes take argument arrays.
 import { execFile } from 'node:child_process';
-import { rename, unlink, writeFile } from 'node:fs/promises';
 import { mulberry32 } from '../../../engine/seeded.mjs';
+import { writeWav, WAV_RATE } from './wav.mjs';
 import { findFfmpeg, findFfprobe } from '../../lib/ffmpeg.mjs';
 import { pinkNoise } from '../../lib/cues.mjs';
 import { detectBeats, SAMPLE_RATE as BEAT_RATE, MAX_ANALYSIS_SECONDS } from '../../lib/beats.mjs';
 import { SpecError, recordingFile } from '../spec.mjs';
 import { probeRecording, recordingProblem, recordingInput } from '../voice/master.mjs';
 
-const RATE = 48000;
+const RATE = WAV_RATE; // the bed is synthesised at the rate wav.mjs writes
 const TWO_PI = 2 * Math.PI;
 const DT = 1 / RATE;
 const PEAK = 0.5; // the bed is scaled to this peak before its fades
@@ -26,10 +26,6 @@ const DEFAULT_FPS = 30;
 const LAND_EPSILON = 1e-9; // so a cut exactly one frame from a beat lands
 const ROUNDING = 1e6; // bpm and offset are reported to 1e-6
 const BEATS_PER_BAR = 4;
-const INT16_MAX = 32767;
-const WAV_HEADER_BYTES = 44;
-const CHANNELS = 2;
-const BYTES_PER_SAMPLE = 2;
 const MUSIC_PATH = 'music.src';
 /** detectBeats' confidence a user's music must reach for its beats to be used (version 1 beats.mjs's own default gate). */
 export const BEAT_MIN_CONFIDENCE = 0.5;
@@ -224,41 +220,6 @@ function finished({ left, right }) {
   return { left: left.map((x, i) => x * gain(i)), right: right.map((x, i) => x * gain(i)) };
 }
 
-function wavBytes(left, right) {
-  const data = Buffer.alloc(left.length * CHANNELS * BYTES_PER_SAMPLE);
-  for (let i = 0; i < left.length; i++) {
-    data.writeInt16LE(Math.round(left[i] * INT16_MAX), i * 4);
-    data.writeInt16LE(Math.round(right[i] * INT16_MAX), i * 4 + 2);
-  }
-  const header = Buffer.alloc(WAV_HEADER_BYTES);
-  header.write('RIFF', 0, 'ascii');
-  header.writeUInt32LE(WAV_HEADER_BYTES - 8 + data.length, 4);
-  header.write('WAVEfmt ', 8, 'ascii');
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(CHANNELS, 22);
-  header.writeUInt32LE(RATE, 24);
-  header.writeUInt32LE(RATE * CHANNELS * BYTES_PER_SAMPLE, 28);
-  header.writeUInt16LE(CHANNELS * BYTES_PER_SAMPLE, 32);
-  header.writeUInt16LE(BYTES_PER_SAMPLE * 8, 34);
-  header.write('data', 36, 'ascii');
-  header.writeUInt32LE(data.length, 40);
-  return Buffer.concat([header, data]);
-}
-
-// Writes `bytes` to `out` through a temporary name beside it, renamed into place; the temporary file is removed when
-// writing fails, and the error propagates.
-async function writeAtomically(out, bytes) {
-  const partial = `${out}.partial`;
-  try {
-    await writeFile(partial, bytes);
-    await rename(partial, out);
-  } catch (err) {
-    await unlink(partial).catch((cleanup) => { if (cleanup.code !== 'ENOENT') err.cleanup = cleanup; });
-    throw err;
-  }
-}
-
 function checkBed({ bed, grid, seconds, seed }) {
   if (!BEDS.includes(bed)) throw new RangeError(`renderBed: unknown bed ${JSON.stringify(bed)}; beds: ${BEDS.join(', ')}`);
   if (!isPositive(grid?.bpm)) throw new RangeError(`renderBed: grid.bpm must be a positive number, got ${String(grid?.bpm)}`);
@@ -274,8 +235,7 @@ function checkBed({ bed, grid, seconds, seed }) {
 export async function renderBed({ bed, grid, seconds, seed, out }) {
   checkBed({ bed, grid, seconds, seed });
   const { left, right } = finished(BED_VOICES[bed]({ grid, seconds, seed, length: Math.round(seconds * RATE) }));
-  await writeAtomically(out, wavBytes(left, right));
-  return out;
+  return writeWav(out, left, right);
 }
 
 // ---- a user's own music ----

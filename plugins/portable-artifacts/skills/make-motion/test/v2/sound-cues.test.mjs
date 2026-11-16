@@ -131,7 +131,7 @@ test('an explicit cues list replaces the plan, its anchors resolved across the w
   // word:6 is the film's seventh word, "this." in clip (open has five): 3 + 0.8 s; sentence:1 is open's "Now." at 2.2 s
   const cues = [{ at: 'word:6', cue: 'ding' }, { at: 2, cue: 'riser' }, { at: 'sentence:1', cue: 'chime' }];
   assert.deepEqual(pairs(plan(film({ mode: 'viral', cues }))), [[2, 'riser'], [2.2, 'chime'], [3.8, 'ding']]);
-  assert.deepEqual(pairs(plan(film({ sound: 'on', cues: [{ at: 'shot:rows:word:Forty+0.5', cue: 'drop' }] }))), [[6.6, 'drop']]);
+  assert.deepEqual(pairs(plan(film({ sound: 'on', cues: [{ at: 'word:Forty+0.5', cue: 'drop' }] }))), [[6.6, 'drop']]);
 });
 
 test('an explicit cues list is the author opting in: it plays in pro without "sound", and only "sound": "off" silences it', () => {
@@ -153,25 +153,21 @@ test('a cue on the film end sounds on its last frame, not after it', () => {
 });
 
 test('an explicit anchor outside the film is an error naming the cue, not a silent move to the edge', () => {
-  for (const at of [999, -3, 'end+5', 'shot:rows:end+2']) {
+  for (const at of [999, -3, 'end+5', 'word:Forty+5']) {
     assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 1, cue: 'ding' }, { at, cue: 'chime' }] })),
       /^RangeError: cues\[1\]\.at: "chime" lands at -?[\d.]+ s, outside the film \(0 to 8\.5 s\)/, String(at));
   }
   assert.deepEqual(pairs(plan(film({ mode: 'viral', cues: [{ at: 'end', cue: 'ding' }] }))).length, 1, 'the film end itself is inside');
 });
 
-test('a word named by its text must name its shot: shot:<id>:<anchor> resolves in that shot, as an on event does', () => {
-  assert.deepEqual(pairs(plan(film({ mode: 'viral', cues: [{ at: 'shot:clip:word:this', cue: 'ding' }] }))), [[3.8, 'ding']]);
-  assert.deepEqual(pairs(plan(film({ mode: 'viral', cues: [{ at: 'shot:clip:start+0.5', cue: 'ding' }] }))), [[3.5, 'ding']]);
-  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 'word:this', cue: 'ding' }] })),
-    /cues\[0\]\.at: a word named by its text must name its shot: write "shot:clip:word:this"/);
-  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 'shot:nope:start', cue: 'ding' }] })),
-    /cues\[0\]\.at: no shot "nope"; the shots are: open, clip, rows/);
-  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 'shot:clip:word:nothing', cue: 'ding' }] })), /cues\[0\]\.at: no word "nothing" in shot "clip"/);
+test('a word named by its text that only one shot speaks resolves across the film; one no shot speaks is an error', () => {
+  assert.deepEqual(pairs(plan(film({ mode: 'viral', cues: [{ at: 'word:this', cue: 'ding' }] }))), [[3.8, 'ding']]);
+  assert.deepEqual(pairs(plan(film({ mode: 'viral', cues: [{ at: 'word:Read+0.1', cue: 'ding' }] }))), [[3.3, 'ding']]);
+  assert.throws(() => plan(film({ mode: 'viral', cues: [{ at: 'word:nothing', cue: 'ding' }] })), /cues\[0\]\.at: no word "nothing"/);
 });
 
-test('a word text spoken in two shots is ambiguous unprefixed: the error names both shots', () => {
-  const f = { version: 2, mode: 'viral', cues: [{ at: 'word:go', cue: 'ding' }], shots: [{ id: 'a', show: 'statement', say: 'Go.' }, { id: 'b', show: 'statement', say: 'Go.' }] };
+test('a word text spoken in two shots is ambiguous: the error names each by its index across the film (word:<n>)', () => {
+  const f = { version: 2, mode: 'viral', cues: [{ at: 'word:go+0.1', cue: 'ding' }], shots: [{ id: 'a', show: 'statement', say: 'Go.' }, { id: 'b', show: 'statement', say: 'Go.' }] };
   const timeline = {
     fps: FPS, duration: 4, frameCount: 120, timed: 'estimated',
     shots: [
@@ -179,7 +175,9 @@ test('a word text spoken in two shots is ambiguous unprefixed: the error names b
       { id: 'b', index: 1, start: 2, end: 4, duration: 2, words: [word('Go.', 0, 0.4)], sentences: [] },
     ],
   };
-  assert.throws(() => planCues(f, timeline), /cues\[0\]\.at: a word named by its text must name its shot: "go" is spoken in shots "a" and "b"; write "shot:a:word:go"/);
+  assert.throws(() => planCues(f, timeline),
+    /cues\[0\]\.at: "go" is spoken in more than one shot \("a" and "b"\); name the one you mean by its place in the film: word:0\+0\.1 \(in "a"\) or word:1\+0\.1 \(in "b"\)/);
+  assert.deepEqual(pairs(planCues({ ...f, cues: [{ at: 'word:1+0.1', cue: 'ding' }] }, timeline)), [[2.1, 'ding']], 'the index form names the second');
 });
 
 test('a bad anchor in the explicit list is an error naming its path', () => {

@@ -2,17 +2,16 @@
 // the cues they already have; sub, paper, marker and the riser are new, pure sample generators seeded from the film
 // seed through engine/seeded.mjs. renderCues lays a cue list (cues.mjs planCues) into one stereo track of the film's
 // length. Nothing here reads a clock or Math.random: the same cues and seed give the same bytes.
-import { rename, unlink, writeFile } from 'node:fs/promises';
 import { CUE_LAYERS, SAMPLE_RATE, cueWav, pinkNoise } from '../../lib/cues.mjs';
 import { mulberry32 } from '../../../engine/seeded.mjs';
+import { writeWav } from './wav.mjs';
 
 const PEAK = 0.5; // every voice peaks here (-6 dBFS), as version 1 levels its cues, so a cue's gain is a literal gain
 const LIMIT = 0.98; // the cue track is hard-limited here
 const TAIL_SECONDS = 0.005; // linear fade to silence at the end of a voice, so it never ends on a click
 const TWO_PI = 2 * Math.PI;
 const DT = 1 / SAMPLE_RATE;
-const INT16_MAX = 32767;
-const WAV_HEADER_BYTES = 44;
+const WAV_HEADER_BYTES = 44; // of the version 1 cue WAVs cueWav returns
 const CHANNELS = 2;
 const BYTES_PER_SAMPLE = 2;
 const SEED_LIMIT = 0xffffffff; // the largest seed the 32-bit generator tells apart
@@ -214,30 +213,6 @@ function addInto(left, right, xs, start, gain, pan) {
   }
 }
 
-// A 16-bit stereo PCM WAV of the two channels, each sample hard-limited at LIMIT.
-function wavBytes(left, right) {
-  const data = Buffer.alloc(left.length * CHANNELS * BYTES_PER_SAMPLE);
-  const pcm = (x) => Math.round(Math.max(-LIMIT, Math.min(LIMIT, x)) * INT16_MAX);
-  for (let i = 0; i < left.length; i++) {
-    data.writeInt16LE(pcm(left[i]), i * 4);
-    data.writeInt16LE(pcm(right[i]), i * 4 + 2);
-  }
-  const header = Buffer.alloc(WAV_HEADER_BYTES);
-  header.write('RIFF', 0, 'ascii');
-  header.writeUInt32LE(WAV_HEADER_BYTES - 8 + data.length, 4);
-  header.write('WAVEfmt ', 8, 'ascii');
-  header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20); // PCM
-  header.writeUInt16LE(CHANNELS, 22);
-  header.writeUInt32LE(SAMPLE_RATE, 24);
-  header.writeUInt32LE(SAMPLE_RATE * CHANNELS * BYTES_PER_SAMPLE, 28);
-  header.writeUInt16LE(CHANNELS * BYTES_PER_SAMPLE, 32);
-  header.writeUInt16LE(BYTES_PER_SAMPLE * 8, 34);
-  header.write('data', 36, 'ascii');
-  header.writeUInt32LE(data.length, 40);
-  return Buffer.concat([header, data]);
-}
-
 /**
  * Writes `out` (through a temporary name, renamed into place): a stereo 48 kHz 16-bit WAV `seconds` long with each
  * cue's samples added from round(t x 48000) (a riser so its peak falls there, its 4 ms release after), scaled by its
@@ -267,19 +242,7 @@ export async function renderCues(cues, { seconds, seed, out }) {
     const xs = voices.get(cue);
     addInto(left, right, xs, cue === RISER_CUE ? anchor - riserPeakIndex(xs) : anchor, 10 ** (gainDb / 20), pan);
   }
-  await writeAtomically(out, wavBytes(left, right));
+  await writeWav(out, left, right, { limit: LIMIT });
   return { file: out, dropped };
 }
 
-// Writes `bytes` to `out` through a temporary name beside it, renamed into place; the temporary file is removed when
-// writing fails, and the error propagates.
-async function writeAtomically(out, bytes) {
-  const partial = `${out}.partial`;
-  try {
-    await writeFile(partial, bytes);
-    await rename(partial, out);
-  } catch (err) {
-    await unlink(partial).catch((cleanup) => { if (cleanup.code !== 'ENOENT') err.cleanup = cleanup; });
-    throw err;
-  }
-}
