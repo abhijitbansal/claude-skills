@@ -63,14 +63,14 @@
     {
       "id": "bar",
       "show": "quote",
-      "say": "A look that does not reach the bar of those two is cut, not shipped weak.",
+      "say": "A look that falls short of the bar is cut, not shipped weak.",
       "by": "The design, section 5.1"
     },
     {
       "id": "close",
       "show": "end",
       "say": "Write the script. Ship the film.",
-      "ask": "Try it",
+      "ask": "Get portable-artifacts",
       "mark": "make-motion"
     }
   ]

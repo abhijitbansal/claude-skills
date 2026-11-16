@@ -33,7 +33,10 @@ export const TRACK_RATE = MASTER_RATE; // the voice track, from the first mix to
 // The voice in the MP4: AAC at 48 kHz, 160 kbit/s, two channels. Stereo (the mono voice on both) because players and
 // platforms expect it and a later music bed is stereo; the master is made stereo before it is measured, so the
 // loudness it reaches is the loudness of the file (a mono master copied to two channels would measure 3 LU louder).
-export const AAC_AUDIO = Object.freeze(['-c:a', 'aac', '-b:a', '160k', '-ar', String(MASTER_RATE), '-ac', '2']);
+// Perceptual noise substitution off: the encoder's PNS replaces a noisy band with its own noise, independently in each
+// channel, and on a transient frame that noise can peak far over the master (kinds-pop: a -3.2 dBTP master encoded to
+// +0.3 dBTP, one channel mangled at 4.20 s; measured over a gain sweep, PNS off keeps the encode within 0.2 dB of it).
+export const AAC_AUDIO = Object.freeze(['-c:a', 'aac', '-b:a', '160k', '-aac_pns', '0', '-ar', String(MASTER_RATE), '-ac', '2']);
 /** The voice's integrated loudness may miss the mode's target by this many LU; more refuses the film. */
 export const LOUDNESS_TOLERANCE_LU = 1;
 /**
@@ -52,6 +55,8 @@ export const BED_UNDER_VOICE_LU = 18;
 export const MUSIC_FADE_SECONDS = 1;
 /** The note of a film without a voice whose cues and music peak at the ceiling before they reach the mode's target. */
 export const NO_VOICE_NOTE = 'the film has no narration, and its cues and music cannot reach the mode\'s loudness target under its peak ceiling: they were raised as far as the ceiling (and, for music, its limiter) allows';
+/** The note of a film whose AAC encode peaked over the mode's ceiling and was lowered to it, ending short of the target. */
+export const HELD_NOTE = 'the sound\'s AAC encode peaked over the mode\'s ceiling, so it was lowered to the ceiling and sits under the mode\'s loudness target';
 
 const SHAPING_FRAME_SAMPLES = 48; // 1 ms at 48 kHz: the gain expression steps once a frame
 const HIGHPASS_HZ = 80;
@@ -612,6 +617,8 @@ const OWN_MP4_DEMUXERS = 'mov,mp4,m4a';
 export const ownMp4Input = (file) => ['-protocol_whitelist', 'file', '-format_whitelist', OWN_MP4_DEMUXERS, '-f', 'mov', '-i', file];
 // At most this many encodes after the first, each raised by what the last one fell short of the target.
 const ENCODE_ROUNDS = 2;
+// Then at most this many more, each lowering an encode whose true peak is over the mode's ceiling.
+const HOLD_ROUNDS = 2;
 
 /**
  * The ffmpeg arguments of the master's encode: the mastered WAV `master` (with `gainDb`, 0 by default) as AAC_AUDIO,
@@ -659,24 +666,39 @@ function encodeRaise(level, loudness) {
   return Math.max(0, hundredths(Math.min(loudness.lufs - level.lufs, ceilingFor(loudness.truePeakDb) - level.truePeakDb)));
 }
 
+// How far to lower an encode whose true peak is over the mode's ceiling: down to ceilingFor, as the master was capped
+// (negative). 0: it is at or under the ceiling.
+function encodeHold(level, loudness) {
+  if (level.truePeakDb === null || level.truePeakDb <= loudness.truePeakDb) return 0;
+  return hundredths(ceilingFor(loudness.truePeakDb) - level.truePeakDb);
+}
+
 /**
  * Encodes the mastered WAV `master` to `out` (encodeArgs) before any frame is captured and measures the encode: AAC
  * can take more than a decibel from noise-like sound (final review I3). An encode more than MASTER_AIM_LU short of
  * `loudness` is made again with the shortfall added as gain, as far as the true peak allows, at most ENCODE_ROUNDS
- * times. Resolves `{ file: out, level, gainDb }`: the level of the stream the mux will copy (measureFile's shape) and
- * the gain added. The caller judges `level` with the finished file's rule.
+ * times. Then, as the last stage, an encode whose true peak is over the mode's ceiling (the encoder can add more than
+ * ceilingFor leaves it) is made again lowered to ceilingFor, at most HOLD_ROUNDS times, and never raised after.
+ * Resolves `{ file: out, level, gainDb, held }`: the level of the stream the mux will copy (measureFile's shape), the
+ * gain added, and whether it was lowered to the ceiling (judgeLevel's `held`). The caller judges `level` with the
+ * finished file's rule.
  */
 export async function encodeMaster({ run, master, out, duration, loudness }) {
   try {
     let gainDb = 0;
-    await step(run, encodeArgs({ master, out, duration, gainDb }), 'sound encode');
-    let level = await measureFile({ run, file: out });
-    for (let round = 0; round < ENCODE_ROUNDS && encodeRaise(level, loudness) > 0; round++) {
-      gainDb = hundredths(gainDb + encodeRaise(level, loudness));
+    const encode = async (moveDb) => {
+      gainDb = hundredths(gainDb + moveDb);
       await step(run, encodeArgs({ master, out, duration, gainDb }), 'sound encode');
-      level = await measureFile({ run, file: out });
+      return measureFile({ run, file: out });
+    };
+    let level = await encode(0);
+    for (let round = 0; round < ENCODE_ROUNDS && encodeRaise(level, loudness) > 0; round++) level = await encode(encodeRaise(level, loudness));
+    let held = false;
+    for (let round = 0; round < HOLD_ROUNDS && encodeHold(level, loudness) < 0; round++) {
+      level = await encode(encodeHold(level, loudness));
+      held = true;
     }
-    return { file: out, level, gainDb };
+    return { file: out, level, gainDb, held };
   } catch (err) {
     throw asAudioError(err);
   }
@@ -704,13 +726,14 @@ export async function muxVoice({ run, video, audio, out, duration }) {
  * of the target is not refused: `audio` comes back with NO_VOICE_NOTE as its note. Over the target or over the ceiling
  * is refused either way. `tolerance` (LU, default LOUDNESS_TOLERANCE_LU): render.mjs judges both the AAC encode of
  * the master before capture (encodeMaster) and the finished file with the default; the encode is the stream the mux
- * copies, so a film that would fail late fails early.
+ * copies, so a film that would fail late fails early. `held`: the encode was lowered to the ceiling (encodeMaster), so a
+ * level short of the target is not refused either: `audio` comes back with HELD_NOTE as its note.
  */
-export function judgeLevel(audio, loudness, subject = 'the finished film', { noVoice = false, tolerance = LOUDNESS_TOLERANCE_LU } = {}) {
+export function judgeLevel(audio, loudness, subject = 'the finished film', { noVoice = false, held = false, tolerance = LOUDNESS_TOLERANCE_LU } = {}) {
   const short = audio.lufs !== null && audio.lufs < loudness.lufs - tolerance;
-  if (short && noVoice) {
+  if (short && (noVoice || held)) {
     if (audio.truePeakDb !== null && audio.truePeakDb > loudness.truePeakDb) judgeLevel({ ...audio, lufs: null }, loudness, subject);
-    return { ...audio, note: NO_VOICE_NOTE };
+    return { ...audio, note: noVoice ? NO_VOICE_NOTE : HELD_NOTE };
   }
   if (short) {
     throw new AudioError(`voice loudness: ${subject} measures ${audio.lufs} LUFS, more than ${tolerance} LU under the mode's target of ${loudness.lufs} LUFS`, { hint: LEVEL_SHORT_HINT });

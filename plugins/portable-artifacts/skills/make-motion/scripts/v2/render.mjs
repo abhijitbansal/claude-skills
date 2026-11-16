@@ -187,7 +187,6 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     // short of the target (judgeLevel noVoice).
     const narrated = steps !== null && steps.hasNarration(voice);
     const subject = narrated ? 'the mastered narration' : 'the mastered sound';
-    const judgement = { noVoice: !narrated };
     mkdirSync(path.dirname(out), { recursive: true });
     sweepPartials(path.dirname(out));
     if (steps !== null) work = mkdtempSync(path.join(tmpdir(), 'mm-voice-'));
@@ -196,6 +195,8 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     // that encode judged with the finished file's rule, so a film that would fail after the capture fails here. The mux
     // copies this stream, so the judgement after it can no longer differ.
     const encoded = master === null ? null : await steps.encodeMaster({ run, master, out: path.join(work, 'sound.m4a'), duration: open.timeline.duration, loudness });
+    // An encode lowered to the ceiling (encodeMaster's held) may sit under the target: noted, not refused.
+    const judgement = { noVoice: !narrated, held: encoded?.held ?? false };
     if (encoded !== null) steps.judgeLevel(encoded.level, loudness, subject, judgement);
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact })], signal);
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });

@@ -17,6 +17,7 @@ import {
   LEVELS, RAMP_SECONDS, VOICE_RATE, TRACK_RATE, AAC_AUDIO, gainStages, shapingFilter, masterArgs, masterVoice, voiceTrackArgs, muxArgs, masterTrack, muxVoice,
   judgeLevel, measureFile, AUDIO_HINT, MASTER_AIM_LU, mixArgs, recordingInput, encodeArgs, encodeMaster,
 } from '../../scripts/v2/voice/master.mjs';
+import * as voiceMaster from '../../scripts/v2/voice/master.mjs';
 import { ceilingFor } from '../../scripts/lib/loudness.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { renderFilm } from '../../scripts/v2/render.mjs';
@@ -317,10 +318,36 @@ test('encodeMaster raises an encode only as far as the true peak allows, and not
   assert.deepEqual(onCeiling.gains, [0], 'no room: no re-encode');
 });
 
+test('encodeMaster pulls an encode over the mode\'s ceiling back to ceilingFor, and never returns it over (kinds-pop: +0.3 dBTP)', async () => {
+  const once = encodeRun([[-14.1, 0.3], [-14.6, -1.5]]); // viral: ceiling -1, ceilingFor(-1) = -1.5
+  const held = await encodeMaster({ run: once.run, master: '/w/m.wav', out: '/w/m.m4a', duration: 4, loudness: VIRAL.loudness });
+  assert.deepEqual(once.gains, [0, -1.8], 'lowered by the true peak over ceilingFor: 0.3 - (-1.5)');
+  assert.deepEqual([held.gainDb, held.level.truePeakDb, held.held], [-1.8, -1.5, true]);
+  const twice = encodeRun([[-14.1, 0.3], [-14.4, -0.6], [-14.6, -1.5]]);
+  const again = await encodeMaster({ run: twice.run, master: '/w/m.wav', out: '/w/m.m4a', duration: 4, loudness: VIRAL.loudness });
+  assert.deepEqual(twice.gains, [0, -1.8, -2.7], 'still over after the first hold: lowered again from where it landed');
+  assert.ok(again.level.truePeakDb <= VIRAL.loudness.truePeakDb);
+  const raisedOver = encodeRun([[-15.5, -3], [-14, -0.5], [-14.4, -1.5]]);
+  const back = await encodeMaster({ run: raisedOver.run, master: '/w/m.wav', out: '/w/m.m4a', duration: 4, loudness: VIRAL.loudness });
+  assert.deepEqual(raisedOver.gains, [0, 1.5, 0.5], 'a raise that lands over the ceiling is held back, and not raised again');
+  assert.equal(back.held, true);
+  const clean = encodeRun([[-14.1, -2]]);
+  assert.equal((await encodeMaster({ run: clean.run, master: '/w/m.wav', out: '/w/m.m4a', duration: 4, loudness: VIRAL.loudness })).held, false);
+});
+
+test('judgeLevel: an encode held at the ceiling that falls short of the target renders with HELD_NOTE; over the ceiling is still refused', () => {
+  const short = { lufs: -15.9, truePeakDb: -1.5, note: null };
+  assert.throws(() => judgeLevel(short, VIRAL.loudness), /more than 1 LU under/, 'not held: short is refused as before');
+  assert.deepEqual(judgeLevel(short, VIRAL.loudness, undefined, { held: true }), { ...short, note: voiceMaster.HELD_NOTE });
+  assert.equal(typeof voiceMaster.HELD_NOTE, 'string');
+  assert.deepEqual(judgeLevel({ ...short, lufs: -14.4 }, VIRAL.loudness, undefined, { held: true }), { ...short, lufs: -14.4 }, 'within tolerance: no note');
+  assert.throws(() => judgeLevel({ ...short, truePeakDb: -0.5 }, VIRAL.loudness, undefined, { held: true }), /true peak of -0\.5 dBTP, over the mode's ceiling/);
+});
+
 test('encodeArgs encodes the master WAV as AAC 48 kHz at 160 kbit/s, audio only, capped at the film length; muxArgs copies it and the video (final review I3)', () => {
-  assert.deepEqual(AAC_AUDIO, ['-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-ac', '2']);
+  assert.deepEqual(AAC_AUDIO, ['-c:a', 'aac', '-b:a', '160k', '-aac_pns', '0', '-ar', '48000', '-ac', '2']);
   const encode = encodeArgs({ master: '/w/m.wav', out: '/w/m.m4a', duration: 8.4 }).join(' ');
-  assert.match(encode, /-protocol_whitelist file -format_whitelist wav -f wav -i \/w\/m\.wav -map 0:a:0 .*-c:a aac -b:a 160k -ar 48000 -ac 2 -t 8\.4000 -f mp4 \/w\/m\.m4a$/);
+  assert.match(encode, /-protocol_whitelist file -format_whitelist wav -f wav -i \/w\/m\.wav -map 0:a:0 .*-c:a aac -b:a 160k -aac_pns 0 -ar 48000 -ac 2 -t 8\.4000 -f mp4 \/w\/m\.m4a$/);
   assert.match(encodeArgs({ master: '/w/m.wav', out: '/w/m.m4a', duration: 8.4, gainDb: 1.6 }).join(' '), /-af volume=1\.60dB -c:a aac/);
   const args = muxArgs({ video: '/o/v.mp4', audio: '/w/m.m4a', out: '/o/f.mp4', duration: 8.4 });
   const joined = args.join(' ');
@@ -337,6 +364,47 @@ const needFfmpeg = async (t) => {
   if (!ffmpeg) t.skip('no ffmpeg');
   return ffmpeg;
 };
+
+// Transient-rich sound: faint hiss under short loud noise bursts, from a seeded generator. Frames like these are where the
+// native AAC encoder's perceptual noise substitution (PNS) puts its own noise, independently in each channel, and
+// kinds-pop's encode (dual mono, -3.2 dBTP) came out at +0.3 dBTP with one channel mangled at 4.20 s.
+function hissBursts(seed, { hiss, burst, burstSamples }) {
+  let state = seed;
+  const noise = () => { state = (state * 1103515245 + 12345) % 2147483648; return state / 1073741824 - 1; };
+  return Float32Array.from({ length: 4 * TRACK_RATE }, (_, i) => hiss * noise() + (i % 9000 < burstSamples ? burst * noise() : 0));
+}
+// `samples` as a 48 kHz 16-bit stereo WAV with the same samples in both channels: the shape of a mastered voice.
+function writeDualMonoWav(ffmpeg, file, samples) {
+  const mono = path.join(path.dirname(file), `.mono-${path.basename(file)}`);
+  writeWav(mono, samples, TRACK_RATE);
+  const r = spawnSync(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-i', mono, '-ac', '2', '-c:a', 'pcm_s16le', file], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+}
+const BURSTS = [{ hiss: 0.02, burst: 0.4, burstSamples: 400 }, { hiss: 0.025, burst: 0.3, burstSamples: 200 }];
+const BURST_SEEDS = Array.from({ length: 10 }, (_, k) => 1 + 7 * k);
+const AAC_ROOM_DB = VIRAL.loudness.truePeakDb - ceilingFor(VIRAL.loudness.truePeakDb); // 0.5 dB: what ceilingFor leaves the encode
+
+test('the AAC encode adds at most ceilingFor\'s 0.5 dB to the true peak of transient-rich sound (PNS off; with it, kinds-pop gained 3.5 dB)', async (t) => {
+  const ffmpeg = await needFfmpeg(t);
+  if (!ffmpeg) return;
+  const run = realRun(ffmpeg);
+  const work = path.join(dir, 'aac-overshoot');
+  mkdirSync(work, { recursive: true });
+  const overshoots = [];
+  for (const [k, shape] of BURSTS.entries()) {
+    for (const seed of BURST_SEEDS) {
+      const wav = path.join(work, `bursts-${k}-${seed}.wav`);
+      writeDualMonoWav(ffmpeg, wav, hissBursts(seed, shape));
+      const encoded = path.join(work, `bursts-${k}-${seed}.m4a`);
+      assert.equal((await run(encodeArgs({ master: wav, out: encoded, duration: 4 }))).code, 0);
+      const [source, aac] = [await measureFile({ run, file: wav }), await measureFile({ run, file: encoded })];
+      overshoots.push({ k, seed, db: Math.round((aac.truePeakDb - source.truePeakDb) * 10) / 10 });
+    }
+  }
+  const worst = overshoots.reduce((a, b) => (b.db > a.db ? b : a));
+  t.diagnostic(`worst AAC overshoot ${worst.db} dB (shape ${worst.k}, seed ${worst.seed}) over ${overshoots.length} encodes`);
+  assert.ok(worst.db <= AAC_ROOM_DB, `the encode added ${worst.db} dB to shape ${worst.k} seed ${worst.seed}: more than the ${AAC_ROOM_DB} dB ceilingFor leaves`);
+});
 
 // A film with a long held first shot and a held shot between two narrated ones, and a fake synthesiser's sidecar for
 // it: word k of a shot at WORD_FIRST + k * WORD_STEP in that shot's WAV.
