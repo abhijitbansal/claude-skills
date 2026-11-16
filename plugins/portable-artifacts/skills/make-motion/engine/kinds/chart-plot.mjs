@@ -1,7 +1,5 @@
 // The chart kind's plot for its type, drawn into an area (chart-desk.mjs, chart-pop.mjs), and the band at the bottom of
 // the frame its captions take (engine/captions), which a plot keeps clear of. Pure and DOM-free.
-import { registries } from '../registry.mjs';
-import { compositionRect } from './shared.mjs';
 import { drawColumns, drawBars } from './chart-draw.mjs';
 import { drawSeries } from './chart-series.mjs';
 import { drawDonut } from './chart-donut.mjs';
@@ -14,11 +12,4 @@ export function drawPlot(shot, ctx, style, area, { valueOnHighlight, headroom = 
   return drawSeries(shot, ctx, style, area, { valueOnHighlight, area: shot.type === 'area', headroom });
 }
 
-/**
- * The top of the caption band, in px, for a composition the captions would otherwise cover; Infinity with captions off
- * or where the captions already keep out of the composition (a platform-safe composition gives the band up in kindContext).
- */
-export function captionTop(ctx) {
-  if (ctx.captions === false || compositionRect(ctx).safe) return Infinity; // captions off: the band is the plot's
-  return registries.captions.get(ctx.look.captions).zone(ctx)[1];
-}
+export { captionTop } from './shared.mjs'; // moved there: the clipping keeps clear of the band too

@@ -19,8 +19,9 @@ export const pop = {
   summary: 'Short-form caption collage: a near-black field, one heavy condensed grotesque in capitals, an acid accent and springy pops. The look of mode viral.',
   modes: ['viral'],
   fonts: {
-    // wordSpace 0.26 em: the face's own space is about 7% of the cap height and runs caps words together
-    display: { family: 'Archivo', weight: 900, width: 'extra-condensed', wordSpace: 0.26 },
+    // wordSpace 0.18 em: the face's own space is about 7% of the cap height and runs caps words together; at 0.26 a
+    // line set large read as stretched (look review 1), so a plain word space wide enough to part caps words
+    display: { family: 'Archivo', weight: 900, width: 'extra-condensed', wordSpace: 0.18 },
     text: { family: 'Archivo', weight: 700, width: 'condensed' },
     label: { family: 'Archivo', weight: 700, width: 'normal' },
   },
@@ -36,6 +37,10 @@ export const pop = {
   field: { field: 'halftone', params: { color: 'rule', strength: 0.5 } },
   // how shots lay out: a stack of short lines, each set at its own size to fill the width, flush left
   composition: 'stack',
+  // the stack: no line more than `ratio` times its neighbour (lines fill by size only); on a tall frame the block's
+  // middle on `centre` of the composition area's height, its optical centre (a wide frame centres it)
+  // and a viral hook (the first statement) set a word a line when that is larger, within `hook` of the height
+  stack: { ratio: 1.35, centre: 0.45, hook: 0.4 },
   // emphasis recolours a word; the stack's size contrast is the hierarchy, so nothing scales
   emphasis: 'recolor',
   moves: {
@@ -49,7 +54,8 @@ export const pop = {
   camera: { drift: 0, style: 'locked' },
   cuts: ['cut', 'punch', 'slide'],
   keyline: 14,
-  shadow: { dx: 10, dy: 10, blur: 0, alpha: 1, color: '#ff4d2e' },
+  // the hard offset shadow in the accent (look review 1: the orange-red was the film's only second hue)
+  shadow: { dx: 10, dy: 10, blur: 0, alpha: 1, color: '#d7ff3f' },
   // Styling for the devices this look draws. Colours are palette keys (or #rrggbb), sizes are units.
   devices: {
     sticker: { outline: 'ink', width: 10, rotate: 4 },
@@ -76,13 +82,16 @@ export const pop = {
     // list: one item at a time as a stack under a count tag; a note in the text face at the largest of `smallSteps` the
     // stack stays three times, its cap line `noteGap` under the item
     list: { noteGap: 32, smallSteps: [1, 2] },
-    // quote: a stack behind an accent opening mark `mark` em of its first line tall, reaching `into` of its height into
-    // the line; the attribution a tag `tagGap` under it at the largest of `tagSteps` that fits; a portrait `portrait` of
+    // quote: a stack under an accent opening mark `mark` em of its first line tall, reaching `into` of its height into
+    // the line (negative: that share of its height clear above it; look review 1 saw the mark's tail on the first
+    // letters); the attribution a tag `tagGap` under it at the largest of `tagSteps` that fits; a portrait `portrait` of
     // the short side over the mark
-    quote: { mark: 1.1, into: 0.15, tagGap: 40, tagSteps: [1, 2], portrait: 0.24 },
+    quote: { mark: 1.1, into: -0.15, tagGap: 40, tagSteps: [1, 2], portrait: 0.24 },
     // compare: one side at a time as a stack under its tag; the points `pointGap` under it at the largest of `pointSteps`
     // the stack stays three times
-    compare: { pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32 },
+    // on a tall frame (`stackTall`) both sides at once, A over B `sideGap` apart, the unspoken one at `dim` opacity, a
+    // value's size at most `valueTall` of a side's height
+    compare: { pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32, stackTall: true, sideGap: 64, dim: 0.35, valueTall: 0.3 },
     // chart: the claim as a tag at the largest of `tagSteps` that holds it on a line, the plot `tagGap` under it; the
     // highlighted value a numeral up to `numeralMax`, at most `numeralShare` of the plot's height and `numeralWidth` of its
     // width, top right in the plot with the marks `numeralGap` under it (a donut's: in the hole, `holeShare` of the ring);

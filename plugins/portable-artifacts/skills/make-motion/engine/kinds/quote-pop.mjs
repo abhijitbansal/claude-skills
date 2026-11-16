@@ -1,7 +1,7 @@
 // The `quote` kind in a stack composition (pop): the quotation as a stack (stack.mjs) with no marks in its words; its
-// opening mark is a giant shape in the accent, `mark` em of the first line tall, flush left on the stack's edge and
-// drawn behind the first line, which it reaches `into` of its own height (a shape, not a glyph: it is drawn, not set,
-// so it is never a second size or a text on text). The attribution is a tag `tagGap` under the stack, label caps on the
+// opening mark is a giant shape in the accent, `mark` em of the first line tall, flush left on the stack's edge over
+// the first line, which it reaches `into` of its own height (negative in pop: it stands clear above it; a shape, not a
+// glyph: it is drawn, not set, so it is never a second size or a text on text). The attribution is a tag `tagGap` under the stack, label caps on the
 // look's tag colours at the largest of `tagSteps` that fits the width, wrapped when it still does not. A portrait is a
 // cut-out `portrait` of the short side at its longest, beside the mark over the first line (over the mark when the row
 // is too narrow). Pure and DOM-free.

@@ -18,7 +18,7 @@ import {
 
 export { formatValue } from './shared.mjs'; // where it lives now
 import { NUMBER_WORDS, ONES, TENS } from './words.mjs';
-import { stackArea } from './stack.mjs';
+import { stackArea, centredTop } from './stack.mjs';
 import { slugNodes } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
@@ -248,11 +248,12 @@ function plainDelta(ctx, id, words, { left, top, maxWidth, at }) {
   return { nodes: [entrance({ id, at, look, unit, cx, cy, children: [text] })], box, descent: WORD_DESCENT * font.size };
 }
 
-// The label in label caps at scale step `step`, in ink, with its ink starting at `left`, wrapped to the right margin.
+// The label in the display face at scale step `step`, in ink, with its ink starting at `left`, wrapped to the right
+// margin (look review 1: mono capitals at headline size read as borrowed from another system).
 function deskLabel(shot, ctx, left, step) {
   const { look, canvas, unit, measure } = ctx;
-  const font = fontFor(look, 'label', sizeAt(look, step, unit), unit);
-  const layout = layoutText({ text: setCase(look, 'label', shot.label), font, maxWidth: gridX(look, canvas, RIGHT_EDGE) - left, measure });
+  const font = fontFor(look, 'display', sizeAt(look, step, unit), unit);
+  const layout = layoutText({ text: setCase(look, 'display', shot.label), font, maxWidth: gridX(look, canvas, RIGHT_EDGE) - left, measure });
   const ink = firstLineInk(layout, font, measure);
   // up: first line's ink top to the last baseline
   return { font, layout, x: left - ink.left, up: ink.up + layout.lines.at(-1).y - layout.lines[0].y };
@@ -326,7 +327,7 @@ function popParts(shot, ctx, steps, times) {
   const labelH = labelTag(0).box[3];
   const deltaH = shot.delta === undefined ? 0 : POP.deltaGap * unit + deltaTag(0).box[3];
   const blockH = kickerH + CAP_HEIGHT * fig.size + POP.tagGap * unit + labelH + deltaH;
-  const baseline = area.top + (area.h - blockH) / HALF + kickerH + CAP_HEIGHT * fig.size;
+  const baseline = centredTop(area, blockH, ctx) + kickerH + CAP_HEIGHT * fig.size; // on the optical centre when tall
   const enterAt = times.start + look.moves.enter.dur;
   const tracks = times.matched
     ? { scale: pulseScale(look, { pulse: times.land }) }

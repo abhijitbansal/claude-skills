@@ -249,7 +249,9 @@ function boxesFor(placed, words) {
 // A stack (stack.mjs): one text node per line inside the hero group, the kicker as a tag over the first line.
 function expandStacked(shot, ctx) {
   const { look, unit, timing } = ctx;
-  const placed = composeStack(sourceText(shot, look), shot, ctx);
+  // a viral film's first statement (the hook, read from frame 0) may be set a word a line, larger (stack.mjs hookLines)
+  const hook = timing.index === 0 && ctx.mode.hookFromFrameZero === true;
+  const placed = composeStack(sourceText(shot, look), shot, ctx, undefined, { hook });
   const texts = placed.lines.flatMap((line) => line.layout.lines[0].words.map((w) => w.text));
   const times = wordTimes(texts, timing).map(({ at, spoken }) => ({ at, emphasised: spoken !== null && timing.words[spoken].emphasis }));
   const hero = heroId(shot, 'text');

@@ -108,7 +108,7 @@ test('desk end at 16:9 (hand computed): title flush left on column 2 at 242, the
   assert.equal(title.props.x, gridX(look, canvas, 2));
   assert.equal(title.props.x, 242);
   const ask = textNode(nodes, 'close.ask');
-  assert.equal(ask.props.font.family, look.fonts.text.family, 'the ask in the text face');
+  assert.equal(ask.props.font.family, look.fonts.label.family, 'the ask in the label face (look revision 1)');
   const askSize = ask.props.font.size;
   assert.ok([look.scale[1], look.scale[2]].includes(askSize), `ask at step 2 or 3: ${askSize}`);
   assert.ok(size >= 3 * askSize - EPS, 'the title is at least three times the ask');
@@ -183,15 +183,18 @@ test('pop end at 16:9 (hand computed): the mark a tag over the stack, the title 
   const lines = group.children.filter((n) => n.id !== 'close.title.ask');
   const ask = group.children.at(-1);
   assert.equal(ask.id, 'close.title.ask');
-  // each line fills the width (or stops at the stack's cap), unless the whole block was set smaller to fit the height
+  // each line fills the width (or stops at the stack's cap, or is held within the look's ratio of a neighbour), unless
+  // the whole block was set smaller to fit the height
   const tag = nodes.find((n) => n.id === 'close.kicker');
   const plate = plateBox(tag);
   const blockHeight = lineInk(ask).baseline - plate[1];
-  const shrunk = Math.abs(blockHeight - 936) < 1e-6;
+  // set smaller to fill the 936 px: the block then ends at the bottom of the ask's box, its descent under the baseline
+  const shrunk = Math.abs(blockHeight + 0.12 * ask.props.font.size - 936) < 1e-6;
   for (const line of lines) {
     const ink = lineInk(line);
     assert.ok(Math.abs(ink.left - 72) <= 1, `${line.id} flush left at ${ink.left}`);
-    assert.ok(ink.right <= 1848 + 1 && (shrunk || line.props.font.size >= STACK.max - EPS || ink.right >= 1847), `${line.id} fills the width: ${ink.right}`);
+    const held = lines.some((m) => m !== line && Math.abs(line.props.font.size - m.props.font.size * look.stack.ratio) < 1e-6);
+    assert.ok(ink.right <= 1848 + 1 && (shrunk || held || line.props.font.size >= STACK.max - EPS || ink.right >= 1847), `${line.id} fills the width: ${ink.right}`);
     assert.equal(line.props.stack, 'close.title');
   }
   assert.ok(shrunk, 'hand computed: at full width the three lines, the tag and the ask need more than the 936 px between the margins, so the block is set smaller to fill them');
@@ -205,7 +208,7 @@ test('pop end at 16:9 (hand computed): the mark a tag over the stack, the title 
   near(plate[0], 72, 'the tag flush left');
   const firstTop = lineInk(lines[0]).baseline - 0.74 * lines[0].props.font.size;
   near(firstTop - (plate[1] + plate[3]), STACK.kickerGap, 'the tag over the first line');
-  near((plate[1] + askInk.baseline) / 2, 540, 'the block centred in the available height');
+  near((plate[1] + askInk.baseline + 0.12 * ask.props.font.size) / 2, 540, 'the block, to the bottom of the ask\'s box, centred in the available height');
 });
 
 test('pop end at 9:16 stays inside the platform safe zone', () => {

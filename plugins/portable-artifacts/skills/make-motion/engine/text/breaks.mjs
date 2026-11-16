@@ -20,7 +20,15 @@ const SENTENCE_END = /[.!?]["'”’)\]]*$/;
 /** Does a word end a sentence (. ! or ? with any closing quote or bracket)? */
 export const endsSentence = (word) => SENTENCE_END.test(word);
 
+// Words a line of a headline never ends on when another break exists: articles, short prepositions, conjunctions.
+const WEAK_ENDS = new Set(['a', 'an', 'the', 'of', 'to', 'in', 'on', 'at', 'by', 'for', 'from', 'with', 'as', 'into', 'onto', 'via', 'and', 'or', 'but', 'nor']);
+const STACK_WEAK_COST = 1.1; // a stack line ending on one: more than one more line
+// a line ending on one costs maxWidth^2 / this: more than any slack or an off-point break, less than a one-word line (a
+// line of one word is no balanced break, so 'Built on / your machine.' stays when the only other choice leaves a word alone)
+const WEAK_DIVISOR = 2;
 const isForced = (word) => word.endsWith(FORCE_MARK);
+/** Is `word` one a headline line never ends on when another break exists (an article, short preposition or conjunction)? */
+export const isWeakEnd = (word) => WEAK_ENDS.has(word.toLowerCase().replace(EDGE_NON_LETTERS, ''));
 const bare = (word) => (isForced(word) ? word.slice(0, -FORCE_MARK.length) : word);
 
 function buildContext(words, widths, spaceWidth, maxWidth, keepWithNext) {
@@ -37,10 +45,12 @@ function buildContext(words, widths, spaceWidth, maxWidth, keepWithNext) {
     || forced[k - 1]
     || BREAK_AFTER.test(plain[k - 1])
     || PREPOSITIONS.has(plain[k].toLowerCase().replace(EDGE_NON_LETTERS, ''));
-  return { n, forced, glued, lineWidth, preferred, maxWidth };
+  const weak = plain.map(isWeakEnd);
+  return { n, forced, glued, lineWidth, preferred, maxWidth, weak };
 }
 
-// Cost of a line holding words i..k-1. A line of one word in a text of more costs maxWidth^2, which outweighs any
+// Cost of a line holding words i..k-1 (a line ending on an article, preposition or conjunction costs WEAK_DIVISOR's
+// share). A line of one word in a text of more costs maxWidth^2, which outweighs any
 // slack, so the breaker takes another break of the same lines when there is one (a break the author forced with |
 // is the same in every choice, so its one-word line changes nothing).
 function lineCost(ctx, i, k) {
@@ -48,6 +58,7 @@ function lineCost(ctx, i, k) {
   let cost = slack * slack;
   if (!ctx.preferred(k)) cost += (ctx.maxWidth * ctx.maxWidth) / OFF_POINT_DIVISOR;
   if (k - i === 1 && ctx.n > 1) cost += ctx.maxWidth * ctx.maxWidth;
+  if (k < ctx.n && ctx.weak[k - 1] && !ctx.forced[k - 1]) cost += (ctx.maxWidth * ctx.maxWidth) / WEAK_DIVISOR;
   return cost;
 }
 
@@ -91,7 +102,8 @@ export function stackLines(words) {
     const letters = words.slice(i, k).reduce((sum, w) => sum + letterCount(w), 0);
     const long = k - i > 2 && letters > STACK_LONG_LETTERS ? STACK_LONG_COST : 0;
     const alone = k - i === 1 && letters <= STACK_SHORT_LETTERS ? STACK_ALONE_COST : 0;
-    return STACK_LINE_COST + long + alone + (ctx.preferred(k) ? 0 : STACK_OFF_POINT_COST);
+    const weak = k < n && ctx.weak[k - 1] && !ctx.forced[k - 1] ? STACK_WEAK_COST : 0;
+    return STACK_LINE_COST + long + alone + weak + (ctx.preferred(k) ? 0 : STACK_OFF_POINT_COST);
   };
   const best = new Array(n + 1).fill(Infinity);
   const choice = new Array(n + 1).fill(n);

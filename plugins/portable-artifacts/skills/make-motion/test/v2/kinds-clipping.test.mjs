@@ -8,6 +8,7 @@ import path from 'node:path';
 import { registries } from '../../engine/registry.mjs';
 import { sampleGraph } from '../../engine/graph/sample.mjs';
 import { sample } from '../../engine/time/track.mjs';
+import { markerAccent } from '../../engine/kinds/shared.mjs';
 import { ease } from '../../engine/time/ease.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { gridX } from '../../engine/looks/index.mjs';
@@ -43,7 +44,7 @@ test('a missing clipping image is an error with its path, exit 2', () => {
   });
 });
 
-test('desk clipping: cutout on a card 48 units larger, rotated -2 degrees, 62% of the short side, rising in', () => {
+test('desk clipping: cutout on a card 48 units larger, rotated -2 degrees, 70% of a wide frame\'s width (at most the height between the margins), rising in', () => {
   const { nodes, ctx, canvas, hero } = expandShot({ id: 'c', show: 'clipping', src: 'shot.png', hold: 3, caption: 'The query' });
   const look = ctx.look;
   const pic = nodes.find((n) => n.id === hero);
@@ -54,7 +55,7 @@ test('desk clipping: cutout on a card 48 units larger, rotated -2 degrees, 62% o
   near(sample(pic.tracks.y, 0), 0.52 * canvas.h + 80, 'starts 80 below');
   near(lastKey(pic.tracks.y).t, look.moves.enter.dur);
   const image = all([pic]).find((n) => n.type === 'image');
-  near(Math.max(image.props.w, image.props.h), 0.62 * 1080, 'size');
+  near(image.props.w, Math.min(0.7 * 1920, (1080 - 2 * 96) * 1600 / 1000), 'size: 70% of the width (look revision 1)');
   const paper = all([pic]).find((n) => n.id === 'c.image.card.paper');
   assert.ok(paper, 'a card');
   const card = pic.children.find((n) => n.id === 'c.image.card');
@@ -111,13 +112,15 @@ test('a region box is the region inside the drawn picture, through its rotation'
   const W = 0.62 * 1080, H = W * 1000 / 1600;
   const left = 960 - W / 2, top = 540 - H / 2;
   pop.boxes['region:query'].forEach((v, i) => near(v, [left + 0.25 * W, top + 0.5 * H, 0.5 * W, 0.25 * H][i], `pop ${i}`));
-  // desk: the corners turned by the group's -2 degrees and the cutout's own seeded tilt about (0.54 w, 0.52 h).
+  // desk: the corners turned by the group's -2 degrees and the cutout's own seeded tilt about (0.54 w, 0.52 h), the
+  // picture 70% of the width (1344 x 840; look revision 1)
   const desk = expandShot(shot, 'desk');
+  const [DW, DH] = [0.7 * 1920, 0.7 * 1920 * 1000 / 1600];
   const pic = desk.nodes.find((n) => n.id === 'c.image');
   const tilt = pic.children.find((n) => n.id === 'c.image.cutout').props.rotate ?? 0;
   const a = ((-2 + tilt) * Math.PI) / 180, cx = 0.54 * 1920, cy = 0.52 * 1080;
   const corners = [[0.25, 0.5], [0.75, 0.5], [0.25, 0.75], [0.75, 0.75]].map(([fx, fy]) => {
-    const lx = fx * W - W / 2, ly = fy * H - H / 2;
+    const lx = fx * DW - DW / 2, ly = fy * DH - DH / 2;
     return [cx + lx * Math.cos(a) - ly * Math.sin(a), cy + lx * Math.sin(a) + ly * Math.cos(a)];
   });
   const xs = corners.map((p) => p[0]), ys = corners.map((p) => p[1]);
@@ -125,7 +128,7 @@ test('a region box is the region inside the drawn picture, through its rotation'
   desk.boxes['region:query'].forEach((v, i) => near(v, want[i], `desk ${i}`));
 });
 
-test('a mark on a region goes over the picture, and the desk camera pushes until the region fills 58% of the width (zoom 1.2 to 3.2)', () => {
+test('a mark on a region goes over the picture, and the desk camera pushes until the region fills 58% of the width and no more than 36% of the height (zoom 1.2 to 3.2)', () => {
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', say: 'This one shows the query behind every chart.', regions: { query: [0.6, 0.2, 0.3, 0.2] },
     on: [{ at: 'word:query', do: 'circle', target: 'region:query' }] };
   for (const format of ['16:9', '9:16']) {
@@ -134,7 +137,8 @@ test('a mark on a region goes over the picture, and the desk camera pushes until
     assert.ok(ids.indexOf('c.on0') > ids.indexOf('c.image'), 'mark drawn over the picture');
     const push = camera.find((layer) => layer.some((k) => k.zoom !== undefined));
     const at = Math.max(timing.words[4].start, 0.6 + 0.9); // the first shot shows the whole picture for 0.6 s before a push of 0.9 s
-    const want = Math.min(3.2, Math.max(1.2, (0.58 * canvas.w) / boxes['region:query'][2]));
+    const rect = ctx.look.grid ? { w: canvas.w, h: canvas.h } : null; // desk composes on the whole canvas
+    const want = Math.min(3.2, Math.max(1.2, Math.min((0.58 * rect.w) / boxes['region:query'][2], (0.36 * rect.h) / boxes['region:query'][3])));
     near(push.at(-1).t, at, `${format} lands on the event`);
     near(push.at(-1).zoom, want, `${format} zoom`);
     assert.equal(push.at(-1).ease, ctx.look.moves.enter.ease);
@@ -170,7 +174,7 @@ test('a highlight on a region is a hand-drawn marker frame with the rest of the 
   assert.equal(sides.length, 4, 'four strokes inside the picture');
   assert.equal(passes.length, 4, 'each drawn twice: a second pass of the same stroke');
   for (const s of [...sides, ...passes]) {
-    assert.equal(s.props.stroke, ctx.look.palette.accent);
+    assert.equal(s.props.stroke, markerAccent(ctx.look), 'the highlighter\'s yellow as it shows on paper (look revision 1, one yellow)');
     assert.equal(s.props.strokeWidth, 7, '7 units wide');
     assert.equal(s.props.lineCap, 'round');
     assert.equal(s.props.blend, undefined);
@@ -187,8 +191,9 @@ test('a highlight on a region is a hand-drawn marker frame with the rest of the 
   const lands = sides.map((s) => lastKey(s.tracks.draw).t);
   assert.deepEqual([...lands].sort((a, b) => a - b), lands, 'drawn on in order');
   landsOn(sides[3], 'draw', at, 'the frame closes on the event');
-  // geometry in the picture's own space: the region [0.6, 0.2, 0.3, 0.2] of the drawn picture
-  const W = 0.62 * 1080, H = W * 1000 / 1600;
+  // geometry in the picture's own space: the region [0.6, 0.2, 0.3, 0.2] of the drawn picture (70% of 1920 wide: look
+  // revision 1)
+  const W = 0.7 * 1920, H = W * 1000 / 1600;
   const region = [0.6 * W - W / 2, 0.2 * H - H / 2, 0.3 * W, 0.2 * H];
   const pts = (s) => s.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number);
   const ys = [...sides, ...passes].flatMap((s) => pts(s).filter((_, i) => i % 2 === 1));
@@ -260,14 +265,14 @@ test('pop: a second, different region event switches to that close-up; devices s
   assert.ok(boxes['region:chart'][3] > 0);
 });
 
-test('pop region highlight: the close-up\'s hard shadow turns from accent2 to accent and grows from 10 to 18 units on the event, with the emphasize ease; nothing else is drawn', () => {
+test('pop region highlight: the close-up\'s hard accent shadow grows from 10 to 18 units on the event, with the emphasize ease; nothing else is drawn', () => {
   const { nodes, timing, ctx } = expandShot(POP_SHOT, 'pop', '9:16');
   const look = ctx.look;
   const at = timing.words[8].start; // chart: the highlight
   const close = nodes.find((n) => n.id === 'c.close1');
   const shadows = all([close]).filter((n) => /\.shadow(\.emphasis)?$/.test(n.id));
   const base = shadows.find((n) => n.id.endsWith('.shadow')), lifted = shadows.find((n) => n.id.endsWith('.shadow.emphasis'));
-  assert.equal(base.props.fill, look.palette.accent2);
+  assert.equal(base.props.fill, look.palette.accent, 'one hue: the shadow is the accent before the event too (look revision 1)');
   assert.equal(lifted.props.fill, look.palette.accent);
   near(opacityAt(base, at - 1 / FPS), 1); near(opacityAt(lifted, at - 1 / FPS), 0);
   const on = at + 1e-6; // anchors round to 1e-6 s

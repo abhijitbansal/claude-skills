@@ -56,7 +56,8 @@ export const desk = {
     highlight: { color: 'accent', blend: 'multiply', wobble: 3, step: HAND_STEP },
     circle: { color: 'accent2', width: 5, step: HAND_STEP },
     underline: { color: 'accent2', width: 5, step: HAND_STEP },
-    arrow: { color: 'accent2', width: 5, step: HAND_STEP },
+    // the arrow and the compare vs in ink at marker weight (look review 1: a thin red line was the film's one red)
+    arrow: { color: 'ink', width: 10, step: HAND_STEP },
     bracket: { color: 'ink', width: 4, step: HAND_STEP },
     cutout: { keylineColor: '#ffffff' },
     clipping: { fill: '#ffffff', edge: 'torn' },
@@ -86,7 +87,7 @@ export const desk = {
     // label face at the largest of `smallSteps` the items stay three times, a note's cap line `noteGap` em of the item
     // under its last baseline, the figures hanging in the margin a gutter before the items; the block centred in the room
     // the slug leaves
-    list: { fromStep: 3, max: 180, toWide: 11, toTall: 11, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2] },
+    list: { fromStep: 3, max: 180, toWide: 11, toTall: 11, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2], figureStep: 2 },
     // quote: a taped card from column 2, at most to `toWide` (on tall frames from `fromTall` to `toTall`, the measure a
     // quotation needs to break without one-word lines) and wrapped to its text, centred at `centre` of the height; the
     // quotation `pad` in (more when its hanging opening mark needs it), in the display face up to `max`, at most `maxLines` lines, its opening mark hanging; the attribution's cap line
@@ -97,8 +98,9 @@ export const desk = {
     // from step `valueFromStep` to `valueMax` and `valueGap` em over the title, the title from `titleMax` down (at most
     // `valueTitle` of the value; not under step `titleFromStep`) in at most `titleLines` lines, the points `titleGap` em
     // under it at the largest of `pointSteps` the hero stays three times and the title twice; side pictures at the top of
-    // the cards in a shared room `picture` of the content height, `pictureGap` above the text
-    compare: { gap: 6, centre: 0.5, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointSteps: [1, 2, 3], picture: 0.4, pictureGap: 32 },
+    // the cards in a shared room `picture` of the content height, `pictureGap` above the text; the points drop to step
+    // `pointFloorStep` only when the sides fit nowhere at `pointSteps`
+    compare: { gap: 6, centre: 0.5, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointSteps: [2, 3], pointFloorStep: 1, picture: 0.4, pictureGap: 32 },
     // chart: the claim in the display face on columns 2 to `titleToWide` (`titleToTall`), from three times the labels up to
     // `titleMax` in at most `titleLines` lines, the plot `titleGap` under it; labels in the label face at step `labelStep`,
     // `gap` from what they label; marks `line` wide where they are lines, reference lines `ref` and the baseline `axis`

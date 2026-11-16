@@ -26,6 +26,15 @@ before(() => {
   writeFileSync(path.join(specDir, 'shot.png'), 'x');
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
+
+// Look revision 1: a pop block on a tall frame sits with its middle on 45% of the safe height (look.stack.centre), or on
+// the middle when that would take it past the safe zone's edge: the middle of a block `height` tall.
+const opticalMiddle = (safe, canvas, height) => {
+  const h = canvas.h - safe.top - safe.bottom;
+  const optical = safe.top + 0.45 * h;
+  return optical - height / 2 < safe.top || optical + height / 2 > safe.top + h ? safe.top + h / 2 : optical;
+};
+
 test('a number lands its count on the spoken figure', () => {
   const { nodes, timing } = expandShot({ id: 'n', show: 'number', say: 'We saved forty one percent.', value: 41, suffix: '%', label: 'saved' }, 'desk');
   const fig = nodes.find((n) => n.id === 'n.value');
@@ -87,11 +96,11 @@ test('desk number: a one-digit figure up to 820 units, baseline at 72%, flush le
   near(boxes.value[2], 0.51 * 820, 'the figure box is its ink');
   assert.equal(nodes.find((n) => n.id === 'n.rule'), undefined, 'no hairline');
   const label = textNode(nodes, 'n.label');
-  assert.equal(label.props.font.family, look.fonts.label.family, 'the label face');
+  assert.equal(label.props.font.family, look.fonts.display.family, 'the display face: no mono capitals at headline size (look revision 1)');
   assert.equal(label.props.font.size, look.scale[3], 'scale step 4');
   assert.equal(label.props.fill, look.palette.ink, 'in ink, not ink2');
-  near(label.props.font.tracking, look.tracking(look.scale[3], 'label'), 'the label tracking');
-  assert.deepEqual(label.props.layout.lines[0].words.map((w) => w.text), ['SKILLS']);
+  near(label.props.font.tracking, look.tracking(look.scale[3], 'display'), 'the display tracking');
+  assert.deepEqual(label.props.layout.lines[0].words.map((w) => w.text), ['skills'], 'as written: desk sets no display caps');
   const labelInk = 242 + 418.2 + 48;
   near(label.props.x + 0.02 * 132, labelInk, 'label ink 48 units after the figure ink');
   // the delta: plain label caps, no plate
@@ -181,7 +190,7 @@ test('pop number: the figure fills the safe width up to 900 units, flush left; l
   const deltaBox = boxes.delta;
   near(deltaBox[0], safe.left, 'delta ink flush left');
   near(deltaBox[1], labelBox[1] + labelBox[3] + 16, 'delta cap line 16 units under the label tag');
-  near((boxes.value[1] + deltaBox[1] + deltaBox[3]) / 2, safe.top + (canvas.h - safe.top - safe.bottom) / 2, 'the block centred in the safe zone');
+  near((boxes.value[1] + deltaBox[1] + deltaBox[3]) / 2, opticalMiddle(safe, canvas, deltaBox[1] + deltaBox[3] - boxes.value[1]), 'the block on the safe zone\'s optical centre');
   const land = timing.words[0].start;
   assert.ok(sample(fig.tracks.scale, land + look.moves.emphasize.dur) > 1, 'the figure still pulses as it lands');
   const three = expandShot({ id: 'n', show: 'number', hold: 2, value: 459, label: 'x' }, 'pop', '16:9');
@@ -253,7 +262,7 @@ test('pop number: a kicker is a tag at step 2, flush left, 28 units over the fig
   near(box[0], safe.left, 'flush left');
   near(boxes.value[1] - (box[1] + box[3]), 28, '28 units over the figure cap line');
   assert.ok(box[1] >= safe.top - EPS, 'inside the safe zone');
-  near((box[1] + boxes.label[1] + boxes.label[3]) / 2, safe.top + (canvas.h - safe.top - safe.bottom) / 2, 'the block, kicker included, centred');
+  near((box[1] + boxes.label[1] + boxes.label[3]) / 2, opticalMiddle(safe, canvas, boxes.label[1] + boxes.label[3] - box[1]), 'the block, kicker included, on the optical centre');
 });
 
 test('desk number: the label steps down from step 4 until the figure is at least three times its size (the review hero rule)', () => {

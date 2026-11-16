@@ -79,15 +79,29 @@ function runningHead(shot, id, { tag, plate, lines }, area, ctx) {
   return node('text', id, { x: left, y: baseline - layout.lines[0].y, layout, font: set.font, fill: look.palette.ink2, role: 'kicker' });
 }
 
-// One item: its wrapper's children (the count tag, the running head, the stack, the note) and its box.
-function itemParts(shot, item, k, n, ctx, data) {
+// One item set on its own: its staged shot, note and stack placed (restack), its tag on top.
+function itemStack(shot, item, k, n, ctx, data) {
+  const staged = { ...shot, id: `${shot.id}.item${k}`, kicker: countText(shot, k, n) };
+  const first = composeStack(hitText(setCase(ctx.look, 'display', item.text)), staged, ctx);
+  const note = item.note === null ? null : noteFor(item.note, first.lines, stackArea(ctx), ctx, data);
+  return { staged, note, placed: restack(first, ctx, { below: note === null ? 0 : note.room }) };
+}
+
+const topOf = (placed) => (placed.kicker === null ? placed.lines[0].baseline - placed.lines[0].ink.up : placed.kicker.top);
+
+// `placed` moved down by `dy` px: its lines and its tag.
+const shifted = (placed, dy) => ({
+  ...placed,
+  lines: placed.lines.map((line) => ({ ...line, baseline: line.baseline + dy })),
+  kicker: placed.kicker === null ? null : { ...placed.kicker, top: placed.kicker.top + dy },
+});
+
+// One item: its wrapper's children (the count tag, the running head, the stack, the note) and its box, from its stack
+// (itemStack) hung from the shot's one tag line `top`.
+function itemParts(shot, { staged, note, placed: own }, top, ctx, data) {
   const { look, unit } = ctx;
   const area = stackArea(ctx);
-  const staged = { ...shot, id: `${shot.id}.item${k}`, kicker: countText(shot, k, n) };
-  const text = hitText(setCase(look, 'display', item.text));
-  const first = composeStack(text, staged, ctx);
-  const note = item.note === null ? null : noteFor(item.note, first.lines, area, ctx, data);
-  const placed = restack(first, ctx, { below: note === null ? 0 : note.room });
+  const placed = shifted(own, top - topOf(own));
   const hero = `${staged.id}.text`;
   const words = placed.rows.flat();
   const built = stackNodes(staged, ctx, placed, { times: words.map(() => ({ at: 0, emphasised: false })), ghost: false, matched: true, hero });
@@ -111,7 +125,10 @@ function itemParts(shot, item, k, n, ctx, data) {
  */
 export function expandPopList(shot, ctx, data, times) {
   const items = itemsOf(shot);
-  const parts = items.map((item, k) => itemParts(shot, item, k, items.length, ctx, data));
+  const stacks = items.map((item, k) => itemStack(shot, item, k, items.length, ctx, data));
+  // one tag line for the whole shot: the tallest item's, every other item hung from it (look revision 1)
+  const top = Math.min(...stacks.map((st) => topOf(st.placed)));
+  const parts = stacks.map((st) => itemParts(shot, st, top, ctx, data));
   const wrappers = parts.map((p, k) => ({ id: p.id, tracks: { opacity: shownFrom(times[k], times[k + 1]) }, children: p.children }));
   return { nodes: [], group: null, itemBoxes: parts.map((p) => p.box), wrappers };
 }

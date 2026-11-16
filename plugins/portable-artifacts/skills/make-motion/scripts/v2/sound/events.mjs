@@ -13,6 +13,7 @@ import '../../../engine/kinds/index.mjs';
 import { resolveAnchor, AnchorError } from '../../../engine/script/anchors.mjs';
 import { resolveLook } from '../../../engine/graph/film.mjs';
 import { isHidden } from '../../../engine/kinds/shared.mjs';
+import { canvasSize } from '../../../template/formats.mjs';
 
 const DEFAULT_CUT = 'cut';
 
@@ -25,10 +26,10 @@ function cutEvents(shot, entry) {
 
 // Each `on` entry at its anchor in the shot, as the frame draws it (engine/graph/film.mjs resolves it the same way). An
 // entry aimed at a part that is off screen then (its kind's partWindow) plans no cue: the review reports it instead.
-function deviceEvents(shot, entry, { kinds, look }) {
+function deviceEvents(shot, entry, { kinds, look, canvas }) {
   if (!Array.isArray(shot.on)) return [];
   const kind = typeof shot.show === 'string' && kinds.has(shot.show) ? kinds.get(shot.show) : null;
-  const windowOf = (target) => (typeof kind?.partWindow === 'function' ? kind.partWindow(shot, entry, target, look) : null);
+  const windowOf = (target) => (typeof kind?.partWindow === 'function' ? kind.partWindow(shot, entry, target, look, canvas) : null);
   return shot.on.flatMap((item, j) => {
     try {
       const t = resolveAnchor(item.at, entry);
@@ -79,10 +80,12 @@ function landEvents(shot, entry, kinds) {
  */
 export function soundEvents(film, timeline, { kinds = registries.kinds } = {}) {
   const look = resolveLook(film);
+  const [w, h] = canvasSize(film);
+  const canvas = { w, h };
   const events = film.shots.flatMap((shot, index) => {
     const entry = timeline.shots[index];
     if (entry?.id !== shot.id) throw new RangeError(`timeline shot ${index} is ${JSON.stringify(entry?.id)}, the film's shot is "${shot.id}"`);
-    return [...cutEvents(shot, entry), ...deviceEvents(shot, entry, { kinds, look }), ...kindEvents(shot, entry, kinds), ...emphasisEvents(entry), ...landEvents(shot, entry, kinds)];
+    return [...cutEvents(shot, entry), ...deviceEvents(shot, entry, { kinds, look, canvas }), ...kindEvents(shot, entry, kinds), ...emphasisEvents(entry), ...landEvents(shot, entry, kinds)];
   });
   return Object.freeze([...events].sort((a, b) => a.t - b.t));
 }

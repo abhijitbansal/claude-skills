@@ -101,15 +101,21 @@ function dimTrack(look, dimAt) {
   return track([{ t: 0, v: ink }, { t: dimAt, v: ink }, { t: dimAt + look.moves.emphasize.dur, v: ink2, ease: DIM_EASE }]);
 }
 
-// A figure: the item's number as written in the label face (1 to 12, never 01), its ink ending `right`, on `baseline`.
-function figureNode(id, k, n, set, { right, baseline }, ctx) {
+// A figure's size: the small parts' size, never under data.figureStep (look review 1: a figure at step 1 vanished on the
+// phone tile). A figure belongs to its item: items and figures are one size class (props.stack, the hero id), so the
+// sizes and hero rules judge the items, not a figure against them.
+const figureSize = (set, ctx, data) => Math.max(set.small, sizeAt(ctx.look, data.figureStep, ctx.unit));
+
+// A figure: the item's number as written in the label face (1 to 12, never 01), `size` px, its ink ending `right`, on
+// `baseline`.
+function figureNode(id, k, size, { right, baseline, stack }, ctx) {
   const { look, unit, measure } = ctx;
   const text = String(k + 1);
-  const font = fontFor(look, 'label', set.small, unit);
+  const font = fontFor(look, 'label', size, unit);
   const layout = layoutText({ text, font, maxWidth: NO_WRAP, measure });
   const ink = inkExtent(text, font, measure);
   const y = baseline - layout.lines[0].y;
-  return { node: node('text', id, { x: right - ink.right, y, layout, font, fill: look.palette.ink, role: 'label' }), y };
+  return { node: node('text', id, { x: right - ink.right, y, layout, font, fill: look.palette.ink, role: 'label', stack }), y };
 }
 
 /**
@@ -132,7 +138,7 @@ export function expandDeskList(shot, ctx, data, times, hero) {
     const y = cursor + CAP_HEIGHT * set.size - part.layout.lines[0].y;
     const enter = (at, rest) => (matched && k === 0 ? {} : enterTracks(look, unit, at, { y: rest }));
     const dim = { fill: dimTrack(look, times[k + 1]) };
-    children.push(node('text', id, { x: span.x, y, layout: part.layout, font: set.font, fill: look.palette.ink, role: 'hero' }, {
+    children.push(node('text', id, { x: span.x, y, layout: part.layout, font: set.font, fill: look.palette.ink, role: 'hero', ...(numbered ? { stack: hero } : {}) }, {
       tracks: enter(times[k], y), wordTracks: part.layout.lines.flatMap((line) => line.words.map(() => dim)),
     }));
     itemBoxes.push(unionBox(part.layout.lines.map((line) => capBox(span.x + line.x, y + line.y, line.width, set.size))));
@@ -141,7 +147,8 @@ export function expandDeskList(shot, ctx, data, times, hero) {
       // centred on the first line's cap height: a figure a third of the item's size reads as a footnote mark on its
       // baseline and as a superscript on its cap line (both viewed on the rendered sheets), as a list marker centred
       const middle = y + part.layout.lines[0].y - (CAP_HEIGHT * set.size) / HALF;
-      const figure = figureNode(`${shot.id}.figure${k}`, k, set.parts.length, set, { right: span.x - look.grid.gutter * unit, baseline: middle + (CAP_HEIGHT * set.small) / HALF }, ctx);
+      const size = figureSize(set, ctx, data);
+      const figure = figureNode(`${shot.id}.figure${k}`, k, size, { right: span.x - look.grid.gutter * unit, baseline: middle + (CAP_HEIGHT * size) / HALF, stack: hero }, ctx);
       children.push(node(figure.node.type, figure.node.id, figure.node.props, { tracks: enter(times[k], figure.y), wordTracks: [dim] }));
     }
     if (part.note !== null) {

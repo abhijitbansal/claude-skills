@@ -10,6 +10,7 @@ import path from 'node:path';
 import { registries } from '../../engine/registry.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { compareTurn, valueText } from '../../engine/kinds/compare.mjs';
+import { stackArea } from '../../engine/kinds/stack.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { pathPoints } from '../../engine/devices/shared.mjs';
@@ -121,14 +122,13 @@ test('desk compare at 9:16: the cards stacked, left over right, on one column sp
   for (const box of [a, b]) inside(box, { left: m - 4, top: m - 4, right: m - 4, bottom: m - 4 }, canvas, 'card');
 });
 
-test('desk compare: the left side is in full ink from frame 0; the right arrives at the turn; then the left goes under a paper scrim and the right stays clear', () => {
+test('desk compare: both cards on the paper from frame 0, the left in full ink and the right under a paper scrim until the turn; then the left goes under it and the right comes out (look revision 1)', () => {
   const { nodes, timing, ctx } = expandShot(SIDES(), 'desk', '16:9');
   const turn = compareTurn(timing);
   const { left, right } = cardsOf(nodes);
   const lt = textNode(left.children, 'c.left.title');
   assert.equal(opacity(lt, 0), 1, 'the left title on frame 0');
-  assert.equal(opacity(right, turn - ctx.look.moves.enter.dur - 0.05), 0, 'the right card not there before its turn');
-  assert.equal(opacity(right, turn), 1, 'the right card landed on the turn');
+  assert.equal(opacity(right, 0.05), 1, 'the right card on the paper from the start');
   const scrim = left.children.find((n) => n.id.endsWith('.scrim'));
   assert.ok(scrim, 'a scrim over the left card');
   assert.equal(scrim.props.fill, ctx.look.palette.paper, 'a paper scrim');
@@ -136,7 +136,9 @@ test('desk compare: the left side is in full ink from frame 0; the right arrives
   assert.equal(opacity(scrim, turn - 0.01), 0, 'clear before the turn');
   assert.equal(scrim.tracks.opacity.points.at(-1).v, ctx.look.devices.focus.dim, 'dimmed to the look\'s focus dim');
   assert.equal(opacity(left, 0), 1, 'the left card itself is on screen on frame 0');
-  assert.equal(right.children.filter((n) => n.id.endsWith('.scrim')).length, 0, 'the spoken side is never dimmed');
+  const lifted = right.children.find((n) => n.id.endsWith('.scrim'));
+  assert.equal(opacity(lifted, 0.05), ctx.look.devices.focus.dim, 'the unspoken right side dimmed before the turn');
+  assert.equal(lifted.tracks.opacity.points.at(-1).v, 0, 'and clear once spoken');
 });
 
 test('desk compare: versus draws a hand vs between the cards at the turn; before-after draws an arrow from left to right, in both formats', () => {
@@ -189,9 +191,9 @@ test('desk compare: a one-word side against a thirty-word title keeps both cards
 
 // ---- pop ----
 
-test('pop compare: one side at a time, a hard cut at the turn; each a stack with its title as the hero under an A / B tag (BEFORE / AFTER for before-after); both seen', () => {
+test('pop compare on a wide frame: one side at a time, a hard cut at the turn; each a stack with its title as the hero under an A / B tag (BEFORE / AFTER for before-after); both seen', () => {
   for (const [mode, tags] of [['versus', ['A', 'B']], ['before-after', ['BEFORE', 'AFTER']]]) {
-    const { nodes, timing, canvas } = expandShot(SIDES({ mode }), 'pop', '9:16');
+    const { nodes, timing, canvas, ctx } = expandShot(SIDES({ mode }), 'pop', '16:9'); // a tall frame shows both (look revision 1)
     const turn = compareTurn(timing);
     const left = all(nodes).find((n) => n.id === 'c.left'), right = all(nodes).find((n) => n.id === 'c.right');
     assert.equal(opacity(left, 0), 1, `${mode}: left on frame 0`);
@@ -204,11 +206,11 @@ test('pop compare: one side at a time, a hard cut at the turn; each a stack with
       const stack = side.children.find((n) => n.id === `${side.id}.title`);
       assert.ok(stack.children.every((n) => n.props.role === 'hero' && n.props.stack === `${side.id}.title`));
     });
-    const insets = viralOf(canvas);
+    const edge = stackArea(ctx).left;
     const stack = left.children.find((n) => n.id === 'c.left.title');
     for (const line of stack.children) {
       const word = line.props.layout.lines[0].words[0];
-      assert.ok(Math.abs(line.props.x + word.x + 0.02 * line.props.font.size - insets.left) <= 1, 'flush left in the safe zone');
+      assert.ok(Math.abs(line.props.x + word.x + 0.02 * line.props.font.size - edge) <= 1, 'flush left on the stack edge');
     }
   }
 });

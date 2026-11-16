@@ -12,10 +12,10 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { stackLines, FORCE_MARK } from '../text/breaks.mjs';
+import { stackLines, FORCE_MARK, isWeakEnd } from '../text/breaks.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
 import { landing } from '../devices/shared.mjs';
-import { sizeAt, fontFor, compositionRect, runInk, inkExtent, capBox, unionBox, requireDevice, ghostTracks } from './shared.mjs';
+import { sizeAt, fontFor, compositionRect, runInk, inkExtent, capBox, unionBox, requireDevice, ghostTracks, isWide } from './shared.mjs';
 
 export const STACK = Object.freeze({ fromStep: 3, max: 400, gap: 0.08, kickerGap: 28, ref: 100 });
 const FIT_PASSES = 3; // re-measure passes, for a face whose width is not exactly proportional to its size
@@ -85,14 +85,71 @@ function kickerHeight(shot, ctx) {
   return probe.boxes.tag[3];
 }
 
+// Lines fill the width by size only, and no line is more than look.stack.ratio times a neighbour of the same stack: a
+// short line that would grow past it is set smaller (still flush left), never stretched.
+function keepRatio(lines, rows, words, ctx) {
+  const ratio = ctx.look.stack?.ratio;
+  if (!Number.isFinite(ratio) || lines.length < 2) return lines;
+  let sizes = lines.map((l) => l.font.size);
+  for (let pass = 0; pass < lines.length; pass++) {
+    sizes = sizes.map((s, k) => Math.min(s, ...[sizes[k - 1], sizes[k + 1]].filter(Number.isFinite).map((n) => n * ratio)));
+  }
+  return lines.map((line, k) => (sizes[k] < line.font.size ? lineAt(rows[k].map((i) => bare(words[i])), sizes[k], ctx) : line));
+}
+
+const HOOK_MAX_WORDS = 4; // a hook this short may be set a word a line
+const CEILING_STEPS = 20; // bisection steps for a hook's size ceiling: well under a pixel
+
+// A hook (a viral film's first statement) may be set a word a line when that sets it larger: the larger of the stack's
+// own lines and the word-a-line set, each kept to look.stack.hook of the area's height (no line ending on a weak word).
+function hookLines(words, own, fitted, area, ctx) {
+  const share = ctx.look.stack?.hook;
+  const plain = words.map(bare);
+  const forced = words.some((w) => w.endsWith(FORCE_MARK));
+  if (!Number.isFinite(share) || words.length < 2 || words.length > HOOK_MAX_WORDS || forced || plain.slice(0, -1).some(isWeakEnd)) return own;
+  const limit = share * area.h;
+  // too tall: the largest lines come down first (a ceiling), and only when every line is at the ceiling all shrink
+  const within = (lines, rows) => {
+    if (blockHeight(lines) <= limit) return lines;
+    const capped = (c) => rows.map((row, k) => (lines[k].font.size <= c ? lines[k] : lineAt(row.map((i) => plain[i]), c, ctx)));
+    let low = Math.min(...lines.map((l) => l.font.size)), high = Math.max(...lines.map((l) => l.font.size));
+    const floor = capped(low);
+    if (blockHeight(floor) > limit) return rows.map((row, k) => lineAt(row.map((i) => plain[i]), floor[k].font.size * (limit / blockHeight(floor)), ctx));
+    for (let i = 0; i < CEILING_STEPS; i++) {
+      const mid = (low + high) / HALF;
+      if (blockHeight(capped(mid)) <= limit) low = mid;
+      else high = mid;
+    }
+    return capped(low);
+  };
+  const single = words.map((_, i) => [i]);
+  const candidates = [{ rows: own.rows, lines: within(own.lines, own.rows) }, { rows: single, lines: within(fitted(single), single) }];
+  const smallest = ({ lines }) => Math.min(...lines.map((l) => l.font.size));
+  return candidates.reduce((best, c) => (smallest(c) > smallest(best) + EPSILON ? c : best));
+}
+
+/**
+ * Where a block `height` tall starts in `area`: on a tall frame its middle on look.stack.centre of the area (its
+ * optical centre), kept inside it; on a wide frame, and in a look without one, its middle on the area's middle.
+ */
+export function centredTop(area, height, ctx) {
+  const centre = isWide(ctx.canvas) ? 1 / HALF : ctx.look.stack?.centre ?? 1 / HALF;
+  const middle = area.top + (area.h - height) / HALF;
+  const optical = area.top + centre * area.h - height / HALF;
+  // a block that would meet the area's edge on the optical centre keeps the middle: a pulse or a punch about its
+  // centre then grows evenly into the slack above and below (and an overflow is shared)
+  return optical < area.top || optical + height > area.top + area.h ? middle : optical;
+}
+
 /** The stack laid out: { rows (word indexes per line), lines [{ font, layout, ink, x, baseline }], area, kicker } . */
-export function composeStack(text, shot, ctx) {
+export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = false, maxSize = Infinity } = {}) {
   const { look, unit } = ctx;
   const words = markedWords(text);
-  const rows = stackLines(words);
-  const area = stackArea(ctx);
-  const limits = { min: sizeAt(look, STACK.fromStep, unit), max: STACK.max * unit };
-  let lines = rows.map((row) => fitLine(row.map((i) => bare(words[i])), area.w, limits, ctx));
+  const limits = { min: sizeAt(look, STACK.fromStep, unit), max: Math.min(STACK.max * unit, maxSize) };
+  const fitted = (rows) => keepRatio(rows.map((row) => fitLine(row.map((i) => bare(words[i])), area.w, limits, ctx)), rows, words, ctx);
+  let rows = stackLines(words);
+  let lines = fitted(rows);
+  if (hook) ({ rows, lines } = hookLines(words, { rows, lines }, fitted, area, ctx));
   const tag = kickerHeight(shot, ctx);
   const above = tag === 0 ? 0 : tag + STACK.kickerGap * unit;
   for (let i = 0; i < SHRINK_PASSES && blockHeight(lines) + above > area.h; i++) {
@@ -102,7 +159,7 @@ export function composeStack(text, shot, ctx) {
   // set smaller than scale step 3 to fit the height, a line no longer reads as a stack: it says so, as a statement
   // that cannot fit does (the review's overflow finding tells the director to cut words)
   lines = lines.map((line) => (line.font.size < limits.min ? { ...line, layout: { ...line.layout, overflow: true } } : line));
-  let top = area.top + (area.h - blockHeight(lines) - above) / HALF + above;
+  let top = centredTop(area, blockHeight(lines) + above, ctx) + above;
   const placed = lines.map((line, k) => {
     if (k > 0) top += STACK.gap * Math.max(line.font.size, lines[k - 1].font.size);
     const baseline = top + line.ink.up;
@@ -176,7 +233,7 @@ export function restack(placed, ctx, { above = 0, below = 0 }) {
       return next.font.size < min ? { ...next, layout: { ...next.layout, overflow: true } } : next;
     });
   }
-  let top = area.top + (area.h - blockHeight(lines) - tag - above - below) / HALF + above + tag;
+  let top = centredTop(area, blockHeight(lines) + tag + above + below, ctx) + above + tag;
   const out = lines.map((line, k) => {
     if (k > 0) top += lineGap(line, lines[k - 1]);
     const baseline = top + line.ink.up;

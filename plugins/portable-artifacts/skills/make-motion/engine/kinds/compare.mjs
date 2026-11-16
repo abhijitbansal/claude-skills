@@ -9,7 +9,7 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
 import {
-  HERO_SCHEMA, heroId, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, NOT_BLANK, assertNoBlanks, hiddenOnFindings,
+  HERO_SCHEMA, heroId, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, NOT_BLANK, assertNoBlanks, hiddenOnFindings, isWide,
 } from './shared.mjs';
 import { SIDES, compareTurn, valueText } from './compare-text.mjs';
 import { expandDeskCompare } from './compare-desk.mjs';
@@ -63,11 +63,21 @@ function assemble(shot, ctx, { nodes, wrappers, boxes, hero }) {
 }
 
 // When a side is on screen in shot seconds, or null for a target that is not a side.
-function sideWindow(shot, timing, target, look) {
+function sideWindow(shot, timing, target, look, canvas) {
   const turn = compareTurn(timing);
+  if (SIDES.includes(target) && bothSides(look, canvas, shot)) return [0, Infinity];
   if (target === 'left') return [0, isEditorial(look) ? Infinity : turn];
   if (target === 'right') return [turn, Infinity];
   return null;
+}
+
+// Are both sides on screen the whole shot? Always in desk (two cards); in a stack look on a tall frame when its data
+// says so (stackTall: A over B) and no side has a picture (a picture and a stack in half the frame left the title a few
+// pixels tall), else one side at a time. A canvas left out counts as wide.
+function bothSides(look, canvas, shot) {
+  if (isEditorial(look)) return true;
+  const pictures = SIDES.some((k) => shot[k]?.src !== undefined);
+  return kindData(look, KIND).stackTall === true && canvas !== undefined && !isWide(canvas) && !pictures;
 }
 
 function expandCompare(shot, ctx) {
@@ -76,7 +86,7 @@ function expandCompare(shot, ctx) {
   const data = kindData(look, KIND);
   const turn = compareTurn(timing);
   const hero = heroId(shot, 'sides');
-  const built = isEditorial(look) ? expandDeskCompare(shot, ctx, data, turn, hero) : expandPopCompare(shot, ctx, data, turn);
+  const built = isEditorial(look) ? expandDeskCompare(shot, ctx, data, turn, hero) : expandPopCompare(shot, ctx, data, { turn, both: bothSides(look, ctx.canvas, shot) });
   const boxes = { ...built.boxes, sides: built.boxes.sides ?? unionBox([built.boxes.left, built.boxes.right]) };
   const { nodes, devices } = assemble(shot, ctx, { ...built, boxes, hero });
   return {
@@ -117,7 +127,7 @@ registries.kinds.add(KIND, {
   },
   // when a side is on screen: one at a time in a stack (pop), both from their arrival in a column of cards (desk)
   partWindow: sideWindow,
-  review: (shot, { look, timing, at }) => hiddenOnFindings(shot, { timing, at }, (target) => sideWindow(shot, timing, target, look)),
+  review: (shot, { look, timing, at, canvas }) => hiddenOnFindings(shot, { timing, at }, (target) => sideWindow(shot, timing, target, look, canvas)),
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...sideProblems(shot), ...kindSupportProblems(KIND, look)],
   expand: expandCompare,
   numbered: false, // no slug

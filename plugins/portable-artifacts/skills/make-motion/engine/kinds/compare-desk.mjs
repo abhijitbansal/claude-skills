@@ -71,9 +71,18 @@ function sidesAt(shot, ctx, data, { size, width, values }) {
   });
 }
 
+// The sides fitted (fitSidesAt) with the points at data.pointSteps; when nothing fits there, with the points down at
+// data.pointFloorStep before a title is flagged (look revision 1 raised the points to the label step for the phone tile).
+function fitSides(shot, ctx, data, width, height) {
+  const first = fitSidesAt(shot, ctx, data, width, height);
+  if (!first.sides.some((s) => s.title.overflow) || data.pointFloorStep === undefined) return first;
+  const smaller = fitSidesAt(shot, ctx, { ...data, pointSteps: [data.pointFloorStep] }, width, height);
+  return smaller.sides.some((s) => s.title.overflow) ? first : smaller;
+}
+
 // The largest title size that sets every title in data.titleLines lines and fits `height`; else the floor, flagged on
 // the side with the most title lines.
-function fitSides(shot, ctx, data, width, height) {
+function fitSidesAt(shot, ctx, data, width, height) {
   const { look, unit } = ctx;
   const values = valueSet(shot, ctx, data, width);
   const hasPoints = SIDES.some((k) => pointsText(shot[k]) !== null);
@@ -147,9 +156,13 @@ function coverOf(card) {
 // each, nonzero, so the tape over the paper is not dimmed twice), rising to the look's focus dim over the look's draw
 // move from `at`. The clipping's paper scrim (region-mark.mjs paperScrim) but whole and at the look's own strength: the
 // clipping's 0.8 left the dimmed side unreadable on the phone tile (viewed on the rendered sheets).
-function dimScrim(id, card, look, at) {
+// The left card goes under it from the turn; the right card is under it from frame 0 and comes out at the turn (look
+// review 1: an empty half for two seconds left the frame unbalanced; the unspoken side is already the dimmed state).
+function dimScrim(id, card, look, at, { lifts = false } = {}) {
   const { dur, ease } = look.moves.draw;
-  return paperScrim({ id: `${id}.scrim`, cover: coverOf(card), at: at + dur, dur, ease, opacity: look.devices.focus?.dim ?? DEFAULT_DIM, look });
+  const dim = look.devices.focus?.dim ?? DEFAULT_DIM;
+  const [from, opacity] = lifts ? [dim, 0] : [0, dim];
+  return paperScrim({ id: `${id}.scrim`, cover: coverOf(card), at: at + dur, dur, ease, from, opacity, look });
 }
 
 // The cards' boxes: side by side on a wide frame, stacked on a tall one, centred.
@@ -207,12 +220,12 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
   const set = fitSides(shot, ctx, data, cardW - HALF * pad, avail - top);
   const boxes = cardBoxes(ctx, data, Math.max(...set.sides.map((s) => s.height)) + top + HALF * pad);
   const cards = set.sides.map((side, i) => {
-    const id = `${shot.id}.${side.key}`, at = i === 0 ? 0 : turn;
+    const id = `${shot.id}.${side.key}`, at = 0; // both cards from frame 0, the unspoken one dimmed
     const card = cardOf(ctx, id, boxes[i], at);
     const size = { w: boxes[i][2], h: boxes[i][3] };
     const texts = sideTexts(shot, ctx, data, side, { ...size, at, top });
     const picture = sidePicture(shot, ctx, data, side.key, room, size);
-    const scrim = i === 0 ? [dimScrim(id, card, look, turn)] : [];
+    const scrim = [dimScrim(id, card, look, turn, { lifts: i === 1 })];
     return cardGroup(card, id, [...picture, ...texts, ...scrim]);
   });
   const group = node('group', hero, {}, { children: cards });

@@ -1,4 +1,6 @@
-// The `compare` kind in a stack composition (pop): one side at a time, a hard cut inside the shot at the turn. Each side
+// The `compare` kind in a stack composition (pop): on a wide frame one side at a time, a hard cut inside the shot at the
+// turn; on a tall frame (look data stackTall) both at once, A in the top part of the stack area and B in the bottom part,
+// `sideGap` apart, the unspoken side at `dim` opacity (B until the turn, A from it). Each side
 // is a stack (stack.mjs) with its title as the hero, a value (when both sides have one) as a numeral line of the same
 // stack, under a tag "A" / "B" ("BEFORE" / "AFTER" for before-after), and its points under the stack in the text face at
 // the largest of look.kinds.compare.pointSteps the stack stays three times, their cap line `pointGap` under it. A side's
@@ -6,6 +8,7 @@
 // DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
+import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, fitInBox, numeralLayout } from './shared.mjs';
 import { STACK, composeStack, stackNodes, stackArea, restack } from './stack.mjs';
@@ -14,6 +17,7 @@ import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
 
 const TAGS = Object.freeze({ versus: ['A', 'B'], 'before-after': ['BEFORE', 'AFTER'] });
 const HALF = 2;
+const SHARE_PASSES = 2;
 
 // The points' font: the largest of data.pointSteps the stack's largest line stays MIN_HERO_RATIO times, else the smallest.
 function pointFont(look, data, lines, unit) {
@@ -42,12 +46,12 @@ function pictureNodes(shot, key, ctx, data, { fit, placed, at }) {
   }).nodes;
 }
 
-// One side: its wrapper's children (the picture, the tag, the stack, the points) and its box.
-function sideParts(shot, key, k, ctx, data, { at, value }) {
+// One side in `area` (the stack area, or its part on a tall frame): its wrapper's children (the picture, the tag, the
+// stack, the points) and its box.
+function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinity }) {
   const { look, unit, measure } = ctx;
-  const area = stackArea(ctx);
   const staged = { ...shot, id: `${shot.id}.${key}`, kicker: TAGS[shot.mode ?? 'versus'][k] };
-  const first = composeStack(setCase(look, 'display', shot[key].title), staged, ctx);
+  const first = composeStack(setCase(look, 'display', shot[key].title), staged, ctx, area, { maxSize });
   const numeral = value === null ? null : numeralLayout(value.texts[k], value.font, measure);
   const valueRoom = numeral === null ? 0 : STACK.gap * value.font.size + (CAP_HEIGHT + WORD_DESCENT) * value.font.size;
   const words = pointsText(shot[key]);
@@ -73,28 +77,51 @@ function sideParts(shot, key, k, ctx, data, { at, value }) {
     const y = under + data.pointGap * unit + CAP_HEIGHT * font.size - points.lines[0].y;
     children.push(node('text', `${staged.id}.points`, { x: area.left, y, layout: points, font, fill: look.palette.ink2, role: 'body' }));
   }
-  return { id: staged.id, children, box: built.boxes.text };
+  return { id: staged.id, children, box: built.boxes.text, largest: Math.max(...placed.lines.map((line) => line.font.size)) };
 }
 
-// Both values' one size: the largest, up to a stack line's cap, at which the wider of the two fills the stack area's
-// width, in fixed digit advances; under the stack's floor step it is flagged (small). null without values.
-function sharedValue(shot, ctx) {
+// Both values' one size: the largest, up to a stack line's cap (and `valueTall` of a side's height when both sides share
+// the frame), at which the wider of the two fills the stack area's width, in fixed digit advances; under the stack's
+// floor step it is flagged (small). null without values.
+function sharedValue(shot, ctx, data, sideHeight) {
   if (!hasValues(shot)) return null;
   const { look, unit, measure } = ctx;
   const width = stackArea(ctx).w;
   const texts = SIDES.map((k) => setCase(look, 'display', valueText(shot[k].value)));
-  const cap = STACK.max * unit;
+  const cap = Math.min(STACK.max * unit, data.valueTall * sideHeight);
   const widest = Math.max(...texts.map((text) => numeralLayout(text, fontFor(look, 'display', cap, unit), measure).width));
   const size = Math.min(cap, Math.floor((cap * width) / widest));
   return { texts, font: fontFor(look, 'display', size, unit), small: size < sizeAt(look, STACK.fromStep, unit) };
 }
 
-/** The pop compare: the two sides as wrappers { id, tracks, children } shown before and from the turn, and their boxes. */
-export function expandPopCompare(shot, ctx, data, turn) {
+// The stack area cut in two, A's part over B's, `sideGap` apart.
+function sideAreas(ctx, data) {
+  const area = stackArea(ctx);
+  const h = (area.h - data.sideGap * ctx.unit) / HALF;
+  return [{ ...area, h }, { ...area, top: area.top + area.h - h, h }];
+}
+
+// A side's opacity when both are on screen: full while it is spoken, `dim` otherwise, changing over the look's enter move
+// at the turn (A speaks first).
+function dimTrack(look, data, k, turn) {
+  const [from, to] = k === 0 ? [1, data.dim] : [data.dim, 1];
+  return track([{ t: 0, v: from }, { t: turn, v: from }, { t: turn + look.moves.enter.dur, v: to, ease: look.moves.enter.ease }]);
+}
+
+/**
+ * The pop compare: the two sides as wrappers { id, tracks, children } and their boxes; one at a time (shown before and
+ * from the turn) or, `both`, A over B with the unspoken side dimmed.
+ */
+export function expandPopCompare(shot, ctx, data, { turn, both }) {
   const spans = [[0, turn], [turn, undefined]];
-  const value = sharedValue(shot, ctx);
+  const areas = both ? sideAreas(ctx, data) : [stackArea(ctx), stackArea(ctx)];
+  const value = sharedValue(shot, ctx, data, both ? areas[0].h : Infinity);
   // a side's picture is whole the moment its side is (the stack is too): no fade in after the hard cut at the turn
-  const parts = SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: spans[k][0], value }));
-  const wrappers = parts.map((p, k) => ({ id: p.id, tracks: { opacity: shownFrom(spans[k][0], spans[k][1]) }, children: p.children }));
+  const partsAt = (maxSize) => SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: both ? 0 : spans[k][0], value, area: areas[k], maxSize }));
+  let parts = partsAt(Infinity);
+  // both on one frame: the two titles one size, the smaller side's largest (twice: a side set again may shrink to fit)
+  for (let pass = 0; both && pass < SHARE_PASSES; pass++) parts = partsAt(Math.min(...parts.map((p) => p.largest)));
+  const opacity = (k) => (both ? dimTrack(ctx.look, data, k, turn) : shownFrom(spans[k][0], spans[k][1]));
+  const wrappers = parts.map((p, k) => ({ id: p.id, tracks: { opacity: opacity(k) }, children: p.children }));
   return { wrappers, boxes: { left: parts[0].box, right: parts[1].box } };
 }

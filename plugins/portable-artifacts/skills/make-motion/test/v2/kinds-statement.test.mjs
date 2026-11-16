@@ -281,7 +281,7 @@ test('a centred look centres caps; with recolor-scale an emphasised word turns a
   near(sample(text.wordTracks[3].scale, later - look.moves.enter.dur), look.moves.enter.scale, 'words pop from the enter scale');
 });
 
-test('pop stack: lines by sense, each filling the safe width or capped at 400 units, flush left, 0.08 apart, centred in the safe zone', () => {
+test('pop stack: lines by sense, each filling the safe width, capped at 400 units or held within the look\'s ratio of its neighbour, flush left, 0.08 apart, on the safe zone\'s optical centre', () => {
   const { nodes, canvas, ctx } = expandSecond({ id: 'a', show: 'statement', say: 'Your charts are *hiding* something.' }, 'pop', '9:16');
   const safe = viralOf(canvas);
   const left = safe.left, width = canvas.w - safe.left - safe.right; // 120 and 765 on 1080 x 1920
@@ -291,18 +291,20 @@ test('pop stack: lines by sense, each filling the safe width or capped at 400 un
   // 5.5 - 0.02 - 9 x 0.02 = 5.3 em, so 5.28 em wide; fitted 0.5 px inside the 765 px width: 764.5 / 5.28 = 144.792 px
   near(lines[2].size, 764.5 / 5.28, 'SOMETHING. hand-computed size');
   for (const l of lines) {
-    assert.ok(Math.abs(l.right - l.left - width) <= 1 || Math.abs(l.size - 400) < EPS, `${l.text}: ink ${l.right - l.left} fills ${width}, or 400 units`);
+    const held = lines.some((m) => m !== l && Math.abs(l.size - m.size * ctx.look.stack.ratio) < 1e-6);
+    assert.ok(Math.abs(l.right - l.left - width) <= 1 || Math.abs(l.size - 400) < EPS || held, `${l.text}: ink ${l.right - l.left} fills ${width}, 400 units, or the ratio`);
     near(l.left, left, `${l.text}: flush left on the safe edge`);
-    assert.equal(l.node.props.font.wordSpace, 0.26);
+    assert.equal(l.node.props.font.wordSpace, 0.18);
     assert.equal(l.node.props.stack, 'a.text', 'every line names its stack');
     assert.equal(l.node.props.role, 'hero');
   }
   lines.slice(1).forEach((l, k) => near(l.top - lines[k].bottom, 0.08 * Math.max(l.size, lines[k].size), `gap over ${l.text}`));
-  near((lines[0].top + lines.at(-1).bottom) / 2, safe.top + (canvas.h - safe.top - safe.bottom) / 2, 'block centred in the safe zone');
+  near((lines[0].top + lines.at(-1).bottom) / 2, safe.top + ctx.look.stack.centre * (canvas.h - safe.top - safe.bottom), 'block on the optical centre of the safe zone');
   assert.ok(lines.every((l) => l.size >= ctx.look.scale[2] - EPS), 'never below scale step 3');
-  // a short line would need more than 400 units to fill the width: it stops at 400, flush left
+  // a short line would need more than 400 units to fill the width: it stops at 400, or within the look's ratio of its
+  // neighbour (look revision 1), flush left
   const short = stackLinesOf(expandSecond({ id: 'b', show: 'statement', say: 'No. Never.', text: 'No. | Never.' }, 'pop', '9:16').nodes, 'b.text');
-  assert.equal(short[0].size, 400);
+  near(short[0].size, Math.min(400, short[1].size * ctx.look.stack.ratio), 'held at 400 units or the ratio');
   near(short[0].left, left);
   assert.ok(short[0].right - short[0].left < width);
   // on 16:9 the stack fills columns 1 to 12

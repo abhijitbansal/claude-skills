@@ -23,7 +23,8 @@ const NO_WRAP = 1e6;
 const HALF = 2;
 
 // How far a cut-out's keyline and hard shadow reach past its picture.
-const reachOf = (look, unit) => (look.keyline + Math.max(look.shadow.dx, look.shadow.dy)) * unit;
+// how far past the picture its keyline and shadow reach: the emphasised shadow's offset where a highlight grows it
+const reachOf = (look, unit) => (look.keyline + Math.max(look.shadow.dx, look.shadow.dy, look.devices.cutout?.emphasis?.offset ?? 0)) * unit;
 
 // A stack kicker's tag params (the tag device sizes itself from its text) and its plate height.
 function kickerTag(shot, ctx) {

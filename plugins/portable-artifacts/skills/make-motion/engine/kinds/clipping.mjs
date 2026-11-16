@@ -17,11 +17,12 @@ import { regionMark } from './region-mark.mjs';
 import { closeUpPlan, closeUps } from './close-ups.mjs';
 import { clippingProblems, establishingFindings } from './clipping-rules.mjs';
 import { pinnedRoom, captionNodes, kickerNodes } from './clipping-captions.mjs';
-import { stackArea } from './stack.mjs';
+import { stackArea, centredTop } from './stack.mjs';
+import { slugBox } from './slug.mjs';
 import { layeredCamera } from '../graph/camera.mjs';
 import {
   HERO_SCHEMA, REGION_PREFIX, heroId, isWide, arrivesMatched, regionOf, isEditorial, cutsToCloseUp, requireDevice,
-  compositionRect, fieldNode, defaultCamera, pushLayer, onDevices, placeDevices, deviceCamera, withEstablishingView,
+  compositionRect, fieldNode, defaultCamera, pushLayer, onDevices, placeDevices, deviceCamera, withEstablishingView, captionTop,
   openingLanding, easePeak, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 
@@ -29,6 +30,9 @@ const CAPTION_MAX = 80;
 const KICKER_MAX = 40;
 const REGIONS_MAX = 8;
 const SHARE = 0.62; // on 16:9: the picture's longer side, of the canvas short side
+// on 16:9 in an editorial look: the picture's width, of the canvas width (look review 1: at SHARE the opening was an
+// unreadable thumbnail), at most the height between the margins
+const EDITORIAL_WIDE = 0.7;
 const TALL_WIDTH = 0.92; // on other formats: the picture's width, of the available width
 const TALL_HEIGHT = 0.6; // ...and its height at most this share of the available height
 const CROP_ASPECT = 4 / 5; // a locked look's establishing crop on a vertical format, width over height...
@@ -36,6 +40,10 @@ const CROP_WIDTH = 0.92; // ...drawn at this share of the available width (never
 const CARD_PAD = 48; // units the card reaches past the picture on every side
 const RISE = 80; // units the editorial picture rises in from
 const EDITORIAL_TURN = -2; // degrees
+const DEGREES_HALF_TURN = 180;
+const TURN_ALLOWANCE = (4 * Math.PI) / DEGREES_HALF_TURN; // the group's -2 degrees and a cutout's seeded tilt, at most
+const SLUG_CLEAR = 1; // gutters between a slug card and a pushed region's frame (more leaves a caption card no room under it)
+const FRAME_REACH = 24; // units a region's marker frame reaches past the region (gap, stroke and hand overshoot)
 const OPENING_OPACITY = 0.5; // the least of the picture shown on the first frame of a shot that opens on a hard cut
 const FADE_EASE = 'outCubic'; // the picture's fade where the look's enter ease overshoots (a spring)
 const CENTRE = Object.freeze({ wide: [0.54, 0.52], tall: [0.5, 0.46] }); // editorial; centred uses the composition centre
@@ -108,16 +116,38 @@ function pictureGroup(shot, ctx, { hero, centre, children, hideAt }) {
   return node('group', hero, props, { tracks, children });
 }
 
-// Where the picture is centred: the composition centre (moved to the middle of what `room` leaves: pinnedRoom), or the
-// editorial point.
-function centreOf(ctx, room = NO_ROOM) {
+// The band an editorial picture keeps inside, in px: from the top margin to the bottom margin, or, where the caption
+// band is in use, to a gutter over it less the picture's rise (it rises in from RISE units lower).
+function editorialRoom(ctx) {
+  const { look, canvas, unit } = ctx;
+  const margin = look.grid.margin * unit;
+  const band = captionTop(ctx);
+  if (band === Infinity) return { top: margin, bottom: canvas.h - margin, band: false };
+  return { top: margin, bottom: Math.min(canvas.h - margin, band - look.grid.gutter * unit - RISE * unit), band: true };
+}
+
+// Where a picture `h` tall is centred: in what `room` leaves of the composition (pinnedRoom), on its optical centre on a
+// tall frame and its middle on a wide one (stack.mjs centredTop), or the editorial point.
+function centreOf(ctx, room = NO_ROOM, h = 0, w = 0) {
   const { look, canvas } = ctx;
   if (!isEditorial(look)) {
     const rect = compositionRect(ctx);
-    return [rect.cx, rect.cy + (room.above - room.below) / HALF];
+    const area = { top: rect.top + room.above, h: rect.h - room.above - room.below };
+    const top = centredTop(area, h, ctx);
+    // a picture tall enough to meet the area's top on the optical centre keeps the middle: its spring then overshoots
+    // evenly into the slack withinReach left above and below
+    return [rect.cx, top <= area.top ? area.top + area.h / HALF : top + h / HALF];
   }
   const [fx, fy] = isWide(canvas) ? CENTRE.wide : CENTRE.tall;
-  return [fx * canvas.w, fy * canvas.h];
+  const { bottom, band } = editorialRoom(ctx);
+  const turnedHalf = (h + Math.sin(TURN_ALLOWANCE) * w) / HALF;
+  const cy = band ? Math.min(fy * canvas.h, bottom - turnedHalf) : fy * canvas.h; // over the caption band, its rise included
+  const slug = isWide(canvas) ? slugBox(ctx.shot ?? {}, ctx) : null;
+  if (slug === null || w === 0) return [fx * canvas.w, cy];
+  // on a wide frame with a slug card: the picture's right edge a gutter left of the card, never past the left margin
+  const margin = look.grid.margin * ctx.unit, gutter = look.grid.gutter * ctx.unit;
+  const right = Math.min(fx * canvas.w + w / HALF, slug.inked[0] - gutter);
+  return [Math.max(margin + w / HALF, right - w / HALF), cy];
 }
 
 // The space a picture fits in: the platform safe zone for pop on 9:16, else the canvas inside the margins, less the
@@ -162,6 +192,19 @@ function cropSize(ctx, crop, room) {
 function plainSize(ctx, picture, crop, room) {
   const { canvas } = ctx;
   if (crop) return cropSize(ctx, crop, room);
+  if (isWide(canvas) && isEditorial(ctx.look)) {
+    const margin = ctx.look.grid.margin * ctx.unit;
+    // a slug card top right keeps the picture's right edge a gutter left of it: the picture is then as wide as that
+    // leaves, when it is less than EDITORIAL_WIDE (the slug and the picture never pile up in one corner); its turned
+    // height keeps over the caption band through its rise (editorialRoom)
+    const slug = slugBox(ctx.shot ?? {}, ctx);
+    const room = slug === null ? Infinity : slug.inked[0] - ctx.look.grid.gutter * ctx.unit - margin;
+    const { top, bottom, band } = editorialRoom(ctx);
+    // over a caption band its turned height counts (turned height per unit height); between the margins its own does
+    const turned = band ? 1 + (Math.sin(TURN_ALLOWANCE) * picture.width) / picture.height : 1;
+    const fit = Math.min(Math.min(EDITORIAL_WIDE * canvas.w, room) / picture.width, (bottom - top) / (turned * picture.height));
+    return { w: picture.width * fit, h: picture.height * fit };
+  }
   if (isWide(canvas)) {
     const fit = (SHARE * Math.min(canvas.w, canvas.h)) / Math.max(picture.width, picture.height);
     return { w: picture.width * fit, h: picture.height * fit };
@@ -175,14 +218,26 @@ function plainSize(ctx, picture, crop, room) {
 // editorial) keeps its keyline and shadow inside the available area at the peak of its enter spring: the area less the
 // spring's peak overshoot. The shadow's offset is allowed on every side, since the picture is centred in the area.
 function withinReach(ctx, size, room) {
-  const { look, unit } = ctx;
-  if (isEditorial(look)) return size;
-  const move = look.moves.enter;
-  const peak = move.scale === undefined ? 1 : Math.max(1, move.scale + (1 - move.scale) * easePeak(move.ease));
-  const edge = HALF * (look.keyline + Math.max(look.shadow.dx, look.shadow.dy)) * unit;
+  if (isEditorial(ctx.look)) return size;
+  const { peak, edge } = enterReach(ctx);
   const available = availableArea(ctx, room);
   const fit = Math.min(1, (available.w / peak - edge) / size.w, (available.h / peak - edge) / size.h);
   return { w: size.w * fit, h: size.h * fit };
+}
+
+// The enter spring's peak scale and the keyline and shadow's reach past the picture's edge (px).
+function enterReach(ctx) {
+  const { look, unit } = ctx;
+  const move = look.moves.enter;
+  const peak = move.scale === undefined ? 1 : Math.max(1, move.scale + (1 - move.scale) * easePeak(move.ease));
+  return { peak, edge: HALF * (look.keyline + Math.max(look.shadow.dx, look.shadow.dy)) * unit, keyline: look.keyline * unit };
+}
+
+// How tall a picture w x h turned `turn` degrees stands at the spring's peak: its keyline outside both edges and its
+// shadow past one.
+function reachHeight(w, h, turn, { peak, edge, keyline }) {
+  const a = Math.abs((turn * Math.PI) / DEGREES_HALF_TURN);
+  return (w * Math.sin(a) + h * Math.cos(a) + 2 * edge + keyline) * peak;
 }
 
 // The picture's drawn size: plainSize, kept inside the available area through its entrance (withinReach).
@@ -256,12 +311,13 @@ function pictureLayout(shot, ctx, room) {
   const closeUp = cutsToCloseUp(look);
   const picture = ctx.asset(shot.src);
   const crop = establishingCrop(shot, ctx, picture);
-  const { w, h } = pictureSize(ctx, picture, crop, room);
+  const { w, h } = pictureSize({ ...ctx, shot }, picture, crop, room);
   const hero = heroId(shot, 'image');
-  const centre = centreOf(ctx, room);
   const parts = pictureParts(shot, ctx, { w, h, hero, crop });
   const tilt = parts.find((n) => n.id === `${hero}.cutout`)?.props.rotate ?? 0;
   const turn = (isEditorial(look) ? EDITORIAL_TURN : 0) + tilt;
+  const reach = isEditorial(look) ? null : enterReach(ctx);
+  const centre = centreOf({ ...ctx, shot }, room, reach === null ? h : reachHeight(w, h, turn, reach), w);
   // a region (fractions of the whole image) in the drawn picture's own space, through the crop when there is one
   const [cx0, cy0, cw, ch] = crop ?? [0, 0, picture.width, picture.height];
   const local = ([fx, fy, fw, fh]) => {
@@ -316,7 +372,10 @@ function expandClipping(given, ctx) {
   const laid = pictureLayout(shot, ctx, pinnedRoom(shot, ctx));
   // The camera pushes in on the first event aimed at a region, landing as the event does (moving cameras only).
   const pushed = closeUp ? undefined : (shot.on ?? []).find(isRegionEvent);
-  const push = pushed && laid.boxes[pushed.target] ? pushLayer(ctx, laid.boxes[pushed.target], ctx.at(pushed.at)) : null;
+  // a slug card stays clear of the pushed region: its frame's top a gutter (and the frame's own reach) under the card
+  const slug = slugBox(shot, ctx);
+  const below = slug === null ? -Infinity : slug.inked[1] + slug.inked[3] + (SLUG_CLEAR * look.grid.gutter + FRAME_REACH) * unit;
+  const push = pushed && laid.boxes[pushed.target] ? pushLayer(ctx, laid.boxes[pushed.target], ctx.at(pushed.at), { below }) : null;
   const drift = defaultCamera(look, timing, unit);
   const pins = pinnedParts(shot, ctx, laid, followOf(laid, pushed, push, drift));
   const boxes = { ...laid.boxes, ...pins.boxes };

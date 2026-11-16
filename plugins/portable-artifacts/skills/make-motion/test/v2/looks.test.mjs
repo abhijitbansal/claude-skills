@@ -101,7 +101,7 @@ test('desk display is the base Fraunces at 600 and lets canvas pick the optical 
 
 test('pop type is Archivo with width as a keyword', () => {
   const { fonts } = registries.looks.get('pop');
-  assert.deepEqual({ ...fonts.display }, { family: 'Archivo', weight: 900, width: 'extra-condensed', wordSpace: 0.26 });
+  assert.deepEqual({ ...fonts.display }, { family: 'Archivo', weight: 900, width: 'extra-condensed', wordSpace: 0.18 });
   assert.deepEqual({ ...fonts.text }, { family: 'Archivo', weight: 700, width: 'condensed' });
   assert.deepEqual({ ...fonts.label }, { family: 'Archivo', weight: 700, width: 'normal' });
 });
@@ -171,8 +171,8 @@ test('pop values are the brief values', () => {
   assert.deepEqual({ ...l.maxLines }, { display: 3, text: 3 });
   assert.deepEqual({ ...l.wordsPerLine }, { text: 12 });
   assert.equal(l.keyline, 14);
-  assert.deepEqual({ ...l.shadow }, { dx: 10, dy: 10, blur: 0, alpha: 1, color: '#ff4d2e' });
-  assert.equal(l.shadow.color, l.palette.accent2);
+  assert.deepEqual({ ...l.shadow }, { dx: 10, dy: 10, blur: 0, alpha: 1, color: '#d7ff3f' });
+  assert.equal(l.shadow.color, l.palette.accent); // look revision 1: one hue
 });
 
 test('looks and their parts are frozen, and the registry hands back the same object', () => {
@@ -264,7 +264,7 @@ test('applyAccent returns a frozen copy with only the accent changed', () => {
   assert.equal(tinted.fonts, desk.fonts);
   assert.equal(tinted.tracking(220), -0.01, 'functions survive the copy');
   assert.ok(Object.isFrozen(tinted) && Object.isFrozen(tinted.palette) && Object.isFrozen(tinted.shadow));
-  assert.equal(registries.looks.get('pop').shadow.color, registries.looks.get('pop').palette.accent2);
+  assert.equal(registries.looks.get('pop').shadow.color, registries.looks.get('pop').palette.accent);
   assert.equal(applyAccent(registries.looks.get('pop'), '#FF6600').palette.accent, '#FF6600');
 });
 
@@ -366,7 +366,7 @@ test('every look names its composition: desk is editorial, pop is a stack', () =
 test('revision 1 look data: desk display line height 1.1; pop word space, recolour emphasis, quieter halftone, region emphasis on the cut-out', () => {
   const desk = registries.looks.get('desk'), pop = registries.looks.get('pop');
   assert.equal(desk.lineHeight.display, 1.1);
-  assert.equal(pop.fonts.display.wordSpace, 0.26);
+  assert.equal(pop.fonts.display.wordSpace, 0.18); // look revision 1: 0.26 read as stretched
   assert.equal(pop.emphasis, 'recolor');
   assert.equal(pop.field.params.strength, 0.5);
   assert.deepEqual({ ...pop.devices.cutout }, { keylineColor: '#ffffff', emphasis: { shadow: 'accent', offset: 18 } });

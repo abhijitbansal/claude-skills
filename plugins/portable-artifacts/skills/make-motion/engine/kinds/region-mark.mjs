@@ -7,8 +7,8 @@
 // draws a ruled, square-cornered frame. Built from plain nodes in the picture's own space (the caller puts them in a
 // group turned like the picture). Pure, DOM-free.
 import { node } from '../graph/node.mjs';
-import { landing, isHand, colourOf, deviceRng, spread, smoothPath, polyline } from '../devices/shared.mjs';
-import { paperScrim, SCRIM } from './shared.mjs';
+import { landing, isHand, deviceRng, spread, smoothPath, polyline } from '../devices/shared.mjs';
+import { paperScrim, SCRIM, markerAccent } from './shared.mjs';
 
 export { paperScrim, SCRIM } from './shared.mjs'; // where they live now
 
@@ -64,7 +64,7 @@ export function regionMark({ id, region, cover, at, look, unit, seed }) {
     const b = corners[(i + 1) % SIDES];
     const points = hand ? handPoints(a, b, spec, unit, rng, corners[2][1]) : [a, b];
     const draw = landing(start + seg * (i + 1), { ease: look.moves.draw.ease, dur: seg }, 0, 1, step);
-    const props = { stroke: colourOf(look, 'accent'), strokeWidth: spec.width * unit, lineCap: spec.cap, ...(spec.alpha < 1 ? { opacity: spec.alpha } : {}) };
+    const props = { stroke: markerAccent(look), strokeWidth: spec.width * unit, lineCap: spec.cap, ...(spec.alpha < 1 ? { opacity: spec.alpha } : {}) };
     const pathOf = (pts) => (hand ? smoothPath(pts) : polyline(pts));
     const first = node('path', `${id}.side${i}`, { ...props, d: pathOf(points) }, { tracks: { draw }, step });
     if (!spec.pass) return [first];

@@ -263,7 +263,7 @@ test('cutout keeps the image src and size and puts a keyline and a shadow behind
   }
   assert.ok(byPart(build('cutout', desk).nodes, 'shadow').props.blur > 0);
   assert.equal(byPart(build('cutout', pop).nodes, 'shadow').props.blur, undefined, 'pop shadow is hard');
-  assert.equal(byPart(build('cutout', pop).nodes, 'shadow').props.fill, pop.palette.accent2);
+  assert.equal(byPart(build('cutout', pop).nodes, 'shadow').props.fill, pop.palette.accent, 'the accent: one hue (look revision 1)');
 });
 
 test('a cutout of an image with transparency is refused until the draw layer can dilate alpha', () => {

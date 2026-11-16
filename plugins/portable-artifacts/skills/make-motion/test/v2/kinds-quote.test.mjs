@@ -198,7 +198,7 @@ test('pop quote at 16:9: the opening mark stays inside the margins when the stac
   assert.ok(mark[1] >= margin - 1, `mark top ${mark[1]} under the top margin ${margin}`);
 });
 
-test('pop quote at 9:16: a stack flush left in the safe zone, the opening mark a giant accent shape behind the first line, the attribution a tag under it', () => {
+test('pop quote at 9:16: a stack flush left in the safe zone, the opening mark a giant accent shape over the first line, the attribution a tag under it', () => {
   const { nodes, ctx, canvas, boxes } = expandShot(EXAMPLE(), 'pop', '9:16');
   const insets = viralOf(canvas);
   const stack = nodes.find((n) => n.id === 'voice.text');
@@ -212,7 +212,7 @@ test('pop quote at 9:16: a stack flush left in the safe zone, the opening mark a
   assert.ok(markBox[3] >= firstSize * 0.7, `giant: ${markBox[3]} tall against a ${firstSize} line`);
   assert.ok(Math.abs(markBox[0] - insets.left) <= 2, `flush left on the stack edge: ${markBox[0]}`);
   const firstInk = boxes['word:0'];
-  assert.ok(overlaps(markBox, firstInk), 'behind the first line');
+  assert.ok(!overlaps(markBox, firstInk) && markBox[1] + markBox[3] <= firstInk[1] + 1e-6, 'clear above the first line, never over it (look revision 1)');
   const lineInk = [insets.left, first.props.y + first.props.layout.lines[0].y - 0.74 * firstSize, 1, 0.74 * firstSize];
   assert.ok(markBox[1] < lineInk[1], 'it rises above the first line');
   assert.ok(markBox[1] + markBox[3] < lineInk[1] + lineInk[3], 'it never holds the whole first line (the line\'s ground stays the field)');

@@ -28,7 +28,8 @@ export const RESERVED_IDS = Object.freeze([FIELD_ID]);
 /** The prefix of a target that names one of a clipping's regions. */
 export const REGION_PREFIX = 'region:';
 const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
-const PUSH = Object.freeze({ share: 0.58, min: 1.2, max: 3.2, dur: 0.9 }); // the region fills `share` of the width
+// the region fills `share` of the width, and at most `tall` of the height (room under or over it for a caption card)
+const PUSH = Object.freeze({ share: 0.58, tall: 0.36, min: 1.2, max: 3.2, dur: 0.9 });
 const PUSH_OVERSHOOT = 1.2; // a spring ease can carry the push this far past its target; the pan limit allows for it
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
 const FORCE_MARK = '|';
@@ -263,6 +264,33 @@ function mixColour(a, b, share) {
   return `#${mixed.map((c) => c.toString(HEX_RADIX).padStart(CHANNEL_DIGITS, '0')).join('')}`;
 }
 
+const CHANNEL_MAX = 255;
+// `a` multiplied into `b` (both #rrggbb), channel by channel: what a 'multiply' blend of `a` shows on `b`.
+function multiplyColour(a, b) {
+  const channel = (hex, i) => parseInt(hex.slice(1 + CHANNEL_DIGITS * i, 1 + CHANNEL_DIGITS * (i + 1)), HEX_RADIX);
+  const out = [0, 1, 2].map((i) => Math.round((channel(a, i) * channel(b, i)) / CHANNEL_MAX));
+  return `#${out.map((c) => c.toString(HEX_RADIX).padStart(CHANNEL_DIGITS, '0')).join('')}`;
+}
+
+/**
+ * The accent as the look's highlighter shows it on the paper (#rrggbb): multiplied into the paper when the highlighter
+ * blends 'multiply' (desk), the accent itself otherwise. A chart's highlighted mark and a region's frame use it, so the
+ * film shows one yellow.
+ */
+export function markerAccent(look) {
+  const accent = colourOf(look, 'accent');
+  return look.devices?.highlight?.blend === 'multiply' ? multiplyColour(accent, colourOf(look, 'paper')) : accent;
+}
+
+/**
+ * The top of the caption band, in px, for a composition the captions would otherwise cover; Infinity with captions off
+ * or where the captions already keep out of the composition (a platform-safe composition gives the band up in kindContext).
+ */
+export function captionTop(ctx) {
+  if (ctx.captions === false || compositionRect(ctx).safe) return Infinity; // captions off: the band is the composition's
+  return registries.captions.get(ctx.look.captions).zone(ctx)[1];
+}
+
 const ghostInks = new WeakMap(); // palette -> its ghost colour
 /** A palette's ghost colour (#rrggbb): its ink mixed GHOST_SHARE into its paper, computed once per palette. */
 export function ghostInk(palette) {
@@ -325,19 +353,20 @@ const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /**
  * A camera layer for a deliberate close-up on `box` (canvas pixels): the zoom that makes the box PUSH.share of the
- * composition width (clamped to PUSH.min..PUSH.max), panned so the box centre sits on the composition centre (as far
+ * composition width and at most PUSH.tall of its height (clamped to PUSH.min..PUSH.max), its top kept under `below`, panned so the box centre sits on the composition centre (as far
  * as the field allows), easing with the look's enter ease over PUSH.dur and landing on `at`. A node at depth 0 moves
  * to c + (x - c) zoom - pan, so pan = c + (boxCentre - c) zoom - target; the drift's own pan at the landing time is
  * taken off, since the camera adds the layers.
  */
-export function pushLayer(ctx, box, at) {
+export function pushLayer(ctx, box, at, { below = -Infinity } = {}) {
   const { look, canvas, unit, timing } = ctx;
   const rect = compositionRect(ctx);
-  const zoom = clampTo((PUSH.share * rect.w) / box[2], PUSH.min, PUSH.max);
+  const zoom = clampTo(Math.min((PUSH.share * rect.w) / box[2], (PUSH.tall * rect.h) / box[3]), PUSH.min, PUSH.max);
   const drift = driftReach(look, unit);
   const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
   const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx) - driftAt(look, timing, unit, at);
-  const y = pan(canvas.h / HALF, box[1] + box[3] / HALF, rect.cy);
+  // the pushed box's top stays under `below` (a slug card's bottom), moving its centre down from the composition's
+  const y = pan(canvas.h / HALF, box[1] + box[3] / HALF, Math.max(rect.cy, below + (box[3] * zoom) / HALF));
   return [
     { t: Math.max(0, at - PUSH.dur), x: 0, y: 0, zoom: 1 },
     { t: at, x: clampAbs(x, panLimit(canvas.w, zoom, drift)), y: clampAbs(y, panLimit(canvas.h, zoom, drift)), zoom, ease: look.moves.enter.ease },
@@ -640,9 +669,9 @@ function scrimPath(outlines, hole) {
  * from clear to `opacity` (default SCRIM, the clipping's own) over the `dur` seconds before `at` (clipping, compare).
  * @param {{ id: string, cover: number[][][], hole?: number[], at: number, dur: number, opacity?: number, ease?: string, look: object }} p
  */
-export function paperScrim({ id, cover, hole, at, dur, opacity = SCRIM, ease = SCRIM_EASE, look }) {
+export function paperScrim({ id, cover, hole, at, dur, opacity = SCRIM, from = 0, ease = SCRIM_EASE, look }) {
   return node('path', id, { d: scrimPath(cover, hole), fill: colourOf(look, 'paper') }, {
-    tracks: { opacity: landing(at, { ease, dur }, 0, opacity) },
+    tracks: { opacity: landing(at, { ease, dur }, from, opacity) },
   });
 }
 
