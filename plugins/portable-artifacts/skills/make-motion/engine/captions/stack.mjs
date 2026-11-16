@@ -8,17 +8,13 @@ import { node } from '../graph/node.mjs';
 import { track, sample } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { sizeAt, fontFor, setCase, compositionRect, runInk, shownFrom, pulseScale, easePeak } from '../kinds/shared.mjs';
-import { captionGroups, groupTimes } from './index.mjs';
+import { captionGroups, groupTimes, fitGroup, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
 
 const STACK = Object.freeze({
-  step: 3, // the display face at scale step 3, the smallest size a stack line takes
+  step: 3, // the display face at scale step 3 (a stack line's smallest), smaller only for a group that does not fit
   maxLines: 2,
   grouping: Object.freeze({ maxWords: 3, maxChars: 18 }),
 });
-// The room the zone keeps for a line's ink above and below its baseline, as shares of the size (heavy caps reach about
-// 0.72 em up; a Q's tail or a comma about 0.2 em down).
-const ZONE_ASCENT = 0.8;
-const ZONE_DESCENT = 0.25;
 
 // The area a stack composes in: the platform safe zone on 9:16 for a look that keeps to it, else columns 1 to 12 inside
 // the margins (as kinds/stack.mjs stackArea).
@@ -82,30 +78,39 @@ function wordTracksOf(layout, group, ctx) {
   });
 }
 
-// The group's text laid out in caps in `maxWidth`: one layout word per spoken word, or an error that says which differ.
-function setGroup(group, font, maxWidth, ctx) {
+// The group's text laid out in caps at `size` px in `maxWidth`, as { layout, font }: one layout word per spoken word, or
+// an error that says which differ.
+function setAt(group, size, maxWidth, ctx) {
+  const font = fontFor(ctx.look, 'display', size, ctx.unit);
   const text = setCase(ctx.look, 'display', group.words.map((w) => w.text).join(' '));
-  const set = layoutText({ text, font, maxWidth, measure: ctx.measure });
-  const count = set.lines.reduce((n, l) => n + l.words.length, 0);
+  const layout = layoutText({ text, font, maxWidth, measure: ctx.measure });
+  const count = layout.lines.reduce((n, l) => n + l.words.length, 0);
   if (count !== group.words.length) throw new Error(`${ctx.captionId}: "${text}" lays out as ${count} words, not the ${group.words.length} spoken`);
-  return set.lines.length > STACK.maxLines ? { ...set, overflow: true } : set;
+  return { layout, font };
+}
+
+// The group at step STACK.step, or smaller (down to the look's smallest step) when it needs more than STACK.maxLines or
+// a line's ink is wider than `maxWidth` there: groups.mjs fitGroup.
+function setGroup(group, maxWidth, ctx) {
+  const fits = ({ layout, font }) => layout.lines.length <= STACK.maxLines
+    && layout.lines.every((line) => { const ink = runInk(line, font, ctx.measure); return ink.right - ink.left <= maxWidth; });
+  return fitGroup((px) => setAt(group, px, maxWidth, ctx), fits, displayFont(ctx).size, sizeAt(ctx.look, 1, ctx.unit));
 }
 
 /** The shot's caption nodes: one text per group, pinned, each on screen in turn. */
 function compose(words, ctx) {
   const { look, timing, fps, captionId, hero, filmStart, measure } = ctx;
   const z = zone(ctx);
-  const font = displayFont(ctx);
   const peak = peakOf(look);
   const groups = captionGroups(words, STACK.grouping);
   const times = groupTimes(groups, { duration: timing.duration, fps });
   return groups.map((group, k) => {
-    const layout = setGroup(group, font, z[2] / peak, ctx);
+    const { layout, font } = setGroup(group, z[2] / peak, ctx);
     const ink = runInk(layout.lines[0], font, measure);
     // the last baseline keeps the descent at the peak scale above the zone's bottom
     const y = z[1] + z[3] - ZONE_DESCENT * font.size * peak - layout.lines.at(-1).y;
     const emphasis = layout.lines.flatMap((l) => l.words).filter((w) => group.words[w.index].emphasis).map((w) => w.index);
-    const caption = { zone: z, end: filmStart + times[k].end, hero, emphasis };
+    const caption = { zone: z, end: filmStart + times[k].end, hero, emphasis, marks: ctx.markIds ?? [] };
     return node('text', `${captionId}.${k}`, { x: z[0] - ink.left, y, layout, font, fill: look.palette.ink, role: 'caption', furniture: true, fixed: true, caption }, {
       tracks: { opacity: shownFrom(times[k].at, times[k].until) },
       wordTracks: wordTracksOf(layout, group, ctx),

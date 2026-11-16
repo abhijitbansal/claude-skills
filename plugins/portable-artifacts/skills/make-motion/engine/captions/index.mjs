@@ -1,121 +1,36 @@
 // Captions (design 9.3): the spoken words of a narrated shot whose kind does not show its own words (a kind declares
 // `showsWords: true`; statement and number do), drawn in the look's caption style. Importing this file registers the
-// styles `lower` (desk) and `stack` (pop) in registries.captions (once: a second evaluation leaves the registry as it is).
+// styles `lower` (desk) and `stack` (pop) in registries.captions (once: a second evaluation leaves the registry as it is);
+// a style added to that registry must be { summary, zone, compose } (validateCaptionStyle).
 //
 // A caption style is { summary, zone(ctx) -> [x, y, w, h], compose(words, ctx) -> nodes }: `zone` is the canvas-pixel
 // rectangle its text stays inside on this canvas, `compose` the shot's caption nodes from the timeline's words (measured
 // or estimated, shot seconds). `ctx` is the shot's ctx (graph/film.mjs shotContext) plus `captionId` (the id every
-// caption node starts with), `hero` (the id of the shot's hero node, or null) and `filmStart` (the film second the shot
-// starts at). Each caption text node carries props.role 'caption', props.furniture and props.caption = { zone, end,
-// hero, emphasis }: its zone, the film second its last word ends, the hero id and the word indexes (of its layout) that
-// are emphasised, which the frame review's caption rules read (engine/review/frame.mjs). A clipping's own `caption` (the
-// author's line on a card) is a different thing and carries no props.caption.
+// caption node starts with), `hero` (the id of the shot's hero node, or null), `filmStart` (the film second the shot
+// starts at), `avoid` (the boxes of the kind's pinned text cards over the shot), `markIds` (the ids of the shot's mark
+// devices: a highlight, circle, underline, bracket or focus event, `<shot>.on<j>`) and `marks` (where those stand on the
+// frame, camera applied, over the shot). Each caption text node carries props.role 'caption', props.furniture and
+// props.caption = { zone, end, hero, emphasis, marks }: its zone, the film second its last word ends, the hero id, the
+// word indexes (of its layout) that are emphasised and the mark ids, which the frame review's caption rules read
+// (engine/review/frame.mjs). A clipping's own `caption` (the author's line on a card) carries no props.caption.
 //
-// Timing: a group shows from its first word's start until the next group starts or CAPTION_HOLD after its last word
-// ends, whichever is first, and never past the shot: stepped, so every frame it is on screen it is whole (the review
-// judges a text only once it has landed). Pure and DOM-free.
+// Grouping and timing live in groups.mjs (re-exported here), which imports no style, so any caption module can be
+// imported first. Pure and DOM-free.
 import { registries } from '../registry.mjs';
-import { endsSentence } from '../text/breaks.mjs';
 import { sampleGraph } from '../graph/sample.mjs';
+import { applyCamera } from '../graph/camera.mjs';
 import { pathPoints } from '../devices/shared.mjs';
 import { compositionRect } from '../kinds/shared.mjs';
 import { lower } from './lower.mjs';
 import { stack } from './stack.mjs';
 
-/** Seconds a caption group stays after its last word ends (the review allows 0.3). */
-export const CAPTION_HOLD = 0.2;
-// A word that ends a clause: , ; : or a dash (spaced, or closing the word), with any closing quote or bracket after it.
-const CLAUSE_END = /[,;:–—-]["'”’)\]]*$/;
-// Costs of the grouping's dynamic program: every group, a group of one word in a sentence of more, a break that is not
-// after clause punctuation, and the squared share of a group's unused characters (balance).
-const COST = Object.freeze({ group: 1, lone: 100, offClause: 2, balance: 1 });
-const AVOID_STEP = 0.1; // seconds between the samples of where a pinned card stands
+export { CAPTION_HOLD, captionGroups, groupTimes } from './groups.mjs';
+
+/** The devices whose event marks a region or a text: a caption keeps off what they mark while they are on screen. */
+export const MARK_DEVICES = Object.freeze(['highlight', 'circle', 'underline', 'bracket', 'focus']);
+const AVOID_STEP = 0.1; // seconds between the samples of where a pinned card or a mark stands
 const DEGREES_TO_RADIANS = Math.PI / 180;
-
-const isWhole = (n) => Number.isInteger(n) && n >= 1;
-
-// The words as units that are never split: a merged run (consecutive words sharing one start and end, as a voice gives
-// "$5 million") is one unit. Each unit is { first, last } (word indexes, inclusive).
-function unitsOf(words) {
-  const units = [];
-  words.forEach((w, i) => {
-    const prev = units.at(-1);
-    const shares = prev && words[prev.last].start === w.start && words[prev.last].end === w.end;
-    if (shares) prev.last = i;
-    else units.push({ first: i, last: i });
-  });
-  return units;
-}
-
-// The units split into sentences: a sentence ends at a unit whose last word ends one (or at the last unit).
-function sentencesOf(units, words) {
-  const sentences = [[]];
-  units.forEach((u, k) => {
-    sentences.at(-1).push(u);
-    if (endsSentence(words[u.last].text) && k < units.length - 1) sentences.push([]);
-  });
-  return sentences;
-}
-
-// The cost of one group: units[i..j) of a sentence of `units`, Infinity when it breaks the limits (a single unit never
-// does: it cannot be split).
-function groupCost(units, i, j, words, { maxWords, maxChars }) {
-  const first = units[i].first, last = units[j - 1].last;
-  const count = last - first + 1;
-  const chars = words.slice(first, last + 1).map((w) => w.text).join(' ').length;
-  if (j - i > 1 && (count > maxWords || chars > maxChars)) return Infinity;
-  const sentenceWords = units.at(-1).last - units[0].first + 1;
-  const lone = count === 1 && sentenceWords > 1 ? COST.lone : 0;
-  const offClause = j < units.length && !CLAUSE_END.test(words[last].text) ? COST.offClause : 0;
-  const slack = Math.max(0, maxChars - chars) / maxChars;
-  return COST.group + lone + offClause + COST.balance * slack * slack;
-}
-
-// One sentence's units as groups, by a dynamic program over break points (fewest groups, breaks after clause
-// punctuation, no group of one word, balanced). Ties keep the earlier break.
-function sentenceGroups(units, words, limits) {
-  const best = [0], from = [0];
-  for (let j = 1; j <= units.length; j++) {
-    best[j] = Infinity;
-    for (let i = 0; i < j; i++) {
-      const cost = best[i] + groupCost(units, i, j, words, limits);
-      if (cost < best[j]) { best[j] = cost; from[j] = i; }
-    }
-  }
-  const groups = [];
-  for (let j = units.length; j > 0; j = from[j]) groups.unshift({ first: units[from[j]].first, last: units[j - 1].last });
-  return groups;
-}
-
-/**
- * The words of a shot as caption groups, in order: { first, last, words } (word indexes, inclusive, and the words).
- * Breaks at sentence ends first (a group never runs across one), then after clause punctuation; never splits a merged
- * pair (two words sharing one time); never leaves a group of one word unless its sentence is one word; a group holds at
- * most `maxWords` words and `maxChars` characters (spaces included) unless it is one unbreakable unit.
- * @param {{ text: string, start: number, end: number }[]} words @param {{ maxWords: number, maxChars: number }} limits
- */
-export function captionGroups(words, { maxWords, maxChars } = {}) {
-  if (!isWhole(maxWords) || !isWhole(maxChars)) throw new RangeError(`captionGroups: maxWords and maxChars must be whole numbers of 1 or more, got ${maxWords} and ${maxChars}`);
-  if (!Array.isArray(words)) throw new TypeError('captionGroups: words must be an array of timeline words');
-  if (words.length === 0) return [];
-  return sentencesOf(unitsOf(words), words)
-    .flatMap((sentence) => sentenceGroups(sentence, words, { maxWords, maxChars }))
-    .map(({ first, last }) => ({ first, last, words: words.slice(first, last + 1) }));
-}
-
-/**
- * When each group is on screen, in shot seconds: { at, until, end } with `end` its last word's end. `until` is the next
- * group's start or `end + CAPTION_HOLD`, whichever is first, inside the shot, and at least one frame after `at`.
- */
-export function groupTimes(groups, { duration, fps }) {
-  return groups.map((g, k) => {
-    const at = g.words[0].start;
-    const end = Math.max(...g.words.map((w) => w.end));
-    const next = groups[k + 1]?.words[0].start ?? Infinity;
-    const until = Math.min(next, end + CAPTION_HOLD, duration);
-    return { at, end, until: Math.min(duration, Math.max(until, at + 1 / fps)) };
-  });
-}
+const STYLE_FIELDS = Object.freeze([['summary', 'string'], ['zone', 'function'], ['compose', 'function']]);
 
 /** Is the film captioned? Its `captions` (true or false) when it says, else the mode's data. */
 export function captionsOn(film, mode) {
@@ -124,21 +39,52 @@ export function captionsOn(film, mode) {
   return film.captions;
 }
 
-// A point turned by `deg` degrees about the origin.
-function turn([x, y], deg) {
-  const a = deg * DEGREES_TO_RADIANS, cos = Math.cos(a), sin = Math.sin(a);
-  return [x * cos - y * sin, x * sin + y * cos];
+// ---- where things stand on the frame ----
+
+// A sampled node's own transform as a canvas-style matrix [a, b, c, d, e, f] (as engine/page/bounds.mjs localMatrix).
+function matrixOf(n) {
+  const a = n.rotate * DEGREES_TO_RADIANS, cos = Math.cos(a), sin = Math.sin(a);
+  const sx = n.scaleX * n.scale, sy = n.scaleY * n.scale;
+  return [cos * sx, sin * sx, -sin * sy, cos * sy, n.x, n.y];
+}
+const times = (p, q) => [p[0] * q[0] + p[2] * q[1], p[1] * q[0] + p[3] * q[1], p[0] * q[2] + p[2] * q[3], p[1] * q[2] + p[3] * q[3], p[0] * q[4] + p[2] * q[5] + p[4], p[1] * q[4] + p[3] * q[5] + p[5]];
+const through = (m, [x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+const IDENTITY = Object.freeze([1, 0, 0, 1, 0, 0]);
+
+function boxOf(points) {
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
 }
 
-// The canvas box of a sampled card paper `paper` inside the sampled pinned group `group`.
-function paperBox(group, paper) {
-  const pts = pathPoints(paper.props.d).map((p) => {
-    const [px, py] = turn(p, paper.rotate);
-    const [gx, gy] = turn([(px + paper.x) * group.scale, (py + paper.y) * group.scale], group.rotate);
-    return [group.x + gx, group.y + gy];
-  });
-  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+// Does a sampled path show ink of its own: drawn some of its stroke, or its fill whole, and not wiped to nothing?
+const drawn = (n) => (n.reveal ?? 1) > 0 && ((Boolean(n.props.stroke) && (n.draw ?? 1) > 0) || (Boolean(n.props.fill) && (n.draw ?? 1) >= 1));
+
+/**
+ * Where the marks `ids` stand in a sampled tree (camera applied), as canvas boxes: for each mark on screen, the box of its
+ * drawn paths (a frame, a circle, a band, a line), never the paper scrim of a region highlight (`<id>.scrim`).
+ */
+export function markedBoxes(sampled, ids) {
+  const wanted = new Set(ids);
+  const found = new Map();
+  const walk = (n, parent, opacity, root) => {
+    const o = opacity * n.opacity, m = times(parent, matrixOf(n)), mark = root ?? (wanted.has(n.id) ? n.id : null);
+    if (o <= 0) return;
+    if (mark && n.type === 'path' && !n.id.endsWith('.scrim') && drawn(n)) found.set(mark, [...(found.get(mark) ?? []), ...pathPoints(n.props.d).map((p) => through(m, p))]);
+    n.children.forEach((child) => walk(child, m, o, mark));
+  };
+  sampled.forEach((n) => walk(n, IDENTITY, 1, null));
+  return [...found.values()].filter((points) => points.length > 0).map(boxOf);
+}
+
+/** The ids of a shot's mark devices (MARK_DEVICES events), as the kinds name them: `<shot id>.on<j>`. */
+export const markIds = (shot) => (shot.on ?? []).flatMap((item, j) => (MARK_DEVICES.includes(item.do) ? [`${shot.id}.on${j}`] : []));
+
+const sampleTimes = (duration) => [...Array.from({ length: Math.floor(duration / AVOID_STEP) + 1 }, (_, i) => i * AVOID_STEP), duration];
+
+// Where a shot's marks stand over the shot: markedBoxes every AVOID_STEP seconds, the shot's camera applied.
+function marksOver(nodes, camera, canvas, duration, ids) {
+  if (ids.length === 0 || typeof camera !== 'function') return [];
+  return sampleTimes(duration).flatMap((t) => markedBoxes(applyCamera(sampleGraph(nodes, t), camera(t), canvas), ids));
 }
 
 /**
@@ -149,10 +95,11 @@ function paperBox(group, paper) {
 export function pinnedCards(nodes, duration) {
   const cards = nodes.filter((n) => n.props.fixed === true && n.children.some((c) => c.props.textCard === true));
   if (cards.length === 0) return [];
-  const times = [...Array.from({ length: Math.floor(duration / AVOID_STEP) + 1 }, (_, i) => i * AVOID_STEP), duration];
-  return times.flatMap((t) => sampleGraph(cards, t).filter((g) => g.opacity > 0)
-    .flatMap((g) => g.children.filter((c) => c.props.textCard === true).map((paper) => paperBox(g, paper))));
+  return sampleTimes(duration).flatMap((t) => sampleGraph(cards, t).filter((g) => g.opacity > 0)
+    .flatMap((g) => g.children.filter((c) => c.props.textCard === true).map((paper) => boxOf(pathPoints(paper.props.d).map((p) => through(times(matrixOf(g), matrixOf(paper)), p))))));
 }
+
+// ---- a shot's captions ----
 
 const captioned = (kind, ctx) => kind.showsWords !== true && ctx.timing.words.length > 0;
 
@@ -174,15 +121,38 @@ export function kindContext(film, kind, ctx) {
 
 /**
  * The caption nodes of one shot (none when its kind shows its own words or it has no narration), from the look's style.
- * The style's ctx also carries `avoid`: the boxes of the kind's pinned text cards over the shot (pinnedCards).
  * @param {object} shot @param {object} ctx the shot's ctx (shotContext)
- * @param {{ kind: object, hero: string | null, filmStart: number, nodes: object[] }} p nodes: the kind's nodes
+ * @param {{ kind: object, hero: string | null, filmStart: number, nodes: object[], camera?: Function }} p nodes: the
+ *   kind's nodes; camera: the shot's camera, (t) => { x, y, zoom, rotate } (graph/film.mjs), for where its marks stand
  */
-export function shotCaptions(shot, ctx, { kind, hero, filmStart, nodes }) {
+export function shotCaptions(shot, ctx, { kind, hero, filmStart, nodes, camera }) {
   if (!captioned(kind, ctx)) return [];
   const style = registries.captions.get(ctx.look.captions);
-  const avoid = pinnedCards(nodes, ctx.timing.duration);
-  return style.compose(ctx.timing.words, { ...ctx, captionId: `${shot.id}.captions`, hero, filmStart, avoid });
+  const ids = markIds(shot);
+  const marks = marksOver(nodes, camera, ctx.canvas, ctx.timing.duration, ids);
+  return style.compose(ctx.timing.words, { ...ctx, captionId: `${shot.id}.captions`, hero, filmStart, avoid: pinnedCards(nodes, ctx.timing.duration), markIds: ids, marks });
+}
+
+// ---- registration ----
+
+/** Throws a RangeError naming the style and the field when `style` is not { summary: string, zone, compose }. */
+export function validateCaptionStyle(name, style) {
+  for (const [field, type] of STYLE_FIELDS) {
+    if (typeof style?.[field] !== type) throw new RangeError(`caption style "${name}": ${field} must be a ${type}, got ${typeof style?.[field]}`);
+  }
+  return style;
+}
+
+// Every style added to the shared registry is checked as it is added, as looks and modes are (once: a second evaluation
+// of this file keeps the first wrapper).
+const addStyle = registries.captions.add;
+if (!addStyle.validatesStyles) {
+  const checkedAdd = (name, style) => {
+    validateCaptionStyle(name, style);
+    addStyle(name, style);
+  };
+  checkedAdd.validatesStyles = true;
+  registries.captions.add = checkedAdd;
 }
 
 for (const style of [lower, stack]) {

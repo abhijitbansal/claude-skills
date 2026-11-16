@@ -5,8 +5,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { registries } from '../../engine/registry.mjs';
-import { captionGroups, kindContext } from '../../engine/captions/index.mjs';
-import { auditFrame } from '../../engine/review/frame.mjs';
+import { spawnSync } from 'node:child_process';
+import { captionGroups, kindContext, markedBoxes, CAPTION_HOLD } from '../../engine/captions/index.mjs';
+import { auditFrame, CAPTION_LATE_SECONDS } from '../../engine/review/frame.mjs';
 import { runInk, unionBox, compositionRect } from '../../engine/kinds/shared.mjs';
 import { pathPoints } from '../../engine/devices/shared.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
@@ -488,4 +489,120 @@ test('captions are pure: the same film gives the same caption nodes', () => {
   const b = captionsIn(filmFor([CLIP], 'pop', '9:16', ON), 0, 0.5).map((e) => JSON.stringify(e.node));
   assert.ok(a.length > 0);
   assert.deepEqual(a, b);
+});
+
+// ---- fix wave (final review I5 and Minors 15 to 20, 27) ----
+
+const strokeNode = (id, bbox, extra = {}) => ({ ...pathNode(id, bbox), props: { stroke: '#d63a2f', ...extra.props }, draw: 1, ...extra });
+
+test('I5: a caption over the region a highlight marks is mechanical (caption-covers) even when the picture is pushed in, while the mark is on screen', () => {
+  const marked = { caption: { marks: ['c.on0'] } };
+  const frame = groupNode('c.on0', [650, 820, 400, 120], [{ ...pathNode('c.on0.scrim', [-400, -300, 2800, 1800]), props: { fill: '#f3eee3' } }, strokeNode('c.on0.side0', [650, 820, 400, 120])]);
+  const pushed = { ...groupNode('c.image', [-400, -300, 2800, 1800], [imageNode('c.image.photo', [-380, -280, 2760, 1760]), frame]), scale: 2 };
+  // the caption rules only: the hand-built scrim and caption carry no colours for the contrast rule to read
+  const captionRules = (nodes) => rules(auditFrame(nodes, reviewCtx())).filter((r) => r.startsWith('caption'));
+  assert.deepEqual(captionRules([pushed, captionNode(marked)]), ['caption-covers']);
+  assert.match(auditFrame([pushed, captionNode(marked)], reviewCtx()).find((x) => x.rule === 'caption-covers').message, /covers the region marked by "c\.on0"/);
+  const drawing = { ...pushed, children: [pushed.children[0], { ...frame, children: [frame.children[0], { ...frame.children[1], draw: 0 }] }] };
+  assert.deepEqual(captionRules([drawing, captionNode(marked)]), [], 'a mark not yet drawn is not on screen');
+  const away = { ...pushed, children: [pushed.children[0], groupNode('c.on0', [650, 200, 400, 120], [strokeNode('c.on0.side0', [650, 200, 400, 120])])] };
+  assert.deepEqual(captionRules([away, captionNode(marked)]), [], 'a caption over unmarked picture that fills the frame is still over ground');
+  assert.deepEqual(captionRules([pushed, captionNode()]), [], 'only the marks the caption names (its shot\'s) are judged');
+});
+
+test('I5: a caption over any text that is not landed (a hero mid-pulse at 1.3, set large) is mechanical (caption-covers); landed pairs stay with the overlap rule', () => {
+  const hero = { ...captionNode({ id: 'c.text', x: 700, y: 860 }), props: { role: 'hero' }, scale: 1.3 };
+  const f = auditFrame([captionNode(), hero], reviewCtx({ restScales: new Map([['c.text', 1]]) }));
+  assert.ok(rules(f).includes('caption-covers'), JSON.stringify(rules(f)));
+  assert.match(f.find((x) => x.rule === 'caption-covers').message, /covers the text "c\.text"/);
+  const landed = { ...captionNode({ id: 'c.text', x: 700, y: 860 }), props: { role: 'hero' } };
+  assert.deepEqual(rules(auditFrame([captionNode(), landed], reviewCtx())).filter((r) => r === 'caption-covers'), [], 'a landed pair is the overlap rule\'s');
+});
+
+test('I5: a captioned shot\'s caption names the marks of its shot, and the marks stand where the camera puts them (frame coordinates)', () => {
+  const shot = { ...CLIP, regions: { query: [0.58, 0.14, 0.37, 0.24] }, on: [{ at: 'word:query', do: 'highlight', target: 'region:query' }] };
+  const film = filmOf([shot], 'desk', '16:9', ON);
+  const timeline = buildTimeline(film, { fps: FPS });
+  const built = filmFor([shot], 'desk', '16:9', ON);
+  const [first] = captionTexts(built.sampleShot(0, 0.1)).map((e) => e.node);
+  assert.deepEqual(first.props.caption.marks, ['c.on0']);
+  const canvas = canvasOf('16:9');
+  const end = timeline.shots[0].duration;
+  const boxes = markedBoxes(built.sampleShot(0, end - 0.01), ['c.on0']);
+  assert.equal(boxes.length, 1);
+  const [x, y, w, h] = boxes[0];
+  assert.ok(x > 0 && y > 0 && x + w < canvas.w && y + h < canvas.h && w > canvas.w * 0.3, `the pushed-in region frame on the canvas: ${boxes[0].map(Math.round)}`);
+});
+
+test('I5: desk lower steps right of a marked region that comes into its band, as it does of a pinned card', () => {
+  const film = filmOf([CLIP], 'desk', '16:9', ON);
+  const timeline = buildTimeline(film, { fps: FPS });
+  const canvas = canvasOf('16:9');
+  const ctx = shotContext({ film, index: 0, timeline, canvas, measure, assets: IMAGES, viralInsets: viralOf(canvas) });
+  const lower = registries.captions.get('lower');
+  const free = lower.zone(ctx);
+  const stepped = lower.zone({ ...ctx, avoid: [], marks: [[free[0] - 40, free[1] + 10, 200, 60]] });
+  assert.ok(stepped[0] > free[0] + 160, `the zone starts right of the mark: ${stepped[0]} vs ${free[0]}`);
+});
+
+test('Minor 15: each caption module can be imported first, on its own, in a fresh process', () => {
+  for (const file of ['groups.mjs', 'lower.mjs', 'stack.mjs', 'index.mjs']) {
+    const url = new URL(`../../engine/captions/${file}`, import.meta.url).href;
+    const run = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(url)});`], { encoding: 'utf8' });
+    assert.equal(run.status, 0, `${file} first: ${run.stderr}`);
+  }
+});
+
+test('Minor 16: a group too long for the zone at its size is set smaller, down to the look\'s smallest step, rather than leave the zone', () => {
+  for (const [style, look, format] of [['lower', 'desk', '16:9'], ['lower', 'desk', '9:16'], ['stack', 'pop', '9:16']]) {
+    for (const line of ['Supercalifragilisticexpialidocious.', 'Simple internationalisation works.']) {
+      const words = wordsOf(line);
+      const nodes = composeWith(style, look, format, words);
+      for (const t of words.map((w) => w.start + 0.05)) {
+        for (const entry of onScreen(captionTexts(sampleGraph(nodes, t)))) {
+          const { layout, font } = entry.node.props;
+          assert.ok(!layout.overflow && layout.lines.length <= 2, `${style} ${format} "${line}": ${layout.lines.length} lines`);
+          assert.ok(insideBox(inkOf(entry), entry.node.props.caption.zone), `${style} ${format} "${line}" inside its zone`);
+          assert.ok(font.size >= registries.looks.get(look).scale[0] - EPS, `never below the look's smallest step: ${font.size}`);
+        }
+      }
+    }
+  }
+});
+
+test('Minor 17: lower keeps to the platform safe zone for a look that composes in it', () => {
+  const desk = registries.looks.get('desk');
+  if (!registries.looks.has('desk-viral-test')) registries.looks.add('desk-viral-test', { ...desk, name: 'desk-viral-test', modes: ['viral'] });
+  const film = filmOf([CLIP], 'desk-viral-test', '9:16', { mode: 'viral', ...ON });
+  const timeline = buildTimeline(film, { fps: FPS });
+  const canvas = canvasOf('9:16');
+  const ctx = shotContext({ film, index: 0, timeline, canvas, measure, assets: IMAGES, viralInsets: viralOf(canvas) });
+  const rect = compositionRect(ctx);
+  assert.ok(rect.safe);
+  assert.ok(insideBox(registries.captions.get('lower').zone(ctx), [rect.left, rect.top, rect.w, rect.h]), 'inside the platform safe zone');
+});
+
+test('Minor 18: a caption style must have a summary, a zone and a compose to register', () => {
+  assert.throws(() => registries.captions.add('test-bad', { summary: 'x' }), /caption style "test-bad": zone must be a function/);
+  assert.throws(() => registries.captions.add('test-bad', { zone: () => [0, 0, 1, 1], compose: () => [] }), /caption style "test-bad": summary must be a string/);
+  assert.equal(registries.captions.has('test-bad'), false);
+});
+
+test('Minor 19: lower in a look that does not style a card fails naming the device and the look', () => {
+  const desk = registries.looks.get('desk');
+  const { card: _card, ...devices } = desk.devices;
+  if (!registries.looks.has('desk-no-card-test')) registries.looks.add('desk-no-card-test', { ...desk, name: 'desk-no-card-test', devices });
+  const shot = { ...CLIP, show: 'free', src: undefined, nodes: [] };
+  assert.throws(() => filmFor([shot], 'desk-no-card-test', '16:9', ON), /look "desk-no-card-test" does not style device "card"/);
+});
+
+test('Minor 20: the viral hook rule judges the opening text, never a caption that happens to be larger', () => {
+  const opening = { ...captionNode({ id: 'h.text', x: 200, y: 200, scales: Array(9).fill(1) }), props: { role: 'hero' } };
+  const caption = { ...captionNode({ id: 'h.captions.0', x: 200, y: 860 }), layout: { ...captionNode().layout, size: 96 } };
+  const f = auditFrame([opening, caption], reviewCtx({ mode: 'viral', isFirstShot: true, look: registries.looks.get('pop'), safe: { left: 0, top: 0, right: 1920, bottom: 1080 } }));
+  assert.ok(rules(f).includes('hook-words'), JSON.stringify(rules(f)));
+});
+
+test('Minor 27: a caption group leaves inside the time the review allows', () => {
+  assert.ok(CAPTION_HOLD < CAPTION_LATE_SECONDS, `${CAPTION_HOLD} < ${CAPTION_LATE_SECONDS}`);
 });

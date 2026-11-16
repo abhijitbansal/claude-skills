@@ -110,10 +110,11 @@ function heroBox(n, rest) {
 
 // ---- shots ----
 
-// The shot's nodes: its kind's, then its captions (drawn last, pinned over everything) when the film is captioned.
-function withCaptions(out, shot, kind, ctx, film) {
+// The shot's nodes: its kind's, then its captions (drawn last, pinned over everything) when the film is captioned. `cam`
+// is the shot's camera, for where its marks stand on the frame (the captions keep off them).
+function withCaptions(out, shot, kind, ctx, film, cam) {
   if (!captionsOn(film, ctx.mode)) return out.nodes;
-  const captions = shotCaptions(shot, ctx, { kind, hero: out.hero ?? null, filmStart: ctx.timing.start, nodes: out.nodes });
+  const captions = shotCaptions(shot, ctx, { kind, hero: out.hero ?? null, filmStart: ctx.timing.start, nodes: out.nodes, camera: cam });
   return captions.length === 0 ? out.nodes : [...out.nodes, ...captions];
 }
 
@@ -127,11 +128,12 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
   const heroNode = out.hero === undefined ? undefined : out.nodes.find((n) => n.id === out.hero);
   const box = kind.heroTarget === undefined ? undefined : out.boxes?.[kind.heroTarget];
   const cut = index === 0 ? null : registries.cuts.get(shot.cut ?? DEFAULT_CUT);
+  const cam = cameraOf(out.camera, canvas, `shot "${shot.id}"`);
   return {
     start: timing.start,
     duration: timing.duration,
-    nodes: withCaptions(out, shot, kind, ctx, film),
-    cam: cameraOf(out.camera, canvas, `shot "${shot.id}"`),
+    nodes: withCaptions(out, shot, kind, ctx, film, cam),
+    cam,
     background: out.background ?? DEFAULT_BACKGROUND,
     hero: heroNode && box ? { id: heroNode.id, box, pose: heroNode.props } : null,
     cut,

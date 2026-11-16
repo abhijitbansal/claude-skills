@@ -1,11 +1,13 @@
 // Captions in the render page, with the real fonts: an emphasised caption word at the edge of its zone is never clipped
 // (the measured ink, frame by frame, through the caption rules), and both gate films with captions on come back from the
 // film review with no finding at all. Run with --test-concurrency=1; skips without a browser.
-import test from 'node:test';
+import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, copyFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { listEntries } from '../../scripts/v2/list.mjs';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/looks/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
@@ -62,6 +64,32 @@ for (const [look, format, own] of COMBOS) {
     assert.ok(edgeSeen, 'an emphasised word at the start of a group was on screen');
     assert.deepEqual(session.errors, []);
   });
+}
+
+// The kind examples `--list kinds` prints, with captions on (review-browser runs them without), in both looks and both
+// formats: no finding at all, the caption rules among them (the clipping example circles or underlines a region).
+const EXAMPLE_COMBOS = [['pro', 'desk', '16:9'], ['pro', 'desk', '9:16'], ['viral', 'pop', '16:9'], ['viral', 'pop', '9:16']];
+let exampleDir;
+before(() => {
+  exampleDir = mkdtempSync(path.join(tmpdir(), 'mm-v2-captions-browser-'));
+  mkdirSync(path.join(exampleDir, 'assets'));
+  copyFileSync(path.join(GATE_DIR, 'clipping.png'), path.join(exampleDir, 'assets', 'screenshot.png'));
+});
+after(() => rmSync(exampleDir, { recursive: true, force: true }));
+
+for (const [mode, look, format] of EXAMPLE_COMBOS) {
+  for (const entry of listEntries('kinds')) {
+    test(`the ${entry.name} example with captions on in ${look} at ${format} has no review finding`, async (t) => {
+      const on = entry.example.on?.map((item) => ({ ...item, do: look === 'pop' ? 'underline' : item.do }));
+      const film = { version: 2, mode, look, format, fps: FPS, seed: 3, captions: true, shots: [{ ...entry.example, ...(on ? { on } : {}) }] };
+      const session = await sessionOrNull(film, { specDir: exampleDir });
+      if (!session) { t.skip('no browser'); return; }
+      t.after(() => session.close());
+      const findings = await reviewFilm({ session });
+      assert.deepEqual(findings.map((f) => `${f.kind} ${f.rule}: ${f.message}`), []);
+      assert.deepEqual(session.errors, []);
+    });
+  }
 }
 
 for (const [name, extra] of [['gate-desk', { captions: true }], ['gate-pop', { captions: true }]]) {
