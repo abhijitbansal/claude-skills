@@ -13,6 +13,7 @@ import { resolveAnchor, anchorSeconds, AnchorError, echoValue, showValue } from 
 import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { REGION_PREFIX } from '../../engine/kinds/shared.mjs';
+import { fieldAt } from '../../engine/assets.mjs';
 import { SpecError, isPlainObject, quote, schemaErrors, srcProblem } from './spec-common.mjs';
 import { CUES_MAX, MUSIC_SCHEMA, VOICE_SCHEMA, checkCueItems, checkMusic, checkVoice, isRecordingVoice, readRecording } from './spec-sound.mjs';
 
@@ -403,12 +404,13 @@ export function timedAnchorErrors(film, timeline, { registries = defaultRegistri
   return [...anchorSpanErrors(film, timeline), ...timedKindErrors(film, timeline, registries)];
 }
 
+// Each picture a kind's srcFields name ("src", or a dotted path such as "left.src"), held to the film folder.
 function checkSrcFields(shot, base, kind, specDir) {
   return (kind?.srcFields ?? []).flatMap((field) => {
-    const value = shot[field];
+    const value = fieldAt(shot, field);
     if (typeof value !== 'string' || value === '') return [];
     const problem = srcProblem(value, specDir);
-    return problem ? [{ path: pathJoin(base, field), message: problem }] : [];
+    return problem ? [{ path: field.split('.').reduce((acc, key) => pathJoin(acc, key), base), message: problem }] : [];
   });
 }
 

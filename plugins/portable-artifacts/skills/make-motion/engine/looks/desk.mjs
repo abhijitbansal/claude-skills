@@ -94,13 +94,19 @@ export const desk = {
     // compare: two cards across columns 1 to 12, `gap` gutters apart, centred at `centre`; on each, `pad` in, the value
     // from step `valueFromStep` to `valueMax` and `valueGap` em over the title, the title from `titleMax` down (at most
     // `valueTitle` of the value; not under step `titleFromStep`) in at most `titleLines` lines, the points `titleGap` em
-    // under it at the largest of `pointSteps` the hero stays three times and the title twice
-    compare: { gap: 6, centre: 0.5, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointSteps: [1, 2, 3] },
+    // under it at the largest of `pointSteps` the hero stays three times and the title twice; side pictures at the top of
+    // the cards in a shared room `picture` of the content height, `pictureGap` above the text
+    compare: { gap: 6, centre: 0.5, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointSteps: [1, 2, 3], picture: 0.4, pictureGap: 32 },
+    // chart: the claim in the display face on columns 2 to `titleToWide` (`titleToTall`), from three times the labels up to
+    // `titleMax` in at most `titleLines` lines, the plot `titleGap` under it; labels in the label face at step `labelStep`,
+    // `gap` from what they label; marks `line` wide where they are lines, reference lines `ref` and the baseline `axis`
+    // wide; marks other than the highlighted one dim to `dim`; reference lines drawn (`refs`)
+    chart: { titleToWide: 11, titleToTall: 11, titleMax: 132, titleLines: 2, titleGap: 56, labelStep: 2, gap: 14, line: 5, ref: 2, axis: 3, dim: 0.3, refs: true },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'paper', slide: 'paper', punch: null, match: null },
-    device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper' },
+    device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper' },
     emphasis: null,
     land: 'click',
   },

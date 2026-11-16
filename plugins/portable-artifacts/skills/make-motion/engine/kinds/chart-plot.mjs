@@ -1,0 +1,24 @@
+// The chart kind's plot for its type, drawn into an area (chart-desk.mjs, chart-pop.mjs), and the band at the bottom of
+// the frame its captions take (engine/captions), which a plot keeps clear of. Pure and DOM-free.
+import { registries } from '../registry.mjs';
+import { compositionRect } from './shared.mjs';
+import { drawColumns, drawBars } from './chart-draw.mjs';
+import { drawSeries } from './chart-series.mjs';
+import { drawDonut } from './chart-donut.mjs';
+
+/** The plot of `shot` in `area` ({ x, y, w, h }): { nodes, boxes, plot, highlight, times }. */
+export function drawPlot(shot, ctx, style, area, { valueOnHighlight }) {
+  if (shot.type === 'column') return drawColumns(shot, ctx, style, area, { valueOnHighlight });
+  if (shot.type === 'bar') return drawBars(shot, ctx, style, area, { valueOnHighlight });
+  if (shot.type === 'donut') return drawDonut(shot, ctx, style, area, { valueOnHighlight });
+  return drawSeries(shot, ctx, style, area, { valueOnHighlight, area: shot.type === 'area' });
+}
+
+/**
+ * The top of the caption band, in px, for a composition the captions would otherwise cover; Infinity where the
+ * captions already keep out of the composition (a platform-safe composition gives the band up in kindContext).
+ */
+export function captionTop(ctx) {
+  if (compositionRect(ctx).safe) return Infinity;
+  return registries.captions.get(ctx.look.captions).zone(ctx)[1];
+}

@@ -15,14 +15,13 @@ import { landing } from '../devices/shared.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
-  isEditorial, requireDevice, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale,
-  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, driftReach,
+  isEditorial, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale,
+  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, driftReach, highlightBands, highlightLines,
 } from './shared.mjs';
 import { wordTimes } from './words.mjs';
 import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { composeStack, stackNodes } from './stack.mjs';
-import { BAND_HEIGHT } from '../devices/highlight.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
@@ -35,8 +34,6 @@ const FIRST_COLUMN = 2;
 const SLUG_CLEAR = 2; // gutters between a statement's ink and the slug card, its tape included (look gate fix pass F4)
 const CENTRED_TO = 11;
 const KICKER = Object.freeze({ step: 1, gap: 28, ruleGap: 12, rule: 2 }); // a centred look's kicker above the text
-// The highlighter band behind a run reaches this far (em of the text) past the run's highest and lowest ink.
-const HIGHLIGHT_PAST_INK = 0.06;
 const EMPHASIS_SHARE = 0.5; // emphasis on this share of a statement's words or more is a creative finding (highlight looks)
 const FILL_EASE = 'outCubic';
 const HALF = 2;
@@ -231,47 +228,6 @@ function wordTracksFor(words, times, ctx, matched) {
   });
 }
 
-// Runs of adjacent emphasised words on one line, each [first, last] word index.
-function emphasisRuns(layout, times, timing) {
-  const emphasised = (index) => times[index].spoken !== null && timing.words[times[index].spoken].emphasis;
-  return layout.lines.flatMap((line) => line.words.reduce((runs, word) => {
-    if (!emphasised(word.index)) return runs;
-    const open = runs.at(-1);
-    if (open && open.last === word.index - 1) return [...runs.slice(0, -1), { ...open, last: word.index }];
-    return [...runs, { line, first: word.index, last: word.index }];
-  }, []));
-}
-
-// The box to give the highlight device for a run, so that the band it draws (BAND_HEIGHT times the box, about the same
-// middle) runs from HIGHLIGHT_PAST_INK above the run's highest ink to HIGHLIGHT_PAST_INK below its lowest: it holds the
-// words, descenders included, and with the look's display line height it clears the lines above and below.
-function bandBox(placed, line, run, measure) {
-  const { font, x, y } = placed;
-  const a = line.words.find((w) => w.index === run.first), b = line.words.find((w) => w.index === run.last);
-  const ink = runInk(line, font, measure, run.first, run.last);
-  const baseline = y + line.y;
-  const top = baseline - ink.up - HIGHLIGHT_PAST_INK * font.size, bottom = baseline + ink.down + HIGHLIGHT_PAST_INK * font.size;
-  const h = (bottom - top) / BAND_HEIGHT;
-  const left = x + line.x + a.x;
-  return [left, (top + bottom) / HALF - h / HALF, x + line.x + b.x + b.width - left, h];
-}
-
-function highlights(shot, ctx, placed, times) {
-  const { look, unit, seed, timing, measure } = ctx;
-  if (look.emphasis !== 'highlight') return [];
-  const { layout } = placed;
-  const at = placed;
-  const runs = emphasisRuns(layout, times, timing);
-  if (runs.length > 0) requireDevice(look, 'highlight', 'statement');
-  const device = registries.devices.get('highlight');
-  return runs.flatMap(({ line, first, last }, k) => {
-    const box = bandBox(placed, line, { first, last }, measure);
-    // the band grows with the words: each word's landing time and right edge
-    const stops = line.words.filter((w) => w.index >= first && w.index <= last).map((w) => ({ at: times[w.index].at, x: at.x + line.x + w.x + w.width }));
-    return device.build({ id: `${shot.id}.hl${k}`, box, at: times[first].at, look, unit, seed, stops }).nodes;
-  });
-}
-
 // The kicker: on a slug card in an editorial composition (slug.mjs); above the text, centred, in a centred one, landing
 // with the first word.
 function kickerNodes(shot, ctx, placed, landAt) {
@@ -283,20 +239,6 @@ function kickerNodes(shot, ctx, placed, landAt) {
   const capLine = placed.y + placed.layout.lines[0].y - CAP_HEIGHT * placed.font.size;
   const y = capLine - KICKER.gap * unit - layout.lines[0].y;
   return [node('text', `${shot.id}.kicker`, { x: placed.span.x, y, layout, font, fill: look.palette.ink2, role: 'kicker' }, { tracks: enterTracks(look, unit, landAt, { y }) })];
-}
-
-// The most laid-out lines one unbroken run of emphasised words spans (a run follows word order across lines), or
-// undefined when nothing is emphasised: the frame review's highlight-lines rule reads it from the text node.
-function highlightLines(layout, times, timing) {
-  const lineOf = new Map(layout.lines.flatMap((line, k) => line.words.map((w) => [w.index, k])));
-  const emphasised = (i) => times[i] !== undefined && times[i].spoken !== null && timing.words[times[i].spoken].emphasis;
-  let most, first = null;
-  for (let i = 0; i <= times.length; i++) {
-    if (i < times.length && emphasised(i)) { first ??= i; continue; }
-    if (first !== null) most = Math.max(most ?? 0, lineOf.get(i - 1) - lineOf.get(first) + 1);
-    first = null;
-  }
-  return most;
 }
 
 function boxesFor(placed, words) {
@@ -342,7 +284,7 @@ function expandStatement(shot, ctx) {
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'text', behind });
   const firstAt = times.length > 0 ? Math.min(look.moves.enter.dur, times[0].at) : 0;
-  const base = [fieldNode(shot, ctx), ...kickerNodes(shot, ctx, placed, firstAt), ...highlights(shot, ctx, placed, times), text];
+  const base = [fieldNode(shot, ctx), ...kickerNodes(shot, ctx, placed, firstAt), ...highlightBands(shot.id, placed, times, ctx, 'statement'), text];
   return {
     nodes: placeDevices(base, devices),
     camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],

@@ -404,6 +404,25 @@ test('a list shot in pop with sound on plans one pop per item, at the time each 
   assert.deepEqual(pairs(planCues(film, timeline)), arrivals.map((t) => [Math.round(t * 1e6) / 1e6, 'pop']));
 });
 
+test('a compare shot sounds its turn when the second side arrives: paper in desk (sound on), a whoosh in pop', () => {
+  const shot = { id: 'swap', show: 'compare', say: 'Before, you ran a server. After, you share one file.', left: { title: 'A server' }, right: { title: 'One file' } };
+  for (const [film, cue] of [[{ version: 2, mode: 'pro', look: 'desk', sound: 'on', shots: [shot] }, 'paper'], [{ version: 2, mode: 'viral', look: 'pop', shots: [shot] }, 'whoosh']]) {
+    const timeline = buildTimeline(film, { fps: FPS });
+    const turn = timeline.shots[0].start + registries.kinds.get('compare').events(shot, timeline.shots[0])[0].t;
+    assert.deepEqual(pairs(planCues(film, timeline)), [[Math.round(turn * 1e6) / 1e6, cue]], film.look);
+  }
+});
+
+test('a chart lands its highlighted value as the land event: a click in desk (sound on), a sub in pop', () => {
+  const shot = { id: 'g', show: 'chart', type: 'column', title: 'Q3 carried the year', say: 'Sales rose every quarter. Q3 carried the year.', data: [{ label: 'Q1', value: 12 }, { label: 'Q3', value: 31 }], highlight: 'Q3' };
+  for (const [film, cue] of [[{ version: 2, mode: 'pro', look: 'desk', sound: 'on', shots: [shot] }, 'click'], [{ version: 2, mode: 'viral', look: 'pop', shots: [shot] }, 'sub']]) {
+    const timeline = buildTimeline(film, { fps: FPS });
+    const land = timeline.shots[0].start + registries.kinds.get('chart').landing(shot, timeline.shots[0]);
+    assert.ok(soundEvents(film, timeline).some((e) => e.kind === 'land' && e.t === land), film.look);
+    assert.deepEqual(pairs(planCues(film, timeline)), [[Math.round(land * 1e6) / 1e6, cue]], film.look);
+  }
+});
+
 test('a kind event naming a device the kind did not declare in eventDevices is an error, never a silent cue', () => {
   const kinds = createRegistry('kinds');
   const list = registries.kinds.get('list');

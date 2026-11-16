@@ -81,12 +81,17 @@ export const pop = {
     quote: { mark: 1.1, into: 0.15, tagGap: 40, tagSteps: [1, 2], portrait: 0.24 },
     // compare: one side at a time as a stack under its tag; the points `pointGap` under it at the largest of `pointSteps`
     // the stack stays three times
-    compare: { pointGap: 32, pointSteps: [1, 2] },
+    compare: { pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32 },
+    // chart: the claim as a tag at the largest of `tagSteps` that holds it on a line, the highlighted value `tagGap` under
+    // it as a numeral up to `numeralMax`, at most `numeralShare` of the area's height, the plot `numeralGap` under that;
+    // labels at step `labelStep`, `gap` from what they label; lines `line` wide, the baseline `axis` wide; the other marks
+    // dim to `dim`; no reference lines (`refs`): the values are labelled on the marks
+    chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.28, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null },
-    device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop' },
+    device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh' },
     emphasis: 'pop',
     land: 'sub',
   },

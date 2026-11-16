@@ -14,6 +14,7 @@ import { landing, isHand, colourOf, smoothPath, polyline, pathPoints } from '../
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, asTextCard, unionBox } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
+import { paperScrim } from './region-mark.mjs';
 
 const NO_WRAP = 1e6;
 const EPSILON = 1e-6;
@@ -95,11 +96,32 @@ function fitSides(shot, ctx, data, width, height) {
   return { values, sides: set.map((s, i) => (i === worst ? { ...s, title: { ...s.title, overflow: true } } : s)) };
 }
 
-// One side's text nodes in its card's centred space, all arriving at `at`.
-function sideTexts(shot, ctx, data, side, { w, h, at }) {
+// The pictures' room at the top of each card: both sides share one height, `data.picture` of the content height, so
+// their titles line up; each picture is fitted into the content width and that height. null when no side has one.
+function pictureRoom(shot, ctx, data, width, height) {
+  const sides = SIDES.filter((k) => shot[k].src !== undefined);
+  if (sides.length === 0) return null;
+  const fitted = Object.fromEntries(sides.map((k) => {
+    const picture = ctx.asset(shot[k].src);
+    const scale = Math.min(width / picture.width, (data.picture * height) / picture.height);
+    return [k, { w: picture.width * scale, h: picture.height * scale }];
+  }));
+  return { fitted, h: Math.max(...Object.values(fitted).map((f) => f.h)), gap: data.pictureGap * ctx.unit };
+}
+
+// A side's picture at the top left of its card's content, in the card's centred space; none without one.
+function sidePicture(shot, ctx, data, key, room, { w, h }) {
+  const fit = room?.fitted[key];
+  if (fit === undefined) return [];
+  const pad = data.pad * ctx.unit;
+  return [node('image', `${shot.id}.${key}.src`, { src: shot[key].src, w: fit.w, h: fit.h, x: -w / HALF + pad, y: -h / HALF + pad })];
+}
+
+// One side's text nodes in its card's centred space, all arriving at `at`, starting `top` under the content's top.
+function sideTexts(shot, ctx, data, side, { w, h, at, top }) {
   const { look, unit } = ctx;
   const pad = data.pad * unit, ox = -w / HALF + pad;
-  let cursor = -h / HALF + pad; // the next cap line
+  let cursor = -h / HALF + pad + top; // the next cap line
   const out = [];
   const place = (id, layout, font, fill, role) => {
     const y = cursor + CAP_HEIGHT * font.size - layout.lines[0].y;
@@ -126,12 +148,11 @@ function coverOf(card) {
 
 // The unspoken side's dim: a scrim of the look's paper over the whole card, its paper and tape as one path (one outline
 // each, nonzero, so the tape over the paper is not dimmed twice), rising to the look's focus dim over the look's draw
-// move from `at`. As the clipping's region scrim (region-mark.mjs) but whole and at the look's own strength: the
+// move from `at`. The clipping's paper scrim (region-mark.mjs paperScrim) but whole and at the look's own strength: the
 // clipping's 0.8 left the dimmed side unreadable on the phone tile (viewed on the rendered sheets).
 function dimScrim(id, card, look, at) {
-  const d = coverOf(card).map((points) => polyline(points, true)).join('');
-  const dim = look.devices.focus?.dim ?? DEFAULT_DIM;
-  return node('path', `${id}.scrim`, { d, fill: look.palette.paper }, { tracks: { opacity: landing(at + look.moves.draw.dur, look.moves.draw, 0, dim) } });
+  const { dur, ease } = look.moves.draw;
+  return paperScrim({ id: `${id}.scrim`, cover: coverOf(card), at: at + dur, dur, ease, opacity: look.devices.focus?.dim ?? DEFAULT_DIM, look });
 }
 
 // The cards' boxes: side by side on a wide frame, stacked on a tall one, centred.
@@ -184,14 +205,18 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
   const span = gridSpan(look, canvas, 1, look.grid.columns);
   const cardW = wide ? (span.w - gap) / HALF : span.w;
   const avail = (wide ? canvas.h - HALF * margin : (canvas.h - HALF * margin - gap) / HALF) - HALF * pad;
-  const set = fitSides(shot, ctx, data, cardW - HALF * pad, avail);
-  const boxes = cardBoxes(ctx, data, Math.max(...set.sides.map((s) => s.height)) + HALF * pad);
+  const room = pictureRoom(shot, ctx, data, cardW - HALF * pad, avail);
+  const top = room === null ? 0 : room.h + room.gap;
+  const set = fitSides(shot, ctx, data, cardW - HALF * pad, avail - top);
+  const boxes = cardBoxes(ctx, data, Math.max(...set.sides.map((s) => s.height)) + top + HALF * pad);
   const cards = set.sides.map((side, i) => {
     const id = `${shot.id}.${side.key}`, at = i === 0 ? 0 : turn;
     const card = registries.devices.get('card').build({ id, box: boxes[i], at, look, unit, seed }).nodes[0];
-    const texts = sideTexts(shot, ctx, data, side, { w: boxes[i][2], h: boxes[i][3], at });
+    const size = { w: boxes[i][2], h: boxes[i][3] };
+    const texts = sideTexts(shot, ctx, data, side, { ...size, at, top });
+    const picture = sidePicture(shot, ctx, data, side.key, room, size);
     const scrim = i === 0 ? [dimScrim(id, card, look, turn)] : [];
-    return node('group', id, card.props, { tracks: card.tracks, children: [...asTextCard(id, card.children), ...texts, ...scrim] });
+    return node('group', id, card.props, { tracks: card.tracks, children: [...asTextCard(id, card.children), ...picture, ...texts, ...scrim] });
   });
   const group = node('group', hero, {}, { children: cards });
   return { nodes: [group, ...betweenMarks(shot, ctx, boxes, turn)], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };

@@ -11,3 +11,4 @@ import './end.mjs';
 import './list.mjs';
 import './quote.mjs';
 import './compare.mjs';
+import './chart.mjs';

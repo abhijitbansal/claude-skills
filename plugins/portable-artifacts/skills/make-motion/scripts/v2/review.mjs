@@ -250,8 +250,11 @@ function pacingFindings(film, timeline, held) {
   }));
 }
 
-// Advice a kind gives about its own shots (kind.review(shot, { look, timing, at }) -> [{ path, at, message }]): the clipping
-// kind says a region event comes too early to show the whole picture first.
+const MECHANICAL_KIND = 'mechanical';
+
+// Advice a kind gives about its own shots (kind.review(shot, { look, timing, at }) -> [{ path, at, message, kind? }]):
+// the clipping kind says a region event comes too early to show the whole picture first (creative, the default); the
+// chart kind says a chart breaks an honesty rule (kind: 'mechanical', which fails the run like any mechanical finding).
 function kindFindings(film, timeline) {
   const look = resolveLook(film);
   return film.shots.flatMap((shot, index) => {
@@ -259,7 +262,7 @@ function kindFindings(film, timeline) {
     if (typeof review !== 'function') return [];
     const timing = timeline.shots[index];
     return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing) }).map((f) => ({
-      kind: 'creative', shot: shot.id, path: `shots[${index}].${f.path}`, t: timing.start + f.at, rule: 'kind', node: f.path, message: f.message,
+      kind: f.kind === MECHANICAL_KIND ? MECHANICAL_KIND : 'creative', shot: shot.id, path: `shots[${index}].${f.path}`, t: timing.start + f.at, rule: 'kind', node: f.path, message: f.message,
     }));
   });
 }

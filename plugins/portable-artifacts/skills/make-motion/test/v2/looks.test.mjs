@@ -379,7 +379,7 @@ test('desk sounds are the brief values: paper cuts and slides, marker hand marks
   const { sounds } = registries.looks.get('desk');
   assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null });
   assert.deepEqual({ ...sounds.device }, {
-    highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper',
+    highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
   });
   assert.equal(sounds.emphasis, null);
   assert.equal(sounds.land, 'click');
@@ -389,7 +389,7 @@ test('pop sounds are the brief values: click, whoosh and impact cuts, a pop high
   const { sounds } = registries.looks.get('pop');
   assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null });
   assert.deepEqual({ ...sounds.device }, {
-    highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop',
+    highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
   });
   assert.equal(sounds.emphasis, 'pop');
   assert.equal(sounds.land, 'sub');
@@ -401,7 +401,7 @@ const kindDevices = () => registries.kinds.names().flatMap((k) => registries.kin
 test('every look names a sound (or null) for exactly the registered cuts, the registered devices and the devices kinds declare, and its sounds are frozen', () => {
   assert.deepEqual(registries.cuts.names().sort(), [...KNOWN_CUTS].sort(), 'the look index registers the cuts it checks against');
   assert.equal(registries.devices.names().length, 9, 'the look index registers the devices it checks against');
-  assert.deepEqual(kindDevices(), ['item'], 'the list kind declares its item event');
+  assert.deepEqual(kindDevices(), ['item', 'turn'], 'the list kind declares its item event, compare its turn');
   assert.ok(kindDevices().every((d) => !registries.devices.has(d)), 'a kind\'s event device is not also a registered device');
   const wanted = [...registries.devices.names(), ...kindDevices()].sort();
   for (const name of lookNames()) {
@@ -462,7 +462,7 @@ test('desk and pop carry frozen composition data for the end, list, quote and co
   for (const name of ['desk', 'pop']) {
     const { kinds } = registries.looks.get(name);
     assert.ok(Object.isFrozen(kinds), `${name} kinds frozen`);
-    for (const kind of ['end', 'list', 'quote', 'compare']) {
+    for (const kind of ['end', 'list', 'quote', 'compare', 'chart']) {
       assert.equal(typeof kinds[kind], 'object', `${name} kinds.${kind}`);
       assert.ok(Object.isFrozen(kinds[kind]), `${name} kinds.${kind} frozen`);
     }

@@ -60,7 +60,7 @@ import { pop } from './pop.mjs';
  *   (checked by validateLook as the look registers); which names a synth knows is scripts/v2/sound's to check
  * @property {string} captions  the caption style, a name in registries.captions (engine/captions): how the spoken words
  *   of a narrated shot that does not show its own words are drawn (checked by validateLook as the look registers)
- * @property {Record<string, object>} [kinds]  composition data per shot kind, for the kinds that read it (end, list):
+ * @property {Record<string, object>} [kinds]  composition data per shot kind, for the kinds that read it (end, list, quote, compare, chart):
  *   a look without an entry for such a kind does not support it, and a film asking for it is invalid (kindSupportProblems)
  */
 

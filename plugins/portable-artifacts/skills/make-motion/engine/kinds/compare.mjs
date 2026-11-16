@@ -1,5 +1,5 @@
 // The `compare` kind: two sides, options (`versus`) or before and after (`before-after`). Each side has a title and
-// optional points (at most three) and value; a value is shown only when both sides have one (the validator refuses one
+// optional points (at most three), value and picture (`src`, drawn above its text); a value is shown only when both sides have one (the validator refuses one
 // alone), as a numeral, the larger never styled as better. The left side arrives with the first sentence and the right
 // with the second (else at the narration's midpoint); `on` events target `left` or `right`. An editorial composition
 // (desk) sets two paper cards side by side (stacked on tall frames), the unspoken side under a paper scrim, a hand vs or
@@ -36,9 +36,8 @@ const SIDE_SCHEMA = Object.freeze({
   },
 });
 
-// The kind's own rules: a value on one side only (values are compared, so both or neither), a number longer than
-// VALUE_TEXT_MAX characters as set, and a picture on a side, which this build cannot load (srcFields name top-level
-// fields only).
+// The kind's own rules: a value on one side only (values are compared, so both or neither) and a number longer than
+// VALUE_TEXT_MAX characters as set. A side's picture is a srcFields path, held to the film folder by the validator.
 function sideProblems(shot) {
   const values = SIDES.filter((k) => shot[k]?.value !== undefined);
   const lopsided = values.length === 1 ? [{ path: `${values[0]}.value`, message: 'give a value on both sides or neither: values are compared' }] : [];
@@ -46,10 +45,7 @@ function sideProblems(shot) {
     .filter(([, text]) => text.length > VALUE_TEXT_MAX).map(([k, text]) => ({
       path: `${k}.value`, message: `a value is set on one line of at most ${VALUE_TEXT_MAX} characters ("${text}" is ${text.length}): round it, or put the unit in the title`,
     }));
-  const pictures = SIDES.filter((k) => shot[k]?.src !== undefined).map((k) => ({
-    path: `${k}.src`, message: 'a picture on a compare side is not supported yet (pictures are read from top-level fields only); leave src out',
-  }));
-  return [...lopsided, ...long, ...pictures];
+  return [...lopsided, ...long];
 }
 
 // Each `on` device, inside the side it aims at when the composition hides sides (pop), else on the frame. Nothing goes
@@ -96,7 +92,7 @@ registries.kinds.add(KIND, {
       hero: HERO_SCHEMA,
     },
   },
-  srcFields: [],
+  srcFields: ['left.src', 'right.src'], // a side's picture (engine/assets.mjs reads dotted paths)
   heroTarget: 'sides',
   targets: () => [...SIDES],
   ids: (shot) => [heroId(shot, 'sides')],
@@ -104,11 +100,14 @@ registries.kinds.add(KIND, {
   nodeField: (shot, id) => {
     const side = SIDES.find((k) => id === `${shot.id}.${k}` || id.startsWith(`${shot.id}.${k}.`));
     if (side === undefined) return undefined;
-    const part = ['title', 'value', 'points'].find((p) => id.startsWith(`${shot.id}.${side}.${p}`));
+    const part = ['title', 'value', 'points', 'src'].find((p) => id.startsWith(`${shot.id}.${side}.${p}`));
     return part === undefined ? side : `${side}.${part}`;
   },
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...sideProblems(shot), ...kindSupportProblems(KIND, look)],
   expand: expandCompare,
   numbered: false, // no slug
   showsWords: true, // its sides restate the narration: never captioned (engine/captions)
+  // the second side's arrival as a device event named `turn`, in shot seconds (for the cue plan: scripts/v2/sound/events.mjs)
+  events: (shot, timing) => [{ kind: 'device', device: 'turn', t: compareTurn(timing) }],
+  eventDevices: Object.freeze(['turn']), // every device name `events` sends: each look must name a sound for it (sound/cues.mjs)
 });

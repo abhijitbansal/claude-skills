@@ -5,8 +5,9 @@ import { registries } from '../registry.mjs';
 import '../modes/index.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { fitText } from '../text/layout.mjs';
-import { landing } from '../devices/shared.mjs';
+import { fitText, layoutText } from '../text/layout.mjs';
+import { landing, entrance, colourOf, polyline } from '../devices/shared.mjs';
+import { BAND_HEIGHT } from '../devices/highlight.mjs';
 import { ease } from '../time/ease.mjs';
 import { aloneFromFrame } from '../cuts/index.mjs';
 
@@ -437,4 +438,107 @@ export function unionBox(boxes) {
   const left = Math.min(...boxes.map((b) => b[0])), top = Math.min(...boxes.map((b) => b[1]));
   const right = Math.max(...boxes.map((b) => b[0] + b[2])), bottom = Math.max(...boxes.map((b) => b[1] + b[3]));
   return [left, top, right - left, bottom - top];
+}
+
+// ---- the desk highlighter behind emphasised runs (statement, quote) ----
+
+const HIGHLIGHT_PAST_INK = 0.06; // em of the text: the band reaches this far past the run's ink, above and below
+
+const isEmphasised = (times, timing, index) => times[index] !== undefined && times[index].spoken !== null && timing.words[times[index].spoken].emphasis;
+
+// Runs of adjacent emphasised words on one line, each { line, first, last } (word indexes).
+function emphasisRuns(layout, times, timing) {
+  return layout.lines.flatMap((line) => line.words.reduce((runs, word) => {
+    if (!isEmphasised(times, timing, word.index)) return runs;
+    const open = runs.at(-1);
+    if (open && open.last === word.index - 1) return [...runs.slice(0, -1), { ...open, last: word.index }];
+    return [...runs, { line, first: word.index, last: word.index }];
+  }, []));
+}
+
+// The box to give the highlight device for a run, so that the band it draws (BAND_HEIGHT times the box, about the same
+// middle) runs from HIGHLIGHT_PAST_INK above the run's highest ink to HIGHLIGHT_PAST_INK below its lowest: it holds the
+// words, descenders included, and with the look's display line height it clears the lines above and below.
+function bandBox({ x, y, font }, line, run, measure) {
+  const a = line.words.find((w) => w.index === run.first), b = line.words.find((w) => w.index === run.last);
+  const ink = runInk(line, font, measure, run.first, run.last);
+  const baseline = y + line.y;
+  const top = baseline - ink.up - HIGHLIGHT_PAST_INK * font.size, bottom = baseline + ink.down + HIGHLIGHT_PAST_INK * font.size;
+  const h = (bottom - top) / BAND_HEIGHT;
+  const left = x + line.x + a.x;
+  return [left, (top + bottom) / HALF - h / HALF, x + line.x + b.x + b.width - left, h];
+}
+
+/**
+ * The most laid-out lines one unbroken run of emphasised words spans (a run follows word order across lines), or
+ * undefined when nothing is emphasised: the frame review's highlight-lines rule reads it from the text node.
+ */
+export function highlightLines(layout, times, timing) {
+  const lineOf = new Map(layout.lines.flatMap((line, k) => line.words.map((w) => [w.index, k])));
+  let most, first = null;
+  for (let i = 0; i <= times.length; i++) {
+    if (i < times.length && isEmphasised(times, timing, i)) { first ??= i; continue; }
+    if (first !== null) most = Math.max(most ?? 0, lineOf.get(i - 1) - lineOf.get(first) + 1);
+    first = null;
+  }
+  return most;
+}
+
+/**
+ * The highlight bands behind a placed text's emphasised runs, in the text's parent space, each growing with its words
+ * (every word's landing time and right edge); none when the look's emphasis is not the highlighter. `placed` is
+ * { x, y, layout, font }, `times` is per word index ({ at, spoken }), `kind` names the kind for a missing device.
+ */
+export function highlightBands(id, placed, times, ctx, kind) {
+  const { look, unit, seed, timing, measure } = ctx;
+  if (look.emphasis !== 'highlight') return [];
+  const runs = emphasisRuns(placed.layout, times, timing);
+  if (runs.length > 0) requireDevice(look, 'highlight', kind);
+  const device = registries.devices.get('highlight');
+  return runs.flatMap(({ line, first, last }, k) => {
+    const box = bandBox(placed, line, { first, last }, measure);
+    const stops = line.words.filter((w) => w.index >= first && w.index <= last).map((w) => ({ at: times[w.index].at, x: placed.x + line.x + w.x + w.width }));
+    return device.build({ id: `${id}.hl${k}`, box, at: times[first].at, look, unit, seed, stops }).nodes;
+  });
+}
+
+// ---- the plain tag (number, quote) ----
+
+const TAG_PAD = Object.freeze({ x: 0.32, y: 0.2 }); // em of the tag's own size
+const NO_WRAP = 1e6;
+const TAG_FIT_EPSILON = 1e-6;
+
+// The tag size from `toStep` down to `fromStep`: any size (scaled to fit), or only the scale steps (snapped).
+function smoothTagSize(look, unit, { fromStep, toStep, maxWidth }, widthAt) {
+  const size = sizeAt(look, toStep, unit), first = widthAt(size);
+  return first > maxWidth ? Math.max(sizeAt(look, fromStep, unit), Math.floor((size * maxWidth) / first)) : size;
+}
+function snappedTagSize(look, unit, { fromStep, toStep, maxWidth }, widthAt) {
+  const sizes = Array.from({ length: toStep - fromStep + 1 }, (_, i) => sizeAt(look, toStep - i, unit));
+  return sizes.find((s) => widthAt(s) <= maxWidth + TAG_FIT_EPSILON) ?? sizes.at(-1);
+}
+
+/**
+ * A tag built from plain nodes at a chosen scale step (the tag device sets every tag at step 2): `fill` behind label
+ * caps in `text` colour (palette keys), at `toStep`, set smaller (down to `fromStep`) and then wrapped when it is wider
+ * than `maxWidth`. Smaller is any size between the two steps, or with `snap` only the scale steps between them (the
+ * largest that holds it on one line). Its plate's top left at (left, top); it enters as an object device does.
+ * { nodes, box }.
+ */
+export function plainTag(ctx, id, words, { left, top, maxWidth, at, fromStep, toStep, fill, text, snap = false }) {
+  const { look, unit, measure } = ctx;
+  const shown = setCase(look, 'label', words);
+  const padded = (size, width) => width + HALF * TAG_PAD.x * size;
+  const oneLine = (size) => layoutText({ text: shown, font: fontFor(look, 'label', size, unit), maxWidth: NO_WRAP, measure });
+  const size = snap ? snappedTagSize(look, unit, { fromStep, toStep, maxWidth }, (s) => padded(s, oneLine(s).width)) : smoothTagSize(look, unit, { fromStep, toStep, maxWidth }, (s) => padded(s, oneLine(s).width));
+  const font = fontFor(look, 'label', size, unit);
+  const layout = layoutText({ text: shown, font, maxWidth: maxWidth - HALF * TAG_PAD.x * size, measure });
+  const w = padded(size, layout.width), h = layout.height + HALF * TAG_PAD.y * size;
+  const corners = [[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]];
+  const plate = node('path', `${id}.plate`, { d: polyline(corners, true), fill: colourOf(look, fill) });
+  const label = node('text', `${id}.text`, {
+    x: -w / HALF + TAG_PAD.x * size, y: -h / HALF + TAG_PAD.y * size, layout, font, fill: colourOf(look, text), role: 'tag',
+  });
+  const group = entrance({ id, at, look, unit, cx: left + w / HALF, cy: top + h / HALF, children: [plate, label] });
+  return { nodes: [group], box: [left, top, w, h] };
 }

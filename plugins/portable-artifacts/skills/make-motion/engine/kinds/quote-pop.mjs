@@ -7,9 +7,8 @@
 // is too narrow). Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
-import { layoutText } from '../text/layout.mjs';
-import { landing, entrance, colourOf, polyline } from '../devices/shared.mjs';
-import { sizeAt, fontFor, setCase, arrivesMatched } from './shared.mjs';
+import { landing } from '../devices/shared.mjs';
+import { setCase, arrivesMatched, plainTag } from './shared.mjs';
 import { STACK, stackArea, composeStack, stackNodes } from './stack.mjs';
 import { restack } from './end.mjs';
 import { ghostWords } from './statement.mjs';
@@ -27,10 +26,8 @@ const SIX = Object.freeze([
 const SIX_OFFSET = 0.55;
 const SIX_LEFT = 0.02; // the shape's leftmost point: set on `left`, so the mark sits flush on the stack edge
 const MARK_HEIGHT = 0.8; // of the shape's own box; its width is 1
-const TAG_PAD = Object.freeze({ x: 0.32, y: 0.2 }); // em of the tag's own size, as number.mjs plainTag
 const DECIMALS = 2;
 const ROOM_SEARCH_STEPS = 16; // bisection steps for the room over the stack: well under a pixel
-const NO_WRAP = 1e6;
 const EPSILON = 1e-6;
 const HALF = 2;
 
@@ -43,27 +40,14 @@ export function markPath(left, top, height) {
   return one(0) + one(SIX_OFFSET);
 }
 
-// The attribution as a tag: label caps on the look's tag colours at the largest of `steps` that fits `maxWidth`, else
-// the smallest, wrapped. Built like number.mjs plainTag (private there). { nodes, box, height } with the plate's top
-// left at (left, top).
-function attributionTag(shot, ctx, { left, top, maxWidth, at, steps }) {
-  const { look, unit, measure } = ctx;
-  const style = look.devices.tag ?? {};
-  const text = setCase(look, 'label', attributionOf(shot));
-  const padded = (size, width) => width + HALF * TAG_PAD.x * size;
-  const sizes = [...steps].sort((a, b) => b - a).map((step) => sizeAt(look, step, unit));
-  const oneLine = (size) => layoutText({ text, font: fontFor(look, 'label', size, unit), maxWidth: NO_WRAP, measure });
-  const size = sizes.find((s) => padded(s, oneLine(s).width) <= maxWidth + EPSILON) ?? sizes.at(-1);
-  const font = fontFor(look, 'label', size, unit);
-  const layout = layoutText({ text, font, maxWidth: maxWidth - HALF * TAG_PAD.x * size, measure });
-  const w = padded(size, layout.width), h = layout.height + HALF * TAG_PAD.y * size;
-  const corners = [[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]];
-  const plate = node('path', `${shot.id}.by.plate`, { d: polyline(corners, true), fill: colourOf(look, style.fill ?? 'ink') });
-  const label = node('text', `${shot.id}.by.text`, {
-    x: -w / HALF + TAG_PAD.x * size, y: -h / HALF + TAG_PAD.y * size, layout, font, fill: colourOf(look, style.text ?? 'paper'), role: 'tag',
+// The attribution as a tag on the look's tag colours (shared.mjs plainTag): at the largest of `steps` that holds it on
+// one line, else the smallest, wrapped. { nodes, box, height } with the plate's top left at (left, top).
+function byTag(shot, ctx, { left, top, maxWidth, at, steps }) {
+  const style = ctx.look.devices.tag ?? {};
+  const tag = plainTag(ctx, `${shot.id}.by`, attributionOf(shot), {
+    left, top, maxWidth, at, fromStep: Math.min(...steps), toStep: Math.max(...steps), fill: style.fill ?? 'ink', text: style.text ?? 'paper', snap: true,
   });
-  const group = entrance({ id: `${shot.id}.by`, at, look, unit, cx: left + w / HALF, cy: top + h / HALF, children: [plate, label] });
-  return { nodes: [group], box: [left, top, w, h], height: h };
+  return { ...tag, height: tag.box[3] };
 }
 
 // The portrait's size, longest side `portrait` of the short side, or null.
@@ -112,7 +96,7 @@ export function expandPopQuote(shot, ctx, data, times, hero) {
   const first = composeStack(setCase(look, 'display', quotationOf(shot)), staged, ctx);
   const portrait = portraitSize(shot, ctx, data);
   const markAbove = (size) => data.mark * size * (1 - data.into);
-  const tagProbe = attributionTag(shot, ctx, { left: 0, top: 0, maxWidth: area.w, at: 0, steps: data.tagSteps });
+  const tagProbe = byTag(shot, ctx, { left: 0, top: 0, maxWidth: area.w, at: 0, steps: data.tagSteps });
   const placed = placeStack(first, ctx, data, { portrait, area, below: data.tagGap * unit + tagProbe.height });
   const line0 = placed.lines[0];
   const markH = data.mark * line0.font.size;
@@ -124,7 +108,7 @@ export function expandPopQuote(shot, ctx, data, times, hero) {
   const stackTimes = times.words.map(({ at, spoken }) => ({ at, emphasised: spoken !== null && ctx.timing.words[spoken].emphasis }));
   const built = stackNodes(staged, ctx, placed, { times: stackTimes, hero, ...flags });
   const last = placed.lines.at(-1);
-  const tag = attributionTag(shot, ctx, { left: area.left, top: last.baseline + last.ink.down + data.tagGap * unit, maxWidth: area.w, at: times.by, steps: data.tagSteps });
+  const tag = byTag(shot, ctx, { left: area.left, top: last.baseline + last.ink.down + data.tagGap * unit, maxWidth: area.w, at: times.by, steps: data.tagSteps });
   const boxes = { text: built.boxes.text, ...Object.fromEntries(Object.entries(built.boxes).filter(([k]) => k.startsWith('word:'))), by: tag.box };
   const nodes = [mark, built.group, ...tag.nodes];
   if (portrait === null) return { nodes, boxes };

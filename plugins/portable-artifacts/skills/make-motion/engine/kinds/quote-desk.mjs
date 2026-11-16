@@ -15,10 +15,9 @@ import { FORCE_MARK } from '../text/breaks.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, arrivesMatched, fitDisplay, capBox, unionBox, rectPath,
-  asTextCard,
+  asTextCard, highlightBands, highlightLines,
 } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
-import { highlightBands, highlightLines } from './quote-emphasis.mjs';
 import { OPEN_MARK, CLOSE_MARK, quotationOf, attributionOf } from './quote-text.mjs';
 
 const FIRST_COLUMN = 2;

@@ -9,11 +9,11 @@ import { node } from '../graph/node.mjs';
 import { ease } from '../time/ease.mjs';
 import { layoutText, numeralAdvance } from '../text/layout.mjs';
 import { gridSpan, gridX } from '../looks/index.mjs';
-import { entrance, colourOf, polyline } from '../devices/shared.mjs';
+import { entrance, colourOf } from '../devices/shared.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, setCase, inkBox, shownFrom,
   isEditorial, heroProblems, fieldNode, enterTracks, pulseScale, runInk,
-  defaultCamera, onDevices, placeDevices, deviceCamera, openingLanding,
+  defaultCamera, onDevices, placeDevices, deviceCamera, openingLanding, plainTag,
 } from './shared.mjs';
 import { NUMBER_WORDS, ONES, TENS } from './words.mjs';
 import { stackArea } from './stack.mjs';
@@ -43,7 +43,6 @@ const POP = Object.freeze({ max: 760, maxShort: 900, tagGap: 40, tagStep: 3, tag
 const DELTA = Object.freeze({ step: 2, text: 'ink2' });
 const SHORT_DIGITS = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
-const TAG = Object.freeze({ padX: 0.32, padY: 0.2 }); // em of the tag's own size
 const FIT_EPSILON = 1e-6;
 const DELTA_LAG = 0.15; // seconds after the label lands
 const FIT_TRIES = 6;
@@ -309,29 +308,6 @@ function deskParts(shot, ctx, steps, times) {
 }
 
 // ---- pop ----
-
-// A tag built from plain nodes at a chosen scale step (the tag device sets every tag at step 2): `fill` behind label
-// caps in `text` colour (palette keys), at `toStep`, set smaller (down to `fromStep`) and then wrapped when it is wider
-// than `maxWidth`. Its plate's top left at (left, top); it enters as an object device does.
-function plainTag(ctx, id, words, { left, top, maxWidth, at, fromStep, toStep, fill, text }) {
-  const { look, unit, measure } = ctx;
-  const shown = setCase(look, 'label', words);
-  const padded = (size, width) => width + HALF * TAG.padX * size;
-  const oneLine = (size) => layoutText({ text: shown, font: fontFor(look, 'label', size, unit), maxWidth: NO_WRAP, measure });
-  let size = sizeAt(look, toStep, unit);
-  const first = padded(size, oneLine(size).width);
-  if (first > maxWidth) size = Math.max(sizeAt(look, fromStep, unit), Math.floor((size * maxWidth) / first));
-  const font = fontFor(look, 'label', size, unit);
-  const layout = layoutText({ text: shown, font, maxWidth: maxWidth - HALF * TAG.padX * size, measure });
-  const w = padded(size, layout.width), h = layout.height + HALF * TAG.padY * size;
-  const corners = [[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]];
-  const plate = node('path', `${id}.plate`, { d: polyline(corners, true), fill: colourOf(look, fill) });
-  const label = node('text', `${id}.text`, {
-    x: -w / HALF + TAG.padX * size, y: -h / HALF + TAG.padY * size, layout, font, fill: colourOf(look, text), role: 'tag',
-  });
-  const group = entrance({ id, at, look, unit, cx: left + w / HALF, cy: top + h / HALF, children: [plate, label] });
-  return { nodes: [group], box: [left, top, w, h] };
-}
 
 // pop: the figure flush left on the stack's edge, filling the available width (the platform safe width on 9:16,
 // columns 1 to 12 otherwise) between scale step 5 and POP.maxShort units for one or two digits (POP.max for more); the

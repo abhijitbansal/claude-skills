@@ -13,6 +13,7 @@ import { compareTurn, valueText } from '../../engine/kinds/compare.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { pathPoints } from '../../engine/devices/shared.mjs';
+import { srcsOfShot } from '../../engine/assets.mjs';
 import '../../engine/kinds/index.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { shotContext } from '../../engine/graph/film.mjs';
@@ -61,7 +62,7 @@ test('compare turn: the right side arrives with the second sentence; with one se
 
 // ---- fields ----
 
-test('compare: the example validates in both looks; a side missing its title, a value on one side only and a picture on a side are each refused with what to write', () => {
+test('compare: the example validates in both looks; a side missing its title, and a value on one side only are each refused with what to write', () => {
   assert.deepEqual(errorsOf(EXAMPLE()), []);
   assert.deepEqual(errorsOf(EXAMPLE(), 'viral'), []);
   assert.ok(listEntries('kinds').some((e) => e.name === 'compare'));
@@ -69,8 +70,6 @@ test('compare: the example validates in both looks; a side missing its title, a 
   assert.ok(untitled.some((e) => e.path === 'shots[0].right.title' && /required/.test(e.message)), JSON.stringify(untitled));
   const lopsided = errorsOf(SIDES({ left: { title: 'A', value: 3 } }));
   assert.ok(lopsided.some((e) => e.path === 'shots[0].left.value' && /both sides or neither/.test(e.message)), JSON.stringify(lopsided));
-  const picture = errorsOf(SIDES({ right: { title: 'B', src: 'shot.png' } }));
-  assert.ok(picture.some((e) => e.path === 'shots[0].right.src' && /not supported yet/.test(e.message)), JSON.stringify(picture));
   const four = errorsOf(SIDES({ left: { title: 'A', points: ['1', '2', '3', '4'] } }));
   assert.ok(four.some((e) => /left\.points/.test(e.path)), JSON.stringify(four));
   const mode = errorsOf(SIDES({ mode: 'befor-after' }));
@@ -258,6 +257,44 @@ test('desk compare: a value is never set past its own card, in both formats, eve
       const right = card.props.x + value.props.x + Math.max(...value.props.layout.lines.map((l) => l.x + l.width));
       const paper = paperOf(card);
       assert.ok(right <= paper[0] + paper[2] + EPS, `${format}: ${value.id} ends at ${right}, the card at ${paper[0] + paper[2]}`);
+    }
+  }
+});
+
+test('compare sounds its turn: one device event named turn when the second side arrives, declared in eventDevices', () => {
+  const kind = registries.kinds.get('compare');
+  assert.deepEqual(kind.eventDevices, ['turn']);
+  const { timing } = expandShot(SIDES(), 'desk', '16:9');
+  assert.deepEqual(kind.events(SIDES(), timing), [{ kind: 'device', device: 'turn', t: compareTurn(timing) }]);
+});
+
+test('compare pictures: a side\'s src is a picture field (srcFields left.src, right.src): inside the film folder it validates, outside it is refused at its own path', () => {
+  assert.deepEqual(registries.kinds.get('compare').srcFields, ['left.src', 'right.src']);
+  assert.deepEqual(srcsOfShot(SIDES({ left: { title: 'A', src: 'a.png' }, right: { title: 'B', src: 'b.png' } }), ['left.src', 'right.src']), ['a.png', 'b.png']);
+  assert.deepEqual(errorsOf(SIDES({ left: { title: 'A', src: 'shot.png' }, right: { title: 'B', src: 'shot.png' } })), []);
+  const outside = errorsOf(SIDES({ right: { title: 'B', src: '../secret.png' } }));
+  assert.ok(outside.some((e) => e.path === 'shots[0].right.src' && /outside|escape|inside/i.test(e.message)), JSON.stringify(outside));
+  const missing = errorsOf(SIDES({ left: { title: 'A', src: 'nope.png' } }));
+  assert.ok(missing.some((e) => e.path === 'shots[0].left.src'), JSON.stringify(missing));
+});
+
+test('compare pictures are drawn on their side: desk inside the card above the text, pop inside the side above its stack, inside the frame', () => {
+  const shot = SIDES({ left: { title: 'A server', src: 'shot.png' }, right: { title: 'One file', src: 'shot.png' } });
+  for (const format of ['16:9', '9:16']) {
+    const { nodes } = expandShot(shot, 'desk', format);
+    for (const card of Object.values(cardsOf(nodes))) {
+      const image = all(card.children).find((n) => n.type === 'image');
+      assert.ok(image, `${format}: ${card.id} has its picture`);
+      const title = textNode(card.children, `${card.id}.title`);
+      assert.ok(image.props.y + image.props.h / 2 <= title.props.y + title.props.layout.lines[0].y - 0.74 * title.props.font.size + EPS, `${format}: ${card.id} picture above the title`);
+    }
+    const pop = expandShot(shot, 'pop', format);
+    for (const side of ['left', 'right']) {
+      const wrapper = all(pop.nodes).find((n) => n.id === `c.${side}`);
+      assert.ok(all([wrapper]).some((n) => n.type === 'image'), `pop ${format}: ${side} has its picture`);
+      const cutout = all([wrapper]).find((n) => n.id === `c.${side}.src`);
+      const from = side === 'left' ? 0 : compareTurn(pop.timing);
+      assert.equal(cutout.tracks?.opacity === undefined ? 1 : sample(cutout.tracks.opacity, from), 1, `pop ${format}: ${side} picture whole when its side shows`);
     }
   }
 });

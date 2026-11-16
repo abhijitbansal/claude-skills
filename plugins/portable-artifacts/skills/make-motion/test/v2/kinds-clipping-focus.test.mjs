@@ -249,3 +249,19 @@ test('F5 pop establishing picture: as large as the safe area allows at the sprin
   // the picture reaches within 2 px of the safe edge it fits against: the bottom for a tall window, else the right
   assert.ok(safe.bottom - lowest < 2 || safe.right - rightmost < 2, `the reach ${lowest}, ${rightmost} against the safe bottom ${safe.bottom} and right ${safe.right}`);
 });
+
+test('the paper scrim is shared (region-mark.mjs paperScrim): the clipping\'s own at 0.8 with the region cut out, another kind\'s at the opacity it asks, whole', async () => {
+  const { paperScrim, SCRIM } = await import('../../engine/kinds/region-mark.mjs');
+  const { registries } = await import('../../engine/registry.mjs');
+  const look = registries.looks.get('desk');
+  const cover = [[[0, 0], [100, 0], [100, 50], [0, 50]]];
+  const holed = paperScrim({ id: 'a.scrim', cover, hole: [10, 10, 20, 20], at: 1, dur: 0.5, look });
+  assert.equal(SCRIM, 0.8);
+  assert.equal(sample(holed.tracks.opacity, 0.5), 0, 'clear until it starts');
+  assert.equal(sample(holed.tracks.opacity, 1), SCRIM, 'the clipping strength by default');
+  assert.equal(pointsOf(holed.props.d).length, 8, 'the outline and the hole');
+  assert.equal(holed.props.fill, look.palette.paper);
+  const whole = paperScrim({ id: 'b.scrim', cover, at: 2, dur: 0.5, opacity: 0.55, look });
+  assert.equal(sample(whole.tracks.opacity, 2), 0.55, 'the opacity asked');
+  assert.equal(pointsOf(whole.props.d).length, 4, 'no hole');
+});
