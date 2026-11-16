@@ -8,7 +8,8 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PassThrough } from 'node:stream';
-import { HERE, browserAvailable } from './helpers/session.mjs';
+import { HERE, browserAvailable, ffmpegOrNull } from './helpers/session.mjs';
+import { findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 import { registries } from '../../engine/registry.mjs';
 import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and cuts, as make.mjs does
 import { timedAnchorErrors, validateFilm } from '../../scripts/v2/spec.mjs';
@@ -212,9 +213,23 @@ const OWN_WORDS = { segments: [{ words: [
   [' Every', 0.3], [' row', 0.6], [' has', 0.9], [' a', 1.1], [' source.', 1.3], [' Four', 2.6], [' hundred', 2.9], [' rows.', 3.3],
 ].map(([word, start]) => ({ word, start, end: Math.round((start + 0.25) * 100) / 100 })) }] };
 
-test('a voice from your own recording ({ src, words }) is never synthesised: its words time the film; a missing words file is an invalid film', async () => {
+// A silent 16-bit mono PCM WAV of `seconds` at 8 kHz: a recording the voice stage's probe accepts.
+const SILENT_RATE = 8000;
+function silentWav(seconds) {
+  const data = Buffer.alloc(Math.round(seconds * SILENT_RATE) * 2);
+  const head = Buffer.alloc(44);
+  head.write('RIFF', 0); head.writeUInt32LE(36 + data.length, 4); head.write('WAVE', 8);
+  head.write('fmt ', 12); head.writeUInt32LE(16, 16); head.writeUInt16LE(1, 20); head.writeUInt16LE(1, 22);
+  head.writeUInt32LE(SILENT_RATE, 24); head.writeUInt32LE(SILENT_RATE * 2, 28); head.writeUInt16LE(2, 32); head.writeUInt16LE(16, 34);
+  head.write('data', 36); head.writeUInt32LE(data.length, 40);
+  return Buffer.concat([head, data]);
+}
+
+test('a voice from your own recording ({ src, words }) is never synthesised: its words time the film; a missing words file is an invalid film', async (t) => {
+  const ffmpeg = await ffmpegOrNull();
+  if (!ffmpeg || !findFfprobe({ ffmpeg })) { t.skip('no ffmpeg or ffprobe: the voice stage probes the recording'); return; }
   const fake = fakeSynthesiser();
-  writeFileSync(path.join(dir, 'vo.wav'), 'RIFF');
+  writeFileSync(path.join(dir, 'vo.wav'), silentWav(4));
   writeFileSync(path.join(dir, 'vo.json'), JSON.stringify(OWN_WORDS));
   const own = await runVoiced(writeVoiced('voiced-own', { voice: { src: 'vo.wav', words: 'vo.json' } }), fake.synthesise, { outline: true });
   assert.equal(own.exitCode, 0, JSON.stringify(own.report));
@@ -225,6 +240,12 @@ test('a voice from your own recording ({ src, words }) is never synthesised: its
   assert.equal(missing.exitCode, 1);
   assert.deepEqual(missing.report.findings.map((f) => f.path), ['voice.words']);
   assert.deepEqual(stagesOf(missing.report), [['validate', false]]);
+  writeFileSync(path.join(dir, 'vo-stub.wav'), 'RIFF'); // four bytes: a name, not a recording
+  const stub = await runVoiced(writeVoiced('voiced-own-stub', { voice: { src: 'vo-stub.wav', words: 'vo.json' } }), fake.synthesise, { outline: true });
+  assert.equal(stub.exitCode, 1, JSON.stringify(stub.report));
+  assert.deepEqual(stub.report.findings.map((f) => f.path), ['voice.src']);
+  assert.match(stub.report.findings[0].message, /"vo-stub\.wav" cannot be read as audio/);
+  assert.deepEqual(stagesOf(stub.report), [['validate', true], ['voice', false]]);
 });
 
 test('a narrated statement shot after a hard cut opens on its first word, though the voice starts a little after the shot', async (t) => {

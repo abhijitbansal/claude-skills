@@ -2,7 +2,7 @@
 // every error is { path, message }: the path names the field ("shots[0].show")
 // and the message says what to write instead. validateFilm collects every error
 // it can and never throws for a bad film.
-import { accessSync, constants as fsConstants, readFileSync, realpathSync, statSync } from 'node:fs';
+import { accessSync, closeSync, constants as fsConstants, fstatSync, openSync, readSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
@@ -173,7 +173,7 @@ function checkMode(spec, regs) {
     validateMode({ ...regs.modes.get(name), name });
   } catch (err) {
     if (!(err instanceof RangeError)) throw err;
-    return [{ path: 'mode', message: `${err.message}; the mode's data must have both voiceSpeed and emphasisPause, and loudness { lufs, truePeakDb, lra }` }];
+    return [{ path: 'mode', message: `${err.message}; the mode's data is incomplete or out of range: add or fix the field named above in the mode's registration` }];
   }
   return [];
 }
@@ -581,13 +581,17 @@ export const WORDS_MAX_BYTES = 16 * 1024 * 1024;
 const isRecordingVoice = (voice) => isPlainObject(voice) && Object.keys(voice).length === 2
   && typeof voice.src === 'string' && voice.src !== '' && typeof voice.words === 'string' && voice.words !== '';
 
-// { real } (the file's real path, inside the spec folder and readable) or { error } at `at`: the same rules as a
-// picture's src (relative, inside the folder after links are followed, a file that exists).
+const notRegularMessage = (value) => `${quote(value)} is not a regular file (a FIFO, a device or another special file); name the file itself`;
+
+// { real } (the file's real path, inside the spec folder, a regular file and readable) or { error } at `at`: the same
+// rules as a picture's src (relative, inside the folder after links are followed, a file that exists), and never a FIFO
+// or a device, which a reader would wait on.
 function recordingFile(value, at, specDir) {
   const problem = srcProblem(value, specDir);
   if (problem) return { error: { path: at, message: problem } };
   try {
     const real = realpathSync(path.resolve(specDir, value));
+    if (!statSync(real).isFile()) return { error: { path: at, message: notRegularMessage(value) } };
     accessSync(real, fsConstants.R_OK);
     return { real };
   } catch (err) {
@@ -595,15 +599,39 @@ function recordingFile(value, at, specDir) {
   }
 }
 
+// The words file at `real` read through one descriptor, opened without blocking (a FIFO swapped in after the check is
+// refused, not waited on), and never more than WORDS_MAX_BYTES + 1 bytes of it: { text } or { size } (over the cap) or
+// { special: true }.
+function readWords(real) {
+  const fd = openSync(real, fsConstants.O_RDONLY | (fsConstants.O_NONBLOCK ?? 0));
+  try {
+    const stat = fstatSync(fd);
+    if (!stat.isFile()) return { special: true };
+    if (stat.size > WORDS_MAX_BYTES) return { size: stat.size };
+    const buffer = Buffer.alloc(WORDS_MAX_BYTES + 1);
+    let length = 0;
+    let n;
+    do {
+      n = readSync(fd, buffer, length, buffer.length - length, null);
+      length += n;
+    } while (n > 0 && length < buffer.length);
+    return length > WORDS_MAX_BYTES ? { size: length } : { text: buffer.toString('utf8', 0, length) };
+  } finally {
+    closeSync(fd);
+  }
+}
+
 // The parsed words file at `real`, or { error } at voice.words.
 function wordsJson(real, value) {
+  const refused = (message) => ({ error: { path: 'voice.words', message } });
   try {
-    const size = statSync(real).size;
-    if (size > WORDS_MAX_BYTES) return { error: { path: 'voice.words', message: `${quote(value)} is ${size} bytes; a words file can be at most ${WORDS_MAX_BYTES} bytes` } };
-    return { json: JSON.parse(readFileSync(real, 'utf8')) };
+    const read = readWords(real);
+    if (read.special) return refused(notRegularMessage(value));
+    if (read.text === undefined) return refused(`${quote(value)} is ${read.size} bytes or more; a words file can be at most ${WORDS_MAX_BYTES} bytes`);
+    return { json: JSON.parse(read.text) };
   } catch (err) {
     const why = err instanceof SyntaxError ? `is not valid JSON: ${err.message}` : `cannot be read: ${errorCode(err)}`;
-    return { error: { path: 'voice.words', message: `${quote(value)} ${why}; it must be ${WHISPER_SHAPE}` } };
+    return refused(`${quote(value)} ${why}; it must be ${WHISPER_SHAPE}`);
   }
 }
 
@@ -611,9 +639,9 @@ function wordsJson(real, value) {
  * A film's own recording, `voice: { src, words }` with paths relative to `specDir`: -> { src, sidecar }, `src` the
  * recording's real path (inside the folder, readable) and `sidecar` its words fitted to the film (voice/sidecar.mjs
  * fromWhisper: the words file is Whisper's word-timestamp JSON). Throws a SpecError at voice.src and voice.words for a
- * path that leaves the folder, a missing or
- * unreadable file, words that are not JSON, or words that do not fit the film's says. The audio itself is read only
- * when the film is rendered (ffmpeg decodes it there).
+ * path that leaves the folder, a missing, unreadable or special (FIFO, device) file, a words file over WORDS_MAX_BYTES or
+ * not JSON, or words that do not fit the film's says. The audio itself is not opened here: the voice stage probes it
+ * (run.mjs, voice/master.mjs probeRecording) and the render decodes it.
  */
 export function readRecording(spec, specDir) {
   const { src, words } = spec.voice;

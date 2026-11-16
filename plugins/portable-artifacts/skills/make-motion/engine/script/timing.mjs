@@ -108,9 +108,11 @@ function measuredWords(shot, measured, index, tokens, offset = NARRATION_LEAD) {
 /**
  * A measured shot's words as the picture shows them: the first word from the shot's first frame (start 0), so a shot
  * never opens on an empty frame while its voice's lead-in plays; its sound still starts at its measured time (the mix
- * reads the sidecar, not these). Every other word keeps its measured time. An anchor on the first word is the shot start.
+ * reads the sidecar, not these). So are the tokens that start with it: a run sharing its word ("$5 million" as one
+ * word), or a spaced dash before it (a zero-length span at its start). Every other word keeps its measured time. An
+ * anchor on the first word is the shot start.
  */
-const shownFromShotStart = (words) => words.map((w, k) => (k === 0 ? { ...w, start: 0 } : w));
+const shownFromShotStart = (words) => words.map((w) => (w.start === words[0].start ? { ...w, start: 0 } : w));
 
 // A spoken shot timed by its measured words: as long as its last word end plus the trailing pause and the tail, and
 // never shorter than its WAV, so the narration cannot run into the next shot.

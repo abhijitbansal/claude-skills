@@ -17,7 +17,7 @@
 // `asetnsamples` cuts the audio into 1 ms frames. Each stage is a trapezoid in decibels: 0 dB until RAMP_SECONDS
 // before the word, a straight ramp up to its level at the word's start, held to its end, and a ramp back down over the
 // next RAMP_SECONDS. `enable='between(t,a,b)'` was not used: it switches the gain on in one step, with no ramp.
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import path from 'node:path';
 import { narrationStart } from '../../../engine/script/timing.mjs';
 import { fileInput, parseLoudness } from '../../lib/ffmpeg.mjs';
@@ -140,14 +140,102 @@ export function shapingFilter(sidecar, timeline) {
   return [`asetnsamples=n=${SHAPING_FRAME_SAMPLES}:p=0`, ...stages.map(stageFilter)].join(',');
 }
 
+// ---- an author's own recording: plain audio, and nothing else for ffmpeg to open ---------------------------------------
+
+/**
+ * The demuxers a recording may be opened with, as ffmpeg names them: WAV, MP3, FLAC, Ogg, M4A or MP4 (the mov demuxer,
+ * whose external track references stay off by default) and AIFF. ffmpeg picks a demuxer from a file's content, not its
+ * name, so every call that opens the recording passes this list as -format_whitelist: a playlist (hls, dash), a concat
+ * script, an image sequence, or any other format that can open another file, fails to open.
+ */
+export const RECORDING_DEMUXERS = Object.freeze(['wav', 'mp3', 'flac', 'ogg', 'mov', 'mp4', 'm4a', 'aiff']);
+// The format names ffprobe reports for those demuxers (the mov demuxer under its full name).
+const RECORDING_FORMATS = new Set(['wav', 'mp3', 'flac', 'ogg', 'aiff', 'mov,mp4,m4a,3gp,3g2,mj2']);
+const ACCEPTED_LABEL = 'WAV, MP3, FLAC, Ogg, M4A or MP4, or AIFF';
+/** The recording as an ffmpeg or ffprobe input: read through the file protocol only, and by an accepted demuxer only. */
+export const recordingInput = (file) => ['-protocol_whitelist', 'file', '-format_whitelist', RECORDING_DEMUXERS.join(','), '-i', file];
+export const PROBE_TIMEOUT_MS = 10000;
+const PROBE_MAX_BUFFER = 1024 * 1024;
+/** A recording may end this many seconds before its last word's end (Whisper's times step 0.02 s; encoders pad). */
+export const RECORDING_END_TOLERANCE = 0.05;
+// ffmpeg's log line when the whitelist refuses the demuxer it detected: the demuxer's own name is the log context.
+const REFUSED_FORMAT_RE = /^\[([a-z0-9_,]+) @ 0x[0-9a-f]+\] Format not on whitelist/m;
+const PROBE_HINT = 'check that ffprobe (it comes with ffmpeg) runs on this machine, then run again';
+const SECONDS_STEPS = 100;
+
+/** The ffprobe arguments that read a recording's format, duration and streams (JSON on stdout). */
+export const probeRecordingArgs = (file) => ['-v', 'error', '-show_entries',
+  'format=format_name,duration:stream=index,codec_type:stream_disposition=attached_pic', '-of', 'json', ...recordingInput(file)];
+
+function openedProbe(stdout) {
+  const parsed = JSON.parse(stdout);
+  const streams = (Array.isArray(parsed?.streams) ? parsed.streams : []).map((s) => ({ type: s?.codec_type, attachedPic: s?.disposition?.attached_pic === 1 }));
+  return { format: parsed?.format?.format_name ?? null, duration: Number(parsed?.format?.duration), streams };
+}
+
+function refusedProbe(stderr, file) {
+  const refused = REFUSED_FORMAT_RE.exec(stderr);
+  if (refused) return { format: refused[1], error: 'its format is not on the whitelist' };
+  const last = lastLine(stderr);
+  return { format: null, error: last.startsWith(`${file}: `) ? last.slice(file.length + 2) : last };
+}
+
+/**
+ * What ffprobe reads of the recording `file` (its real path) through recordingInput: `{ format, duration, streams: [{
+ * type, attachedPic }] }` when it opens, or `{ format, error }` when it does not (`format` the demuxer ffmpeg detected and
+ * the whitelist refused, or null). ffprobe failing to run, or not finishing within PROBE_TIMEOUT_MS, is an AudioError
+ * (machine trouble), never a skipped check; an abort through `signal` rejects with the abort.
+ */
+export function probeRecording({ ffprobe, file, signal }) {
+  const options = { encoding: 'utf8', timeout: PROBE_TIMEOUT_MS, killSignal: 'SIGKILL', maxBuffer: PROBE_MAX_BUFFER, signal };
+  return new Promise((resolve, reject) => {
+    execFile(ffprobe, probeRecordingArgs(file), options, (err, stdout, stderr) => {
+      if (err?.name === 'AbortError') return reject(err);
+      if (err && (err.killed || typeof err.code !== 'number')) {
+        const why = err.killed ? `it did not finish within ${PROBE_TIMEOUT_MS / 1000} s` : err.message;
+        return reject(new AudioError(`voice: ffprobe could not read the recording: ${why}`, { hint: PROBE_HINT }));
+      }
+      try {
+        return resolve(err ? refusedProbe(stderr, file) : openedProbe(stdout));
+      } catch (parseErr) {
+        return reject(new AudioError(`voice: ffprobe printed no readable report for the recording: ${parseErr.message}`, { hint: PROBE_HINT }));
+      }
+    });
+  });
+}
+
+/**
+ * Why a probed recording (probeRecording) cannot narrate a film whose last word ends at `lastWordEnd` seconds in it, or
+ * null: a format that is not plain audio (named), a file ffmpeg cannot read, no audio stream or more than one, any other
+ * stream but a cover picture, no readable length, or a length short of the last word (by more than
+ * RECORDING_END_TOLERANCE). The message follows the file's name.
+ */
+export function recordingProblem(probe, lastWordEnd) {
+  if (probe.format !== null && !RECORDING_FORMATS.has(probe.format)) {
+    return `is in the "${probe.format}" format, not plain audio: a recording must be ${ACCEPTED_LABEL}, which open no other file; export it as WAV`;
+  }
+  if (probe.error !== undefined) return `cannot be read as audio (${probe.error}); a recording must be ${ACCEPTED_LABEL}`;
+  const audio = probe.streams.filter((s) => s.type === 'audio');
+  if (audio.length === 0) return 'has no audio stream; name the recording itself';
+  if (audio.length > 1) return `has ${audio.length} audio streams; a recording must have exactly one`;
+  const other = probe.streams.find((s) => s.type !== 'audio' && !s.attachedPic);
+  if (other !== undefined) return `has a ${other.type ?? 'non-audio'} stream besides its audio; a recording must hold its audio alone: export it as WAV`;
+  if (!Number.isFinite(probe.duration)) return 'has no length ffmpeg can read; export it as WAV';
+  if (probe.duration + RECORDING_END_TOLERANCE < lastWordEnd) {
+    return `lasts ${Math.round(probe.duration * SECONDS_STEPS) / SECONDS_STEPS} s, but the words file's last word ends at ${lastWordEnd} s; the words are not this recording's`;
+  }
+  return null;
+}
+
 // ---- the voice track ---------------------------------------------------------------------------------------------------
 
 /**
  * The ffmpeg arguments that build the film's voice track at 48 kHz mono: each shot of `shots` (one per timeline shot,
  * `{ wav }` an absolute path or null) with a WAV is resampled once to 48 kHz and delayed to its shot's narration start in
  * whole samples, the inputs are mixed without normalisation, and the track is padded and cut to the film's length.
- * `recording` (an absolute path) is an author's own recording of the whole film instead: one input at film time 0, its
- * words already where the timeline put them (engine/script/timing.mjs recordedTimeline), resampled the same way.
+ * `recording` (an absolute path) is an author's own recording of the whole film instead: one input at film time 0
+ * through recordingInput (the file protocol and the accepted audio demuxers only), its words already where the timeline
+ * put them (engine/script/timing.mjs recordedTimeline), resampled the same way.
  */
 export function voiceTrackArgs({ shots, timeline, out, recording }) {
   const placed = recording === undefined
@@ -158,7 +246,8 @@ export function voiceTrackArgs({ shots, timeline, out, recording }) {
   const chains = placed.map((s, k) => `[${k}:a]aformat=sample_rates=${TRACK_RATE}:channel_layouts=mono,adelay=delays=${s.delay}S:all=1[v${k}]`);
   const labels = placed.map((_, k) => `[v${k}]`).join('');
   const graph = `${chains.join(';')};${labels}amix=inputs=${placed.length}:duration=longest:normalize=0,apad=whole_len=${length},atrim=end_sample=${length}[voice]`;
-  return [...QUIET, '-y', ...placed.flatMap((s) => fileInput(s.wav)), '-filter_complex', graph, '-map', '[voice]', ...NO_METADATA,
+  const inputs = recording === undefined ? placed.flatMap((s) => fileInput(s.wav)) : recordingInput(recording);
+  return [...QUIET, '-y', ...inputs, '-filter_complex', graph, '-map', '[voice]', ...NO_METADATA,
     '-ar', String(TRACK_RATE), '-ac', '1', '-c:a', 'pcm_s16le', out];
 }
 

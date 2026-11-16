@@ -1,7 +1,8 @@
 // A film narrated by the author's own recording: `voice: { src, words }`. One file for the whole film, its word times
-// from a Whisper word-timestamp JSON (fromWhisper) or a version 1 sidecar; the timeline follows the file (each word's
-// time in the film is its time in the file); the file is mixed at film time 0 through the same master and mux. No model,
-// no network; the tests that run ffmpeg skip without it. Run with --test-concurrency=1.
+// from a Whisper word-timestamp JSON (fromWhisper, the only words file accepted); the timeline follows the file (each
+// word's time in the film is its time in the file); the file is probed (plain audio only) and mixed at film time 0
+// through the same master and mux, ffmpeg limited to the accepted audio demuxers. No model, no network; the tests that
+// run ffmpeg or ffprobe skip without them. Run with --test-concurrency=1.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -14,9 +15,10 @@ import '../../scripts/v2/list.mjs'; // registers the looks, kinds, devices and c
 import { PlacementError, RECORDING_LEAD, buildTimeline } from '../../engine/script/timing.mjs';
 import { RecordingWordsError, fromWhisper, sentencesOf } from '../../scripts/v2/voice/sidecar.mjs';
 import { parseSay } from '../../engine/script/say.mjs';
-import { validateFilm } from '../../scripts/v2/spec.mjs';
+import { WORDS_MAX_BYTES, validateFilm } from '../../scripts/v2/spec.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
-import { TRACK_RATE, masterTrack, muxVoice } from '../../scripts/v2/voice/master.mjs';
+import { TRACK_RATE, masterTrack, muxVoice, recordingProblem, voiceTrackArgs } from '../../scripts/v2/voice/master.mjs';
+import { findFfprobe } from '../../scripts/lib/ffmpeg.mjs';
 
 const FIXTURES = path.join(HERE, '..', 'fixtures', 'voice');
 const readJson = (name) => JSON.parse(readFileSync(path.join(FIXTURES, name), 'utf8'));
@@ -34,6 +36,14 @@ const withWords = (edit) => {
   edit(words);
   return { ...json, segments: [{ id: 0, words }] };
 };
+
+// ffmpeg and the ffprobe beside it, or null after skipping `t` when either is missing.
+async function mediaTools(t) {
+  const ffmpeg = await ffmpegOrNull();
+  const ffprobe = ffmpeg ? findFfprobe({ ffmpeg }) : null;
+  if (!ffmpeg || !ffprobe) { t.skip('no ffmpeg or ffprobe'); return null; }
+  return { ffmpeg, ffprobe };
+}
 
 let dir;
 before(() => { dir = mkdtempSync(path.join(tmpdir(), 'mm-v2-voice-external-')); });
@@ -75,34 +85,84 @@ test('a misheard word keeps its place: one word for one token, at the recording\
   assert.deepEqual(spans(fromWhisper(misheard, FILM).shots[0])[7], ['answer', 2.74, 3.1]);
 });
 
-const mismatch = (json, pattern) => assert.throws(() => fromWhisper(json, FILM), (err) => {
+const mismatch = (json, pattern, film = FILM) => assert.throws(() => fromWhisper(json, film), (err) => {
   assert.ok(err instanceof RecordingWordsError, err.stack);
   assert.equal(err.path, 'voice.words');
   assert.match(err.message, pattern);
   return true;
 });
+// No message about unmatched words prints two counts: it lists the words.
+const NO_COUNTS = /has \d+ words? and the words file has \d+/;
 
-test('an extra word in the recording is an invalid film at voice.words, naming the shot and both counts, never a silent shift', () => {
+test('an extra word in the recording is an invalid film at voice.words, naming the shot and the word, never a silent shift', () => {
   const extra = withWords((words) => { words.splice(13, 0, { word: ' um', start: 7.41, end: 7.44 }); });
-  mismatch(extra, /^shot "close": its say has 9 words and the words file has 11 for it/);
+  mismatch(extra, /^shot "close": the words file has "um" \(7\.41 s\), which the say does not/);
+  assert.throws(() => fromWhisper(extra, FILM), (err) => !NO_COUNTS.test(err.message));
 });
 
-test('a word missing from the recording is an invalid film at voice.words, naming the shot and both counts', () => {
+test('a word missing from the recording is an invalid film at voice.words, naming the shot and the say\'s word', () => {
   const missing = withWords((words) => { words.splice(15, 1); }); // " files,"
-  mismatch(missing, /^shot "close": its say has 9 words and the words file has 9 for it/);
+  mismatch(missing, /^shot "close": the say has "files", which the words file does not/);
+  assert.throws(() => fromWhisper(missing, FILM), (err) => !NO_COUNTS.test(err.message));
 });
 
-test('words left over after the last narrated shot are an error at that shot', () => {
+test('words left over after the last narrated shot are an error at that shot, naming them', () => {
   const extra = withWords((words) => { words.push({ word: ' Thanks.', start: 12.4, end: 12.9 }); });
-  mismatch(extra, /^shot "cost": its say has 4 words and the words file has 4 for it/);
+  mismatch(extra, /^shot "cost": the words file has "Thanks\." \(12\.4 s\), which the say does not/);
+});
+
+// One narrated shot `say`, and a words file of `text` spoken a word every 0.4 s from 0.5 s.
+const oneShot = (say) => ({ version: 2, mode: 'pro', voice: FILM.voice, shots: [{ id: 'only', show: 'statement', say }] });
+const spoken = (text) => ({ segments: [{ words: text.split(' ').map((word, k) => ({
+  word: ` ${word}`, start: Math.round((0.5 + 0.4 * k) * 100) / 100, end: Math.round((0.8 + 0.4 * k) * 100) / 100,
+})) }] });
+
+test('an extra word and a missing one in the same sentence are both named, never moved onto a neighbour\'s time (review probe A)', () => {
+  const film = oneShot('Every chart is a quiet question today.');
+  mismatch(spoken('Every um chart is a question today.'), /^shot "only": the words file has "um" \(0\.9 s\), which the say does not, and the say has "quiet", which the words file does not/, film);
+});
+
+test('an extra word right before a missing one is named too: two substitutions never beat one word added and one left out', () => {
+  const film = oneShot('Every chart is a quiet question.');
+  mismatch(spoken('Every chart is um a question.'), /the words file has "um" \(1\.7 s\), which the say does not, and the say has "quiet", which the words file does not/, film);
+});
+
+test('up to three misheard words in a row keep their places; more in a row are different words, named, not substituted', () => {
+  const misheard = fromWhisper(spoken('Every graph was the question.'), oneShot('Every chart is a question.'));
+  assert.deepEqual(spans(misheard.shots[0]).map(([text, start]) => [text, start]), [['Every', 0.5], ['chart', 0.9], ['is', 1.3], ['a', 1.7], ['question.', 2.1]]);
+  mismatch(spoken('Some graph was the answer.'), /^shot "only": the words file has "Some" \(0\.5 s\), "graph" \(0\.9 s\), "was" \(1\.3 s\), "the" \(1\.7 s\), "answer\." \(2\.1 s\), which the say does not, and the say has "Every", "chart", "is", "a", "question\."/, oneShot('Every chart is a question.'));
+});
+
+test('a symbol on its own has no sound: the error says to write the spoken word', () => {
+  mismatch(spoken('Salt and pepper.'), /"and" \(0\.9 s\), which the say does not.*"&" has no sound of its own/, oneShot('Salt & pepper.'));
+});
+
+test('a words file for a film with no narrated shot is an invalid film at voice.words, not ignored', () => {
+  const silent = { ...FILM, shots: [{ id: 'still', show: 'statement', hold: 2, text: 'Quiet.' }] };
+  mismatch(WHISPER, /no shot has a say/, silent);
+});
+
+test('word times that overlap across two shots are an invalid film at voice.words naming both shots', () => {
+  const overlap = withWords((words) => { words[8].end = 6.05; }); // " arrives." (open) runs past " In" (close) at 6.0 s
+  mismatch(overlap, /"close".*6 s.*"open".*6\.05 s/);
 });
 
 test('a words file without word times, or with a time that is not a number, says what is wrong', () => {
   mismatch({ segments: [{ text: 'Every chart' }] }, /word times/);
   mismatch({ text: 'Every chart' }, /segments/);
   mismatch(withWords((words) => { words[3].start = 'soon'; }), /segments\[0\]\.words\[3\]\.start/);
+  mismatch(withWords((words) => { words[3].start = -0.5; }), /segments\[0\]\.words\[3\]\.start/);
   mismatch(withWords((words) => { words[3].end = 1.0; }), /segments\[0\]\.words\[3\]\.end/);
-  mismatch(withWords((words) => { words[5].start = 0.1; words[5].end = 0.2; }), /out of order/);
+  mismatch(withWords((words) => { words[5].start = 0.1; words[5].end = 0.2; }), /segments\[0\]\.words\[5\]\.start: 0\.1 s is out of order/);
+});
+
+test('a huge non-string word is named by its type, not echoed whole into the message', () => {
+  const huge = withWords((words) => { words[2].word = { text: 'x'.repeat(100000) }; });
+  assert.throws(() => fromWhisper(huge, FILM), (err) => {
+    assert.match(err.message, /segments\[0\]\.words\[2\]\.word: must be the word's text, got an object/);
+    assert.ok(err.message.length < 300, `${err.message.length} characters`);
+    return true;
+  });
 });
 
 test('only Whisper\'s word-timestamp JSON is accepted: one of our own sidecars is refused, naming the accepted shape', () => {
@@ -153,6 +213,20 @@ test('the lead never reaches back before the last word of the shot before', () =
   assert.equal(Math.round(tl.shots[3].start * FPS), Math.ceil(10 * FPS));
 });
 
+test('a shot opening on a run of tokens that share one word shows all of them from its first frame, not apart', () => {
+  const film = { version: 2, mode: 'pro', voice: FILM.voice, shots: [
+    { id: 'go', show: 'statement', say: 'Go.' },
+    { id: 'cost', show: 'statement', cut: 'cut', say: '$5 million is a lot.' },
+  ] };
+  const json = { segments: [{ words: [
+    { word: ' Go.', start: 0.3, end: 0.6 }, { word: ' $5 million', start: 1.5, end: 2.1 }, { word: ' is', start: 2.15, end: 2.3 },
+    { word: ' a', start: 2.35, end: 2.4 }, { word: ' lot.', start: 2.45, end: 2.8 },
+  ] }] };
+  const cost = recorded(film, json).shots[1];
+  assert.deepEqual(cost.words.slice(0, 2).map((w) => [w.text, w.start]), [['$5', 0], ['million', 0]]);
+  assert.ok(cost.words[2].start > 0, 'the next word keeps its own time');
+});
+
 const placement = (film, json, pattern, at) => assert.throws(() => recorded(film, json), (err) => {
   assert.ok(err instanceof PlacementError, err.stack);
   assert.deepEqual(err.errors.map((e) => e.path), [at]);
@@ -186,10 +260,15 @@ test('a cut longer than the shot it opens is an error at that cut', () => {
 
 // ---- validation: the two files, inside the film's folder ----
 
+// A silent WAV recording, long enough for the fixture's words (the last ends at 11.9 s).
+const SILENT_RATE = 8000;
+const FILM_RECORDING_SECONDS = 12.5;
+const writeSilence = (file, seconds = FILM_RECORDING_SECONDS) => writeWav(file, new Float32Array(Math.round(seconds * SILENT_RATE)), SILENT_RATE);
+
 function specFolder(name, { words = WHISPER } = {}) {
   const folder = path.join(dir, name);
   mkdirSync(folder, { recursive: true });
-  writeFileSync(path.join(folder, 'recording.wav'), 'RIFF');
+  writeSilence(path.join(folder, 'recording.wav'));
   writeFileSync(path.join(folder, 'recording.words.json'), typeof words === 'string' ? words : JSON.stringify(words));
   return folder;
 }
@@ -221,6 +300,32 @@ test('a missing recording or words file, or words that are not JSON, is an inval
   assert.match(errorsOf(withVoice({ src: 'recording.wav', words: 'gone.json' }), folder)[0].message, /file not found: "gone\.json"/);
 });
 
+test('a src that is a FIFO is refused at voice.src: not a regular file', (t) => {
+  if (process.platform === 'win32') { t.skip('no FIFOs'); return; }
+  const folder = specFolder('fifo-src');
+  assert.equal(spawnSync('mkfifo', [path.join(folder, 'pipe.wav')]).status, 0);
+  const errors = errorsOf(withVoice({ src: 'pipe.wav', words: 'recording.words.json' }), folder);
+  assert.deepEqual(errors.map((e) => e.path), ['voice.src']);
+  assert.match(errors[0].message, /"pipe\.wav" is not a regular file/);
+});
+
+test('a words file that is a FIFO is refused at voice.words without waiting on it', (t) => {
+  if (process.platform === 'win32') { t.skip('no FIFOs'); return; }
+  const folder = specFolder('fifo-words');
+  assert.equal(spawnSync('mkfifo', [path.join(folder, 'pipe.json')]).status, 0);
+  const errors = errorsOf(withVoice({ src: 'recording.wav', words: 'pipe.json' }), folder);
+  assert.deepEqual(errors.map((e) => e.path), ['voice.words']);
+  assert.match(errors[0].message, /"pipe\.json" is not a regular file/);
+});
+
+test('a words file over the 16 MB cap is refused at voice.words before it is parsed', () => {
+  const folder = specFolder('words-cap');
+  writeFileSync(path.join(folder, 'big.json'), Buffer.alloc(WORDS_MAX_BYTES + 1, 0x20));
+  const errors = errorsOf(withVoice({ src: 'recording.wav', words: 'big.json' }), folder);
+  assert.deepEqual(errors.map((e) => e.path), ['voice.words']);
+  assert.match(errors[0].message, new RegExp(`a words file can be at most ${WORDS_MAX_BYTES} bytes`));
+});
+
 test('words that cannot be matched to the say are an invalid film at voice.words', () => {
   const folder = specFolder('mismatch', { words: withWords((words) => { words.splice(15, 1); }) });
   const errors = errorsOf(FILM, folder);
@@ -238,7 +343,8 @@ const makeOutline = (folder, film = FILM) => {
   });
 };
 
-test('make on a film with its own recording synthesises nothing and reports timed: "measured", voice.model null', async () => {
+test('make on a film with its own recording synthesises nothing and reports timed: "measured", voice.model null', async (t) => {
+  if (!await mediaTools(t)) return;
   const { report, exitCode, outline } = await makeOutline(specFolder('make-ok'));
   assert.equal(exitCode, 0, JSON.stringify(report));
   assert.equal(report.timed, 'measured');
@@ -247,11 +353,110 @@ test('make on a film with its own recording synthesises nothing and reports time
   assert.equal(outline[2].start, 175 / FPS, 'the outline follows the recording');
 });
 
-test('a say-less shot that cannot be placed is an invalid film from make: exit 1 at that shot, nothing after the timeline', async () => {
+test('a say-less shot that cannot be placed is an invalid film from make: exit 1 at that shot, nothing after the timeline', async (t) => {
+  if (!await mediaTools(t)) return;
   const { report, exitCode } = await makeOutline(specFolder('make-place'), withShot(1, { hold: 3 }));
   assert.equal(exitCode, 1, JSON.stringify(report));
   assert.deepEqual(report.findings.map((f) => [f.kind, f.path]), [['mechanical', 'shots[1]']]);
   assert.deepEqual(report.stages.map((s) => [s.name, s.ok]), [['validate', true], ['voice', true], ['timeline', false]]);
+});
+
+// ---- the recording itself: plain audio only, and ffmpeg may open nothing else (review probes C3 and C4) ----
+
+// A folder for the film, with an MPEG-TS of 2 s outside it and the review's two hostile recordings inside: an HLS
+// playlist naming the outside segment by its absolute path, and a file named cat.wav holding an ffconcat list whose
+// entry is a symlink inside the folder that points outside.
+function hostileFolder(name, ffmpeg) {
+  const folder = path.join(dir, name);
+  const outside = path.join(dir, `${name}-outside`);
+  mkdirSync(folder, { recursive: true });
+  mkdirSync(outside, { recursive: true });
+  const segment = path.join(outside, 'seg.ts');
+  const made = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'sine=f=440:d=2', '-c:a', 'aac', '-f', 'mpegts', segment]);
+  assert.equal(made.status, 0, made.stderr);
+  writeFileSync(path.join(folder, 'vo.m3u8'), `#EXTM3U\n#EXT-X-TARGETDURATION:3\n#EXTINF:2.0,\n${segment}\n#EXT-X-ENDLIST\n`);
+  symlinkSync(segment, path.join(folder, 'seg.ts'));
+  writeFileSync(path.join(folder, 'cat.wav'), 'ffconcat version 1.0\nfile seg.ts\n');
+  const words = { segments: [{ words: [{ word: ' Go.', start: 0.2, end: 0.5 }] }] };
+  writeFileSync(path.join(folder, 'take.json'), JSON.stringify(words));
+  return folder;
+}
+const goFilm = (src) => ({ version: 2, mode: 'pro', voice: { src, words: 'take.json' }, shots: [{ id: 'go', show: 'statement', say: 'Go.' }] });
+
+test('a playlist or a concat script as the recording is an invalid film at voice.src naming its format, found before any decode', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const folder = hostileFolder('hostile-make', tools.ffmpeg);
+  for (const [src, format] of [['vo.m3u8', 'hls'], ['cat.wav', 'concat']]) {
+    const { report, exitCode } = await makeOutline(folder, goFilm(src));
+    assert.equal(exitCode, 1, `${src}: ${JSON.stringify(report)}`);
+    assert.deepEqual(report.findings.map((f) => f.path), ['voice.src'], src);
+    assert.match(report.findings[0].message, new RegExp(`"${src.replace('.', '\\.')}" is in the "${format}" format, not plain audio`));
+    assert.deepEqual(report.stages.map((s) => [s.name, s.ok]), [['validate', true], ['voice', false]]);
+  }
+});
+
+test('with the probe bypassed, ffmpeg itself refuses to open a playlist or a concat script: the format whitelist', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const folder = hostileFolder('hostile-mix', tools.ffmpeg);
+  for (const name of ['vo.m3u8', 'cat.wav']) {
+    const args = voiceTrackArgs({ shots: [], timeline: { duration: 2, shots: [] }, out: path.join(folder, `${name}.track.wav`), recording: path.join(folder, name) });
+    const r = ffmpegRun(tools.ffmpeg, args);
+    assert.notEqual(r.status, 0, `${name}: ffmpeg decoded it`);
+    assert.match(r.stderr, /Format not on whitelist/, name);
+  }
+});
+
+test('recordingProblem: one audio stream (a cover picture beside it is fine) with a readable length, or it says what is wrong', () => {
+  const audio = { type: 'audio', attachedPic: false };
+  const probe = (edit) => ({ format: 'mp3', duration: 12, streams: [audio], ...edit });
+  assert.equal(recordingProblem(probe({}), 11.9), null);
+  assert.equal(recordingProblem(probe({ streams: [audio, { type: 'video', attachedPic: true }] }), 11.9), null);
+  assert.equal(recordingProblem(probe({ duration: 11.86 }), 11.9), null, 'within the end tolerance');
+  assert.match(recordingProblem(probe({ duration: NaN }), 11.9), /has no length ffmpeg can read/);
+  assert.match(recordingProblem(probe({ streams: [audio, audio] }), 11.9), /has 2 audio streams/);
+  assert.match(recordingProblem(probe({ streams: [audio, { type: 'video', attachedPic: false }] }), 11.9), /has a video stream besides its audio/);
+  assert.match(recordingProblem({ format: 'dash', error: 'its format is not on the whitelist' }, 1), /is in the "dash" format, not plain audio/);
+  assert.match(recordingProblem({ format: null, error: 'Invalid data found when processing input' }, 1), /cannot be read as audio \(Invalid data found/);
+});
+
+// A 12.5 s tone in `file` encoded with `codec` (null: ffmpeg's default for the extension); null when this ffmpeg lacks it.
+function writeTone(ffmpeg, file, codec) {
+  const r = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', `sine=f=220:d=${FILM_RECORDING_SECONDS}`, ...(codec ? ['-c:a', codec] : []), file]);
+  return r.status === 0 ? file : null;
+}
+
+test('a plain WAV, MP3 or FLAC recording passes the probe, and the whitelisted mix decodes it', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const folder = specFolder('formats');
+  const files = [['recording.wav', path.join(folder, 'recording.wav')], ['take.mp3', writeTone(tools.ffmpeg, path.join(folder, 'take.mp3'), 'libmp3lame')],
+    ['take.flac', writeTone(tools.ffmpeg, path.join(folder, 'take.flac'), null)]];
+  for (const [src, file] of files) {
+    if (file === null) { t.diagnostic(`${src}: this ffmpeg cannot encode it; not checked`); continue; }
+    const { report, exitCode } = await makeOutline(folder, withVoice({ src, words: 'recording.words.json' }));
+    assert.equal(exitCode, 0, `${src}: ${JSON.stringify(report.findings)}`);
+    const r = ffmpegRun(tools.ffmpeg, voiceTrackArgs({ shots: [], timeline: { duration: 12, shots: [] }, out: path.join(folder, `${src}.track.wav`), recording: file }));
+    assert.equal(r.status, 0, `${src}: ${r.stderr}`);
+  }
+});
+
+test('a recording shorter than its words, or with no audio stream, is an invalid film at voice.src', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const folder = specFolder('short');
+  writeSilence(path.join(folder, 'short.wav'), 5);
+  const short = await makeOutline(folder, withVoice({ src: 'short.wav', words: 'recording.words.json' }));
+  assert.equal(short.exitCode, 1, JSON.stringify(short.report));
+  assert.deepEqual(short.report.findings.map((f) => f.path), ['voice.src']);
+  assert.match(short.report.findings[0].message, /"short\.wav" lasts 5 s, but the words file's last word ends at 11\.9 s/);
+  const video = path.join(folder, 'picture.mp4');
+  assert.equal(ffmpegRun(tools.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=gray:s=64x64:r=10:d=13', '-c:v', 'mpeg4', video]).status, 0);
+  const silent = await makeOutline(folder, withVoice({ src: 'picture.mp4', words: 'recording.words.json' }));
+  assert.equal(silent.exitCode, 1, JSON.stringify(silent.report));
+  assert.deepEqual(silent.report.findings.map((f) => f.path), ['voice.src']);
+  assert.match(silent.report.findings[0].message, /"picture\.mp4" has no audio stream/);
 });
 
 // ---- alignment: a generated recording through the real timeline, master and mux ----
@@ -297,20 +502,25 @@ function onsets(samples, rate, threshold, quiet = 0.05) {
   return found;
 }
 
-// A film with a say-less shot between two narrated ones, and a recording of it: a voice-like tone burst over each
-// word's span (clicks alone are too peaky for the limiter: voice-master.test.mjs), the words JSON matching it.
+// A film that opens on a say-less shot (so its first narrated shot does not start at 0: a recording delayed by that
+// shot's start would show), with a say-less shot between two narrated ones, and a recording of it: a voice-like tone
+// burst over each word's span (clicks alone are too peaky for the limiter: voice-master.test.mjs), the words JSON
+// matching it.
 const ALIGN_FILM = { version: 2, mode: 'pro', voice: { src: 'take.wav', words: 'take.json' }, shots: [
-  { id: 'one', show: 'statement', say: 'Every chart is a question.' },
+  { id: 'intro', show: 'statement', hold: 1, text: 'Charts.' },
+  { id: 'one', show: 'statement', cut: 'cut', say: 'Every chart is a question.' },
   { id: 'breath', show: 'statement', cut: 'cut', hold: 1.3, text: 'A breath.' },
   { id: 'two', show: 'statement', cut: 'cut', say: 'The answer arrives on time.' },
 ] };
-// Words 0.22 s long with at least 0.16 s of silence between them, so each onset is found on its own.
+// Words 0.22 s long with at least 0.16 s of silence between them, so each onset is found on its own; the first 1.31 s
+// in, after the intro's 1 s and the lead.
 const ALIGN_WORDS = [
-  [' Every', 0.31], [' chart', 0.69], [' is', 1.07], [' a', 1.45], [' question.', 1.83],
-  [' The', 4.12], [' answer', 4.5], [' arrives', 4.9], [' on', 5.3], [' time.', 5.7],
+  [' Every', 1.31], [' chart', 1.69], [' is', 2.07], [' a', 2.45], [' question.', 2.83],
+  [' The', 5.12], [' answer', 5.5], [' arrives', 5.9], [' on', 6.3], [' time.', 6.7],
 ].map(([word, start]) => ({ word, start, end: Math.round((start + 0.22) * 100) / 100 }));
 const RECORDING_RATE = 44100; // neither Kokoro's rate nor the track's: the file is resampled once
-const RECORDING_SECONDS = 6.4;
+const RECORDING_SECONDS = 7.4;
+const ONSET_TOLERANCE = 0.002; // a decoded onset may miss its word's time by 2 ms (measured: under 0.1 ms)
 
 function writeRecording(file) {
   const samples = new Float32Array(Math.round(RECORDING_SECONDS * RECORDING_RATE));
@@ -330,7 +540,7 @@ const realRun = (ffmpeg) => async (args) => {
 };
 const ONSET_FRACTION = 0.05;
 
-test('alignment: each word onset decoded from the finished MP4, and each word on the timeline, lies within one frame of its time in the recording', async (t) => {
+test('alignment: each word onset decoded from the finished MP4 lies within 2 ms of its time in the recording, and each word on the timeline within one frame', async (t) => {
   const ffmpeg = await ffmpegOrNull();
   if (!ffmpeg) { t.skip('no ffmpeg'); return; }
   const work = path.join(dir, 'align');
@@ -348,7 +558,8 @@ test('alignment: each word onset decoded from the finished MP4, and each word on
     if (!first) assert.ok(Math.abs(shown - heard) <= FRAME, `timeline word ${k} at ${shown.toFixed(4)} s, the recording has it at ${heard} s`);
     else assert.ok(shown === shot.start && (shot.index === 0 || heard - shown <= RECORDING_LEAD + FRAME), `word ${k} opens "${shot.id}": shown from its first frame, heard ${(heard - shown).toFixed(3)} s later`);
   });
-  assert.ok(timeline.shots[1].duration >= 1.3 - 1e-9 && timeline.shots[1].start > ALIGN_WORDS[4].end, 'the say-less shot sits in the pause');
+  assert.ok(timeline.shots[0].duration >= 1 - 1e-9 && timeline.shots[1].start > 1, 'the film opens on the say-less shot');
+  assert.ok(timeline.shots[2].duration >= 1.3 - 1e-9 && timeline.shots[2].start > ALIGN_WORDS[4].end, 'the say-less shot sits in the pause');
   const video = path.join(work, 'video.mp4');
   const made = ffmpegRun(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', `color=c=gray:s=320x180:r=${FPS}:d=${timeline.duration}`, '-c:v', 'mpeg4', video]);
   assert.equal(made.status, 0, made.stderr);
@@ -363,9 +574,9 @@ test('alignment: each word onset decoded from the finished MP4, and each word on
   const peak = samples.reduce((m, s) => Math.max(m, Math.abs(s)), 0);
   const heard = onsets(samples, rate, peak * ONSET_FRACTION);
   assert.equal(heard.length, fileStarts.length, `onsets at ${heard.map((s) => s.toFixed(3))}`);
-  heard.forEach((s, k) => assert.ok(Math.abs(s - fileStarts[k]) <= FRAME, `onset ${k} at ${s.toFixed(4)} s, its word in the recording at ${fileStarts[k]} s`));
+  heard.forEach((s, k) => assert.ok(Math.abs(s - fileStarts[k]) <= ONSET_TOLERANCE, `onset ${k} at ${s.toFixed(4)} s, its word in the recording at ${fileStarts[k]} s`));
   heard.forEach((s, k) => {
-    if (!placed[k].first) assert.ok(Math.abs(s - placed[k].shown) <= FRAME, `onset ${k} at ${s.toFixed(4)} s, its word shown at ${placed[k].shown.toFixed(4)} s`);
+    if (!placed[k].first) assert.ok(Math.abs(s - placed[k].shown) <= ONSET_TOLERANCE, `onset ${k} at ${s.toFixed(4)} s, its word shown at ${placed[k].shown.toFixed(4)} s`);
   });
   t.diagnostic(`largest onset offset: ${(Math.max(...heard.map((s, k) => Math.abs(s - fileStarts[k]))) * 1000).toFixed(2)} ms from the recording`);
 });
@@ -382,7 +593,7 @@ test('make renders a film with its own recording: one audio stream at the mode\'
   // already covers a say-less shot in the middle.
   writeFileSync(path.join(folder, 'take.json'), JSON.stringify({ segments: [{ words: ALIGN_WORDS.slice(0, 5) }] }));
   const specPath = path.join(folder, 'film.json');
-  writeFileSync(specPath, JSON.stringify({ ...ALIGN_FILM, shots: ALIGN_FILM.shots.slice(0, 1) }));
+  writeFileSync(specPath, JSON.stringify({ ...ALIGN_FILM, shots: ALIGN_FILM.shots.filter((s) => s.id === 'one').map(({ cut, ...s }) => s) }));
   const out = path.join(folder, 'out', 'film.mp4');
   const { report, exitCode } = await runMake({ specPath, out, exact: false, noRender: false, outline: false }, {
     synthesise: () => { throw new Error('an own recording is never synthesised'); },

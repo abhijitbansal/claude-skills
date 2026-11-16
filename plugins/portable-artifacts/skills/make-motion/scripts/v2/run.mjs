@@ -9,7 +9,7 @@
 // never prints to stdout and never waits for input.
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { findFfmpeg } from '../lib/ffmpeg.mjs';
+import { findFfmpeg, findFfprobe } from '../lib/ffmpeg.mjs';
 import { PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
@@ -160,21 +160,36 @@ async function makeVoice(film, options, state, io) {
   return made;
 }
 
+const FFPROBE_HINT = 'install ffmpeg with its ffprobe (they come together), or set FFPROBE_PATH to an ffprobe you trust';
+const lastWordEnd = (sidecar) => Math.max(0, ...sidecar.shots.map((s) => s.seconds));
+
+// The recording as read (spec.mjs readRecording), once ffprobe says it is plain audio of an accepted format, long enough
+// for its words (voice/master.mjs probeRecording, recordingProblem); otherwise a SpecError at voice.src. No ffprobe, or
+// one that fails to run, is machine trouble.
+async function probedRecording(film, read, signal) {
+  const ffprobe = findFfprobe({ ffmpeg: await findFfmpeg() });
+  if (ffprobe === null) throw Object.assign(new Error('ffprobe not found: it is needed to check a recording of your own'), { hint: FFPROBE_HINT });
+  const { probeRecording, recordingProblem } = await import('./voice/master.mjs');
+  const problem = recordingProblem(await probeRecording({ ffprobe, file: read.src, signal }), lastWordEnd(read.sidecar));
+  if (problem !== null) throw new SpecError([{ path: 'voice.src', message: `${JSON.stringify(film.voice.src)} ${problem}` }]);
+  return read;
+}
+
 // An author's own recording (`voice: { src, words }`): nothing is synthesised. Its two files are read again, inside the
-// film's folder, and its words fitted to the film (spec.mjs readRecording); a problem is the film's (findings, exit 1)
-// and null is returned. -> { recording, sidecar, cached: false }, `recording` the file's real path (the only path that
-// reaches ffmpeg) and `sidecar` its words in seconds from its start. voice.seconds is the narration's length in the
-// file: its last word end.
-async function recordVoice(film, specDir, state, log) {
+// film's folder, its words fitted to the film (spec.mjs readRecording), and the audio probed before anything decodes it;
+// a problem is the film's (findings, exit 1) and null is returned. -> { recording, sidecar, cached: false },
+// `recording` the file's real path (the only path that reaches ffmpeg) and `sidecar` its words in seconds from its
+// start. voice.seconds is the narration's length in the file: its last word end.
+async function recordVoice(film, specDir, state, io) {
   let read;
   try {
-    read = await stage(state, log, 'voice', () => readRecording(film, specDir));
+    read = await stage(state, io.log, 'voice', () => probedRecording(film, readRecording(film, specDir), io.signal));
   } catch (err) {
-    if (!(err instanceof SpecError)) throw err;
+    if (!(err instanceof SpecError) || io.signal?.aborted) throw err;
     state.findings = err.errors.map(validationFinding);
     return null;
   }
-  state.voice = { cached: false, seconds: roundSeconds(Math.max(0, ...read.sidecar.shots.map((s) => s.seconds))), model: null };
+  state.voice = { cached: false, seconds: roundSeconds(lastWordEnd(read.sidecar)), model: null };
   return { recording: read.src, sidecar: read.sidecar, cached: false };
 }
 
@@ -204,7 +219,7 @@ async function execute(options, state, io) {
   state.validated = true;
   const { film, specDir } = loaded;
   const made = film.voice === undefined ? null
-    : film.voice.name === undefined ? await recordVoice(film, specDir, state, io.log) : await makeVoice(film, options, state, io);
+    : film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io);
   if (film.voice !== undefined && made === null) return;
   io.signal?.throwIfAborted(); // the voice can take minutes, and a cache hit returns whatever the signal
   const timeline = await timelineFor(film, made, state, io.log);

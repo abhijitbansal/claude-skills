@@ -14,8 +14,8 @@ import { hintRefusals } from '../../scripts/v2/voice/calls.mjs';
 // instead of registering into the shared ones. The modes are data the validator
 // and the timeline read (mode choice, default look and format, pace).
 const STUB_MODES = [
-  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 } },
-  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -14, truePeakDb: -1, lra: 9 } },
+  { name: 'pro', defaultLook: 'desk', defaultFormat: '16:9', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false },
+  { name: 'viral', defaultLook: 'pop', defaultFormat: '9:16', wpm: 175, tail: 0.3, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -14, truePeakDb: -1, lra: 9 }, cues: true },
 ];
 function stubRegistries({ modes = STUB_MODES } = {}) {
   const r = {
@@ -432,7 +432,7 @@ test('withFilmDefaults keeps what the author wrote', () => {
   assert.deepEqual(withFilmDefaults(written, registries), written);
 });
 test('a registered mode supplies its own default look and format', () => {
-  const regs = stubRegistries({ modes: [{ name: 'pro', defaultLook: 'pop', defaultFormat: '1:1', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 } }] });
+  const regs = stubRegistries({ modes: [{ name: 'pro', defaultLook: 'pop', defaultFormat: '1:1', wpm: 150, tail: 0.6, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false }] });
   const out = withFilmDefaults({ version: 2, shots: [shotA] }, regs);
   assert.equal(out.look, 'pop');
   assert.equal(out.format, '1:1');
@@ -879,7 +879,7 @@ test('a film whose mode lacks voice data, or has it out of range, is an error at
   assert.equal(missing.errors.length, 1);
   assert.equal(missing.errors[0].path, 'mode');
   assert.match(missing.errors[0].message, /voiceSpeed/);
-  assert.match(missing.errors[0].message, /both voiceSpeed and emphasisPause/);
+  assert.match(missing.errors[0].message, /the mode's data is incomplete or out of range/);
   assert.match(check(film({ mode: 'pro' }), regsWith({}, ['emphasisPause'])).errors[0].message, /emphasisPause must be/);
   assert.match(check(film({ mode: 'pro' }), regsWith({ voiceSpeed: 1.3 })).errors[0].message, /voiceSpeed must be a number from 0.8 to 1.25, got 1.3/);
   assert.equal(check(film({ mode: 'pro' }), regsWith({ voiceSpeed: 1.25, emphasisPause: 3 })).ok, true);
