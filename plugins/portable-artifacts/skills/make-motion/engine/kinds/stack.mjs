@@ -25,6 +25,7 @@ const FIT_SLACK = 0.5; // px: a line is fitted this far inside the width, so re-
 const FILL_EASE = 'outCubic';
 const NO_WRAP = 1e6;
 const HALF = 2;
+const EPSILON = 1e-6;
 
 // The words of a text with a `|` kept on the word it follows, as stackLines takes them.
 function markedWords(text) {
@@ -146,4 +147,53 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero }) {
     id: `${shot.id}.kicker`, text: shot.kicker, box: [placed.kicker.left, placed.kicker.top, 1, 1], at: look.moves.enter.dur, look, unit, seed, measure,
   }).nodes;
   return { group, kicker, boxes: Object.fromEntries([['text', unionBox(boxes)], ...boxes.map((box, i) => [`word:${i}`, box])]) };
+}
+
+// ---- a stack set again with room above and below it (end, list, quote, compare) ----
+
+// One display line of `text` at `size` (lineAt with the text as its one word list).
+const textLine = (text, size, ctx) => lineAt([text], size, ctx);
+
+const lineText = (line) => line.layout.lines[0].words.map((w) => w.text).join(' ');
+const lineGap = (a, b) => STACK.gap * Math.max(a.font.size, b.font.size);
+
+/**
+ * A composed stack (stack.mjs composeStack) set again with room kept `above` its tag (or first line) and `below` its last
+ * line, in px: its lines set smaller in proportion when stack, tag and room do not fit the stack's area (a line under
+ * scale step 3 says so, overflow: true, as composeStack does), and the whole, room included, centred in the area.
+ */
+export function restack(placed, ctx, { above = 0, below = 0 }) {
+  const { area } = placed;
+  const first = placed.lines[0];
+  const tag = placed.kicker === null ? 0 : first.baseline - first.ink.up - placed.kicker.top; // the tag and its gap
+  const min = sizeAt(ctx.look, STACK.fromStep, ctx.unit);
+  const room = Math.max(1, area.h - tag - above - below); // never zero: the lines then shrink to the floor and say so
+  let lines = placed.lines;
+  for (let i = 0; i < FIT_PASSES && blockHeight(lines) > room + EPSILON; i++) {
+    const share = room / blockHeight(lines);
+    lines = lines.map((line) => {
+      const next = textLine(lineText(line), line.font.size * share, ctx);
+      return next.font.size < min ? { ...next, layout: { ...next.layout, overflow: true } } : next;
+    });
+  }
+  let top = area.top + (area.h - blockHeight(lines) - tag - above - below) / HALF + above + tag;
+  const out = lines.map((line, k) => {
+    if (k > 0) top += lineGap(line, lines[k - 1]);
+    const baseline = top + line.ink.up;
+    top = baseline + line.ink.down;
+    return { ...line, x: area.left - line.ink.left, baseline };
+  });
+  const kicker = placed.kicker === null ? null : { ...placed.kicker, top: out[0].baseline - out[0].ink.up - tag };
+  return { ...placed, lines: out, kicker };
+}
+
+/** One line fitted so its ink fills `width`, between `min` and `max` px; one still too wide at `min` says so (overflow). */
+export function fittedLine(text, width, { min, max }, ctx) {
+  let line = textLine(text, max, ctx);
+  for (let i = 0; i < FIT_PASSES; i++) {
+    const size = Math.min(max, Math.max(min, (line.font.size * (width - FIT_SLACK)) / line.width));
+    if (size === line.font.size) break;
+    line = textLine(text, size, ctx);
+  }
+  return line.width <= width + WIDTH_TOLERANCE ? line : { ...line, layout: { ...line.layout, overflow: true } };
 }

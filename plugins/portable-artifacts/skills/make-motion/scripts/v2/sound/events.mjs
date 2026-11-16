@@ -11,6 +11,8 @@
 import { registries } from '../../../engine/registry.mjs';
 import '../../../engine/kinds/index.mjs';
 import { resolveAnchor, AnchorError } from '../../../engine/script/anchors.mjs';
+import { resolveLook } from '../../../engine/graph/film.mjs';
+import { isHidden } from '../../../engine/kinds/shared.mjs';
 
 const DEFAULT_CUT = 'cut';
 
@@ -21,12 +23,18 @@ function cutEvents(shot, entry) {
   return [event({ kind: 'cut', t: entry.start, shot: entry.id, cut: shot.cut ?? DEFAULT_CUT })];
 }
 
-// Each `on` entry at its anchor in the shot, as the frame draws it (engine/graph/film.mjs resolves it the same way).
-function deviceEvents(shot, entry) {
+// Each `on` entry at its anchor in the shot, as the frame draws it (engine/graph/film.mjs resolves it the same way). An
+// entry aimed at a part that is off screen then (its kind's partWindow) plans no cue: the review reports it instead.
+function deviceEvents(shot, entry, { kinds, look }) {
   if (!Array.isArray(shot.on)) return [];
-  return shot.on.map((item, j) => {
+  const kind = typeof shot.show === 'string' && kinds.has(shot.show) ? kinds.get(shot.show) : null;
+  const windowOf = (target) => (typeof kind?.partWindow === 'function' ? kind.partWindow(shot, entry, target, look) : null);
+  return shot.on.flatMap((item, j) => {
     try {
-      return event({ kind: 'device', t: entry.start + resolveAnchor(item.at, entry), shot: entry.id, device: item.do });
+      const t = resolveAnchor(item.at, entry);
+      const window = windowOf(item.target);
+      if (window !== null && isHidden(t, window)) return [];
+      return [event({ kind: 'device', t: entry.start + t, shot: entry.id, device: item.do })];
     } catch (err) {
       if (err instanceof AnchorError) throw new AnchorError(`shots[${entry.index}].on[${j}].at: ${err.message}`);
       throw err;
@@ -50,9 +58,9 @@ function kindEvents(shot, entry, kinds) {
   if (typeof kind.events !== 'function') return [];
   const declared = Array.isArray(kind.eventDevices) ? kind.eventDevices : [];
   return kind.events(shot, entry).map((e) => {
-    if (e?.kind !== 'device' || !declared.includes(e.device) || !Number.isFinite(e.t)) {
-      throw new RangeError(`kind "${shot.show}" sent the device event ${JSON.stringify(e?.device)}, which its eventDevices (${declared.join(', ')}) does not declare (or a time that is not a number)`);
-    }
+    if (e?.kind !== 'device') throw new RangeError(`kind "${shot.show}" sent an event of kind ${JSON.stringify(e?.kind)}; a kind's own events are device events`);
+    if (!declared.includes(e.device)) throw new RangeError(`kind "${shot.show}" sent the device event ${JSON.stringify(e.device)}, which its eventDevices (${declared.join(', ')}) does not declare`);
+    if (!Number.isFinite(e.t)) throw new RangeError(`kind "${shot.show}" sent the device event "${e.device}" at ${JSON.stringify(e.t)}, which is not a time in seconds`);
     return event({ kind: 'device', t: entry.start + e.t, shot: entry.id, device: e.device });
   });
 }
@@ -70,10 +78,11 @@ function landEvents(shot, entry, kinds) {
  * `kinds` is the kinds registry whose `landing` hooks are asked (default: the shared one).
  */
 export function soundEvents(film, timeline, { kinds = registries.kinds } = {}) {
+  const look = resolveLook(film);
   const events = film.shots.flatMap((shot, index) => {
     const entry = timeline.shots[index];
     if (entry?.id !== shot.id) throw new RangeError(`timeline shot ${index} is ${JSON.stringify(entry?.id)}, the film's shot is "${shot.id}"`);
-    return [...cutEvents(shot, entry), ...deviceEvents(shot, entry), ...kindEvents(shot, entry, kinds), ...emphasisEvents(entry), ...landEvents(shot, entry, kinds)];
+    return [...cutEvents(shot, entry), ...deviceEvents(shot, entry, { kinds, look }), ...kindEvents(shot, entry, kinds), ...emphasisEvents(entry), ...landEvents(shot, entry, kinds)];
   });
   return Object.freeze([...events].sort((a, b) => a.t - b.t));
 }

@@ -6,7 +6,7 @@
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { landing, isHand, colourOf, polyline } from '../devices/shared.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, unionBox } from './shared.mjs';
 import { valueText } from './chart-scale.mjs';
 import { chartData, valueScale, columnMarks, barMarks } from './chart-marks.mjs';
 import { chartTimes } from './chart-time.mjs';
@@ -125,7 +125,7 @@ export function axisGutter(shot, ctx, style, scale, refs) {
 }
 
 /** Columns in `area`: { nodes, boxes, plot, highlight } (highlight: { index, text } of the highlighted value, or null). */
-export function drawColumns(shot, ctx, style, area, { valueOnHighlight }) {
+export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
   const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing);
   const { font, gap } = style;
   const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
@@ -140,7 +140,7 @@ export function drawColumns(shot, ctx, style, area, { valueOnHighlight }) {
   const catLines = fits ? Math.min(CATEGORY_LINES, Math.max(1, ...catLayouts.map((l) => l.lines.length))) : 1;
   const catH = ink + (catLines - 1) * (catLayouts.find((l) => l.lines.length > 1)?.lines[1].y ?? 0);
   const negative = data.items.some((it) => it.value < scale.baseline);
-  const top = ink + gap, bottom = gap + catH + (negative ? ink + gap : 0);
+  const top = ink + gap + headroom, bottom = gap + catH + (negative ? ink + gap : 0);
   const plot = { x: area.x + gutter, y: area.y + top, w: plotW, h: Math.max(1, area.h - top - bottom) };
   const yOf = (v) => plot.y + plot.h - ((Math.min(scale.hi, Math.max(scale.lo, v)) - scale.lo) / (scale.hi - scale.lo)) * plot.h;
   const marks = columnMarks(data.items, plot, scale);
@@ -148,28 +148,35 @@ export function drawColumns(shot, ctx, style, area, { valueOnHighlight }) {
   const values = [], labels = [], boxes = {};
   marks.forEach((m) => {
     nodes.push(...markNodes(shot, ctx, style, { k: m.index, n: marks.length, x: m.x, y: m.base, across: m.width, length: m.tip - m.base, horizontal: false, times, hl }));
-    boxes[`mark:${m.index}`] = [m.x - m.width / HALF, Math.min(m.base, m.tip), m.width, Math.abs(m.tip - m.base)];
+    const parts = [[m.x - m.width / HALF, Math.min(m.base, m.tip), m.width, Math.abs(m.tip - m.base)]]; // the mark and, below, its labels
     const up = m.tip <= m.base;
     const y = up ? m.tip - gap - WORD_DESCENT * font.size : m.tip + gap + CAP_HEIGHT * font.size;
     const highlighted = m.index === hl;
     if (!highlighted || valueOnHighlight) {
       const grown = growWindow(m.index, marks.length, times.growEnd).end;
       const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, grown);
-      values.push(label(ctx, { id: `${shot.id}.value.${m.index}`, text: valueText(m.value, decimals, shot.unit), font, x: m.x, y, align: 'center', fill: highlighted ? style.strong : style.text, numeric: true, maxWidth: band, tracks }).node);
+      const v = label(ctx, { id: `${shot.id}.value.${m.index}`, text: valueText(m.value, decimals, shot.unit), font, x: m.x, y, align: 'center', fill: highlighted ? style.strong : style.text, numeric: true, maxWidth: band, tracks });
+      values.push(v.node);
+      parts.push(v.box);
     }
     const catY = plot.y + plot.h + (negative ? ink + gap : 0) + gap + CAP_HEIGHT * font.size;
-    if (fits) labels.push(label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: m.x, y: catY, align: 'center', fill: style.text, maxWidth: band * LABEL_SHARE, lines: CATEGORY_LINES }).node);
+    if (fits) {
+      const c = label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: m.x, y: catY, align: 'center', fill: style.text, maxWidth: band * LABEL_SHARE, lines: CATEGORY_LINES });
+      labels.push(c.node);
+      parts.push(c.box);
+    }
     else if (m.index % stride === 0) {
       const half = labelWidth(ctx, font, m.key) / HALF; // kept on the plot: the end labels move in, never off the frame
       const x = Math.min(Math.max(m.x, plot.x + half), plot.x + plot.w - half);
       labels.push(label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x, y: catY, align: 'center', fill: style.text, crowded: true }).node);
     }
+    boxes[`mark:${m.index}`] = unionBox(parts); // a device around the mark goes around its labels, never through them
   });
   return { nodes: [...nodes, ...values, ...labels], boxes, plot, highlight: hl >= 0 ? { index: hl, text: valueText(data.items[hl].value, decimals, shot.unit) } : null, times };
 }
 
 /** Bars in `area`, labels in a left column, values at the bar ends: { nodes, boxes, plot, highlight }. */
-export function drawBars(shot, ctx, style, area, { valueOnHighlight }) {
+export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
   const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing);
   const { font, gap } = style;
   const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
@@ -178,7 +185,7 @@ export function drawBars(shot, ctx, style, area, { valueOnHighlight }) {
   const valueCol = Math.max(...data.items.map((it) => labelWidth(ctx, font, valueText(it.value, decimals, shot.unit), true)));
   const rows = (style.refs ? 1 : 0) + (isBroken(shot) ? 1 : 0); // tick labels, then the baseline label on a row of its own
   const below = rows === 0 ? 0 : gap + rows * ink + (rows - 1) * (gap / HALF);
-  const plot = { x: area.x + labelCol + gap, y: area.y, w: Math.max(1, area.w - labelCol - gap - valueCol - gap), h: Math.max(1, area.h - below) };
+  const plot = { x: area.x + labelCol + gap, y: area.y + headroom, w: Math.max(1, area.w - labelCol - gap - valueCol - gap), h: Math.max(1, area.h - below - headroom) };
   const xOf = (v) => plot.x + ((Math.min(scale.hi, Math.max(scale.lo, v)) - scale.lo) / (scale.hi - scale.lo)) * plot.w;
   const marks = barMarks(data.items, plot, scale);
   const nodes = [], values = [], labels = [], boxes = {};
@@ -200,16 +207,19 @@ export function drawBars(shot, ctx, style, area, { valueOnHighlight }) {
   const rowH = marks[0]?.band ?? plot.h;
   marks.forEach((m) => {
     nodes.push(...markNodes(shot, ctx, style, { k: m.index, n: marks.length, x: m.base, y: m.y, across: m.height, length: m.tip - m.base, horizontal: true, times, hl }));
-    boxes[`mark:${m.index}`] = [Math.min(m.base, m.tip), m.y - m.height / HALF, Math.abs(m.tip - m.base), m.height];
+    const parts = [[Math.min(m.base, m.tip), m.y - m.height / HALF, Math.abs(m.tip - m.base), m.height]];
     const mid = m.y + (CAP_HEIGHT * font.size) / HALF;
     const highlighted = m.index === hl;
     if (!highlighted || valueOnHighlight) {
       const grown = growWindow(m.index, marks.length, times.growEnd).end;
       const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, grown);
-      values.push(label(ctx, { id: `${shot.id}.value.${m.index}`, text: valueText(m.value, decimals, shot.unit), font, x: Math.max(m.tip, m.base) + gap, y: mid, fill: highlighted ? style.strong : style.text, numeric: true, tracks }).node);
+      const v = label(ctx, { id: `${shot.id}.value.${m.index}`, text: valueText(m.value, decimals, shot.unit), font, x: Math.max(m.tip, m.base) + gap, y: mid, fill: highlighted ? style.strong : style.text, numeric: true, tracks });
+      values.push(v.node);
+      parts.push(v.box);
     }
     const piece = label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: plot.x - gap, y: mid, align: 'right', fill: style.text, maxWidth: labelCol, lines: rowH >= HALF * ink ? CATEGORY_LINES : 1 });
     labels.push(piece.node);
+    boxes[`mark:${m.index}`] = unionBox([...parts, piece.box]); // a device around the bar goes around its labels
   });
   return { nodes: [...nodes, ...values, ...labels], boxes, plot, highlight: hl >= 0 ? { index: hl, text: valueText(data.items[hl].value, decimals, shot.unit) } : null, times };
 }

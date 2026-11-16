@@ -10,17 +10,18 @@ import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { chartStyle } from './chart-draw.mjs';
 import { drawPlot, captionTop } from './chart-plot.mjs';
 import { label } from './chart-labels.mjs';
+import { SLUG } from './slug.mjs';
 
 const FIRST_COLUMN = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
 
-// The claim: fitted, flush left on column 2, its cap line on the top margin.
+// The claim: fitted, flush left on column 2, its cap line where a statement's slug sits (SLUG.top of the height).
 function titleNode(shot, ctx, data, labelSize) {
   const { look, canvas, unit, measure } = ctx;
   const span = gridSpan(look, canvas, FIRST_COLUMN, isWide(canvas) ? data.titleToWide : data.titleToTall);
   const opts = { text: setCase(look, 'display', shot.title), font: fontFor(look, 'display', data.titleMax * unit, unit), maxWidth: span.w, align: 'left', measure };
   const fit = fitDisplay(opts, { min: MIN_HERO_RATIO * labelSize, max: data.titleMax * unit, maxHeight: canvas.h, maxLines: data.titleLines }, look, unit);
-  const top = look.grid.margin * unit;
+  const top = Math.max(look.grid.margin * unit, SLUG.top * canvas.h); // where a statement's slug sits
   const y = top + CAP_HEIGHT * fit.font.size - fit.layout.lines[0].y;
   const bottom = y + fit.layout.lines.at(-1).y + WORD_DESCENT * fit.font.size;
   const textNode = node('text', `${shot.id}.title`, { x: span.x, y, layout: fit.layout, font: fit.font, fill: look.palette.ink, role: 'hero' });

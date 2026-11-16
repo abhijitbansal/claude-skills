@@ -162,8 +162,8 @@ test('desk compare: values on both sides are numerals at one size and one colour
   const { nodes } = expandShot(SIDES({ left: { title: 'Server', value: 1200 }, right: { title: 'File', value: 0 } }), 'desk', '16:9');
   const { left, right } = cardsOf(nodes);
   const a = textNode(left.children, 'c.left.value'), b = textNode(right.children, 'c.right.value');
-  assert.deepEqual(a.props.layout.lines[0].words.map((w) => w.text), ['1,200']);
-  assert.deepEqual(b.props.layout.lines[0].words.map((w) => w.text), ['0']);
+  assert.deepEqual(a.props.layout.lines[0].words.map((w) => w.text).join(''), '1,200');
+  assert.deepEqual(b.props.layout.lines[0].words.map((w) => w.text).join(''), '0');
   assert.equal(a.props.font.size, b.props.font.size);
   assert.equal(a.props.fill, b.props.fill);
   assert.equal(a.props.font.family, b.props.font.family);
@@ -213,12 +213,14 @@ test('pop compare: one side at a time, a hard cut at the turn; each a stack with
   }
 });
 
-test('pop compare: points sit under the stack in the text face, a third of it or less; values join the stack as a numeral line', () => {
+test('pop compare: points sit under the stack in the text face, a third of it or less; the value is a numeral line of its own under the title', () => {
   const { nodes, ctx } = expandShot(SIDES({ left: { title: 'Server', value: 1200, points: ['Deploys'] }, right: { title: 'File', value: 3 } }), 'pop', '9:16');
   const left = all(nodes).find((n) => n.id === 'c.left');
   const stack = left.children.find((n) => n.id === 'c.left.title');
-  const words = stack.children.flatMap((n) => n.props.layout.lines[0].words.map((w) => w.text));
-  assert.ok(words.includes('1,200'), `the value in the stack: ${words}`);
+  const value = textNode(left.children, 'c.left.value');
+  assert.equal(value.props.layout.lines[0].words.map((w) => w.text).join(''), '1,200', 'the value under the title');
+  const lowest = Math.max(...stack.children.map((n) => n.props.y + n.props.layout.lines[0].y));
+  assert.ok(value.props.y + value.props.layout.lines[0].y > lowest, 'under the stack');
   const points = textNode(left.children, 'c.left.points');
   assert.equal(points.props.font.family, ctx.look.fonts.text.family);
   assert.ok(Math.max(...stack.children.map((n) => n.props.font.size)) >= 3 * points.props.font.size - EPS);
@@ -312,4 +314,35 @@ test('compare: on targets are left and right; an underline on the right lands, a
   assert.ok(bad.some((e) => /unknown target "middle"/.test(e.message)));
   assert.equal(kind.showsWords, true);
   assert.notEqual(kind.numbered, true);
+});
+
+// ---- fix round 1 ----
+
+const valueNode = (nodes, side) => all(nodes).find((n) => n.type === 'text' && n.id === `c.${side}.value`);
+
+test('pop compare values share one size, the size at which the wider of the two fits, on both sides', () => {
+  for (const format of ['16:9', '9:16']) {
+    const { nodes, ctx } = expandShot(SIDES({ left: { title: 'Before', value: 3 }, right: { title: 'After', value: 1234567 } }), 'pop', format);
+    const a = valueNode(nodes, 'left'), b = valueNode(nodes, 'right');
+    assert.ok(a && b, `${format}: both values are their own numeral lines`);
+    assert.equal(a.props.font.size, b.props.font.size, `${format}: one size`);
+    assert.ok(b.props.x + b.props.layout.width <= ctx.canvas.w, `${format}: the wider one fits`);
+  }
+});
+
+test('compare values are numerals in fixed advances: one word per character', () => {
+  for (const look of ['desk', 'pop']) {
+    const { nodes } = expandShot(SIDES({ left: { title: 'A', value: 1118 }, right: { title: 'B', value: 2000 } }), look, '16:9');
+    assert.deepEqual(valueNode(nodes, 'left').props.layout.lines[0].words.map((w) => w.text), ['1', ',', '1', '1', '8'], `${look}: per character`);
+  }
+});
+
+test('desk compare: a long legal value shrinks the numeral, never the title below its floor, and flags no title that fits', () => {
+  for (const format of ['16:9', '9:16']) {
+    const { nodes, ctx } = expandShot(SIDES({ left: { title: 'Server', value: 1200000, points: ['Per seat'] }, right: { title: 'File', value: 9 } }), 'desk', format);
+    const title = textNode(cardsOf(nodes).left.children, 'c.left.title');
+    const floor = Math.max(ctx.look.scale[2], 3 * ctx.look.scale[0]) * ctx.unit;
+    assert.ok(title.props.font.size >= floor - EPS, `${format}: title ${title.props.font.size} at or over its floor ${floor}`);
+    assert.notEqual(title.props.layout.overflow, true, `${format}: no false "does not fit"`);
+  }
 });

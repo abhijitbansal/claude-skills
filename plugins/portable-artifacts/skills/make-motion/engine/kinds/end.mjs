@@ -1,7 +1,7 @@
 // The `end` kind: the film's closing card. A closing line (`title`, else the say), a short call to action (`ask`), a
 // wordmark or name (`mark`) and an optional logo picture (`src`). An editorial composition (desk) sets the title as the
 // hero in the display face flush left on column 2, the ask under it in the text face, and the mark on a small taped card
-// in the bottom right (the slug's card without its number: frame furniture, never a second hero); a stack (pop) sets the
+// in the bottom right (label caps under the title and the ask, judged like any text); a stack (pop) sets the
 // title as a stack under the mark as a tag, with the ask as its last line in the accent. A picture sits where the mark
 // would (on the card, or over the stack), at most a sixth of the short side. The title's words arrive as they are spoken
 // (its first word on the shot's first frame); the ask lands on its own first spoken word, else just after the title's
@@ -16,12 +16,11 @@ import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase, capBox,
   isEditorial, heroProblems, fieldNode, enterTracks, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk,
-  asTextCard, ghostTracks, driftReach,
+  ghostTracks, driftReach,
+  plainSay, endTimes, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup,
 } from './shared.mjs';
-import { wordTimes } from './words.mjs';
 import { SLUG } from './slug.mjs';
-import { STACK, stackArea, composeStack, stackNodes } from './stack.mjs';
-import { ghostWords } from './statement.mjs';
+import { STACK, stackArea, composeStack, stackNodes, restack, fittedLine } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
 const KIND = 'end';
@@ -30,67 +29,37 @@ const ASK_MAX = 60;
 const MARK_MAX = 32;
 const FIRST_COLUMN = 2; // the title starts on column 2; the card's right margin mirrors it
 export const PICTURE_SHARE = 1 / 6; // of the short side: the longest side of a logo picture
-const ASK_LAG = 0.4; // seconds after the title's last word, for an ask that is not spoken
-const ASK_HOLD = 0.6; // seconds an unspoken ask is on screen, at least, before the shot ends
 const CARD_CLEAR = 2; // gutters between the title block's ink and the card (as a statement keeps off its slug)
-const FIT_PASSES = 3;
-const FIT_SLACK = 0.5; // px: a stack line is fitted this far inside the width
-const WIDTH_TOLERANCE = 1; // px
 const NO_WRAP = 1e6;
-const EPSILON = 1e-6;
 const HALF = 2;
 const DEGREES_TO_RADIANS = Math.PI / 180;
 
 // ---- the words ----
 
-// A say that does not parse has its own validation error; it then gives no words.
-function plainSay(say) {
-  if (typeof say !== 'string') return '';
-  try {
-    return parseSay(say).plain;
-  } catch (err) {
-    if (err instanceof SayError) return '';
-    throw err;
-  }
-}
-
 const titleOf = (shot) => shot.title ?? plainSay(shot.say);
-
-/** When the title's words and the ask land, in shot seconds: { title: [{ at }], ask }. An ask whose words are spoken
- *  lands on the first of them; otherwise ASK_LAG after the title's last word, ASK_HOLD before the shot ends at the
- *  latest (never before that last word). With no narration the title's first word lands at 0. */
-export function endTimes(shot, timing) {
-  const title = wordsOf(titleOf(shot));
-  const ask = shot.ask === undefined ? [] : wordsOf(shot.ask);
-  const times = wordTimes([...title, ...ask], timing);
-  const titleTimes = times.slice(0, title.length);
-  if (ask.length === 0) return { title: titleTimes, ask: null };
-  const spoken = times.slice(title.length).find((t) => t.spoken !== null);
-  if (spoken) return { title: titleTimes, ask: spoken.at };
-  const last = titleTimes.at(-1)?.at ?? 0;
-  return { title: titleTimes, ask: Math.max(last, Math.min(last + ASK_LAG, timing.duration - ASK_HOLD)) };
-}
 
 // ---- the picture ----
 
-/** A picture's size in canvas pixels: its longest side PICTURE_SHARE of the short side, its aspect kept. */
+/** A picture's size in canvas pixels: its longest side at most PICTURE_SHARE of the short side (a small logo is never
+ *  enlarged), its aspect kept. */
 export function pictureSize(picture, canvas) {
-  const longest = Math.min(canvas.w, canvas.h) * PICTURE_SHARE;
-  const scale = longest / Math.max(picture.width, picture.height);
-  return { w: picture.width * scale, h: picture.height * scale };
+  return fitLongestSide(picture, Math.min(Math.min(canvas.w, canvas.h) * PICTURE_SHARE, Math.max(picture.width, picture.height)));
 }
 
 // ---- desk: the card ----
 
-// The card's contents laid out (the mark, the picture over it) and its size: null with neither.
-function cardParts(shot, ctx, data) {
+// The card's contents laid out (the mark, the picture over it) and its size: null with neither. The mark is set in the
+// label face at the largest of data.markSteps that keeps the title three times it and the mark no larger than the ask, so
+// the frame reads title, then ask, then mark.
+function cardParts(shot, ctx, data, block) {
   if (shot.mark === undefined && shot.src === undefined) return null;
   const { look, unit, measure, canvas } = ctx;
   const pad = SLUG.pad * unit, gap = SLUG.gap * unit;
   let mark = null;
   if (shot.mark !== undefined) {
-    const font = fontFor(look, 'display', sizeAt(look, data.markStep, unit), unit);
-    const layout = layoutText({ text: setCase(look, 'display', shot.mark), font, maxWidth: NO_WRAP, measure });
+    const limits = [{ size: block.title.font.size, ratio: MIN_HERO_RATIO }, ...(block.ask === null ? [] : [{ size: block.ask.font.size, ratio: 1 }])];
+    const font = fontFor(look, 'label', sizeAt(look, stepUnder(look, data.markSteps, unit, limits), unit), unit);
+    const layout = layoutText({ text: setCase(look, 'label', shot.mark), font, maxWidth: NO_WRAP, measure });
     mark = { font, layout, ink: runInk(layout.lines[0], font, measure) };
   }
   const picture = shot.src === undefined ? null : pictureSize(ctx.asset(shot.src), canvas);
@@ -111,27 +80,26 @@ function cardBox(parts, ctx, data) {
 }
 
 // The card's nodes: one group (the card's entrance, turned exactly data.turn, pinned to the frame) holding the card, the
-// picture and the mark (frame furniture, as a slug's texts are).
+// picture and the mark (judged like any text: it is the film's own sign-off, not a running head).
 function cardNodes(shot, ctx, parts, placed, data) {
   const { look, unit, seed } = ctx;
   const id = `${shot.id}.mark`;
-  const card = registries.devices.get('card').build({ id, box: placed.box, at: look.moves.enter.dur, look, unit, seed }).nodes[0];
+  const card = cardOf(ctx, id, placed.box, look.moves.enter.dur);
   const left = -parts.w / HALF + parts.pad, top = -parts.h / HALF + parts.pad;
   const picture = parts.picture === null ? [] : [node('image', `${id}.picture`, { src: shot.src, w: parts.picture.w, h: parts.picture.h, x: left, y: top })];
   const markTop = top + (parts.picture === null ? 0 : parts.picture.h + parts.gap);
   const mark = parts.mark === null ? [] : [node('text', `${id}.text`, {
     x: left - parts.mark.ink.left, y: markTop + parts.mark.ink.up - parts.mark.layout.lines[0].y, layout: parts.mark.layout, font: parts.mark.font,
-    fill: look.palette.ink, role: 'mark', furniture: true,
+    fill: look.palette.ink, role: 'mark',
   })];
-  return [node('group', id, { ...card.props, rotate: data.turn, fixed: true }, { tracks: card.tracks, children: [...asTextCard(id, card.children), ...picture, ...mark] })];
+  return [cardGroup(card, id, [...picture, ...mark], { rotate: data.turn, fixed: true })];
 }
 
 // ---- desk: the title and the ask ----
 
 // The ask's scale step: the largest of data.askSteps that keeps the title MIN_HERO_RATIO times its size (else the smallest).
 function askStepFor(look, data, titleSize, unit) {
-  const fits = data.askSteps.filter((step) => MIN_HERO_RATIO * sizeAt(look, step, unit) <= titleSize + EPSILON);
-  return fits.length > 0 ? Math.max(...fits) : Math.min(...data.askSteps);
+  return stepUnder(look, data.askSteps, unit, [{ size: titleSize, ratio: MIN_HERO_RATIO }]);
 }
 
 // The title fitted to columns 2..toWide (toTall on vertical formats) and the ask under it, at y = 0: { title, ask, span,
@@ -152,7 +120,6 @@ function deskBlock(shot, ctx, data) {
   return { title, ask: { font, layout, y }, span, top, bottom: y + layout.lines.at(-1).y };
 }
 
-const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 
 // The boxes the title and the ask cover with the block's top-left at y: from each one's first cap line to just under its
 // last baseline, as wide as its widest line.
@@ -180,15 +147,11 @@ function deskY(block, card, ctx, data) {
   return Math.max(look.grid.margin * unit - block.top, y - up);
 }
 
-// The words' boxes of a laid-out text at (x, y), in canvas pixels, by word index.
-const wordBoxes = (layout, x, y) => layout.lines.flatMap((line) => line.words.map((w) => ({ index: w.index, box: capBox(x + line.x + w.x, y + line.y, w.width, layout.size) })))
-  .sort((a, b) => a.index - b.index).map((w) => w.box);
-
 function expandDesk(shot, ctx, data, times) {
   const { look, unit } = ctx;
-  const parts = cardParts(shot, ctx, data);
-  const card = parts === null ? null : cardBox(parts, ctx, data);
   const block = deskBlock(shot, ctx, data);
+  const parts = cardParts(shot, ctx, data, block);
+  const card = parts === null ? null : cardBox(parts, ctx, data);
   const x = block.span.x, y = deskY(block, card, ctx, data);
   const hero = heroId(shot, 'title');
   const matched = arrivesMatched(shot, ctx);
@@ -212,69 +175,11 @@ function expandDesk(shot, ctx, data, times) {
 
 // ---- pop ----
 
-// One display line of `text` at `size`: { font, layout, ink, width } with the ink in the line's own space.
-function lineAt(text, size, ctx) {
-  const font = fontFor(ctx.look, 'display', size, ctx.unit);
-  const layout = layoutText({ text, font, maxWidth: NO_WRAP, measure: ctx.measure });
-  const ink = runInk(layout.lines[0], font, ctx.measure);
-  return { font, layout, ink, width: ink.right - ink.left };
-}
-
-const lineText = (line) => line.layout.lines[0].words.map((w) => w.text).join(' ');
-const lineGap = (a, b) => STACK.gap * Math.max(a.font.size, b.font.size);
-const stackHeight = (lines) => lines.reduce((sum, l, k) => sum + l.ink.up + l.ink.down + (k === 0 ? 0 : lineGap(l, lines[k - 1])), 0);
-
-/**
- * A composed stack (stack.mjs composeStack) set again with room kept `above` its tag (or first line) and `below` its last
- * line, in px: its lines set smaller in proportion when stack, tag and room do not fit the stack's area (a line under
- * scale step 3 says so, overflow: true, as composeStack does), and the whole, room included, centred in the area.
- */
-export function restack(placed, ctx, { above = 0, below = 0 }) {
-  const { area } = placed;
-  const first = placed.lines[0];
-  const tag = placed.kicker === null ? 0 : first.baseline - first.ink.up - placed.kicker.top; // the tag and its gap
-  const min = sizeAt(ctx.look, STACK.fromStep, ctx.unit);
-  const room = area.h - tag - above - below;
-  let lines = placed.lines;
-  for (let i = 0; i < FIT_PASSES && stackHeight(lines) > room + EPSILON; i++) {
-    const share = room / stackHeight(lines);
-    lines = lines.map((line) => {
-      const next = lineAt(lineText(line), line.font.size * share, ctx);
-      return next.font.size < min ? { ...next, layout: { ...next.layout, overflow: true } } : next;
-    });
-  }
-  let top = area.top + (area.h - stackHeight(lines) - tag - above - below) / HALF + above + tag;
-  const out = lines.map((line, k) => {
-    if (k > 0) top += lineGap(line, lines[k - 1]);
-    const baseline = top + line.ink.up;
-    top = baseline + line.ink.down;
-    return { ...line, x: area.left - line.ink.left, baseline };
-  });
-  const kicker = placed.kicker === null ? null : { ...placed.kicker, top: out[0].baseline - out[0].ink.up - tag };
-  return { ...placed, lines: out, kicker };
-}
-
-/** One line fitted so its ink fills `width`, between `min` and `max` px; one still too wide at `min` says so (overflow). */
-export function fittedLine(text, width, { min, max }, ctx) {
-  let line = lineAt(text, max, ctx);
-  for (let i = 0; i < FIT_PASSES; i++) {
-    const size = Math.min(max, Math.max(min, (line.font.size * (width - FIT_SLACK)) / line.width));
-    if (size === line.font.size) break;
-    line = lineAt(text, size, ctx);
-  }
-  return line.width <= width + WIDTH_TOLERANCE ? line : { ...line, layout: { ...line.layout, overflow: true } };
-}
-
 // A word's tracks in a stack line: a ghost lit when spoken (a mode that reads from frame 0), else a fade on its time.
 function stackWordTracks(look, at, lit, { ghost, matched }) {
   if (ghost) return ghostTracks(look, at, lit);
   return matched ? {} : { opacity: landing(at, look.moves.enter, 0, 1) };
 }
-
-/** The tag's plate box as the tag device builds it at (left, top), [x, y, w, h] in canvas pixels. */
-export const tagBox =(ctx, id, text, left, top) => registries.devices.get('tag').build({
-  id, text, box: [left, top, 1, 1], at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure,
-}).boxes.tag;
 
 function expandPop(shot, ctx, data, times) {
   const { look, unit } = ctx;
@@ -317,6 +222,7 @@ function expandPop(shot, ctx, data, times) {
 // ---- the kind ----
 
 function expandEnd(shot, ctx) {
+  assertNoBlanks(shot, 'end'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
   const times = endTimes(shot, timing);
@@ -362,9 +268,9 @@ registries.kinds.add(KIND, {
   example: { id: 'close', show: 'end', say: 'Every number, with its source.', ask: 'Start today', mark: 'make-motion' },
   schema: {
     properties: {
-      title: { type: 'string', minLength: 1, maxLength: TITLE_MAX },
-      ask: { type: 'string', minLength: 1, maxLength: ASK_MAX },
-      mark: { type: 'string', minLength: 1, maxLength: MARK_MAX },
+      title: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: TITLE_MAX },
+      ask: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: ASK_MAX },
+      mark: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: MARK_MAX },
       src: { type: 'string', minLength: 1 },
       hero: HERO_SCHEMA,
     },
@@ -378,6 +284,7 @@ registries.kinds.add(KIND, {
   nodeField: (shot, id) => {
     const hero = heroId(shot, 'title');
     if (shot.ask !== undefined && (id === `${shot.id}.ask` || id === `${hero}.ask`)) return 'ask';
+    if (shot.mark !== undefined && (id.startsWith(`${shot.id}.mark.`) || id.startsWith(`${shot.id}.kicker`))) return 'mark';
     if (id === hero || id.startsWith(`${hero}.`)) return shot.title !== undefined ? 'title' : 'say';
     return undefined;
   },

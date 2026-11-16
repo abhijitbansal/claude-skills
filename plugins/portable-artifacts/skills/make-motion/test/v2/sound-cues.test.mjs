@@ -7,6 +7,7 @@ import { createRegistry, registries } from '../../engine/registry.mjs';
 import '../../engine/looks/index.mjs';
 import '../../engine/modes/index.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
+import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { soundEvents } from '../../scripts/v2/sound/events.mjs';
 import { planCues, CUE_GAIN_DB, MIN_CUE_GAP } from '../../scripts/v2/sound/cues.mjs';
 import { KNOWN_CUES } from '../../scripts/v2/sound/synth.mjs';
@@ -393,12 +394,12 @@ test('I1: on an estimated timeline the heard times are the shown times', () => {
 
 // ---- a kind's own events (the list's items, final wave follow-up) ----
 
-test('a list shot in pop with sound on plans one pop per item, at the time each item arrives', () => {
+test('a list shot in pop with sound on plans one pop per item after the first, at the time each item arrives', () => {
   const film = { version: 2, mode: 'viral', look: 'pop', shots: [{ id: 'steps', show: 'list', items: ['Write it', 'Render it', 'Share it'] }] };
   const timeline = buildTimeline(film, { fps: FPS });
   const { kinds } = registries;
   const arrivals = kinds.get('list').events(film.shots[0], timeline.shots[0]).map((e) => timeline.shots[0].start + e.t);
-  assert.equal(arrivals.length, 3);
+  assert.equal(arrivals.length, 2, 'item 0 arrives on the shot start: it sends no event');
   const items = soundEvents(film, timeline).filter((e) => e.kind === 'device' && e.device === 'item');
   assert.deepEqual(items.map((e) => [e.t, e.shot]), arrivals.map((t) => [t, 'steps']));
   assert.deepEqual(pairs(planCues(film, timeline)), arrivals.map((t) => [Math.round(t * 1e6) / 1e6, 'pop']));
@@ -421,6 +422,17 @@ test('a chart lands its highlighted value as the land event: a click in desk (so
     assert.ok(soundEvents(film, timeline).some((e) => e.kind === 'land' && e.t === land), film.look);
     assert.deepEqual(pairs(planCues(film, timeline)), [[Math.round(land * 1e6) / 1e6, cue]], film.look);
   }
+});
+
+test('a cut into a list keeps its own cue: item 0 sends no event (it arrives on the cut), items 1 on sound when heard', () => {
+  const film = { version: 2, mode: 'viral', look: 'pop', shots: [{ id: 'a', show: 'statement', say: 'First things first.' }, { id: 'steps', show: 'list', cut: 'slide', say: 'Write it. Render it. Share it.', items: ['Write it', 'Render it', 'Share it'] }] };
+  const timeline = buildTimeline(film, { fps: FPS });
+  const entry = timeline.shots[1];
+  const events = registries.kinds.get('list').events(film.shots[1], entry);
+  assert.deepEqual(events.map((e) => e.t), [entry.sentences[1].start, entry.sentences[2].start], 'items 1 and 2 at their sentences (shot seconds)');
+  const cues = pairs(planCues(film, timeline));
+  const atCut = cues.filter(([t]) => Math.abs(t - Math.round(entry.start * 1e6) / 1e6) < 1e-6);
+  assert.deepEqual(atCut.map(([, c]) => c), [registries.looks.get('pop').sounds.cut.slide], JSON.stringify(cues));
 });
 
 test('a kind event naming a device the kind did not declare in eventDevices is an error, never a silent cue', () => {
@@ -447,4 +459,21 @@ test('the plan is frozen data and the same film plans the same cues', () => {
   const first = plan(film({ mode: 'viral' }));
   assert.deepEqual(plan(film({ mode: 'viral' })), first);
   assert.ok(Object.isFrozen(first) && first.every(Object.isFrozen));
+});
+
+test('an on event aimed at a part off screen when it fires is a creative finding naming the part\'s window, and plans no cue', () => {
+  const list = { id: 'steps', show: 'list', say: 'Write it. Render it. Share it.', items: ['Write it', 'Render it', 'Share it'], on: [{ at: 'word:write', do: 'underline', target: 'item:2' }, { at: 'word:share', do: 'underline', target: 'item:2' }] };
+  const compare = { id: 'swap', show: 'compare', say: 'Before, you ran a server. After, you share one file.', left: { title: 'A server' }, right: { title: 'One file' }, on: [{ at: 'word:before', do: 'underline', target: 'right' }] };
+  for (const shot of [list, compare]) {
+    const film = { version: 2, mode: 'viral', look: 'pop', shots: [shot] };
+    const timeline = buildTimeline(film, { fps: FPS });
+    const kind = registries.kinds.get(shot.show);
+    const found = kind.review(shot, { look: registries.looks.get('pop'), timing: timeline.shots[0], at: (ref) => resolveAnchor(ref, timeline.shots[0]) });
+    const hidden = found.filter((f) => f.path === 'on[0].at');
+    assert.equal(hidden.length, 1, `${shot.show}: ${JSON.stringify(found)}`);
+    assert.match(hidden[0].message, /on screen only from \d+\.\d+ s to \d+\.\d+ s/);
+    assert.ok(!found.some((f) => f.path === 'on[1].at'), `${shot.show}: an event inside the window is fine`);
+    const devices = soundEvents(film, timeline).filter((e) => e.kind === 'device' && e.device === 'underline');
+    assert.equal(devices.length, shot.on.length - 1, `${shot.show}: the hidden event plans no cue`);
+  }
 });

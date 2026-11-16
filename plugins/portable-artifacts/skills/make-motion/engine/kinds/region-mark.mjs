@@ -8,6 +8,9 @@
 // group turned like the picture). Pure, DOM-free.
 import { node } from '../graph/node.mjs';
 import { landing, isHand, colourOf, deviceRng, spread, smoothPath, polyline } from '../devices/shared.mjs';
+import { paperScrim, SCRIM } from './shared.mjs';
+
+export { paperScrim, SCRIM } from './shared.mjs'; // where they live now
 
 // units; gap is the clear space between the region and the stroke's inner edge, pass the second pass's offset and
 // alpha each pass's opacity (where the two passes overlap the stroke reads denser, as marker ink does)
@@ -16,8 +19,6 @@ const CRISP = Object.freeze({ width: 10, overshoot: 0, wobble: 0, gap: 5, cap: '
 // opacity of the paper scrim outside the region: the surroundings recede into the paper and a figure sliced at the frame
 // edge fades toward the paper (look gate fix pass F1: tuned on the rendered desk proof within 0.6 to 0.8; at 0.72 a
 // sliced "59" still read as a number)
-export const SCRIM = 0.8;
-const SCRIM_EASE = 'outCubic';
 const DRAW_SHARE = 2; // the frame takes this many of the look's draw moves, a quarter of it per side
 const SIDES = 4;
 
@@ -38,27 +39,6 @@ function handPoints(a, b, spec, unit, rng, floor) {
   return Array.from({ length: STROKE_POINTS }, (_, i) => {
     const f = i / (STROKE_POINTS - 1), off = spread(rng, spec.wobble) * unit;
     return [start[0] + along[0] * span * f + normal[0] * off, start[1] + along[1] * span * f + normal[1] * off];
-  });
-}
-
-// The scrim: one path of every covered outline (clockwise, as the devices draw them) and the hole, when there is one,
-// counter-clockwise after them. Under the nonzero fill rule the draw layer uses, a pixel inside any outline is filled
-// once, however many overlap there (tape over the paper is not scrimmed twice), and the hole inside the paper stays clear.
-function scrimPath(outlines, hole) {
-  const outer = outlines.map((points) => polyline(points, true)).join('');
-  if (hole === undefined) return outer;
-  const [x, y, w, h] = hole;
-  return `${outer}${polyline([[x, y], [x, y + h], [x + w, y + h], [x + w, y]], true)}`;
-}
-
-/**
- * A scrim of the look's paper over `cover` (clockwise outlines, as for regionMark), with `hole` ([x, y, w, h]) left
- * clear when given, rising from clear to `opacity` (default SCRIM, the clipping's own) over the `dur` seconds before `at`.
- * @param {{ id: string, cover: number[][][], hole?: number[], at: number, dur: number, opacity?: number, ease?: string, look: object }} p
- */
-export function paperScrim({ id, cover, hole, at, dur, opacity = SCRIM, ease = SCRIM_EASE, look }) {
-  return node('path', id, { d: scrimPath(cover, hole), fill: colourOf(look, 'paper') }, {
-    tracks: { opacity: landing(at, { ease, dur }, 0, opacity) },
   });
 }
 

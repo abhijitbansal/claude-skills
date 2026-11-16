@@ -10,6 +10,8 @@ import { landing, entrance, colourOf, polyline } from '../devices/shared.mjs';
 import { BAND_HEIGHT } from '../devices/highlight.mjs';
 import { ease } from '../time/ease.mjs';
 import { aloneFromFrame } from '../cuts/index.mjs';
+import { parseSay, SayError } from '../script/say.mjs';
+import { wordTimes } from './words.mjs';
 
 // Cap height as a share of the font size. Canvas reports only the font's ascent box, not the cap height, so the
 // layouts below place cap lines with this ratio (Fraunces and Archivo both sit close to it).
@@ -17,6 +19,8 @@ export const CAP_HEIGHT = 0.7;
 // What a word box reaches below the baseline, as a share of the font size.
 export const WORD_DESCENT = 0.12;
 export const HERO_SCHEMA = Object.freeze({ type: 'string', pattern: '^[a-z][a-z0-9-]*$' });
+/** The schema pattern every author text carries: at least one character that is not white space ("  " is refused). */
+export const NOT_BLANK = '\\S';
 
 export const FIELD_ID = 'field';
 /** Ids the kinds use for nodes of their own, which a shot's `hero` may not take. */
@@ -542,3 +546,178 @@ export function plainTag(ctx, id, words, { left, top, maxWidth, at, fromStep, to
   const group = entrance({ id, at, look, unit, cx: left + w / HALF, cy: top + h / HALF, children: [plate, label] });
   return { nodes: [group], box: [left, top, w, h] };
 }
+
+// ---- used by several kinds: the spoken words, boxes, picture sizing, numerals, step ratios, the paper scrim ----
+
+const ASK_LAG = 0.4; // seconds after the title's last word, for an ask that is not spoken
+const ASK_HOLD = 0.6; // seconds an unspoken ask is on screen, at least, before the shot ends
+const THOUSANDS = /\B(?=(\d{3})+(?!\d))/g;
+const STEP_EPSILON = 1e-6;
+export const SCRIM = 0.8; // the clipping's paper scrim over a picture's surroundings
+const SCRIM_EASE = 'outCubic';
+
+/** A say's plain words; a say that does not parse (it has its own validation error) gives none. */
+export function plainSay(say) {
+  if (typeof say !== 'string') return '';
+  try {
+    return parseSay(say).plain;
+  } catch (err) {
+    if (err instanceof SayError) return '';
+    throw err;
+  }
+}
+
+/**
+ * When a title's words and its ask land, in shot seconds: { title: [{ at, spoken }], ask } (end, quote). An ask whose
+ * words are spoken lands on the first of them; otherwise ASK_LAG after the title's last word, ASK_HOLD before the shot
+ * ends at the latest (never before that last word). With no narration the title's first word lands at 0.
+ */
+export function endTimes(shot, timing) {
+  const title = wordsOf(shot.title ?? plainSay(shot.say));
+  const ask = shot.ask === undefined ? [] : wordsOf(shot.ask);
+  const times = wordTimes([...title, ...ask], timing);
+  const titleTimes = times.slice(0, title.length);
+  if (ask.length === 0) return { title: titleTimes, ask: null };
+  const spoken = times.slice(title.length).find((t) => t.spoken !== null);
+  if (spoken) return { title: titleTimes, ask: spoken.at };
+  const last = titleTimes.at(-1)?.at ?? 0;
+  return { title: titleTimes, ask: Math.max(last, Math.min(last + ASK_LAG, timing.duration - ASK_HOLD)) };
+}
+
+/** Do two [x, y, w, h] boxes overlap? */
+export const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+
+/** A laid-out text's word boxes at (x, y), cap line to descent, in word order. */
+export const wordBoxes = (layout, x, y) => layout.lines.flatMap((line) => line.words.map((w) => ({ index: w.index, box: capBox(x + line.x + w.x, y + line.y, w.width, layout.size) })))
+  .sort((a, b) => a.index - b.index).map((w) => w.box);
+
+/** A picture scaled so its longest side is `longest` px, its aspect kept: { w, h }. */
+export function fitLongestSide(picture, longest) {
+  const scale = longest / Math.max(picture.width, picture.height);
+  return { w: picture.width * scale, h: picture.height * scale };
+}
+
+/** A picture scaled to fit inside `w` x `h` px, its aspect kept: { w, h }. */
+export function fitInBox(picture, w, h) {
+  const scale = Math.min(w / picture.width, h / picture.height);
+  return { w: picture.width * scale, h: picture.height * scale };
+}
+
+/** A value as shown: fixed decimals, thousands grouped with commas, a leading minus for a negative value. */
+export function formatValue(value, decimals) {
+  const [whole, fraction] = Math.abs(value).toFixed(decimals).split('.');
+  const sign = value < 0 && Number(Math.abs(value).toFixed(decimals)) !== 0 ? '-' : '';
+  return `${sign}${whole.replace(THOUSANDS, ',')}${fraction === undefined ? '' : `.${fraction}`}`;
+}
+
+/** Does the shot set its words as ghosts lit as spoken (a mode that reads from frame 0, a look without the highlighter)? */
+export const ghostWords = (ctx) => ctx.mode.hookFromFrameZero === true && ctx.look.emphasis !== 'highlight';
+
+/**
+ * The scale steps of `steps` at which every limit holds: a text at that step stays `ratio` times under `size` for each
+ * { size, ratio } (the review's hero rule, and any second ratio a kind keeps).
+ */
+export const stepsUnder = (look, steps, unit, limits) => steps.filter((step) => limits.every(({ size, ratio }) => ratio * sizeAt(look, step, unit) <= size + STEP_EPSILON));
+
+/** The largest step of `steps` at which every limit holds (stepsUnder), else the smallest. */
+export function stepUnder(look, steps, unit, limits) {
+  const fits = stepsUnder(look, steps, unit, limits);
+  return fits.length > 0 ? Math.max(...fits) : Math.min(...steps);
+}
+
+// A scrim's path: every covered outline (clockwise, as the devices draw them) and the hole, when there is one,
+// counter-clockwise after them. Under the nonzero fill rule the draw layer uses, a pixel inside any outline is filled
+// once, however many overlap there (tape over the paper is not scrimmed twice), and the hole inside the paper stays clear.
+function scrimPath(outlines, hole) {
+  const outer = outlines.map((points) => polyline(points, true)).join('');
+  if (hole === undefined) return outer;
+  const [x, y, w, h] = hole;
+  return `${outer}${polyline([[x, y], [x, y + h], [x + w, y + h], [x + w, y]], true)}`;
+}
+
+/**
+ * A scrim of the look's paper over `cover` (clockwise outlines), with `hole` ([x, y, w, h]) left clear when given, rising
+ * from clear to `opacity` (default SCRIM, the clipping's own) over the `dur` seconds before `at` (clipping, compare).
+ * @param {{ id: string, cover: number[][][], hole?: number[], at: number, dur: number, opacity?: number, ease?: string, look: object }} p
+ */
+export function paperScrim({ id, cover, hole, at, dur, opacity = SCRIM, ease = SCRIM_EASE, look }) {
+  return node('path', id, { d: scrimPath(cover, hole), fill: colourOf(look, 'paper') }, {
+    tracks: { opacity: landing(at, { ease, dur }, 0, opacity) },
+  });
+}
+
+/** The tag device's plate box at (left, top), [x, y, w, h] in canvas pixels (end, list). */
+export const tagBox = (ctx, id, text, left, top) => registries.devices.get('tag').build({
+  id, text, box: [left, top, 1, 1], at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure,
+}).boxes.tag;
+
+const NOT_TEXT = new Set(['say', 'id', 'show', 'cut', 'hero', 'on']); // fields that are not author text set on screen
+
+/**
+ * Throws a RangeError naming the first blank text field of `shot` (its path inside the shot, as the validator writes
+ * it): the validator refuses blank text, and a kind's expand never reaches its layout with one (an empty layout has no
+ * lines to read).
+ */
+export function assertNoBlanks(shot, kind) {
+  const walk = (value, at) => {
+    if (typeof value === 'string') {
+      if (!/\S/.test(value)) throw new RangeError(`${kind} shot "${shot.id}": ${at} is blank; write the text, or leave the field out`);
+      return;
+    }
+    if (Array.isArray(value)) value.forEach((v, i) => walk(v, `${at}[${i}]`));
+    else if (value !== null && typeof value === 'object') Object.entries(value).forEach(([k, v]) => walk(v, at ? `${at}.${k}` : k));
+  };
+  Object.entries(shot).filter(([k]) => !NOT_TEXT.has(k)).forEach(([k, v]) => walk(v, k));
+}
+
+/**
+ * One line of text with every digit centred in a cell as wide as the widest digit and every other character at its own
+ * width (number.mjs sets its count the same way): the layout shape layoutText gives, one word per character.
+ */
+export function numeralLayout(text, font, measure) {
+  // never tighter than the face: a display face tracked in (pop) would push one digit's ink into the next
+  const tracking = Math.max(0, font.tracking ?? 0) * font.size;
+  const advance = Math.max(...'0123456789'.split('').map((d) => measure(d, font).width)) + tracking;
+  let x = 0;
+  const words = [...text].map((ch, index) => {
+    const glyph = measure(ch, font).width;
+    const cell = /\d/.test(ch) ? advance : glyph + tracking;
+    const word = { text: ch, index, x: x + (cell - glyph) / 2, width: glyph };
+    x += cell;
+    return word;
+  });
+  const { ascent, descent } = measure('0', font);
+  return { size: font.size, width: x, height: ascent + descent, lines: [{ x: 0, y: ascent, width: x, words }], overflow: false };
+}
+
+const WINDOW_EPSILON = 1e-6;
+
+/**
+ * Creative findings for each `on` entry aimed at a part that is off screen when it fires: `windowOf(target)` gives the
+ * part's [from, to) in shot seconds (to may be Infinity, the shot's end) or null for a target that is always shown. The
+ * finding is at on[j].at and names that span; entries whose anchor does not resolve have their own validation error.
+ */
+export function hiddenOnFindings(shot, { timing, at }, windowOf) {
+  if (!Array.isArray(shot.on) || typeof at !== 'function') return [];
+  return shot.on.flatMap((entry, j) => {
+    const window = windowOf(entry.target);
+    if (window === null) return [];
+    let t;
+    try { t = at(entry.at); } catch { return []; }
+    if (!isHidden(t, window)) return [];
+    const to = window[1] === Infinity ? timing.duration : window[1];
+    return [{ path: `on[${j}].at`, at: t, message: `the ${entry.do} on ${entry.target} fires at ${t.toFixed(2)} s, but ${entry.target} is on screen only from ${window[0].toFixed(2)} s to ${to.toFixed(2)} s; move it into that window` }];
+  });
+}
+
+/** Is a moment outside a part's [from, to) on-screen window? */
+export const isHidden = (t, [from, to]) => t < from - WINDOW_EPSILON || t >= to - WINDOW_EPSILON;
+
+/** The card device's card at `box`, entering at `at` (end, quote, compare): its one node, a group of paper and tape. */
+export const cardOf = (ctx, id, box, at) => registries.devices.get('card').build({ id, box, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed }).nodes[0];
+
+/**
+ * A card as a group carrying `id`: the card's paper and tape marked as a text card for the review (asTextCard), then
+ * `children` in the card's centred space; `props` adds to the card's own (a turn, a pin to the frame).
+ */
+export const cardGroup = (card, id, children, props = {}) => node('group', id, { ...card.props, ...props }, { tracks: card.tracks, children: [...asTextCard(id, card.children), ...children] });

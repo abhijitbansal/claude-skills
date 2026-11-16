@@ -125,9 +125,9 @@ test('desk end at 16:9 (hand computed): title flush left on column 2 at 242, the
   assert.ok(Math.abs(box[0] + box[2] - 1678) <= 2, `card right edge ${box[0] + box[2]}`);
   assert.ok(Math.abs(box[1] + box[3] - 984) <= 2, `card bottom ${box[1] + box[3]}`);
   const mark = textNode(card.children, 'close.mark.text');
-  assert.equal(mark.props.font.family, look.fonts.display.family);
-  assert.equal(mark.props.font.size, look.scale[2]);
-  assert.deepEqual(mark.props.layout.lines.flatMap((l) => l.words.map((w) => w.text)), ['make-motion']);
+  assert.equal(mark.props.font.family, look.fonts.label.family, 'the mark in the label face');
+  assert.ok([look.scale[0], look.scale[1]].includes(mark.props.font.size), `at a label step: ${mark.props.font.size}`);
+  assert.deepEqual(mark.props.layout.lines.flatMap((l) => l.words.map((w) => w.text)), ['MAKE-MOTION']);
   const block = [242, top, 1386 - 242, bottom - top];
   assert.ok(!overlaps(block, box), 'the title block stays off the card');
 });
@@ -145,14 +145,17 @@ test('desk end at 9:16: title on columns 2 to 11, the ask under it, the card bot
   assert.ok(!overlaps(boxes.title, box) && !overlaps(boxes.ask, box), 'the text stays off the card');
 });
 
-test('desk end: the mark is frame furniture on its card, never a second hero; the only hero text is the title', () => {
+test('desk end: the mark is not frame furniture: it is judged by the hero and size rules, the frame reading title, then ask, then mark', () => {
   for (const format of ['16:9', '9:16']) {
     const { nodes } = expandShot(EXAMPLE(), 'desk', format);
     const heroes = all(nodes).filter((n) => n.type === 'text' && n.props.role === 'hero');
     assert.deepEqual(heroes.map((n) => n.id), ['close.title'], format);
     const mark = textNode(nodes, 'close.mark.text');
-    assert.equal(mark.props.furniture, true);
+    assert.notEqual(mark.props.furniture, true, 'not furniture');
     assert.notEqual(mark.props.role, 'hero');
+    const title = textNode(nodes, 'close.title'), ask = textNode(nodes, 'close.ask');
+    assert.ok(title.props.font.size >= 3 * mark.props.font.size - EPS, `${format}: title three times the mark`);
+    assert.ok(mark.props.font.size <= ask.props.font.size + EPS, `${format}: the mark never above the ask`);
     const paper = all(nodes).find((n) => n.id === 'close.mark.paper');
     assert.equal(paper.props.textCard, true, 'the review keeps other texts off the card');
   }

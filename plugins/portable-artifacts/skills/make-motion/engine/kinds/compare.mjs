@@ -9,7 +9,7 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
 import {
-  HERO_SCHEMA, heroId, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
+  HERO_SCHEMA, heroId, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, NOT_BLANK, assertNoBlanks, hiddenOnFindings,
 } from './shared.mjs';
 import { SIDES, compareTurn, valueText } from './compare-text.mjs';
 import { expandDeskCompare } from './compare-desk.mjs';
@@ -29,9 +29,9 @@ const SIDE_SCHEMA = Object.freeze({
   required: ['title'],
   additionalProperties: false,
   properties: {
-    title: { type: 'string', minLength: 1, maxLength: TITLE_MAX },
-    points: { type: 'array', maxItems: POINTS_MAX, items: { type: 'string', minLength: 1, maxLength: POINT_MAX } },
-    value: { anyOf: [{ type: 'number', exclusiveMinimum: -VALUE_LIMIT, exclusiveMaximum: VALUE_LIMIT }, { type: 'string', minLength: 1, maxLength: VALUE_TEXT_MAX }] },
+    title: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: TITLE_MAX },
+    points: { type: 'array', maxItems: POINTS_MAX, items: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: POINT_MAX } },
+    value: { anyOf: [{ type: 'number', exclusiveMinimum: -VALUE_LIMIT, exclusiveMaximum: VALUE_LIMIT }, { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: VALUE_TEXT_MAX }] },
     src: { type: 'string', minLength: 1 },
   },
 });
@@ -42,8 +42,10 @@ function sideProblems(shot) {
   const values = SIDES.filter((k) => shot[k]?.value !== undefined);
   const lopsided = values.length === 1 ? [{ path: `${values[0]}.value`, message: 'give a value on both sides or neither: values are compared' }] : [];
   const long = values.filter((k) => Number.isFinite(shot[k].value)).map((k) => [k, valueText(shot[k].value)])
-    .filter(([, text]) => text.length > VALUE_TEXT_MAX).map(([k, text]) => ({
-      path: `${k}.value`, message: `a value is set on one line of at most ${VALUE_TEXT_MAX} characters ("${text}" is ${text.length}): round it, or put the unit in the title`,
+    .filter(([k, text]) => text.length > VALUE_TEXT_MAX || (shot[k].value !== 0 && Number(text.replace(/[^\d.-]/g, '')) === 0)).map(([k, text]) => ({
+      path: `${k}.value`, message: text.length > VALUE_TEXT_MAX
+        ? `a value is set on one line of at most ${VALUE_TEXT_MAX} characters ("${text}" is ${text.length}): round it, or put the unit in the title`
+        : `${shot[k].value} would show as "${text}" (at most 3 decimals): scale it and put the unit in the title`,
     }));
   return [...lopsided, ...long];
 }
@@ -60,7 +62,16 @@ function assemble(shot, ctx, { nodes, wrappers, boxes, hero }) {
   return { nodes: placeDevices([node('group', hero, {}, { children })], loose), devices };
 }
 
+// When a side is on screen in shot seconds, or null for a target that is not a side.
+function sideWindow(shot, timing, target, look) {
+  const turn = compareTurn(timing);
+  if (target === 'left') return [0, isEditorial(look) ? Infinity : turn];
+  if (target === 'right') return [turn, Infinity];
+  return null;
+}
+
 function expandCompare(shot, ctx) {
+  assertNoBlanks(shot, 'compare'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
   const turn = compareTurn(timing);
@@ -100,9 +111,13 @@ registries.kinds.add(KIND, {
   nodeField: (shot, id) => {
     const side = SIDES.find((k) => id === `${shot.id}.${k}` || id.startsWith(`${shot.id}.${k}.`));
     if (side === undefined) return undefined;
+    if (id.startsWith(`${shot.id}.${side}.kicker`)) return null; // the A / B tag is the kind's, not author text
     const part = ['title', 'value', 'points', 'src'].find((p) => id.startsWith(`${shot.id}.${side}.${p}`));
     return part === undefined ? side : `${side}.${part}`;
   },
+  // when a side is on screen: one at a time in a stack (pop), both from their arrival in a column of cards (desk)
+  partWindow: sideWindow,
+  review: (shot, { look, timing, at }) => hiddenOnFindings(shot, { timing, at }, (target) => sideWindow(shot, timing, target, look)),
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...sideProblems(shot), ...kindSupportProblems(KIND, look)],
   expand: expandCompare,
   numbered: false, // no slug

@@ -66,11 +66,11 @@ test('list timing: with fewer spoken words than items, items arrive at equal int
   });
 });
 
-test('list: each arrival is a device event named item for the cue plan, in shot seconds', () => {
+test('list: each arrival after the first is a device event named item for the cue plan, in shot seconds (item 0 rides the cut)', () => {
   const shot = { id: 'l', show: 'list', hold: 3, items: ['One', 'Two', 'Three'] };
   const { timing } = expandShot(shot);
   assert.deepEqual(registries.kinds.get('list').events(shot, timing), [
-    { kind: 'device', device: 'item', t: 0 }, { kind: 'device', device: 'item', t: 1 }, { kind: 'device', device: 'item', t: 2 },
+    { kind: 'device', device: 'item', t: 1 }, { kind: 'device', device: 'item', t: 2 },
   ]);
 });
 
@@ -303,7 +303,7 @@ test('list review: more than 6 items says split the list; an item over 12 words 
   assert.deepEqual(seven, [{ path: 'items', at: 0, message: '7 items is more than a list holds; split the list (6 at most)' }]);
   const wordy = { id: 'l', show: 'list', hold: 2, items: ['Short', { text: 'one two three four five six seven eight nine ten eleven twelve thirteen' }] };
   const t2 = expandShot(wordy).timing;
-  assert.deepEqual(kind.review(wordy, { look: registries.looks.get('desk'), timing: t2 }), [{ path: 'items.1', at: 1, message: 'item 1 has 13 words; cut words (12 at most)' }]);
+  assert.deepEqual(kind.review(wordy, { look: registries.looks.get('desk'), timing: t2 }), [{ path: 'items[1]', at: 1, message: 'item 1 has 13 words; cut words (12 at most)' }]);
   assert.deepEqual(kind.review(EXAMPLE(), { look: registries.looks.get('desk'), timing: expandShot(EXAMPLE()).timing }), []);
   assert.deepEqual(errorsOf({ id: 'l', show: 'list', hold: 7, items: Array.from({ length: 7 }, (_, k) => `Point ${k}`) }), [], 'seven validate: the review, not the validator, judges length');
 });

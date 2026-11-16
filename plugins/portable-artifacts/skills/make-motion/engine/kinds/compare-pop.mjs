@@ -7,32 +7,26 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { FORCE_MARK } from '../text/breaks.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom } from './shared.mjs';
-import { composeStack, stackNodes, stackArea } from './stack.mjs';
-import { restack } from './end.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, fitInBox, numeralLayout } from './shared.mjs';
+import { STACK, composeStack, stackNodes, stackArea, restack } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
 
 const TAGS = Object.freeze({ versus: ['A', 'B'], 'before-after': ['BEFORE', 'AFTER'] });
-const EPSILON = 1e-6;
 const HALF = 2;
 
 // The points' font: the largest of data.pointSteps the stack's largest line stays MIN_HERO_RATIO times, else the smallest.
 function pointFont(look, data, lines, unit) {
   const largest = Math.max(...lines.map((line) => line.font.size));
-  const fits = data.pointSteps.filter((step) => MIN_HERO_RATIO * sizeAt(look, step, unit) <= largest + EPSILON);
-  return fontFor(look, 'text', sizeAt(look, fits.length > 0 ? Math.max(...fits) : Math.min(...data.pointSteps), unit), unit);
+  return fontFor(look, 'text', sizeAt(look, stepUnder(look, data.pointSteps, unit, [{ size: largest, ratio: MIN_HERO_RATIO }]), unit), unit);
 }
 
 // A side's picture fitted into the stack area's width and `data.picture` of its height, with the room it takes over the
 // tag (its keyline included, and the gap); null without one.
 function pictureFit(shot, key, ctx, data, area) {
   if (shot[key].src === undefined) return null;
-  const picture = ctx.asset(shot[key].src);
   const keyline = ctx.look.keyline * ctx.unit;
-  const scale = Math.min((area.w - HALF * keyline) / picture.width, (data.picture * area.h) / picture.height);
-  const w = picture.width * scale, h = picture.height * scale;
+  const { w, h } = fitInBox(ctx.asset(shot[key].src), area.w - HALF * keyline, data.picture * area.h);
   return { w, h, keyline, room: h + HALF * keyline + data.pictureGap * ctx.unit };
 }
 
@@ -49,35 +43,58 @@ function pictureNodes(shot, key, ctx, data, { fit, placed, at }) {
 }
 
 // One side: its wrapper's children (the picture, the tag, the stack, the points) and its box.
-function sideParts(shot, key, k, ctx, data, at) {
+function sideParts(shot, key, k, ctx, data, { at, value }) {
   const { look, unit, measure } = ctx;
   const area = stackArea(ctx);
   const staged = { ...shot, id: `${shot.id}.${key}`, kicker: TAGS[shot.mode ?? 'versus'][k] };
-  const title = setCase(look, 'display', shot[key].title);
-  const text = hasValues(shot) ? `${title}${FORCE_MARK} ${setCase(look, 'display', valueText(shot[key].value))}` : title;
-  const first = composeStack(text, staged, ctx);
+  const first = composeStack(setCase(look, 'display', shot[key].title), staged, ctx);
+  const numeral = value === null ? null : numeralLayout(value.texts[k], value.font, measure);
+  const valueRoom = numeral === null ? 0 : STACK.gap * value.font.size + (CAP_HEIGHT + WORD_DESCENT) * value.font.size;
   const words = pointsText(shot[key]);
-  const font = words === null ? null : pointFont(look, data, first.lines, unit);
+  const font = words === null ? null : pointFont(look, data, [...first.lines, ...(value === null ? [] : [{ font: value.font }])], unit);
   const points = words === null ? null : layoutText({ text: words, font, maxWidth: area.w, measure });
   const room = points === null ? 0 : data.pointGap * unit + CAP_HEIGHT * font.size + points.lines.at(-1).y - points.lines[0].y + WORD_DESCENT * font.size;
   const fit = pictureFit(shot, key, ctx, data, area);
-  const placed = restack(first, ctx, { above: fit === null ? 0 : fit.room, below: room });
+  const placed = restack(first, ctx, { above: fit === null ? 0 : fit.room, below: valueRoom + room });
   const hero = `${staged.id}.title`;
   const built = stackNodes(staged, ctx, placed, { times: placed.rows.flat().map(() => ({ at: 0, emphasised: false })), ghost: false, matched: true, hero });
   const children = [...pictureNodes(shot, key, ctx, data, { fit, placed, at }), ...built.kicker, built.group];
+  const last = placed.lines.at(-1);
+  let under = last.baseline + last.ink.down; // the lowest ink so far
+  if (numeral !== null) {
+    // the value: a numeral line of its own under the title, at the size both sides share (never styled as better)
+    const baseline = under + STACK.gap * value.font.size + CAP_HEIGHT * value.font.size;
+    const layout = value.small ? { ...numeral, overflow: true } : numeral;
+    // one size class with the title's lines (stack: the hero id), as when it was a line of the stack
+    children.push(node('text', `${staged.id}.value`, { x: area.left, y: baseline - numeral.lines[0].y, layout, font: value.font, fill: look.palette.ink, role: 'hero', stack: hero }));
+    under = baseline + WORD_DESCENT * value.font.size;
+  }
   if (points !== null) {
-    const last = placed.lines.at(-1);
-    const y = last.baseline + last.ink.down + data.pointGap * unit + CAP_HEIGHT * font.size - points.lines[0].y;
+    const y = under + data.pointGap * unit + CAP_HEIGHT * font.size - points.lines[0].y;
     children.push(node('text', `${staged.id}.points`, { x: area.left, y, layout: points, font, fill: look.palette.ink2, role: 'body' }));
   }
   return { id: staged.id, children, box: built.boxes.text };
 }
 
+// Both values' one size: the largest, up to a stack line's cap, at which the wider of the two fills the stack area's
+// width, in fixed digit advances; under the stack's floor step it is flagged (small). null without values.
+function sharedValue(shot, ctx) {
+  if (!hasValues(shot)) return null;
+  const { look, unit, measure } = ctx;
+  const width = stackArea(ctx).w;
+  const texts = SIDES.map((k) => setCase(look, 'display', valueText(shot[k].value)));
+  const cap = STACK.max * unit;
+  const widest = Math.max(...texts.map((text) => numeralLayout(text, fontFor(look, 'display', cap, unit), measure).width));
+  const size = Math.min(cap, Math.floor((cap * width) / widest));
+  return { texts, font: fontFor(look, 'display', size, unit), small: size < sizeAt(look, STACK.fromStep, unit) };
+}
+
 /** The pop compare: the two sides as wrappers { id, tracks, children } shown before and from the turn, and their boxes. */
 export function expandPopCompare(shot, ctx, data, turn) {
   const spans = [[0, turn], [turn, undefined]];
+  const value = sharedValue(shot, ctx);
   // a side's picture is whole the moment its side is (the stack is too): no fade in after the hard cut at the turn
-  const parts = SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, spans[k][0]));
+  const parts = SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: spans[k][0], value }));
   const wrappers = parts.map((p, k) => ({ id: p.id, tracks: { opacity: shownFrom(spans[k][0], spans[k][1]) }, children: p.children }));
   return { wrappers, boxes: { left: parts[0].box, right: parts[1].box } };
 }

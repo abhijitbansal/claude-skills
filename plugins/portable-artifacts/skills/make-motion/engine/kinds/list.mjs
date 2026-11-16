@@ -10,7 +10,7 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
 import {
-  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox,
+  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, NOT_BLANK, assertNoBlanks, hiddenOnFindings,
 } from './shared.mjs';
 import { itemsOf } from './list-items.mjs';
 import { expandDeskList } from './list-desk.mjs';
@@ -53,6 +53,7 @@ function assemble(shot, ctx, parts) {
 }
 
 function expandList(shot, ctx) {
+  assertNoBlanks(shot, 'list'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
   const times = listTimes(shot, timing);
@@ -83,30 +84,41 @@ function listNodeField(shot, id) {
   const item = `items[${part[2]}]`;
   if (part[1] === 'note' || part[3] === 'note') return `${item}.note`;
   if (part[3] === 'title') return title;
-  return part[3] === 'kicker' ? null : item;
+  if (part[3] === 'kicker') return null;
+  const k = Number(part[2]);
+  return typeof shot.items?.[k] === 'object' && shot.items[k] !== null ? `${item}.text` : item; // the text the author edits
 }
 
 // Advice about the list itself: too many items to hold, or an item too long to read as a point.
-function listReview(shot, { timing }) {
+// When item `k` is on screen in shot seconds: in a stack (pop) only until the next arrives, in a column (desk) to the end.
+function itemWindow(shot, timing, target, look) {
+  const k = typeof target === 'string' && target.startsWith(ITEM_PREFIX) ? Number(target.slice(ITEM_PREFIX.length)) : NaN;
+  if (!Number.isInteger(k)) return null;
+  const times = listTimes(shot, timing);
+  if (k < 0 || k >= times.length) return null;
+  return [times[k], isEditorial(look) ? Infinity : (times[k + 1] ?? Infinity)];
+}
+
+function listReview(shot, { look, timing, at }) {
   const out = shot.items.length > MAX_ITEMS
     ? [{ path: 'items', at: 0, message: `${shot.items.length} items is more than a list holds; split the list (${MAX_ITEMS} at most)` }]
     : [];
   const times = listTimes(shot, timing);
   itemsOf(shot).forEach((item, k) => {
     const count = wordsOf(item.text).length;
-    if (count > MAX_WORDS) out.push({ path: `items.${k}`, at: times[k], message: `item ${k} has ${count} words; cut words (${MAX_WORDS} at most)` });
+    if (count > MAX_WORDS) out.push({ path: `items[${k}]`, at: times[k], message: `item ${k} has ${count} words; cut words (${MAX_WORDS} at most)` });
   });
-  return out;
+  return [...out, ...hiddenOnFindings(shot, { timing, at }, (target) => itemWindow(shot, timing, target, look))];
 }
 
 const ITEM_SCHEMA = Object.freeze({
   anyOf: [
-    { type: 'string', minLength: 1, maxLength: ITEM_MAX },
+    { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: ITEM_MAX },
     {
       type: 'object',
       required: ['text'],
       additionalProperties: false,
-      properties: { text: { type: 'string', minLength: 1, maxLength: ITEM_MAX }, note: { type: 'string', minLength: 1, maxLength: NOTE_MAX } },
+      properties: { text: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: ITEM_MAX }, note: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: NOTE_MAX } },
     },
   ],
 });
@@ -122,7 +134,7 @@ registries.kinds.add(KIND, {
     required: ['items'],
     properties: {
       items: { type: 'array', minItems: 2, maxItems: ITEMS_LIMIT, items: ITEM_SCHEMA },
-      title: { type: 'string', minLength: 1, maxLength: TITLE_MAX },
+      title: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: TITLE_MAX },
       numbered: { type: 'boolean' },
       style: { enum: ['points', 'steps'] },
       hero: HERO_SCHEMA,
@@ -135,9 +147,11 @@ registries.kinds.add(KIND, {
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...kindSupportProblems(KIND, look)],
   expand: expandList,
   review: listReview,
+  partWindow: itemWindow, // when an `on` target is on screen (an event outside it is a finding and plans no cue)
   nodeField: listNodeField,
-  // each item's arrival as a device event named `item`, in shot seconds (for the cue plan: scripts/v2/sound/events.mjs)
-  events: (shot, timing) => listTimes(shot, timing).map((t) => ({ kind: 'device', device: 'item', t })),
+  // each item's arrival after the first as a device event named `item`, in shot seconds, on heard time (for the cue plan:
+  // scripts/v2/sound/events.mjs); item 0 arrives on the shot's first frame, the cut's own cue covers it
+  events: (shot, timing) => listTimes(shot, timing).slice(1).map((t) => ({ kind: 'device', device: 'item', t })),
   eventDevices: Object.freeze(['item']), // every device name `events` sends: each look must name a sound for it (sound/cues.mjs)
   numbered: true, // the title is a slug in desk, which shows the shot's place among the numbered shots
   showsWords: true, // its narration is the picture: never captioned (engine/captions)

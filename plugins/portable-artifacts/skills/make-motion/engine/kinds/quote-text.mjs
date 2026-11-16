@@ -1,27 +1,29 @@
 // The `quote` kind's words as its compositions read them (quote.mjs, quote-desk.mjs, quote-pop.mjs): the quotation
 // without the marks an author typed, the kind's own marks, the attribution line and the shared timing. Pure, DOM-free.
-import { parseSay, SayError } from '../script/say.mjs';
-import { endTimes } from './end.mjs';
+import { endTimes, plainSay } from './shared.mjs';
 
 export const OPEN_MARK = '“';
 export const CLOSE_MARK = '”';
 export const BY_SEPARATOR = ' · ';
-// Quote marks an author may have typed around the quotation: straight, curly, low and guillemets.
-const MARKS_RE = /^["'‘’‚‛“”„‟«»‹›]+|["'‘’‚‛“”„‟«»‹›]+$/gu;
+// The quote mark pairs an author may type around a quotation: each opening mark and the closing marks that answer it.
+const PAIRS = Object.freeze({ '"': '"“”', "'": "'’", '“': '”"', '„': '“”"', '‚': '‘’', '‘': '’\'', '«': '»', '‹': '›', '»': '«', '”': '”' });
+const TRAILING = /[.,!?;:…]+$/u; // sentence punctuation an author may type after the closing mark
 
-// A say that does not parse has its own validation error; it then gives no words.
-function plainSay(say) {
-  if (typeof say !== 'string') return '';
-  try {
-    return parseSay(say).plain;
-  } catch (err) {
-    if (err instanceof SayError) return '';
-    throw err;
-  }
+/**
+ * The quotation without a matched pair of marks the author typed around it: an opening mark at the start and its closing
+ * mark at the end, or before trailing sentence punctuation (`"Ship it".` -> `Ship it.`). A lone mark is kept, so an
+ * apostrophe at either end stays (`the players'`, `'Tis`).
+ */
+export function quoteBody(text) {
+  const plain = text.trim();
+  const open = plain[0];
+  if (PAIRS[open] === undefined) return plain;
+  const tail = plain.match(TRAILING)?.[0] ?? '';
+  const body = plain.slice(0, plain.length - tail.length);
+  const close = body.at(-1);
+  if (body.length < 2 || !PAIRS[open].includes(close)) return plain;
+  return `${body.slice(1, -1).trim()}${tail}`;
 }
-
-/** The quotation without the marks an author typed around it. */
-export const quoteBody = (text) => text.trim().replace(MARKS_RE, '').trim();
 
 /** The quotation the shot quotes: its `text`, else its say, without typed marks. */
 export const quotationOf = (shot) => quoteBody(shot.text ?? plainSay(shot.say));

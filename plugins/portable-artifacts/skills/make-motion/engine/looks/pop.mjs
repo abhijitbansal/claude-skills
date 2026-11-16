@@ -67,7 +67,8 @@ export const pop = {
   captions: 'stack',
   // halftone 0: pop's own field is already a halftone, and the post pass would dot the pictures too (see the Look typedef)
   post: { grain: 0.02, halftone: 0, bloom: 0 },
-  // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs); sizes are units or 1-based scale steps.
+  // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs, quote.mjs, compare.mjs, chart.mjs);
+  // sizes are units or 1-based scale steps.
   kinds: {
     // end: a stack (the mark as its tag), the ask its last line in the accent, fitted to the width from step `askFromStep`
     // to `askToStep` (so the title stays the larger), its cap line `askGap` under the last title line
@@ -82,11 +83,12 @@ export const pop = {
     // compare: one side at a time as a stack under its tag; the points `pointGap` under it at the largest of `pointSteps`
     // the stack stays three times
     compare: { pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32 },
-    // chart: the claim as a tag at the largest of `tagSteps` that holds it on a line, the highlighted value `tagGap` under
-    // it as a numeral up to `numeralMax`, at most `numeralShare` of the area's height, the plot `numeralGap` under that;
+    // chart: the claim as a tag at the largest of `tagSteps` that holds it on a line, the plot `tagGap` under it; the
+    // highlighted value a numeral up to `numeralMax`, at most `numeralShare` of the plot's height and `numeralWidth` of its
+    // width, top right in the plot with the marks `numeralGap` under it (a donut's: in the hole, `holeShare` of the ring);
     // labels at step `labelStep`, `gap` from what they label; lines `line` wide, the baseline `axis` wide; the other marks
     // dim to `dim`; no reference lines (`refs`): the values are labelled on the marks
-    chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.28, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false },
+    chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {

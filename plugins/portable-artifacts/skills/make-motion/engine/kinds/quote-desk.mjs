@@ -15,7 +15,7 @@ import { FORCE_MARK } from '../text/breaks.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, arrivesMatched, fitDisplay, capBox, unionBox, rectPath,
-  asTextCard, highlightBands, highlightLines,
+  highlightBands, highlightLines, wordBoxes, stepUnder, fitLongestSide, cardOf, cardGroup,
 } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { OPEN_MARK, CLOSE_MARK, quotationOf, attributionOf } from './quote-text.mjs';
@@ -24,16 +24,14 @@ const FIRST_COLUMN = 2;
 const RULE_THICKNESS = 3; // units
 const PORTRAIT_CLEAR = 2; // gutters between the portrait's keyline and the text: room for both tilts
 const HANG_INSET = 16; // units: the hanging opening mark's ink stays at least this far inside the paper
-const EPSILON = 1e-6;
 const HALF = 2;
 
 // The portrait's size, its overlap with the card and the measure the text gives up for it: null without a portrait.
 function portraitPlan(shot, ctx, data, span) {
   if (shot.src === undefined) return null;
   const { look, canvas, unit } = ctx;
-  const picture = ctx.asset(shot.src);
-  const scale = (data.portrait * Math.min(canvas.w, canvas.h)) / Math.max(picture.width, picture.height);
-  const w = picture.width * scale, h = picture.height * scale, keyline = look.keyline * unit;
+  const { w, h } = fitLongestSide(ctx.asset(shot.src), data.portrait * Math.min(canvas.w, canvas.h));
+  const keyline = look.keyline * unit;
   const right = span.x + span.w;
   // into the card by `overlap` of its width, or further where the frame's margin would cut it
   const overlapX = Math.max(data.overlap * w, right + w + keyline - (canvas.w - look.grid.margin * unit));
@@ -59,8 +57,7 @@ const noLoneLine = (layout) => layout.lines.length < HALF || layout.lines.every(
 
 // The attribution's scale step: the largest of data.attrSteps the quotation stays MIN_HERO_RATIO times, else the smallest.
 function attrSize(look, data, size, unit) {
-  const fits = data.attrSteps.filter((step) => MIN_HERO_RATIO * sizeAt(look, step, unit) <= size + EPSILON);
-  return sizeAt(look, fits.length > 0 ? Math.max(...fits) : Math.min(...data.attrSteps), unit);
+  return sizeAt(look, stepUnder(look, data.attrSteps, unit, [{ size, ratio: MIN_HERO_RATIO }]), unit);
 }
 
 // The card's contents laid out from its top left: { quote, attr, textX, textY, attrX, attrY, ruleY, w, h }.
@@ -97,10 +94,6 @@ function cardLayout(shot, ctx, data, { span, plan, room }) {
   };
 }
 
-// The quotation's word boxes in the card's centred space.
-const wordBoxes = (layout, x, y) => layout.lines.flatMap((line) => line.words.map((w) => ({ index: w.index, box: capBox(x + line.x + w.x, y + line.y, w.width, layout.size) })))
-  .sort((a, b) => a.index - b.index).map((w) => w.box);
-
 // The card's children in its centred space: the bands, the quotation, the rule and the attribution.
 function cardChildren(shot, ctx, lay, times) {
   const { look, unit } = ctx;
@@ -132,9 +125,9 @@ export function expandDeskQuote(shot, ctx, data, times, hero) {
   const top = Math.max(topLimit, Math.min(data.centre * canvas.h - lay.h / HALF, canvas.h - margin - lay.h));
   const box = [span.x, top, lay.w, lay.h];
   // the card is on the desk from the shot's first frame (its words arrive as spoken): a shot never opens on the field alone
-  const card = registries.devices.get('card').build({ id: hero, box, at: 0, look, unit, seed }).nodes[0];
+  const card = cardOf(ctx, hero, box, 0);
   const { children, placed, attrY } = cardChildren(shot, ctx, lay, times);
-  const group = node('group', hero, card.props, { tracks: card.tracks, children: [...asTextCard(hero, card.children), ...children] });
+  const group = cardGroup(card, hero, children);
   const cx = box[0] + lay.w / HALF, cy = box[1] + lay.h / HALF;
   const words = wordBoxes(placed.layout, cx + placed.x, cy + placed.y);
   const attr = lay.attr.layout;

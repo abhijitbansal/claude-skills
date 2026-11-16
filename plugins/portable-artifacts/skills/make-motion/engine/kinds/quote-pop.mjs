@@ -8,10 +8,8 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { landing } from '../devices/shared.mjs';
-import { setCase, arrivesMatched, plainTag } from './shared.mjs';
-import { STACK, stackArea, composeStack, stackNodes } from './stack.mjs';
-import { restack } from './end.mjs';
-import { ghostWords } from './statement.mjs';
+import { setCase, arrivesMatched, plainTag, ghostWords, fitLongestSide } from './shared.mjs';
+import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
 import { quotationOf, attributionOf } from './quote-text.mjs';
 
 // One opening mark (a "6") in a 0.45 x 0.8 box, as cubic curves from its tail's tip; the pair sets two of them 0.55 apart.
@@ -53,9 +51,7 @@ function byTag(shot, ctx, { left, top, maxWidth, at, steps }) {
 // The portrait's size, longest side `portrait` of the short side, or null.
 function portraitSize(shot, ctx, data) {
   if (shot.src === undefined) return null;
-  const picture = ctx.asset(shot.src);
-  const scale = (data.portrait * Math.min(ctx.canvas.w, ctx.canvas.h)) / Math.max(picture.width, picture.height);
-  return { w: picture.width * scale, h: picture.height * scale, keyline: ctx.look.keyline * ctx.unit };
+  return { ...fitLongestSide(ctx.asset(shot.src), data.portrait * Math.min(ctx.canvas.w, ctx.canvas.h)), keyline: ctx.look.keyline * ctx.unit };
 }
 
 // Where the portrait goes: beside the mark (a gutter after it, its bottom a tag gap over the first line) when the row has

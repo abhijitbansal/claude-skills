@@ -9,7 +9,7 @@
 // broken-axis mark and a label saying it. How each look composes it is look data (look.kinds.chart). Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
-import { HERO_SCHEMA, heroId, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera } from './shared.mjs';
+import { HERO_SCHEMA, heroId, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks } from './shared.mjs';
 import { chartData } from './chart-marks.mjs';
 import { chartLanding } from './chart-time.mjs';
 import { expandDeskChart } from './chart-desk.mjs';
@@ -33,15 +33,15 @@ const MECHANICAL = 'mechanical';
 
 const POINT = Object.freeze({
   type: 'object', required: ['x', 'y'], additionalProperties: false,
-  properties: { x: { anyOf: [{ type: 'number' }, { type: 'string', minLength: 1, maxLength: X_MAX }] }, y: { type: 'number' } },
+  properties: { x: { anyOf: [{ type: 'number' }, { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: X_MAX }] }, y: { type: 'number' } },
 });
 const ITEM = Object.freeze({
   type: 'object', required: ['label', 'value'], additionalProperties: false,
-  properties: { label: { type: 'string', minLength: 1, maxLength: LABEL_MAX }, value: { type: 'number' } },
+  properties: { label: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: LABEL_MAX }, value: { type: 'number' } },
 });
 const SERIES = Object.freeze({
   type: 'object', required: ['name', 'points'], additionalProperties: false,
-  properties: { name: { type: 'string', minLength: 1, maxLength: LABEL_MAX }, points: { type: 'array', minItems: 1, maxItems: POINTS_MAX, items: POINT } },
+  properties: { name: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: LABEL_MAX }, points: { type: 'array', minItems: 1, maxItems: POINTS_MAX, items: POINT } },
 });
 const DATA = Object.freeze({
   anyOf: [
@@ -114,6 +114,7 @@ function chartField(shot, id) {
 }
 
 function expandChart(shot, ctx) {
+  assertNoBlanks(shot, 'chart'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
   const hero = heroId(shot, 'chart');
@@ -139,11 +140,11 @@ registries.kinds.add(KIND, {
     properties: {
       type: { enum: [...TYPES] },
       data: DATA,
-      title: { type: 'string', minLength: 1, maxLength: TITLE_MAX },
-      unit: { type: 'string', minLength: 1, maxLength: UNIT_MAX },
-      highlight: { type: 'string', minLength: 1, maxLength: LABEL_MAX },
+      title: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: TITLE_MAX },
+      unit: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: UNIT_MAX },
+      highlight: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: LABEL_MAX },
       baseline: { type: 'number' },
-      source: { type: 'string', minLength: 1, maxLength: SOURCE_MAX },
+      source: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: SOURCE_MAX },
       hero: HERO_SCHEMA,
     },
   },

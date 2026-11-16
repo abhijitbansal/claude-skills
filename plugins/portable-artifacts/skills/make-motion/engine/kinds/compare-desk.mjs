@@ -11,12 +11,11 @@ import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { landing, isHand, colourOf, smoothPath, polyline, pathPoints } from '../devices/shared.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, asTextCard, unionBox } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, stepUnder, fitInBox, numeralLayout, cardOf, cardGroup } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
-import { paperScrim } from './region-mark.mjs';
+import { paperScrim } from './shared.mjs';
 
-const NO_WRAP = 1e6;
 const EPSILON = 1e-6;
 const HALF = 2;
 const DEGREES_TO_RADIANS = Math.PI / 180;
@@ -33,8 +32,7 @@ const DEFAULT_DIM = 0.55; // the scrim's opacity for a look whose devices name n
 // The points' size: the largest of data.pointSteps the hero stays MIN_HERO_RATIO times and the title POINT_TITLE_RATIO
 // times (a numeral as the hero must not leave the points beside the title at almost its size), else the smallest.
 function pointSize(look, data, { hero, title }, unit) {
-  const fits = data.pointSteps.filter((step) => MIN_HERO_RATIO * sizeAt(look, step, unit) <= hero + EPSILON && POINT_TITLE_RATIO * sizeAt(look, step, unit) <= title + EPSILON);
-  return sizeAt(look, fits.length > 0 ? Math.max(...fits) : Math.min(...data.pointSteps), unit);
+  return sizeAt(look, stepUnder(look, data.pointSteps, unit, [{ size: hero, ratio: MIN_HERO_RATIO }, { size: title, ratio: POINT_TITLE_RATIO }]), unit);
 }
 
 // Both values on one line at one size: the largest up to valueMax that both fit `width`. A value is never set wider
@@ -44,7 +42,7 @@ function valueSet(shot, ctx, data, width) {
   if (!hasValues(shot)) return null;
   const { look, unit, measure } = ctx;
   const texts = SIDES.map((k) => setCase(look, 'display', valueText(shot[k].value)));
-  const at = (size) => texts.map((text) => layoutText({ text, font: fontFor(look, 'display', size, unit), maxWidth: NO_WRAP, measure }));
+  const at = (size) => texts.map((text) => numeralLayout(text, fontFor(look, 'display', size, unit), measure)); // fixed digit advances
   const ref = at(data.valueMax * unit);
   const widest = Math.max(...ref.map((l) => l.width));
   const size = Math.min(data.valueMax * unit, Math.floor((data.valueMax * unit * width) / widest));
@@ -84,7 +82,8 @@ function fitSides(shot, ctx, data, width, height) {
   // breaks by sense: the largest size with no title line of one word, else the largest that fits at all
   const noLone = (set) => set.every((s) => s.title.lines.length < HALF || s.title.lines.every((line) => line.words.length > 1));
   // under a numeral the title is the second voice: at most data.valueTitle of the numeral
-  const top = values === null ? data.titleMax * unit : Math.min(data.titleMax * unit, data.valueTitle * values.size);
+  // never under its floor: a long value shrinks the numeral, not the title (so a title that fits is never flagged)
+  const top = values === null ? data.titleMax * unit : Math.max(floor, Math.min(data.titleMax * unit, data.valueTitle * values.size));
   for (const accept of [(set) => fits(set) && noLone(set), fits]) {
     for (let size = Math.floor(top); size >= Math.ceil(floor); size--) {
       const set = sidesAt(shot, ctx, data, { size, width, values });
@@ -102,9 +101,7 @@ function pictureRoom(shot, ctx, data, width, height) {
   const sides = SIDES.filter((k) => shot[k].src !== undefined);
   if (sides.length === 0) return null;
   const fitted = Object.fromEntries(sides.map((k) => {
-    const picture = ctx.asset(shot[k].src);
-    const scale = Math.min(width / picture.width, (data.picture * height) / picture.height);
-    return [k, { w: picture.width * scale, h: picture.height * scale }];
+    return [k, fitInBox(ctx.asset(shot[k].src), width, data.picture * height)];
   }));
   return { fitted, h: Math.max(...Object.values(fitted).map((f) => f.h)), gap: data.pictureGap * ctx.unit };
 }
@@ -211,12 +208,12 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
   const boxes = cardBoxes(ctx, data, Math.max(...set.sides.map((s) => s.height)) + top + HALF * pad);
   const cards = set.sides.map((side, i) => {
     const id = `${shot.id}.${side.key}`, at = i === 0 ? 0 : turn;
-    const card = registries.devices.get('card').build({ id, box: boxes[i], at, look, unit, seed }).nodes[0];
+    const card = cardOf(ctx, id, boxes[i], at);
     const size = { w: boxes[i][2], h: boxes[i][3] };
     const texts = sideTexts(shot, ctx, data, side, { ...size, at, top });
     const picture = sidePicture(shot, ctx, data, side.key, room, size);
     const scrim = i === 0 ? [dimScrim(id, card, look, turn)] : [];
-    return node('group', id, card.props, { tracks: card.tracks, children: [...asTextCard(id, card.children), ...picture, ...texts, ...scrim] });
+    return cardGroup(card, id, [...picture, ...texts, ...scrim]);
   });
   const group = node('group', hero, {}, { children: cards });
   return { nodes: [group, ...betweenMarks(shot, ctx, boxes, turn)], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };

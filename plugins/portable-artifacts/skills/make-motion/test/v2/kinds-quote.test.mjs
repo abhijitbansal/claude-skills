@@ -272,6 +272,17 @@ test('desk quote: an attribution too long for one line puts the role on its own 
   assert.ok(lines.some((l) => l.startsWith('HOUSE')), `the role starts a line: ${lines}`);
 });
 
+test('quote marks: only a matched outer pair is taken off; apostrophes at either end stay; a mark before trailing punctuation never doubles', () => {
+  assert.equal(quoteBody('"Ship it"'), 'Ship it');
+  assert.equal(quoteBody('\u201cShip it\u201d'), 'Ship it');
+  assert.equal(quoteBody("'Ship it'"), 'Ship it');
+  assert.equal(quoteBody('"Ship it".'), 'Ship it.');
+  assert.equal(quoteBody('\u201cShip it\u201d!'), 'Ship it!');
+  assert.equal(quoteBody("Hear the players'"), "Hear the players'");
+  assert.equal(quoteBody("'Tis the season"), "'Tis the season");
+  assert.equal(quoteBody('\u201990s were loud'), '\u201990s were loud');
+});
+
 // ---- targets and declarations ----
 
 test('quote: targets are the text, its words and the attribution; declarations', () => {

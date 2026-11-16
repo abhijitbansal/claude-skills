@@ -66,6 +66,7 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
     seed: film.seed ?? DEFAULT_SEED,
     fps: timeline.fps,
     viralInsets,
+    captions: captionsOn(film, registries.modes.get(film.mode ?? DEFAULT_MODE)), // whether the film shows captions
     asset: shotAsset(shot, kind, assets),
     // the shot's 1-based place among the film's numbered shots (kinds with `numbered: true`): what a slug shows
     ordinal: film.shots.slice(0, index + 1).filter((s) => registries.kinds.has(s.show) && registries.kinds.get(s.show).numbered === true).length,

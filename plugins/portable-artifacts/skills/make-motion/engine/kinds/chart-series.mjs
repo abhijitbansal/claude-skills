@@ -97,7 +97,7 @@ function endLabels(shot, ctx, style, { lines, plot, times, hl, decimals }) {
 }
 
 /** Lines (or areas, `area`) in `area`: { nodes, boxes, plot, highlight }. */
-export function drawSeries(shot, ctx, style, box, { valueOnHighlight, area }) {
+export function drawSeries(shot, ctx, style, box, { valueOnHighlight, area, headroom = 0 }) {
   const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing);
   const { font, gap } = style;
   const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
@@ -108,7 +108,7 @@ export function drawSeries(shot, ctx, style, box, { valueOnHighlight, area }) {
   });
   const gutter = axisGutter(shot, ctx, style, scale, style.refs);
   const right = Math.max(0, ...ends) + gap;
-  const plot = { x: box.x + gutter, y: box.y + ink / HALF, w: Math.max(1, box.w - gutter - right), h: Math.max(1, box.h - ink / HALF - gap - ink) };
+  const plot = { x: box.x + gutter, y: box.y + ink / HALF + headroom, w: Math.max(1, box.w - gutter - right), h: Math.max(1, box.h - ink / HALF - gap - ink - headroom) };
   const { lines, xs, baseY } = lineMarks(data.series, plot, scale);
   const yOf = (v) => plot.y + plot.h - ((Math.min(scale.hi, Math.max(scale.lo, v)) - scale.lo) / (scale.hi - scale.lo)) * plot.h;
   const parts = lines.map((line) => seriesNodes(shot, ctx, style, { line, baseY, times, hl, area }));

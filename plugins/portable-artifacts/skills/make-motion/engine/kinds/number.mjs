@@ -13,8 +13,10 @@ import { entrance, colourOf } from '../devices/shared.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, setCase, inkBox, shownFrom,
   isEditorial, heroProblems, fieldNode, enterTracks, pulseScale, runInk,
-  defaultCamera, onDevices, placeDevices, deviceCamera, openingLanding, plainTag,
+  defaultCamera, onDevices, placeDevices, deviceCamera, openingLanding, plainTag, formatValue, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
+
+export { formatValue } from './shared.mjs'; // where it lives now
 import { NUMBER_WORDS, ONES, TENS } from './words.mjs';
 import { stackArea } from './stack.mjs';
 import { slugNodes } from './slug.mjs';
@@ -49,7 +51,6 @@ const FIT_TRIES = 6;
 const NO_WRAP = 1e6;
 const HALF = 2;
 const DIGIT = /\d/;
-const THOUSANDS = /\B(?=(\d{3})+(?!\d))/g;
 const VALUE_LIMIT = 1e15; // larger figures lose integer precision and no layout holds them
 // Words that start a spoken number by themselves; "one" and "a" start one only before a number word or unit.
 const COUNT_WORDS = new Set([...ONES.filter((w) => w !== 'one'), ...TENS.filter(Boolean)]);
@@ -58,13 +59,6 @@ const NOT_DIGIT = /\D/g;
 const NOT_LETTER = /[^a-z]/g;
 
 // ---- the count ----
-
-/** The value as shown: fixed decimals, thousands grouped with commas, a leading minus for a negative value. */
-export function formatValue(value, decimals) {
-  const [whole, fraction] = Math.abs(value).toFixed(decimals).split('.');
-  const sign = value < 0 && Number(Math.abs(value).toFixed(decimals)) !== 0 ? '-' : '';
-  return `${sign}${whole.replace(THOUSANDS, ',')}${fraction === undefined ? '' : `.${fraction}`}`;
-}
 
 // A spoken word's lower-case letter parts, split on hyphens ("forty-one" -> forty, one).
 const parts = (word) => word.text.toLowerCase().split('-').map((part) => part.replace(NOT_LETTER, '')).filter(Boolean);
@@ -348,6 +342,7 @@ function popParts(shot, ctx, steps, times) {
 }
 
 function expandNumber(given, ctx) {
+  assertNoBlanks(given, 'number'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, timing, unit, fps } = ctx;
   // A negative value with a prefix reads "-$5": the minus goes in front of the prefix and the figure counts its size.
   const shot = given.value < 0 && given.prefix !== undefined ? { ...given, value: -given.value, prefix: `-${given.prefix}` } : given;
@@ -375,12 +370,12 @@ registries.kinds.add('number', {
     required: ['value', 'label'],
     properties: {
       value: { type: 'number', exclusiveMinimum: -VALUE_LIMIT, exclusiveMaximum: VALUE_LIMIT },
-      prefix: { type: 'string', minLength: 1, maxLength: AFFIX_MAX },
-      suffix: { type: 'string', minLength: 1, maxLength: AFFIX_MAX },
+      prefix: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: AFFIX_MAX },
+      suffix: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: AFFIX_MAX },
       decimals: { type: 'integer', minimum: 0, maximum: DECIMALS_MAX },
-      label: { type: 'string', minLength: 1, maxLength: LABEL_MAX },
-      delta: { type: 'string', minLength: 1, maxLength: DELTA_MAX },
-      kicker: { type: 'string', minLength: 1, maxLength: KICKER_MAX },
+      label: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: LABEL_MAX },
+      delta: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: DELTA_MAX },
+      kicker: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: KICKER_MAX },
       hero: HERO_SCHEMA,
     },
   },

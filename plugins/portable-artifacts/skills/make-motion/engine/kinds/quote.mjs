@@ -9,7 +9,7 @@
 import { registries } from '../registry.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
 import {
-  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera,
+  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 import { quotationOf, quoteTimes } from './quote-text.mjs';
 import { expandDeskQuote } from './quote-desk.mjs';
@@ -23,6 +23,7 @@ const BY_MAX = 48;
 const ROLE_MAX = 48;
 
 function expandQuote(shot, ctx) {
+  assertNoBlanks(shot, 'quote'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
   const times = quoteTimes(shot, timing);
@@ -52,9 +53,9 @@ registries.kinds.add(KIND, {
   schema: {
     required: ['by'],
     properties: {
-      text: { type: 'string', minLength: 1, maxLength: TEXT_MAX },
-      by: { type: 'string', minLength: 1, maxLength: BY_MAX },
-      role: { type: 'string', minLength: 1, maxLength: ROLE_MAX },
+      text: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: TEXT_MAX },
+      by: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: BY_MAX },
+      role: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: ROLE_MAX },
       src: { type: 'string', minLength: 1 },
       hero: HERO_SCHEMA,
     },

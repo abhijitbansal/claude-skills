@@ -1,6 +1,6 @@
 // The `compare` kind's sides as its compositions read them (compare.mjs, compare-desk.mjs, compare-pop.mjs): when the
 // right side arrives, how a value is shown and the words of each side. Pure and DOM-free.
-import { formatValue } from './number.mjs';
+import { formatValue } from './shared.mjs';
 
 export const SIDES = Object.freeze(['left', 'right']);
 const MAX_DECIMALS = 3;

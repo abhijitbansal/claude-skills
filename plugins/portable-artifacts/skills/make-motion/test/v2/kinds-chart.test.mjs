@@ -338,3 +338,46 @@ test('on devices aim at the chart, its title or one mark: a desk highlight and c
   assert.ok(deskNodes.some((n) => n.id.startsWith('g.on0')) && deskNodes.some((n) => n.id.startsWith('g.on1')), 'both desk devices drawn');
   assert.ok(all(expandShot(pop, 'pop', '9:16').nodes).some((n) => n.id.startsWith('g.on0')), 'the pop underline drawn');
 });
+
+// ---- fix round 1: director's notes ----
+
+test('(a) desk chart: the claim\'s cap line sits where a statement\'s slug does (14% of the height), not on the top margin', async () => {
+  const { expandShot, all } = await helpers();
+  for (const format of ['16:9', '9:16']) {
+    const { nodes, canvas } = expandShot(COLUMNS(), 'desk', format);
+    const title = all(nodes).find((n) => n.id === 'g.title');
+    const { CAP_HEIGHT } = await import('../../engine/kinds/shared.mjs');
+    near(title.props.y + title.props.layout.lines[0].y - CAP_HEIGHT * title.props.font.size, 0.14 * canvas.h, `${format} cap line`);
+  }
+});
+
+test('(b) pop chart at 9:16: the plot starts right under the claim tag and fills most of the stack area; the numeral sits in it, not above it', async () => {
+  const { expandShot, all } = await helpers();
+  const { stackArea } = await import('../../engine/kinds/stack.mjs');
+  for (const shot of [COLUMNS(), BARS(), LINES(), DONUT()]) {
+    const { boxes, nodes, ctx } = expandShot(shot, 'pop', '9:16');
+    const area = stackArea(ctx);
+    assert.ok(boxes.chart[3] >= 0.6 * area.h, `${shot.type}: plot ${Math.round(boxes.chart[3])} of ${Math.round(area.h)}`);
+    const numeral = all(nodes).find((n) => n.id === 'g.numeral.punch');
+    assert.ok(numeral.props.y >= boxes.chart[1] - 1, `${shot.type}: the numeral inside the plot box`);
+  }
+});
+
+test('(c) desk chart: with captions off the plot uses the caption band', async () => {
+  const { filmOf, expandIn } = await helpers();
+  const on = expandIn(filmOf([COLUMNS()], 'desk', '16:9', { captions: true })).boxes.chart;
+  const off = expandIn(filmOf([COLUMNS()], 'desk', '16:9', { captions: false })).boxes.chart;
+  assert.ok(off[1] + off[3] > on[1] + on[3] + 20, `off ${off[1] + off[3]} below on ${on[1] + on[3]}`);
+});
+
+test('(d) desk chart: a mark\'s box holds its value and category labels, so an on circle around it never crosses them', async () => {
+  const { expandShot, all } = await helpers();
+  const { boxes, nodes } = expandShot(COLUMNS(), 'desk', '16:9');
+  const box = boxes['mark:2'];
+  for (const id of ['g.value.2', 'g.label.2']) {
+    const n = all(nodes).find((m) => m.id === id);
+    const [x, y, w, h] = lineBoxes(n)[0];
+    const slack = 0.15 * n.props.font.size; // the test's cap and descent shares against the kind's
+    assert.ok(x >= box[0] - slack && y >= box[1] - slack && x + w <= box[0] + box[2] + slack && y + h <= box[1] + box[3] + slack, `${id} ${[x, y, w, h].map(Math.round)} inside the mark box ${box.map(Math.round)}`);
+  }
+});

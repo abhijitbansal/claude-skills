@@ -6,10 +6,11 @@
 // and DOM-free.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, stepsUnder } from './shared.mjs';
 import { composeStack, stackNodes, stackArea } from './stack.mjs';
 import { FORCE_MARK, PREPOSITIONS } from '../text/breaks.mjs';
-import { restack, tagBox } from './end.mjs';
+import { restack } from './stack.mjs';
+import { tagBox } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { itemsOf } from './list-items.mjs';
 
@@ -44,8 +45,7 @@ export const countText = (shot, k, n) => `${shot.style === 'steps' ? `${STEPS_WO
 // The note's size: the largest of data.smallSteps the stack's largest line stays MIN_HERO_RATIO times, else the smallest.
 function noteSize(look, data, lines, unit) {
   const largest = Math.max(...lines.map((line) => line.font.size));
-  const fits = data.smallSteps.filter((step) => MIN_HERO_RATIO * sizeAt(look, step, unit) <= largest + EPSILON);
-  return sizeAt(look, fits.length > 0 ? Math.max(...fits) : Math.min(...data.smallSteps), unit);
+  return sizeAt(look, stepUnder(look, data.smallSteps, unit, [{ size: largest, ratio: MIN_HERO_RATIO }]), unit);
 }
 
 // The note laid out under the stack: { layout, font, room } where room runs from the last line's ink to the note's last
@@ -68,7 +68,7 @@ function runningHead(shot, id, { tag, plate, lines }, area, ctx) {
   const left = plate[0] + plate[2] + look.grid.gutter * unit;
   const width = area.left + area.w - left;
   const largest = Math.max(...lines.map((line) => line.font.size));
-  const ratioed = HEAD_STEPS.filter((step) => MIN_HERO_RATIO * sizeAt(look, step, unit) <= largest + EPSILON);
+  const ratioed = stepsUnder(look, HEAD_STEPS, unit, [{ size: largest, ratio: MIN_HERO_RATIO }]);
   const steps = ratioed.length > 0 ? ratioed : [HEAD_STEPS.at(-1)];
   const at = (step) => {
     const font = fontFor(look, 'label', sizeAt(look, step, unit), unit);

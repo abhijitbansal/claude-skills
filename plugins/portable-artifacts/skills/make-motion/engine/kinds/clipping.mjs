@@ -22,7 +22,7 @@ import { layeredCamera } from '../graph/camera.mjs';
 import {
   HERO_SCHEMA, REGION_PREFIX, heroId, isWide, arrivesMatched, regionOf, isEditorial, cutsToCloseUp, requireDevice,
   compositionRect, fieldNode, defaultCamera, pushLayer, onDevices, placeDevices, deviceCamera, withEstablishingView,
-  openingLanding, easePeak,
+  openingLanding, easePeak, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 
 const CAPTION_MAX = 80;
@@ -307,6 +307,7 @@ function followOf(laid, pushed, push, base) {
 }
 
 function expandClipping(given, ctx) {
+  assertNoBlanks(given, 'clipping'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, unit, timing } = ctx;
   const shot = withEstablishingView(given, ctx); // a region event waits until the whole picture has been seen
   const problems = clippingProblems(shot);
@@ -352,8 +353,8 @@ registries.kinds.add('clipping', {
         propertyNames: { pattern: '^[a-z][a-z0-9-]*$' },
         additionalProperties: { type: 'array', items: FRACTION, minItems: 4, maxItems: 4 },
       },
-      caption: { type: 'string', minLength: 1, maxLength: CAPTION_MAX },
-      kicker: { type: 'string', minLength: 1, maxLength: KICKER_MAX },
+      caption: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: CAPTION_MAX },
+      kicker: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: KICKER_MAX },
       crop: { type: 'array', items: FRACTION, minItems: 4, maxItems: 4 },
       hero: HERO_SCHEMA,
     },

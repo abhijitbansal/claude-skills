@@ -16,7 +16,7 @@ import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
   isEditorial, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale,
-  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, driftReach, highlightBands, highlightLines,
+  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, driftReach, highlightBands, highlightLines, ghostWords, plainSay, overlaps, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 import { wordTimes } from './words.mjs';
 import { slugBox, slugNodes, SLUG } from './slug.mjs';
@@ -89,7 +89,6 @@ function blockInk(placed, measure) {
   return [left, top, right - left, bottom - top];
 }
 
-const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 
 // The room a statement's ink keeps from the slug: the card's paper and tape grown by SLUG_CLEAR gutters on every side,
 // and across by the camera drift as well (the slug is fixed to the frame; the text drifts with the camera).
@@ -197,7 +196,7 @@ export function enterStarts(words, look) {
 // A mode with `hookFromFrameZero` (viral) reads from the first frame: in every statement of a recolour look every word
 // is on screen from frame 0 as a ghost (opaque, ink mixed 40% into paper, shared.mjs ghostTracks) and takes its own
 // colour when it is spoken.
-export const ghostWords = (ctx) => ctx.mode.hookFromFrameZero === true && ctx.look.emphasis !== 'highlight';
+export { ghostWords } from './shared.mjs'; // where it lives now
 
 // A ghost word that lights to `to` when spoken at `at`, pulsing as it does when `peak` is given.
 function hookTracks(look, at, to, peak) {
@@ -267,6 +266,7 @@ function expandStacked(shot, ctx) {
 }
 
 function expandStatement(shot, ctx) {
+  assertNoBlanks(shot, 'statement'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, unit, timing } = ctx;
   if (look.composition === 'stack') return expandStacked(shot, ctx);
   const placed = compose(sourceText(shot, look), shot, ctx);
@@ -292,16 +292,6 @@ function expandStatement(shot, ctx) {
     hero,
     background: look.palette.paper,
   };
-}
-
-// A say that does not parse has its own validation error; its targets are then just `text`.
-function plainSay(say) {
-  try {
-    return parseSay(say).plain;
-  } catch (err) {
-    if (err instanceof SayError) return '';
-    throw err;
-  }
 }
 
 // Emphasis is a pointer, not a paint job: in a highlight look a statement whose emphasised words are EMPHASIS_SHARE of
@@ -331,8 +321,8 @@ registries.kinds.add('statement', {
   example: { id: 'hook', show: 'statement', say: 'Numbers need *sources*.', kicker: 'The problem' },
   schema: {
     properties: {
-      text: { type: 'string', minLength: 1, maxLength: TEXT_MAX },
-      kicker: { type: 'string', minLength: 1, maxLength: KICKER_MAX },
+      text: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: TEXT_MAX },
+      kicker: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: KICKER_MAX },
       hero: HERO_SCHEMA,
     },
   },

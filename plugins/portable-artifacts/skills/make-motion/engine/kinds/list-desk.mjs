@@ -11,7 +11,7 @@ import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, inkExtent, capBox, unionBox, driftReach, arrivesMatched,
+  CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, inkExtent, capBox, unionBox, driftReach, arrivesMatched, overlaps, stepUnder,
 } from './shared.mjs';
 import { slugBox, slugNodes } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
@@ -27,8 +27,7 @@ const DIM_EASE = 'outCubic';
 
 // The small parts' size (notes, figures): the largest of data.smallSteps the items stay MIN_HERO_RATIO times, else the smallest.
 function smallSize(look, data, size, unit) {
-  const fits = data.smallSteps.filter((step) => MIN_HERO_RATIO * sizeAt(look, step, unit) <= size + EPSILON);
-  return sizeAt(look, fits.length > 0 ? Math.max(...fits) : Math.min(...data.smallSteps), unit);
+  return sizeAt(look, stepUnder(look, data.smallSteps, unit, [{ size, ratio: MIN_HERO_RATIO }]), unit);
 }
 
 // The items laid out at `size` across `width`: { parts [{ layout, note }], small, height } with height from the first cap
@@ -81,7 +80,6 @@ function fitItems(items, span, room, ctx, data, hasSmall) {
   return { ...smaller, parts };
 }
 
-const overlaps = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 
 // The room the list has: between the margins, starting under the slug's card when the card is over the list's columns.
 function roomFor(slug, span, ctx) {
@@ -103,10 +101,10 @@ function dimTrack(look, dimAt) {
   return track([{ t: 0, v: ink }, { t: dimAt, v: ink }, { t: dimAt + look.moves.emphasize.dur, v: ink2, ease: DIM_EASE }]);
 }
 
-// A figure: the item's number in the label face, padded to the count's digits, its ink ending `right`, on `baseline`.
+// A figure: the item's number as written in the label face (1 to 12, never 01), its ink ending `right`, on `baseline`.
 function figureNode(id, k, n, set, { right, baseline }, ctx) {
   const { look, unit, measure } = ctx;
-  const text = String(k + 1).padStart(String(n).length, '0');
+  const text = String(k + 1);
   const font = fontFor(look, 'label', set.small, unit);
   const layout = layoutText({ text, font, maxWidth: NO_WRAP, measure });
   const ink = inkExtent(text, font, measure);
