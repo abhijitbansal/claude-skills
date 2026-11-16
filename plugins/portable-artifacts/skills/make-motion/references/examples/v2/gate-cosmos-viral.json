@@ -28,7 +28,7 @@
     {
       "id": "sizes",
       "show": "compare",
-      "say": "Earth is small. Jupiter is eleven Earths wide.",
+      "say": "Earth is small. The Sun is one hundred nine Earths wide.",
       "left": {
         "title": "Earth",
         "value": "12,742",
@@ -37,8 +37,8 @@
         ]
       },
       "right": {
-        "title": "Jupiter",
-        "value": "139,820",
+        "title": "The Sun",
+        "value": "1,392,700",
         "points": [
           "kilometres across"
         ]
@@ -47,29 +47,30 @@
     {
       "id": "giants",
       "show": "chart",
-      "type": "column",
-      "title": "Jupiter dwarfs the rest",
+      "type": "bar",
+      "title": "Jupiter is the widest planet",
       "say": "Neptune, four Earths. Saturn, nine. Jupiter beats them all.",
       "data": [
         {
           "label": "Earth",
-          "value": 13
+          "value": 12742
         },
         {
           "label": "Neptune",
-          "value": 49
+          "value": 49244
         },
         {
           "label": "Saturn",
-          "value": 116
+          "value": 116460
         },
         {
           "label": "Jupiter",
-          "value": 140
+          "value": 139820
         }
       ],
       "highlight": "Jupiter",
-      "source": "Width in thousand km, NASA"
+      "source": "NASA planetary fact sheet",
+      "unit": "km"
     },
     {
       "id": "path",
@@ -86,7 +87,7 @@
       "id": "close",
       "show": "end",
       "say": "Scale changes everything.",
-      "ask": "Look up tonight",
+      "ask": "Look up tonight.",
       "mark": "cosmos"
     }
   ]

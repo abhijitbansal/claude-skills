@@ -101,21 +101,17 @@ export function countLanding(timing, value, decimals) {
 // expand (the picture) and by the kind's `landing` hook (scripts/v2/sound/events.mjs, the sound).
 const landingOf = (shot, timing) => countLanding(timing, shot.value, shot.decimals ?? 0);
 
-// A value part way through the count from `from`, cut toward zero at `decimals` so it never shows the final value early.
-function partial(value, share, decimals, from = 0) {
+// A value part way through the count, cut toward zero at `decimals` so it never shows the final value early.
+function partial(value, share, decimals) {
   const scale = 10 ** decimals;
-  return Math.trunc((from + (value - from) * Math.min(1, share)) * scale) / scale;
+  return Math.trunc(value * Math.min(1, share) * scale) / scale;
 }
-
-// Where a count starts: 0, or with `sameDigits` (look data, cosmos) the smallest whole number with as many digits as the
-// value (150 counts from 100), so the figure opens near its value with every digit in place.
-const countFrom = (value, sameDigits) => (sameDigits && value >= BY_ONES ? 10 ** Math.floor(Math.log10(value)) : 0);
 
 // The texts the count shows and when each appears, eased by the look's count ease from `start` to `land` (the final
 // value exactly on `land`): `rate` steps a second and at most MAX_COUNT_STEPS values in all (the start value and the
 // final one included), a step equal to the one before it merged into it. Each step shows from its time until the next
 // one's, so exactly one is visible at any moment.
-export function countSteps({ value, decimals, start, land, rate, curve, sameDigits = false }) {
+export function countSteps({ value, decimals, start, land, rate, curve }) {
   // a small whole number counts by ones (look review 2: a count of 0 then 9 never read as counting), evenly
   if (decimals === 0 && Number.isInteger(value) && value > 0 && value < BY_ONES) {
     return Array.from({ length: value + 1 }, (_, k) => ({ t: k === 0 ? 0 : start + ((land - start) * k) / value, text: formatValue(k, 0) }));
@@ -125,7 +121,7 @@ export function countSteps({ value, decimals, start, land, rate, curve, sameDigi
   const final = formatValue(value, decimals);
   const steps = [];
   for (let k = 0; k <= frames; k++) {
-    const text = k === frames ? final : formatValue(partial(value, curve(k / frames), decimals, countFrom(value, sameDigits)), decimals);
+    const text = k === frames ? final : formatValue(partial(value, curve(k / frames), decimals), decimals);
     const shown = k < frames && text === final ? steps.at(-1)?.text ?? formatValue(0, decimals) : text;
     if (steps.length === 0 || shown !== steps.at(-1).text) steps.push({ t: k === 0 ? 0 : start + ((land - start) * k) / frames, text: shown });
   }
@@ -134,7 +130,9 @@ export function countSteps({ value, decimals, start, land, rate, curve, sameDigi
 
 // One text node holding every step's digits: each digit centred in a fixed advance, separators at their own width.
 // In a centred composition every step is centred on the final value's ink centre, so the count grows from the middle.
-function digitsLayout(steps, font, measure, centred) {
+// `right`: every step set flush with the final value's right edge (cosmos: a counter grows leftward from the unit, so
+// the unit never stands apart from a short early value).
+function digitsLayout(steps, font, measure, centred, right = false) {
   const tracking = (font.tracking ?? 0) * font.size;
   const advance = numeralAdvance(measure, font) + tracking;
   const words = [], wordTracks = [], meta = [];
@@ -152,6 +150,7 @@ function digitsLayout(steps, font, measure, centred) {
     meta.push({ text: step.text, t: step.t, words: indexes, width: x });
   });
   if (centred) centreSteps(words, meta);
+  else if (right) meta.forEach((m) => { const shift = meta.at(-1).width - m.width; m.words.forEach((i) => { words[i] = { ...words[i], x: words[i].x + shift }; }); });
   const { ascent, descent } = measure('0', font);
   const width = meta.at(-1).width;
   const layout = { size: font.size, width, height: ascent + descent, lines: [{ x: 0, y: ascent, width, words }], overflow: false };
@@ -193,7 +192,7 @@ function figureAt(shot, ctx, { maxWidth, minSize, maxSize, steps }) {
   const at = (size) => {
     const font = fontFor(look, 'display', size, unit);
     const small = fontFor(look, 'display', AFFIX_SHARE * size, unit);
-    const digits = digitsLayout(steps, font, measure, look.composition === 'centred');
+    const digits = digitsLayout(steps, font, measure, look.composition === 'centred', look.kinds?.number?.countAlign === 'right');
     const prefix = affix(caps(shot.prefix), small, measure), suffix = affix(caps(shot.suffix), small, measure);
     const gap = AFFIX_GAP * size;
     const preW = prefix ? prefix.width + gap : 0, sufW = suffix ? suffix.width + gap : 0;
@@ -215,7 +214,10 @@ function figureGroup(shot, ctx, fig, { left, baseline, tracks }) {
   const hero = heroId(shot, 'value');
   const capTop = baseline - CAP_HEIGHT * fig.size;
   const gx = look.composition === 'centred' ? left + fig.total / HALF : left, gy = baseline - (CAP_HEIGHT * fig.size) / HALF;
-  const affixY = (layout) => capTop + CAP_HEIGHT * layout.size - layout.lines[0].y - gy;
+  // a prefix or suffix on the figure's cap line, or on its baseline (look.kinds.number.affix 'baseline', cosmos: a unit
+  // beside a figure, never an exponent)
+  const onBaseline = look.kinds?.number?.affix === 'baseline';
+  const affixY = (layout) => (onBaseline ? baseline - layout.lines[0].y : capTop + CAP_HEIGHT * layout.size - layout.lines[0].y) - gy;
   const digitsX = left + fig.preW - fig.digits.inkLeft;
   const inkRight = left + fig.preW + fig.digits.inkWidth;
   const children = [
@@ -293,18 +295,23 @@ function deskLabel(shot, ctx, left, step, right) {
 // the figure keeps its top margin and is at least MIN_HERO_RATIO times the label.
 // The desk figure, fitted to its span: columns 2 to DESK.toWide / toTall, or inside the 9:16 safe zone the whole safe
 // width (columns 1 to the last), where a look may let the figure go down to scale step `fromStep`
-// (look.kinds.number.fromStep), never under MIN_HERO_RATIO times the delta. With an orbit (number-orbit.mjs) the orbit's
-// width must fit from half a margin in from the frame's left edge (it may reach into the margin, or the platform's left
-// band, which carries no buttons) to the span's right edge: the figure is fitted, then refitted smaller in proportion
-// when its orbit is too wide, and set as far left as its orbit allows.
+// (look.kinds.number.fromStep), never under MIN_HERO_RATIO times the delta. With an orbit (number-orbit.mjs) the group
+// is centred across the whole grid (columns 1 to the last) and the orbit kept inside it: the figure is fitted, refitted
+// smaller in proportion when its orbit is too wide, and at the size floor set in an upright orbit (WIDE_SHARE).
 function deskFigure(shot, ctx, { bounds, orbit, maxSize, steps }) {
   const { look, canvas, unit } = ctx;
   const deltaFloor = shot.delta === undefined ? 0 : Math.ceil(MIN_HERO_RATIO * sizeAt(look, DELTA.step, unit)) + 1;
   const minSize = bounds.safe ? Math.max(sizeAt(look, look.kinds?.number?.fromStep ?? FIGURE_STEP, unit), deltaFloor) : sizeAt(look, FIGURE_STEP, unit);
   const span = bounds.safe ? editorialSpan(ctx, 1, look.grid.columns) : editorialSpan(ctx, 2, isWide(canvas) ? DESK.toWide : DESK.toTall);
+  if (orbit) return orbitFigure(shot, ctx, { span: editorialSpan(ctx, 1, look.grid.columns), orbit, minSize, maxSize, steps });
+  return { left: span.x, span, fig: figureAt(shot, ctx, { maxWidth: span.w, minSize, maxSize, steps }) };
+}
+
+// The figure in an orbit centred in `span`, the orbit inside it; when the orbit is too wide for that, it may reach half a
+// margin in from the frame's left edge (the platform's left band carries no buttons), the group set as far left as needed.
+function orbitFigure(shot, ctx, { span, orbit, minSize, maxSize, steps }) {
+  const right = span.x + span.w, minLeft = (ctx.look.grid.margin * ctx.unit) / HALF, room = right - minLeft;
   const first = figureAt(shot, ctx, { maxWidth: span.w, minSize, maxSize, steps });
-  if (!orbit) return { left: span.x, span, fig: first };
-  const right = span.x + span.w, minLeft = (look.grid.margin * unit) / HALF, room = right - minLeft;
   const geometryOf = (fig) => orbitGeometry({ width: fig.total, height: CAP_HEIGHT * fig.size }, orbit, room / HALF);
   const share = Math.min(1, room / (HALF * orbitGeometry({ width: first.total, height: CAP_HEIGHT * first.size }, orbit).hx));
   let fig = share < 1 ? figureAt(shot, ctx, { maxWidth: first.total * share, minSize, maxSize, steps }) : first;
@@ -312,7 +319,7 @@ function deskFigure(shot, ctx, { bounds, orbit, maxSize, steps }) {
   if (fig.size <= minSize + 1) fig = figureAt(shot, ctx, { maxWidth: Math.min(first.total, WIDE_SHARE * room), minSize, maxSize, steps });
   const geometry = geometryOf(fig);
   const reach = geometry.hx - fig.total / HALF;
-  const left = Math.min(Math.max(span.x, minLeft + reach), right - reach - fig.total);
+  const left = Math.min(Math.max(span.x + (span.w - fig.total) / HALF, minLeft + reach), right - reach - fig.total);
   return { left, span: { x: left, w: right - left }, fig, geometry };
 }
 
@@ -432,7 +439,7 @@ function expandNumber(given, ctx) {
   const start = Math.max(0, land - Math.max(look.moves.count.dur, MIN_COUNT));
   // The count changes at the look's own rhythm: a hand look (desk) on its 12 fps step, a crisp one (pop) every frame.
   const rate = look.moves.draw.step ?? fps;
-  const steps = countSteps({ value: shot.value, decimals: shot.decimals ?? 0, start, land, rate, curve: ease(look.moves.count.ease), sameDigits: look.kinds?.number?.sameDigits === true });
+  const steps = countSteps({ value: shot.value, decimals: shot.decimals ?? 0, start, land, rate, curve: ease(look.moves.count.ease) });
   const times = { land, start, matched: arrivesMatched(shot, ctx) };
   const parts = isEditorial(look) ? deskParts(shot, ctx, steps, times) : popParts(shot, ctx, steps, times);
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'value' });

@@ -16,8 +16,9 @@ import { colourOf, roundedRect } from '../devices/shared.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, arrivesMatched, fitDisplay, capBox, unionBox, rectPath,
-  highlightBands, highlightLines, wordBoxes, stepUnder, fitLongestSide, cardOf, cardGroup,
+  highlightBands, highlightLines, wordBoxes, stepUnder, fitLongestSide, cardOf, cardGroup, asTextCard,
 } from './shared.mjs';
+import { track } from '../time/track.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { OPEN_MARK, CLOSE_MARK, quotationOf, attributionOf } from './quote-text.mjs';
 
@@ -76,7 +77,9 @@ function cardLayout(shot, ctx, data, { span, plan, room }) {
   const attrMax = sizeAt(look, Math.max(...data.attrSteps), unit);
   const pillY = data.pill ? HALF * data.pill.padY * attrMax : 0;
   const maxHeight = room - HALF * pad - drop - markDrop(data.max * unit) - (data.attrGap * data.max * unit + (CAP_HEIGHT + WORD_DESCENT) * attrMax + pillY);
-  const text = `${markFont ? '' : OPEN_MARK}${setCase(look, 'display', quotationOf(shot))}${CLOSE_MARK}`;
+  // with a large mark the closing mark is large too (closeMarkNode), not inline; short sentences one per line (sentenceLines)
+  const body = sentenceLines(setCase(look, 'display', quotationOf(shot)), data.sentenceLines);
+  const text = `${markFont ? '' : OPEN_MARK}${body}${markFont ? '' : CLOSE_MARK}`;
   // breaks by sense, no line of one word: the fit trades size for a layout without one, down to its floor (fitText)
   const opts = { text, font: fontFor(look, 'display', data.max * unit, unit), maxWidth: width, align: 'left', measure, optical: true, accept: noLoneLine };
   const min = MIN_HERO_RATIO * sizeAt(look, Math.min(...data.attrSteps), unit);
@@ -90,15 +93,28 @@ function cardLayout(shot, ctx, data, { span, plan, room }) {
   const textY = pad + drop + markDrop(size) + CAP_HEIGHT * size - quote.layout.lines[0].y;
   const capLine = textY + quote.layout.lines.at(-1).y + data.attrGap * size + (pill ? pill.y : 0);
   const attrY = capLine + CAP_HEIGHT * font.size - layout.lines[0].y;
-  const bottom = attrY + layout.lines.at(-1).y + WORD_DESCENT * font.size + (pill ? pill.y : 0);
+  const textBottom = attrY + layout.lines.at(-1).y + WORD_DESCENT * font.size + (pill ? pill.y : 0);
   // the card wraps its text: as wide as its longest line or the attribution row, with the portrait's share kept
-  const content = Math.max(...quote.layout.lines.map((l) => Math.max(0, l.x + l.width)), ruleW + gap + layout.width + (pill ? pill.x : 0));
+  const close = markFont ? closePlace({ ...markFont, size: data.mark * size }, look.grid.gutter * unit, { quote, width, capLine }, measure) : null;
+  const closeEnd = close?.under === false ? quote.layout.width + close.gap + close.width : 0;
+  const bottom = Math.max(textBottom, close?.under ? close.bottom : 0);
+  const content = Math.max(...quote.layout.lines.map((l) => Math.max(0, l.x + l.width)), closeEnd, ruleW + gap + layout.width + (pill ? pill.x : 0));
   return {
     quote, attr: { font, layout }, textX: edge, textY, attrX: edge + ruleW + gap, attrY, pill, capLine,
     ruleY: capLine + (CAP_HEIGHT * font.size) / HALF - (RULE_THICKNESS * unit) / HALF, ruleW,
-    mark: markFont ? { font: { ...markFont, size: data.mark * size }, x: pad, top: pad + drop } : null,
+    mark: markFont ? { font: { ...markFont, size: data.mark * size }, x: pad, top: pad + drop } : null, close,
     w: Math.min(span.w, edge + content + pad + (plan === null ? 0 : plan.reserve)), h: bottom + pad,
   };
+}
+
+// Where the closing mark goes: past the block's widest line on its last line (inside the block it would meet the
+// text), or, when that would run off the text's width (a block already as wide as the card allows), under the block,
+// its ink right-aligned to the block and its ink top on the attribution's cap line: the card closes at bottom right.
+function closePlace(font, gap, { quote, width, capLine }, measure) {
+  const m = measure(CLOSE_MARK, font);
+  const under = quote.layout.width + gap + m.width > width;
+  const height = markInk({ ...font }, measure).height;
+  return { font, gap, width: m.width, under, bottom: capLine + height };
 }
 
 // Where the opening mark's ink sits in `font`: up from the baseline to its top, its height (a quotation mark's ink
@@ -121,6 +137,32 @@ function markNode(shot, ctx, lay, ox, oy, at) {
   const ink = markInk(font, measure);
   const y = oy + top + ink.up - layout.lines[0].y;
   return node('text', `${shot.id}.mark`, { x: ox + x - ink.left, y, layout, font, fill: look.palette.accent, role: 'affix', furniture: true }, { tracks: enterTracks(look, unit, at, { y }) });
+}
+
+// The matching closing mark (with a large opening mark, cosmos): the same size, in the accent, after the last line,
+// its ink top on that line's cap line, arriving with the last word.
+function closeMarkNode(shot, ctx, lay, ox, oy, at) {
+  const { look, unit, measure } = ctx;
+  const { font, gap } = lay.close;
+  const layout = layoutText({ text: CLOSE_MARK, font, maxWidth: 1e6, measure });
+  const last = lay.quote.layout.lines.at(-1);
+  const m = measure(CLOSE_MARK, font);
+  const up = m.inkAscent ?? CAP_HEIGHT * font.size;
+  const capTop = lay.close.under ? oy + lay.capLine : oy + lay.textY + last.y - CAP_HEIGHT * lay.quote.font.size;
+  const y = capTop + up - layout.lines[0].y;
+  const inkRight = Number.isFinite(m.inkRight) ? m.inkRight : m.width;
+  const x = lay.close.under ? ox + lay.textX + lay.quote.layout.width - inkRight : ox + lay.textX + lay.quote.layout.width + gap - (m.inkLeft ?? 0);
+  return node('text', `${shot.id}.close`, { x, y, layout, font, fill: look.palette.accent, role: 'affix', furniture: true }, { tracks: enterTracks(look, unit, at, { y }) });
+}
+
+// Short sentences one per line (data.sentenceLines: { words }, cosmos): when every sentence has at most `words` words, a
+// forced break (a lone '|', text/layout.mjs) after each; else the text as it is.
+const SENTENCE_END = /(?<=[.!?][\u201d\u2019"')]?)\s+/;
+function sentenceLines(text, rule) {
+  if (!rule) return text;
+  const sentences = text.split(SENTENCE_END).filter((s) => s.length > 0);
+  if (sentences.length < 2 || sentences.some((s) => s.split(/\s+/).length > rule.words)) return text;
+  return sentences.join(' | ');
 }
 
 // The attribution's pill (cosmos): a plate as the look's tag is, around the attribution's lines.
@@ -148,13 +190,39 @@ function cardChildren(shot, ctx, lay, times) {
   const rule = node('path', `${shot.id}.rule`, { d: rectPath(lay.ruleW, RULE_THICKNESS * unit), fill: look.palette.ink, x: ox + lay.textX, y: ruleY }, {
     tracks: enterTracks(look, unit, times.by, { y: ruleY }),
   });
-  const byFill = lay.pill ? colourOf(look, look.devices?.tag?.text ?? 'paper') : look.palette.ink;
+  const byFill = lay.pill ? colourOf(look, look.devices?.tag?.text ?? 'paper') : colourOf(look, ctx.look.kinds?.quote?.attrFill ?? 'ink');
   const by = node('text', `${shot.id}.by`, { x: ox + lay.attrX, y: attrY, layout: lay.attr.layout, font: lay.attr.font, fill: byFill, role: 'label' }, {
     tracks: enterTracks(look, unit, times.by, { y: attrY }),
   });
   const mark = lay.mark ? [markNode(shot, ctx, lay, ox, oy, times.words[0]?.at ?? 0)] : [];
+  const close = lay.close ? [closeMarkNode(shot, ctx, lay, ox, oy, times.words.at(-1)?.at ?? 0)] : [];
   const attribution = lay.pill ? [pillNode(shot, ctx, lay, ox, oy, times.by), by] : [rule, by];
-  return { children: [...highlightBands(shot.id, placed, times.words, ctx, 'quote'), ...mark, quote, ...attribution], placed, attrY };
+  return { children: [...highlightBands(shot.id, placed, times.words, ctx, 'quote'), ...mark, quote, ...close, ...attribution], placed, attrY };
+}
+
+// The card growing with the text (data.grow, cosmos): its paper scaled down from its top edge to the height of the
+// lines spoken so far, stepping down a line as each line's first word arrives and to the whole card with the
+// attribution. The texts are not scaled.
+function growingCard(card, hero, children, lay, times, ctx) {
+  const { look } = ctx;
+  const { dur, ease } = look.moves.enter;
+  const size = lay.quote.font.size;
+  // the card down to a line's descent and the card's padding (its text edge, the same padding in a mark layout)
+  const share = (line) => Math.min(1, (lay.textY + line.y + WORD_DESCENT * size + lay.textX) / lay.h);
+  const lines = lay.quote.layout.lines;
+  const keys = [{ t: 0, v: share(lines[0]) }];
+  lines.slice(1).forEach((line, i) => {
+    const at = times.words[line.words[0].index]?.at ?? 0;
+    // grown to the line by the time its first word arrives (it never spills past the paper)
+    const from = Math.max(keys.at(-1).t, at - dur);
+    keys.push({ t: from, v: share(lines[i]) }, { t: from + dur, v: share(line), ease });
+  });
+  const by = Math.max(keys.at(-1).t, times.by - dur);
+  keys.push({ t: by, v: keys.at(-1).v }, { t: by + dur, v: 1, ease });
+  const parts = asTextCard(hero, card.children).map((n) => (n.props.textCard ? node(n.type, n.id, { ...n.props, card: hero }, { tracks: n.tracks, children: n.children }) : n));
+  const paper = node('group', `${hero}.grow.in`, { y: lay.h / HALF }, { children: parts });
+  const grow = node('group', `${hero}.grow`, { y: -lay.h / HALF }, { tracks: { scaleY: track(keys) }, children: [paper] });
+  return node('group', hero, { ...card.props }, { tracks: card.tracks, children: [grow, ...children] });
 }
 
 /** The desk quote: { nodes (the card group, the portrait), boxes } with the card group carrying the hero id. */
@@ -173,7 +241,7 @@ export function expandDeskQuote(shot, ctx, data, times, hero) {
   // the card is on the desk from the shot's first frame (its words arrive as spoken): a shot never opens on the field alone
   const card = cardOf(ctx, hero, box, 0);
   const { children, placed, attrY } = cardChildren(shot, ctx, lay, times);
-  const group = cardGroup(card, hero, children);
+  const group = data.grow ? growingCard(card, hero, children, lay, times, ctx) : cardGroup(card, hero, children);
   const cx = box[0] + lay.w / HALF, cy = box[1] + lay.h / HALF;
   const words = wordBoxes(placed.layout, cx + placed.x, cy + placed.y);
   const attr = lay.attr.layout;

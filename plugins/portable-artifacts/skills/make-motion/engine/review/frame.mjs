@@ -357,7 +357,8 @@ function textCards(sampled) {
   const walk = (n, opacity, parent) => {
     const o = opacity * (n.opacity ?? 1);
     if (o <= 0) return;
-    if (n.props?.textCard === true && parent && isBox(n.bbox)) cards.push({ card: parent, box: n.bbox });
+    // a paper may name its card (props.card: a card whose paper is scaled in a group of its own, quote-desk growingCard)
+    if (n.props?.textCard === true && parent && isBox(n.bbox)) cards.push({ card: n.props.card ?? parent, box: n.bbox });
     (n.children ?? []).forEach((child) => walk(child, o, n.id));
   };
   (Array.isArray(sampled) ? sampled : []).forEach((n) => walk(n, 1, null));

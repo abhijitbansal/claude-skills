@@ -13,6 +13,7 @@ import { layoutText, unclean } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { landing } from '../devices/shared.mjs';
 import { glowFill, glowStyle } from '../devices/glow.mjs';
+import { sunNodes } from '../devices/sun.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
@@ -61,7 +62,9 @@ const kickerRoom = (look, unit) => (KICKER.gap + look.scale[KICKER.step - 1] * C
 // together[i]: on-screen word i and the next are both emphasised, so a highlight look's fit keeps them on one line when
 // a slightly smaller size allows (fitText): a highlight that breaks across lines paints more than it points.
 function highlightTogether(text, ctx) {
-  if (ctx.look.emphasis !== 'highlight') return [];
+  // a glow look may keep its emphasised phrases whole on a wide frame (look.kinds.statement.together, cosmos)
+  const keeps = ctx.look.emphasis === 'glow' && ctx.look.kinds?.statement?.together === true && isWide(ctx.canvas);
+  if (ctx.look.emphasis !== 'highlight' && !keeps) return [];
   const times = wordTimes(wordsOf(text), ctx.timing);
   const emphasised = times.map(({ spoken }) => spoken !== null && ctx.timing.words[spoken].emphasis);
   return emphasised.map((on, i) => on && emphasised[i + 1] === true);
@@ -72,16 +75,28 @@ function highlightTogether(text, ctx) {
 // null): the fit prefers a layout whose block, so placed, stays off it.
 function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const { look, unit } = ctx;
-  const span = editorialSpan(ctx, FIRST_COLUMN, to);
+  const data = look.kinds?.statement ?? {}; // look data (cosmos): tallFrom, tallHeight, linesWide, toWide, together
+  const wide = isWide(ctx.canvas);
+  const span = editorialSpan(ctx, !wide && data.tallFrom ? data.tallFrom : FIRST_COLUMN, to);
   const bounds = editorialBounds(ctx);
   const min = sizeAt(look, DESK.fromStep, unit), max = DESK.max * unit;
   const font = fontFor(look, 'display', max, unit);
   const place = (layout, at) => ({ layout, font: at, x: span.x, y: bounds.at(DESK.centre) - (inkSpan(layout).top + inkSpan(layout).bottom) / HALF, span });
-  const accept = clear ? (layout) => !overlaps(clear, blockInk(place(layout, { ...font, size: layout.size }), ctx.measure)) : undefined;
-  const opts = { text, font, maxWidth: span.w, align: 'left', measure: ctx.measure, optical: true, together: highlightTogether(text, ctx), accept };
-  // a look may allow more lines on a tall frame (look.maxLinesTall, cosmos: a wide face would set the hook small)
-  const maxLines = !isWide(ctx.canvas) && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;
-  const fitted = fitDisplay(opts, { min, max, maxHeight: bounds.height(DESK.height), maxLines, tradeFloor }, look, unit);
+  const together = highlightTogether(text, ctx);
+  // with data.together (cosmos, wide) a layout that breaks inside an emphasised run is refused, not just ranked lower
+  const whole = (layout) => !(data.together && wide) || !layout.lines.some((line) => together[line.words.at(-1).index]);
+  const clears = (layout) => !clear || !overlaps(clear, blockInk(place(layout, { ...font, size: layout.size }), ctx.measure));
+  const accept = clear || (data.together && wide) ? (layout) => clears(layout) && whole(layout) : undefined;
+  const opts = { text, font, maxWidth: span.w, align: 'left', measure: ctx.measure, optical: true, together, accept };
+  // a look may allow more lines and more of the band's height on a tall frame (look.maxLinesTall, kinds.statement
+  // tallHeight, cosmos: a wide face would set the hook small), and ask a wide frame for at most `linesWide` lines
+  const maxLines = !wide && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;
+  const maxHeight = bounds.height(!wide && data.tallHeight ? data.tallHeight : DESK.height);
+  // a phrase kept whole may cost size: the fit looks down to the kind's floor for a layout that keeps it
+  const floor = data.together && wide ? Math.max(tradeFloor, min) : tradeFloor;
+  const fit = (lines) => fitDisplay(opts, { min, max, maxHeight, maxLines: lines, tradeFloor: floor }, look, unit);
+  const fewer = wide && data.linesWide ? fit(data.linesWide) : null;
+  const fitted = fewer && !fewer.layout.overflow && whole(fewer.layout) ? fewer : fit(maxLines);
   return place(fitted.layout, fitted.font);
 }
 
@@ -120,7 +135,7 @@ function dropBelow(placed, clear, ctx) {
 // frame review reports text left over a card: card-overlap).
 function composeEditorial(text, shot, ctx) {
   const { look, canvas, unit, measure } = ctx;
-  const last = isWide(canvas) ? DESK.toWide : DESK.toTall;
+  const last = isWide(canvas) ? look.kinds?.statement?.toWide ?? DESK.toWide : DESK.toTall;
   const slug = slugBox(shot, ctx);
   const clear = slug ? slugClearance(slug, ctx) : null;
   // a statement stays three times the slug's kicker (the hero ratio the review asks of a frame's own texts; the slug is
@@ -219,6 +234,8 @@ function wordTracksFor(words, times, ctx, matched) {
   return words.map((w, i) => {
     const { at, spoken } = times[i];
     const emphasised = spoken !== null && timing.words[spoken].emphasis;
+    // a look whose hook opens at full ink (look.hookInk, cosmos): every word in ink from frame 0, the emphasis by the glow
+    if (hook && look.hookInk) return look.emphasis === 'glow' && emphasised ? glowFill(look, at) : {};
     if (hook) {
       const lit = hookTracks(look, at, emphasised ? look.palette.accent : look.palette.ink, recolour ? peaks.get(w.word.index) : undefined);
       return look.emphasis === 'glow' && emphasised ? { ...lit, glow: glowFill(look, at).glow } : lit;
@@ -295,7 +312,7 @@ function expandStatement(shot, ctx) {
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'text', behind });
   const firstAt = times.length > 0 ? Math.min(look.moves.enter.dur, times[0].at) : 0;
-  const base = [fieldNode(shot, ctx), ...kickerNodes(shot, ctx, placed, firstAt), ...highlightBands(shot.id, placed, times, ctx, 'statement'), text];
+  const base = [fieldNode(shot, ctx), ...statementSun(shot, ctx, times, boxes), ...kickerNodes(shot, ctx, placed, firstAt), ...highlightBands(shot.id, placed, times, ctx, 'statement'), text];
   return {
     nodes: placeDevices(base, devices),
     camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],
@@ -303,6 +320,20 @@ function expandStatement(shot, ctx) {
     hero,
     background: look.palette.paper,
   };
+}
+
+// The look's sun behind the emphasised words (look.sun, kinds.statement.sun: { share of the frame's short side, offset
+// of the radius to the right of the phrase, strength }): large and low, off to one side so the words take their light
+// from it, lighting as the first of them is spoken. [] without a sun or an emphasis.
+function statementSun(shot, ctx, times, boxes) {
+  const { look, canvas, timing } = ctx;
+  const data = look.kinds?.statement?.sun;
+  const lit = times.map((t, i) => ({ ...t, i })).filter(({ spoken }) => spoken !== null && timing.words[spoken].emphasis);
+  if (!data || lit.length === 0) return [];
+  const [x, y, w, h] = unionBox(lit.map(({ i }) => boxes[`word:${i}`]));
+  const r = data.share * Math.min(canvas.w, canvas.h);
+  const cx = Math.min(canvas.w, x + w + data.offset * r);
+  return sunNodes(`${shot.id}.sun`, look, { cx, cy: y + h / HALF, r, strength: data.strength, at: lit[0].at });
 }
 
 // Emphasis is a pointer, not a paint job: in a highlight look a statement whose emphasised words are EMPHASIS_SHARE of

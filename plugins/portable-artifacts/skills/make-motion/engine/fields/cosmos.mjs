@@ -17,7 +17,7 @@ import {
 
 // Random streams of this field. shared.mjs LAYERS holds 0 to 5 (paper, mesh, halftone); these continue after it, so a
 // cosmos film and a paper film with the same seed are not correlated.
-const COSMOS_LAYERS = Object.freeze({ farStars: 6, nearStars: 7, drift: 8 });
+const COSMOS_LAYERS = Object.freeze({ farStars: 6, nearStars: 7, drift: 8, glints: 9 });
 
 // Sizes are in units (1 unit = short side / 1080); speeds in units per second. plan() scales them by `unit`.
 const STAR_COUNT = [60, 140]; // per layer on REFERENCE_AREA, scaled by the field's area
@@ -58,7 +58,13 @@ const BLOOM_MIX = 0.5; // the bloom colour: the accent pushed this far toward in
 const BLOOM_STOPS = Object.freeze([[0, 1], [0.35, 0.55], [1, 0]]);
 const BLOOM_DRIFT = 0.025; // share of the field's short side it wanders either way
 const BLOOM_PERIOD = 40; // seconds for one slow loop
-const RULES = Object.freeze({ stars: { min: 0, max: MAX_STARS, int: true }, bloom: { min: 0, max: MAX_BLOOM } });
+// The glints (param `glints`: how many, 0 for none): a few larger soft stars nearer the camera, a depth cue. One cached
+// soft dot drawn at each, drifting GLINT_SPEED times the near layer (parallax).
+const MAX_GLINTS = 24;
+const GLINT_RADIUS = [7, 13]; // units
+const GLINT_ALPHA = 0.55;
+const GLINT_SPEED = 1.8;
+const RULES = Object.freeze({ stars: { min: 0, max: MAX_STARS, int: true }, bloom: { min: 0, max: MAX_BLOOM }, glints: { min: 0, max: MAX_GLINTS, int: true } });
 
 // sRGB relative luminance, as WCAG defines it (shared/contrast.mjs is not served to the page).
 const LINEAR_KNEE = 0.03928, LINEAR_SLOPE = 12.92, GAMMA_OFFSET = 0.055, GAMMA_SCALE = 1.055, GAMMA = 2.4;
@@ -108,6 +114,13 @@ function planLayer(rng, spec, { w, h, unit }, count, heading) {
   };
 }
 
+function planGlints(seed, { w, h, unit }, count, near) {
+  const rng = layerRng(seed, COSMOS_LAYERS.glints);
+  const r = GLINT_RADIUS[1] * unit;
+  const spots = Array.from({ length: count }, () => [rng() * w, rng() * h, (GLINT_RADIUS[0] + rng() * (GLINT_RADIUS[1] - GLINT_RADIUS[0])) / GLINT_RADIUS[1]]);
+  return { r, spots, vx: near.vx * GLINT_SPEED, vy: near.vy * GLINT_SPEED, alpha: GLINT_ALPHA };
+}
+
 function planBloom({ w, h }, palette, alpha) {
   const short = Math.min(w, h);
   return { x: BLOOM_AT[0] * w, y: BLOOM_AT[1] * h, r: BLOOM_RADIUS * short, drift: BLOOM_DRIFT * short, color: mix(palette.accent, palette.ink2, BLOOM_MIX), alpha };
@@ -138,11 +151,12 @@ export function plan(input) {
   const top = palette.deep, bottom = palette.paper;
   const { lift, peak: liftPeak } = planLift({ w, h }, palette, top, bottom);
   const bloom = params.bloom > 0 ? planBloom({ w, h }, palette, params.bloom) : null;
+  const glints = params.glints > 0 ? planGlints(seed, { w, h, unit }, params.glints, layers[1]) : null;
   // the lightest colour under text: the bloom's centre over the bottom of the gradient, when it is lighter still
   const behindBloom = bloom ? mix(bottom, bloom.color, bloom.alpha) : liftPeak;
   const peak = luminance(behindBloom) > luminance(liftPeak) ? behindBloom : liftPeak;
   return deepFreeze({
-    field: 'cosmos', w, h, unit, top, bottom, lift, bloom, peak, starColor: palette.ink,
+    field: 'cosmos', w, h, unit, top, bottom, lift, bloom, glints, peak, starColor: palette.ink,
     vignette: { color: palette.deep, alpha: VIGNETTE_ALPHA, inner: VIGNETTE_INNER },
     layers,
   });
@@ -184,6 +198,23 @@ function buildVignette(c, p) {
   c.fillRect(0, 0, p.w, p.h);
 }
 
+function buildGlint(c, g, color) {
+  const dot = c.createRadialGradient(g.r, g.r, 0, g.r, g.r, g.r);
+  dot.addColorStop(0, rgba(color, g.alpha));
+  dot.addColorStop(0.25, rgba(color, g.alpha * 0.45));
+  dot.addColorStop(1, rgba(color, 0));
+  c.fillStyle = dot;
+  c.fillRect(0, 0, HALF * g.r, HALF * g.r);
+}
+
+function drawGlints(c, p, sprite, t) {
+  const { r, spots, vx, vy } = p.glints;
+  for (const [x, y, share] of spots) {
+    const size = HALF * r * share;
+    c.drawImage(sprite, wrap(x + vx * t, p.w) - size / HALF, wrap(y + vy * t, p.h) - size / HALF, size, size);
+  }
+}
+
 function buildBloom(c, b) {
   const glow = c.createRadialGradient(b.r, b.r, 0, b.r, b.r, b.r);
   for (const [at, share] of BLOOM_STOPS) glow.addColorStop(at, rgba(b.color, b.alpha * share));
@@ -207,7 +238,9 @@ function stillsOf(p) {
     buildVignette(vignette.ctx, p);
     const bloom = p.bloom ? createSurface(Math.ceil(HALF * p.bloom.r), Math.ceil(HALF * p.bloom.r)) : null;
     if (bloom) buildBloom(bloom.ctx, p.bloom);
-    cache.set(p, { ground: ground.canvas, vignette: vignette.canvas, bloom: bloom?.canvas ?? null });
+    const glint = p.glints ? createSurface(Math.ceil(HALF * p.glints.r), Math.ceil(HALF * p.glints.r)) : null;
+    if (glint) buildGlint(glint.ctx, p.glints, p.starColor);
+    cache.set(p, { ground: ground.canvas, vignette: vignette.canvas, bloom: bloom?.canvas ?? null, glint: glint?.canvas ?? null });
   }
   return cache.get(p);
 }
@@ -236,6 +269,7 @@ export function paint(ctx, fieldPlan, t) {
     c.drawImage(stills.ground, 0, 0);
     if (stills.bloom) c.drawImage(stills.bloom, ...bloomAt(fieldPlan.bloom, t));
     drawStars(c, fieldPlan, t);
+    if (stills.glint) drawGlints(c, fieldPlan, stills.glint, t);
     c.drawImage(stills.vignette, 0, 0);
   });
 }

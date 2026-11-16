@@ -152,6 +152,16 @@ function timedShot(shot, pace, words, index) {
   return measuredShot(shot, pace, measured, index);
 }
 
+// The pace one shot is timed at: the film's, with a longer tail where the film's look asks one for the shot's kind
+// (look.kinds.end.wordmark.tail, cosmos: the finished end card holds before the film ends). A look not registered
+// here (a bare timeline) asks nothing.
+function shotPace(film, shot, pace) {
+  const looks = registries.looks;
+  const look = looks && typeof film.look === 'string' && looks.has(film.look) ? looks.get(film.look) : null;
+  const floor = shot.show === 'end' ? look?.kinds?.end?.wordmark?.tail : undefined;
+  return Number.isFinite(floor) && shot.mark !== undefined && floor > pace.tail ? { ...pace, tail: floor } : pace;
+}
+
 const toFrames = (seconds, fps) => Math.ceil(Math.max(MIN_SHOT_SECONDS, seconds) * fps - FRAME_EPSILON);
 
 // { wpm, tail } of the registered mode `name`; the registry's own error for an unknown one.
@@ -310,7 +320,7 @@ export function buildTimeline(film, { fps, modes = registries.modes, words, reco
 
   let startFrame = 0;
   const shots = film.shots.map((shot, index) => {
-    const { seconds, words: shotWords, sentences } = timedShot(shot, pace, words, index);
+    const { seconds, words: shotWords, sentences } = timedShot(shot, shotPace(film, shot, pace), words, index);
     const frames = toFrames(seconds, fps);
     const entry = {
       id: shot.id,

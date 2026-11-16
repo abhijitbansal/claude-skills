@@ -39,6 +39,8 @@ export function chartStyle(ctx, data) {
     // `direct`: every mark carries its value, so no baseline rule is drawn (refs off drops the gridlines and ticks);
     // `fill`, the share of its band a column or bar takes
     axis: data.direct !== true, fill: data.fill,
+    // `dimTo`: a palette key the other marks turn to at the highlight (cosmos: the one lavender dim), not an alpha
+    dimTo: data.dimTo ? colourOf(look, data.dimTo) : null,
   };
 }
 
@@ -106,10 +108,12 @@ function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, t
   const grow = landing(win.end, { ease: look.moves.enter.ease, dur: win.dur }, 0, 1, style.step);
   const d = style.round > 0 ? roundPath(across, length, horizontal, style.round) : markPath(across, length, horizontal);
   const scale = horizontal ? { scaleX: grow } : { scaleY: grow };
-  const dims = hl >= 0 && k !== hl ? dimTracks(look, times.highlightAt, style.dim) : {};
+  const dimmed = hl >= 0 && k !== hl;
+  const dims = dimmed && !style.dimTo ? dimTracks(look, times.highlightAt, style.dim) : {};
   const fill = style.marks ? style.marks[k % style.marks.length] : style.mark;
   const out = [node('path', `${shot.id}.mark.${k}`, { d, fill, x, y }, { tracks: { ...scale, ...dims }, step: style.step })];
   if (k === hl && style.glow > 0) out.push(markGlow(`${shot.id}.mark.${k}.glow`, look, style, { x, y, across, length, horizontal }, times.highlightAt));
+  if (dimmed && style.dimTo) out.push(node('path', `${shot.id}.mark.${k}.dim`, { d, fill: style.dimTo, x, y }, { tracks: arriveAt(look, times.highlightAt), step: style.step }));
   if (k === hl) out.push(node('path', `${shot.id}.mark.${k}.accent`, { d, fill: style.accent, x, y }, { tracks: arriveAt(look, times.highlightAt) }));
   return out;
 }

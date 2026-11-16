@@ -16,6 +16,7 @@ import { track } from '../time/track.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
 import { paperScrim } from './shared.mjs';
+import { drawsDiscs, expandDiscs } from './compare-discs.mjs';
 import { slugBox, slugNodes } from './slug.mjs';
 
 const EPSILON = 1e-6;
@@ -204,7 +205,7 @@ function spokenFill(look, turn, lifts) {
   const { dur, ease } = look.moves.draw;
   const { ink, accent } = look.palette;
   const [from, to] = lifts ? [ink, accent] : [accent, ink];
-  return track([{ t: 0, v: from }, { t: turn, v: from }, { t: turn + dur, v: to, ease }]);
+  return track([{ t: 0, v: from }, { t: turn, v: from }, { t: turn + dur, v: to, ease }], { space: look.colorSpace });
 }
 
 // The vs as a pill (look data `vs: 'pill'`, cosmos): the look's tag round "vs", centred on (cx, cy), in at the turn.
@@ -243,6 +244,8 @@ function betweenMarks(shot, ctx, data, [a, b], turn) {
 
 /** The desk compare: { nodes, boxes, group } with the group (both cards) carrying the hero id. */
 export function expandDeskCompare(shot, ctx, data, turn, hero) {
+  // a look that draws scale (cosmos): two discs in the true ratio when both values are numbers (compare-discs.mjs)
+  if (drawsDiscs(shot, data)) return expandDiscs(shot, ctx, data, turn, hero);
   const { look, canvas, unit, seed } = ctx;
   const wide = isWide(canvas);
   const margin = look.grid.margin * unit, gap = data.gap * look.grid.gutter * unit, pad = data.pad * unit;

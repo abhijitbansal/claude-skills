@@ -63,6 +63,17 @@ test('a viral cosmos hook (read from frame 0): the emphasised word lights to the
   assert.equal(glowWords(textNode(second.nodes, 's.text')).length, 1);
 });
 
+test('a viral cosmos hook opens at full contrast: on frame 0 every word is opaque ink (no ghost), the emphasis lights by the glow', () => {
+  const { nodes } = expandIn(filmOf([SHOT], 'cosmos', '9:16', { mode: 'viral' }));
+  const text = textNode(nodes, 's.text');
+  const ink = cosmos.palette.ink;
+  text.wordTracks.forEach((w, i) => {
+    assert.equal(w.ghost, undefined, `word ${i} is not a ghost`);
+    assert.equal(w.opacity === undefined ? 1 : sample(w.opacity, 0), 1, `word ${i} opaque on frame 0`);
+    assert.equal(w.fill === undefined ? ink : sample(w.fill, 0), ink, `word ${i} in ink on frame 0`);
+  });
+});
+
 test('desk and pop statements carry no glow', () => {
   for (const [look, format] of [['desk', '16:9'], ['pop', '9:16']]) {
     const text = textNode(expandShot(SHOT, look, format).nodes);

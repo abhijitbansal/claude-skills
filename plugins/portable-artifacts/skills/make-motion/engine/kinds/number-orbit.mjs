@@ -1,12 +1,14 @@
 // The number kind's orbit (look.kinds.number.orbit, cosmos): a tilted ellipse round the figure, large enough to leave
 // air round its cap box, faint from the first frame, with a small bright dot that circles it once as the figure counts
-// (from the count's start to its landing); the ellipse brightens as the figure lands. Pure and DOM-free.
+// (from the count's start to its landing) and keeps circling slowly to the end of the shot; the ellipse brightens as
+// the figure lands, and the look's sun sits at its focus. Pure and DOM-free.
 //
 // orbit data: { tilt (degrees), ratio (minor / major axis), air (share past the box's corners), width (units of
 // stroke), dot (units of radius), faint and lit (the ellipse's opacity before and after the landing) }.
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { CAP_HEIGHT } from './shared.mjs';
+import { sunNodes } from '../devices/sun.mjs';
 
 const HALF = 2;
 const DEGREES_TO_RADIANS = Math.PI / 180;
@@ -15,6 +17,8 @@ const BEZIER_CIRCLE = 0.5523;
 const DOT_GLOW = 2.5; // the dot's light, in dot radii of blur
 const DOT_GLOW_ALPHA = 0.9;
 const ROUND = 100; // path coordinates to 0.01 px
+const REST_TURN = 24; // degrees a second the dot keeps circling after the count lands: the orbit never stops
+const SUN_SHARE = 1.1; // the sun's radius, of the orbit's minor half axis
 
 /**
  * The orbit round a box { width, height } (its cap box, centred): its tilt, the ellipse's half axes a and b in its own
@@ -64,8 +68,11 @@ export function orbitNodes(id, ctx, { left, width, baseline, size }, times, orbi
     d: ellipsePath(r, r / orbit.ratio), x: 0, y: -a,
     fill: look.palette.ink, glow: { color: look.palette.accent, alpha: DOT_GLOW_ALPHA, radius: DOT_GLOW * r },
   });
-  const turn = track([{ t: 0, v: 0 }, { t: times.start, v: 0 }, { t: Math.max(times.start + 1 / fps, times.land), v: FULL_TURN, ease: look.moves.count.ease }]);
+  const landed = Math.max(times.start + 1 / fps, times.land), end = Math.max(landed, ctx.timing.duration);
+  const turn = track([{ t: 0, v: 0 }, { t: times.start, v: 0 }, { t: landed, v: FULL_TURN, ease: look.moves.count.ease }, { t: end, v: FULL_TURN + REST_TURN * (end - landed) }]);
   const spin = node('group', `${id}.orbit.spin`, {}, { tracks: { rotate: turn }, children: [dot] });
   const squash = node('group', `${id}.orbit.path`, { scaleY: orbit.ratio }, { children: [spin] });
-  return [node('group', `${id}.orbit`, { x: left + width / HALF, y: baseline - height / HALF, rotate: tilt }, { children: [ring, squash] })];
+  // the light source at the ellipse's focus (look.sun): the figure's orbit is round a sun
+  const sun = sunNodes(`${id}.orbit.sun`, look, { cx: -Math.sqrt(Math.max(0, a * a - b * b)), cy: 0, r: SUN_SHARE * b });
+  return [node('group', `${id}.orbit`, { x: left + width / HALF, y: baseline - height / HALF, rotate: tilt }, { children: [...sun, ring, squash] })];
 }

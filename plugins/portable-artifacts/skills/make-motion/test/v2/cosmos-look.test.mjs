@@ -87,7 +87,7 @@ test('composition, emphasis, field, camera, cuts, grain, captions and modes', ()
   const l = look();
   assert.equal(l.composition, 'editorial', 'statements flush left on the grid');
   assert.equal(l.emphasis, 'glow');
-  assert.deepEqual({ ...l.field, params: { ...l.field.params } }, { field: 'cosmos', params: { bloom: 0.08 } });
+  assert.deepEqual({ ...l.field, params: { ...l.field.params } }, { field: 'cosmos', params: { bloom: 0.08, glints: 9 } });
   assert.equal(l.camera.style, 'desk', 'the resting drift: linear, no shake');
   assert.ok(l.camera.drift > 0 && l.camera.drift <= 12, `a slow drift: ${l.camera.drift} units`);
   assert.deepEqual([...l.cuts], ['cut', 'match']);

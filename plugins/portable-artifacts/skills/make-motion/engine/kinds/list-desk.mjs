@@ -11,6 +11,7 @@ import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { roundedRect } from '../devices/shared.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
+import { sunNodes } from '../devices/sun.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, inkExtent, capBox, unionBox, driftReach, arrivesMatched, overlaps, stepUnder,
 } from './shared.mjs';
@@ -112,7 +113,8 @@ function dotRail(id, centres, times, dots, ctx) {
     if (times[k + 1] !== undefined) keys.push({ t: times[k + 1], v: peak }, { t: times[k + 1] + dur, v: 0, ease: DIM_EASE });
     return track(keys);
   };
-  const shown = (k) => enterTracks(look, unit, times[k], { y: 0 }).opacity;
+  // with previews every dot and the whole rail are there from frame 0 (look.kinds.list.previews, cosmos)
+  const shown = (k) => (dots.previews ? track([{ t: 0, v: 1 }]) : enterTracks(look, unit, times[k], { y: 0 }).opacity);
   const railW = dots.line * unit;
   // the rail grows with the list: the segment to dot k arrives with item k
   const rail = centres.slice(1).map(([x, y], k) => {
@@ -121,18 +123,43 @@ function dotRail(id, centres, times, dots, ctx) {
       tracks: { opacity: track(shown(k + 1).points.map((p, i) => ({ t: p.t, v: p.v * DOT.railAlpha, ...(i > 0 ? { ease: look.moves.enter.ease } : {}) }))) },
     });
   });
-  return [...rail, ...centres.flatMap((c, k) => [
+  return [...pathLight(id, centres, times, dots, ctx), ...rail, ...centres.flatMap((c, k) => [
     node('path', `${id}.dot${k}`, { d: circle(c, r), fill: look.palette.ink2 }, { tracks: { opacity: shown(k) } }),
     node('path', `${id}.halo${k}`, { d: circle(c, r * DOT.halo), fill: look.palette.accent, blend: 'screen' }, { tracks: { opacity: lit(k, DOT.haloAlpha) } }),
     node('path', `${id}.lit${k}`, { d: circle(c, r), fill: look.palette.accent }, { tracks: { opacity: lit(k, 1) } }),
   ])];
 }
 
+// The light along the path (dots.light, cosmos): the look's sun at the path's start, and each segment of the rail lit
+// in the accent as its item arrives, so the light travels down the path to the current item. [] without it.
+function pathLight(id, centres, times, dots, ctx) {
+  if (!dots.light) return [];
+  const { look, unit } = ctx;
+  const w = dots.line * unit, [x0, y0] = centres[0];
+  const sun = sunNodes(`${id}.sun`, look, { cx: x0, cy: y0, r: dots.light.sun * unit, strength: dots.light.strength });
+  const lit = centres.slice(1).map(([x, y], k) => {
+    const from = centres[k][1];
+    const on = track([{ t: 0, v: 0 }, { t: times[k + 1], v: 0 }, { t: times[k + 1] + look.moves.draw.dur, v: 1, ease: look.moves.draw.ease }]);
+    return node('path', `${id}.path${k}`, { d: roundedRect(x - w / HALF, from, w, Math.max(1, y - from), w / HALF), fill: look.palette.accent }, { tracks: { opacity: on } });
+  });
+  return [...sun, ...lit];
+}
+
+// An item's fill with previews (cosmos): ink2 from frame 0, lit to ink while it is current (from `at` to `next`),
+// back to ink2 after; one dim colour for every state that is not current.
+function previewTrack(look, at, next) {
+  const { ink, ink2 } = look.palette;
+  const { dur } = look.moves.emphasize;
+  const keys = [{ t: 0, v: ink2 }, { t: at, v: ink2 }, { t: at + dur, v: ink, ease: DIM_EASE }];
+  if (next !== undefined) keys.push({ t: next, v: ink }, { t: next + dur, v: ink2, ease: DIM_EASE });
+  return track(keys, { space: look.colorSpace });
+}
+
 // A word track that holds ink until `dimAt` (never, when undefined), then turns to ink2.
 function dimTrack(look, dimAt) {
   const { ink, ink2 } = look.palette;
   if (dimAt === undefined) return track([{ t: 0, v: ink }]);
-  return track([{ t: 0, v: ink }, { t: dimAt, v: ink }, { t: dimAt + look.moves.emphasize.dur, v: ink2, ease: DIM_EASE }]);
+  return track([{ t: 0, v: ink }, { t: dimAt, v: ink }, { t: dimAt + look.moves.emphasize.dur, v: ink2, ease: DIM_EASE }], { space: look.colorSpace });
 }
 
 // A figure: the item's number as written (1 to 12, never 01) in the display serif at the item's own size (director's
@@ -149,12 +176,22 @@ function figureNode(id, k, size, { right, baseline, stack }, ctx) {
   return { node: node('text', id, { x: right - ink.right, y, layout, font, fill: look.palette.ink2, role: 'label', stack }), y };
 }
 
+// With wide tall-frame spacing (gapTall) the block fills its room, so its ink (a dot, an ascender over the cap line)
+// would sit on the band's edges: a look gives it a share of the room instead (roomTall, cosmos), centred.
+function tallRoom(room, data, canvas) {
+  if (isWide(canvas) || data.roomTall === undefined) return room;
+  const inset = ((room.bottom - room.top) * (1 - data.roomTall)) / HALF;
+  return { top: room.top + inset, bottom: room.bottom - inset };
+}
+
 /**
  * The desk list: { nodes (the slug), group (the hero: items, figures, notes), itemBoxes, wrappers: null }.
  * @param {number[]} times when each item arrives (listTimes)
  */
-export function expandDeskList(shot, ctx, data, times, hero) {
+export function expandDeskList(shot, ctx, given, times, hero) {
   const { look, canvas, unit } = ctx;
+  // a look may space the items wider on a tall frame (gapTall, cosmos), so the path runs the band's height
+  const data = !isWide(canvas) && given.gapTall ? { ...given, gap: given.gapTall } : given;
   const items = itemsOf(shot).map((item) => ({ ...item, text: setCase(look, 'display', item.text) }));
   const dots = data.dots;
   // a look with a dot rail marks every item with its dot, so no figures
@@ -162,7 +199,9 @@ export function expandDeskList(shot, ctx, data, times, hero) {
   const staged = shot.title === undefined ? shot : { ...shot, kicker: shot.title };
   const grid = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
   const span = dots ? { x: grid.x + dots.column * unit, w: grid.w - dots.column * unit } : grid;
-  const room = roomFor(slugBox(staged, ctx), grid, ctx);
+  // a look may drop the slug for lists (look.kinds.list.slug false, cosmos: the badge floated, unexplained)
+  const slugged = data.slug !== false;
+  const room = tallRoom(roomFor(slugged ? slugBox(staged, ctx) : null, grid, ctx), data, canvas);
   const set = fitItems(items, span, room.bottom - room.top, ctx, data, numbered || items.some((i) => i.note !== null));
   const matched = arrivesMatched(shot, ctx);
   const children = [], itemBoxes = [], centres = [];
@@ -170,8 +209,8 @@ export function expandDeskList(shot, ctx, data, times, hero) {
   set.parts.forEach((part, k) => {
     const id = `${shot.id}.item${k}`;
     const y = cursor + CAP_HEIGHT * set.size - part.layout.lines[0].y;
-    const enter = (at, rest) => (matched && k === 0 ? {} : enterTracks(look, unit, at, { y: rest }));
-    const dim = { fill: dimTrack(look, times[k + 1]) };
+    const enter = (at, rest) => ((matched && k === 0) || data.previews ? {} : enterTracks(look, unit, at, { y: rest }));
+    const dim = { fill: data.previews ? previewTrack(look, times[k], times[k + 1]) : dimTrack(look, times[k + 1]) };
     children.push(node('text', id, { x: span.x, y, layout: part.layout, font: set.font, fill: look.palette.ink, role: 'hero', ...(numbered ? { stack: hero } : {}) }, {
       tracks: enter(times[k], y), wordTracks: part.layout.lines.flatMap((line) => line.words.map(() => dim)),
     }));
@@ -192,6 +231,6 @@ export function expandDeskList(shot, ctx, data, times, hero) {
     }
     cursor = last + data.gap * set.size;
   });
-  const rail = dots ? dotRail(shot.id, centres, times, dots, ctx) : [];
-  return { nodes: slugNodes(staged, ctx), group: node('group', hero, {}, { children: [...rail, ...children] }), itemBoxes, wrappers: null };
+  const rail = dots ? dotRail(shot.id, centres, times, { ...dots, previews: data.previews }, ctx) : [];
+  return { nodes: slugged ? slugNodes(staged, ctx) : [], group: node('group', hero, {}, { children: [...rail, ...children] }), itemBoxes, wrappers: null };
 }

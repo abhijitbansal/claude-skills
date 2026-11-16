@@ -267,3 +267,14 @@ test('the bloom param plans a large soft disc low on the field, and the peak the
   assert.equal(lit.bloom.alpha, 0.08);
   assert.throws(() => field.plan({ w: 1920, h: 1080, unit: 1, seed: 1, palette, params: { bloom: 0.5 } }), /bloom/);
 });
+
+test('the glints param plans a few larger soft stars, drifting faster than the near layer (a depth cue); none by default', async () => {
+  const { registries: regs } = await import('../../engine/registry.mjs');
+  const palette = { paper: '#2a1a5e', deep: '#0b1030', ink: '#f4f1ff', ink2: '#a9a4d6', accent: '#ffd166', accent2: '#4de2c5', rule: '#3d3478' };
+  const field = regs.fields.get('cosmos');
+  assert.equal(field.plan({ w: 1920, h: 1080, unit: 1, seed: 1, palette, params: {} }).glints, null);
+  const p = field.plan({ w: 1920, h: 1080, unit: 1, seed: 1, palette, params: { glints: 9 } });
+  assert.equal(p.glints.spots.length, 9);
+  assert.ok(Math.hypot(p.glints.vx, p.glints.vy) > Math.hypot(p.layers[1].vx, p.layers[1].vy), 'nearer: faster');
+  assert.ok(p.glints.r > 3, 'larger than a star');
+});

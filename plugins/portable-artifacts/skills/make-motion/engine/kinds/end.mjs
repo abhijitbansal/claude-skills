@@ -22,6 +22,7 @@ import {
   plainSay, endTimes, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup, plainTag,
 } from './shared.mjs';
 import { SLUG } from './slug.mjs';
+import { expandWordmark } from './end-mark.mjs';
 import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
@@ -252,7 +253,10 @@ function expandEnd(shot, ctx) {
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
   const times = endTimes(shot, timing);
-  const parts = isEditorial(look) ? expandDesk(shot, ctx, data, times) : expandPop(shot, ctx, data, times);
+  // a look may make the end a centred wordmark card (look.kinds.end.wordmark, cosmos: end-mark.mjs) when there is a mark
+  const wordmark = isEditorial(look) && data.wordmark && shot.mark !== undefined && shot.src === undefined;
+  const parts = wordmark ? expandWordmark(shot, ctx, data, times, titleOf(shot))
+    : isEditorial(look) ? expandDesk(shot, ctx, data, times) : expandPop(shot, ctx, data, times);
   const behind = Object.fromEntries(Object.keys(parts.boxes).filter((k) => k === 'title' || k.startsWith('word:')).map((k) => [k, parts.hero]));
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'title', behind });
   return {

@@ -20,7 +20,7 @@ export function glowFill(look, at) {
   const { ink, accent } = look.palette;
   const end = at + look.moves.emphasize.dur;
   return {
-    fill: track([{ t: 0, v: ink }, { t: at, v: ink }, { t: end, v: accent, ease: FILL_EASE }]),
+    fill: track([{ t: 0, v: ink }, { t: at, v: ink }, { t: end, v: accent, ease: FILL_EASE }], { space: look.colorSpace }),
     glow: track([{ t: 0, v: 0 }, { t: at, v: 0 }, { t: end, v: 1, ease: FILL_EASE }]),
   };
 }

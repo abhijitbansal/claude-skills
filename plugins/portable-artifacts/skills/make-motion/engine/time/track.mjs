@@ -2,6 +2,7 @@
 // A value is a number, a number array (interpolated per element), a #rrggbb colour (interpolated per
 // channel) or any other string (stepped: the earlier value holds until the next key). Pure and DOM-free.
 import { ease } from './ease.mjs';
+import { mixOklab } from '../color/oklab.mjs';
 
 const DEFAULT_EASE = 'linear';
 const COLOUR_PATTERN = /^#[0-9a-fA-F]{6}$/;
@@ -59,7 +60,8 @@ function copyValue(v) {
   return typeof v === 'string' && COLOUR_PATTERN.test(v) ? v.toLowerCase() : v;
 }
 
-export function track(keys) {
+// options.space 'oklab': colour keys are mixed in OKLab (engine/color/oklab.mjs) instead of per sRGB channel.
+export function track(keys, { space } = {}) {
   if (!Array.isArray(keys) || keys.length === 0) throw new Error('keys: must have at least one key');
   const first = { kind: null, length: 0 };
   const points = keys.map((key, i) => {
@@ -68,7 +70,7 @@ export function track(keys) {
     if (i === 0) { first.kind = kind; first.length = Array.isArray(key.v) ? key.v.length : 0; }
     return Object.freeze({ t: key.t, v: copyValue(key.v), ease: resolveEase(key.ease, i) });
   });
-  return Object.freeze({ kind: first.kind, points: Object.freeze(points) });
+  return Object.freeze({ kind: first.kind, points: Object.freeze(points), ...(space === 'oklab' ? { space } : {}) });
 }
 
 // ---- sampling ----
@@ -87,10 +89,11 @@ function formatColour(channels) {
   return `#${hex.join('')}`;
 }
 
-function blend(kind, from, to, e) {
+function blend(kind, from, to, e, space) {
   if (kind === 'number') return lerp(from, to, e);
   if (kind === 'array') return from.map((a, i) => lerp(a, to[i], e));
   if (kind === 'colour') {
+    if (space === 'oklab') return mixOklab(from, to, e);
     const b = parseColour(to);
     return formatColour(parseColour(from).map((a, i) => lerp(a, b[i], e)));
   }
@@ -107,7 +110,7 @@ function quantise(t, stepFps) {
 
 export function sample(tr, t, stepFps) {
   if (!isNumber(t)) throw new Error(`sample t: must be a finite number, got ${t}`);
-  const { points, kind } = tr;
+  const { points, kind, space } = tr;
   const time = quantise(t, stepFps);
   let i = -1;
   while (i + 1 < points.length && points[i + 1].t <= time) i++;
@@ -115,5 +118,5 @@ export function sample(tr, t, stepFps) {
   if (i === points.length - 1 || time === points[i].t) return out(points[i].v);
   const next = points[i + 1];
   const p = (time - points[i].t) / (next.t - points[i].t); // next.t > time >= points[i].t, so never 0
-  return blend(kind, points[i].v, next.v, next.ease(p));
+  return blend(kind, points[i].v, next.v, next.ease(p), space);
 }
