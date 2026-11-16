@@ -39,7 +39,12 @@ export function drawDonut(shot, ctx, style, box, { valueOnHighlight }) {
   const texts = data.items.map((it) => valueText(it.value, decimals, shot.unit));
   const labelW = Math.max(...data.items.map((it, k) => Math.max(labelWidth(ctx, font, it.key), labelWidth(ctx, font, texts[k], true))));
   const side = labelW + LABEL_GAPS * gap;
-  const r = Math.max(1, Math.min(box.h / HALF, (box.w - HALF * side) / HALF));
+  // never under the look's minimum (style.minPlot of the box's short side): labels too long for it say so instead
+  const floor = (style.minPlot * Math.min(box.w, box.h)) / HALF;
+  const r = Math.max(1, Math.min(box.h / HALF, Math.max(floor, (box.w - HALF * side) / HALF)));
+  // a label wider than the room the ring leaves at its side says so (only that one: a short label is not told to shorten)
+  const room = box.w / HALF - r - LABEL_GAPS * gap;
+  const tooWide = (k) => Math.max(labelWidth(ctx, font, data.items[k].key), labelWidth(ctx, font, texts[k], true)) > room;
   const plot = { x: box.x + box.w / HALF - r, y: box.y + box.h / HALF - r, w: HALF * r, h: HALF * r };
   const ring = donutMarks(data.items, plot);
   const nodes = ring.segments.flatMap((seg) => segmentNodes(shot, ctx, style, { seg, ring, times, hl }));
@@ -52,7 +57,7 @@ export function drawDonut(shot, ctx, style, box, { valueOnHighlight }) {
       const x = which === 'right' ? ring.cx + r + LABEL_GAPS * gap : ring.cx - r - LABEL_GAPS * gap;
       const top = ys[j] - blockH / HALF;
       const highlighted = s.index === hl;
-      const name = label(ctx, { id: `${shot.id}.label.${s.index}`, text: s.key, font, x, y: top + CAP_HEIGHT * font.size, align, fill: highlighted ? style.strong : style.text, crowded: !fits });
+      const name = label(ctx, { id: `${shot.id}.label.${s.index}`, text: s.key, font, x, y: top + CAP_HEIGHT * font.size, align, fill: highlighted ? style.strong : style.text, crowded: !fits || tooWide(s.index) });
       if (highlighted && !valueOnHighlight) return [name.node];
       const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, times.growEnd);
       const value = label(ctx, { id: `${shot.id}.value.${s.index}`, text: texts[s.index], font, x, y: top + ink + lineGap + CAP_HEIGHT * font.size, align, fill: highlighted ? style.strong : style.text, numeric: true, tracks });

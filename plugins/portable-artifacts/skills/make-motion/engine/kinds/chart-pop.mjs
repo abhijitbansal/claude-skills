@@ -5,7 +5,8 @@
 import { node } from '../graph/node.mjs';
 import { landing } from '../devices/shared.mjs';
 import { track } from '../time/track.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, fontFor, plainTag } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, fontFor } from './shared.mjs';
+import { plainTag } from './plain-tag.mjs';
 import { stackArea } from './stack.mjs';
 import { numeralLayout, valueText } from './chart-scale.mjs';
 import { chartStyle, valueDecimals } from './chart-draw.mjs';
@@ -14,6 +15,7 @@ import { label } from './chart-labels.mjs';
 import { chartTimes } from './chart-time.mjs';
 import { chartData } from './chart-marks.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
+import { HERO_MARGIN } from './secondary.mjs';
 
 const HALF = 2;
 const DEFAULT_PUNCH = Object.freeze({ scale: 1.08, dur: 0.12 }); // for a look whose devices name no punch
@@ -38,9 +40,13 @@ function numeralSet(shot, ctx, data, { width, height, labelSize }) {
   if (text === null) return null;
   const { look, unit, measure } = ctx;
   const perUnit = numeralLayout(text, { ...fontFor(look, 'display', 1, unit), size: 1 }, measure).width;
-  const size = Math.max(Math.ceil(MIN_HERO_RATIO * labelSize), Math.min(data.numeralMax * unit, width / perUnit, (data.numeralShare * height) / (CAP_HEIGHT + WORD_DESCENT)));
+  const room = Math.min(data.numeralMax * unit, width / perUnit, (data.numeralShare * height) / (CAP_HEIGHT + WORD_DESCENT));
+  const floor = Math.ceil(MIN_HERO_RATIO * labelSize);
+  const size = Math.max(floor, room);
   const font = fontFor(look, 'display', size, unit);
-  return { font, layout: numeralLayout(text, font, measure), height: (CAP_HEIGHT + WORD_DESCENT) * size };
+  const layout = numeralLayout(text, font, measure);
+  // held at its floor wider than its room (a donut's hole, the plot's share): it says so, the review's fit finding
+  return { font, layout: floor > room && layout.width > width ? { ...layout, overflow: true } : layout, height: (CAP_HEIGHT + WORD_DESCENT) * size };
 }
 
 // The numeral placed with its ink box's centre at (cx, cy), punching in at the highlight: it appears a little over its
@@ -70,12 +76,17 @@ export function expandPopChart(shot, ctx, data, hero) {
   const area = stackArea(ctx);
   const bottom = Math.min(area.top + area.h, captionTop(ctx) - gap);
   const tagStyle = look.devices.tag ?? {};
+  // the claim is read as part of the hierarchy, so the hero rule judges it (role 'claim', review B I10); until the
+  // highlighted numeral punches in (and with no highlight, always) it is the frame's largest text: at least three times
+  // the labels
+  const minSize = Math.ceil(HERO_MARGIN * MIN_HERO_RATIO * font.size);
   const tag = plainTag(ctx, `${shot.id}.title`, shot.title, {
-    left: area.left, top: area.top, maxWidth: area.w, at: 0, fromStep: Math.min(...data.tagSteps), toStep: Math.max(...data.tagSteps), fill: tagStyle.fill ?? 'ink', text: tagStyle.text ?? 'paper', snap: true,
+    left: area.left, top: area.top, maxWidth: area.w, at: 0, fromStep: Math.min(...data.tagSteps), toStep: Math.max(...data.tagSteps), fill: tagStyle.fill ?? 'ink', text: tagStyle.text ?? 'paper', snap: true, role: 'claim', minSize,
   });
   const at = chartTimes(shot, ctx.timing).highlightAt ?? 0;
   const source = shot.source === undefined ? null
-    : label(ctx, { id: `${shot.id}.source`, text: shot.source, font, x: area.left, y: bottom - WORD_DESCENT * font.size - gap / HALF, fill: style.text }); // clear of the safe edge, commas included
+    // clear of the safe edge, commas included; wider than the stack area it says so (the review's fit finding)
+    : label(ctx, { id: `${shot.id}.source`, text: shot.source, font, x: area.left, y: bottom - WORD_DESCENT * font.size - gap / HALF, fill: style.text, maxWidth: area.w });
   const floor = (source === null ? bottom : source.box[1] - gap) - gap;
   const top = tag.box[1] + tag.box[3] + data.tagGap * unit;
   const box = { x: area.left, y: top, w: area.w, h: Math.max(1, floor - top) };

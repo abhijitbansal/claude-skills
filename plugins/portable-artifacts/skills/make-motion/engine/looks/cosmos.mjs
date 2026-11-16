@@ -156,15 +156,19 @@ export const cosmos = {
     // (`plainPoints`), the cards at least `fill` of the height they could take with their copy centred, on the optical
     // centre (`centre`), and the spoken card's rim light (`rim`: alpha, blur units) moving to the other card at the turn
     // with two numeric values the compare draws scale (compare-discs.mjs `discs`): discs in the true ratio, the smaller at
-    // least `minDot` units with a `ring`, the larger the sun at scale off the frame from `edge`, one headline with it
-    compare: { discs: { minDot: 28, fill: 0.8, wide: { edge: 0.56 }, tall: { edge: 0.62 }, gap: 12, valueStep: 3, ratioStep: 4, ring: { gap: 14, width: 4 } }, vs: 'pill', valueAccent: true, plainPoints: true, fill: 0.62, rim: { alpha: 0.45, blur: 34 }, gap: 6, centre: 0.46, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointStep: 2, pointScale: 1, picture: 0.4, pictureGap: 32 },
+    // least `minDot` units with a `ring`, the larger the sun at scale off the frame from `edge`, one headline with it;
+    // under `minRatio` the cards (near equal discs read as two equal circles), a ratio at or over `maxRatio` printed as
+    // "<more> <maxRatio>", the larger disc at most `bigCap` times the room
+    compare: { discs: { minDot: 28, fill: 0.8, wide: { edge: 0.56 }, tall: { edge: 0.62 }, gap: 12, valueStep: 3, ratioStep: 4, ring: { gap: 14, width: 4 }, minRatio: 2, maxRatio: 1e9, more: 'more than', bigCap: 20 }, vs: 'pill', valueAccent: true, plainPoints: true, fill: 0.62, rim: { alpha: 0.45, blur: 34 }, gap: 6, centre: 0.46, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointStep: 2, pointScale: 1, picture: 0.4, pictureGap: 32 },
     // chart: as desk's, the marks in a shape colour (`marks`: one series, one colour; alternating read as categories),
     // far ends rounded at `round` units (half the width read as domes, rendered), and the highlighted mark in the accent with `glow` units of soft light round it
     // (chart-draw.mjs); every mark labelled directly (`direct`, `refs` false: no axis, gridlines or ticks), marks `fill` of
     // their band, labels at step 2, the source at step 1 (both at least the secondary floor) and `sourceGap` gaps apart; the
     // marks grow in the lavender, gold only the highlighted one (`dimTo`: the others stay the one lavender dim); on a tall
     // frame each bar's label over it so the bars take the full safe width (`labelsAbove`)
-    chart: { titleToWide: 11, titleToTall: 12, titleMax: 168, titleLines: 4, titleGap: 56, labelStep: 2, labelScale: 0.88, sourceStep: 1, sourceGap: 5, gap: 14, line: 6, ref: 2, axis: 3, dim: 0.65, refs: false, direct: true, fill: 0.8, dimTo: 'ink2', marks: ['ink2'], labelsAbove: 'tall', round: 16, glow: 22 },
+    // `titleMargin`: the claim at least this many times three times the labels (a hair over, so rounding never takes it
+    // under; desk and pop fit it from exactly three times); `minPlot` as desk's
+    chart: { titleToWide: 11, titleToTall: 12, titleMax: 168, titleLines: 4, titleGap: 56, labelStep: 2, labelScale: 0.88, sourceStep: 1, sourceGap: 5, gap: 14, line: 6, ref: 2, axis: 3, dim: 0.65, refs: false, direct: true, fill: 0.8, dimTo: 'ink2', marks: ['ink2'], labelsAbove: 'tall', round: 16, glow: 22, minPlot: 0.4, titleMargin: 1.03 },
   },
   post: { grain: 0.01, halftone: 0, bloom: 0 },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.

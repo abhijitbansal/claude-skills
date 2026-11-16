@@ -8,11 +8,12 @@
 // Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
-import { kindData, kindSupportProblems } from '../looks/index.mjs';
+import { kindData, kindSupportProblems, supportsKind } from '../looks/index.mjs';
 import {
-  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, NOT_BLANK, assertNoBlanks, hiddenOnFindings,
+  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, onDevices, placeDevices, deviceCamera, unionBox, NOT_BLANK, assertNoBlanks, hiddenOnFindings,
 } from './shared.mjs';
-import { itemsOf } from './list-items.mjs';
+import { defaultCamera } from './camera.mjs';
+import { itemsOf, isNumbered } from './list-items.mjs';
 import { expandDeskList } from './list-desk.mjs';
 import { expandPopList } from './list-pop.mjs';
 
@@ -108,7 +109,22 @@ function listReview(shot, { look, timing, at }) {
     const count = wordsOf(item.text).length;
     if (count > MAX_WORDS) out.push({ path: `items[${k}]`, at: times[k], message: `item ${k} has ${count} words; cut words (${MAX_WORDS} at most)` });
   });
-  return [...out, ...hiddenOnFindings(shot, { timing, at }, (target) => itemWindow(shot, timing, target, look))];
+  return [...out, ...undrawnFindings(shot, look), ...hiddenOnFindings(shot, { timing, at }, (target) => itemWindow(shot, timing, target, look))];
+}
+
+// What the shot asks for and an editorial look's list does not draw, as advice at the field (review C C1): a title when
+// the look sets no slug for lists (the title is the slug's kicker), and numbering when it marks items with a dot rail.
+function undrawnFindings(shot, look) {
+  if (!look || !isEditorial(look) || !supportsKind(look, KIND)) return [];
+  const data = kindData(look, KIND);
+  const out = [];
+  if (shot.title !== undefined && data.slug === false) {
+    out.push({ path: 'title', at: 0, message: `the ${look.name} look does not draw a list's title (it sets no slug for lists): say it in the narration or a statement before the list, and leave the title out` });
+  }
+  if (isNumbered(shot) && data.dots) {
+    out.push({ path: shot.style === 'steps' ? 'style' : 'numbered', at: 0, message: `the ${look.name} look marks list items with dots, not numbers: when the order matters, say it in the items ("First, ..."), and leave the numbering out` });
+  }
+  return out;
 }
 
 const ITEM_SCHEMA = Object.freeze({

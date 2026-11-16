@@ -5,14 +5,20 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as shared from '../../engine/kinds/shared.mjs';
+import * as highlighter from '../../engine/kinds/highlighter.mjs';
+import * as plainTagModule from '../../engine/kinds/plain-tag.mjs';
+import * as camera from '../../engine/kinds/camera.mjs';
 import '../../engine/kinds/index.mjs';
 import { expandShot, textNode, all } from './helpers/kinds.mjs';
 
 const kindsDir = fileURLToPath(new URL('../../engine/kinds/', import.meta.url));
 const source = (name) => readFileSync(`${kindsDir}${name}`, 'utf8');
 
-test('shared.mjs exports the highlight helpers and the plain tag', () => {
-  for (const name of ['highlightBands', 'highlightLines', 'plainTag']) assert.equal(typeof shared[name], 'function', name);
+test('the shared modules export the highlight helpers (highlighter.mjs), the plain tag (plain-tag.mjs) and the camera (camera.mjs)', () => {
+  for (const name of ['highlightBands', 'highlightLines']) assert.equal(typeof highlighter[name], 'function', name);
+  assert.equal(typeof plainTagModule.plainTag, 'function', 'plainTag');
+  for (const name of ['defaultCamera', 'driftReach', 'pushLayer', 'cutEnd', 'regionFloor', 'withEstablishingView']) assert.equal(typeof camera[name], 'function', name);
+  for (const name of ['highlightBands', 'plainTag', 'pushLayer']) assert.equal(shared[name], undefined, `${name} is no longer in shared.mjs`);
 });
 
 test('no kind keeps its own copy: statement, number and quote import the shared helpers', () => {
@@ -42,9 +48,11 @@ const KIND_FILES = Object.freeze({
   clipping: ['close-ups.mjs', 'region-mark.mjs'],
 });
 // editorial.mjs: the editorial family's columns and bounds, canvas or 9:16 safe zone (its own module: see its header)
-const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'slug.mjs', 'words.mjs', 'editorial.mjs', 'secondary.mjs']);
+// camera.mjs, highlighter.mjs, plain-tag.mjs: split out of shared.mjs by responsibility (review B M21); values.mjs: the
+// value limit and the shown-as-zero rule number, compare and chart share (review B I4)
+const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'slug.mjs', 'words.mjs', 'editorial.mjs', 'secondary.mjs', 'camera.mjs', 'highlighter.mjs', 'plain-tag.mjs', 'values.mjs']);
 
-test('no kind imports another kind\'s file: what several kinds use lives in shared.mjs, stack.mjs, slug.mjs, words.mjs, editorial.mjs or secondary.mjs', async () => {
+test('no kind imports another kind\'s file: what several kinds use lives in the shared modules (shared, stack, slug, words, editorial, secondary, camera, highlighter, plain-tag, values)', async () => {
   const { readdirSync } = await import('node:fs');
   const files = readdirSync(kindsDir).filter((f) => f.endsWith('.mjs') && f !== 'index.mjs' && !SHARED_MODULES.includes(f));
   const owner = (file) => Object.keys(KIND_FILES).find((kind) => file === `${kind}.mjs` || file.startsWith(`${kind}-`) || KIND_FILES[kind].includes(file));
@@ -67,7 +75,9 @@ function textFields(schema, at = '') {
   const own = Object.entries(schema.properties ?? {}).flatMap(([k, s]) => textFields(s, at ? `${at}.${k}` : k));
   const items = schema.items ? textFields(schema.items, `${at}[]`) : [];
   const any = (schema.anyOf ?? []).flatMap((s) => textFields(s, at));
-  return [...own, ...items, ...any];
+  // the shapes a schema picks by a condition (the chart's data by its type: allOf of if / then / else)
+  const picked = [...(schema.allOf ?? []), ...[schema.then, schema.else].filter(Boolean)].flatMap((s) => textFields(s, at));
+  return [...own, ...items, ...any, ...picked];
 }
 
 test('every text field of every kind refuses a blank string: its schema says not blank', async () => {
@@ -79,6 +89,8 @@ test('every text field of every kind refuses a blank string: its schema says not
     for (const [at, s] of textFields(registries.kinds.get(name).schema)) { fields += 1; assert.equal(s.pattern, NOT_BLANK, `${name}.${at}`); }
   }
   assert.ok(fields > 30, `the walk finds the text fields (${fields})`);
+  const chartFields = textFields(registries.kinds.get('chart').schema).map(([at]) => at);
+  for (const at of ['data[].label', 'data[].x', 'data.series[].name']) assert.ok(chartFields.includes(at), `the walk reaches the chart's ${at} (${chartFields})`);
 });
 
 test('a blank text is a validation error in the usual <json.path>: <message> form', async () => {

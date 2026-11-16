@@ -494,24 +494,29 @@ test('captions are pure: the same film gives the same caption nodes', () => {
 
 // ---- fix wave (final review I5 and Minors 15 to 20, 27) ----
 
-const strokeNode = (id, bbox, extra = {}) => ({ ...pathNode(id, bbox), props: { stroke: '#d63a2f', ...extra.props }, draw: 1, ...extra });
+// A stroked path at the canvas origin whose points (`d`, which the mark boxes read: engine/review/marks.mjs) are `box` in
+// its parent's space, and whose snapshot bbox is `bbox`.
+const strokeNode = (id, bbox, extra = {}, box = bbox) => ({ ...pathNode(id, bbox), x: 0, y: 0, props: { stroke: '#d63a2f', d: `M${box[0]} ${box[1]}L${box[0] + box[2]} ${box[1]}L${box[0] + box[2]} ${box[1] + box[3]}L${box[0]} ${box[1] + box[3]}Z`, ...extra.props }, draw: 1, ...extra });
 
-test('I5: a caption over the region a highlight marks is mechanical (caption-covers) even when the picture is pushed in, while the mark is on screen', () => {
+test('I5: a caption over the region a highlight marks is a caption-covers finding (creative since branch review A, I3) even when the picture is pushed in, while the mark is on screen', () => {
   const marked = { caption: { marks: ['c.on0'] } };
-  const frame = groupNode('c.on0', [650, 820, 400, 120], [{ ...pathNode('c.on0.scrim', [-400, -300, 2800, 1800]), props: { fill: '#f3eee3' } }, strokeNode('c.on0.side0', [650, 820, 400, 120])]);
+  // inside the picture pushed in at 2: points at half the frame coordinates
+  const frame = groupNode('c.on0', [650, 820, 400, 120], [{ ...pathNode('c.on0.scrim', [-400, -300, 2800, 1800]), props: { fill: '#f3eee3' } }, strokeNode('c.on0.side0', [650, 820, 400, 120], {}, [325, 410, 200, 60])]);
   const pushed = { ...groupNode('c.image', [-400, -300, 2800, 1800], [imageNode('c.image.photo', [-380, -280, 2760, 1760]), frame]), scale: 2 };
   // the caption rules only: the hand-built scrim and caption carry no colours for the contrast rule to read
   const captionRules = (nodes) => rules(auditFrame(nodes, reviewCtx())).filter((r) => r.startsWith('caption'));
   assert.deepEqual(captionRules([pushed, captionNode(marked)]), ['caption-covers']);
-  assert.match(auditFrame([pushed, captionNode(marked)], reviewCtx()).find((x) => x.rule === 'caption-covers').message, /covers the region marked by "c\.on0"/);
+  const covers = auditFrame([pushed, captionNode(marked)], reviewCtx()).find((x) => x.rule === 'caption-covers');
+  assert.match(covers.message, /covers the region marked by "c\.on0"/);
+  assert.equal(covers.kind, 'creative');
   const drawing = { ...pushed, children: [pushed.children[0], { ...frame, children: [frame.children[0], { ...frame.children[1], draw: 0 }] }] };
   assert.deepEqual(captionRules([drawing, captionNode(marked)]), [], 'a mark not yet drawn is not on screen');
-  const away = { ...pushed, children: [pushed.children[0], groupNode('c.on0', [650, 200, 400, 120], [strokeNode('c.on0.side0', [650, 200, 400, 120])])] };
+  const away = { ...pushed, children: [pushed.children[0], groupNode('c.on0', [650, 200, 400, 120], [strokeNode('c.on0.side0', [650, 200, 400, 120], {}, [325, 100, 200, 60])])] };
   assert.deepEqual(captionRules([away, captionNode(marked)]), [], 'a caption over unmarked picture that fills the frame is still over ground');
   assert.deepEqual(captionRules([pushed, captionNode()]), [], 'only the marks the caption names (its shot\'s) are judged');
 });
 
-test('I5: a caption over any text that is not landed (a hero mid-pulse at 1.3, set large) is mechanical (caption-covers); landed pairs stay with the overlap rule', () => {
+test('I5: a caption over any text that is not landed (a hero mid-pulse at 1.3, set large) is a caption-covers finding (creative since branch review A, I3); landed pairs stay with the overlap rule', () => {
   const hero = { ...captionNode({ id: 'c.text', x: 700, y: 860 }), props: { role: 'hero' }, scale: 1.3 };
   const f = auditFrame([captionNode(), hero], reviewCtx({ restScales: new Map([['c.text', 1]]) }));
   assert.ok(rules(f).includes('caption-covers'), JSON.stringify(rules(f)));

@@ -150,3 +150,22 @@ Three independent reviewers said "not yet" for both gate films; the last after b
 - Default: leave it parked; the other four looks (ledger, keynote, poster, marker) are not started.
 - If the owner wants it finished, the shortest path from review 3: put the sun at the orbit centre (or draw a Sun to Earth line instead of an orbit), give the to-scale compare a reveal and one alignment axis, draw the sun one way everywhere, keep gold off orbit strokes, drop the quote card. The reviewers agree the films already hold together and that gold-only-for-light is the idea to keep.
 - Copy of the vertical gate film (mine): "Now look up." beside a sun reads as advice to look at the Sun; change it before the film is shown to anyone.
+
+## Code review of the cosmos look: items left with the parked look (2026-11-16)
+
+A code review of the cosmos work (branch-review-C.md in the session folder: 1 critical, 11 important, 17 minor) is fixed only where it touches the shipped looks or test honesty. Left for whoever finishes the look:
+
+- The contrast check does not see the sun, its bloom or any glow, so text over them is judged against the plain field (an end title over the sun disc could pass at about 1.05:1, by the reviewer geometry, not rendered).
+- A film accent override changes the accent but not the glow and sun colours.
+- Canvas shadowBlur is used at 7 sites (22 to 64 units), redrawn every frame; the plan asked for no blur filters and the guard test only checks a blur property.
+- The end wordmark is marked furniture, so the 3x hero rule does not judge it.
+- Open for the shipped looks too, in a file another fix owns: the hook-word review rule now counts only lines in the hero role (engine/review/frame.mjs); the plan says no review rule is loosened. To settle in the fix wave.
+
+## Look regressions accepted in the code-review fix wave (2026-11-16)
+
+The fix wave made three texts obey the 3x hero rule honestly instead of through a size-class or tag exemption. Two frames changed for the worse to the controller eye and have had no independent look review:
+
+- Pop chart: the claim is now set at the hero size inside its lime plate, so it is a three-line lime block that competes with the highlighted numeral (kinds-pop, shot tests). Suggested redesign: the claim as a white headline in the stack face with no plate, the numeral as the only accent.
+- Pop end ask: now usually one or two steps smaller than the 1.5x the second look review asked for.
+- Desk compare (16:9): points are smaller or fewer so the title is 3x them.
+- Default: ship as is; redesign the pop chart claim in the next look pass.

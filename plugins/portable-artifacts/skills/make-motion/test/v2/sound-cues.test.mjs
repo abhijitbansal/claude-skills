@@ -268,20 +268,40 @@ test('a look with no sounds is an error naming the look, not a TypeError', () =>
 
 // ---- on the real timeline ----
 
-test('on buildTimeline: a number whose say opens on its figure lands on the cut, and the landing is the cue kept', () => {
-  const f = {
-    version: 2,
-    mode: 'viral',
-    shots: [
-      { id: 'hello', show: 'statement', say: 'Hello there.' },
-      { id: 'rows', show: 'number', cut: 'cut', say: 'Four hundred fifty nine rows. One file.', value: 459, label: 'in one file' },
-    ],
-  };
-  const timeline = buildTimeline(f, { fps: FPS });
+// A number spoken on its cut: the count still runs for its minimum time on screen (engine/kinds/number.mjs MIN_COUNT,
+// 0.5 s), and its landing sound fires when the figure lands, not on the cut (branch review B, I5: the sound follows the
+// picture). The cut cue at the cut and the land cue at the landing are further apart than MIN_CUE_GAP: both are kept.
+const NUMBER_ON_CUT = Object.freeze({
+  version: 2,
+  mode: 'viral',
+  shots: [
+    { id: 'hello', show: 'statement', say: 'Hello there.' },
+    { id: 'rows', show: 'number', cut: 'cut', say: 'Four hundred fifty nine rows. One file.', value: 459, label: 'in one file' },
+  ],
+});
+const MIN_COUNT_SECONDS = 0.5;
+const rounded = (t) => Math.round(t * 1e6) / 1e6;
+
+test('on buildTimeline: a number spoken on its cut plays the cut cue at the cut and the land cue when the count lands on screen', () => {
+  const timeline = buildTimeline(NUMBER_ON_CUT, { fps: FPS });
   const rows = timeline.shots[1];
-  const events = soundEvents(f, timeline).filter((e) => e.shot === 'rows');
-  assert.deepEqual(events.map((e) => [e.kind, e.t]), [['cut', rows.start], ['land', rows.start]], 'the count lands on "Four", the first word, at the shot start');
-  assert.deepEqual(pairs(planCues(f, timeline)).filter(([t]) => t >= rows.start - EPSILON), [[Math.round(rows.start * 1e6) / 1e6, 'sub']], 'the click is dropped: the number arriving wins the tie with the cut');
+  const land = rows.start + MIN_COUNT_SECONDS;
+  const events = soundEvents(NUMBER_ON_CUT, timeline).filter((e) => e.shot === 'rows');
+  assert.deepEqual(events.map((e) => [e.kind, rounded(e.t)]), [['cut', rounded(rows.start)], ['land', rounded(land)]], 'spoken on "Four", the first word, but seen to count for 0.5 s');
+  assert.ok(land - rows.start > MIN_CUE_GAP, 'further apart than MIN_CUE_GAP');
+  const after = pairs(planCues(NUMBER_ON_CUT, timeline)).filter(([t]) => t >= rows.start - EPSILON);
+  assert.deepEqual(after, [[rounded(rows.start), 'click'], [rounded(land), 'sub']], 'both kept: the click on the cut, the sub on the landing');
+});
+
+test('on buildTimeline: in a look with no cut cue, a number spoken on its cut plays only its land cue, when it lands', () => {
+  const timeline = buildTimeline(NUMBER_ON_CUT, { fps: FPS });
+  const rows = timeline.shots[1];
+  const looks = createRegistry('look');
+  const pop = registries.looks.get('pop');
+  // the planner's own registry: pop as it is, but silent on a plain cut (the events still read the registered pop)
+  looks.add('pop', { ...pop, sounds: { ...pop.sounds, cut: { ...pop.sounds.cut, cut: null } } });
+  const cues = planCues(NUMBER_ON_CUT, timeline, { looks });
+  assert.deepEqual(pairs(cues).filter(([t]) => t >= rows.start - EPSILON), [[rounded(rows.start + MIN_COUNT_SECONDS), 'sub']]);
 });
 
 // ---- fix round 1: chains, order, look checks on every path, pinned behaviour ----

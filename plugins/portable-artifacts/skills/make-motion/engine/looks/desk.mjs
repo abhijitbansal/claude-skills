@@ -103,8 +103,9 @@ export const desk = {
     // chart: the claim in the display face on columns 2 to `titleToWide` (`titleToTall`), from three times the labels up to
     // `titleMax` in at most `titleLines` lines, the plot `titleGap` under it; labels in the label face at step `labelStep`,
     // `gap` from what they label; marks `line` wide where they are lines, reference lines `ref` and the baseline `axis`
-    // wide; marks other than the highlighted one dim to `dim`; reference lines drawn (`refs`)
-    chart: { titleToWide: 11, titleToTall: 11, titleMax: 180, titleLines: 2, titleGap: 56, labelStep: 2, labelScale: 1.25, sourceStep: 2, gap: 14, line: 5, ref: 2, axis: 3, dim: 0.3, refs: true },
+    // wide; marks other than the highlighted one dim to `dim`; reference lines drawn (`refs`); a donut or line plot keeps
+    // at least `minPlot` of its box however long its labels (chart-draw.mjs)
+    chart: { titleToWide: 11, titleToTall: 11, titleMax: 180, titleLines: 2, titleGap: 56, labelStep: 2, labelScale: 1.25, sourceStep: 2, gap: 14, line: 5, ref: 2, axis: 3, dim: 0.3, refs: true, minPlot: 0.4 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {

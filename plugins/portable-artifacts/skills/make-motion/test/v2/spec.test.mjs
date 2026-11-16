@@ -34,6 +34,11 @@ function stubRegistries({ modes = STUB_MODES } = {}) {
     targets: () => ['image', 'caption'],
   });
   r.kinds.add('plain', { schema: { properties: {} } }); // no targets function: accepts no target
+  r.kinds.add('gallery', {
+    schema: { properties: { srcs: { type: 'array', items: { type: 'string' } }, items: { type: 'array', items: { type: 'object' } } } },
+    srcFields: ['srcs', 'items.0.src'],
+    targets: () => [],
+  });
   r.looks.add('desk', { name: 'desk', modes: ['pro'], cuts: ['cut', 'match'] });
   r.looks.add('pop', { name: 'pop', modes: ['viral'], cuts: ['cut'] });
   r.devices.add('highlight', { supports: () => true });
@@ -404,6 +409,15 @@ test('a symlink that points outside the spec folder is refused', () => {
   } finally {
     rmSync(outside, { recursive: true, force: true });
   }
+});
+test('every picture of an array srcField is held to the film folder, at its own path (branch review A, Minor 1)', () => {
+  const r = check(film({}, [{ id: 'g', show: 'gallery', srcs: ['assets/photo.png', '/etc/passwd', 'https://example.com/a.png'], hold: 2 }]));
+  assert.deepEqual(r.errors.map((e) => e.path), ['shots[0].srcs[1]', 'shots[0].srcs[2]']);
+  assert.match(r.errors[0].message, /absolute/);
+});
+test('a numbered step in a dotted srcField names the array item: items[0].src, not items.0.src', () => {
+  const r = check(film({}, [{ id: 'g', show: 'gallery', items: [{ src: '../outside.png' }], hold: 2 }]));
+  assert.deepEqual(r.errors.map((e) => e.path), ['shots[0].items[0].src']);
 });
 test('a field not declared in srcFields is not treated as a path', () => {
   const r = check(film({}, [{ id: 'p', show: 'picture', src: 'assets/photo.png', caption: '../not-a-path.png', hold: 2 }]));

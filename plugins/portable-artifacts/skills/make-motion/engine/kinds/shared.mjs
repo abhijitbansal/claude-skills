@@ -1,13 +1,13 @@
 // Helpers shared by the designed shot kinds (statement, number, clipping): type sizes and fonts from the look, the
-// field every shot draws first, composition and look checks, entrances, the default camera, the camera push,
-// and the devices a shot's `on` events place. Pure and DOM-free; layout runs on ctx.measure.
+// field every shot draws first, composition and look checks, entrances and the devices a shot's `on` events place
+// (the camera: camera.mjs; the desk highlighter: highlighter.mjs; the plain tag: plain-tag.mjs). Pure and DOM-free;
+// layout runs on ctx.measure.
 import { registries } from '../registry.mjs';
 import '../modes/index.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { fitText, layoutText } from '../text/layout.mjs';
-import { landing, entrance, colourOf, polyline, scrimColour } from '../devices/shared.mjs';
-import { BAND_HEIGHT } from '../devices/highlight.mjs';
+import { fitText } from '../text/layout.mjs';
+import { landing, colourOf, polyline, scrimColour } from '../devices/shared.mjs';
 import { ease } from '../time/ease.mjs';
 import { aloneFromFrame } from '../cuts/index.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
@@ -27,11 +27,7 @@ export const FIELD_ID = 'field';
 export const RESERVED_IDS = Object.freeze([FIELD_ID]);
 /** The prefix of a target that names one of a clipping's regions. */
 export const REGION_PREFIX = 'region:';
-const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
-// the region fills `share` of the width (look review 2: at 0.58 the payoff was too small on the phone), at most `tall`
-// of the height when a caption card needs room under or over it, else `full` of it
-const PUSH = Object.freeze({ share: 0.72, tall: 0.36, full: 0.7, min: 1.2, max: 3.2, dur: 0.9 });
-const PUSH_OVERSHOOT = 1.2; // a spring ease can carry the push this far past its target; the pan limit allows for it
+export const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
 const FORCE_MARK = '|';
 const APOSTROPHE_RE = /(\p{L})'(?=\p{L})/gu;
@@ -322,91 +318,6 @@ export const wipeIn = (look, at) => ({ reveal: landing(at, look.moves.draw, 0, 1
 /** A filled rectangle path at the origin: a hairline or a rule. */
 export const rectPath = (w, h) => `M0 0H${w}V${h}H0Z`;
 
-// ---- camera ----
-
-const drifts = (look) => look.camera.style === 'desk' && look.camera.drift > 0;
-
-/** How far the look's resting camera drift moves a depth-0 node either way across, in px (0 where nothing drifts). */
-export const driftReach = (look, unit) => (drifts(look) ? (look.camera.drift * unit) / HALF : 0);
-
-/** The look's resting camera as layers of keys: desk drifts half a drift either way, alternating by shot. */
-export function defaultCamera(look, timing, unit) {
-  if (!drifts(look)) return [];
-  const half = (look.camera.drift * unit) / HALF;
-  const dir = timing.index % HALF === 0 ? 1 : -1;
-  return [[{ t: 0, x: -half * dir }, { t: timing.duration, x: half * dir }]];
-}
-
-// The drift's camera x at shot time t (linear, as defaultCamera keys it).
-function driftAt(look, timing, unit, t) {
-  if (!drifts(look)) return 0;
-  const half = (look.camera.drift * unit) / HALF;
-  const dir = timing.index % HALF === 0 ? 1 : -1;
-  return -half * dir + (HALF * half * dir * t) / timing.duration;
-}
-
-// The largest pan at full push that keeps the depth-1 field over the canvas. At push progress f (0 to the ease's
-// overshoot F) the field pans f * pan / 2 and zooms 1 + (zoom - 1) f / 2 about the centre, and it reaches
-// FIELD_BLEED past each edge: |pan| <= (2 bleed - drift) / F + (zoom - 1)(centre + bleed) - drift keeps it covered.
-function panLimit(size, zoom, drift) {
-  const centre = size / HALF;
-  const bleed = FIELD_BLEED * size;
-  return (HALF * bleed - drift) / PUSH_OVERSHOOT + (zoom - 1) * (centre + bleed) - drift;
-}
-
-const clampAbs = (v, limit) => Math.min(limit, Math.max(-limit, v));
-const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
-
-/**
- * A camera layer for a deliberate close-up on `box` (canvas pixels): the zoom that makes the box PUSH.share of the
- * composition width and at most PUSH.tall of its height (clamped to PUSH.min..PUSH.max), its top kept under `below`, panned so the box centre sits on the composition centre (as far
- * as the field allows), easing with the look's enter ease over PUSH.dur and landing on `at`. A node at depth 0 moves
- * to c + (x - c) zoom - pan, so pan = c + (boxCentre - c) zoom - target; the drift's own pan at the landing time is
- * taken off, since the camera adds the layers.
- */
-export function pushLayer(ctx, box, at, { below = -Infinity, caption = false } = {}) {
-  const { look, canvas, unit, timing } = ctx;
-  const rect = compositionRect(ctx);
-  const zoom = clampTo(Math.min((PUSH.share * rect.w) / box[2], ((caption ? PUSH.tall : PUSH.full) * rect.h) / box[3]), PUSH.min, PUSH.max);
-  const drift = driftReach(look, unit);
-  const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
-  const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx) - driftAt(look, timing, unit, at);
-  // the pushed box's top stays under `below` (a slug card's bottom), moving its centre down from the composition's
-  const y = pan(canvas.h / HALF, box[1] + box[3] / HALF, Math.max(rect.cy, below + (box[3] * zoom) / HALF));
-  return [
-    { t: Math.max(0, at - PUSH.dur), x: 0, y: 0, zoom: 1 },
-    { t: at, x: clampAbs(x, panLimit(canvas.w, zoom, drift)), y: clampAbs(y, panLimit(canvas.h, zoom, drift)), zoom, ease: look.moves.enter.ease },
-  ];
-}
-
-// ---- an establishing view ----
-
-const ESTABLISH = 0.6; // seconds of the whole picture, after the incoming cut has ended, before a region is singled out
-
-/** When the incoming cut of a shot ends, in shot seconds: 0 for the first shot and for a hard cut. */
-export function cutEnd(shot, timing) {
-  if (timing.index === 0) return 0;
-  return Math.min(registries.cuts.get(shot.cut ?? 'cut').dur, timing.duration);
-}
-
-/**
- * The earliest shot second a region event may land on, so the whole picture is seen first: the push (or, in a locked
- * look, the close-up switch) may not start before the incoming cut has ended plus ESTABLISH. A push starts PUSH.dur
- * before it lands; a close-up switch starts where it lands.
- */
-export function regionFloor(shot, { look, timing }) {
-  const quiet = cutEnd(shot, timing) + ESTABLISH;
-  return cutsToCloseUp(look) ? quiet : quiet + PUSH.dur;
-}
-
-/** `shot` with every event aimed at a region moved to no earlier than regionFloor (its anchor replaced by seconds). */
-export function withEstablishingView(shot, ctx) {
-  if (!Array.isArray(shot.on)) return shot;
-  const floor = regionFloor(shot, ctx);
-  const on = shot.on.map((item) => (regionOf(item.target) !== null && ctx.at(item.at) < floor ? { ...item, at: Math.min(floor, ctx.timing.duration) } : item));
-  return { ...shot, on };
-}
-
 // ---- devices from `on` ----
 
 // Params a device needs beyond the base ones, worked out from the target box; null when `on` cannot place it.
@@ -477,109 +388,6 @@ export function unionBox(boxes) {
   const left = Math.min(...boxes.map((b) => b[0])), top = Math.min(...boxes.map((b) => b[1]));
   const right = Math.max(...boxes.map((b) => b[0] + b[2])), bottom = Math.max(...boxes.map((b) => b[1] + b[3]));
   return [left, top, right - left, bottom - top];
-}
-
-// ---- the desk highlighter behind emphasised runs (statement, quote) ----
-
-const HIGHLIGHT_PAST_INK = 0.06; // em of the text: the band reaches this far past the run's ink, above and below
-
-const isEmphasised = (times, timing, index) => times[index] !== undefined && times[index].spoken !== null && timing.words[times[index].spoken].emphasis;
-
-// Runs of adjacent emphasised words on one line, each { line, first, last } (word indexes).
-function emphasisRuns(layout, times, timing) {
-  return layout.lines.flatMap((line) => line.words.reduce((runs, word) => {
-    if (!isEmphasised(times, timing, word.index)) return runs;
-    const open = runs.at(-1);
-    if (open && open.last === word.index - 1) return [...runs.slice(0, -1), { ...open, last: word.index }];
-    return [...runs, { line, first: word.index, last: word.index }];
-  }, []));
-}
-
-// The box to give the highlight device for a run, so that the band it draws (BAND_HEIGHT times the box, about the same
-// middle) runs from HIGHLIGHT_PAST_INK above the run's highest ink to HIGHLIGHT_PAST_INK below its lowest: it holds the
-// words, descenders included, and with the look's display line height it clears the lines above and below.
-function bandBox({ x, y, font }, line, run, measure) {
-  const a = line.words.find((w) => w.index === run.first), b = line.words.find((w) => w.index === run.last);
-  const ink = runInk(line, font, measure, run.first, run.last);
-  const baseline = y + line.y;
-  const top = baseline - ink.up - HIGHLIGHT_PAST_INK * font.size, bottom = baseline + ink.down + HIGHLIGHT_PAST_INK * font.size;
-  const h = (bottom - top) / BAND_HEIGHT;
-  const left = x + line.x + a.x;
-  return [left, (top + bottom) / HALF - h / HALF, x + line.x + b.x + b.width - left, h];
-}
-
-/**
- * The most laid-out lines one unbroken run of emphasised words spans (a run follows word order across lines), or
- * undefined when nothing is emphasised: the frame review's highlight-lines rule reads it from the text node.
- */
-export function highlightLines(layout, times, timing) {
-  const lineOf = new Map(layout.lines.flatMap((line, k) => line.words.map((w) => [w.index, k])));
-  let most, first = null;
-  for (let i = 0; i <= times.length; i++) {
-    if (i < times.length && isEmphasised(times, timing, i)) { first ??= i; continue; }
-    if (first !== null) most = Math.max(most ?? 0, lineOf.get(i - 1) - lineOf.get(first) + 1);
-    first = null;
-  }
-  return most;
-}
-
-/**
- * The highlight bands behind a placed text's emphasised runs, in the text's parent space, each growing with its words
- * (every word's landing time and right edge); none when the look's emphasis is not the highlighter. `placed` is
- * { x, y, layout, font }, `times` is per word index ({ at, spoken }), `kind` names the kind for a missing device.
- */
-export function highlightBands(id, placed, times, ctx, kind) {
-  const { look, unit, seed, timing, measure } = ctx;
-  if (look.emphasis !== 'highlight') return [];
-  const runs = emphasisRuns(placed.layout, times, timing);
-  if (runs.length > 0) requireDevice(look, 'highlight', kind);
-  const device = registries.devices.get('highlight');
-  return runs.flatMap(({ line, first, last }, k) => {
-    const box = bandBox(placed, line, { first, last }, measure);
-    const stops = line.words.filter((w) => w.index >= first && w.index <= last).map((w) => ({ at: times[w.index].at, x: placed.x + line.x + w.x + w.width }));
-    return device.build({ id: `${id}.hl${k}`, box, at: times[first].at, look, unit, seed, stops }).nodes;
-  });
-}
-
-// ---- the plain tag (number, quote) ----
-
-const TAG_PAD = Object.freeze({ x: 0.32, y: 0.2 }); // em of the tag's own size
-const NO_WRAP = 1e6;
-const TAG_FIT_EPSILON = 1e-6;
-
-// The tag size from `toStep` down to `fromStep`: any size (scaled to fit), or only the scale steps (snapped).
-function smoothTagSize(look, unit, { fromStep, toStep, maxWidth }, widthAt) {
-  const size = sizeAt(look, toStep, unit), first = widthAt(size);
-  return first > maxWidth ? Math.max(sizeAt(look, fromStep, unit), Math.floor((size * maxWidth) / first)) : size;
-}
-function snappedTagSize(look, unit, { fromStep, toStep, maxWidth }, widthAt) {
-  const sizes = Array.from({ length: toStep - fromStep + 1 }, (_, i) => sizeAt(look, toStep - i, unit));
-  return sizes.find((s) => widthAt(s) <= maxWidth + TAG_FIT_EPSILON) ?? sizes.at(-1);
-}
-
-/**
- * A tag built from plain nodes at a chosen scale step (the tag device sets every tag at step 2): `fill` behind label
- * caps in `text` colour (palette keys), at `toStep`, set smaller (down to `fromStep`) and then wrapped when it is wider
- * than `maxWidth`. Smaller is any size between the two steps, or with `snap` only the scale steps between them (the
- * largest that holds it on one line). Its plate's top left at (left, top); it enters as an object device does.
- * { nodes, box }.
- */
-export function plainTag(ctx, id, words, { left, top, maxWidth, at, fromStep, toStep, fill, text, snap = false }) {
-  const { look, unit, measure } = ctx;
-  const shown = setCase(look, 'label', words);
-  const padded = (size, width) => width + HALF * TAG_PAD.x * size;
-  const oneLine = (size) => layoutText({ text: shown, font: fontFor(look, 'label', size, unit), maxWidth: NO_WRAP, measure });
-  const size = snap ? snappedTagSize(look, unit, { fromStep, toStep, maxWidth }, (s) => padded(s, oneLine(s).width)) : smoothTagSize(look, unit, { fromStep, toStep, maxWidth }, (s) => padded(s, oneLine(s).width));
-  const font = fontFor(look, 'label', size, unit);
-  const layout = layoutText({ text: shown, font, maxWidth: maxWidth - HALF * TAG_PAD.x * size, measure });
-  const w = padded(size, layout.width), h = layout.height + HALF * TAG_PAD.y * size;
-  const corners = [[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]];
-  const plate = node('path', `${id}.plate`, { d: polyline(corners, true), fill: colourOf(look, fill) });
-  const label = node('text', `${id}.text`, {
-    x: -w / HALF + TAG_PAD.x * size, y: -h / HALF + TAG_PAD.y * size, layout, font, fill: colourOf(look, text), role: 'tag',
-  });
-  const group = entrance({ id, at, look, unit, cx: left + w / HALF, cy: top + h / HALF, children: [plate, label] });
-  return { nodes: [group], box: [left, top, w, h] };
 }
 
 // ---- used by several kinds: the spoken words, boxes, picture sizing, numerals, step ratios, the paper scrim ----

@@ -192,8 +192,10 @@ export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = fa
     lines = rows.map((row, k) => lineAt(row.map((j) => bare(words[j])), lines[k].font.size * share, ctx));
   }
   // set smaller than scale step 3 to fit the height, a line no longer reads as a stack: it says so, as a statement
-  // that cannot fit does (the review's overflow finding tells the director to cut words)
-  lines = lines.map((line) => (line.font.size < limits.min ? { ...line, layout: { ...line.layout, overflow: true } } : line));
+  // that cannot fit does (the review's overflow finding tells the director to cut words); so does a line still wider
+  // than the area (a long word at the floor), whose fit flag the ratio, hook and shrink passes rebuild it without
+  const tooWide = (line) => line.width > area.w + WIDTH_TOLERANCE;
+  lines = lines.map((line) => (line.font.size < limits.min || tooWide(line) ? { ...line, layout: { ...line.layout, overflow: true } } : line));
   let top = centredTop(area, blockHeight(lines) + above, ctx) + above;
   const placed = lines.map((line, k) => {
     if (k > 0) top += STACK.gap * Math.max(line.font.size, lines[k - 1].font.size);

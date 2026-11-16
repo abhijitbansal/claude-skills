@@ -15,9 +15,9 @@ import { FORCE_MARK } from '../text/breaks.mjs';
 import { colourOf, roundedRect } from '../devices/shared.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, arrivesMatched, fitDisplay, capBox, unionBox, rectPath,
-  highlightBands, highlightLines, wordBoxes, stepUnder, fitLongestSide, cardOf, cardGroup, asTextCard,
+  CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, arrivesMatched, fitDisplay, capBox, unionBox, rectPath, wordBoxes, stepUnder, fitLongestSide, cardOf, cardGroup, asTextCard,
 } from './shared.mjs';
+import { highlightBands, highlightLines } from './highlighter.mjs';
 import { track } from '../time/track.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { secondarySize, heroFloor } from './secondary.mjs';

@@ -12,12 +12,13 @@ const NOT_WORD = /[^\p{L}\p{N}]/gu;
 
 const plain = (text) => String(text).toLowerCase().replace(NOT_WORD, '');
 
-// The start of the first spoken word that is the highlight's first word, or null.
+// The start of the first spoken run of words that is the whole highlight ("North America", not an earlier "north"), or
+// null.
 function namingWord(highlight, words) {
-  const first = plain(String(highlight).split(/\s+/)[0]);
-  if (first === '') return null;
-  const word = words.find((w) => plain(w.text) === first);
-  return word === undefined ? null : word.start;
+  const parts = String(highlight).split(/\s+/).map(plain).filter((p) => p !== '');
+  if (parts.length === 0) return null;
+  const at = words.findIndex((_, i) => parts.every((p, j) => words[i + j] !== undefined && plain(words[i + j].text) === p));
+  return at < 0 ? null : words[at].start;
 }
 
 /** { growEnd, highlightAt } in shot seconds; highlightAt is null without a highlight. */

@@ -110,12 +110,12 @@ test('number at 9:16: recomposed tall, a tall ellipse inside the safe zone, the 
   assert.ok(out.boxes.label[1] > fy + fh, 'the label under the figure');
 });
 
-test('number: a count never opens on a bare zero with its unit', () => {
+test('number: a count never opens on a bare zero with its unit (review C I11: nor on any step short of the final digit count)', () => {
   for (const expand of [wide, tall]) {
     const out = expand(COUNT);
     const digits = byId(out.nodes, 'n.value.digits');
     assert.notEqual(digits.props.steps[0].text, '0');
-    assert.equal(digits.props.steps[0].t, 0, 'its first step from the first frame');
+    assert.equal(digits.props.steps[0].text.replace(/\D/g, '').length, digits.props.steps.at(-1).text.replace(/\D/g, '').length, 'its first step has the final digit count');
   }
 });
 

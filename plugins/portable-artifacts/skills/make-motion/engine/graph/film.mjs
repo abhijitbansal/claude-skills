@@ -14,6 +14,7 @@ import { srcsOfShot } from '../assets.mjs';
 import { resolveAnchor } from '../script/anchors.mjs';
 import { captionsOn, shotCaptions, kindContext } from '../captions/index.mjs';
 import { sampleGraph } from './sample.mjs';
+import { localMatrix } from '../page/bounds.mjs';
 import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs';
 
 const DEFAULT_MODE = 'pro';
@@ -21,7 +22,6 @@ const DEFAULT_SEED = 1;
 const DEFAULT_CUT = 'cut';
 const DEFAULT_BACKGROUND = '#000000';
 const TIME_DECIMALS = 1e9; // shot-local time is rounded to 1e-9 s, so float noise cannot change a sample
-const DEGREES_TO_RADIANS = Math.PI / 180;
 
 /** Film second `t` as a time inside a shot that starts at `start`, rounded to 1e-9 s so float noise cannot change a
  *  sample: the drawn frame (frameAt) and the audited one (the page's __snapshotShot) read a shot at the same time. */
@@ -91,10 +91,9 @@ function cameraOf(spec, canvas, where) {
 
 // ---- hero boxes ----
 
-function matrixOf({ x = 0, y = 0, rotate = 0, scale = 1, scaleX = 1, scaleY = 1 }) {
-  const a = rotate * DEGREES_TO_RADIANS, cos = Math.cos(a), sin = Math.sin(a);
-  return [cos * scale * scaleX, sin * scale * scaleX, -sin * scale * scaleY, cos * scale * scaleY, x, y];
-}
+// A pose as a matrix: page/bounds.mjs localMatrix, the one place a node's transform becomes one, with a pose's missing
+// fields at rest.
+const matrixOf = ({ x = 0, y = 0, rotate = 0, scale = 1, scaleX = 1, scaleY = 1 }) => localMatrix({ x, y, rotate, scale, scaleX, scaleY });
 
 function invert([a, b, c, d, e, f]) {
   const det = a * d - b * c;

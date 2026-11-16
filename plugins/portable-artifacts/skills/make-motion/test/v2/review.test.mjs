@@ -600,12 +600,19 @@ test('the viral hook rule counts every word of a stack, not only its largest lin
   assert.match(hook.message, /has 8 words/);
 });
 
-test('the viral hook rule counts the hero lines of a stack, not body text sharing its size class (a compare card\'s points)', () => {
+// Review C I3: the rule as it stood at 9ea68e6, restored. Every line of the hero's stack counts, whatever its role: a
+// text a kind groups with the hero (props.stack) reads as part of the opening statement. A kind that does not want a
+// line counted keeps it out of the stack.
+test('the viral hook rule counts every line of the hero\'s stack, a body line grouped with it included (review C, I3)', () => {
   const title = stackLine(0, 300, 100, 2);
   const points = { ...textNode({ id: 's.points', size: 100, x: 200, y: 450, words: 6, role: 'body' }), props: { ...textNode({ id: 's.points', size: 100, x: 200, y: 450, words: 6, role: 'body' }).props, stack: 's' } };
   const group = { type: 'group', id: 's', depth: 0, props: {}, x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, visible: true, children: [title, points], bbox: [0, 0, 0, 0] };
   const findings = auditFrame([group], ctx({ look: registries.looks.get('pop'), mode: 'viral', isFirstShot: true }));
-  assert.equal(findings.find((f) => f.rule === 'hook-words'), undefined, 'two hero words; the six body words are not the hook');
+  const hook = findings.find((f) => f.rule === 'hook-words');
+  assert.ok(hook, 'two hero words and six body words in one stack: eight, over the viral seven');
+  assert.match(hook.message, /has 8 words/);
+  const apart = { ...points, props: { ...points.props, stack: undefined } };
+  assert.equal(auditFrame([{ ...group, children: [title, apart] }], ctx({ look: registries.looks.get('pop'), mode: 'viral', isFirstShot: true })).find((f) => f.rule === 'hook-words'), undefined, 'outside the stack the body is not the hook');
 });
 
 test('a line set flush by its ink is inside the safe area when its measured ink is: lineInk left and right', () => {

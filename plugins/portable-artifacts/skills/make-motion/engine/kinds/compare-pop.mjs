@@ -69,18 +69,21 @@ function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinit
   const last = placed.lines.at(-1);
   let under = last.baseline + last.ink.down; // the lowest ink so far
   if (numeral !== null) {
-    // the value: a numeral line of its own under the title, at the size both sides share (never styled as better)
+    // the value: a numeral line of its own under the title, at the size both sides share (never styled as better), its
+    // own size class (review B I6): expandPopCompare sets it at the titles' size, so the review sees one size honestly
     const baseline = under + STACK.gap * value.font.size + CAP_HEIGHT * value.font.size;
     const layout = value.small ? { ...numeral, overflow: true } : numeral;
-    // one size class with the title's lines (stack: the hero id), as when it was a line of the stack
-    children.push(node('text', `${staged.id}.value`, { x: area.left, y: baseline - numeral.lines[0].y, layout, font: value.font, fill: look.palette.ink, role: 'hero', stack: hero }));
+    children.push(node('text', `${staged.id}.value`, { x: area.left, y: baseline - numeral.lines[0].y, layout, font: value.font, fill: look.palette.ink, role: 'hero' }));
     under = baseline + WORD_DESCENT * value.font.size;
   }
   if (points !== null) {
     const y = under + data.pointGap * unit + CAP_HEIGHT * font.size - points.lines[0].y;
     children.push(node('text', `${staged.id}.points`, { x: area.left, y, layout: points, font, fill: look.palette.ink2, role: 'body' }));
+    under = y + points.lines.at(-1).y + WORD_DESCENT * font.size;
   }
-  return { id: staged.id, children, box: built.boxes.text, largest: Math.max(...placed.lines.map((line) => line.font.size)) };
+  // the whole side, its tag (or first line) to its lowest ink: the turn bar keeps clear of it
+  const top = placed.kicker === null ? placed.lines[0].baseline - placed.lines[0].ink.up : placed.kicker.top;
+  return { id: staged.id, children, box: built.boxes.text, block: [area.left, top, area.w, under - top], largest: Math.max(...placed.lines.map((line) => line.font.size)) };
 }
 
 // Both values' one size: the largest, up to a stack line's cap (and `valueTall` of a side's height when both sides share
@@ -93,9 +96,11 @@ function sharedValue(shot, ctx, data, sideHeight) {
   const texts = SIDES.map((k) => setCase(look, 'display', valueText(shot[k].value)));
   const cap = Math.min(STACK.max * unit, data.valueTall * sideHeight);
   const widest = Math.max(...texts.map((text) => numeralLayout(text, fontFor(look, 'display', cap, unit), measure).width));
-  const size = Math.min(cap, Math.floor((cap * width) / widest));
-  return { texts, font: fontFor(look, 'display', size, unit), small: size < sizeAt(look, STACK.fromStep, unit) };
+  return valueAt(look, unit, texts, Math.min(cap, Math.floor((cap * width) / widest)));
 }
+
+// The shared value at `size` px, flagged (small) under the stack's floor step.
+const valueAt = (look, unit, texts, size) => ({ texts, font: fontFor(look, 'display', size, unit), small: size < sizeAt(look, STACK.fromStep, unit) });
 
 // The stack area cut in two, A's part over B's, `sideGap` apart.
 function sideAreas(ctx, data) {
@@ -118,22 +123,36 @@ function dimTrack(look, data, k, turn) {
 export function expandPopCompare(shot, ctx, data, { turn, both }) {
   const spans = [[0, turn], [turn, undefined]];
   const areas = both ? sideAreas(ctx, data) : [stackArea(ctx), stackArea(ctx)];
-  const value = sharedValue(shot, ctx, data, both ? areas[0].h : Infinity);
+  const fitted = sharedValue(shot, ctx, data, both ? areas[0].h : Infinity);
   // a side's picture is whole the moment its side is (the stack is too): no fade in after the hard cut at the turn
-  const partsAt = (maxSize) => SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: both ? 0 : spans[k][0], value, area: areas[k], maxSize }));
-  let parts = partsAt(Infinity);
-  // both on one frame: the two titles one size, the smaller side's largest (twice: a side set again may shrink to fit)
-  for (let pass = 0; both && pass < SHARE_PASSES; pass++) parts = partsAt(Math.min(...parts.map((p) => p.largest)));
+  const partsAt = (maxSize, value) => SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: both ? 0 : spans[k][0], value, area: areas[k], maxSize }));
+  const { parts, value } = sharedSizes(fitted, partsAt, { both, look: ctx.look, unit: ctx.unit });
   const opacity = (k) => (both ? dimTrack(ctx.look, data, k, turn) : shownFrom(spans[k][0], spans[k][1]));
   const wrappers = parts.map((p, k) => ({ id: p.id, tracks: { opacity: opacity(k) }, children: p.children }));
-  const boxes = { left: parts[0].box, right: parts[1].box };
+  const boxes = { left: parts[0].box, right: parts[1].box, leftBlock: parts[0].block, rightBlock: parts[1].block };
   if (!both) return { wrappers, boxes };
-  const bar = turnBar(shot, ctx, areas[0], boxes, turn);
+  const bar = turnBar(shot, ctx, areas[0], { left: parts[0].block, right: parts[1].block }, turn);
   return { wrappers, boxes: { ...boxes, turn: bar.box }, extra: [bar.node] };
 }
 
-// Both sides on one frame: the turn marked by the accent bar midway between the blocks, flush left, punched in at the
-// turn (look review 2: a dim alone did not read as the handover).
+// The sides' sizes. Both on one frame: the two titles one size, the smaller side's largest (twice: a side set again may
+// shrink to fit). With values: the value at the titles' largest line size, the titles capped at the value's when it
+// must be smaller to fit, so title and value are one size, honestly, for the hero rule (review B I6).
+function sharedSizes(fitted, partsAt, { both, look, unit }) {
+  let parts = partsAt(Infinity, fitted);
+  if (!both && fitted === null) return { parts, value: null };
+  let value = fitted;
+  for (let pass = 0; pass < SHARE_PASSES; pass++) {
+    const size = Math.min(fitted === null ? Infinity : fitted.font.size, ...parts.map((p) => p.largest));
+    value = fitted === null ? null : valueAt(look, unit, fitted.texts, size);
+    parts = partsAt(size, value);
+  }
+  return { parts, value };
+}
+
+// Both sides on one frame: the turn marked by the accent bar midway between the two whole blocks (A's lowest ink, its
+// value and points included, and B's tag), flush left, punched in at the turn (look review 2: a dim alone did not read
+// as the handover).
 function turnBar(shot, ctx, area, { left, right }, turn) {
   const { look, unit } = ctx;
   const w = TURN_BAR.width * area.w, h = TURN_BAR.height * unit;

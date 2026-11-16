@@ -16,10 +16,10 @@ import { glowFill, glowStyle } from '../devices/glow.mjs';
 import { sunNodes, sunAnchor, hasSun } from '../devices/sun.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
-  CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox,
-  isEditorial, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale,
-  defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, driftReach, highlightBands, highlightLines, ghostWords, plainSay, overlaps, NOT_BLANK, assertNoBlanks,
+  CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox, isEditorial, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, ghostWords, plainSay, overlaps, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
+import { defaultCamera, driftReach } from './camera.mjs';
+import { highlightBands, highlightLines } from './highlighter.mjs';
 import { wordTimes } from './words.mjs';
 import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
@@ -215,7 +215,6 @@ export function enterStarts(words, look) {
 // A mode with `hookFromFrameZero` (viral) reads from the first frame: in every statement of a recolour look every word
 // is on screen from frame 0 as a ghost (opaque, ink mixed 40% into paper, shared.mjs ghostTracks) and takes its own
 // colour when it is spoken.
-export { ghostWords } from './shared.mjs'; // where it lives now
 
 // A ghost word that lights to `to` when spoken at `at`, pulsing as it does when `peak` is given.
 function hookTracks(look, at, to, peak) {

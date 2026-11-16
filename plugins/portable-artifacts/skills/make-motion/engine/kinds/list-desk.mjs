@@ -13,8 +13,9 @@ import { roundedRect } from '../devices/shared.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
 import { sunNodes } from '../devices/sun.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, inkExtent, capBox, unionBox, driftReach, arrivesMatched, overlaps, stepUnder,
+  CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, inkExtent, capBox, unionBox, arrivesMatched, overlaps, stepUnder,
 } from './shared.mjs';
+import { driftReach } from './camera.mjs';
 import { slugBox, slugNodes } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { itemsOf, isNumbered } from './list-items.mjs';

@@ -1,7 +1,8 @@
 // What validateFilm checks in a clipping shot beyond its schema: each region's rectangle and the crop's, and, in a look that cuts to
 // region close-ups (a locked camera), the timing of region events and targets that the close-up would hide. Errors
 // are { path, message } with paths relative to the shot. Pure and DOM-free.
-import { REGION_PREFIX, regionOf, cutsToCloseUp, heroProblems, regionFloor, cutEnd } from './shared.mjs';
+import { REGION_PREFIX, regionOf, cutsToCloseUp, heroProblems } from './shared.mjs';
+import { regionFloor, cutEnd } from './camera.mjs';
 
 const EDGE_EPSILON = 1e-9;
 

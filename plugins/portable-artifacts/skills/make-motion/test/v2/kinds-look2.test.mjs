@@ -50,14 +50,17 @@ test('ruling 3: phrase-aware stack breaks: a comma ends its line, and no one-wor
   }
 });
 
-test('ruling 6: the pop end ask is an action: the look\'s tag in the accent, one line, at least 1.5 times the label step', () => {
-  const { nodes, boxes } = expandShot({ id: 'close', show: 'end', say: 'Write the script. Ship the film.', ask: 'Try it now', mark: 'make-motion' }, 'pop', '9:16');
+test('ruling 6 (as review B I10 sizes it): the pop end ask is an action: the look\'s tag in the accent, one line, the largest scale step the title stays three times', () => {
+  const { nodes, boxes, ctx } = expandShot({ id: 'close', show: 'end', say: 'Write the script. Ship the film.', ask: 'Try it now', mark: 'make-motion' }, 'pop', '9:16');
   const plate = all(nodes).find((n) => n.id === 'close.ask.plate');
   const text = all(nodes).find((n) => n.id === 'close.ask.text');
   assert.ok(plate && text, 'a tag: plate and text');
   assert.equal(plate.props.fill, pop().palette.accent);
   assert.equal(text.props.layout.lines.length, 1);
-  assert.ok(text.props.font.size >= 1.5 * pop().scale[1] - 1e-6, `${text.props.font.size}`);
+  const largest = Math.max(...all(nodes).filter((n) => n.props?.stack === 'close.title').map((n) => n.props.font.size));
+  const steps = pop().kinds.end.askSteps.map((s) => pop().scale[s - 1] * ctx.unit);
+  const fits = steps.filter((s) => 1.03 * 3 * s <= largest + 1e-6); // with the hero margin (kinds/secondary.mjs)
+  assert.equal(text.props.font.size, fits.length > 0 ? Math.max(...fits) : Math.min(...steps), `ask ${text.props.font.size} under a ${largest} title`);
   assert.ok(boxes.ask, 'its box');
   assert.equal(registries.kinds.get('end').nodeField({ id: 'close', ask: 'x' }, 'close.ask.text'), 'ask');
 });
@@ -72,7 +75,8 @@ test('ruling 4: a tall pop compare labels its sides OPTION A / OPTION B (BEFORE 
   const turn = all(nodes).find((n) => n.id === 'v.turn');
   assert.ok(turn, 'a turn device');
   assert.equal(turn.props.fill ?? turn.props.stroke, pop().palette.accent);
-  assert.ok(turn.props.y === undefined || true);
+  assert.equal(turn.type, 'path', 'a filled bar');
+  assert.equal(turn.props.y, undefined, 'drawn where its path says, not offset');
   const box = boxes.turn;
   assert.ok(box[1] >= boxes.left[1] + boxes.left[3] - 1e-6 && box[1] + box[3] <= boxes.right[1] + 1e-6, 'between the two blocks');
   assert.equal(sample(turn.tracks.opacity, ctx.timing.duration - 0.01), 1, 'on screen once the turn has come');
@@ -108,7 +112,7 @@ test('ruling 13: a small whole number counts up by ones, visibly, landing within
   }
 });
 
-test('ruling 8: desk compare points in the display serif at 1.25 times the label step or more; a kicker gives the compare a slug clear of its cards', async () => {
+test('ruling 8 (as review B I6 sizes it): desk compare points in the display serif at 1.25 times the label step, or a third of the title when that is less (never under step 1); a kicker gives the compare a slug clear of its cards', async () => {
   const { validateFilm } = await import('../../scripts/v2/spec.mjs');
   const desk = registries.looks.get('desk');
   const shot = { id: 's', show: 'compare', kicker: 'The swap', mode: 'before-after', say: 'Before, you placed every keyframe. Now, you write what is said.', left: { title: 'Keyframes', points: ['Durations', 'Positions'] }, right: { title: 'A script', points: ['Words set the timing'] } };
@@ -117,8 +121,11 @@ test('ruling 8: desk compare points in the display serif at 1.25 times the label
   for (const format of ['16:9', '9:16']) {
     const { nodes, boxes } = expandShot(shot, 'desk', format);
     const points = all(nodes).find((n) => n.id === 's.left.points');
+    const title = all(nodes).find((n) => n.id === 's.left.title');
     assert.equal(points.props.font.family, desk.fonts.display.family, 'the serif');
-    assert.ok(points.props.font.size >= 1.25 * desk.scale[1] - 1e-6, `${format}: ${points.props.font.size}`);
+    const unit = expandShot(shot, 'desk', format).ctx.unit;
+    const want = Math.max(desk.scale[0] * unit, Math.min(1.25 * desk.scale[1] * unit, title.props.font.size / 3));
+    assert.ok(Math.abs(points.props.font.size - want) < 1e-6, `${format}: ${points.props.font.size} vs ${want}`);
     const slug = all(nodes).find((n) => n.id === 's.slug');
     assert.ok(slug, `${format}: a slug`);
     const { slugBox } = await import('../../engine/kinds/slug.mjs');

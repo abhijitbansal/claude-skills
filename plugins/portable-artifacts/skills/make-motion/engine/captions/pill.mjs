@@ -10,7 +10,7 @@ import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { roundedRect, colourOf } from '../devices/shared.mjs';
 import { sizeAt, fontFor, setCase, isWide, runInk, shownFrom, compositionRect } from '../kinds/shared.mjs';
-import { captionGroups, groupTimes, fitGroup, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
+import { captionGroups, groupTimes, fitGroup, heardStart, heardEnd, columnRight, visibleDuring, spokenLayout, clearZone, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
 
 const PILL = Object.freeze({
   step: 2, // the label face at scale step 2
@@ -24,15 +24,19 @@ const PILL = Object.freeze({
   fill: 0.85, // a group holds at most this share of the characters the line could
 });
 const PROBE = 'abcdefghijklmnopqrstuvwxyz'; // the average advance of a letter, for how many fit on the line
-const JOIN_EPSILON = 1e-9; // seconds: spans closer than this are back to back
 const DEFAULT_FILL = 'paper'; // the pill's colour when the look styles no card
 const HALF = 2;
+const MIN_COLUMNS = 4; // the zone never narrows to fewer columns than this to step past a pinned card or a mark
 
-const columnRight = (ctx, column) => (column === ctx.look.grid.columns ? ctx.gridX(column + 1) : ctx.gridX(column + 1) - ctx.look.grid.gutter * ctx.unit);
 const labelFont = (ctx, step = PILL.step) => fontFor(ctx.look, 'label', sizeAt(ctx.look, step, ctx.unit), ctx.unit);
 const pillFill = (look) => colourOf(look, look.devices?.card?.fill ?? DEFAULT_FILL);
 
-/** The zone: one line and its pill high, on the bottom margin, across the caption columns, inside compositionRect. */
+/**
+ * The zone: one line and its pill high, on the bottom margin, across the caption columns, inside compositionRect.
+ * Against a pinned text card or a marked region in the band (ctx.avoid, ctx.marks: groups.mjs clearZone) it takes the
+ * widest span of at least MIN_COLUMNS of the grid's columns clear of them, the nearest the caption columns' centre among
+ * equals.
+ */
 function zone(ctx) {
   const { look, canvas, unit } = ctx;
   const font = labelFont(ctx);
@@ -42,7 +46,8 @@ function zone(ctx) {
   const bottom = Math.min(canvas.h - look.grid.margin * unit, rect.top + rect.h);
   const left = Math.max(rect.left, ctx.gridX(from));
   const right = Math.min(rect.left + rect.w, columnRight(ctx, to));
-  return [left, bottom - h, right - left, h];
+  const rank = ({ a, b }) => [a - b, Math.abs(a + b - from - to)]; // the widest, then the most central
+  return clearZone(ctx, [left, bottom - h, right - left, h], { from: 1, to: look.grid.columns, minColumns: MIN_COLUMNS, left: rect.left, right: rect.left + rect.w, rank });
 }
 
 function groupingFor(width, ctx) {
@@ -56,9 +61,7 @@ function groupingFor(width, ctx) {
 function setAt(group, size, ctx) {
   const font = fontFor(ctx.look, 'label', size, ctx.unit);
   const text = setCase(ctx.look, 'label', group.words.map((w) => w.text).join(' '));
-  const layout = layoutText({ text, font, maxWidth: Number.MAX_SAFE_INTEGER, measure: ctx.measure });
-  const count = layout.lines.reduce((n, l) => n + l.words.length, 0);
-  if (count !== group.words.length) throw new Error(`${ctx.captionId}: "${text}" lays out as ${count} words, not the ${group.words.length} spoken`);
+  const layout = spokenLayout(layoutText({ text, font, maxWidth: Number.MAX_SAFE_INTEGER, measure: ctx.measure }), group, text, ctx.captionId);
   return { layout, font, ink: runInk(layout.lines[0], font, ctx.measure) };
 }
 
@@ -67,24 +70,12 @@ function setGroup(group, maxWidth, ctx) {
   return fitGroup((px) => setAt(group, px, ctx), fits, labelFont(ctx).size, labelFont(ctx, PILL.minStep).size);
 }
 
-// Opacity 1 during each [at, until) and 0 elsewhere, stepped; back-to-back spans join, so the pill never blinks.
-function visibleDuring(spans) {
-  const keys = [{ t: 0, v: 0 }];
-  for (const span of spans) {
-    const last = keys.at(-1);
-    const at = Math.max(span.at, last.t);
-    if (keys.length > 1 && at - last.t < JOIN_EPSILON) keys.pop();
-    else keys.push({ t: at, v: 0 }, { t: at, v: 1 });
-    keys.push({ t: Math.max(at, span.until), v: 1 }, { t: Math.max(at, span.until), v: 0 });
-  }
-  return track(keys);
-}
-
-// A word's fill: ink, the accent from when it is spoken, and ink again when it ends (unless it is emphasised).
+// A word's fill: ink, the accent from when it is heard, and ink again when it ends (unless it is emphasised).
 function spokenFill(look, word) {
   const { ink, accent } = look.palette;
-  const keys = [{ t: 0, v: ink }, { t: word.start, v: ink }, { t: word.start, v: accent }];
-  if (!word.emphasis) keys.push({ t: Math.max(word.start, word.end), v: accent }, { t: Math.max(word.start, word.end), v: ink });
+  const [from, to] = [heardStart(word), Math.max(heardStart(word), heardEnd(word))];
+  const keys = [{ t: 0, v: ink }, { t: from, v: ink }, { t: from, v: accent }];
+  if (!word.emphasis) keys.push({ t: to, v: accent }, { t: to, v: ink });
   return { fill: track(keys) };
 }
 

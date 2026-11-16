@@ -338,10 +338,12 @@ test('encodeMaster pulls an encode over the mode\'s ceiling back to ceilingFor, 
 test('judgeLevel: an encode held at the ceiling that falls short of the target renders with HELD_NOTE; over the ceiling is still refused', () => {
   const short = { lufs: -15.9, truePeakDb: -1.5, note: null };
   assert.throws(() => judgeLevel(short, VIRAL.loudness), /more than 1 LU under/, 'not held: short is refused as before');
-  assert.deepEqual(judgeLevel(short, VIRAL.loudness, undefined, { held: true }), { ...short, note: voiceMaster.HELD_NOTE });
+  // held from an on-target encode (branch review A, I5: the cause is carried, a bare `held: true` excuses nothing)
+  const heldFrom = { lufs: -14.1, truePeakDb: 0.3, note: null };
+  assert.deepEqual(judgeLevel(short, VIRAL.loudness, undefined, { heldFrom }), { ...short, note: voiceMaster.HELD_NOTE });
   assert.equal(typeof voiceMaster.HELD_NOTE, 'string');
-  assert.deepEqual(judgeLevel({ ...short, lufs: -14.4 }, VIRAL.loudness, undefined, { held: true }), { ...short, lufs: -14.4 }, 'within tolerance: no note');
-  assert.throws(() => judgeLevel({ ...short, truePeakDb: -0.5 }, VIRAL.loudness, undefined, { held: true }), /true peak of -0\.5 dBTP, over the mode's ceiling/);
+  assert.deepEqual(judgeLevel({ ...short, lufs: -14.4 }, VIRAL.loudness, undefined, { heldFrom }), { ...short, lufs: -14.4 }, 'within tolerance: no note');
+  assert.throws(() => judgeLevel({ ...short, truePeakDb: -0.5 }, VIRAL.loudness, undefined, { heldFrom }), /true peak of -0\.5 dBTP, over the mode's ceiling/);
 });
 
 test('encodeArgs encodes the master WAV as AAC 48 kHz at 160 kbit/s, audio only, capped at the film length; muxArgs copies it and the video (final review I3)', () => {

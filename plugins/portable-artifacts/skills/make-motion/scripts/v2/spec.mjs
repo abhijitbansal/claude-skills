@@ -405,12 +405,17 @@ export function timedAnchorErrors(film, timeline, { registries = defaultRegistri
 }
 
 // Each picture a kind's srcFields name ("src", or a dotted path such as "left.src"), held to the film folder.
+// An array field holds one picture per string, each checked at its own index; a numbered step of a dotted field names
+// an array item (items[0].src).
 function checkSrcFields(shot, base, kind, specDir) {
   return (kind?.srcFields ?? []).flatMap((field) => {
     const value = fieldAt(shot, field);
-    if (typeof value !== 'string' || value === '') return [];
-    const problem = srcProblem(value, specDir);
-    return problem ? [{ path: field.split('.').reduce((acc, key) => pathJoin(acc, key), base), message: problem }] : [];
+    const at = field.split('.').reduce((acc, key) => pathJoin(acc, /^\d+$/.test(key) ? Number(key) : key), base);
+    const pictures = Array.isArray(value) ? value.map((src, k) => [src, pathJoin(at, k)]) : [[value, at]];
+    return pictures.flatMap(([src, path]) => {
+      const problem = typeof src === 'string' && src !== '' ? srcProblem(src, specDir) : null;
+      return problem ? [{ path, message: problem }] : [];
+    });
   });
 }
 

@@ -20,8 +20,8 @@
 import { registries } from '../registry.mjs';
 import { sampleGraph } from '../graph/sample.mjs';
 import { applyCamera } from '../graph/camera.mjs';
-import { pathPoints } from '../devices/shared.mjs';
 import { compositionRect } from '../kinds/shared.mjs';
+import { markBoxes, pathBox, walkPlaced } from '../review/marks.mjs';
 import { lower } from './lower.mjs';
 import { stack } from './stack.mjs';
 import { pill } from './pill.mjs';
@@ -31,7 +31,6 @@ export { CAPTION_HOLD, captionGroups, groupTimes } from './groups.mjs';
 /** The devices whose event marks a region or a text: a caption keeps off what they mark while they are on screen. */
 export const MARK_DEVICES = Object.freeze(['highlight', 'circle', 'underline', 'bracket', 'focus']);
 const AVOID_STEP = 0.1; // seconds between the samples of where a pinned card or a mark stands
-const DEGREES_TO_RADIANS = Math.PI / 180;
 const STYLE_FIELDS = Object.freeze([['summary', 'string'], ['zone', 'function'], ['compose', 'function']]);
 
 /** Is the film captioned? Its `captions` (true or false) when it says, else the mode's data. */
@@ -43,40 +42,11 @@ export function captionsOn(film, mode) {
 
 // ---- where things stand on the frame ----
 
-// A sampled node's own transform as a canvas-style matrix [a, b, c, d, e, f] (as engine/page/bounds.mjs localMatrix).
-function matrixOf(n) {
-  const a = n.rotate * DEGREES_TO_RADIANS, cos = Math.cos(a), sin = Math.sin(a);
-  const sx = n.scaleX * n.scale, sy = n.scaleY * n.scale;
-  return [cos * sx, sin * sx, -sin * sy, cos * sy, n.x, n.y];
-}
-const times = (p, q) => [p[0] * q[0] + p[2] * q[1], p[1] * q[0] + p[3] * q[1], p[0] * q[2] + p[2] * q[3], p[1] * q[2] + p[3] * q[3], p[0] * q[4] + p[2] * q[5] + p[4], p[1] * q[4] + p[3] * q[5] + p[5]];
-const through = (m, [x, y]) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
-const IDENTITY = Object.freeze([1, 0, 0, 1, 0, 0]);
-
-function boxOf(points) {
-  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
-  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
-}
-
-// Does a sampled path show ink of its own: drawn some of its stroke, or its fill whole, and not wiped to nothing?
-const drawn = (n) => (n.reveal ?? 1) > 0 && ((Boolean(n.props.stroke) && (n.draw ?? 1) > 0) || (Boolean(n.props.fill) && (n.draw ?? 1) >= 1));
-
 /**
- * Where the marks `ids` stand in a sampled tree (camera applied), as canvas boxes: for each mark on screen, the box of its
- * drawn paths (a frame, a circle, a band, a line), never the paper scrim of a region highlight (`<id>.scrim`).
+ * Where the marks `ids` stand in a sampled tree (camera applied), as canvas boxes: engine/review/marks.mjs markBoxes,
+ * the computation the frame review judges a caption over a mark with, so the two never disagree.
  */
-export function markedBoxes(sampled, ids) {
-  const wanted = new Set(ids);
-  const found = new Map();
-  const walk = (n, parent, opacity, root) => {
-    const o = opacity * n.opacity, m = times(parent, matrixOf(n)), mark = root ?? (wanted.has(n.id) ? n.id : null);
-    if (o <= 0) return;
-    if (mark && n.type === 'path' && !n.id.endsWith('.scrim') && drawn(n)) found.set(mark, [...(found.get(mark) ?? []), ...pathPoints(n.props.d).map((p) => through(m, p))]);
-    n.children.forEach((child) => walk(child, m, o, mark));
-  };
-  sampled.forEach((n) => walk(n, IDENTITY, 1, null));
-  return [...found.values()].filter((points) => points.length > 0).map(boxOf);
-}
+export const markedBoxes = (sampled, ids) => markBoxes(sampled, ids).map((m) => m.box);
 
 /** The ids of a shot's mark devices (MARK_DEVICES events), as the kinds name them: `<shot id>.on<j>`. */
 export const markIds = (shot) => (shot.on ?? []).flatMap((item, j) => (MARK_DEVICES.includes(item.do) ? [`${shot.id}.on${j}`] : []));
@@ -89,6 +59,16 @@ function marksOver(nodes, camera, canvas, duration, ids) {
   return sampleTimes(duration).flatMap((t) => markedBoxes(applyCamera(sampleGraph(nodes, t), camera(t), canvas), ids));
 }
 
+// The paper boxes of the pinned text cards in one sampled list of cards (each card a top-level node).
+function cardPapers(sampled) {
+  const roots = new Set(sampled), boxes = [];
+  walkPlaced(sampled, (n, m, parent) => {
+    const box = parent !== null && roots.has(parent) && n.props.textCard === true ? pathBox(n, m) : null;
+    if (box !== null) boxes.push(box);
+  });
+  return boxes;
+}
+
 /**
  * Where the kind's pinned text cards (a slug, a clipping's caption card: a top-level node with props.fixed holding a
  * paper with props.textCard) stand over the shot: their paper boxes in canvas pixels, every AVOID_STEP seconds and on the
@@ -97,8 +77,7 @@ function marksOver(nodes, camera, canvas, duration, ids) {
 export function pinnedCards(nodes, duration) {
   const cards = nodes.filter((n) => n.props.fixed === true && n.children.some((c) => c.props.textCard === true));
   if (cards.length === 0) return [];
-  return sampleTimes(duration).flatMap((t) => sampleGraph(cards, t).filter((g) => g.opacity > 0)
-    .flatMap((g) => g.children.filter((c) => c.props.textCard === true).map((paper) => boxOf(pathPoints(paper.props.d).map((p) => through(times(matrixOf(g), matrixOf(paper)), p))))));
+  return sampleTimes(duration).flatMap((t) => cardPapers(sampleGraph(cards, t)));
 }
 
 // ---- a shot's captions ----

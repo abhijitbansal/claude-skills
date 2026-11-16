@@ -33,22 +33,25 @@
 // card or a caption card) is left out of both.
 //
 // Spoken captions. A text with props.caption (engine/captions: { zone, end, hero, emphasis, marks }) is a caption of the
-// spoken words, and five mechanical rules judge it: once landed, its ink outside its zone (caption-zone); over any picture
+// spoken words, and five rules judge it: once landed, its ink outside its zone (caption-zone); over any picture
 // on screen, the hero's among them, or a hero that is a path (caption-hero; a picture, and only a picture, standing at 1.2
 // times its size or more, as a camera push leaves it, or covering 80% of the canvas or more, is the frame's ground and is
 // not judged); over a region its shot marks (`marks`: highlight, circle, underline, bracket, focus), by the mark's drawn
-// paths while on screen, ground or not, or over a text that has not landed (caption-covers); on screen more than 0.3 s
+// paths while on screen, ground or not, or over a text that has not landed (caption-covers, creative: the caption styles
+// keep off every mark they can, so what is left names the shot and what the author can change); on screen more than 0.3 s
 // after its last word ends at film second `end` (caption-late, against ctx.t); and, on any frame, an emphasised word
-// clipped by its zone (caption-clipped, a pulse included). A clipping's own caption carries no props.caption and is judged by the general
-// rules; the card-overlap and overlap rules keep the two apart.
+// clipped by its zone (caption-clipped, a pulse included). All but caption-covers are mechanical. A clipping's own caption
+// carries no props.caption and is judged by the general rules; the card-overlap and overlap rules keep the two apart (a
+// spoken caption over a pinned card is creative too).
 //
 // What escapes. The audit looks at sampled frames (scripts/v2/review.mjs), and an unlanded text is not judged, so a defect
 // that is on screen for less than the sampling step (0.25 s: 7 frames at 30 fps) and falls between two samples can
 // escape, and so can one that exists only while a text is still arriving, pulsing or being pushed by the camera when
 // the same text lands on another sampled frame.
 import { unitOf } from '../units.mjs';
-import { CAP_HEIGHT, WORD_DESCENT } from '../kinds/shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, unionBox as union } from '../kinds/shared.mjs';
 import { contrastFindings } from './contrast.mjs';
+import { markBoxes, showsItself } from './marks.mjs';
 import { registries } from '../registry.mjs';
 import '../modes/index.mjs';
 
@@ -85,12 +88,6 @@ const roleOf = (n) => n.props?.role ?? 'body';
 const wordsOf = (layout) => layout.lines.flatMap((line) => line.words);
 const isBox = (box) => Array.isArray(box) && box.length === 4 && box.every(Number.isFinite);
 const hasWords = (layout) => Array.isArray(layout?.lines) && layout.lines.some((line) => Array.isArray(line.words) && line.words.length > 0);
-
-function union(boxes) {
-  const left = Math.min(...boxes.map((b) => b[0])), top = Math.min(...boxes.map((b) => b[1]));
-  const right = Math.max(...boxes.map((b) => b[0] + b[2])), bottom = Math.max(...boxes.map((b) => b[1] + b[3]));
-  return [left, top, right - left, bottom - top];
-}
 
 // How far a line's glyphs reach above and below its baseline, in the text's own pixels: measured when the snapshot has it
 // for this line, else from the cap line and the line's descender and accent glyphs.
@@ -370,13 +367,15 @@ function textCards(sampled) {
 }
 
 // A landed text over the paper of a card that holds text, other than its own card, by more than OVERLAP_UNITS both ways:
-// mechanical (a statement left under its slug, a caption over a slug).
+// mechanical (a statement left under its slug). A spoken caption over one is creative and names the shot: the caption
+// styles keep off every pinned card they can (branch review A, I3), so what is left is the author's to change.
 function cardRules(texts, cards, ctx, unit) {
   const limit = OVERLAP_UNITS * unit + EPSILON;
   return texts.filter((t) => t.landed).flatMap((t) => cards.filter(({ card }) => !t.ancestors.includes(card)).flatMap(({ card, box }) => {
     const across = Math.min(t.ink[0] + t.ink[2], box[0] + box[2]) - Math.max(t.ink[0], box[0]);
     const down = Math.min(t.ink[1] + t.ink[3], box[1] + box[3]) - Math.max(t.ink[1], box[1]);
     if (across <= limit || down <= limit) return [];
+    if (isSpokenCaption(t)) return [finding(ctx, CREATIVE, 'card-overlap', `${t.node.id}|${card}`, `${inShot(t.node.id, ctx)} runs over the card "${card}", and its style found no place in its band clear of it; ${CAPTION_REMEDY}`, t.role)];
     return [finding(ctx, MECHANICAL, 'card-overlap', `${t.node.id}|${card}`, `text "${t.node.id}" runs over the card "${card}"; move it off the card or cut words`, t.role)];
   }));
 }
@@ -435,8 +434,9 @@ function wordRules(texts, ctx) {
   if (Number.isFinite(maxHookWords) && ctx.isFirstShot && opening.length > 0) {
     const hero = opening.reduce((best, t) => (t.size > best.size ? t : best));
     const stack = hero.node.props?.stack;
-    // the stack's lines in the hero's role: a size class may also hold body text (a compare card's points), not the hook
-    const parts = stack === undefined ? [hero] : texts.filter((t) => t.node.props?.stack === stack && t.role === hero.role);
+    // every line of the hero's stack, whatever its role (review C I3: the rule as at 9ea68e6; a kind keeps a line it does
+    // not want read as the hook out of the stack)
+    const parts = stack === undefined ? [hero] : texts.filter((t) => t.node.props?.stack === stack);
     const count = parts.reduce((sum, t) => sum + shownWords(t.node, wordsOf(t.node.layout)).length, 0);
     if (count > maxHookWords) out.push(finding(ctx, CREATIVE, 'hook-words', hero.node.id, `the opening statement has ${count} words; a ${name} hook takes at most ${maxHookWords}`, hero.role));
   }
@@ -479,23 +479,16 @@ function figuresOf(sampled, heroId, canvas) {
   return found;
 }
 
-// Where the marks `ids` stand on the frame, as { id, box }: for each mark on screen, the union of its drawn paths' boxes
-// (a frame, a circle, a band, a line; never a region highlight's paper scrim, `<id>.scrim`).
-function markBoxes(sampled, ids) {
-  const wanted = new Set(ids), found = new Map();
-  const walk = (n, opacity, mark) => {
-    const o = opacity * (n.opacity ?? 1), root = mark ?? (wanted.has(n.id) ? n.id : null);
-    if (o <= 0) return;
-    if (root && n.type === 'path' && !n.id.endsWith('.scrim') && showsItself(n) && isBox(n.bbox)) found.set(root, [...(found.get(root) ?? []), n.bbox]);
-    (n.children ?? []).forEach((child) => walk(child, o, root));
-  };
-  if (wanted.size > 0) (Array.isArray(sampled) ? sampled : []).forEach((n) => walk(n, 1, null));
-  return [...found].map(([id, boxes]) => ({ id, box: union(boxes) }));
-}
+// What the author can change when a caption style finds no place in its band (engine/captions groups.mjs clearZone moves
+// the zone off every pinned card and mark it can): no spec field moves the zone itself.
+const CAPTION_REMEDY = 'shorten the shot\'s line so its caption groups are narrower, or turn captions off for the film (captions: false)';
+const inShot = (id, ctx) => `caption "${id}" in shot "${ctx.shotId}"`;
 
-// Rule 5 (caption-covers): a landed caption over a region its shot marks (props.caption.marks: the mark devices' ids),
-// while the mark is drawn on screen, whatever the picture under it (ground or not); or over any text that has not landed
-// (a hero mid-pulse or set large: two landed texts are the overlap rule's), by more than OVERLAP_UNITS both ways.
+// Rule 5 (caption-covers): a landed caption over a region its shot marks (props.caption.marks: the mark devices' ids,
+// their boxes from marks.mjs, the computation the caption placed itself with), while the mark is drawn on screen,
+// whatever the picture under it (ground or not); or over any text that has not landed (a hero mid-pulse or set large:
+// two landed texts are the overlap rule's), by more than OVERLAP_UNITS both ways. Creative: the caption styles keep off
+// every mark and card they can, so what is left is the author's to change (branch review A, I3).
 function captionCoverRules(captions, texts, sampled, ctx, unit) {
   const limit = OVERLAP_UNITS * unit + EPSILON;
   return captions.filter((t) => t.landed).flatMap((t) => {
@@ -503,8 +496,8 @@ function captionCoverRules(captions, texts, sampled, ctx, unit) {
     const mark = markBoxes(sampled, t.node.props.caption.marks ?? []).find((m) => overlapBy(t.ink, m.box) > limit);
     const text = texts.find((o) => !o.landed && !isSpokenCaption(o) && overlapBy(t.ink, o.ink) > limit);
     return [
-      ...(mark ? [finding(ctx, MECHANICAL, 'caption-covers', `${id}|${mark.id}`, `caption "${id}" covers the region marked by "${mark.id}"; a caption keeps off what the shot points at: move the zone or the region`, t.role)] : []),
-      ...(text ? [finding(ctx, MECHANICAL, 'caption-covers', `${id}|${text.node.id}`, `caption "${id}" covers the text "${text.node.id}"; move the zone or the text`, t.role)] : []),
+      ...(mark ? [finding(ctx, CREATIVE, 'caption-covers', `${id}|${mark.id}`, `${inShot(id, ctx)} covers the region marked by "${mark.id}", and its style found no place in its band clear of it; move the mark (its region, its target or its cue), ${CAPTION_REMEDY}`, t.role)] : []),
+      ...(text ? [finding(ctx, CREATIVE, 'caption-covers', `${id}|${text.node.id}`, `${inShot(id, ctx)} covers the text "${text.node.id}" while it arrives; shorten that text or ${CAPTION_REMEDY}`, t.role)] : []),
     ];
   });
 }
@@ -516,9 +509,9 @@ function captionPlaceRules(captions, sampled, ctx, unit) {
     const { zone, hero } = t.node.props.caption;
     const id = t.node.id;
     const out = [];
-    if (isBox(zone) && outsideBox(t.ink, zone, SAFE_TOLERANCE_UNITS * unit)) out.push(finding(ctx, MECHANICAL, 'caption-zone', id, `caption "${id}" is outside its caption zone; cut words from the group or move the zone`, t.role));
+    if (isBox(zone) && outsideBox(t.ink, zone, SAFE_TOLERANCE_UNITS * unit)) out.push(finding(ctx, MECHANICAL, 'caption-zone', id, `${inShot(id, ctx)} is outside its caption zone; cut words from the shot's line (a long word alone, or many words together)`, t.role));
     const over = figuresOf(sampled, hero, ctx.canvas).find((f) => overlapBy(t.ink, f.box) > OVERLAP_UNITS * unit + EPSILON);
-    if (over) out.push(finding(ctx, MECHANICAL, 'caption-hero', `${id}|${over.id}`, `caption "${id}" covers "${over.id}"; captions never cover the hero or a picture: move the zone or make the picture smaller`, t.role));
+    if (over) out.push(finding(ctx, MECHANICAL, 'caption-hero', `${id}|${over.id}`, `${inShot(id, ctx)} covers "${over.id}"; captions never cover the hero or a picture: make the picture smaller, ${CAPTION_REMEDY}`, t.role));
     return out;
   });
 }
@@ -547,15 +540,6 @@ function captionRules(texts, sampled, ctx, unit) {
   const captions = texts.filter(isSpokenCaption);
   return [...captionPlaceRules(captions, sampled, ctx, unit), ...captionLateRules(captions, ctx), ...captionClipRules(captions, ctx, unit),
     ...captionCoverRules(captions, texts, sampled, ctx, unit)];
-}
-
-// Does a node show anything of its own? A text with a word above opacity 0 (or no word tracks), a path with its fill
-// finished or some of its stroke drawn, an image; a group shows only through its children. `reveal` 0 hides all.
-function showsItself(n) {
-  if ((n.reveal ?? 1) <= 0) return false;
-  if (n.type === 'text') return !Array.isArray(n.words) || n.words.length === 0 || n.words.some((w) => (w.opacity ?? 1) > 0);
-  if (n.type === 'path') return (Boolean(n.props?.fill) && (n.draw ?? 1) >= 1) || (Boolean(n.props?.stroke) && (n.draw ?? 1) > 0);
-  return n.type === 'image';
 }
 
 // Is anything but the background on screen? Nodes behind the picture plane (depth > 0: the film's field) do not count.

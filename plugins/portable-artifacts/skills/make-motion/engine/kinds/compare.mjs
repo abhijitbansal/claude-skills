@@ -9,9 +9,11 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
 import {
-  HERO_SCHEMA, heroId, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, NOT_BLANK, assertNoBlanks, hiddenOnFindings, isWide,
+  HERO_SCHEMA, heroId, isEditorial, heroProblems, fieldNode, onDevices, placeDevices, deviceCamera, unionBox, NOT_BLANK, assertNoBlanks, hiddenOnFindings, isWide,
 } from './shared.mjs';
+import { defaultCamera } from './camera.mjs';
 import { SIDES, compareTurn, valueText } from './compare-text.mjs';
+import { VALUE_SCHEMA, showsAsZero, zeroMessage } from './values.mjs';
 import { expandDeskCompare } from './compare-desk.mjs';
 import { expandPopCompare } from './compare-pop.mjs';
 
@@ -24,7 +26,6 @@ const POINT_MAX = 60;
 const POINTS_MAX = 3;
 const VALUE_TEXT_MAX = 9; // characters as set: a value is one numeral line that holds the hero size on a desk card
 const RATIO_LABEL_MAX = 16; // characters: the ratio and its label on one line at hero size
-const VALUE_LIMIT = 1e15; // as number.mjs: larger figures lose integer precision
 
 const SIDE_SCHEMA = Object.freeze({
   type: 'object',
@@ -33,7 +34,7 @@ const SIDE_SCHEMA = Object.freeze({
   properties: {
     title: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: TITLE_MAX },
     points: { type: 'array', maxItems: POINTS_MAX, items: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: POINT_MAX } },
-    value: { anyOf: [{ type: 'number', exclusiveMinimum: -VALUE_LIMIT, exclusiveMaximum: VALUE_LIMIT }, { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: VALUE_TEXT_MAX }] },
+    value: { anyOf: [VALUE_SCHEMA, { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: VALUE_TEXT_MAX }] },
     src: { type: 'string', minLength: 1 },
   },
 });
@@ -44,13 +45,19 @@ function sideProblems(shot) {
   const values = SIDES.filter((k) => shot[k]?.value !== undefined);
   const lopsided = values.length === 1 ? [{ path: `${values[0]}.value`, message: 'give a value on both sides or neither: values are compared' }] : [];
   const long = values.filter((k) => Number.isFinite(shot[k].value)).map((k) => [k, valueText(shot[k].value)])
-    .filter(([k, text]) => text.length > VALUE_TEXT_MAX || (shot[k].value !== 0 && Number(text.replace(/[^\d.-]/g, '')) === 0)).map(([k, text]) => ({
+    .filter(([k, text]) => text.length > VALUE_TEXT_MAX || showsAsZero(shot[k].value, text)).map(([k, text]) => ({
       path: `${k}.value`, message: text.length > VALUE_TEXT_MAX
         ? `a value is set on one line of at most ${VALUE_TEXT_MAX} characters ("${text}" is ${text.length}): round it, or put the unit in the title`
-        : `${shot[k].value} would show as "${text}" (at most 3 decimals): scale it and put the unit in the title`,
+        : zeroMessage(shot[k].value, text, 'put the unit in the title'),
     }));
   return [...lopsided, ...long];
 }
+
+// A kicker a stack look does not draw (it tags each side OPTION A / B or BEFORE / AFTER instead): advice at the field,
+// never a silent drop (review B M18). An editorial look sets it on a slug.
+const kickerFindings = (shot, look) => (shot.kicker !== undefined && look && !isEditorial(look)
+  ? [{ path: 'kicker', at: 0, message: `the ${look.name} look does not draw a compare's kicker (its sides carry their own tags): say it in the narration or a statement before the compare, and leave it out` }]
+  : []);
 
 // Each `on` device, inside the side it aims at when the composition hides sides (pop), else on the frame. Nothing goes
 // behind: the sides are opaque cards in desk (a band under them would be hidden), and pop styles no highlight on text.
@@ -132,7 +139,10 @@ registries.kinds.add(KIND, {
   },
   // when a side is on screen: one at a time in a stack (pop), both from their arrival in a column of cards (desk)
   partWindow: sideWindow,
-  review: (shot, { look, timing, at, canvas }) => hiddenOnFindings(shot, { timing, at }, (target) => sideWindow(shot, timing, target, look, canvas)),
+  review: (shot, { look, timing, at, canvas }) => [
+    ...kickerFindings(shot, look),
+    ...hiddenOnFindings(shot, { timing, at }, (target) => sideWindow(shot, timing, target, look, canvas)),
+  ],
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...sideProblems(shot), ...kindSupportProblems(KIND, look)],
   expand: expandCompare,
   numbered: (shot) => shot.kicker !== undefined, // with a kicker, a slug (desk) that counts among the numbered shots

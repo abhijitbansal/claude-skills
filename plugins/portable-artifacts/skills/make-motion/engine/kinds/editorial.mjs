@@ -5,7 +5,8 @@
 // kinds/shared.mjs may not import the looks index (captions/index -> kinds/shared would load the looks before the
 // caption styles they name). Pure and DOM-free.
 import { gridSpan } from '../looks/index.mjs';
-import { compositionRect, driftReach } from './shared.mjs';
+import { compositionRect } from './shared.mjs';
+import { driftReach } from './camera.mjs';
 
 // The safe rect's sides, each moved in by the look's resting camera drift (a drifting camera carries a block set flush
 // on the safe edge past it).

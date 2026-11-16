@@ -8,11 +8,12 @@ import { node } from '../graph/node.mjs';
 import { track, sample } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { sizeAt, fontFor, setCase, compositionRect, runInk, shownFrom, pulseScale, easePeak } from '../kinds/shared.mjs';
-import { captionGroups, groupTimes, fitGroup, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
+import { captionGroups, groupTimes, fitGroup, heardStart, spokenLayout, clearZone, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
 
 const STACK = Object.freeze({
   step: 3, // the display face at scale step 3 (a stack line's smallest), smaller only for a group that does not fit
   maxLines: 2,
+  minColumns: 4, // the zone never narrows to fewer columns than this to step past a pinned card or a mark
   grouping: Object.freeze({ maxWords: 3, maxChars: 18 }),
 });
 
@@ -31,12 +32,18 @@ const scales = (look) => look.emphasis === 'recolor-scale' && look.moves.emphasi
 // The largest scale an emphasised word reaches (the spring's overshoot included), or 1 in a look that does not scale.
 const peakOf = (look) => (scales(look) ? 1 + (look.moves.emphasize.scale - 1) * easePeak(look.moves.emphasize.ease) : 1);
 
-/** The zone: the bottom of the area, as high as two lines at their peak scale, over its whole width. */
+/**
+ * The zone: the bottom of the area, as high as two lines at their peak scale, over its whole width. Against a pinned
+ * text card or a marked region in the band (ctx.avoid, ctx.marks: groups.mjs clearZone) it keeps to the stack edge (the
+ * left) while it can, narrowing from the right, then moves its left edge right, never under STACK.minColumns columns.
+ */
 function zone(ctx) {
   const font = displayFont(ctx);
   const area = areaOf(ctx);
   const h = (STACK.maxLines - 1) * font.lineHeight * font.size + (ZONE_ASCENT + ZONE_DESCENT) * font.size * peakOf(ctx.look);
-  return [area.left, area.top + area.h - h, area.w, h];
+  const to = ctx.look.grid.columns;
+  const rank = ({ a, b }) => [a - 1, a - b]; // on the stack edge first, then the widest
+  return clearZone(ctx, [area.left, area.top + area.h - h, area.w, h], { from: 1, to, minColumns: STACK.minColumns, left: area.left, right: area.left + area.w, rank });
 }
 
 // A word's colour over time: ink, the accent while it is spoken (from its start to `next`, the next later start), and,
@@ -65,12 +72,12 @@ function wordTracksOf(layout, group, ctx) {
   const { look, fps } = ctx;
   const words = layout.lines.flatMap((line) => line.words.map((w) => ({ line, w })));
   const pulses = new Map(words.filter(({ w }) => scales(look) && group.words[w.index].emphasis)
-    .map(({ w }) => [w.index, pulseScale(look, { pulse: group.words[w.index].start })]));
+    .map(({ w }) => [w.index, pulseScale(look, { pulse: heardStart(group.words[w.index]) })]));
   return words.map(({ line, w }) => {
     const said = group.words[w.index];
-    // lit until a later word starts: the words of a merged run (one shared time) light together
-    const next = group.words.slice(w.index + 1).find((o) => o.start > said.start)?.start;
-    const fill = fillTrack(look, said.start, next, said.emphasis);
+    // lit from when it is heard until a later word is: the words of a merged run (one shared time) light together
+    const next = group.words.slice(w.index + 1).map(heardStart).find((t) => t > heardStart(said));
+    const fill = fillTrack(look, heardStart(said), next, said.emphasis);
     const before = line.words.filter((o) => o.index < w.index && pulses.has(o.index)).map((o) => ({ track: pulses.get(o.index), width: o.width }));
     const own = pulses.has(w.index) ? [{ track: pulses.get(w.index), width: w.width / 2 }] : [];
     const x = followTrack([...before, ...own], fps);
@@ -83,10 +90,7 @@ function wordTracksOf(layout, group, ctx) {
 function setAt(group, size, maxWidth, ctx) {
   const font = fontFor(ctx.look, 'display', size, ctx.unit);
   const text = setCase(ctx.look, 'display', group.words.map((w) => w.text).join(' '));
-  const layout = layoutText({ text, font, maxWidth, measure: ctx.measure });
-  const count = layout.lines.reduce((n, l) => n + l.words.length, 0);
-  if (count !== group.words.length) throw new Error(`${ctx.captionId}: "${text}" lays out as ${count} words, not the ${group.words.length} spoken`);
-  return { layout, font };
+  return { layout: spokenLayout(layoutText({ text, font, maxWidth, measure: ctx.measure }), group, text, ctx.captionId), font };
 }
 
 // The group at step STACK.step, or smaller (down to the look's smallest step) when it needs more than STACK.maxLines or

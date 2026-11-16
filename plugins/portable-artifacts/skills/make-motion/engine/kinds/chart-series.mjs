@@ -73,7 +73,7 @@ function seriesNodes(shot, ctx, style, { line, baseY, times, hl, area }) {
 }
 
 // Each series' end: its name and its last value, after its last point, spread down the right so none meets the next.
-function endLabels(shot, ctx, style, { lines, plot, times, hl, decimals }) {
+function endLabels(shot, ctx, style, { lines, plot, times, hl, decimals, squeezed }) {
   const { font, gap } = style;
   const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
   const live = lines.filter((l) => l.points.length > 0);
@@ -83,7 +83,7 @@ function endLabels(shot, ctx, style, { lines, plot, times, hl, decimals }) {
     const out = [];
     let after = x;
     if (l.name !== null) {
-      const name = label(ctx, { id: `${shot.id}.series.${l.index}`, text: l.name, font, x, y, fill: l.index === hl ? style.strong : style.text, crowded: !fits });
+      const name = label(ctx, { id: `${shot.id}.series.${l.index}`, text: l.name, font, x, y, fill: l.index === hl ? style.strong : style.text, crowded: !fits || squeezed });
       out.push(name.node);
       after = x + name.box[2] + gap;
     }
@@ -108,7 +108,10 @@ export function drawSeries(shot, ctx, style, box, { valueOnHighlight, area, head
   });
   const gutter = axisGutter(shot, ctx, style, scale, style.refs);
   const right = Math.max(0, ...ends) + gap;
-  const plot = { x: box.x + gutter, y: box.y + ink / HALF + headroom, w: Math.max(1, box.w - gutter - right), h: Math.max(1, box.h - ink / HALF - gap - ink - headroom) };
+  // never narrower than the look's minimum (style.minPlot of the box): end labels too long for it say so instead
+  const floor = style.minPlot * box.w;
+  const squeezed = box.w - gutter - right < floor;
+  const plot = { x: box.x + gutter, y: box.y + ink / HALF + headroom, w: Math.max(1, floor, box.w - gutter - right), h: Math.max(1, box.h - ink / HALF - gap - ink - headroom) };
   const { lines, xs, baseY } = lineMarks(data.series, plot, scale);
   const yOf = (v) => plot.y + plot.h - ((Math.min(scale.hi, Math.max(scale.lo, v)) - scale.lo) / (scale.hi - scale.lo)) * plot.h;
   const parts = lines.map((line) => seriesNodes(shot, ctx, style, { line, baseY, times, hl, area }));
@@ -122,7 +125,7 @@ export function drawSeries(shot, ctx, style, box, { valueOnHighlight, area, head
       ...valueAxis(shot, ctx, style, { plot, scale, yOf, gutterX: plot.x - gap, refs: style.refs }),
       ...parts.flatMap((p) => p.fills), ...parts.flatMap((p) => p.strokes),
       ...xLabels(shot, ctx, style, { xs, plot }),
-      ...endLabels(shot, ctx, { ...style, valueOnHighlight }, { lines, plot, times, hl, decimals }),
+      ...endLabels(shot, ctx, { ...style, valueOnHighlight }, { lines, plot, times, hl, decimals, squeezed }),
     ],
     boxes, plot, times,
     highlight: last === undefined ? null : { index: hl, text: valueText(last, decimals, shot.unit) },

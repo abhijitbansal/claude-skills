@@ -89,10 +89,42 @@ function formatOne(e) {
   }
 }
 
+// The anyOf branch (its index) an error belongs to, or -1: under the anyOf's schemaPath and at or inside its instancePath.
+function branchOf(e, anyOf) {
+  if (typeof e.schemaPath !== 'string' || typeof e.instancePath !== 'string') return -1;
+  const prefix = `${anyOf.schemaPath}/`;
+  const inside = e.instancePath === anyOf.instancePath || e.instancePath.startsWith(`${anyOf.instancePath}/`);
+  return e.schemaPath.startsWith(prefix) && inside ? Number(e.schemaPath.slice(prefix.length).split('/')[0]) : -1;
+}
+
+// How far a branch's errors put it from the value: first whether it failed on the value's own type (a series object
+// where an array was given), then how many errors it has.
+const distance = (list, anyOf) => [list.some((e) => e.keyword === 'type' && e.instancePath === anyOf.instancePath) ? 1 : 0, list.length];
+const closer = (a, b) => a[0] - b[0] || a[1] - b[1];
+
+// For each failed anyOf (outermost first), only the errors of its closest branch (distance; ties to the first), so a
+// misspelled key in one shape is not answered by every other shape's errors too.
+function closestBranches(errors) {
+  let kept = errors;
+  const anyOfs = errors.filter((e) => e.keyword === 'anyOf' && typeof e.schemaPath === 'string').sort((a, b) => a.schemaPath.length - b.schemaPath.length);
+  for (const anyOf of anyOfs) {
+    if (!kept.includes(anyOf)) continue;
+    const branches = new Map();
+    for (const e of kept) {
+      const n = branchOf(e, anyOf);
+      if (n >= 0) branches.set(n, [...(branches.get(n) ?? []), e]);
+    }
+    if (branches.size < 2) continue;
+    const [best] = [...branches].sort(([na, a], [nb, b]) => closer(distance(a, anyOf), distance(b, anyOf)) || na - nb)[0];
+    kept = kept.filter((e) => [-1, best].includes(branchOf(e, anyOf)));
+  }
+  return kept;
+}
+
 // Turn raw Ajv errors (compile with { allErrors: true, verbose: true }) into
 // [{ path, message }] lines that name the field and the fix.
 export function formatAjvErrors(errors) {
-  const specific = errors.filter((e) => !NOISE.has(e.keyword));
+  const specific = closestBranches(errors).filter((e) => !NOISE.has(e.keyword));
   const source = specific.length ? specific : errors;
   const formatted = source.map(formatOne);
   // "titel: did you mean title" already explains "title: required".

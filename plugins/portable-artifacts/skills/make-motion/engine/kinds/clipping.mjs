@@ -21,10 +21,9 @@ import { stackArea, centredTop } from './stack.mjs';
 import { slugBox } from './slug.mjs';
 import { layeredCamera } from '../graph/camera.mjs';
 import {
-  HERO_SCHEMA, REGION_PREFIX, heroId, isWide, arrivesMatched, regionOf, isEditorial, cutsToCloseUp, requireDevice,
-  compositionRect, fieldNode, defaultCamera, pushLayer, onDevices, placeDevices, deviceCamera, withEstablishingView, captionTop,
-  openingLanding, easePeak, NOT_BLANK, assertNoBlanks,
+  HERO_SCHEMA, REGION_PREFIX, heroId, isWide, arrivesMatched, regionOf, isEditorial, cutsToCloseUp, requireDevice, compositionRect, fieldNode, onDevices, placeDevices, deviceCamera, captionTop, openingLanding, easePeak, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
+import { defaultCamera, pushLayer, withEstablishingView } from './camera.mjs';
 
 const CAPTION_MAX = 80;
 const KICKER_MAX = 40;

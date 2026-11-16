@@ -1,9 +1,9 @@
 // The `compare` kind's sides as its compositions read them (compare.mjs, compare-desk.mjs, compare-pop.mjs): when the
 // right side arrives, how a value is shown and the words of each side. Pure and DOM-free.
 import { formatValue } from './shared.mjs';
+import { shownDecimals } from './values.mjs';
 
 export const SIDES = Object.freeze(['left', 'right']);
-const MAX_DECIMALS = 3;
 const POINT_DASH = '–';
 const LINE_BREAK = ' | '; // a lone `|` forces a break after the word before it (text/layout.mjs)
 const HALF = 2;
@@ -22,8 +22,7 @@ export function compareTurn(timing) {
 /** A value as shown: a number with thousands grouped and its own decimals (at most 3), a string as written. */
 export function valueText(value) {
   if (typeof value === 'string') return value;
-  const decimals = Math.min(MAX_DECIMALS, (String(value).split('.')[1] ?? '').length);
-  return formatValue(value, decimals);
+  return formatValue(value, shownDecimals(value));
 }
 
 /** Does the shot set values (on both sides: the validator refuses one side alone)? */

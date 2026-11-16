@@ -10,17 +10,19 @@
 //
 // discs data: { minDot, fill (share of the room the larger takes when it fits), wide: { edge } and tall: { edge } (the
 // larger's near edge, a share of the span / band), gap (units between a group's lines), valueStep, ratioStep (scale
-// steps: the floors of the number and the headline), ring: { gap, width } (units) }.
+// steps: the floors of the number and the headline), ring: { gap, width } (units), minRatio (under it: the cards),
+// maxRatio and more (a ratio at or over it prints "<more> <maxRatio>"), bigCap (the larger at most this many rooms) }.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { track } from '../time/track.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, formatValue } from './shared.mjs';
 import { SIDES, valueText } from './compare-text.mjs';
 import { secondarySize, secondaryFloor, heroFloor } from './secondary.mjs';
-import { sunBody, circlePath } from '../devices/sun.mjs';
+import { sunBody, circlePath, hasSun } from '../devices/sun.mjs';
 
 const HALF = 2;
+const DECIMAL_UNDER = 10; // a ratio under this keeps one decimal (1.5x is not 2x)
 const NO_WRAP = 1e6;
 const TIMES = '×';
 const MID = 0.5; // the wide Sun's centre: the band's middle
@@ -31,16 +33,32 @@ const CLEAR = 1.15; // a number's cap height and a little more (ink overshoot) b
 const NUMERIC = /^(\d{1,3}(,\d{3})+|\d+)(\.\d+)?$/;
 export const numericValue = (v) => (typeof v === 'number' ? v : typeof v === 'string' && NUMERIC.test(v.trim()) ? Number(v.trim().replaceAll(',', '')) : NaN);
 
-/** Does the look draw scale for this shot (both values numbers, the look's discs data)? */
-export const drawsDiscs = (shot, data) => Boolean(data.discs) && SIDES.every((k) => numericValue(shot[k]?.value) > 0);
+/**
+ * Does the look draw scale for this shot: the look's discs data and a sun to draw the larger with, both values numbers
+ * above 0, and their ratio at least discs.minRatio (nearer equal, two discs read as two equal circles: the cards say it
+ * better)? Otherwise the compare falls back to the cards.
+ */
+export function drawsDiscs(shot, data, look) {
+  if (!data.discs || !hasSun(look)) return false;
+  const values = SIDES.map((k) => numericValue(shot[k]?.value));
+  if (!values.every((v) => v > 0)) return false;
+  return Math.max(...values) / Math.min(...values) >= data.discs.minRatio;
+}
+
+/** The ratio as printed: one decimal under 10, thousands grouped above 999, at discs.maxRatio "<discs.more> <max>". */
+export function ratioText(ratio, discs) {
+  if (ratio >= discs.maxRatio) return `${discs.more} ${formatValue(discs.maxRatio, 0)}`;
+  return formatValue(ratio, ratio < DECIMAL_UNDER ? 1 : 0);
+}
 
 // The two diameters in px: the larger at `fill` of the room, the smaller in true ratio, or, when that would be under
-// the dot floor, the smaller at the floor and the larger in true ratio from it (it runs off the frame).
+// the dot floor, the smaller at the floor and the larger in true ratio from it (it runs off the frame), never more than
+// `bigCap` times the room (past that the arc on the frame is a straight edge anyway).
 export function discSizes(small, big, room, data, unit) {
   const ratio = big / small, floor = data.minDot * unit;
   const fitted = data.fill * room;
   if (fitted / ratio >= floor) return { small: fitted / ratio, big: fitted, ratio, capped: false };
-  return { small: floor, big: floor * ratio, ratio, capped: true };
+  return { small: floor, big: Math.min(floor * ratio, data.bigCap * room), ratio, capped: true };
 }
 
 // The three sizes: secondary (name, unit) at the floor, the number a distinct middle size, the headline the hero.
@@ -70,7 +88,7 @@ function groupSet(shot, key, ctx, sz, maxWidth, align) {
 function headSet(shot, ratio, ctx, sz, maxWidth, align) {
   const { look, unit, measure } = ctx;
   const font = fontFor(look, 'display', sz.h, unit);
-  const layout = layoutText({ text: `${Math.round(ratio)}${shot.ratioLabel ?? TIMES}`, font, maxWidth, measure, align });
+  const layout = layoutText({ text: `${ratioText(ratio, ctx.data.discs)}${shot.ratioLabel ?? TIMES}`, font, maxWidth, measure, align });
   return { font, layout, h: layout.lines.at(-1).y - layout.lines[0].y + (CAP_HEIGHT + WORD_DESCENT) * sz.h };
 }
 

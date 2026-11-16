@@ -9,8 +9,9 @@
 import { registries } from '../registry.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
 import {
-  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, defaultCamera, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks,
+  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
+import { defaultCamera } from './camera.mjs';
 import { quotationOf, quoteTimes } from './quote-text.mjs';
 import { expandDeskQuote } from './quote-desk.mjs';
 import { expandPopQuote } from './quote-pop.mjs';

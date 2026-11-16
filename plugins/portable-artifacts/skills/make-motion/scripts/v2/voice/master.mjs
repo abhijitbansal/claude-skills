@@ -41,8 +41,8 @@ export const AAC_AUDIO = Object.freeze(['-c:a', 'aac', '-b:a', '160k', '-aac_pns
 export const LOUDNESS_TOLERANCE_LU = 1;
 /**
  * The master aims within this many LU of the target (the limiter runs when the ceiling would leave it further short),
- * and the mastered WAV is judged against it before any frame is captured: the finished file keeps
- * LOUDNESS_TOLERANCE_LU, so the AAC encode has room to move it without a late refusal.
+ * and encodeMaster raises an encode that falls further short; what is judged, before any frame is captured and after
+ * the mux, is the AAC encode, against LOUDNESS_TOLERANCE_LU.
  */
 export const MASTER_AIM_LU = 0.5;
 export const UNMEASURED_NOTE = 'the sound is too short or too quiet for its loudness to be measured, so it was not normalised';
@@ -593,9 +593,12 @@ async function builtVoice({ run, voice, timeline, workDir }) {
  * made: { dir, sidecar } (a WAV per narrated shot), or { recording, sidecar } (the absolute path of an author's own
  * recording of the whole film, and its words in seconds from the file's start), or undefined for a film without one.
  * `cues` ({ file }) and `music` ({ file, recording, fadeFrom, duck }) make it one mix (masterMix); without them the voice
- * alone is mastered as it always was (masterVoice). Every failure is an AudioError with the audio hint.
+ * alone is mastered as it always was (masterVoice). `headroomDb` (0 by default) masters under a ceiling that much
+ * lower, the limiter included, with the same loudness target and balance: room for encodeMaster to raise an encode
+ * that AAC took level from (voice/remaster.mjs). Every failure is an AudioError with the audio hint.
  */
-export async function masterTrack({ run, voice, timeline, loudness, workDir, cues, music }) {
+export async function masterTrack({ run, voice, timeline, loudness: target, workDir, cues, music, headroomDb = 0 }) {
+  const loudness = headroomDb === 0 ? target : { ...target, truePeakDb: target.truePeakDb - headroomDb };
   try {
     const built = voice === undefined ? null : await builtVoice({ run, voice, timeline, workDir });
     if (!cues && !music) {
@@ -659,9 +662,11 @@ export async function measureFile({ run, file }) {
   }
 }
 
-// How far to raise an encode that fell more than MASTER_AIM_LU short of the target: the shortfall, as far as the true
-// peak allows (ceilingFor: the ceiling less the room a later encode may still move it). 0: leave it.
-function encodeRaise(level, loudness) {
+/**
+ * How far to raise an encode that fell more than MASTER_AIM_LU short of the target: the shortfall, as far as the true
+ * peak allows (ceilingFor: the ceiling less the room a later encode may still move it). 0: leave it.
+ */
+export function encodeRaise(level, loudness) {
   if (level.lufs === null || level.truePeakDb === null || loudness.lufs - level.lufs <= MASTER_AIM_LU) return 0;
   return Math.max(0, hundredths(Math.min(loudness.lufs - level.lufs, ceilingFor(loudness.truePeakDb) - level.truePeakDb)));
 }
@@ -679,9 +684,9 @@ function encodeHold(level, loudness) {
  * `loudness` is made again with the shortfall added as gain, as far as the true peak allows, at most ENCODE_ROUNDS
  * times. Then, as the last stage, an encode whose true peak is over the mode's ceiling (the encoder can add more than
  * ceilingFor leaves it) is made again lowered to ceilingFor, at most HOLD_ROUNDS times, and never raised after.
- * Resolves `{ file: out, level, gainDb, held }`: the level of the stream the mux will copy (measureFile's shape), the
- * gain added, and whether it was lowered to the ceiling (judgeLevel's `held`). The caller judges `level` with the
- * finished file's rule.
+ * Resolves `{ file: out, level, gainDb, held, heldFrom }`: the level of the stream the mux will copy (measureFile's
+ * shape), the gain added, whether it was lowered to the ceiling, and the level it was lowered from (null when no hold
+ * ran: judgeLevel's `heldFrom`, the cause of a held shortfall). The caller judges `level` with the finished file's rule.
  */
 export async function encodeMaster({ run, master, out, duration, loudness }) {
   try {
@@ -693,12 +698,9 @@ export async function encodeMaster({ run, master, out, duration, loudness }) {
     };
     let level = await encode(0);
     for (let round = 0; round < ENCODE_ROUNDS && encodeRaise(level, loudness) > 0; round++) level = await encode(encodeRaise(level, loudness));
-    let held = false;
-    for (let round = 0; round < HOLD_ROUNDS && encodeHold(level, loudness) < 0; round++) {
-      level = await encode(encodeHold(level, loudness));
-      held = true;
-    }
-    return { file: out, level, gainDb, held };
+    const heldFrom = encodeHold(level, loudness) < 0 ? level : null;
+    for (let round = 0; round < HOLD_ROUNDS && encodeHold(level, loudness) < 0; round++) level = await encode(encodeHold(level, loudness));
+    return { file: out, level, gainDb, held: heldFrom !== null, heldFrom };
   } catch (err) {
     throw asAudioError(err);
   }
@@ -726,14 +728,17 @@ export async function muxVoice({ run, video, audio, out, duration }) {
  * of the target is not refused: `audio` comes back with NO_VOICE_NOTE as its note. Over the target or over the ceiling
  * is refused either way. `tolerance` (LU, default LOUDNESS_TOLERANCE_LU): render.mjs judges both the AAC encode of
  * the master before capture (encodeMaster) and the finished file with the default; the encode is the stream the mux
- * copies, so a film that would fail late fails early. `held`: the encode was lowered to the ceiling (encodeMaster), so a
- * level short of the target is not refused either: `audio` comes back with HELD_NOTE as its note.
+ * copies, so a film that would fail late fails early. `heldFrom`: the level encodeMaster's last-stage hold lowered the
+ * encode from (null or absent: no hold). A shortfall the hold caused (the level before it was within `tolerance`) is
+ * not refused: `audio` comes back with HELD_NOTE as its note. A shortfall that predates the hold is refused as any is.
  */
-export function judgeLevel(audio, loudness, subject = 'the finished film', { noVoice = false, held = false, tolerance = LOUDNESS_TOLERANCE_LU } = {}) {
-  const short = audio.lufs !== null && audio.lufs < loudness.lufs - tolerance;
+export function judgeLevel(audio, loudness, subject = 'the finished film', { noVoice = false, heldFrom = null, tolerance = LOUDNESS_TOLERANCE_LU } = {}) {
+  const isShort = (level) => level.lufs !== null && level.lufs < loudness.lufs - tolerance;
+  const short = isShort(audio);
+  const held = heldFrom !== null && typeof heldFrom === 'object' && !isShort(heldFrom);
   if (short && (noVoice || held)) {
     if (audio.truePeakDb !== null && audio.truePeakDb > loudness.truePeakDb) judgeLevel({ ...audio, lufs: null }, loudness, subject);
-    return { ...audio, note: noVoice ? NO_VOICE_NOTE : HELD_NOTE };
+    return { ...audio, note: [noVoice ? NO_VOICE_NOTE : null, held ? HELD_NOTE : null].filter(Boolean).join('; ') };
   }
   if (short) {
     throw new AudioError(`voice loudness: ${subject} measures ${audio.lufs} LUFS, more than ${tolerance} LU under the mode's target of ${loudness.lufs} LUFS`, { hint: LEVEL_SHORT_HINT });

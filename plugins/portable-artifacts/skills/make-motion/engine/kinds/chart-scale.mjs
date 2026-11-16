@@ -26,7 +26,8 @@ export function niceTicks(lo, hi, count = 3) {
   const multiple = NICE.find((m) => norm <= m);
   const exponent = multiple === NICE.at(-1) ? power + 1 : power;
   const step = (multiple === NICE.at(-1) ? 1 : multiple) * 10 ** exponent;
-  const decimals = Math.max(0, -exponent) + (multiple === QUARTER ? 1 : 0);
+  // the step's own decimals: 2.5 x 10^k has one past 10^k's, so 25 and 250 have none and 0.25 has two
+  const decimals = Math.max(0, -exponent + (multiple === QUARTER ? 1 : 0));
   const round = (v) => Number(v.toFixed(decimals));
   const first = Math.floor(from / step + STEP_EPSILON), last = Math.ceil(to / step - STEP_EPSILON);
   const ticks = Array.from({ length: last - first + 1 }, (_, k) => round((first + k) * step));
@@ -36,7 +37,7 @@ export function niceTicks(lo, hi, count = 3) {
 /** A value as shown: thousands grouped, `decimals` places, a currency unit before the number (after its sign), % after it, any other unit after a space. */
 export function valueText(value, decimals, unit) {
   const figure = formatValue(Math.abs(value), decimals);
-  const sign = value < 0 ? '-' : '';
+  const sign = value < 0 && Number(figure.replace(/,/g, '')) !== 0 ? '-' : ''; // never "-0.000"
   if (unit === undefined || unit === '') return `${sign}${figure}`;
   if (CURRENCY.test(unit)) return `${sign}${unit}${figure}`;
   return unit === '%' ? `${sign}${figure}%` : `${sign}${figure} ${unit}`;

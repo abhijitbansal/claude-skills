@@ -109,7 +109,8 @@ export function stackLines(words) {
     const alone = k - i === 1 && letters <= STACK_SHORT_LETTERS ? STACK_ALONE_COST : 0;
     const weak = k < n && ctx.weak[k - 1] && !ctx.forced[k - 1] ? STACK_WEAK_COST : 0;
     const comma = words.slice(i, k - 1).some((w) => INNER_COMMA.test(bare(w))) ? STACK_COMMA_COST : 0;
-    const orphan = i === 0 && k === 1 && n > 2 ? STACK_ORPHAN_COST : 0;
+    // a one-word first line of a longer text, unless that word is a whole sentence ("Shipped." stands alone)
+    const orphan = i === 0 && k === 1 && n > 2 && !SENTENCE_END.test(bare(words[0])) ? STACK_ORPHAN_COST : 0;
     return STACK_LINE_COST + long + alone + weak + comma + orphan + (ctx.preferred(k) ? 0 : STACK_OFF_POINT_COST);
   };
   const best = new Array(n + 1).fill(Infinity);

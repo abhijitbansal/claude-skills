@@ -21,7 +21,7 @@ import { openSession } from './session.mjs';
 
 // The voice steps, loaded only for a voiced film: a silent film imports nothing of the voice (nor version 1's loudness
 // module, which brings its whole spec validator, about 200 ms of loading measured on the dev machine).
-const voiceSteps = () => import('./voice/master.mjs');
+const voiceSteps = async () => ({ ...await import('./voice/master.mjs'), ...await import('./voice/remaster.mjs') });
 
 export const JPEG_QUALITY = 98;
 const HELD_CHUNK = 150; // frames whose held flags are fetched in one page.evaluate
@@ -190,13 +190,14 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     mkdirSync(path.dirname(out), { recursive: true });
     sweepPartials(path.dirname(out));
     if (steps !== null) work = mkdtempSync(path.join(tmpdir(), 'mm-voice-'));
-    const master = steps === null ? null : await steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work, cues: sound?.cues ?? undefined, music: sound?.music ?? undefined });
-    // Before any frame is captured: the master encoded to the AAC the film ships (raised by what AAC took from it), and
-    // that encode judged with the finished file's rule, so a film that would fail after the capture fails here. The mux
-    // copies this stream, so the judgement after it can no longer differ.
-    const encoded = master === null ? null : await steps.encodeMaster({ run, master, out: path.join(work, 'sound.m4a'), duration: open.timeline.duration, loudness });
-    // An encode lowered to the ceiling (encodeMaster's held) may sit under the target: noted, not refused.
-    const judgement = { noVoice: !narrated, held: encoded?.held ?? false };
+    const master = (headroomDb) => steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work, cues: sound?.cues ?? undefined, music: sound?.music ?? undefined, headroomDb });
+    // Before any frame is captured: the master encoded to the AAC the film ships (raised by what AAC took from it, and
+    // mastered again with room for that when it peaks at the ceiling: encodeToTarget), and that encode judged with the
+    // finished file's rule, so a film that would fail after the capture fails here. The mux copies this stream, so the
+    // judgement after it can no longer differ.
+    const encoded = steps === null ? null : await steps.encodeToTarget({ run, master, out: path.join(work, 'sound.m4a'), duration: open.timeline.duration, loudness, noVoice: !narrated });
+    // A shortfall the last-stage hold caused (heldFrom: the level it lowered from) is noted, not refused.
+    const judgement = { noVoice: !narrated, heldFrom: encoded?.heldFrom ?? null };
     if (encoded !== null) steps.judgeLevel(encoded.level, loudness, subject, judgement);
     encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact })], signal);
     const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });

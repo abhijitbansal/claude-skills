@@ -19,7 +19,6 @@ import { SLUG } from './slug.mjs';
 const FIRST_COLUMN = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
 const SOURCE_PREFIX = 'Source: ';
-const HERO_MARGIN = 1.03; // the claim a hair over three times the labels, so rounding never takes it under
 const SOURCE_GAP = 3;
 const BARRED = Object.freeze(['bar', 'column']); // the types drawn as labelled bars on a tall cosmos frame (chart-plot.mjs) // gaps between the plot's lowest label and the source line
 
@@ -28,7 +27,8 @@ function titleNode(shot, ctx, data, labelSize) {
   const { look, canvas, unit, measure } = ctx;
   const span = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.titleToWide : data.titleToTall);
   const opts = { text: setCase(look, 'display', shot.title), font: fontFor(look, 'display', data.titleMax * unit, unit), maxWidth: span.w, align: 'left', measure };
-  const fit = fitDisplay(opts, { min: HERO_MARGIN * MIN_HERO_RATIO * labelSize, max: data.titleMax * unit, maxHeight: canvas.h, maxLines: data.titleLines }, look, unit);
+  // a look may keep the claim a hair over three times the labels (data.titleMargin, cosmos); desk fits it from three times
+  const fit = fitDisplay(opts, { min: (data.titleMargin ?? 1) * MIN_HERO_RATIO * labelSize, max: data.titleMax * unit, maxHeight: canvas.h, maxLines: data.titleLines }, look, unit);
   const bounds = editorialBounds(ctx);
   // where a statement's slug sits, or the top of the composition band in the platform safe zone (editorial.mjs)
   const top = bounds.safe ? bounds.top : Math.max(look.grid.margin * unit, SLUG.top * canvas.h);
@@ -77,7 +77,8 @@ export function expandDeskChart(shot, ctx, data, hero) {
   const down = bounds.safe && shot.source !== undefined ? inkExtent(sourceText, sourceFont, ctx.measure).down : WORD_DESCENT * font.size;
   const sourceBaseline = Math.min(bounds.bottom, caption - gap) - down - wrap;
   const sourced = shot.source === undefined ? null
-    : label(ctx, { id: `${shot.id}.source`, text: sourceText, font: sourceFont, x: bounds.safe ? left : gridX(look, canvas, FIRST_COLUMN), y: sourceBaseline, fill: style.text, asWritten: true, ...(wrap > 0 ? { maxWidth: sourceWidth, lines: 2 } : {}) });
+    // off the safe zone too, a line wider than the plot's span says so (the review's fit finding), never runs off the frame
+    : label(ctx, { id: `${shot.id}.source`, text: sourceText, font: sourceFont, x: bounds.safe ? left : gridX(look, canvas, FIRST_COLUMN), y: sourceBaseline, fill: style.text, asWritten: true, ...(wrap > 0 ? { maxWidth: sourceWidth, lines: 2 } : bounds.safe ? {} : { maxWidth: right - left }) });
   const area = { x: left, y: title.bottom + data.titleGap * unit, w: right - left, h: 0 };
   const floorOf = (src) => Math.min(src === null ? bounds.bottom : src.box[1] - (data.sourceGap ?? SOURCE_GAP) * gap, caption) - gap;
   // bars with their labels over them need rows that show a bar; when they cannot have them, the source line (the least

@@ -3,19 +3,18 @@
 // balance. On each, `pad` in: the value as a numeral (when both sides have one: one size, one colour, neither styled as
 // better), the title in the display face and the points in the text face, all sides at one size each: the largest
 // title size from `titleMax` down that sets every title in at most `titleLines` lines and fits the card, with the points
-// at `pointScale` times step `pointStep` in the display serif. The left card is on the desk from the first frame, the
-// right one lands on the turn; from the turn the left one goes under a paper scrim at the look's focus dim, and a
-// hand-drawn vs (versus) or an arrow (before-after) draws on between them. Pure, DOM-free.
+// at `pointScale` times step `pointStep` in the display serif (at most a third of the title). Both cards are on the desk
+// from the first frame, the unspoken one under a paper scrim at the look's focus dim: the right one until the turn, the
+// left one from it; a hand-drawn vs (versus) or an arrow (before-after) draws on between them at the turn. Pure, DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
 import { landing, isHand, colourOf, smoothPath, polyline, pathPoints } from '../devices/shared.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, fitInBox, numeralLayout, cardOf, cardGroup, asTextCard } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, fitInBox, numeralLayout, cardOf, cardGroup, asTextCard, paperScrim } from './shared.mjs';
 import { track } from '../time/track.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
-import { paperScrim } from './shared.mjs';
 import { drawsDiscs, expandDiscs } from './compare-discs.mjs';
 import { slugBox, slugNodes } from './slug.mjs';
 
@@ -29,15 +28,14 @@ const VS_STROKES = Object.freeze({
   v: [[0, 0], [0.22, 1], [0.44, 0]],
   s: [[1, 0.12], [0.8, 0], [0.6, 0.22], [0.8, 0.5], [1, 0.78], [0.8, 1], [0.58, 0.9]],
 });
-const POINT_TITLE_RATIO = 2; // the title stays at least this many times the points
 const DEFAULT_STROKE = 5; // units, when the look's arrow has no width
 const DEFAULT_DIM = 0.55; // the scrim's opacity for a look whose devices name no focus dim (desk's own is 0.55)
 
 // The points' size: data.pointScale times scale step data.pointStep (look review 2: they must read on the phone tile),
-// never more than the title over POINT_TITLE_RATIO nor a numeral hero over MIN_HERO_RATIO. A side's title and points are
-// one size class (props.stack), so the hero rule judges the card, not the points against its title.
+// never more than the title (or a numeral hero) over MIN_HERO_RATIO: the points are a size class of their own, judged
+// against the title by the hero rule (review B I6), so a smaller title takes smaller points, down to scale step 1.
 function pointSize(look, data, { hero, title }, unit) {
-  return Math.min(data.pointScale * sizeAt(look, data.pointStep, unit), title / POINT_TITLE_RATIO, hero > title ? hero / MIN_HERO_RATIO : Infinity);
+  return Math.max(sizeAt(look, 1, unit), Math.min(data.pointScale * sizeAt(look, data.pointStep, unit), Math.max(hero, title) / MIN_HERO_RATIO));
 }
 
 // Both values on one line at one size: the largest up to valueMax that both fit `width`. A value is never set wider
@@ -83,7 +81,8 @@ function fitSides(shot, ctx, data, width, height) {
   const { look, unit } = ctx;
   const values = valueSet(shot, ctx, data, width);
   const hasPoints = SIDES.some((k) => pointsText(shot[k], { dash: !data.plainPoints }) !== null);
-  const floor = Math.max(sizeAt(look, data.titleFromStep, unit), hasPoints ? POINT_TITLE_RATIO * data.pointScale * sizeAt(look, data.pointStep, unit) : 0);
+  // with points, never so small that the points (at step 1 at the least) fall under a third of it
+  const floor = Math.max(sizeAt(look, data.titleFromStep, unit), hasPoints ? MIN_HERO_RATIO * sizeAt(look, 1, unit) : 0);
   const fits = (set) => set.every((s) => s.title.lines.length <= data.titleLines && s.title.width <= width + EPSILON && s.height <= height + EPSILON);
   // breaks by sense: the largest size with no title line of one word, else the largest that fits at all
   const noLone = (set) => set.every((s) => s.title.lines.length < HALF || s.title.lines.every((line) => line.words.length > 1));
@@ -126,21 +125,20 @@ function sideTexts(shot, ctx, data, side, { w, h, at, top, valueFill }) {
   const pad = data.pad * unit, ox = -w / HALF + pad;
   let cursor = -h / HALF + pad + top; // the next cap line
   const out = [];
-  const copy = `${shot.id}.${side.key}.copy`; // the size class of a side's title and points
-  const place = (id, layout, font, fill, role, stack, wordTracks) => {
+  // each text its own size class: the review judges the points against the title (review B I6)
+  const place = (id, layout, font, fill, role, wordTracks) => {
     const y = cursor + CAP_HEIGHT * font.size - layout.lines[0].y;
-    out.push(node('text', id, { x: ox, y, layout, font, fill, role, ...(stack ? { stack } : {}) }, { tracks: enterTracks(look, unit, at, { y }), ...(wordTracks ? { wordTracks } : {}) }));
+    out.push(node('text', id, { x: ox, y, layout, font, fill, role }, { tracks: enterTracks(look, unit, at, { y }), ...(wordTracks ? { wordTracks } : {}) }));
     return y + layout.lines.at(-1).y; // the last baseline
   };
   const id = `${shot.id}.${side.key}`;
   // the value is the hero: in ink, or with a fill track (cosmos: the accent while its side is spoken)
   const words = valueFill && side.value ? side.value.lines.flatMap((l) => l.words).map(() => ({ fill: valueFill })) : undefined;
-  if (side.value !== null) cursor = place(`${id}.value`, side.value, fontFor(look, 'display', side.value.size, unit), look.palette.ink, 'hero', undefined, words) + data.valueGap * side.value.size;
-  const grouped = side.points !== null && side.value === null ? copy : undefined;
-  const last = place(`${id}.title`, side.title, side.titleFont, look.palette.ink, 'hero', grouped);
+  if (side.value !== null) cursor = place(`${id}.value`, side.value, fontFor(look, 'display', side.value.size, unit), look.palette.ink, 'hero', words) + data.valueGap * side.value.size;
+  const last = place(`${id}.title`, side.title, side.titleFont, look.palette.ink, 'hero');
   if (side.points !== null) {
     cursor = last + data.titleGap * side.titleFont.size;
-    place(`${id}.points`, side.points, side.pointFont, look.palette.ink, 'body', grouped);
+    place(`${id}.points`, side.points, side.pointFont, look.palette.ink, 'body');
   }
   return out;
 }
@@ -245,7 +243,7 @@ function betweenMarks(shot, ctx, data, [a, b], turn) {
 /** The desk compare: { nodes, boxes, group } with the group (both cards) carrying the hero id. */
 export function expandDeskCompare(shot, ctx, data, turn, hero) {
   // a look that draws scale (cosmos): two discs in the true ratio when both values are numbers (compare-discs.mjs)
-  if (drawsDiscs(shot, data)) return expandDiscs(shot, ctx, data, turn, hero);
+  if (drawsDiscs(shot, data, ctx.look)) return expandDiscs(shot, ctx, data, turn, hero);
   const { look, canvas, unit, seed } = ctx;
   const wide = isWide(canvas);
   const margin = look.grid.margin * unit, gap = data.gap * look.grid.gutter * unit, pad = data.pad * unit;

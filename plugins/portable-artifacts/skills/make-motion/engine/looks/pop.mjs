@@ -79,9 +79,10 @@ export const pop = {
   // Composition data for the kinds that read it (engine/kinds/end.mjs, list.mjs, quote.mjs, compare.mjs, chart.mjs);
   // sizes are units or 1-based scale steps.
   kinds: {
-    // end: a stack (the mark as its tag), the ask an action: the look's tag in the accent at step `askStep`, `askGap`
-    // under the last title line (look review 2: as a last headline line it did not read as an action)
-    end: { askStep: 3, askGap: 40 },
+    // end: a stack (the mark as its tag), the ask an action: the look's tag in the accent at the largest of `askSteps` the
+    // title's largest line stays three times (the hero rule judges it), `askGap` under the last title line (look review 2:
+    // as a last headline line it did not read as an action)
+    end: { askSteps: [1, 2, 3], askGap: 40 },
     // list: one item at a time as a stack under a count tag; a note in the text face at the largest of `smallSteps` the
     // stack stays three times, its cap line `noteGap` under the item
     list: { noteGap: 32, smallSteps: [1, 2] },
@@ -99,8 +100,9 @@ export const pop = {
     // highlighted value a numeral up to `numeralMax`, at most `numeralShare` of the plot's height and `numeralWidth` of its
     // width, top right in the plot with the marks `numeralGap` under it (a donut's: in the hole, `holeShare` of the ring);
     // labels at step `labelStep`, `gap` from what they label; lines `line` wide, the baseline `axis` wide; the other marks
-    // dim to `dim`; no reference lines (`refs`): the values are labelled on the marks
-    chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false },
+    // dim to `dim`; no reference lines (`refs`): the values are labelled on the marks; a donut or line plot keeps at least
+    // `minPlot` of its box however long its labels (chart-draw.mjs)
+    chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false, minPlot: 0.4 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {

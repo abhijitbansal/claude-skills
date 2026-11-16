@@ -251,6 +251,19 @@ function pacingFindings(film, timeline, held) {
 }
 
 const MECHANICAL_KIND = 'mechanical';
+const CREATIVE_KIND = 'creative';
+
+/**
+ * One finding a kind's review gave about shot `shot` (the film's shot `index`, `timing` its timeline shot) as the film
+ * review's: creative unless it says `kind: 'mechanical'`. Any other `kind` (a typo would silently soften an honesty
+ * rule) is an error naming the kind, never read as creative.
+ */
+export function kindFinding(shot, index, timing, f) {
+  if (f.kind !== undefined && f.kind !== MECHANICAL_KIND && f.kind !== CREATIVE_KIND) {
+    throw new Error(`kind "${shot.show}" review: a finding's kind is ${JSON.stringify(f.kind)}, not "${MECHANICAL_KIND}" or "${CREATIVE_KIND}"`);
+  }
+  return { kind: f.kind ?? CREATIVE_KIND, shot: shot.id, path: `shots[${index}].${f.path}`, t: timing.start + f.at, rule: 'kind', node: f.path, message: f.message };
+}
 
 // Advice a kind gives about its own shots (kind.review(shot, { look, timing, at, canvas }) -> [{ path, at, message, kind? }]):
 // the clipping kind says a region event comes too early to show the whole picture first (creative, the default); the
@@ -262,9 +275,7 @@ function kindFindings(film, timeline) {
     const review = registries.kinds.get(shot.show).review;
     if (typeof review !== 'function') return [];
     const timing = timeline.shots[index];
-    return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h } }).map((f) => ({
-      kind: f.kind === MECHANICAL_KIND ? MECHANICAL_KIND : 'creative', shot: shot.id, path: `shots[${index}].${f.path}`, t: timing.start + f.at, rule: 'kind', node: f.path, message: f.message,
-    }));
+    return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h } }).map((f) => kindFinding(shot, index, timing, f));
   });
 }
 

@@ -16,15 +16,15 @@ import { track } from '../time/track.mjs';
 import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase,
-  isEditorial, heroProblems, fieldNode, enterTracks, defaultCamera, onDevices, placeDevices, deviceCamera, unionBox, runInk,
-  driftReach,
-  plainSay, endTimes, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup, plainTag,
+  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase, isEditorial, heroProblems, fieldNode, enterTracks, onDevices, placeDevices, deviceCamera, unionBox, runInk, plainSay, endTimes, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup,
 } from './shared.mjs';
+import { defaultCamera, driftReach } from './camera.mjs';
+import { plainTag } from './plain-tag.mjs';
 import { SLUG } from './slug.mjs';
 import { expandWordmark } from './end-mark.mjs';
 import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
+import { HERO_MARGIN } from './secondary.mjs';
 
 const KIND = 'end';
 const TITLE_MAX = 120;
@@ -211,16 +211,28 @@ function expandDesk(shot, ctx, data, times) {
 function expandPop(shot, ctx, data, times) {
   const { look, unit } = ctx;
   const area = stackArea(ctx);
-  // the ask is an action (look review 2): the look's tag in the accent, one line at data.askStep, under the stack
-  const askTag = (top, at) => plainTag(ctx, `${shot.id}.ask`, shot.ask, {
-    left: area.left, top, maxWidth: area.w, at, fromStep: data.askStep, toStep: data.askStep, fill: 'accent', text: 'paper', snap: true,
-  });
-  const askProbe = shot.ask === undefined ? null : askTag(0, 0);
+  // the ask is an action (look review 2): the look's tag in the accent, one line, under the stack; its words are part of
+  // the hierarchy (review B I10), so the hero rule judges it (role 'ask'): the largest of data.askSteps the title's
+  // largest line stays three times
   const picture = shot.src === undefined ? null : pictureSize(ctx.asset(shot.src), ctx.canvas);
-  const askRoom = askProbe === null ? 0 : data.askGap * unit + askProbe.box[3];
   const above = picture === null ? 0 : picture.h + STACK.kickerGap * unit;
   const staged = { ...shot, kicker: shot.mark };
-  const placed = restack(composeStack(setCase(look, 'display', titleOf(shot)), staged, ctx), ctx, { above, below: askRoom });
+  const first = composeStack(setCase(look, 'display', titleOf(shot)), staged, ctx);
+  // with the hero margin: at exactly three times, the page's measured sizes read 2.99 (review-browser, captions-browser)
+  const stepFor = (p) => stepUnder(look, data.askSteps, unit, [{ size: Math.max(...p.lines.map((l) => l.font.size)), ratio: HERO_MARGIN * MIN_HERO_RATIO }]);
+  const tagAt = (step) => (top, at) => plainTag(ctx, `${shot.id}.ask`, shot.ask, {
+    left: area.left, top, maxWidth: area.w, at, fromStep: step, toStep: step, fill: 'accent', text: 'paper', snap: true, role: 'ask',
+  });
+  const placeWith = (step) => {
+    const probe = shot.ask === undefined ? null : tagAt(step)(0, 0);
+    return restack(first, ctx, { above, below: probe === null ? 0 : data.askGap * unit + probe.box[3] });
+  };
+  // the stack set again round the ask may come out smaller: then the ask is chosen again for the size it has
+  let step = stepFor(first);
+  let placed = placeWith(step);
+  if (stepFor(placed) < step) placed = placeWith(step = stepFor(placed));
+  const askTag = tagAt(step);
+  const askProbe = shot.ask === undefined ? null : askTag(0, 0);
   const hero = heroId(shot, 'title');
   const flags = { ghost: ghostWords(ctx), matched: arrivesMatched(shot, ctx) };
   const stackTimes = times.title.map(({ at }) => ({ at, emphasised: false }));

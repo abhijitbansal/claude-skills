@@ -256,6 +256,22 @@ test('musicInput: a quiet tone is accepted and its loudness measured', async (t)
   assert.ok(Number.isFinite(got.lufs) && got.lufs > -70 && got.lufs < -10, `lufs ${got.lufs}`);
 });
 
+// ebur128 logs a line every 100 ms of audio unless its frame log is off (about 1.7 KB of stderr a second, measured on a
+// 3 s tone), so 700 s overflowed the measurement's 1 MiB buffer and a valid long film failed as machine trouble.
+const LONG_MUSIC_SECONDS = 700;
+
+test('musicInput: a long music file is measured; the per-frame log is off, so the summary is all ffmpeg prints (branch review A, I6)', async (t) => {
+  const tools = await mediaTools(t);
+  if (!tools) return;
+  const dir = filmFolder('long');
+  const made = spawnSync(tools.ffmpeg, ['-hide_banner', '-loglevel', 'error', '-y', '-f', 'lavfi', '-i', `sine=f=440:d=${LONG_MUSIC_SECONDS}:sample_rate=8000`,
+    '-c:a', 'pcm_s16le', path.join(dir, 'long.wav')], { encoding: 'utf8' });
+  assert.equal(made.status, 0, made.stderr);
+  const got = await musicInput(film('long.wav'), dir, { ...tools, seconds: LONG_MUSIC_SECONDS });
+  assert.ok(Number.isFinite(got.lufs) && got.lufs > -70 && got.lufs < -10, `lufs ${got.lufs}`);
+  assert.ok(Math.abs(got.seconds - LONG_MUSIC_SECONDS) < 0.01, `seconds ${got.seconds}`);
+});
+
 test('musicInput: a silent music file is the film\'s mistake, a SpecError at music.src (final review I4)', async (t) => {
   const tools = await mediaTools(t);
   if (!tools) return;

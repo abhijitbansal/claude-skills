@@ -1,8 +1,8 @@
 // EXPERIMENTAL LOOK: the parked `cosmos` look (look.experimental since gate review 3) against the review rules. Every
-// example `--list kinds` prints, in pro 16:9 and viral 9:16, reviewed at the sheet moments, comes back with no finding,
-// so the parked code does not rot while it is left out of the shipped set (review-browser.test.mjs covers desk and
-// pop). A kind that left out a secondary line to keep cosmos's minimum size says so (rule 'dropped'): that is the kind
-// working as designed, not a defect, and is not counted. Run with --test-concurrency=1; skips without a browser.
+// example `--list kinds` prints, in pro 16:9 and viral 9:16, reviewed at the sheet moments, comes back with exactly the
+// findings named in KNOWN (none for most), so the parked code does not rot while it is left out of the shipped set
+// (review-browser.test.mjs covers desk and pop). No rule is filtered out. Run with --test-concurrency=1; skips without
+// a browser.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,6 +14,18 @@ import { reviewFilm } from '../../scripts/v2/review.mjs';
 import { sessionOrNull } from './helpers/session.mjs';
 
 const FPS = 30;
+// The findings cosmos gives on a kind's example, by "<kind> <format>", as "<kind> <rule> <path>": the example is shared
+// with desk and pop, so its copy stays; what cosmos cannot show is said.
+// - list: cosmos sets no list slug and marks items with a dot rail, so the example's title and its steps numbering are
+//   not drawn (review C C1: said, never silent);
+// - end and quote at 9:16: the narrow safe zone cannot hold the hero three times cosmos's 52-unit secondary floor, so the
+//   end leaves out its ask and the quote its attribution (kinds/secondary.mjs, the frame review's dropped rule).
+const KNOWN = Object.freeze({
+  'list 16:9': ['creative kind shots[0].title', 'creative kind shots[0].style'],
+  'list 9:16': ['creative kind shots[0].title', 'creative kind shots[0].style'],
+  'end 9:16': ['creative dropped shots[0].say'],
+  'quote 9:16': ['creative dropped shots[0].say'],
+});
 const COMBOS = Object.freeze([
   { mode: 'pro', format: '16:9' },
   { mode: 'viral', format: '9:16' },
@@ -42,14 +54,16 @@ after(() => rmSync(specDir, { recursive: true, force: true }));
 
 for (const { mode, format } of COMBOS) {
   for (const entry of listEntries('kinds')) {
-    test(`experimental look cosmos: the ${entry.name} example at ${format} has no review finding`, async (t) => {
+    test(`experimental look cosmos: the ${entry.name} example at ${format} has only its known findings`, async (t) => {
       const film = { version: 2, mode, look: 'cosmos', format, fps: FPS, seed: 3, shots: [entry.example] };
       const session = await sessionOrNull(film, { specDir });
       if (!session) { t.skip('no browser'); return; }
       t.after(() => session.close());
       const findings = await reviewFilm({ session });
-      const kept = findings.filter((f) => f.rule !== 'dropped');
-      assert.deepEqual(kept.map((f) => `${f.kind}: ${f.message}`), []);
+      // every finding counts (review C I2: the sweep no longer filters any rule out); the ones this parked look is known
+      // to give are asserted by name
+      const named = findings.map((f) => `${f.kind} ${f.rule} ${f.path}`);
+      assert.deepEqual(named, KNOWN[`${entry.name} ${format}`] ?? [], findings.map((f) => f.message).join('\n'));
       assert.deepEqual(session.errors, []);
     });
   }

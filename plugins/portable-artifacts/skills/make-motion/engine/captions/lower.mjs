@@ -2,8 +2,9 @@
 // right edge is the right edge of column 11 (the slug's right margin: the slug sits top right, the caption bottom right,
 // so the spoken words never take the bottom left, where a clipping's own caption card rests) and its bottom is the
 // bottom margin; it sits square, pinned to the frame (props.fixed: a camera push leaves it in place). Up to two lines in
-// the zone's width (columns 6 to 11 on a wide canvas, 2 to 11 on a tall one, narrowed from the left past any pinned text
-// card of the kind that comes into the band: a clipping's caption card at rest and where a push takes it); the groups are
+// the zone's width (columns 6 to 11 on a wide canvas, 2 to 11 on a tall one, narrowed past any pinned text card of the
+// kind or marked region of the shot that comes into the band: a clipping's caption card at rest and where a push takes
+// it); the groups are
 // sized to that width. One card per shot, sized to its largest group, on screen while a group is; the groups swap inside
 // it as each one's last word ends. An emphasised word is
 // marked with the look's emphasis: a highlighter band drawn on as it is spoken (a highlight look), else its fill turns
@@ -13,7 +14,7 @@ import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { sizeAt, fontFor, setCase, isWide, runInk, shownFrom, asTextCard, compositionRect, requireDevice } from '../kinds/shared.mjs';
-import { captionGroups, groupTimes, fitGroup, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
+import { captionGroups, groupTimes, fitGroup, heardStart, columnRight, visibleDuring, spokenLayout, clearZone, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
 
 const LOWER = Object.freeze({
   step: 2, // label caps at scale step 2, as a slug's kicker
@@ -21,47 +22,36 @@ const LOWER = Object.freeze({
   maxLines: 2,
   wide: Object.freeze([6, 11]), // the zone's columns on a wide canvas...
   tall: Object.freeze([2, 11]), // ...and on a tall one
+  band: Object.freeze([2, 11]), // the columns it may move along to keep off a pinned card or a mark
   minColumns: 3, // the zone never narrows to fewer columns than this to step past a pinned card
   maxWords: 7,
   maxChars: 32,
   fill: 0.8, // a group holds at most this share of the characters its lines could, so breaks by sense still fit
 });
 const PROBE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // the average advance of a capital, for how many fit on a line
-const JOIN_EPSILON = 1e-9; // seconds: spans closer than this are back to back
 const HALF = 2;
 
-// The right edge in pixels of 1-based grid column `column` (1 to 12).
-const columnRight = (ctx, column) => (column === ctx.look.grid.columns ? ctx.gridX(column + 1) : ctx.gridX(column + 1) - ctx.look.grid.gutter * ctx.unit);
 const labelFont = (ctx) => fontFor(ctx.look, 'label', sizeAt(ctx.look, LOWER.step, ctx.unit), ctx.unit);
 const pitchOf = (font) => font.lineHeight * font.size;
 
-// The first caption column whose left edge clears every box of ctx.avoid (pinned text cards) and ctx.marks (marked
-// regions) that reaches into the band [top, bottom] and the columns from..to, by a gutter; `from` when none does, or when
-// that would leave fewer than LOWER.minColumns.
-function clearColumn(ctx, [from, to], top, bottom) {
-  const gutter = ctx.look.grid.gutter * ctx.unit;
-  const blocking = [...(ctx.avoid ?? []), ...(ctx.marks ?? [])].filter(([x, y, w, h]) => y < bottom && y + h > top && x + w > ctx.gridX(from) && x < columnRight(ctx, to));
-  if (blocking.length === 0) return from;
-  const clear = Math.max(...blocking.map(([x, , w]) => x + w)) + gutter;
-  const column = Array.from({ length: to - from + 1 }, (_, i) => from + i).find((c) => ctx.gridX(c) >= clear);
-  return column !== undefined && to - column + 1 >= LOWER.minColumns ? column : from;
-}
-
 /**
  * The zone: the band at the bottom of the grid, two lines and their paper high, over the caption columns (6 to 11 wide,
- * 2 to 11 tall), its left edge moved right of any pinned text card or marked region (ctx.avoid, ctx.marks) that comes
- * into the band; inside the platform safe zone for a look that composes in it (compositionRect safe).
+ * 2 to 11 tall), inside the platform safe zone for a look that composes in it (compositionRect safe). Against a pinned
+ * text card or a marked region in the band (ctx.avoid, ctx.marks: groups.mjs clearZone) it keeps its right edge on
+ * column 11 while it can, moving its left edge right, then takes the widest span of columns 2 to 11 clear of them that
+ * ends furthest right, never under LOWER.minColumns.
  */
 function zone(ctx) {
   const { look, canvas, unit } = ctx;
   const font = labelFont(ctx);
-  const columns = isWide(canvas) ? LOWER.wide : LOWER.tall;
+  const [from, to] = isWide(canvas) ? LOWER.wide : LOWER.tall;
   const rect = compositionRect(ctx);
   const h = HALF * LOWER.pad * unit + (ZONE_ASCENT + ZONE_DESCENT) * font.size + (LOWER.maxLines - 1) * pitchOf(font);
   const bottom = Math.min(canvas.h - look.grid.margin * unit, rect.top + rect.h);
-  const left = Math.max(rect.left, ctx.gridX(clearColumn(ctx, columns, bottom - h, bottom)));
-  const right = Math.min(rect.left + rect.w, columnRight(ctx, columns[1]));
-  return [left, bottom - h, right - left, h];
+  const [left, right] = [Math.max(rect.left, ctx.gridX(from)), Math.min(rect.left + rect.w, columnRight(ctx, to))];
+  const rank = ({ a, b }) => [to - b, a - b]; // the right edge on column 11 first, then the widest
+  const [bandFrom, bandTo] = LOWER.band;
+  return clearZone(ctx, [left, bottom - h, right - left, h], { from: bandFrom, to: bandTo, minColumns: LOWER.minColumns, left: rect.left, right: rect.left + rect.w, rank });
 }
 
 // The grouping limits for a zone `width` px wide: at most LOWER.fill of the capitals its lines could hold.
@@ -75,9 +65,7 @@ function groupingFor(width, font, ctx) {
 function setAt(group, size, maxWidth, ctx) {
   const font = fontFor(ctx.look, 'label', size, ctx.unit);
   const text = setCase(ctx.look, 'label', group.words.map((w) => w.text).join(' '));
-  const layout = layoutText({ text, font, maxWidth, measure: ctx.measure });
-  const count = layout.lines.reduce((n, l) => n + l.words.length, 0);
-  if (count !== group.words.length) throw new Error(`${ctx.captionId}: "${text}" lays out as ${count} words, not the ${group.words.length} spoken`);
+  const layout = spokenLayout(layoutText({ text, font, maxWidth, measure: ctx.measure }), group, text, ctx.captionId);
   const inks = layout.lines.map((line) => runInk(line, font, ctx.measure));
   const ink = { up: inks[0].up, down: inks.at(-1).down, left: Math.min(...inks.map((i) => i.left)), right: Math.max(...inks.map((i) => i.right)) };
   return { layout, font, ink, block: ink.up + layout.lines.at(-1).y - layout.lines[0].y + ink.down };
@@ -90,27 +78,13 @@ function setGroup(group, maxWidth, ctx) {
   return fitGroup((px) => setAt(group, px, maxWidth, ctx), fits, labelFont(ctx).size, sizeAt(ctx.look, 1, ctx.unit));
 }
 
-// Opacity that is 1 during each [at, until) (in order) and 0 elsewhere, stepped; a span that starts where the one before
-// it ends joins it, so the card never blinks between two groups.
-function visibleDuring(spans) {
-  const keys = [{ t: 0, v: 0 }];
-  for (const span of spans) {
-    const last = keys.at(-1);
-    const at = Math.max(span.at, last.t);
-    if (keys.length > 1 && at - last.t < JOIN_EPSILON) keys.pop(); // drop the "off" key of the span before
-    else keys.push({ t: at, v: 0 }, { t: at, v: 1 });
-    keys.push({ t: Math.max(at, span.until), v: 1 }, { t: Math.max(at, span.until), v: 0 });
-  }
-  return track(keys);
-}
-
 // The emphasis of one group: highlighter bands (card-local) behind each emphasised word, drawn on as the word is spoken
 // and whole by the group's last frame (before `until`), or accent fills on them.
 function emphasisOf(set, group, origin, ctx, { id, until }) {
   const { look, unit, seed, measure } = ctx;
   const marked = set.layout.lines.flatMap((line) => line.words.filter((w) => group.words[w.index]?.emphasis).map((w) => ({ line, w })));
   if (marked.length === 0) return { bands: [], wordTracks: [] };
-  const at = (w) => group.words[w.index].start;
+  const at = (w) => heardStart(group.words[w.index]);
   if (look.emphasis !== 'highlight' || !registries.devices.get('highlight').supports(look)) {
     const fills = set.layout.lines.flatMap((l) => l.words).map((w) => (group.words[w.index].emphasis
       ? { fill: track([{ t: 0, v: look.palette.ink }, { t: at(w), v: look.palette.ink }, { t: at(w), v: look.palette.accent }]) } : {}));

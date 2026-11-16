@@ -172,8 +172,10 @@ test('chart: the example and every type validate in both looks; a highlight nami
   }
   const missing = await errorsOf(COLUMNS({ highlight: 'Q5' }));
   assert.ok(missing.some((e) => e.path === 'shots[0].highlight' && /Q1, Q2, Q3, Q4/.test(e.message)), JSON.stringify(missing));
+  // the type picks the shape (review B I9): a line reads points, so items are refused key by key, never as a list of shapes
   const shape = await errorsOf(COLUMNS({ type: 'line' }));
-  assert.ok(shape.some((e) => e.path === 'shots[0].data'), JSON.stringify(shape));
+  assert.ok(shape.some((e) => e.path === 'shots[0].data[0].label' && /allowed: x, y/.test(e.message)), JSON.stringify(shape));
+  assert.ok(!shape.some((e) => /must be object/.test(e.message)), 'no error from the series shape');
   const many = await errorsOf(COLUMNS({ data: Array.from({ length: 13 }, (_, i) => ({ label: `L${i}`, value: i })), highlight: undefined }));
   assert.ok(many.some((e) => /data/.test(e.path)), JSON.stringify(many));
 });

@@ -2,7 +2,8 @@
 // the look, the timing of every mark, and columns and bars (lines and areas: chart-series.mjs; donuts: chart-donut.mjs).
 // Marks are ink, the highlighted one gets an accent copy over it on the word that names it and the others dim; light
 // reference lines (at most three) and a baseline rule are the only lines; labels sit on the marks (direct, never a
-// legend). A bar or column scale that does not start at 0 draws a broken-axis mark and says its baseline. Pure, DOM-free.
+// legend). A bar, column or area scale that does not start at 0 draws a broken-axis mark and says its baseline. Pure,
+// DOM-free.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { landing, isHand, colourOf, polyline, at2, roundedRect } from '../devices/shared.mjs';
@@ -12,6 +13,7 @@ import { chartData, valueScale, columnMarks, barMarks } from './chart-marks.mjs'
 import { chartTimes } from './chart-time.mjs';
 import { label, labelWidth, arriveAt } from './chart-labels.mjs';
 import { secondarySize, secondaryFloor } from './secondary.mjs';
+import { shownDecimals } from './values.mjs';
 
 const MAX_STAGGER = 0.08; // seconds between one mark starting to grow and the next
 const STAGGER_SHARE = 0.3; // of the growth, at most, taken by the staggers together
@@ -21,7 +23,6 @@ const CATEGORY_LINES = 2;
 const FIT_EPSILON = 0.5;
 const CLAMP_ROOM = 1.5; // widths between two thinned labels' centres: room for an end label moved in
 const BREAK = Object.freeze({ size: 9, gap: 5 }); // units: the two strokes of a broken-axis mark
-const MAX_DECIMALS = 3;
 const HALF = 2;
 const GLOW_ALPHA = 0.6; // the highlighted mark's light at its edge, before the blur spreads it (screened, so it only brightens)
 
@@ -45,11 +46,14 @@ export function chartStyle(ctx, data) {
     dimTo: data.dimTo ? colourOf(look, data.dimTo) : null,
     // `labelsAbove` 'tall' (cosmos): on a tall frame each bar's label sits over it, so the bars take the full width
     labelsAbove: data.labelsAbove === 'tall' && !isWide(ctx.canvas),
+    // `minPlot`: the least share of its box a donut (of the short side) or a line plot (of the width) keeps, however long
+    // its labels; under it the labels are flagged as not fitting (the review's fit finding), never cut
+    minPlot: data.minPlot ?? 0,
   };
 }
 
-/** The decimals a set of values is shown with: the most any of them has, at most three. */
-export const valueDecimals = (values) => Math.min(MAX_DECIMALS, Math.max(0, ...values.filter(Number.isFinite).map((v) => (String(v).split('.')[1] ?? '').length)));
+/** The decimals a set of values is shown with: the most any of them needs, at most three (from the number, not its string). */
+export const valueDecimals = (values) => Math.max(0, ...values.filter(Number.isFinite).map((v) => shownDecimals(v)));
 
 /** When mark k of n grows, all done by `growEnd`: { start, end, dur }. */
 export function growWindow(k, n, growEnd) {
@@ -122,8 +126,8 @@ function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, t
   return out;
 }
 
-/** Does the shot's scale break from 0: a bar or column chart with a baseline that is not 0. */
-export const isBroken = (shot) => (shot.type === 'bar' || shot.type === 'column') && (shot.baseline ?? 0) !== 0;
+/** Does the shot's scale break from 0: a bar, column or area chart (drawn from its baseline) with a baseline that is not 0. */
+export const isBroken = (shot) => ['bar', 'column', 'area'].includes(shot.type) && (shot.baseline ?? 0) !== 0;
 
 /**
  * The value scale's furniture along a vertical value axis (columns, lines, areas): reference lines across the plot with
@@ -166,6 +170,12 @@ function directFont(ctx, font, keys, width) {
   return widest <= width ? font : { ...font, size: Math.max(secondaryFloor(ctx.look, ctx.unit), (font.size * width) / widest) };
 }
 
+// The line pitch of the first layout that wraps (its second baseline less its first), or 0 when none does.
+function linePitch(layouts) {
+  const wrapped = layouts.find((l) => l.lines.length > 1);
+  return wrapped ? wrapped.lines[1].y - wrapped.lines[0].y : 0;
+}
+
 /** Columns in `area`: { nodes, boxes, plot, highlight } (highlight: { index, text } of the highlighted value, or null). */
 export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
   const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing);
@@ -181,7 +191,7 @@ export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom
   const widest = Math.max(...data.items.map((it) => labelWidth(ctx, font, it.key)));
   const stride = fits ? 1 : Math.ceil((CLAMP_ROOM * widest + gap) / band);
   const catLines = fits ? Math.min(CATEGORY_LINES, Math.max(1, ...catLayouts.map((l) => l.lines.length))) : 1;
-  const catH = ink + (catLines - 1) * (catLayouts.find((l) => l.lines.length > 1)?.lines[1].y ?? 0);
+  const catH = ink + (catLines - 1) * linePitch(catLayouts); // one line pitch per extra line
   const negative = data.items.some((it) => it.value < scale.baseline);
   const top = ink + gap + headroom, bottom = gap + catH + (negative ? ink + gap : 0);
   const plot = { x: area.x + gutter, y: area.y + top, w: plotW, h: Math.max(1, area.h - top - bottom) };

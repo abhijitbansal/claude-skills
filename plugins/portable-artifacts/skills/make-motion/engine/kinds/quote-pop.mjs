@@ -8,7 +8,8 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { landing } from '../devices/shared.mjs';
-import { setCase, arrivesMatched, plainTag, ghostWords, fitLongestSide } from './shared.mjs';
+import { setCase, arrivesMatched, ghostWords, fitLongestSide } from './shared.mjs';
+import { plainTag } from './plain-tag.mjs';
 import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
 import { quotationOf, attributionOf } from './quote-text.mjs';
 

@@ -4,7 +4,8 @@
 // hero node (props.dropped: the review's 'dropped' rule says so). Pure; a look without the field keeps its own sizes.
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
-const HERO_MARGIN = 1.03;
+/** A hero kept this much over MIN_HERO_RATIO, so the page's measured sizes never round it under. */
+export const HERO_MARGIN = 1.03;
 
 /** The secondary floor in px (0 when the look sets none). */
 export const secondaryFloor = (look, unit) => (look.secondary?.min ?? 0) * unit;

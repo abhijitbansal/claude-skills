@@ -36,7 +36,9 @@ const FLOAT_BYTES = 4;
 // ffmpeg's runs over a user's music (the beat decode, the loudness): longer than either takes on a long file, measured
 // at under 2 s for a 5 minute track on the development Mac; past it the run is machine trouble, not the film's.
 const MUSIC_TOOL_TIMEOUT_MS = 120000;
-const MEASURE_MAX_BUFFER = 1 << 20; // ebur128's summary on stderr; its frame lines are off (-nostats, no per-frame log)
+// ebur128's summary on stderr. Its per-frame log (a line every 100 ms of audio, about 1.7 KB a second) is off through the
+// filter's framelog=quiet, so the stderr stays a few KB however long the file; -nostats only stops ffmpeg's progress line.
+const MEASURE_MAX_BUFFER = 1 << 20;
 const GATE_FLOOR_LUFS = -70; // ebur128's absolute gate: an integrated value at or under it measured nothing
 const SECONDS_STEPS = 100; // a length in a message, to 0.01 s
 const FFPROBE_HINT = 'install ffmpeg with its ffprobe (they come together), or set FFPROBE_PATH to an ffprobe you trust';
@@ -285,7 +287,7 @@ async function decodeMusic(ffmpeg, file, src, signal) {
 
 /** The ffmpeg arguments that measure the music `file`'s loudness (ebur128) over its first `seconds` (all of it without). */
 export const musicLoudnessArgs = (file, seconds) => ['-hide_banner', '-nostats', '-nostdin', ...recordingInput(file), '-map', '0:a:0',
-  ...(seconds === undefined ? [] : ['-t', String(seconds)]), '-map_metadata', '-1', '-af', 'ebur128=peak=true', '-f', 'null', '-'];
+  ...(seconds === undefined ? [] : ['-t', String(seconds)]), '-map_metadata', '-1', '-af', 'ebur128=peak=true:framelog=quiet', '-f', 'null', '-'];
 
 // The music's integrated loudness over the part the film plays (LUFS). Nothing over the measurement gate there is the
 // film's mistake: a silent file under the voice would be mixed and reported as music (final review I4).
