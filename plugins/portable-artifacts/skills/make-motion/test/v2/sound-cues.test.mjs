@@ -391,6 +391,37 @@ test('I1: on an estimated timeline the heard times are the shown times', () => {
   for (const w of timeline.shots[0].words) assert.deepEqual([w.soundStart, w.soundEnd], [w.start, w.end]);
 });
 
+// ---- a kind's own events (the list's items, final wave follow-up) ----
+
+test('a list shot in pop with sound on plans one pop per item, at the time each item arrives', () => {
+  const film = { version: 2, mode: 'viral', look: 'pop', shots: [{ id: 'steps', show: 'list', items: ['Write it', 'Render it', 'Share it'] }] };
+  const timeline = buildTimeline(film, { fps: FPS });
+  const { kinds } = registries;
+  const arrivals = kinds.get('list').events(film.shots[0], timeline.shots[0]).map((e) => timeline.shots[0].start + e.t);
+  assert.equal(arrivals.length, 3);
+  const items = soundEvents(film, timeline).filter((e) => e.kind === 'device' && e.device === 'item');
+  assert.deepEqual(items.map((e) => [e.t, e.shot]), arrivals.map((t) => [t, 'steps']));
+  assert.deepEqual(pairs(planCues(film, timeline)), arrivals.map((t) => [Math.round(t * 1e6) / 1e6, 'pop']));
+});
+
+test('a kind event naming a device the kind did not declare in eventDevices is an error, never a silent cue', () => {
+  const kinds = createRegistry('kinds');
+  const list = registries.kinds.get('list');
+  kinds.add('list', { ...list, events: () => [{ kind: 'device', device: 'bell', t: 0 }] });
+  const film = { version: 2, mode: 'viral', look: 'pop', shots: [{ id: 'steps', show: 'list', items: ['A', 'B'] }] };
+  const timeline = buildTimeline(film, { fps: FPS });
+  assert.throws(() => soundEvents(film, timeline, { kinds }), /kind "list" sent the device event "bell", which its eventDevices \(item\) does not declare/);
+});
+
+test('a look without a sound for a device a kind declares is an error naming it', () => {
+  const looks = createRegistry('looks');
+  const pop = registries.looks.get('pop');
+  const { item: _gone, ...device } = pop.sounds.device;
+  looks.add('pop', { ...pop, sounds: { ...pop.sounds, device } });
+  const film = { version: 2, mode: 'viral', look: 'pop', shots: [{ id: 'steps', show: 'list', items: ['A', 'B'] }] };
+  assert.throws(() => planCues(film, buildTimeline(film, { fps: FPS }), { looks }), /look "pop": sounds\.device\.item must be a cue name or null \(kind "list" sends it\)/);
+});
+
 // ---- determinism ----
 
 test('the plan is frozen data and the same film plans the same cues', () => {

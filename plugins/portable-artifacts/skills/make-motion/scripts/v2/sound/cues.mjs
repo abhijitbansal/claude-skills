@@ -34,8 +34,8 @@ function checkCue(cue, where) {
 
 // The look's sounds: an entry for every cut and device registered now (validateLook, as at registration: a cut or
 // device registered after the look is caught here rather than played as silence), and every cue it names one the synth
-// knows.
-function soundsOf(look) {
+// knows, and an entry (a cue or null) for every device a registered kind sends through its `events` hook (`eventDevices`).
+function soundsOf(look, kinds) {
   const { sounds } = look;
   if (sounds === null || typeof sounds !== 'object') throw new RangeError(`look "${look.name}" has no sounds; a look must name the cue each event makes`);
   validateLook(look);
@@ -44,7 +44,21 @@ function soundsOf(look) {
     for (const [key, cue] of Object.entries(table ?? {})) if (cue !== null) checkCue(cue, `look "${look.name}": sounds.${part}.${key}`);
   }
   for (const key of ['emphasis', 'land']) if (sounds[key] !== null) checkCue(sounds[key], `look "${look.name}": sounds.${key}`);
+  checkKindDevices(look, kinds);
   return sounds;
+}
+
+// Throws when a device a kind declares (`eventDevices`) has no entry in the look's sounds.device: its events would be
+// silent by omission rather than by the look's choice.
+function checkKindDevices(look, kinds) {
+  for (const name of kinds.names()) {
+    for (const device of kinds.get(name).eventDevices ?? []) {
+      const table = look.sounds.device ?? {};
+      if (!Object.hasOwn(table, device) || (table[device] !== null && typeof table[device] !== 'string')) {
+        throw new RangeError(`look "${look.name}": sounds.device.${device} must be a cue name or null (kind "${name}" sends it)`);
+      }
+    }
+  }
 }
 
 const entryOf = (table, key) => (table !== null && typeof table === 'object' && Object.hasOwn(table, key) ? table[key] : null);
@@ -128,8 +142,8 @@ function explicitCues(film, timeline) {
   });
 }
 
-function plannedCues(film, timeline, sounds) {
-  return soundEvents(film, timeline)
+function plannedCues(film, timeline, sounds, kinds) {
+  return soundEvents(film, timeline, { kinds })
     .map((ev) => ({ t: ev.t, cue: cueFor(ev, sounds), rank: TIE_RANK[ev.kind] }))
     .filter((c) => c.cue !== null);
 }
@@ -154,14 +168,14 @@ function placed(cues, timeline) {
  * "sound": "off". The film's own `cues` list ([{ at, cue }]) replaces the planned cues and plays in any mode: `at` is
  * film seconds or an anchor across the whole film (word:<n> and sentence:<n> count across it); a word named by its text
  * must be spoken in one shot only, else word:<n> names it. Without one, cues are planned only when the mode's
- * `cues` is true or the film says "sound": "on". Either way the look's sounds are checked. `looks` and `modes` are the
- * registries (default: the shared ones). An unknown cue name is an error listing the known names.
+ * `cues` is true or the film says "sound": "on". Either way the look's sounds are checked. `looks`, `modes` and `kinds` are
+ * the registries (default: the shared ones). An unknown cue name is an error listing the known names.
  */
-export function planCues(film, timeline, { looks = registries.looks, modes = registries.modes } = {}) {
+export function planCues(film, timeline, { looks = registries.looks, modes = registries.modes, kinds = registries.kinds } = {}) {
   const mode = modes.get(film.mode ?? DEFAULT_MODE);
   const explicit = Array.isArray(film.cues); // the author's own list is itself an opt-in, in any mode
   if (film.sound === 'off' || (!explicit && mode.cues !== true && film.sound !== 'on')) return Object.freeze([]);
-  const sounds = soundsOf(looks.get(film.look ?? mode.defaultLook));
-  const cues = explicit ? explicitCues(film, timeline) : plannedCues(film, timeline, sounds);
+  const sounds = soundsOf(looks.get(film.look ?? mode.defaultLook), kinds);
+  const cues = explicit ? explicitCues(film, timeline) : plannedCues(film, timeline, sounds, kinds);
   return Object.freeze(placed(cues, timeline).map(({ t, cue }) => Object.freeze({ t, cue, gainDb: CUE_GAIN_DB, pan: CUE_PAN })));
 }

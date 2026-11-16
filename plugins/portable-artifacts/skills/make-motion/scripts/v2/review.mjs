@@ -46,8 +46,18 @@ export function safeRectFor(canvas, look) {
   return { left: margin.left, top: margin.top, right: canvas.w - margin.right, bottom: canvas.h - margin.bottom };
 }
 
-// The spec field a text finding is about, so its path points at what to edit (shots[2].kicker rather than shots[2]).
+// The field the shot's kind says a node shows (its `nodeField(shot, nodeId)` hook: a path inside the shot such as
+// "title" or "items[2]", null for the shot itself), or undefined when the kind has no say in it.
+function kindField(shot, finding) {
+  const kind = typeof shot?.show === 'string' && registries.kinds.has(shot.show) ? registries.kinds.get(shot.show) : null;
+  return typeof kind?.nodeField === 'function' ? kind.nodeField(shot, String(finding.node ?? '')) : undefined;
+}
+
+// The spec field a text finding is about, so its path points at what to edit (shots[2].kicker rather than shots[2]): what
+// the kind says first (kindField), else by the text's role.
 function fieldOf(shot, finding) {
+  const own = kindField(shot, finding);
+  if (own !== undefined) return own === null ? '' : `.${own}`;
   const field = {
     kicker: 'kicker', caption: 'caption', label: 'label', tag: 'delta',
     affix: finding.node?.endsWith('.prefix') ? 'prefix' : 'suffix',

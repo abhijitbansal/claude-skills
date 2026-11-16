@@ -476,6 +476,25 @@ test('a finding about a text points at the spec field that holds it, with the sh
   assert.equal(dedupeFindings([at('hero', 'h')], shots)[0].shot, 's2');
 });
 
+test('a kind that maps its node ids to its fields (nodeField) decides the path: an end title, its ask, a list item, its note, its title', () => {
+  const at = (role, node) => ({ shot: 'b', t: 1, finding: { kind: 'creative', path: 'shots[1]', message: 'm', rule: 'fit', node, role } });
+  const pathOf = (shot, role, node) => dedupeFindings([at(role, node)], [{ id: 'a' }, shot])[0].path;
+  const end = { id: 'b', show: 'end', title: 'Thanks', ask: 'Start today', say: 'Thanks for watching.' };
+  assert.equal(pathOf(end, 'hero', 'b.title'), 'shots[1].title', 'desk: the title node');
+  assert.equal(pathOf(end, 'hero', 'b.title.line1'), 'shots[1].title', 'pop: a line of the title stack');
+  assert.equal(pathOf(end, 'ask', 'b.ask'), 'shots[1].ask');
+  assert.equal(pathOf(end, 'hero', 'b.title.ask'), 'shots[1].ask', 'pop: the ask under the stack');
+  assert.equal(pathOf({ ...end, title: undefined }, 'hero', 'b.title'), 'shots[1].say', 'an end without a title shows its say');
+  const list = { id: 'b', show: 'list', title: 'How', items: ['One', { text: 'Two', note: 'n' }, 'Three'] };
+  assert.equal(pathOf(list, 'hero', 'b.item2'), 'shots[1].items[2]', 'desk: an item');
+  assert.equal(pathOf(list, 'hero', 'b.item0.text.line0'), 'shots[1].items[0]', 'pop: a line of an item stack');
+  assert.equal(pathOf(list, 'body', 'b.note1'), 'shots[1].items[1].note', 'desk: a note');
+  assert.equal(pathOf(list, 'body', 'b.item1.note'), 'shots[1].items[1].note', 'pop: a note');
+  assert.equal(pathOf(list, 'kicker', 'b.kicker'), 'shots[1].title', 'desk: the title on the slug');
+  assert.equal(pathOf(list, 'kicker', 'b.item1.title'), 'shots[1].title', 'pop: the running head');
+  assert.equal(pathOf({ ...list, title: undefined }, 'kicker', 'b.kicker'), 'shots[1]', 'no title: the shot');
+});
+
 test('session findings: page errors, blocked requests and a failed post pass are findings; a clean session has none', () => {
   assert.deepEqual(sessionFindings({ info: { post: 'webgl2' }, errors: [], blocked: [] }), []);
   const found = sessionFindings({ info: { post: 'webgl2' }, errors: ['boom', 'boom', 'second'], blocked: ['http://example.com/x'] });
