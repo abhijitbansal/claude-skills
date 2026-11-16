@@ -373,6 +373,14 @@ registries.kinds.add(KIND, {
   heroTarget: 'title',
   targets: endTargets,
   ids: (shot) => [heroId(shot, 'title')],
+  // the field a node shows, for a review finding's path (scripts/v2/review.mjs): the ask, or the title (the say when the
+  // shot has no title, which then shows its say); undefined for any other node (the mark)
+  nodeField: (shot, id) => {
+    const hero = heroId(shot, 'title');
+    if (shot.ask !== undefined && (id === `${shot.id}.ask` || id === `${hero}.ask`)) return 'ask';
+    if (id === hero || id.startsWith(`${hero}.`)) return shot.title !== undefined ? 'title' : 'say';
+    return undefined;
+  },
   validate: endProblems,
   expand: expandEnd,
   review: endReview,

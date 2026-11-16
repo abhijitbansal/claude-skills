@@ -9,3 +9,5 @@ import './number.mjs';
 import './clipping.mjs';
 import './end.mjs';
 import './list.mjs';
+import './quote.mjs';
+import './compare.mjs';

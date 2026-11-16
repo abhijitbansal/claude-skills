@@ -75,11 +75,18 @@ export const pop = {
     // list: one item at a time as a stack under a count tag; a note in the text face at the largest of `smallSteps` the
     // stack stays three times, its cap line `noteGap` under the item
     list: { noteGap: 32, smallSteps: [1, 2] },
+    // quote: a stack behind an accent opening mark `mark` em of its first line tall, reaching `into` of its height into
+    // the line; the attribution a tag `tagGap` under it at the largest of `tagSteps` that fits; a portrait `portrait` of
+    // the short side over the mark
+    quote: { mark: 1.1, into: 0.15, tagGap: 40, tagSteps: [1, 2], portrait: 0.24 },
+    // compare: one side at a time as a stack under its tag; the points `pointGap` under it at the largest of `pointSteps`
+    // the stack stays three times
+    compare: { pointGap: 32, pointSteps: [1, 2] },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null },
-    device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact' },
+    device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop' },
     emphasis: 'pop',
     land: 'sub',
   },

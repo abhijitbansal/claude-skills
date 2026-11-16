@@ -10,6 +10,7 @@ import { facesFor } from '../../engine/page/fonts-shared.mjs';
 import '../../engine/fields/index.mjs';
 import '../../engine/looks/index.mjs';
 import '../../engine/modes/index.mjs';
+import '../../engine/kinds/index.mjs'; // the kinds, for the devices they send through their events hook
 import { applyAccent, gridX, gridSpan, unit, validateLook } from '../../engine/looks/index.mjs';
 import { unitOf } from '../../engine/units.mjs';
 import { FORMATS } from '../../template/formats.mjs';
@@ -378,7 +379,7 @@ test('desk sounds are the brief values: paper cuts and slides, marker hand marks
   const { sounds } = registries.looks.get('desk');
   assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null });
   assert.deepEqual({ ...sounds.device }, {
-    highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null,
+    highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper',
   });
   assert.equal(sounds.emphasis, null);
   assert.equal(sounds.land, 'click');
@@ -388,19 +389,25 @@ test('pop sounds are the brief values: click, whoosh and impact cuts, a pop high
   const { sounds } = registries.looks.get('pop');
   assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null });
   assert.deepEqual({ ...sounds.device }, {
-    highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact',
+    highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop',
   });
   assert.equal(sounds.emphasis, 'pop');
   assert.equal(sounds.land, 'sub');
 });
 
-test('every look names a sound (or null) for exactly the registered cuts and devices, and its sounds are frozen', () => {
+// The device names the kinds send through their `events` hook, as each declares them in `eventDevices` (a list's items).
+const kindDevices = () => registries.kinds.names().flatMap((k) => registries.kinds.get(k).eventDevices ?? []);
+
+test('every look names a sound (or null) for exactly the registered cuts, the registered devices and the devices kinds declare, and its sounds are frozen', () => {
   assert.deepEqual(registries.cuts.names().sort(), [...KNOWN_CUTS].sort(), 'the look index registers the cuts it checks against');
   assert.equal(registries.devices.names().length, 9, 'the look index registers the devices it checks against');
+  assert.deepEqual(kindDevices(), ['item'], 'the list kind declares its item event');
+  assert.ok(kindDevices().every((d) => !registries.devices.has(d)), 'a kind\'s event device is not also a registered device');
+  const wanted = [...registries.devices.names(), ...kindDevices()].sort();
   for (const name of lookNames()) {
     const { sounds } = registries.looks.get(name);
     assert.deepEqual(Object.keys(sounds.cut).sort(), registries.cuts.names().sort(), `${name} sounds.cut`);
-    assert.deepEqual(Object.keys(sounds.device).sort(), registries.devices.names().sort(), `${name} sounds.device`);
+    assert.deepEqual(Object.keys(sounds.device).sort(), wanted, `${name} sounds.device`);
     assert.ok(Object.isFrozen(sounds) && Object.isFrozen(sounds.cut) && Object.isFrozen(sounds.device), `${name} sounds frozen`);
   }
 });
@@ -451,11 +458,11 @@ test('a look added to the shared registry must name a registered caption style',
 
 // ---- kinds: the composition data a look gives the kinds that need it (engine/kinds/end.mjs, list.mjs) ----
 
-test('desk and pop carry frozen composition data for the end and list kinds', () => {
+test('desk and pop carry frozen composition data for the end, list, quote and compare kinds', () => {
   for (const name of ['desk', 'pop']) {
     const { kinds } = registries.looks.get(name);
     assert.ok(Object.isFrozen(kinds), `${name} kinds frozen`);
-    for (const kind of ['end', 'list']) {
+    for (const kind of ['end', 'list', 'quote', 'compare']) {
       assert.equal(typeof kinds[kind], 'object', `${name} kinds.${kind}`);
       assert.ok(Object.isFrozen(kinds[kind]), `${name} kinds.${kind} frozen`);
     }

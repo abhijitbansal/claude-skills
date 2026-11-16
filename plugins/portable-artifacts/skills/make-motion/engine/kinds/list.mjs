@@ -70,6 +70,22 @@ function expandList(shot, ctx) {
   };
 }
 
+// The field a node of the list shows, for a review finding's path (scripts/v2/review.mjs): item k (`<id>.item<k>` and
+// what is inside it, a desk figure `<id>.figure<k>`), its note (`<id>.note<k>`, `<id>.item<k>.note`), or the title (the desk
+// slug's kicker, a pop running head `<id>.item<k>.title`); null for the pop count tag, which no field holds as written.
+function listNodeField(shot, id) {
+  if (!id.startsWith(`${shot.id}.`)) return undefined;
+  const rest = id.slice(shot.id.length + 1);
+  const title = shot.title !== undefined ? 'title' : null;
+  if (rest === 'kicker') return title;
+  const part = /^(item|note|figure)(\d+)(?:\.([a-z]+))?/.exec(rest);
+  if (part === null) return undefined;
+  const item = `items[${part[2]}]`;
+  if (part[1] === 'note' || part[3] === 'note') return `${item}.note`;
+  if (part[3] === 'title') return title;
+  return part[3] === 'kicker' ? null : item;
+}
+
 // Advice about the list itself: too many items to hold, or an item too long to read as a point.
 function listReview(shot, { timing }) {
   const out = shot.items.length > MAX_ITEMS
@@ -119,8 +135,10 @@ registries.kinds.add(KIND, {
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...kindSupportProblems(KIND, look)],
   expand: expandList,
   review: listReview,
+  nodeField: listNodeField,
   // each item's arrival as a device event named `item`, in shot seconds (for the cue plan: scripts/v2/sound/events.mjs)
   events: (shot, timing) => listTimes(shot, timing).map((t) => ({ kind: 'device', device: 'item', t })),
+  eventDevices: Object.freeze(['item']), // every device name `events` sends: each look must name a sound for it (sound/cues.mjs)
   numbered: true, // the title is a slug in desk, which shows the shot's place among the numbered shots
   showsWords: true, // its narration is the picture: never captioned (engine/captions)
 });

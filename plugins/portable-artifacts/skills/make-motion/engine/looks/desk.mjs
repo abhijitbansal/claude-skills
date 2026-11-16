@@ -85,11 +85,22 @@ export const desk = {
     // under its last baseline, the figures hanging in the margin a gutter before the items; the block centred in the room
     // the slug leaves
     list: { fromStep: 3, max: 180, toWide: 11, toTall: 11, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2] },
+    // quote: a taped card from column 2, at most to `toWide` (on tall frames from `fromTall` to `toTall`, the measure a
+    // quotation needs to break without one-word lines) and wrapped to its text, centred at `centre` of the height; the
+    // quotation `pad` in (more when its hanging opening mark needs it), in the display face up to `max`, at most `maxLines` lines, its opening mark hanging; the attribution's cap line
+    // `attrGap` em of the quotation under it, a `rule`-wide rule and `ruleGap` before label caps at the largest of
+    // `attrSteps` the quotation stays three times; a portrait `portrait` of the short side, `overlap` of it on the card
+    quote: { toWide: 10, fromTall: 1, toTall: 12, centre: 0.5, pad: 64, max: 220, maxLines: 8, attrGap: 0.45, rule: 56, ruleGap: 18, attrSteps: [1, 2], portrait: 0.28, overlap: 0.3 },
+    // compare: two cards across columns 1 to 12, `gap` gutters apart, centred at `centre`; on each, `pad` in, the value
+    // from step `valueFromStep` to `valueMax` and `valueGap` em over the title, the title from `titleMax` down (at most
+    // `valueTitle` of the value; not under step `titleFromStep`) in at most `titleLines` lines, the points `titleGap` em
+    // under it at the largest of `pointSteps` the hero stays three times and the title twice
+    compare: { gap: 6, centre: 0.5, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointSteps: [1, 2, 3] },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'paper', slide: 'paper', punch: null, match: null },
-    device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null },
+    device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper' },
     emphasis: null,
     land: 'click',
   },
