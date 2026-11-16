@@ -1,5 +1,5 @@
-// The `cosmos` look's base data (engine/looks/cosmos.mjs): registered and validated, parked as experimental after gate
-// review 3 (the experimental-look wrapper hides it from every listing), the brief's values, a
+// The `cosmos` look's base data (engine/looks/cosmos.mjs): registered and validated, listed again after the final gate
+// review (parked after gate review 3), the brief's values, a
 // sound for every event, contrast of every colour it draws with against the field at its darkest, lightest and lifted
 // points, and the rules test/v2/looks.test.mjs applies to every listed look.
 import { test, before, after } from 'node:test';
@@ -36,29 +36,35 @@ test('cosmos is registered, validated, frozen, and resolvable by name', () => {
   assert.ok(isFrozenDeep(look()));
 });
 
-test('cosmos is parked (experimental since gate review 3): out of the look names and --list looks, still supporting every kind desk does', () => {
-  assert.equal(look().experimental, true);
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop']);
-  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop']);
-  assert.throws(() => registries.looks.get('cosmo'), { message: 'unknown look "cosmo" (have: desk, pop)' });
+// the first-wave kinds that read look data: cosmos ships each of them
+const FIRST_WAVE = ['end', 'list', 'quote', 'compare', 'chart'];
+
+test('cosmos is listed (un-parked after the final gate review), shipping the first-wave kinds; a kind it has no data for is refused naming the looks that support it', () => {
+  assert.equal(look().experimental, undefined);
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
+  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos']);
+  assert.throws(() => registries.looks.get('cosmo'), { message: 'unknown look "cosmo"; did you mean "cosmos"? (have: desk, pop, cosmos)' });
+  for (const kind of FIRST_WAVE) assert.deepEqual(kindSupportProblems(kind, look()), [], kind);
   const desk = registries.looks.get('desk');
-  const kinds = registries.kinds.names().filter((kind) => kindSupportProblems(kind, desk).length === 0);
-  assert.deepEqual(kinds, ['end', 'list', 'quote', 'compare', 'chart'], 'the kinds that need look data, all of which desk has');
-  for (const kind of kinds) assert.deepEqual(kindSupportProblems(kind, look()), [], kind);
+  const later = registries.kinds.names().filter((kind) => kindSupportProblems(kind, desk).length === 0 && !FIRST_WAVE.includes(kind));
+  assert.ok(later.includes('media') && later.includes('screen'), later.join());
+  for (const kind of later.filter((k) => kindSupportProblems(k, look()).length > 0)) {
+    assert.match(kindSupportProblems(kind, look())[0].message, new RegExp(`^kind "${kind}" is not supported by look "cosmos"; the looks that support it: desk, pop`));
+  }
 });
 
 test('the experimental flag still hides a look from every listing while it resolves by name', () => {
   registries.looks.add('test-experimental', { ...cosmosDefinition, name: 'test-experimental', experimental: true });
   assert.equal(registries.looks.has('test-experimental'), true);
   assert.equal(registries.looks.get('test-experimental').name, 'test-experimental');
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop']);
-  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop']);
-  assert.throws(() => registries.looks.get('test-experimentl'), { message: 'unknown look "test-experimentl" (have: desk, pop)' });
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
+  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos']);
+  assert.throws(() => registries.looks.get('test-experimentl'), { message: 'unknown look "test-experimentl" (have: desk, pop, cosmos)' }, 'the hint never offers a parked look');
 });
 
 test('a second evaluation of the looks index keeps one wrapper and the same listing', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?cosmos-again'));
-  assert.deepEqual(registries.looks.names().filter((n) => !n.startsWith('test-')), ['desk', 'pop']);
+  assert.deepEqual(registries.looks.names().filter((n) => !n.startsWith('test-')), ['desk', 'pop', 'cosmos']);
   assert.equal(registries.looks.has('cosmos'), true);
 });
 
@@ -101,7 +107,8 @@ test('motion: smooth curves, entrances scale from 0.92 with a fade and a small o
   const { moves } = look();
   assert.equal(moves.enter.scale, 0.92);
   assert.equal(moves.enter.dist, undefined, 'entrances scale, they do not travel');
-  for (const [key, move] of Object.entries(moves)) assert.equal(move.step, undefined, `${key} is smooth, not stepped`);
+  // the second-wave moves (rise, wipe, slam, pop, settle) are null in the parked look: it does not use them
+  for (const [key, move] of Object.entries(moves).filter(([, m]) => m !== null)) assert.equal(move.step, undefined, `${key} is smooth, not stepped`);
   for (const key of ['exit', 'emphasize', 'draw', 'count']) assert.match(moves[key].ease, /^inOut/, `${key} eases in and out`);
   const curve = ease(moves.enter.ease);
   const samples = Array.from({ length: 101 }, (_, i) => curve(i / 100));
@@ -114,6 +121,8 @@ test('sounds are the brief values, one for every registered cut, device and kind
   assert.deepEqual({ ...sounds.cut }, { cut: null, slide: 'whoosh', punch: 'sub', match: null });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'chime', circle: 'chime', underline: 'chime', arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'pop', turn: 'whoosh',
+    // the second-wave devices and kind events: silent in cosmos, which ships none of the second-wave kinds
+    label: null, focus: null, route: null, numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null, pin: null, link: null,
   });
   assert.equal(sounds.emphasis, null);
   assert.equal(sounds.land, 'ding');
@@ -162,7 +171,7 @@ test('every font it names is bundled at a weight its family reaches, the stage c
     assert.ok(font.weight >= lo && font.weight <= hi, `${role}: weight ${font.weight} in ${lo}..${hi}`);
   }
   assert.deepEqual(facesFor({ fonts: l.fonts }).map((f) => f.family), ['Nunito']);
-  for (const move of Object.values(l.moves)) assert.equal('axis' in move, false);
+  for (const move of Object.values(l.moves).filter((m) => m !== null)) assert.equal('axis' in move, false);
 });
 
 test('its field is registered and plans with its params at 16:9 and 9:16', () => {
@@ -174,8 +183,9 @@ test('its field is registered and plans with its params at 16:9 and 9:16', () =>
 
 test('every move parses and has the grammar keys; tracking answers each role and refuses others', () => {
   const l = look();
-  assert.deepEqual(Object.keys(l.moves), ['enter', 'exit', 'emphasize', 'draw', 'count']);
-  for (const [key, move] of Object.entries(l.moves)) {
+  assert.deepEqual(Object.keys(l.moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle']);
+  for (const key of ['rise', 'wipe', 'slam', 'pop', 'settle']) assert.equal(l.moves[key], null, `${key}: not used by the parked look`);
+  for (const [key, move] of Object.entries(l.moves).filter(([, m]) => m !== null)) {
     assert.equal(typeof ease(move.ease), 'function', key);
     assert.ok(move.dur > 0, key);
   }

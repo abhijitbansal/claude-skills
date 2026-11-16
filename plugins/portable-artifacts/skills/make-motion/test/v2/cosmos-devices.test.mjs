@@ -85,7 +85,11 @@ test('rounded card: an exact rounded rectangle of the look radius, square (no ti
   const paper = part([group], 'paper');
   assert.equal(paper.props.d, roundedRect(-300, -60, 600, 120, 28));
   assert.equal(paper.props.fill, '#2e2770');
-  assert.equal(part([group], 'shadow').props.d, paper.props.d);
+  // gate round 3: the shadow is stacked rings (no blur filter) whose outermost ring stands half the blur past the paper,
+  // set down by the shadow offset
+  const shadow = part([group], 'shadow');
+  const s = cosmos.shadow, half = s.blur / 2;
+  assert.equal(shadow.children[0].props.d, roundedRect(-300 - half + s.dx, -60 - half + s.dy, 600 + s.blur, 120 + s.blur, 28 + half));
 });
 
 test('rounded card: a faint lighter soft sheen whose edge stays inside the card, and a 1-unit lighter edge stroke', () => {
@@ -123,10 +127,28 @@ test('ink on the rounded card holds 4.5:1 against the card at its sheen', () => 
   for (const key of ['ink', 'ink2']) assert.ok(contrast(cosmos.palette[key], brightest) >= 4.5, `${key}: ${contrast(cosmos.palette[key], brightest).toFixed(2)}`);
 });
 
-test('no cosmos device asks the draw layer for a blur filter (about 7 ms a frame each); only the look\'s card shadow blurs', () => {
+test('no cosmos device asks the draw layer for a blur filter (about 7 ms a frame each): the rounded card\'s shadow is stacked rings too', () => {
   const nodes = ['card', 'tag', 'highlight', 'circle', 'underline'].flatMap((name) => build(name, cosmos, name === 'tag' ? { text: 'x', measure } : {}).nodes);
   const blurred = all(nodes).filter((n) => n.props.blur !== undefined).map((n) => n.id);
-  assert.deepEqual(blurred, ['d.shadow']);
+  assert.deepEqual(blurred, []);
+  const shadow = part(build('card', cosmos).nodes, 'shadow');
+  assert.equal(shadow.type, 'group', 'a soft-edged group of rings');
+  assert.equal(shadow.children.length, SOFT_RINGS);
+  // desk keeps its blurred paper shadow exactly (its look data asks for it)
+  assert.ok(part(build('card', desk).nodes, 'shadow').props.blur > 0);
+});
+
+// The plan forbids blur filters: a canvas shadowBlur is one (a full Gaussian pass per glowing word or shape, every
+// frame). The glow of a text or a path is drawn as stacked strokes (engine/page/draw.mjs), so no engine file sets it.
+test('no engine file sets a canvas shadowBlur (comments aside)', async () => {
+  const { readdirSync, readFileSync, statSync } = await import('node:fs');
+  const { fileURLToPath } = await import('node:url');
+  const root = fileURLToPath(new URL('../../engine/', import.meta.url));
+  const files = (dir) => readdirSync(dir).flatMap((f) => (statSync(dir + f).isDirectory() ? files(`${dir}${f}/`) : f.endsWith('.mjs') ? [dir + f] : []));
+  const offenders = files(root).flatMap((f) => readFileSync(f, 'utf8').split('\n').map((line, i) => ({ f, i, line })))
+    .filter(({ line }) => /shadowBlur|shadowColor/.test(line.replace(/\/\/.*$/, '')))
+    .map(({ f, i }) => `${f.slice(root.length)}:${i + 1}`);
+  assert.deepEqual(offenders, []);
 });
 
 // ---- tag ----

@@ -1,8 +1,7 @@
-// EXPERIMENTAL LOOK: the parked `cosmos` look (look.experimental since gate review 3) against the review rules. Every
-// example `--list kinds` prints, in pro 16:9 and viral 9:16, reviewed at the sheet moments, comes back with exactly the
-// findings named in KNOWN (none for most), so the parked code does not rot while it is left out of the shipped set
-// (review-browser.test.mjs covers desk and pop). No rule is filtered out. Run with --test-concurrency=1; skips without
-// a browser.
+// The `cosmos` look (listed again after the final gate review) against the review rules. Every example `--list kinds`
+// prints for a kind cosmos ships, in pro 16:9 and viral 9:16, reviewed at the sheet moments, comes back with exactly the
+// findings named in KNOWN (none for most) (review-browser.test.mjs covers desk and pop). No rule is filtered out. Run
+// with --test-concurrency=1; skips without a browser.
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -52,9 +51,11 @@ before(() => {
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
 
+// each kind only in the looks that ship it (its listing's `looks`): cosmos has no data for the second-wave kinds, which
+// it refuses at validation naming the looks that support them (cosmos-look.test.mjs)
 for (const { mode, format } of COMBOS) {
-  for (const entry of listEntries('kinds')) {
-    test(`experimental look cosmos: the ${entry.name} example at ${format} has only its known findings`, async (t) => {
+  for (const entry of listEntries('kinds').filter((e) => e.looks.includes('cosmos'))) {
+    test(`look cosmos: the ${entry.name} example at ${format} has only its known findings`, async (t) => {
       const film = { version: 2, mode, look: 'cosmos', format, fps: FPS, seed: 3, shots: [entry.example] };
       const session = await sessionOrNull(film, { specDir });
       if (!session) { t.skip('no browser'); return; }

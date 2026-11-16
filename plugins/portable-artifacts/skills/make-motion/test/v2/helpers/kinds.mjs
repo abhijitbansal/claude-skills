@@ -30,7 +30,8 @@ export const measure = (text, font) => {
     inkAscent: inkUp(text) * font.size, inkDescent: (QUOTES.test(text) ? -QUOTE_FLOAT : /[gjpqy]/.test(text) ? 0.22 : 0) * font.size, inkLeft: 0.02 * font.size, inkRight: width - 0.02 * font.size,
   };
 };
-export const IMAGES = new Map([['shot.png', { width: 1600, height: 1000 }]]);
+// shot.png: a wide screenshot; phone.png: a tall one (a phone screen), for the screen kind's phone frame
+export const IMAGES = new Map([['shot.png', { width: 1600, height: 1000 }], ['phone.png', { width: 600, height: 1200 }]]);
 export const canvasOf = (format) => ({ w: FORMATS[format].size[0], h: FORMATS[format].size[1] });
 // The platform safe zone as the stage passes it (template/formats.mjs safeInsets with the viral zone)...
 export const platformOf = (canvas) => safeInsets([canvas.w, canvas.h], VIRAL_SAFE_ZONE);
@@ -46,11 +47,12 @@ export const modeOf = (look) => (look === 'pop' ? 'viral' : 'pro');
 
 export const filmOf = (shots, look = 'desk', format = '16:9', extra = {}) => ({ version: 2, mode: modeOf(look), look, format, fps: FPS, seed: 1, shots, ...extra });
 
-// Expand shot `index` of a film (default: a one-shot film) exactly as buildFilm does.
-export function expandIn(film, index = 0) {
+// Expand shot `index` of a film (default: a one-shot film) exactly as buildFilm does; `prepared` is the film's prepared
+// data by shot id (scripts/v2/prepare), for a kind that declares `prepared: true`.
+export function expandIn(film, index = 0, { prepared = {} } = {}) {
   const timeline = buildTimeline(film, { fps: FPS });
   const canvas = canvasOf(film.format);
-  const ctx = shotContext({ film, index, timeline, canvas, measure, assets: IMAGES, viralInsets: viralOf(canvas) });
+  const ctx = shotContext({ film, index, timeline, canvas, measure, assets: IMAGES, viralInsets: viralOf(canvas), prepared });
   const shot = film.shots[index];
   return { ...registries.kinds.get(shot.show).expand(shot, ctx), timing: timeline.shots[index], ctx, canvas };
 }
@@ -58,9 +60,9 @@ export const expandShot = (shot, look = 'desk', format = '16:9') => expandIn(fil
 // The shot as the second of a film: in viral mode the first shot reads from frame 0 (see the hook tests), later shots arrive word by word.
 export const FILLER = { id: 'filler', show: 'statement', hold: 1, text: 'Hi' };
 export const expandSecond = (shot, look = 'desk', format = '16:9') => expandIn(filmOf([FILLER, shot], look, format), 1);
-export const filmFor = (shots, look = 'desk', format = '16:9', extra = {}) => {
+export const filmFor = (shots, look = 'desk', format = '16:9', extra = {}, { prepared = {} } = {}) => {
   const film = filmOf(shots, look, format, extra);
-  return buildFilm({ film, timeline: buildTimeline(film, { fps: FPS }), measure, assets: IMAGES, canvas: canvasOf(format), viralInsets: viralOf(canvasOf(format)) });
+  return buildFilm({ film, timeline: buildTimeline(film, { fps: FPS }), measure, assets: IMAGES, canvas: canvasOf(format), viralInsets: viralOf(canvasOf(format)), prepared });
 };
 
 export const all = (nodes) => nodes.flatMap((n) => [n, ...all(n.children)]);

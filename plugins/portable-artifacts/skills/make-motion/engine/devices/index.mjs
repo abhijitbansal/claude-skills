@@ -9,8 +9,16 @@ import { cutout } from './cutout.mjs';
 import { card } from './card.mjs';
 import { tag } from './tag.mjs';
 import { punch } from './punch.mjs';
+import { label } from './label.mjs';
+import { focus } from './focus.mjs';
+import { route } from './route.mjs';
+import { numeral } from './numeral.mjs';
+import { sticker } from './sticker.mjs';
+import { sweep } from './sweep.mjs';
+import { duotone, halftone } from './treatments.mjs';
 
-export const DEVICES = Object.freeze([highlight, circle, underline, arrow, bracket, cutout, card, tag, punch]);
+// A device with `on: false` (numeral, sticker, the treatments) is a layout device: kinds build it, an `on` event cannot place it.
+export const DEVICES = Object.freeze([highlight, circle, underline, arrow, bracket, cutout, card, tag, punch, label, focus, route, numeral, sticker, sweep, duotone, halftone]);
 
 for (const device of DEVICES) {
   if (!registries.devices.has(device.name)) registries.devices.add(device.name, device);

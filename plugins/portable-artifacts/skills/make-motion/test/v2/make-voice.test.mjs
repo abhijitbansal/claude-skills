@@ -25,7 +25,7 @@ import { UsageError } from '../../scripts/lib/spec.mjs';
 
 const FPS = 30;
 // The report's keys on every path (make.test.mjs checks the same list through the CLI).
-const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice'];
+const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice', 'provenance'];
 
 const FILMS = {
   gate: { version: 2, mode: 'pro', shots: [
@@ -91,10 +91,22 @@ const runVoiced = (specPath, synthesise, flags = {}, signal = undefined) => runM
 );
 const stagesOf = (report) => report.stages.map((s) => [s.name, s.ok]);
 
-test('a voiced film runs the voice stage before the timeline and its timeline is measured (no browser: --outline)', async () => {
+test('--outline makes no voice: a voiced film is outlined on the word-count estimate, and the run says so', async () => {
+  const fake = fakeSynthesiser();
+  const { report, exitCode, outline, outlineNote } = await runVoiced(writeVoiced('voiced-estimate'), fake.synthesise, { outline: true });
+  assert.equal(exitCode, 0, JSON.stringify(report));
+  assert.equal(fake.calls.length, 0, 'the synthesiser is never asked');
+  assert.equal(report.timed, 'estimated');
+  assert.equal(report.voice, null);
+  assert.deepEqual(stagesOf(report), [['validate', true], ['timeline', true]]);
+  assert.deepEqual(outline.map((s) => s.id), VOICED_SHOTS.map((s) => s.id));
+  assert.match(outlineNote, /estimated from the word count/);
+});
+
+test('a voiced film runs the voice stage before the timeline and its timeline is measured (no browser: the measured outline)', async () => {
   const fake = fakeSynthesiser();
   const specPath = writeVoiced('voiced-outline');
-  const { report, exitCode, outline } = await runVoiced(specPath, fake.synthesise, { outline: true });
+  const { report, exitCode, outline } = await runVoiced(specPath, fake.synthesise, { outlineMeasured: true });
   assert.equal(exitCode, 0, JSON.stringify(report));
   assert.deepEqual(Object.keys(report).sort(), [...REPORT_KEYS].sort());
   assert.equal(report.timed, 'measured');
@@ -231,7 +243,7 @@ test('a voice from your own recording ({ src, words }) is never synthesised: its
   const fake = fakeSynthesiser();
   writeFileSync(path.join(dir, 'vo.wav'), silentWav(4));
   writeFileSync(path.join(dir, 'vo.json'), JSON.stringify(OWN_WORDS));
-  const own = await runVoiced(writeVoiced('voiced-own', { voice: { src: 'vo.wav', words: 'vo.json' } }), fake.synthesise, { outline: true });
+  const own = await runVoiced(writeVoiced('voiced-own', { voice: { src: 'vo.wav', words: 'vo.json' } }), fake.synthesise, { outlineMeasured: true });
   assert.equal(own.exitCode, 0, JSON.stringify(own.report));
   assert.equal(own.report.timed, 'measured');
   assert.deepEqual(own.report.voice, { cached: false, seconds: 3.55, model: null });
@@ -241,7 +253,7 @@ test('a voice from your own recording ({ src, words }) is never synthesised: its
   assert.deepEqual(missing.report.findings.map((f) => f.path), ['voice.words']);
   assert.deepEqual(stagesOf(missing.report), [['validate', false]]);
   writeFileSync(path.join(dir, 'vo-stub.wav'), 'RIFF'); // four bytes: a name, not a recording
-  const stub = await runVoiced(writeVoiced('voiced-own-stub', { voice: { src: 'vo-stub.wav', words: 'vo.json' } }), fake.synthesise, { outline: true });
+  const stub = await runVoiced(writeVoiced('voiced-own-stub', { voice: { src: 'vo-stub.wav', words: 'vo.json' } }), fake.synthesise, { outlineMeasured: true });
   assert.equal(stub.exitCode, 1, JSON.stringify(stub.report));
   assert.deepEqual(stub.report.findings.map((f) => f.path), ['voice.src']);
   assert.match(stub.report.findings[0].message, /"vo-stub\.wav" cannot be read as audio/);
@@ -300,7 +312,7 @@ test('a sidecar that does not match the film is machine trouble, whoever made it
 // ---- an interrupt during the voice stage ----
 
 const abortError = () => Object.assign(new Error('voice synthesis was interrupted'), { name: 'AbortError' });
-const MODES = [['--outline', { outline: true }], ['--no-render (and --sheets-only)', { noRender: true }], ['a full run', { noRender: false }]];
+const MODES = [['the measured outline', { outlineMeasured: true }], ['--no-render (and --sheets-only)', { noRender: true }], ['a full run', { noRender: false }]];
 
 const assertInterrupted = (report, exitCode, stages) => {
   assert.equal(exitCode, 130);
@@ -319,7 +331,7 @@ for (const [name, flags] of MODES) {
       options.signal.addEventListener('abort', () => reject(abortError()), { once: true });
       setImmediate(() => controller.abort());
     });
-    const { report, exitCode } = await runVoiced(writeVoiced(`voiced-abort-${flags.outline ? 'o' : flags.noRender ? 'n' : 'f'}`), synthesise, flags, controller.signal);
+    const { report, exitCode } = await runVoiced(writeVoiced(`voiced-abort-${flags.outlineMeasured ? 'o' : flags.noRender ? 'n' : 'f'}`), synthesise, flags, controller.signal);
     assert.equal(given, controller.signal, 'the run passes its own signal to the synthesiser');
     assertInterrupted(report, exitCode, [['validate', true], ['voice', false]]);
   });
@@ -330,7 +342,7 @@ for (const [name, flags] of MODES) {
       controller.abort();
       return { dir: path.join(options.outDir, '.voice', 'fake'), sidecar: fakeSidecar(film), cached: true };
     };
-    const { report, exitCode } = await runVoiced(writeVoiced(`voiced-late-abort-${flags.outline ? 'o' : flags.noRender ? 'n' : 'f'}`), synthesise, flags, controller.signal);
+    const { report, exitCode } = await runVoiced(writeVoiced(`voiced-late-abort-${flags.outlineMeasured ? 'o' : flags.noRender ? 'n' : 'f'}`), synthesise, flags, controller.signal);
     assertInterrupted(report, exitCode, [['validate', true], ['voice', true]]);
   });
 }
@@ -364,7 +376,7 @@ test('two region events past the estimated end are not a false "same time" clash
   const voiced = clippingFilm('Costs rose.', [2, 3], { voice: { name: 'af_heart' } });
   assert.deepEqual(validateFilm(voiced, { specDir: dir }).errors, [], 'not judged on estimated times');
   const fake = fakeSynthesiser({ sidecarOf: sidecarWith([0.1, 0.5], 4) });
-  const { report, exitCode } = await runVoiced(writeClipping('clip-late', voiced), fake.synthesise, { outline: true });
+  const { report, exitCode } = await runVoiced(writeClipping('clip-late', voiced), fake.synthesise, { outlineMeasured: true });
   assert.equal(exitCode, 0, JSON.stringify(report.findings));
   assert.deepEqual(report.findings, []);
 });
@@ -373,7 +385,7 @@ test('two region events on a word pair the voice says as one are the real "same 
   const film = clippingFilm('It costs $5 million.', ['word:2', 'word:3'], { voice: { name: 'af_heart' } });
   assert.deepEqual(validateFilm(clippingFilm('It costs $5 million.', ['word:2', 'word:3']), { specDir: dir }).errors, [], 'apart on estimated times');
   const fake = fakeSynthesiser({ sidecarOf: sidecarWith([0.1, 0.3, 0.6, 0.6], 1.5) });
-  const { report, exitCode } = await runVoiced(writeClipping('clip-merged', film), fake.synthesise, { outline: true });
+  const { report, exitCode } = await runVoiced(writeClipping('clip-merged', film), fake.synthesise, { outlineMeasured: true });
   assert.equal(exitCode, 1, JSON.stringify(report));
   assert.deepEqual(report.findings.map((f) => [f.kind, f.path]), [['mechanical', 'shots[0].on[1].at']]);
   assert.match(report.findings[0].message, SAME_TIME);

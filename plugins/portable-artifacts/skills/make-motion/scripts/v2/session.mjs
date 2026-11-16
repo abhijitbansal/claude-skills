@@ -3,6 +3,9 @@
 // render) share one session so the browser starts once. Starts nothing until asked; throws with the page's own message
 // when the film cannot be drawn (an unknown font, an image that will not decode).
 import { launchBrowser, guardNetwork } from '../lib/browser.mjs';
+
+/** The one browser of a run that opens several sessions (a batch: openSession(loaded, { browser })); the caller closes it. */
+export const launchRunBrowser = (options = { ownSignals: true }) => launchBrowser(options);
 import { canvasSize } from '../../template/formats.mjs';
 import { startV2Server } from './server.mjs';
 
@@ -30,19 +33,23 @@ export const machineMessage = (err) => String(err?.message ?? err).split('\n')[0
 
 /**
  * @param {{ film: object, timeline: object, specDir: string }} loaded what loadFilm returns
- * @param {{ initScript?: string }} [options] initScript: JavaScript that runs in the page before its own code (tests
- *   use it to take WebGL2 away and exercise the 2D post pass)
+ * @param {{ initScript?: string, browser?: import('playwright').Browser }} [options] initScript: JavaScript that runs in
+ *   the page before its own code (tests use it to take WebGL2 away and exercise the 2D post pass); browser: one to open
+ *   the page in (left open on close), instead of launching one
  * @returns {Promise<{ page: import('playwright').Page, info: { frameCount: number, fps: number, size: [number, number], post: 'webgl2' | '2d' },
  *   film: object, timeline: object, errors: string[], blocked: string[], close(): Promise<void> }>}
  */
-export async function openSession({ film, timeline, specDir }, { initScript } = {}) {
+export async function openSession({ film, timeline, specDir, prepared }, { initScript, browser: shared } = {}) {
   let browser = null;
+  let context = null;
   let server = null;
   let closing = null;
+  // A shared browser (a batch renders every row in one) is left open: only this session's context closes.
   const close = () => {
     closing ??= (async () => {
       try {
-        if (browser) await browser.close();
+        if (shared) await context?.close();
+        else if (browser) await browser.close();
       } finally {
         if (server) await server.close();
       }
@@ -52,10 +59,10 @@ export async function openSession({ film, timeline, specDir }, { initScript } = 
   const errors = [];
   const blocked = [];
   try {
-    server = await startV2Server({ film, timeline, specDir, onError: (err) => errors.push(err.message) });
-    browser = await launchBrowser({ ownSignals: true });
+    server = await startV2Server({ film, timeline, specDir, prepared, onError: (err) => errors.push(err.message) });
+    browser = shared ?? await launchBrowser({ ownSignals: true });
     const [width, height] = canvasSize(film);
-    const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+    context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
     if (initScript !== undefined) await context.addInitScript(initScript);
     const page = await context.newPage();
     page.on('pageerror', (err) => errors.push(err.message));

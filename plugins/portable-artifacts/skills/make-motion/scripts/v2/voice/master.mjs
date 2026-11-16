@@ -426,21 +426,21 @@ function duckFilters(points) {
 // by `offsetDb` as the cues are; 0 dB for a measuring pass (no `lufs` yet).
 const musicGainDb = (music, loudness, offsetDb) => (music.lufs === undefined ? 0 : loudness.lufs - BED_UNDER_VOICE_LU - music.lufs + offsetDb);
 
-// The music's chain from input `index`: 48 kHz stereo, cut to the film, a fade from `fadeFrom` (a user's file), its gain
-// (musicGainDb), then the duck (1 ms frames, as the shaping steps).
-function musicChain(music, index, { duration, offsetDb, loudness }) {
+// The music's chain from input `index` (an extra track's too, with `at`, labelled `label`): 48 kHz stereo, moved to `at`,
+// cut to the film, a fade from `fadeFrom` (a user's file), its gain (musicGainDb), then the duck (1 ms frames).
+function musicChain(music, index, { duration, offsetDb, loudness }, label = '[m]') {
   // asetpts: from the file's first sample, whatever its stream timestamps say (an MP3's delay, an MP4 edit list), so the
   // cut, the fade and the duck's t are film time
-  const parts = [`[${index}:a]asetpts=PTS-STARTPTS`, `aresample=${MASTER_RATE}`, `aformat=sample_rates=${MASTER_RATE}:channel_layouts=stereo`, `atrim=end=${time(duration)}`];
+  const parts = [`[${index}:a]asetpts=PTS-STARTPTS`, `aresample=${MASTER_RATE}`, `aformat=sample_rates=${MASTER_RATE}:channel_layouts=stereo`, ...(music.at > 0 ? [`adelay=${Math.round(music.at * 1000)}:all=1`] : []), `atrim=end=${time(duration)}`];
   if (music.fadeFrom !== null && music.fadeFrom !== undefined) parts.push(`afade=t=out:st=${time(music.fadeFrom)}:d=${time(MUSIC_FADE_SECONDS)}`);
   parts.push(`volume=${decibels(musicGainDb(music, loudness, offsetDb))}dB`);
   const duck = duckFilters(music.duck ?? []);
   if (duck.length > 0) parts.push(`asetnsamples=n=${SHAPING_FRAME_SAMPLES}:p=0`, ...duck);
-  return `${parts.join(',')}[m]`;
+  return `${parts.join(',')}${label}`;
 }
 
 // The inputs and the filter graph of a mix, ending in `tail` (the meter, or the static gain) at the label [out].
-function mixGraph({ voice, cues, music, duration, loudness, drive, offsetDb = 0 }, tail) {
+function mixGraph({ voice, cues, music, tracks = [], duration, loudness, drive, offsetDb = 0 }, tail) {
   const inputs = [];
   const chains = [];
   const labels = [];
@@ -459,6 +459,11 @@ function mixGraph({ voice, cues, music, duration, loudness, drive, offsetDb = 0 
     inputs.push(...(music.recording ? recordingInput(music.file) : ownWavInput(music.file)));
     labels.push('[m]');
   }
+  tracks.forEach((track, k) => { // the film's extra audio files: each set and ducked as the music is
+    chains.push(musicChain(track, labels.length, { duration, offsetDb, loudness }, `[x${k}]`));
+    inputs.push(...recordingInput(track.file));
+    labels.push(`[x${k}]`);
+  });
   if (labels.length === 0) throw new RangeError('mixArgs: a mix needs a voice, cues or music');
   const length = samplesOf(duration);
   const sum = labels.length === 1 ? `${labels[0]}anull` : `${labels.join('')}amix=inputs=${labels.length}:normalize=0:duration=longest`;
@@ -510,7 +515,9 @@ async function musicLevel(run, music, duration, loudness) {
  */
 export async function masterMix({ run, out, loudness, ...parts }) {
   const music = parts.music ? { ...parts.music, lufs: await musicLevel(run, parts.music, parts.duration, loudness) } : undefined;
-  const mix = { ...parts, music, loudness, offsetDb: await voiceOffset(run, parts.voice, loudness), drive: undefined };
+  const tracks = [];
+  for (const track of parts.tracks ?? []) tracks.push({ ...track, lufs: await musicLevel(run, track, parts.duration, loudness) });
+  const mix = { ...parts, music, tracks, loudness, offsetDb: await voiceOffset(run, parts.voice, loudness), drive: undefined };
   const measure = (m) => measureWith(run, mixArgs(m), 'sound master');
   const first = await measure(mix);
   if (isSilent(first)) throw new AudioError(parts.voice ? SILENT_MESSAGE : SILENT_SOUND_MESSAGE, { hint: parts.voice ? SILENT_HINT : SILENT_SOUND_HINT });
@@ -520,7 +527,7 @@ export async function masterMix({ run, out, loudness, ...parts }) {
   }
   // Cues alone: raised to the ceiling and no further, since a limiter would have to crush sparse transients to lift
   // their integrated loudness.
-  const cuesAlone = !parts.voice && !parts.music;
+  const cuesAlone = !parts.voice && !parts.music && tracks.length === 0;
   const { level, drive } = cuesAlone ? { level: first, drive: undefined } : await limited(run, mix, first, measure);
   const { gainDb } = gainFor(level, loudness);
   await step(run, mixArgs({ ...mix, drive, out, gainDb }), 'sound master');
@@ -597,18 +604,18 @@ async function builtVoice({ run, voice, timeline, workDir }) {
  * lower, the limiter included, with the same loudness target and balance: room for encodeMaster to raise an encode
  * that AAC took level from (voice/remaster.mjs). Every failure is an AudioError with the audio hint.
  */
-export async function masterTrack({ run, voice, timeline, loudness: target, workDir, cues, music, headroomDb = 0 }) {
+export async function masterTrack({ run, voice, timeline, loudness: target, workDir, cues, music, tracks = [], headroomDb = 0 }) {
   const loudness = headroomDb === 0 ? target : { ...target, truePeakDb: target.truePeakDb - headroomDb };
   try {
     const built = voice === undefined ? null : await builtVoice({ run, voice, timeline, workDir });
-    if (!cues && !music) {
+    if (!cues && !music && tracks.length === 0) {
       if (built === null) return null;
       const master = path.join(workDir, 'voice-master.wav');
       await masterVoice({ run, wav: built.wav, out: master, filter: built.filter, loudness });
       return master;
     }
     const master = path.join(workDir, 'sound-master.wav');
-    await masterMix({ run, out: master, loudness, voice: built ?? undefined, cues, music, duration: timeline.duration });
+    await masterMix({ run, out: master, loudness, voice: built ?? undefined, cues, music, tracks, duration: timeline.duration });
     return master;
   } catch (err) {
     throw asAudioError(err);

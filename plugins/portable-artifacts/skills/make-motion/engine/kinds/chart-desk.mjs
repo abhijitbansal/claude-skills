@@ -22,10 +22,11 @@ const SOURCE_PREFIX = 'Source: ';
 const SOURCE_GAP = 3;
 const BARRED = Object.freeze(['bar', 'column']); // the types drawn as labelled bars on a tall cosmos frame (chart-plot.mjs) // gaps between the plot's lowest label and the source line
 
-// The claim: fitted, flush left on column 2, its cap line where a statement's slug sits (SLUG.top of the height).
+// The claim: fitted, flush left on column 2 (on a tall frame from data.titleFromTall, cosmos: column 1, the plot's left
+// edge), its cap line where a statement's slug sits (SLUG.top of the height).
 function titleNode(shot, ctx, data, labelSize) {
   const { look, canvas, unit, measure } = ctx;
-  const span = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.titleToWide : data.titleToTall);
+  const span = editorialSpan(ctx, isWide(canvas) ? FIRST_COLUMN : data.titleFromTall ?? FIRST_COLUMN, isWide(canvas) ? data.titleToWide : data.titleToTall);
   const opts = { text: setCase(look, 'display', shot.title), font: fontFor(look, 'display', data.titleMax * unit, unit), maxWidth: span.w, align: 'left', measure };
   // a look may keep the claim a hair over three times the labels (data.titleMargin, cosmos); desk fits it from three times
   const fit = fitDisplay(opts, { min: (data.titleMargin ?? 1) * MIN_HERO_RATIO * labelSize, max: data.titleMax * unit, maxHeight: canvas.h, maxLines: data.titleLines }, look, unit);
@@ -36,8 +37,12 @@ function titleNode(shot, ctx, data, labelSize) {
   const up = bounds.safe ? runInk(fit.layout.lines[0], fit.font, measure).up : CAP_HEIGHT * fit.font.size;
   const y = top + up - fit.layout.lines[0].y;
   const bottom = y + fit.layout.lines.at(-1).y + WORD_DESCENT * fit.font.size;
-  const textNode = node('text', `${shot.id}.title`, { x: span.x, y, layout: fit.layout, font: fit.font, fill: look.palette.ink, role: 'hero' });
-  return { node: textNode, bottom, box: capBox(span.x, y + fit.layout.lines[0].y, fit.layout.width, fit.font.size) };
+  // from the plot's left edge (data.titleFromTall) no line's ink starts left of that edge: a J's ink reaches left of its
+  // advance and would cross the safe edge the plot is set on
+  const inkLeft = Math.min(...fit.layout.lines.map((line) => runInk(line, fit.font, measure).left));
+  const x = !isWide(canvas) && data.titleFromTall !== undefined ? span.x - inkLeft : span.x;
+  const textNode = node('text', `${shot.id}.title`, { x, y, layout: fit.layout, font: fit.font, fill: look.palette.ink, role: 'hero' });
+  return { node: textNode, bottom, box: capBox(x, y + fit.layout.lines[0].y, fit.layout.width, fit.font.size) };
 }
 
 // The source line's font: the label face at data.sourceStep (never under the look's secondary floor), set smaller in
@@ -62,7 +67,6 @@ export function expandDeskChart(shot, ctx, data, hero) {
   const { look, canvas, unit } = ctx;
   const style = chartStyle(ctx, data);
   const { font, gap } = style;
-  const title = titleNode(shot, ctx, data, font.size); // three times the labels as set (labelScale)
   const caption = captionTop(ctx);
   const wide = isWide(canvas);
   const bounds = editorialBounds(ctx);
@@ -73,6 +77,10 @@ export function expandDeskChart(shot, ctx, data, hero) {
   // equal outer margins: the plot's right edge as far in from the right as its left edge is from the left
   const right = bounds.safe ? editorialRight(ctx) : wide ? canvas.w - left : gridX(look, canvas, RIGHT_EDGE);
   const { font: sourceFont, wrap, maxWidth: sourceWidth } = sourceFontFor(ctx, data, sourceText, bounds.safe ? right - left : Infinity);
+  // three times the labels as set (labelScale); a look may hold it at three times the smallest text instead
+  // (data.titleFloor 'smallest', cosmos: labels set large for a phone, the quieter source the smallest)
+  const smallest = data.titleFloor === 'smallest' && shot.source !== undefined ? Math.min(font.size, sourceFont.size) : font.size;
+  const title = titleNode(shot, ctx, data, smallest);
   // over a caption band; in the safe zone its ink (its descenders) ends at the band's bottom
   const down = bounds.safe && shot.source !== undefined ? inkExtent(sourceText, sourceFont, ctx.measure).down : WORD_DESCENT * font.size;
   const sourceBaseline = Math.min(bounds.bottom, caption - gap) - down - wrap;

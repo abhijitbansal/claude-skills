@@ -24,6 +24,9 @@ import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { auditMoments } from './plan.mjs';
 import { pageFinding } from './report.mjs';
+import { loopFindings } from './loop.mjs';
+
+export { LOOP_DIFF_MAX } from './loop.mjs';
 
 const SNAPSHOT_CHUNK = 20; // snapshots fetched per page.evaluate, so a stop request is heard between chunks
 const HELD_CHUNK = 150;
@@ -268,14 +271,17 @@ export function kindFinding(shot, index, timing, f) {
 // Advice a kind gives about its own shots (kind.review(shot, { look, timing, at, canvas }) -> [{ path, at, message, kind? }]):
 // the clipping kind says a region event comes too early to show the whole picture first (creative, the default); the
 // chart kind says a chart breaks an honesty rule (kind: 'mechanical', which fails the run like any mechanical finding).
-function kindFindings(film, timeline) {
+// `pictures` maps a src to the [width, height] the page loaded it at (session.info.pictures); `asset(src)` reads it as
+// { width, height }, or undefined for a src the page did not load (a kind's review says nothing it cannot know).
+function kindFindings(film, timeline, pictures = {}) {
   const look = resolveLook(film);
   const [w, h] = canvasSize(film);
+  const asset = (src) => (Array.isArray(pictures[src]) ? { width: pictures[src][0], height: pictures[src][1] } : undefined);
   return film.shots.flatMap((shot, index) => {
     const review = registries.kinds.get(shot.show).review;
     if (typeof review !== 'function') return [];
     const timing = timeline.shots[index];
-    return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h } }).map((f) => kindFinding(shot, index, timing, f));
+    return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h }, asset }).map((f) => kindFinding(shot, index, timing, f));
   });
 }
 
@@ -310,7 +316,8 @@ export async function reviewFilm({ session, signal }) {
   const audited = snapshots.flatMap((snap) => frameFindings(film, timeline, restingOf, snap, backgrounds));
   const deduped = dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots);
   const still = pacingFindings(film, timeline, await heldFlags(session, signal));
-  return [...deduped, ...still, ...kindFindings(film, timeline), ...hookFindings(film, timeline, snapshots)].sort((a, b) => a.t - b.t);
+  const loop = await loopFindings(session); // root loop: true (loop.mjs)
+  return [...deduped, ...still, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...loop].sort((a, b) => a.t - b.t);
 }
 
 const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });

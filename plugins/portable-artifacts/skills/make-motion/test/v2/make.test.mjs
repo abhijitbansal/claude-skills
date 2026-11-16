@@ -110,9 +110,9 @@ test('no film path, two film paths and a bad --out exit 2', () => {
 });
 
 test('an unknown --list value exits 2 listing the accepted ones', () => {
-  const run = make(['--list', 'moves']);
+  const run = make(['--list', 'movs']);
   assert.equal(run.status, 2);
-  assert.match(run.stderr, /kinds, looks, modes, devices, cuts, fields/);
+  assert.match(run.stderr, /kinds, looks, modes, devices, moves, cuts, fields/);
 });
 
 test('a missing film file exits 2 and names the file', () => {
@@ -434,7 +434,7 @@ test('SIGINT during a render leaves no temp files and no browser behind', async 
 
 // ---- the --json contract on every path ----
 
-const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice'];
+const REPORT_KEYS = ['audio', 'bytes', 'captured', 'capture', 'findings', 'frames', 'mbps', 'msPerFrame', 'ok', 'output', 'post', 'seconds', 'sheets', 'stages', 'timed', 'voice', 'provenance'];
 const shapeOf = (run) => {
   assert.equal(run.stdout.trim().split('\n').length, 1, `one line on stdout, got ${JSON.stringify(run.stdout)}`);
   const report = parse(run);

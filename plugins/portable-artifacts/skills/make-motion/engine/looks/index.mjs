@@ -9,6 +9,8 @@ import '../cuts/index.mjs';
 import '../devices/index.mjs';
 // ...and a look must name a caption style, so the styles are registered before any look is.
 import '../captions/index.mjs';
+// ...and give values (or null) for every named move, so the moves are registered before any look is.
+import '../moves/index.mjs';
 import { desk } from './desk.mjs';
 import { pop } from './pop.mjs';
 import { cosmos } from './cosmos.mjs';
@@ -45,7 +47,11 @@ import { cosmos } from './cosmos.mjs';
  *   a stack of short lines each set at its own size to fill the width, flush left
  * @property {'highlight' | 'recolor-scale' | 'recolor'} emphasis  a highlighter band, a recolour with a pulse, or a
  *   recolour alone
- * @property {{ enter: Move, exit: Move, emphasize: Move, draw: Move, count: Move }} moves
+ * @property {{ enter: Move, exit: Move, emphasize: Move, draw: Move, count: Move } & Record<string, Move | null>} moves  the
+ *   five the first kinds use, and an entry for every move in registries.moves (engine/moves: rise, wipe, slam, pop, draw,
+ *   count, settle), a Move or null where the look does not use it (checked by validateLook as the look registers)
+ * @property {Record<string, { experimental?: boolean, experimentalTypes?: string[] }>} [kinds]  see below; a kind entry
+ *   with `experimental: true` parks the kind in this look (isParkedKind), `chart.experimentalTypes` parks chart types
  * @property {number} wordStagger  seconds between words that have no spoken time; 0 means words follow their spoken times
  * @property {{ drift: number, style: 'desk' | 'locked' }} camera  drift is a travel in units
  * @property {string[]} cuts  a subset of cut, match, slide, punch
@@ -146,10 +152,48 @@ function kindsErrors(name, kinds) {
     .map(([kind, data]) => `look "${name}": kinds.${kind} must be an object, got ${String(data)}`);
 }
 
+// A look's entry for a named move: a Move ({ ease, dur >= 0, ... }) or null (the look does not use it).
+const isMoveOrNull = (move) => move === null
+  || (isPlainObject(move) && typeof move.ease === 'string' && move.ease !== '' && Number.isFinite(move.dur) && move.dur >= 0);
+
+// The errors of a look's moves: an entry, a Move or null, for each registered move in `names`.
+function movesErrors(name, moves, names) {
+  if (!isPlainObject(moves)) return [`look "${name}": moves must be an object of move names to { ease, dur }, got ${String(moves)}`];
+  return names.filter((key) => !isMoveOrNull(moves[key]))
+    .map((key) => `look "${name}": moves.${key} must be a move { ease, dur } or null, got ${JSON.stringify(moves[key]) ?? 'undefined'}`);
+}
+
 /** Does `look` carry composition data for `kind` (look.kinds[kind])? */
 export const supportsKind = (look, kind) => isPlainObject(look?.kinds) && isPlainObject(look.kinds[kind]);
 
-const lookNamesFor = (kind, looks) => looks.names().filter((name) => supportsKind(looks.get(name), kind));
+/** Is `kind` parked in `look` (look.kinds[kind].experimental): it validates and renders there, but the look does not ship it. */
+export const isParkedKind = (look, kind) => supportsKind(look, kind) && look.kinds[kind].experimental === true;
+
+/** Is chart type `type` parked in `look` (look.kinds.chart.experimentalTypes)? */
+export const isParkedChartType = (look, type) => supportsKind(look, 'chart') && Array.isArray(look.kinds.chart.experimentalTypes)
+  && look.kinds.chart.experimentalTypes.includes(type);
+
+// The listed looks that ship `kind` unparked.
+const lookNamesFor = (kind, looks) => looks.names().filter((name) => supportsKind(looks.get(name), kind) && !isParkedKind(looks.get(name), kind));
+
+/** The listed looks that ship `kind`: that have data for it and do not park it. */
+export const kindLooks = (kind, looks = registries.looks) => lookNamesFor(kind, looks);
+
+// Is `kind` gated by look data (a look ships it only with a kinds.<kind> entry)? The kind says so (`lookData: true`: end,
+// list, quote, compare, chart, media, screen). It cannot be read off the looks: cosmos carries composition data for
+// statement, clipping and number, kinds every look draws.
+const readsLookData = (kind, kinds) => kinds.has(kind) && kinds.get(kind).lookData === true;
+
+/**
+ * The kinds a listing shows (--list kinds, the unknown-kind and missing-show hints): a kind that reads no look data
+ * (statement, number, clipping, free), or one that at least one listed look ships unparked. registries.kinds.names()
+ * stays complete: the sound plan walks every kind, parked ones included.
+ */
+export const listedKinds = (kinds = registries.kinds, looks = registries.looks) => kinds.names()
+  .filter((kind) => !readsLookData(kind, kinds) || lookNamesFor(kind, looks).length > 0);
+
+/** The listed looks a kind's listing entry names: every listed look for a kind that reads no look data, else kindLooks. */
+export const listedLooksOf = (kind, looks = registries.looks, kinds = registries.kinds) => (readsLookData(kind, kinds) ? lookNamesFor(kind, looks) : looks.names());
 
 /**
  * A kind's validate rule for the look a film uses: when `look` has no data for `kind`, one problem at the shot's `show`
@@ -175,11 +219,13 @@ export function kindData(look, kind, looks = registries.looks) {
  * when its `captions` does not name a style in `captions` (default the shared caption styles registry); or when its
  * `kinds`, given, is not an object of objects. Returns the look, so it can be used inline.
  */
-export function validateLook(look, { cuts = registries.cuts, devices = registries.devices, captions = registries.captions } = {}) {
+export function validateLook(look, { cuts = registries.cuts, devices = registries.devices, captions = registries.captions, moves = registries.moves } = {}) {
   const caption = captionsError(look.name, look.captions, captions);
   if (caption !== null) throw new RangeError(caption);
   const kinds = kindsErrors(look.name, look.kinds);
   if (kinds.length > 0) throw new RangeError(kinds.join('\n'));
+  const moveErrors = movesErrors(look.name, look.moves, moves.names());
+  if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {
     throw new RangeError(`look "${name}": sounds must be { cut, device, emphasis, land }, got ${String(sounds)}`);

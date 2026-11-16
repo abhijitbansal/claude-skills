@@ -13,7 +13,7 @@ import { layoutText, unclean } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { landing } from '../devices/shared.mjs';
 import { glowFill, glowStyle } from '../devices/glow.mjs';
-import { sunNodes, sunAnchor, hasSun } from '../devices/sun.mjs';
+import { sunNodes, sunAnchor, hasSun, besideSun, belowSun } from '../devices/sun.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox, isEditorial, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, ghostWords, plainSay, overlaps, NOT_BLANK, assertNoBlanks,
@@ -75,23 +75,34 @@ function highlightTogether(text, ctx) {
 // null): the fit prefers a layout whose block, so placed, stays off it.
 function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const { look, unit } = ctx;
-  const data = look.kinds?.statement ?? {}; // look data (cosmos): tallFrom, tallHeight, linesWide, toWide, together
+  const data = look.kinds?.statement ?? {}; // look data (cosmos): tallFrom, tallHeight, linesWide, toWide, together, fromSun, tallAlign
   const wide = isWide(ctx.canvas);
-  const span = editorialSpan(ctx, !wide && data.tallFrom ? data.tallFrom : FIRST_COLUMN, to);
+  // with a sun (data.fromSun, cosmos): on a wide frame the text starts at the column the sun leaves free; on a tall one
+  // it is set centred on the sun's axis (data.tallAlign), on the band's centre, under its disc (cosmos-gate3.test.mjs)
+  const sunny = data.fromSun === true && hasSun(look);
+  const first = wide ? (sunny ? besideSun(look, ctx).from : FIRST_COLUMN) : data.tallFrom ?? FIRST_COLUMN;
+  const align = !wide && data.tallAlign === 'center' ? 'center' : 'left';
+  // a centred text takes every column, so it centres on the sun's axis
+  const span = editorialSpan(ctx, first, align === 'center' ? look.grid.columns : to);
   const bounds = editorialBounds(ctx);
+  // on a tall frame with a sun the block keeps out of its bright light: never higher than belowSun
+  const top = !wide && sunny ? Math.max(bounds.top, belowSun(look, ctx)) : -Infinity;
   const min = sizeAt(look, DESK.fromStep, unit), max = DESK.max * unit;
   const font = fontFor(look, 'display', max, unit);
-  const place = (layout, at) => ({ layout, font: at, x: span.x, y: bounds.at(DESK.centre) - (inkSpan(layout).top + inkSpan(layout).bottom) / HALF, span });
+  const place = (layout, at) => {
+    const ink = inkSpan(layout);
+    return { layout, font: at, x: span.x, y: Math.max(bounds.at(DESK.centre) - (ink.top + ink.bottom) / HALF, top - ink.top), span };
+  };
   const together = highlightTogether(text, ctx);
   // with data.together (cosmos, wide) a layout that breaks inside an emphasised run is refused, not just ranked lower
   const whole = (layout) => !(data.together && wide) || !layout.lines.some((line) => together[line.words.at(-1).index]);
   const clears = (layout) => !clear || !overlaps(clear, blockInk(place(layout, { ...font, size: layout.size }), ctx.measure));
   const accept = clear || (data.together && wide) ? (layout) => clears(layout) && whole(layout) : undefined;
-  const opts = { text, font, maxWidth: span.w, align: 'left', measure: ctx.measure, optical: true, together, accept };
+  const opts = { text, font, maxWidth: span.w, align, measure: ctx.measure, optical: true, together, accept };
   // a look may allow more lines and more of the band's height on a tall frame (look.maxLinesTall, kinds.statement
   // tallHeight, cosmos: a wide face would set the hook small), and ask a wide frame for at most `linesWide` lines
   const maxLines = !wide && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;
-  const maxHeight = bounds.height(!wide && data.tallHeight ? data.tallHeight : DESK.height);
+  const maxHeight = Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : DESK.height), bounds.bottom - Math.max(bounds.top, top));
   // a phrase kept whole may cost size: the fit looks down to the kind's floor for a layout that keeps it
   const floor = data.together && wide ? Math.max(tradeFloor, min) : tradeFloor;
   const fit = (lines) => fitDisplay(opts, { min, max, maxHeight, maxLines: lines, tradeFloor: floor }, look, unit);

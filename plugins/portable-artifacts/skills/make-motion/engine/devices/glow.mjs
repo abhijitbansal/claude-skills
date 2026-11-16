@@ -9,8 +9,14 @@
 // glow pixel beside the glyphs (measured in the browser: .scratch/cosmos/glow-contrast.mjs). Pure and DOM-free.
 import { track } from '../time/track.mjs';
 import { CAP_HEIGHT } from '../kinds/shared.mjs';
+import { lightColour } from './sun.mjs';
 
 const FILL_EASE = 'inOutCubic';
+/**
+ * The share of a glow's alpha its light shows at the glowing shape's edge, its brightest pixel (the draw layer stacks
+ * rings to it, engine/page/draw.mjs; the contrast review reads the same: engine/review/contrast.mjs).
+ */
+export const GLOW_EDGE = 0.55;
 // units: the glow's radius never passes the safe margin (template/formats.mjs SAFE_MARGIN_PX at 1080), so a text kept
 // inside the safe area keeps its glow inside the frame
 const MAX_RADIUS_UNITS = 60;
@@ -29,5 +35,6 @@ export function glowFill(look, at) {
 export function glowStyle(look, font, unit) {
   if (look.emphasis !== 'glow' || !look.glow) return {};
   const { color, alpha, capShare } = look.glow;
-  return { glow: { color, alpha, radius: Math.min(capShare * CAP_HEIGHT * font.size, (look.glow.maxRadius ?? MAX_RADIUS_UNITS) * unit) } };
+  // the glow is the sun's light: it follows a film's accent as the sun does (sun.mjs lightColour)
+  return { glow: { color: lightColour(look, color), alpha, radius: Math.min(capShare * CAP_HEIGHT * font.size, (look.glow.maxRadius ?? MAX_RADIUS_UNITS) * unit) } };
 }

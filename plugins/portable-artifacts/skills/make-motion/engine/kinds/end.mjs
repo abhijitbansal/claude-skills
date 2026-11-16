@@ -333,6 +333,7 @@ registries.kinds.add(KIND, {
   validate: endProblems,
   expand: expandEnd,
   review: endReview,
+  lookData: true, // a look ships it only with a kinds.end entry (engine/looks/index.mjs listedKinds)
   numbered: false, // no slug: the card closes the film and takes no place among its numbered shots
   showsWords: true, // its narration is the picture: never captioned (engine/captions)
 });

@@ -322,9 +322,10 @@ async function toolsFor({ ffmpeg, ffprobe }) {
  * whitelists for beat detection (scripts/lib/beats.mjs detectBeats). -> { file: its real path (the only path that may
  * reach ffmpeg), seconds: its length, lufs: its loudness, beats: seconds, or null with no steady beat }. A problem with
  * the file, a silent one among them, is a SpecError at music.src. `ffmpeg`, `ffprobe` default to the ones found on
- * this machine.
+ * this machine. `beats`: the grid of the film's music.beats file, used as given (nothing is decoded for detection);
+ * `detect`: the detector, pcm -> beats or null (default: detectBeats behind the confidence gate).
  */
-export async function musicInput(film, dir, { ffmpeg, ffprobe, signal, seconds } = {}) {
+export async function musicInput(film, dir, { ffmpeg, ffprobe, signal, seconds, beats, detect = detected } = {}) {
   const src = film?.music?.src;
   if (typeof src !== 'string' || src === '') throw new TypeError('musicInput: the film\'s music has no src');
   const read = recordingFile(src, MUSIC_PATH, dir);
@@ -334,8 +335,9 @@ export async function musicInput(film, dir, { ffmpeg, ffprobe, signal, seconds }
   const problem = recordingProblem(probe, 0, { what: 'music file' });
   if (problem !== null) throw new SpecError([{ path: MUSIC_PATH, message: `${JSON.stringify(src)} ${problem}` }]);
   const lufs = await musicLoudness(tools.ffmpeg, read.real, src, seconds, signal);
+  if (Array.isArray(beats)) return { file: read.real, seconds: probe.duration, lufs, beats: [...beats] };
   const pcm = await decodeMusic(tools.ffmpeg, read.real, src, signal);
-  return { file: read.real, seconds: probe.duration, lufs, beats: detected(pcm) };
+  return { file: read.real, seconds: probe.duration, lufs, beats: detect(pcm) };
 }
 
 /**

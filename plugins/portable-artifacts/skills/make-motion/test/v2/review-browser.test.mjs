@@ -55,7 +55,8 @@ const exampleFor = (entry, look) => ({
 });
 
 for (const { mode, look, format } of COMBOS) {
-  for (const entry of listEntries('kinds')) {
+  // each kind only in the looks that ship it (its listing's `looks`); cosmos has its own sweep (cosmos-examples-browser)
+  for (const entry of listEntries('kinds').filter((e) => e.looks.includes(look))) {
     test(`the ${entry.name} example in ${look} at ${format} has no review finding`, async (t) => {
       const film = { version: 2, mode, look, format, fps: FPS, seed: 3, shots: [exampleFor(entry, look)] };
       const session = await open(t, film); if (!session) return;

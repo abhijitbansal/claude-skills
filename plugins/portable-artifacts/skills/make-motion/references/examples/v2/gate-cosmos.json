@@ -23,13 +23,12 @@
       "show": "number",
       "say": "One hundred fifty million kilometres. One astronomical unit.",
       "value": 150,
-      "suffix": "M km",
-      "label": "from the Sun to Earth"
+      "suffix": "million",
+      "label": "kilometres from the Sun to Earth"
     },
     {
       "id": "path",
       "show": "list",
-      "title": "On the way",
       "say": "It passes Mercury. Then Venus. Then it reaches Earth.",
       "items": [
         "Mercury",
@@ -45,14 +44,14 @@
         "title": "Earth",
         "value": "12,742",
         "points": [
-          "kilometres across"
+          "km across"
         ]
       },
       "right": {
         "title": "The Sun",
         "value": "1,392,700",
         "points": [
-          "kilometres across"
+          "km across"
         ]
       },
       "ratioLabel": "× wider"
@@ -96,7 +95,7 @@
       "id": "close",
       "show": "end",
       "say": "Scale changes everything.",
-      "ask": "Look up tonight.",
+      "ask": "Light takes time.",
       "mark": "cosmos"
     }
   ]

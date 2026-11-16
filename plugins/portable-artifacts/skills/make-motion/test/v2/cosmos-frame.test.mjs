@@ -33,17 +33,19 @@ test('chart at 9:16: each label over its bar, the bars across the safe width, th
     assert.ok(labelBase < Math.min(...ys), `label ${k} over its bar`);
     assert.ok(Math.abs(labels[k].props.x - span.x) < 1, 'flush with the safe left edge');
   });
-  const value = byId(out.nodes, 'g.value.3');
-  assert.ok(value.props.x + value.props.layout.width >= span.x + 0.85 * span.w, 'the longest bar and its value run across the width');
+  // gate round 3: every value follows its label (one rule: cosmos-gate3.test.mjs); the longest bar runs across the width
+  const xs = numbers(marks[3].props.d).filter((_, i) => i % 2 === 0).map((x) => x + marks[3].props.x);
+  assert.ok(Math.max(...xs) >= span.x + 0.85 * span.w, 'the longest bar runs across the width');
   const lastYs = numbers(marks[3].props.d).filter((_, i) => i % 2 === 1).map((y) => y + marks[3].props.y);
   assert.ok(Math.max(...lastYs) >= band.top + (2 / 3) * (band.bottom - band.top), 'the lower third holds the comparison');
 });
 
-test('chart: the marks grow in the lavender, gold only for the highlighted one; no teal anywhere in the look', () => {
+test('chart: the marks grow in the lavender, the highlighted one lit in ink (its light gold); no teal anywhere in the look', () => {
   for (const expand of [wide, tall]) {
     const out = expand(GIANTS);
     assert.equal(byId(out.nodes, 'g.mark.0').props.fill, look.palette.ink2);
-    assert.equal(byId(out.nodes, 'g.mark.3.accent').props.fill, look.palette.accent);
+    // gate round 3: gold is only light (cosmos-gate3.test.mjs)
+    assert.equal(byId(out.nodes, 'g.mark.3.accent').props.fill, look.palette.ink);
   }
   assert.ok(!Object.values(look.palette).includes('#4de2c5'), 'teal dropped');
 });
@@ -71,7 +73,10 @@ test('list at 9:16: the rail runs the content band, sun at its top, the last ite
   const midY = (n) => { const ys = numbers(n.props.d).filter((_, i) => i % 2 === 1); return (Math.min(...ys) + Math.max(...ys)) / 2; };
   const dots = all(out.nodes).filter((n) => /^p\.dot\d+$/.test(n.id)).map((n) => ({ props: { y: midY(n) } }));
   assert.equal(dots.length, 3);
-  assert.ok(dots[0].props.y <= band.top + 0.15 * h, `first dot at ${dots[0].props.y}`);
+  // gate round 3: the sun is its own node at the top of the rail, the first dot under it
+  const sun = all(out.nodes).find((n) => n.id === 'p.sun');
+  assert.ok(sun.props.y <= band.top + 0.15 * h, `the sun at the top: ${sun.props.y}`);
+  assert.ok(dots[0].props.y <= band.top + 0.25 * h, `first dot at ${dots[0].props.y}`);
   assert.ok(dots.at(-1).props.y >= band.bottom - 0.15 * h, `last dot at ${dots.at(-1).props.y}`);
 });
 
@@ -88,11 +93,14 @@ test('quote: the card at its final size from the first frame, on the optical cen
   }
 });
 
-test('statement at 16:9: equal left and right margins', () => {
+// gate round 3: the 16:9 statement starts beside the sun (it keeps a column of its own: cosmos-gate3.test.mjs) and runs
+// to the right margin, no further
+test('statement at 16:9: from the sun\'s free column to no further than the right margin', () => {
   const out = wide({ id: 's', show: 'statement', say: 'The sunlight on your face is *eight minutes* old.' });
   const [x, , w] = out.boxes.text;
   const right = out.ctx.canvas.w - (x + w);
-  assert.ok(Math.abs(right - x) <= 0.1 * x, `left ${x} right ${right}`);
+  assert.ok(right >= look.grid.margin * out.ctx.unit - 1, `right margin ${right}`);
+  assert.ok(x > 0.25 * out.ctx.canvas.w, `starts beside the sun: ${x}`);
 });
 
 test('chart at 9:16: every bar shows (at least half a label tall); the source goes, said so, when the rows need its room', () => {

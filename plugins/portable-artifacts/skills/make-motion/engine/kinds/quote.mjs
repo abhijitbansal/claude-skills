@@ -74,6 +74,7 @@ registries.kinds.add(KIND, {
   },
   validate: quoteProblems,
   expand: expandQuote,
+  lookData: true, // a look ships it only with a kinds.quote entry (engine/looks/index.mjs listedKinds)
   numbered: false, // no slug
   showsWords: true, // its narration is the picture: never captioned (engine/captions)
 });

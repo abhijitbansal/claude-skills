@@ -29,6 +29,8 @@ export const RESERVED_IDS = Object.freeze([FIELD_ID]);
 export const REGION_PREFIX = 'region:';
 export const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
+const ROUTE_GAP = 12; // units: an `on` route's arc starts this far under its target...
+const ROUTE_BOW = 24; // ...and dips this far more at its middle
 const FORCE_MARK = '|';
 const APOSTROPHE_RE = /(\p{L})'(?=\p{L})/gu;
 const HALF = 2;
@@ -329,6 +331,13 @@ function extrasFor(name, box, ctx) {
     return { from: [x, y] };
   }
   if (name === 'tag' || name === 'cutout') return null;
+  // focus: the scrim covers the whole frame with the target left clear
+  if (name === 'focus') return { cover: [0, 0, ctx.canvas.w, ctx.canvas.h] };
+  // route: an arc drawn under the target, from its left edge to its right, as a pointing stroke
+  if (name === 'route') {
+    const base = box[1] + box[3] + ROUTE_GAP * ctx.unit;
+    return { points: [[box[0], base], [box[0] + box[2] / HALF, base + ROUTE_BOW * ctx.unit], [box[0] + box[2], base]] };
+  }
   return {};
 }
 

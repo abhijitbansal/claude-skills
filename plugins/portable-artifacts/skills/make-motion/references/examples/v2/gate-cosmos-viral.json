@@ -26,6 +26,16 @@
       "label": "from the Sun to you"
     },
     {
+      "id": "path",
+      "show": "list",
+      "say": "Past Mercury. Past Venus. Then you.",
+      "items": [
+        "Mercury",
+        "Venus",
+        "You"
+      ]
+    },
+    {
       "id": "sizes",
       "show": "compare",
       "say": "Earth is small. The Sun is one hundred nine Earths wide.",
@@ -33,14 +43,14 @@
         "title": "Earth",
         "value": "12,742",
         "points": [
-          "kilometres across"
+          "km across"
         ]
       },
       "right": {
         "title": "The Sun",
         "value": "1,392,700",
         "points": [
-          "kilometres across"
+          "km across"
         ]
       },
       "ratioLabel": "× wider"
@@ -49,7 +59,7 @@
       "id": "giants",
       "show": "chart",
       "type": "bar",
-      "title": "Jupiter wins",
+      "title": "Jupiter: widest planet",
       "say": "Neptune, four Earths. Saturn, nine. Jupiter beats them all.",
       "data": [
         {
@@ -74,21 +84,10 @@
       "unit": "km"
     },
     {
-      "id": "path",
-      "show": "list",
-      "title": "On the way",
-      "say": "Past Mercury. Past Venus. Then you.",
-      "items": [
-        "Mercury",
-        "Venus",
-        "You"
-      ]
-    },
-    {
       "id": "close",
       "show": "end",
       "say": "Light is old.",
-      "ask": "8 minutes old",
+      "ask": "Eight minutes old.",
       "mark": "cosmos"
     }
   ]

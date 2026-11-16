@@ -7,6 +7,7 @@ import Ajv from 'ajv';
 import { ACCEPTED_VOICES } from './voice/kokoro.mjs';
 import { RecordingWordsError, WHISPER_SHAPE, fromWhisper } from './voice/sidecar.mjs';
 import { KNOWN_CUES } from './sound/synth.mjs';
+import { BeatsFileError, readBeatsFile } from './sound/beats-file.mjs';
 import { didYouMean, pathJoin } from '../../shared/errors.mjs';
 import { SpecError, errorCode, isPlainObject, quote, schemaErrors, srcProblem } from './spec-common.mjs';
 
@@ -27,8 +28,10 @@ export const VOICE_SCHEMA = {
   },
 };
 
-// The film's music: { bed, bpm? } (a synthesised bed, sound/bed.mjs) or { src } (a file of the author's own). checkMusic
-// says which shape is meant; the file is read when the sound is made.
+// The film's music: { bed, bpm? } (a synthesised bed, sound/bed.mjs) or { src, beats?, snap? } (a file of the author's
+// own; beats: the grid scripts/beats.mjs wrote for it, used instead of detecting one; snap: cuts moved onto its beats,
+// sound/snap.mjs). checkMusic says which shape is meant; the music file is read when the sound is made, the beats file
+// here.
 export const MUSIC_SCHEMA = {
   type: 'object',
   additionalProperties: false,
@@ -36,6 +39,8 @@ export const MUSIC_SCHEMA = {
     bed: { enum: [...MUSIC_BEDS] },
     bpm: { type: 'number', minimum: BPM_MIN, maximum: BPM_MAX },
     src: { type: 'string', minLength: 1 },
+    beats: { type: 'string', minLength: 1 },
+    snap: { type: 'boolean' },
   },
 };
 
@@ -91,11 +96,57 @@ export function checkMusic(spec, specDir) {
   if (keys.length === 0) return [{ path: 'music', message: `is empty; ${MUSIC_SHAPES}` }];
   if (keys.includes('bed') && keys.includes('src')) return [{ path: 'music', message: `has a bed and a src; ${MUSIC_SHAPES}` }];
   if (keys.includes('bpm') && !keys.includes('bed')) return [{ path: 'music', message: `bpm sets the tempo of a bed; a file of your own keeps its own tempo. ${MUSIC_SHAPES}` }];
+  if ((keys.includes('beats') || keys.includes('snap')) && !keys.includes('src')) {
+    return [{ path: 'music', message: `beats and snap go with a music file of your own ({ "src": "track.mp3", "beats": "track.beats.json", "snap": true }); a bed already follows the cuts. ${MUSIC_SHAPES}` }];
+  }
   if (typeof music.src !== 'string' || music.src === '') return [];
   const read = recordingFile(music.src, 'music.src', specDir);
-  return read.error ? [read.error] : [];
+  return [...(read.error ? [read.error] : []), ...beatsErrors(music, specDir), ...snapErrors(spec)];
 }
 
+// music.beats: the beats file inside the folder, of the right shape (sound/beats-file.mjs readBeatsFile).
+function beatsErrors(music, specDir) {
+  if (typeof music.beats !== 'string' || music.beats === '') return [];
+  try {
+    readBeatsFile(music.beats, specDir);
+    return [];
+  } catch (err) {
+    if (!(err instanceof BeatsFileError)) throw err;
+    return [{ path: 'music.beats', message: err.message }];
+  }
+}
+
+// music.snap moves cuts, and a narrated film's cuts are where its words put them: snap needs a film with no say.
+function snapErrors(spec) {
+  if (spec.music.snap !== true || !Array.isArray(spec.shots)) return [];
+  const narrated = spec.shots.findIndex((shot) => isPlainObject(shot) && typeof shot.say === 'string');
+  if (narrated === -1) return [];
+  return [{ path: 'music.snap', message: `snap moves cuts onto the music's beats, so it needs a film with no narration; shots[${narrated}] has a say, and a narrated film's cuts follow its words. Remove snap, or the narration` }];
+}
+
+
+// --- extra audio files: audio [{ src, at? }] ---
+
+/** At most this many extra audio files: a sound effect or a second music file each, mixed under the voice. */
+export const AUDIO_MAX = 20;
+const AUDIO_ITEM_KEYS = Object.freeze(['src', 'at']);
+export const AUDIO_SCHEMA = { type: 'array', maxItems: AUDIO_MAX };
+
+// Each extra audio file: { src, at? } with src inside the folder, as a music file is checked (its audio is probed and
+// measured when the sound is made), and at a number of seconds from the film's start, 0 or more.
+export function checkAudio(spec, specDir) {
+  if (!Array.isArray(spec.audio)) return [];
+  return spec.audio.slice(0, AUDIO_MAX).flatMap((item, i) => {
+    const at = pathJoin('audio', i);
+    if (!isPlainObject(item)) return [{ path: at, message: 'must be { "src": "sting.wav", "at": 2.5 } (at: seconds from the film\'s start, default 0)' }];
+    const unknown = Object.keys(item).find((k) => !AUDIO_ITEM_KEYS.includes(k));
+    if (unknown) return [{ path: pathJoin(at, unknown), message: `unknown field; accepted: ${AUDIO_ITEM_KEYS.join(', ')}` }];
+    if (item.at !== undefined && !(typeof item.at === 'number' && Number.isFinite(item.at) && item.at >= 0)) return [{ path: pathJoin(at, 'at'), message: `must be a number of seconds, 0 or more, got ${JSON.stringify(item.at)}` }];
+    if (typeof item.src !== 'string' || item.src === '') return [{ path: pathJoin(at, 'src'), message: 'must be the path of an audio file in the film\'s folder, such as "sounds/sting.wav"' }];
+    const read = recordingFile(item.src, pathJoin(at, 'src'), specDir);
+    return read.error ? [read.error] : [];
+  });
+}
 
 // --- an author's own recording: voice { src, words } ---
 

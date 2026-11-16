@@ -12,3 +12,6 @@ import './list.mjs';
 import './quote.mjs';
 import './compare.mjs';
 import './chart.mjs';
+import './media.mjs';
+import './screen.mjs';
+import './map.mjs';

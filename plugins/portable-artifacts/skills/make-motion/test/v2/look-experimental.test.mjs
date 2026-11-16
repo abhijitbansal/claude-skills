@@ -1,7 +1,8 @@
-// A parked look (look.experimental: cosmos since gate review 3): a film that names it still validates and renders, but
-// the look is left out of every listing (names(), --list looks, unknown-look hints) unless --list looks --all asks for
-// it, where it is marked experimental; a film using it gets one info line on stderr and `look: { name, experimental:
-// true }` in its JSON report, never a finding and never another exit code.
+// A parked look (look.experimental): a film that names it still validates and renders, but the look is left out of every
+// listing (names(), --list looks, unknown-look hints) unless --list looks --all asks for it, where it is marked
+// experimental; a film using it gets one info line and `look: { name, experimental: true }` in its JSON report, never a
+// finding and never another exit code. cosmos was parked this way after gate review 3 and is listed again since the
+// final gate review passed it; the mechanism is tested here on a throwaway look (each test file runs in its own process).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -14,33 +15,34 @@ import { allLookNames } from '../../engine/looks/index.mjs';
 import { listEntries, formatList } from '../../scripts/v2/list.mjs';
 import { parseMakeArgs } from '../../scripts/v2/cli.mjs';
 import { experimentalLook } from '../../scripts/v2/report.mjs';
+import { runMake } from '../../scripts/v2/run.mjs';
 
 const MAKE = fileURLToPath(new URL('../../scripts/make.mjs', import.meta.url));
 const make = (args) => spawnSync(process.execPath, [MAKE, ...args], { encoding: 'utf8', timeout: 120_000 });
 const FILM = (look) => ({ version: 2, mode: 'pro', look, format: '16:9', fps: 30, shots: [{ id: 'a', show: 'statement', say: 'Light takes *eight minutes* to reach us.' }] });
+const PARKED = 'parked-test';
+if (!registries.looks.has(PARKED)) registries.looks.add(PARKED, Object.freeze({ ...registries.looks.get('desk'), name: PARKED, experimental: true }));
 
-test('cosmos is parked: registered and resolvable, but out of names(), --list looks and unknown-look hints', () => {
-  assert.equal(registries.looks.get('cosmos').experimental, true);
-  assert.equal(registries.looks.has('cosmos'), true);
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop']);
-  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop']);
-  assert.throws(() => registries.looks.get('cosmo'), { message: 'unknown look "cosmo" (have: desk, pop)' });
-  assert.deepEqual(allLookNames(), ['desk', 'pop', 'cosmos'], 'every registered look, the parked one included');
+test('cosmos is listed again: in names(), --list looks and the unknown-look hint', () => {
+  assert.equal(registries.looks.get('cosmos').experimental, undefined);
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
+  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos']);
+  assert.match(make(['--list', 'looks']).stdout, /^cosmos {2}/m);
+});
+
+test('a parked look is registered and resolvable, but out of names(), --list looks and unknown-look hints', () => {
+  assert.equal(registries.looks.has(PARKED), true);
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
+  assert.throws(() => registries.looks.get('parked-tst'), { message: 'unknown look "parked-tst" (have: desk, pop, cosmos)' });
+  assert.deepEqual(allLookNames(), ['desk', 'pop', 'cosmos', PARKED], 'every registered look, the parked one included');
 });
 
 test('--list looks --all shows the parked look, marked experimental; without --all it is not there', () => {
   const entries = listEntries('looks', { all: true });
-  assert.deepEqual(entries.map((e) => e.name), ['desk', 'pop', 'cosmos']);
-  assert.deepEqual(entries.map((e) => e.experimental ?? false), [false, false, true]);
-  assert.match(formatList('looks', entries), /^cosmos {2}\(experimental\) /m);
-  const all = make(['--list', 'looks', '--all']);
-  assert.equal(all.status, 0, all.stderr);
-  assert.match(all.stdout, /^cosmos {2}\(experimental\) /m);
-  const shipped = make(['--list', 'looks']);
-  assert.equal(shipped.status, 0);
-  assert.doesNotMatch(shipped.stdout, /cosmos/);
-  const json = JSON.parse(make(['--list', 'looks', '--all', '--json']).stdout);
-  assert.deepEqual(json.entries.find((e) => e.name === 'cosmos').experimental, true);
+  assert.deepEqual(entries.map((e) => e.name), ['desk', 'pop', 'cosmos', PARKED]);
+  assert.deepEqual(entries.map((e) => e.experimental ?? false), [false, false, false, true]);
+  assert.match(formatList('looks', entries), /^parked-test {2}\(experimental\) /m);
+  assert.equal(listEntries('looks').some((e) => e.name === PARKED), false);
 });
 
 test('--all goes only with --list; unknown flags are still rejected with the accepted ones', () => {
@@ -52,26 +54,25 @@ test('--all goes only with --list; unknown flags are still rejected with the acc
   assert.match(run.stderr, /--all/);
 });
 
-test('a film in a parked look: one info line on stderr, look { name, experimental } in the report, exit 0, no finding', () => {
-  assert.deepEqual(experimentalLook(FILM('cosmos')), { name: 'cosmos', experimental: true });
-  assert.equal(experimentalLook(FILM('desk')), null);
+test('a film in a parked look: one info line, look { name, experimental } in the report, exit 0, no finding', async () => {
+  assert.deepEqual(experimentalLook(FILM(PARKED)), { name: PARKED, experimental: true });
+  assert.equal(experimentalLook(FILM('cosmos')), null, 'a listed look adds nothing');
   const dir = mkdtempSync(path.join(tmpdir(), 'mm-v2-parked-'));
   try {
-    for (const look of ['cosmos', 'desk']) {
-      const file = path.join(dir, `${look}.json`);
-      writeFileSync(file, JSON.stringify(FILM(look)));
-      const run = make([file, '--outline', '--json']);
-      assert.equal(run.status, 0, run.stderr);
-      const report = JSON.parse(run.stdout);
+    for (const look of [PARKED, 'cosmos']) {
+      const specPath = path.join(dir, `${look}.json`);
+      writeFileSync(specPath, JSON.stringify(FILM(look)));
+      const lines = [];
+      const { report, exitCode } = await runMake({ specPath, out: null, exact: false, noRender: true, outline: true }, { log: (l) => lines.push(l) });
+      assert.equal(exitCode, 0, JSON.stringify(report));
       assert.deepEqual(report.findings, []);
-      const notes = run.stderr.split('\n').filter((l) => /experimental/.test(l));
-      if (look === 'cosmos') {
-        assert.deepEqual(report.look, { name: 'cosmos', experimental: true });
-        assert.equal(notes.length, 1, run.stderr);
-        assert.match(notes[0], /^make: look "cosmos" is experimental/);
+      const notes = lines.filter((l) => /experimental/.test(l));
+      if (look === PARKED) {
+        assert.deepEqual(report.look, { name: PARKED, experimental: true });
+        assert.deepEqual(notes, [`make: look "${PARKED}" is experimental: it renders, but it is not one of the listed looks and may change`]);
       } else {
-        assert.equal(report.look, undefined, 'a listed look adds nothing');
-        assert.equal(notes.length, 0);
+        assert.equal(report.look, undefined);
+        assert.deepEqual(notes, []);
       }
     }
   } finally {

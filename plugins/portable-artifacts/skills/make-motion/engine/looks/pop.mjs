@@ -52,6 +52,13 @@ export const pop = {
     emphasize: { ease: 'spring(300,12)', dur: 0.2, scale: 1.12 },
     draw: { ease: 'outExpo', dur: 0.2 },
     count: { ease: 'outExpo', dur: 0.6 },
+    // the named moves the second-wave kinds use (engine/moves/index.mjs): pop is the enter move; rise and wipe are fast;
+    // slam lands from 1.6 times its size on a stiff spring; settle springs into a new place
+    rise: { ease: 'outExpo', dur: 0.2, dist: 40 },
+    wipe: { ease: 'outExpo', dur: 0.18 },
+    slam: { ease: 'spring(320,20)', dur: 0.16, scale: 1.6 },
+    pop: { ease: 'spring(260,16)', dur: 0.28, scale: 0.6 },
+    settle: { ease: 'spring(200,22)', dur: 0.3 },
   },
   wordStagger: 0,
   camera: { drift: 0, style: 'locked' },
@@ -70,6 +77,14 @@ export const pop = {
     tag: { fill: 'accent', text: 'paper' },
     // emphasis: a highlight on a close-up turns its hard shadow to `shadow` and grows it to `offset` units; no frame
     cutout: { keylineColor: '#ffffff', emphasis: { shadow: 'accent', offset: 18 } },
+    // second-wave devices: a label in white with an accent leader; the paper scrim at 0.6 over all but the target; a thick
+    // accent route whose head jabs; a white band of light (screened) for a glint on a screen
+    label: { text: 'ink', line: 'accent', width: 4 },
+    focus: { dim: 0.6 },
+    route: { color: 'accent', width: 14 },
+    sweep: { color: 'ink', alpha: 0.35 },
+    // a photo as dots of the field colour on white, one every `cell` units (engine/devices/treatments.mjs)
+    halftone: { dark: 'paper', light: 'ink', cell: 12 },
   },
   // The caption style (registries.captions, engine/captions): display caps flush left on the stack edge, low in the
   // platform safe zone, a few words at a time, the spoken word in the accent.
@@ -103,11 +118,21 @@ export const pop = {
     // dim to `dim`; no reference lines (`refs`): the values are labelled on the marks; a donut or line plot keeps at least
     // `minPlot` of its box however long its labels (chart-draw.mjs)
     chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false, minPlot: 0.4 },
+    // media (engine/kinds/media.mjs): as desk's, the bleed caption on the look's white plate (its card) in the safe zone
+    // screen (engine/kinds/screen.mjs): a white frame with a thick white outline and the look's offset accent shadow; the
+    // chrome's dots and pill in greys, its text in the field colour
+    screen: { fill: 'ink', line: 'ink', lineWidth: 10, dots: 'rule', pill: 'ink2', text: 'paper', urlText: 'paper', wideShare: 0.8, gap: 44 },
+    // map (engine/kinds/map.mjs): the land in the dark `rule` grey on the field (white land would take the white labels'
+    // contrast), field-coloured borders, highlights in the accent, accent2 pins, the title as the look's tag above
+    map: { card: false, land: 'rule', borders: 'paper', borderWidth: 1.5, highlight: 'accent', multiply: false, pin: 'accent2', titleTo: 4, titleSteps: [3], listGap: 12, gap: 36 },
+    media: { treatment: 'halftone', push: 1.06, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 28, toWide: 7, toTall: 12, besideFrom: 8, gap: 40 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null },
-    device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh' },
+    device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
+      label: null, focus: null, route: null, numeral: null, sticker: 'pop', sweep: 'whoosh', duotone: null, halftone: null, zoom: 'whoosh',
+      pin: 'pop', link: 'whoosh' },
     emphasis: 'pop',
     land: 'sub',
   },

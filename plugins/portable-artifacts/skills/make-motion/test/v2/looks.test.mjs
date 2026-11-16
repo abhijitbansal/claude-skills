@@ -26,8 +26,8 @@ const ACCENT_SAMPLE = '#ff6600';
 const lookNames = () => registries.looks.names();
 const closeTo = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`);
 
-test('desk and pop are the listed looks, in showreel order (cosmos is parked: look-experimental.test.mjs)', () => {
-  assert.deepEqual(lookNames(), ['desk', 'pop']);
+test('desk, pop and cosmos are the listed looks, in showreel order (cosmos un-parked after the final gate review)', () => {
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
   assert.equal(registries.looks.get('desk').name, 'desk');
   assert.equal(registries.looks.get('pop').name, 'pop');
@@ -41,7 +41,7 @@ test('every look meets the type rules', () => {
     assert.equal(l.scale.length, 5, name + ' has five steps');
     assert.deepEqual([...l.scale], [...l.scale].sort((a, b) => a - b), name + ' scale runs small to large');
     assert.equal(l.grid.columns, 12);
-    for (const m of Object.values(l.moves)) assert.doesNotThrow(() => ease(m.ease));
+    for (const m of Object.values(l.moves).filter((move) => move !== null)) assert.doesNotThrow(() => ease(m.ease)); // null: a move the look does not use
     for (const c of l.cuts) assert.ok(KNOWN_CUTS.includes(c));
   }
 });
@@ -87,7 +87,7 @@ test('looks never animate an axis the canvas cannot reach', () => {
       const entry = FONTS.find((f) => f.family === font.family);
       assert.equal(entry.reach.wght, true);
     }
-    for (const move of Object.values(moves)) assert.equal('axis' in move, false, `${name}: moves animate no font axis`);
+    for (const move of Object.values(moves).filter((m) => m !== null)) assert.equal('axis' in move, false, `${name}: moves animate no font axis`);
   }
 });
 
@@ -119,10 +119,14 @@ test('every field a look names is registered and accepts the look params', () =>
 test('every move names a curve that parses and has the keys the grammar needs', () => {
   for (const name of lookNames()) {
     const { moves } = registries.looks.get(name);
-    assert.deepEqual(Object.keys(moves), ['enter', 'exit', 'emphasize', 'draw', 'count']);
+    // the five the first kinds use, then the named moves of engine/moves (rise, wipe, slam, pop, settle; draw and count
+    // are among the five)
+    assert.deepEqual(Object.keys(moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle']);
     for (const [key, move] of Object.entries(moves)) {
+      if (move === null) continue; // a named move the look does not use
       assert.equal(typeof ease(move.ease), 'function', `${name}.${key}`);
-      assert.ok(move.dur > 0, `${name}.${key} has a duration`);
+      // desk's slam is a hard arrival: dur 0
+      assert.ok(move.dur > 0 || (key === 'slam' && move.dur === 0), `${name}.${key} has a duration`);
     }
   }
   assert.throws(() => ease('wobble'), /unknown ease/);
@@ -305,7 +309,7 @@ test('mode values are the brief values', () => {
 test('registering twice is harmless: a second evaluation of the index does not throw', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?again'));
   await assert.doesNotReject(() => import('../../engine/modes/index.mjs?again'));
-  assert.deepEqual(lookNames(), ['desk', 'pop']);
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
 });
 
@@ -354,7 +358,7 @@ test('the validator reads each look cuts: punch is pop only, match is desk only'
 
 test('an unknown look still lists the real ones', () => {
   const r = validate({ version: 2, look: 'dsk', shots: shots(undefined) });
-  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop)' }]);
+  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos)' }]);
 });
 
 test('every look names its composition: desk is editorial, pop is a stack', () => {
@@ -380,6 +384,9 @@ test('desk sounds are the brief values: paper cuts and slides, marker hand marks
   assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
+    // the second wave's devices and the screen's zoom event (plan 2026-11-16-pa2-shot-kinds-b)
+    label: null, focus: null, route: 'marker', numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,
+    pin: 'paper', link: 'marker', // the map's place and route events
   });
   assert.equal(sounds.emphasis, null);
   assert.equal(sounds.land, 'click');
@@ -390,6 +397,9 @@ test('pop sounds are the brief values: click, whoosh and impact cuts, a pop high
   assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
+    // the second wave's devices and the screen's zoom event (plan 2026-11-16-pa2-shot-kinds-b)
+    label: null, focus: null, route: null, numeral: null, sticker: 'pop', sweep: 'whoosh', duotone: null, halftone: null, zoom: 'whoosh',
+    pin: 'pop', link: 'whoosh', // the map's place and route events
   });
   assert.equal(sounds.emphasis, 'pop');
   assert.equal(sounds.land, 'sub');
@@ -400,8 +410,8 @@ const kindDevices = () => registries.kinds.names().flatMap((k) => registries.kin
 
 test('every look names a sound (or null) for exactly the registered cuts, the registered devices and the devices kinds declare, and its sounds are frozen', () => {
   assert.deepEqual(registries.cuts.names().sort(), [...KNOWN_CUTS].sort(), 'the look index registers the cuts it checks against');
-  assert.equal(registries.devices.names().length, 9, 'the look index registers the devices it checks against');
-  assert.deepEqual(kindDevices(), ['item', 'turn'], 'the list kind declares its item event, compare its turn');
+  assert.equal(registries.devices.names().length, 17, 'the look index registers the devices it checks against (nine, six second-wave, two treatments)');
+  assert.deepEqual(kindDevices(), ['item', 'turn', 'zoom', 'pin', 'link'], 'the list kind declares its item event, compare its turn, screen its zoom, map its pin and link');
   assert.ok(kindDevices().every((d) => !registries.devices.has(d)), 'a kind\'s event device is not also a registered device');
   const wanted = [...registries.devices.names(), ...kindDevices()].sort();
   for (const name of lookNames()) {

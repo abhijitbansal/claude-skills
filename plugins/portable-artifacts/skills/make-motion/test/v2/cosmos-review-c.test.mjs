@@ -35,8 +35,9 @@ test('C-I11: a counter never opens on a wrong intermediate value: 150, 8 and 459
       assert.equal(digits.props.steps.at(-1).text, String(shot.value), 'lands on the value');
       const suffix = all(nodes).find((n) => n.id === 'n.value.suffix');
       if (suffix) assert.equal(sample(suffix.tracks.opacity, 0), 0, `${format}: the unit is hidden with the figure`);
-      // the first frame is still composed (the empty-first-frame rule): the look's sun and orbit are on screen
-      for (const id of ['n.sun', 'n.orbit']) {
+      // the first frame is still composed (the empty-first-frame rule): the look's sun, its line to Earth and Earth are
+      // on screen (gate round 3: the line replaced the orbit)
+      for (const id of ['n.sun', 'n.line0', 'n.earth']) {
         const device = all(nodes).find((n) => n.id === id);
         assert.ok(device && (device.tracks?.opacity ? sample(device.tracks.opacity, 0) : 1) > 0, `${shot.value} ${format}: ${id} on the first frame`);
       }

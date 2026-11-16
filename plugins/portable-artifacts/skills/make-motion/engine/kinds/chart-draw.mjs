@@ -41,11 +41,15 @@ export function chartStyle(ctx, data) {
     marks: data.marks ? data.marks.map((key) => colourOf(look, key)) : null, round: data.round ? data.round * unit : 0, glow: data.glow ? data.glow * unit : 0,
     // `direct`: every mark carries its value, so no baseline rule is drawn (refs off drops the gridlines and ticks);
     // `fill`, the share of its band a column or bar takes
-    axis: data.direct !== true, fill: data.fill,
+    // (`fillTall`, cosmos: a thinner bar on a tall frame, so a label over it has room above it to sit with its own bar)
+    axis: data.direct !== true, fill: !isWide(ctx.canvas) && data.fillTall !== undefined ? data.fillTall : data.fill,
     // `dimTo`: a palette key the other marks turn to at the highlight (cosmos: the one lavender dim), not an alpha
     dimTo: data.dimTo ? colourOf(look, data.dimTo) : null,
     // `labelsAbove` 'tall' (cosmos): on a tall frame each bar's label sits over it, so the bars take the full width
     labelsAbove: data.labelsAbove === 'tall' && !isWide(ctx.canvas),
+    // `hlFill`: a palette key the highlighted mark lights in (cosmos: ink, gold being only the light round it), else the
+    // accent
+    hlFill: data.hlFill ? colourOf(look, data.hlFill) : null,
     // `minPlot`: the least share of its box a donut (of the short side) or a line plot (of the width) keeps, however long
     // its labels; under it the labels are flagged as not fitting (the review's fit finding), never cut
     minPlot: data.minPlot ?? 0,
@@ -122,7 +126,7 @@ function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, t
   const out = [node('path', `${shot.id}.mark.${k}`, { d, fill, x, y }, { tracks: { ...scale, ...dims }, step: style.step })];
   if (k === hl && style.glow > 0) out.push(markGlow(`${shot.id}.mark.${k}.glow`, look, style, { x, y, across, length, horizontal }, times.highlightAt));
   if (dimmed && style.dimTo) out.push(node('path', `${shot.id}.mark.${k}.dim`, { d, fill: style.dimTo, x, y }, { tracks: arriveAt(look, times.highlightAt), step: style.step }));
-  if (k === hl) out.push(node('path', `${shot.id}.mark.${k}.accent`, { d, fill: style.accent, x, y }, { tracks: arriveAt(look, times.highlightAt) }));
+  if (k === hl) out.push(node('path', `${shot.id}.mark.${k}.accent`, { d, fill: style.hlFill ?? style.accent, x, y }, { tracks: arriveAt(look, times.highlightAt) }));
   return out;
 }
 
@@ -229,10 +233,16 @@ export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom
 }
 
 // A bar with its label over it (style.labelsAbove): its band split into the label's row and, under it, the bar at
-// `fill` of the rest; labelY is the label's baseline.
+// `fill` of the rest; the band's spare room goes ABOVE_SHARE over the label and the rest between the label and its own
+// bar, so a label reads with its bar, not with the one above it (gate review 3); labelY is the label's baseline.
+const ABOVE_SHARE = 2 / 3; // of the room over the label and under it together (the label's own descent counts as under)
 function liftBar(m, size, gap, fill) {
-  const top = m.y - m.band / HALF, row = (CAP_HEIGHT + WORD_DESCENT) * size + gap / HALF, room = m.band - row;
-  return { ...m, y: top + row + room / HALF, height: room * fill, labelY: top + CAP_HEIGHT * size };
+  const under = WORD_DESCENT * size + gap / HALF; // the label row's own room under its baseline
+  const top = m.y - m.band / HALF, row = CAP_HEIGHT * size + under, room = m.band - row;
+  const height = room * fill, spare = room - height;
+  const above = Math.min(spare, ABOVE_SHARE * (spare + under));
+  const labelTop = top + above;
+  return { ...m, y: labelTop + row + (spare - above) + height / HALF, height, labelY: labelTop + CAP_HEIGHT * size };
 }
 
 /** Bars in `area`, labels in a left column (or over each bar), values at the bar ends: { nodes, boxes, plot, highlight }. */
@@ -277,13 +287,15 @@ export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 
       const grown = growWindow(m.index, marks.length, times.growEnd).end;
       const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, grown);
       const text = valueText(m.value, decimals, shot.unit);
-      // with the label over the bar, the value on the label's row, ending at the bar's end (never over the label)
-      const at = above ? { x: Math.max(m.tip - labelWidth(ctx, font, text, true), plot.x + labelWidth(ctx, font, m.key) + gap * HALF), y: m.labelY } : { x: Math.max(m.tip, m.base) + gap, y: mid };
+      // with the label over the bar, the value on the label's row right after the label, one rule for every bar (gate
+      // review 3: values at some bar ends and after other labels read as two rules)
+      const at = above ? { x: plot.x + labelWidth(ctx, font, m.key) + gap * HALF, y: m.labelY } : { x: Math.max(m.tip, m.base) + gap, y: mid };
       const v = label(ctx, { id: `${shot.id}.value.${m.index}`, text, font, x: at.x, y: at.y, fill: highlighted ? style.strong : style.text, numeric: true, tracks });
       values.push(v.node);
       parts.push(v.box);
     }
-    const piece = above ? label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: plot.x, y: m.labelY, fill: style.text })
+    // over its bar, the highlighted bar's label is lit in ink with its value (it stands in that bar's light)
+    const piece = above ? label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: plot.x, y: m.labelY, fill: highlighted ? style.strong : style.text })
       : label(ctx, { id: `${shot.id}.label.${m.index}`, text: m.key, font, x: plot.x - gap, y: mid, align: 'right', fill: style.text, maxWidth: labelCol, lines: rowH >= HALF * ink ? CATEGORY_LINES : 1 });
     labels.push(piece.node);
     boxes[`mark:${m.index}`] = unionBox([...parts, piece.box]); // a device around the bar goes around its labels

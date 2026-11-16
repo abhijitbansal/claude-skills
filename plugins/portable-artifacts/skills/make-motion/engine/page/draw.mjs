@@ -6,6 +6,8 @@ import { measurePath, path2D } from './geometry.mjs';
 import { roughShape } from './rough.mjs';
 import { contentBox, localMatrix } from './bounds.mjs';
 import { registries } from '../registry.mjs';
+import { GLOW_EDGE } from '../devices/glow.mjs';
+import { createTreatCache } from './treat.mjs';
 import '../fields/index.mjs';
 
 const DEFAULT_TEXT_FILL = '#ffffff';
@@ -18,24 +20,39 @@ const unit01 = (v) => Math.min(1, Math.max(0, v));
 
 // ---- text ----
 
-// A word's glyph glow: its own glyphs blurred (canvas shadow) in glow.color at `share` of glow.alpha, under the word,
-// screened so it only lightens (over a dark field a source-over gold read as brown mud in the counters). The shadow is
-// a blur of the glyph mask alone, so it hugs the letters and costs about what the word does.
+// A word's glyph glow: its own glyphs stroked in stacked rings (stackGlow) in glow.color at `share` of glow.alpha, under
+// the word, screened so it only lightens (over a dark field a source-over gold read as brown mud in the counters). The
+// rings follow the glyph outlines, so the light hugs the letters.
 function drawGlow(ctx, text, x, glow, share) {
   ctx.save();
   ctx.globalCompositeOperation = 'screen';
-  withGlow(ctx, glow, share, () => ctx.fillText(text, x, 0));
+  stackGlow(ctx, glow, share, () => ctx.strokeText(text, x, 0));
   ctx.restore();
 }
 
-// Runs paint() with a canvas shadow of glow.color at `share` of glow.alpha, glow.radius px of blur, then clears it.
-function withGlow(ctx, glow, share, paint) {
+// A glow with no blur filter (the plan forbids them; a canvas shadow blur is a full Gaussian pass per glowing shape,
+// every frame): `rings` strokes of the shape (paint() strokes it at the context's line width), widest first, the rings
+// packed toward the shape (widths rising as the GLOW_CURVE power of their rank), each at the alpha that stacks to
+// GLOW_EDGE of glow.alpha * share at the shape's edge (where a blur's falloff stands at half) and falls to nothing
+// glow.radius px out: bright at the edge and quickly gone, as light is (an even falloff left a wide half-tone band that
+// read as a brown halo round white type). devices/shared.mjs softRoundedRect stacks rings the same way.
+const GLOW_STEP = 3; // px between rings on average: too fine to see at glow alphas
+const GLOW_RINGS = Object.freeze({ min: 4, max: 16 });
+const GLOW_CURVE = 1.5;
+function stackGlow(ctx, glow, share, paint) {
+  const rings = Math.min(GLOW_RINGS.max, Math.max(GLOW_RINGS.min, Math.ceil(glow.radius / GLOW_STEP)));
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(glow.color.slice(i, i + HALF), HEX_RADIX));
-  ctx.shadowColor = `rgba(${r}, ${g}, ${b}, ${glow.alpha * share})`;
-  ctx.shadowBlur = glow.radius;
-  paint();
-  ctx.shadowColor = 'transparent';
-  ctx.shadowBlur = 0;
+  const alpha = 1 - (1 - Math.min(1, GLOW_EDGE * glow.alpha * share)) ** (1 / rings);
+  ctx.save();
+  ctx.strokeStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+  ctx.fillStyle = ctx.strokeStyle;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  for (let i = rings; i >= 1; i--) {
+    ctx.lineWidth = HALF * glow.radius * (i / rings) ** GLOW_CURVE;
+    paint();
+  }
+  ctx.restore();
 }
 
 function drawWord(ctx, line, word, tracks, baseFill, glow) {
@@ -82,21 +99,17 @@ function strokeTrimmed(ctx, path, length, draw) {
   ctx.setLineDash([]);
 }
 
-// The glow of `path` alone, without its fill: the fill is drawn FAR_OFF user units away and its shadow offset back by
-// the same distance in device pixels (canvas shadow offsets ignore the transform), so only the light lands.
-const FAR_OFF = 100000;
-function glowOnly(ctx, path, glow) {
-  const m = ctx.getTransform();
-  ctx.save();
-  ctx.translate(FAR_OFF, 0);
-  ctx.shadowOffsetX = -m.a * FAR_OFF;
-  ctx.shadowOffsetY = -m.b * FAR_OFF;
-  withGlow(ctx, glow, 1, () => ctx.fill(path));
-  ctx.restore();
+// The light of `path` (stackGlow): each ring strokes the outline and fills the inside, so the inside holds the full
+// glow and the edge falls off outward.
+function pathGlow(ctx, path, glow) {
+  stackGlow(ctx, glow, 1, () => {
+    ctx.stroke(path);
+    ctx.fill(path);
+  });
 }
 
-// props.glow ({ color, alpha, radius, only }) on a filled path: a soft light round its edge, the canvas shadow of its
-// fill (a smooth blur, so no steps), drawn under the fill; with `only`, the light without the fill.
+// props.glow ({ color, alpha, radius, only }) on a filled path: a soft light round its edge (stacked rings, no blur),
+// drawn under the fill; with `only`, the light without the fill.
 // props.radial ({ r, color, stops: [[at, alpha, stopColor?]...] }) on a path: it is filled with a radial gradient about
 // the node's origin, each stop's colour (its own, else `color`) at its alpha out to r, instead of props.fill: a soft
 // disc of light with no blur filter (a hot core, a limb and a bloom are stops of one gradient).
@@ -113,10 +126,9 @@ function drawPath(ctx, n) {
   const { path, length } = shapeOf(n);
   const draw = unit01(n.draw);
   if (fill && draw >= 1) {
+    if (glow) pathGlow(ctx, path, glow);
     ctx.fillStyle = fill;
-    if (glow?.only) glowOnly(ctx, path, glow);
-    else if (glow) withGlow(ctx, glow, 1, () => ctx.fill(path));
-    else ctx.fill(path);
+    if (!glow?.only) ctx.fill(path);
   }
   if (!stroke) return;
   ctx.strokeStyle = stroke;
@@ -139,6 +151,18 @@ function drawImage(ctx, n, assets) {
   return ctx.drawImage(image, ...clip, 0, 0, w ?? clip[2], h ?? clip[3]);
 }
 
+// props.treatment ({ type: 'duotone' | 'halftone', dark, light, cell? }, engine/devices/treatments.mjs) on an image: the
+// picture (through its clip) treated once at its drawn size (treat.mjs) and that bitmap drawn instead, every frame.
+const treated = createTreatCache((width, height) => new OffscreenCanvas(width, height));
+
+function drawTreated(ctx, n, assets) {
+  const { src, clip, treatment } = n.props;
+  const image = assets.get(src);
+  if (!image) throw new Error(`image node "${n.id}": no loaded picture for src "${src}"`);
+  const w = n.props.w ?? clip?.[2] ?? image.width, h = n.props.h ?? clip?.[3] ?? image.height;
+  return ctx.drawImage(treated.get(image, treatment, w, h, clip), 0, 0, w, h);
+}
+
 // ---- fields ----
 
 // A field node's props carry everything its plan needs ({ field, params, w, h, unit, seed, palette }). The plan is
@@ -159,7 +183,7 @@ function drawField(ctx, n, time = 0) {
 function drawBody(ctx, n, env) {
   if (n.type === 'text') return drawText(ctx, n);
   if (n.type === 'path') return drawPath(ctx, n);
-  if (n.type === 'image') return drawImage(ctx, n, env.assets);
+  if (n.type === 'image') return n.props.treatment ? drawTreated(ctx, n, env.assets) : drawImage(ctx, n, env.assets);
   if (n.type === 'field') return drawField(ctx, n, env.time);
   return undefined; // a group draws only its children
 }

@@ -45,6 +45,13 @@ export const desk = {
     emphasize: { ease: 'linear', dur: 0.25, step: HAND_STEP },
     draw: { ease: 'linear', dur: 0.5, step: HAND_STEP },
     count: { ease: 'outCubic', dur: 0.8 },
+    // the named moves the second-wave kinds use (engine/moves/index.mjs); rise and pop are the enter move, a wipe is a
+    // mask reveal, slam is a hard arrival (dur 0: desk does not slam), settle a slow ease into a new place
+    rise: { ease: 'outCubic', dur: 0.5, dist: 24 },
+    wipe: { ease: 'linear', dur: 0.4 },
+    slam: { ease: 'linear', dur: 0 },
+    pop: { ease: 'outCubic', dur: 0.5, dist: 24 },
+    settle: { ease: 'outCubic', dur: 0.6 },
   },
   wordStagger: 0,
   camera: { drift: 12, style: 'desk' },
@@ -65,6 +72,10 @@ export const desk = {
     tag: { fill: 'accent', text: 'ink' },
     focus: { dim: 0.55 },
     route: { color: 'accent2', width: 4, pins: true, step: HAND_STEP },
+    // a place or part name in the text face in ink, its leader a hairline of ink
+    label: { text: 'ink', line: 'ink', width: 2 },
+    // a photo printed in ink on paper (engine/devices/treatments.mjs)
+    duotone: { dark: 'ink', light: 'paper' },
   },
   // The caption style (registries.captions, engine/captions): label caps on a taped paper card, low on the grid.
   captions: 'lower',
@@ -106,11 +117,26 @@ export const desk = {
     // wide; marks other than the highlighted one dim to `dim`; reference lines drawn (`refs`); a donut or line plot keeps
     // at least `minPlot` of its box however long its labels (chart-draw.mjs)
     chart: { titleToWide: 11, titleToTall: 11, titleMax: 180, titleLines: 2, titleGap: 56, labelStep: 2, labelScale: 1.25, sourceStep: 2, gap: 14, line: 5, ref: 2, axis: 3, dim: 0.3, refs: true, minPlot: 0.4 },
+    // media (engine/kinds/media.mjs): the photo in `treatment`, pushing from `push` to 1 over the shot; bleed: the caption
+    // on a taped card over columns 1 to `toWide` (`toTall`), `cardPad` in, at the largest of `captionSteps` that holds it
+    // in `captionLines` (two: a low, small card that keeps off the subject); cutout: the caption as the hero at the largest
+    // of `heroSteps` in `maxLines`, beside the picture from column `besideFrom` (wide) or `gap` under it (tall)
+    // screen (engine/kinds/screen.mjs): a white card frame with an ink hairline (`line`, `lineWidth` units) and the
+    // contact shadow; window dots and the address pill in `dots` and `pill`, chrome text in `text` and `urlText`; on a
+    // wide frame the framed screen is at most `wideShare` of the room's width; a tall frame's panel `gap` under it
+    screen: { fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
+    // map (engine/kinds/map.mjs): a printed sheet (`card`) with the land in paper, ink hairline borders `borderWidth`
+    // units, highlights under the highlighter (multiply), red pins; the title on columns 1 to `titleTo` at the largest of
+    // `titleSteps`, the map beside it; on a tall frame the places listed under the map `listGap` apart; `gap` between parts
+    map: { card: true, land: 'paper', borders: 'ink', borderWidth: 1.2, highlight: 'accent', multiply: true, pin: 'accent2', titleTo: 4, titleSteps: [5, 4, 3], listGap: 10, gap: 40 },
+    media: { treatment: 'duotone', push: 1.05, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 40, toWide: 6, toTall: 12, besideFrom: 8, gap: 48 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'paper', slide: 'paper', punch: null, match: null },
-    device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper' },
+    device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
+      label: null, focus: null, route: 'marker', numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,
+      pin: 'paper', link: 'marker' },
     emphasis: null,
     land: 'click',
   },

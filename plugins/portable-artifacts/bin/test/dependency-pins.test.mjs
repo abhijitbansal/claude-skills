@@ -684,3 +684,39 @@ test('guardrail proof: modelFilesViolations passes only the VOICE_MODEL call and
   for (const source of bad) assert.equal(count(source), 1, source);
   assert.equal(count('x = ensureModelFiles(a, b); y = ensureModelFiles(VOICE_MODEL, c);'), 1, 'one bad call among good ones');
 });
+
+// ---- make-motion 2's map and code kinds (plan 2026-11-16-pa2-shot-kinds-b Tasks 5 and 8) --------------------------------
+
+const MOTION = path.join(SKILLS, 'make-motion');
+const motionManifest = () => JSON.parse(fs.readFileSync(path.join(MOTION, 'package.json'), 'utf8'));
+const motionLock = () => JSON.parse(fs.readFileSync(path.join(MOTION, 'package-lock.json'), 'utf8')).packages;
+// The packages the prepare step imports (scripts/v2/prepare), and what the map ones bring in, by the lockfile.
+const PREPARE_PACKAGES = Object.freeze(['d3-geo', 'topojson-client', 'world-atlas', 'us-atlas', 'shiki']);
+const MAP_BROUGHT_IN = Object.freeze(['d3-array', 'internmap', 'commander']);
+const readmeText = () => fs.readFileSync(path.join(PLUGIN, 'README.md'), 'utf8');
+
+test('make-motion names the prepare packages as direct dependencies with exact versions, each in its lockfile with an integrity hash', () => {
+  const deps = motionManifest().dependencies;
+  const lock = motionLock();
+  for (const name of PREPARE_PACKAGES) {
+    assert.match(deps[name] ?? '', EXACT, `${name} is a direct exact pin`);
+    assert.equal(lock[`node_modules/${name}`]?.version, deps[name], `${name} is locked at its pin`);
+    assert.ok(lock[`node_modules/${name}`]?.integrity, `${name} has an integrity hash`);
+  }
+});
+
+test('the README licence table has a row for each map package and what it brings in, with the licence the lockfile states', () => {
+  const lock = motionLock();
+  const lines = readmeText().split('\n');
+  for (const name of ['d3-geo', 'topojson-client', ...MAP_BROUGHT_IN]) {
+    const entry = lock[`node_modules/topojson-client/node_modules/${name}`] ?? lock[`node_modules/${name}`];
+    const row = lines.find((line) => line.startsWith('|') && line.includes(`\`${name}\``));
+    assert.ok(row, `a licence row names ${name}`);
+    assert.ok(row.trim().endsWith(`| ${entry.license} |`), `${name}: ${row}`);
+  }
+  assert.ok(lines.some((line) => line.includes('[shiki]') && line.trim().endsWith('| MIT |')), 'the shiki row stays');
+});
+
+test('guardrail proof: a ranged map pin fails rangeViolations', () => {
+  assert.deepEqual(rangeViolations({ dependencies: { 'd3-geo': '^3.1.1' } }, 'skills/make-motion/package.json'), ['skills/make-motion/package.json: dependencies.d3-geo = ^3.1.1']);
+});

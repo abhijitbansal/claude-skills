@@ -45,6 +45,15 @@ function shotAsset(shot, kind, assets) {
   };
 }
 
+// { prepared } for a shot whose kind declares `prepared: true`: its entry in the film's prepared data (by shot id), which
+// must be there; {} for any other kind. A missing entry is an error naming the shot, never an empty frame.
+function preparedOf(shot, kind, prepared) {
+  if (kind.prepared !== true) return {};
+  const entry = prepared?.[shot.id];
+  if (entry === undefined || entry === null) throw new Error(`shot "${shot.id}": kind "${shot.show}" needs prepared data and got none (scripts/v2/prepare)`);
+  return { prepared: entry };
+}
+
 // Does a shot count among the film's numbered shots? Its kind says so: `numbered` true, or a function of the shot.
 const isNumbered = (kind, shot) => (typeof kind.numbered === 'function' ? kind.numbered(shot) === true : kind.numbered === true);
 
@@ -53,11 +62,13 @@ const isNumbered = (kind, shot) => (typeof kind.numbered === 'function' ? kind.n
  * `viralInsets` is the platform safe zone for this canvas (template/formats.mjs safeInsets with VIRAL_SAFE_ZONE),
  * which a viral look composes inside on 9:16; null leaves every look on the canvas.
  */
-export function shotContext({ film, index, timeline, canvas, measure, assets = new Map(), look = resolveLook(film), viralInsets = null }) {
+export function shotContext({ film, index, timeline, canvas, measure, assets = new Map(), look = resolveLook(film), viralInsets = null, prepared = {} }) {
   const shot = film.shots[index];
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
   return {
+    // the shot's prepared data (scripts/v2/prepare, sent with the film), for a kind that declares `prepared: true`
+    ...preparedOf(shot, kind, prepared),
     look,
     mode: registries.modes.get(film.mode ?? DEFAULT_MODE),
     canvas,
@@ -122,11 +133,11 @@ function withCaptions(out, shot, kind, ctx, film, cam) {
   return captions.length === 0 ? out.nodes : [...out.nodes, ...captions];
 }
 
-function expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets }) {
+function expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets, prepared }) {
   const shot = film.shots[index];
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
-  const ctx = shotContext({ film, index, timeline, canvas, measure, assets, look, viralInsets });
+  const ctx = shotContext({ film, index, timeline, canvas, measure, assets, look, viralInsets, prepared });
   const out = kind.expand(shot, kindContext(film, kind, ctx)); // a captioned shot's kind keeps clear of the captions
   if (!out || !Array.isArray(out.nodes)) throw new Error(`kind "${shot.show}" must return { nodes: [...] } for shot "${shot.id}"`);
   const heroNode = out.hero === undefined ? undefined : out.nodes.find((n) => n.id === out.hero);
@@ -147,19 +158,20 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
 
 /**
  * @param {{ film: object, timeline: object, measure: Function, assets?: Map<string, { width: number, height: number }>,
- *   canvas: { w: number, h: number }, viralInsets?: { top, right, bottom, left } }} opts the film (defaults resolved here: mode, look, seed, accent), its timeline
- *   (buildTimeline), the text measure, the pictures by src, the canvas size of the film's format and the platform safe
- *   zone (see shotContext)
+ *   canvas: { w: number, h: number }, viralInsets?: { top, right, bottom, left }, prepared?: Record<string, object> }} opts the film (defaults resolved here: mode, look, seed, accent), its timeline
+ *   (buildTimeline), the text measure, the pictures by src, the canvas size of the film's format, the platform safe
+ *   zone (see shotContext) and the prepared data by shot id (scripts/v2/prepare; a kind with `prepared: true` needs its
+ *   shot's entry)
  * @returns {{ duration: number, frameCount: number, look: object, frameAt(t): { background: string, sampled: object[] },
  *   sampleAt(t): object[], sampleShot(index, t): object[], backgrounds: string[] }}
  */
-export function buildFilm({ film, timeline, measure, assets = new Map(), canvas, viralInsets = null }) {
+export function buildFilm({ film, timeline, measure, assets = new Map(), canvas, viralInsets = null, prepared = {} }) {
   if (!film || !Array.isArray(film.shots)) throw new Error('buildFilm: film must have a shots array');
   if (!timeline || timeline.shots?.length !== film.shots.length) throw new Error('buildFilm: timeline must have one entry per shot (see buildTimeline)');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
   if (!(canvas?.w > 0 && canvas?.h > 0)) throw new Error('buildFilm: canvas must be { w, h }');
   const look = resolveLook(film);
-  const shots = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets }));
+  const shots = timeline.shots.map((_, index) => expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets, prepared }));
 
   // One shot alone at its local time t: sampled, camera applied, the hero carrying its box.
   const sampleShot = (index, t) => {

@@ -11,7 +11,7 @@ import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { roundedRect } from '../devices/shared.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
-import { sunNodes } from '../devices/sun.mjs';
+import { sunNodes, circlePath } from '../devices/sun.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, inkExtent, capBox, unionBox, arrivesMatched, overlaps, stepUnder,
 } from './shared.mjs';
@@ -102,7 +102,7 @@ function roomFor(slug, span, ctx) {
 // The dot rail (look.kinds.list.dots: { column, radius, line } in units): a dot per item on its first line's cap middle,
 // in a column at the span's left, joined by a thin rail; ink2 always, and lit in the accent with a soft halo while its
 // item is current (from its arrival to the next's). The rail and each dot arrive with their item's entrance opacity.
-const DOT = Object.freeze({ halo: 2.4, haloAlpha: 0.28, railAlpha: 0.5 });
+const DOT = Object.freeze({ halo: 2.4, railAlpha: 0.5 });
 function dotRail(id, centres, times, dots, ctx) {
   const { look, unit } = ctx;
   const r = dots.radius * unit;
@@ -126,24 +126,44 @@ function dotRail(id, centres, times, dots, ctx) {
   });
   return [...pathLight(id, centres, times, dots, ctx), ...rail, ...centres.flatMap((c, k) => [
     node('path', `${id}.dot${k}`, { d: circle(c, r), fill: look.palette.ink2 }, { tracks: { opacity: shown(k) } }),
-    node('path', `${id}.halo${k}`, { d: circle(c, r * DOT.halo), fill: look.palette.accent, blend: 'screen' }, { tracks: { opacity: lit(k, DOT.haloAlpha) } }),
+    haloNode(`${id}.halo${k}`, c, r * DOT.halo, look, { opacity: lit(k, 1) }),
     node('path', `${id}.lit${k}`, { d: circle(c, r), fill: look.palette.accent }, { tracks: { opacity: lit(k, 1) } }),
   ])];
 }
 
-// The light along the path (dots.light, cosmos): the look's sun at the path's start, and each segment of the rail lit
-// in the accent as its item arrives, so the light travels down the path to the current item. [] without it.
+// The current dot's halo: a soft accent light round it, a radial falling to nothing (a flat screened disc read as a
+// grey-brown smudge round the dot: gate review 3).
+const HALO_STOPS = Object.freeze([[0, 0.55], [0.4, 0.28], [1, 0]]);
+const haloNode = (id, [cx, cy], radius, look, tracks) => node('path', id, {
+  d: circlePath(radius), x: cx, y: cy, radial: { r: radius, color: look.palette.accent, stops: HALO_STOPS.map((s) => [...s]) },
+}, { tracks });
+
+// Where the sun stands over a dot rail with light (dots.light): on the rail's line, a disc and a gap above the first
+// item's dot, so it is a node of its own and never the first item's bullet (gate review 3). [x, y] px.
+function railSunAt(centres, dots, look, unit) {
+  const [x0, y0] = centres[0];
+  return [x0, y0 - railSunRoom(dots, look, unit)];
+}
+// The room a rail's sun takes above its first dot, px: its disc twice and a gap.
+const railSunRoom =(dots, look, unit) => (HALF * look.sun.disc * dots.light.sun + dots.light.gap) * unit;
+
+// The light along the path (dots.light, cosmos): the look's sun at the path's start, above the first item, and each
+// segment of the rail lit in the accent as its item arrives (the first, from the sun, with the first item), so the
+// light travels down the path to the current item. [] without it.
 function pathLight(id, centres, times, dots, ctx) {
   if (!dots.light) return [];
   const { look, unit } = ctx;
-  const w = dots.line * unit, [x0, y0] = centres[0];
-  const sun = sunNodes(`${id}.sun`, look, { cx: x0, cy: y0, r: dots.light.sun * unit, strength: dots.light.strength });
-  const lit = centres.slice(1).map(([x, y], k) => {
-    const from = centres[k][1];
-    const on = track([{ t: 0, v: 0 }, { t: times[k + 1], v: 0 }, { t: times[k + 1] + look.moves.draw.dur, v: 1, ease: look.moves.draw.ease }]);
-    return node('path', `${id}.path${k}`, { d: roundedRect(x - w / HALF, from, w, Math.max(1, y - from), w / HALF), fill: look.palette.accent }, { tracks: { opacity: on } });
-  });
-  return [...sun, ...lit];
+  const w = dots.line * unit;
+  const [sx, sy] = railSunAt(centres, dots, look, unit);
+  const sun = sunNodes(`${id}.sun`, look, { cx: sx, cy: sy, r: dots.light.sun * unit, strength: dots.light.strength });
+  const reach = (k) => track([{ t: 0, v: 0 }, { t: times[k], v: 0 }, { t: times[k] + look.moves.draw.dur, v: 1, ease: look.moves.draw.ease }]);
+  const bar = (key, x, from, to, tracks) => node('path', `${id}.${key}`, { d: roundedRect(x - w / HALF, from, w, Math.max(1, to - from), w / HALF), fill: look.palette.accent }, { tracks });
+  const toFirst = [
+    node('path', `${id}.rail.sun`, { d: roundedRect(sx - w / HALF, sy, w, Math.max(1, centres[0][1] - sy), 0), fill: look.palette.ink2, opacity: DOT.railAlpha }),
+    bar('path.sun', sx, sy, centres[0][1], { opacity: reach(0) }),
+  ];
+  const lit = centres.slice(1).map(([x, y], k) => bar(`path${k}`, x, centres[k][1], y, { opacity: reach(k + 1) }));
+  return [...sun, ...toFirst, ...lit];
 }
 
 // An item's fill with previews (cosmos): ink2 from frame 0, lit to ink while it is current (from `at` to `next`),
@@ -202,7 +222,9 @@ export function expandDeskList(shot, ctx, given, times, hero) {
   const span = dots ? { x: grid.x + dots.column * unit, w: grid.w - dots.column * unit } : grid;
   // a look may drop the slug for lists (look.kinds.list.slug false, cosmos: the badge floated, unexplained)
   const slugged = data.slug !== false;
-  const room = tallRoom(roomFor(slugged ? slugBox(staged, ctx) : null, grid, ctx), data, canvas);
+  const plain = tallRoom(roomFor(slugged ? slugBox(staged, ctx) : null, grid, ctx), data, canvas);
+  // a rail with a sun (dots.light, cosmos) keeps the room over the first item for it
+  const room = dots?.light ? { ...plain, top: plain.top + railSunRoom(dots, look, unit) } : plain;
   const set = fitItems(items, span, room.bottom - room.top, ctx, data, numbered || items.some((i) => i.note !== null));
   const matched = arrivesMatched(shot, ctx);
   const children = [], itemBoxes = [], centres = [];

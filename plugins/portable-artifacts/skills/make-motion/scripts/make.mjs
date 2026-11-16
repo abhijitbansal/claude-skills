@@ -3,7 +3,7 @@
 // the MP4. Read the JSON with --json (one object on stdout on every path, progress on stderr).
 //
 //   node scripts/make.mjs <film.json> [--out <file.mp4>] [--json] [--no-render | --sheets-only] [--exact] [--outline]
-//   node scripts/make.mjs --list kinds|looks|modes|devices|cuts|fields [--all] [--json]   (--all: experimental looks too)
+//   node scripts/make.mjs --list kinds|looks|modes|devices|moves|cuts|fields|voices [--all] [--json]   (--all: experimental looks and parked kinds too)
 //
 // Exit 0: the film is valid and has no mechanical finding. Exit 1: it is invalid, or a mechanical finding exists (the
 // MP4 is still rendered when the film validated), or the page raised an error about it. Exit 2: a usage error or trouble
@@ -15,6 +15,8 @@ import { UsageError } from '../shared/cli.mjs';
 import { parseMakeArgs } from './v2/cli.mjs';
 import { listEntries, formatList, COMMON_SHOT_FIELDS } from './v2/list.mjs';
 import { runMake } from './v2/run.mjs';
+import { readingLines } from './v2/voice/reading.mjs';
+import { runBatch } from './v2/batch.mjs';
 import { describeError, errorReport, formatText, outlineLines } from './v2/report.mjs';
 
 const EXIT_MACHINE = 2;
@@ -30,18 +32,28 @@ function printList(options) {
   return say(JSON.stringify({ ok: true, list: options.list, ...common, entries }));
 }
 
-function printResult(options, { report, sheetsDir, outline }) {
-  if (options.json) return say(JSON.stringify(outline ? { ...report, outline } : report));
-  if (outline) return say(outlineLines(outline).join('\n'));
+function printResult(options, { report, sheetsDir, outline, outlineNote, reading }) {
+  if (reading) return say(options.json ? JSON.stringify({ ...report, reading }) : readingLines(reading).join('\n'));
+  const note = outlineNote ? { outlineNote } : {};
+  if (options.json) return say(JSON.stringify(outline ? { ...report, outline, ...note } : report));
+  if (outline) return say([...outlineLines(outline), ...(outlineNote ? [`note: ${outlineNote}`] : [])].join('\n'));
   if (report.error) log(`make: ${report.error.message}${report.error.hint ? `; ${report.error.hint}` : ''}`);
   if (report.error && report.timed === null) return undefined; // stopped before there was anything to report in text
   return say(formatText(report, { sheetsDir }));
 }
 
+// { message, hint } of a usage error: an error that carries its own hint (a removed flag: what to do instead, then the
+// accepted flags) ends its message with it; any other is split where its usage text begins.
+function usageParts(err) {
+  const first = err.message.split('\n')[0];
+  if (typeof err.hint === 'string' && first.endsWith(`: ${err.hint}`)) return { message: first.slice(0, -(err.hint.length + 2)), hint: err.hint };
+  const [message, ...rest] = first.split(USAGE_MARK);
+  return { message, hint: rest.length > 0 ? `usage: ${rest.join(USAGE_MARK)}` : '' };
+}
+
 // A problem with the command line: one line on stderr, or the report with its error under --json.
 function printUsageError(err, json) {
-  const [message, ...rest] = err.message.split('\n')[0].split(USAGE_MARK);
-  if (json) say(JSON.stringify(errorReport({ message, hint: rest.length > 0 ? `usage: ${rest.join(USAGE_MARK)}` : '' })));
+  if (json) say(JSON.stringify(errorReport(usageParts(err))));
   else log(err.message.split('\n')[0]);
   process.exitCode = EXIT_MACHINE;
 }
@@ -73,7 +85,20 @@ function crashed(result, fatal) {
   return { ...result, report: { ...result.report, ok: false, error: describeError(fatal) }, exitCode: EXIT_MACHINE };
 }
 
+// --batch: one line per row (or the refusals), or the batch report under --json.
+async function executeBatch(options, controller) {
+  const { report, exitCode } = await runBatch(options, { signal: controller.signal, log, runRow: runMake });
+  if (options.json) say(JSON.stringify(report));
+  else {
+    for (const e of report.errors) log(`make: ${e}`);
+    for (const row of report.rows) say(`row ${row.index}: ${row.status} ${row.file}`);
+    if (report.manifest) say(`manifest: ${report.manifest}`);
+  }
+  process.exitCode = exitCode;
+}
+
 async function execute(options, controller, guarded) {
+  if (options.batch) return executeBatch(options, controller);
   let result = await runMake(options, { signal: controller.signal, log });
   if (guarded.fatal) result = crashed(result, guarded.fatal);
   printResult(options, result);

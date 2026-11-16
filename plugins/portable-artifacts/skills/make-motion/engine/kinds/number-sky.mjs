@@ -1,31 +1,32 @@
-// The number kind composed round the look's sun (look.kinds.number.orbit with look.sun, cosmos): the sun stands on its
-// anchored place for the format (sun.mjs sunAnchor) and the orbit is set so the sun is at a focus. On a wide frame the
-// orbit is tilted, the figure at its centre, the label (and delta) under the orbit. On a tall frame it is recomposed,
-// not shrunk: a tall ellipse falls from the sun high in the frame to the band's bottom, its upper focus the sun, the
-// figure large in its lower middle and the label under the figure inside it, all inside the safe zone. Pure, DOM-free;
-// number.mjs hands in its figure parts (`parts`: figureAt, figureGroup, glowingFigure, plainDelta).
+// The number kind composed on the look's sky (look.kinds.number.sky with look.sun, cosmos): a measured line from the
+// Sun to Earth. The sun stands on its anchored place for the format (sun.mjs sunAnchor); a straight lavender line runs
+// from its disc to the Earth mark (sun.mjs earthNodes) on the sun's axis; while the figure counts, a small light drawn as
+// the sun is travels the line from the sun to Earth and goes out there. On a wide frame the line runs across the frame
+// at the sun's height, the figure centred over it and the label under it (a dimension line); on a tall one it falls
+// from the sun high in the frame to Earth at the band's bottom, broken round the figure and its label, centred on it.
+// Gate review 3: the orbit this replaces had the Sun on its rim, which reads as Earth circling an empty point.
+// Pure, DOM-free; number.mjs hands in its figure parts (`parts`: figureAt, figureGroup, glowingFigure, plainDelta).
 //
-// sky data (look.kinds.number.sky): { labelStep, labelGap (units), wide: { top, bottom } (shares of the frame the
-// orbit keeps clear), tall: { across (share of the safe half width the ellipse takes), low (how far below its centre
-// the figure may sit, a share of the tall half axis), fit (share of the chord a text may take) } }.
+// sky data (look.kinds.number.sky): { labelStep (scale step of the label), labelGap (units between the line or the
+// figure and the label), above (units between the figure's baseline and a wide line), line: { width, gap (units: the
+// line's stroke and its gap to the sun's disc, Earth's ring and a tall line's break) }, light (units: the travelling
+// light's radius), fit (share of a wide line the figure may take; a tall one takes the safe width), out (seconds the light takes to go
+// out at Earth) }.
 import { node } from '../graph/node.mjs';
+import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, enterTracks, isWide } from './shared.mjs';
-import { sunNodes, sunAnchor } from '../devices/sun.mjs';
-import { orbitGeometry, orbitNodes } from './number-orbit.mjs';
+import { sunNodes, sunAnchor, earthNodes, earthReach } from '../devices/sun.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
 const HALF = 2;
-const RAD = Math.PI / 180;
-const TRIES = 8;
-const SHRINK = 0.92;
 const HERO_MARGIN = 1.03;
 const DELTA_GAP = 24; // units: the delta's cap line under the label's baseline
 const DELTA_LAG = 0.15;
-const LABEL_LINES = 1.2; // the label's room under a wide orbit, in label sizes (one line and its descent)
+const LINEAR = 'linear';
 
-// A label laid out centred or flush left at `size` to `maxWidth`.
+// A label laid out to `maxWidth` with `align`.
 function labelSet(shot, ctx, size, maxWidth, align) {
   const { look, unit, measure } = ctx;
   const font = fontFor(look, 'display', size, unit);
@@ -36,72 +37,96 @@ function labelSet(shot, ctx, size, maxWidth, align) {
 function labelNode(shot, ctx, set, left, top, at) {
   const { look, unit } = ctx;
   const y = top + CAP_HEIGHT * set.font.size - set.layout.lines[0].y;
-  return { node: node('text', `${shot.id}.label`, { x: left, y, layout: set.layout, font: set.font, fill: look.palette.ink, role: 'label' }, { tracks: enterTracks(look, unit, at, { y }) }), bottom: y + set.layout.lines.at(-1).y + WORD_DESCENT * set.font.size, y };
+  return { node: node('text', `${shot.id}.label`, { x: left, y, layout: set.layout, font: set.font, fill: look.palette.ink, role: 'label' }, { tracks: enterTracks(look, unit, at, { y }) }), bottom: y + set.layout.lines.at(-1).y + WORD_DESCENT * set.font.size };
 }
 
-// Wide: the figure fitted, then shrunk until its tilted orbit, set with its focus on the sun, keeps the frame's top and
-// bottom margins and the grid's right edge with room for the label under it.
-function wideSky(shot, ctx, fit, data) {
-  const { canvas, unit } = ctx;
-  const sun = sunAnchor(ctx.look, ctx), span = editorialSpan(ctx, 1, ctx.look.grid.columns);
-  const t = data.tilt * RAD;
-  let fig = fit(span.w), geo = null, centre = null;
-  for (let i = 0; i < TRIES; i++) {
-    geo = orbitGeometry({ width: fig.total, height: CAP_HEIGHT * fig.size }, data);
-    const c = Math.sqrt(Math.max(0, geo.a * geo.a - geo.b * geo.b));
-    centre = { x: sun.cx + c * Math.cos(t), y: sun.cy + c * Math.sin(t) };
-    const fits = centre.x + geo.hx <= span.x + span.w && centre.y - geo.hy >= data.sky.wide.top * canvas.h
-      && centre.y + geo.hy + data.sky.labelGap * unit + LABEL_LINES * sizeAt(ctx.look, data.sky.labelStep, unit) <= data.sky.wide.bottom * canvas.h;
-    if (fits) break;
-    fig = fit(fig.total * SHRINK);
-  }
-  return { fig, geometry: { a: geo.a, b: geo.b, tilt: data.tilt }, centre, below: centre.y + geo.hy, sun, align: 'left', labelLeft: centre.x - fig.total / HALF };
+// A straight segment of the line from (x0, y0) to (x1, y1).
+const segment = (id, ctx, [x0, y0], [x1, y1]) => node('path', id, { d: `M${x0} ${y0}L${x1} ${y1}`, stroke: ctx.look.palette.ink2, strokeWidth: ctx.look.kinds.number.sky.line.width * ctx.unit, lineCap: 'round' });
+
+// The travelling light: the look's sun drawn small, carried along `axis` from `from` to `to` over the count, hidden
+// (scaled to nothing) across each of `gaps` ([enter, leave] positions along the axis) and going out at the end.
+function lightNodes(id, ctx, { axis, across, from, to, gaps }, times) {
+  const { look, unit } = ctx;
+  const data = look.kinds.number.sky;
+  const [t0, t1] = [times.start, Math.max(times.start + 1 / ctx.fps, times.land)];
+  const when = (p) => t0 + ((p - from) / (to - from)) * (t1 - t0);
+  const blink = 1 / ctx.fps;
+  const scaleKeys = [{ t: 0, v: 0 }, { t: t0, v: 0 }, { t: t0 + blink, v: 1 }];
+  for (const [enter, leave] of gaps) scaleKeys.push({ t: when(enter), v: 1 }, { t: when(enter) + blink, v: 0 }, { t: when(leave), v: 0 }, { t: when(leave) + blink, v: 1 });
+  scaleKeys.push({ t: t1, v: 1 }, { t: t1 + data.out, v: 0, ease: look.moves.exit.ease });
+  // keys in time order (a count that starts on frame 0 puts two keys at 0)
+  const ordered = scaleKeys.filter((k, i) => i === 0 || k.t >= scaleKeys[i - 1].t);
+  const move = track([{ t: 0, v: from }, { t: t0, v: from }, { t: t1, v: to, ease: LINEAR }]);
+  const disc = sunNodes(`${id}.disc`, look, { cx: 0, cy: 0, r: data.light * unit });
+  const at = axis === 'x' ? { y: across } : { x: across };
+  return [node('group', id, at, { tracks: { [axis]: move, scale: track(ordered) }, children: disc })];
 }
 
-// Tall: the ellipse through the band's bottom with its upper focus on the sun (b = (d^2 + a^2) / 2d for d from the sun
-// to the bottom), the figure as low in it as its width allows.
-function tallSky(shot, ctx, fit, data) {
-  const sun = sunAnchor(ctx.look, ctx), span = editorialSpan(ctx, 1, ctx.look.grid.columns), bounds = editorialBounds(ctx);
-  const sky = data.sky.tall;
-  const a = sky.across * span.w / HALF, d = bounds.bottom - sun.cy;
-  const b = (d * d + a * a) / (HALF * d), cy = bounds.bottom - b, cx = span.x + span.w / HALF;
-  const chord = (y) => HALF * a * Math.sqrt(Math.max(0, 1 - ((y - cy) / b) ** 2));
-  // fitted to the chord where the figure would sit, low in the ellipse (its cap box's lower edge), then set as low as
-  // that width allows: a figure too wide for there at its floor rises toward the centre
-  const low = cy + sky.low * b;
-  const first = fit(sky.fit * chord(low));
-  const lowFig = fit(sky.fit * chord(low + (CAP_HEIGHT * first.size) / HALF));
-  const fig = lowFig.digits.layout.overflow ? fit(sky.fit * chord(cy)) : lowFig;
+// Wide: the line across at the sun's height from its disc to Earth at the grid's right edge, the figure centred over it,
+// the label under it.
+function wideSky(shot, ctx, fit) {
+  const { look, unit } = ctx;
+  const data = look.kinds.number.sky, gap = data.line.gap * unit;
+  const sun = sunAnchor(look, ctx), span = editorialSpan(ctx, 1, look.grid.columns);
+  const reach = earthReach(look, unit);
+  const earth = { x: span.x + span.w - reach, y: sun.cy };
+  const x0 = sun.cx + look.sun.disc * sun.r + gap, x1 = earth.x - reach - gap;
+  const fig = fit(data.fit * (x1 - x0));
+  const mid = (x0 + x1) / HALF;
+  return {
+    fig, earth, sun, align: 'center', figLeft: mid - fig.total / HALF, baseline: sun.cy - data.above * unit,
+    labelTop: sun.cy + data.labelGap * unit, labelLeft: x0, labelWidth: x1 - x0,
+    segments: [[[x0, sun.cy], [x1, sun.cy]]], light: { axis: 'x', across: sun.cy, from: x0, to: x1, gaps: [] },
+  };
+}
+
+// Tall: the line down from the sun to Earth at the band's bottom, broken round the figure, its label and its delta
+// (`deltaH` px with its gap), centred on it.
+function tallSky(shot, ctx, fit, labelSize, deltaH) {
+  const { look, unit } = ctx;
+  const data = look.kinds.number.sky, gap = data.line.gap * unit;
+  const sun = sunAnchor(look, ctx), span = editorialSpan(ctx, 1, look.grid.columns), bounds = editorialBounds(ctx);
+  const reach = earthReach(look, unit);
+  const earth = { x: sun.cx, y: bounds.bottom - reach };
+  const y0 = sun.cy + look.sun.disc * sun.r + gap, y1 = earth.y - reach - gap;
+  // the whole safe width: nothing stands beside a tall figure (a three-digit figure needs it at its floor)
+  const fig = fit(span.w);
   const cap = CAP_HEIGHT * fig.size;
-  // the lowest cap-box centre whose lower corners stay inside the chord's fitting share
-  const room = b * Math.sqrt(Math.max(0, 1 - (fig.total / (sky.fit * HALF * a)) ** 2)) - cap / HALF;
-  const figY = cy + Math.max(0, Math.min(sky.low * b, room));
-  return { fig, geometry: { a, b, tilt: 0 }, centre: { x: cx, y: cy }, figY, chord, below: figY + cap / HALF, sun, align: 'center' };
+  const set = labelSet(shot, ctx, labelSize, span.w, 'center');
+  const labelH = set.layout.lines.at(-1).y - set.layout.lines[0].y + (CAP_HEIGHT + WORD_DESCENT) * labelSize;
+  const blockH = cap + (shot.label === undefined ? 0 : data.labelGap * unit + labelH) + deltaH;
+  const top = (y0 + y1) / HALF - blockH / HALF;
+  return {
+    fig, earth, sun, align: 'center', figLeft: sun.cx - fig.total / HALF, baseline: top + cap,
+    labelTop: top + cap + data.labelGap * unit, labelLeft: span.x, labelWidth: span.w,
+    segments: [[[sun.cx, y0], [sun.cx, top - gap]], [[sun.cx, top + blockH + gap], [sun.cx, y1]]],
+    light: { axis: 'y', across: sun.cx, from: y0, to: y1, gaps: [[top - gap, top + blockH + gap]] },
+  };
 }
 
 /** The sky composition: { nodes, boxes, hero }. */
 export function skyParts(shot, ctx, steps, times, parts, { minSize, maxSize }) {
   const { look, unit } = ctx;
-  const data = look.kinds.number.orbit;
-  const labelSize = sizeAt(look, data.sky.labelStep, unit);
+  const data = look.kinds.number.sky;
+  const labelSize = sizeAt(look, data.labelStep, unit);
   const floor = Math.max(minSize, HERO_MARGIN * MIN_HERO_RATIO * labelSize);
   const fit = (maxWidth) => parts.figureAt(shot, ctx, { maxWidth, minSize: floor, maxSize, steps });
-  const sky = isWide(ctx.canvas) ? wideSky(shot, ctx, fit, data) : tallSky(shot, ctx, fit, data);
-  const { fig } = sky;
-  const cap = CAP_HEIGHT * fig.size;
-  const capMid = sky.figY ?? sky.centre.y;
-  const figure = parts.figureGroup(shot, ctx, look.kinds.number.glow ? parts.glowingFigure(fig, ctx, times) : fig, { left: sky.centre.x - fig.total / HALF, baseline: capMid + cap / HALF, tracks: {} });
+  const probe = shot.delta === undefined ? null : parts.plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: 0, top: 0, maxWidth: editorialSpan(ctx, 1, look.grid.columns).w, at: 0 });
+  const deltaH = probe === null ? 0 : DELTA_GAP * unit + probe.box[3];
+  const sky = isWide(ctx.canvas) ? wideSky(shot, ctx, fit) : tallSky(shot, ctx, fit, labelSize, deltaH);
+  const figure = parts.figureGroup(shot, ctx, look.kinds.number.glow ? parts.glowingFigure(sky.fig, ctx, times) : sky.fig, { left: sky.figLeft, baseline: sky.baseline, tracks: {} });
   const labelAt = times.land + look.moves.enter.dur;
-  const top = sky.below + data.sky.labelGap * unit;
-  const width = sky.align === 'center' ? data.sky.tall.fit * sky.chord(top + labelSize) : editorialSpan(ctx, 1, look.grid.columns).w;
-  const set = labelSet(shot, ctx, labelSize, width, sky.align);
-  const label = shot.label === undefined ? null : labelNode(shot, ctx, set, sky.align === 'center' ? sky.centre.x - width / HALF : sky.labelLeft, top, labelAt);
-  const sun = sunNodes(`${shot.id}.sun`, look, { ...sky.sun, at: undefined });
-  const nodes = [...sun, ...orbitNodes(shot.id, ctx, sky.centre, times, data, sky.geometry), figure.group, ...(label ? [label.node] : [])];
-  const boxes = { value: figure.box, ...(label ? { label: [sky.centre.x - width / HALF, top, width, label.bottom - top] } : {}) };
+  const set = labelSet(shot, ctx, labelSize, sky.labelWidth, 'center');
+  const label = shot.label === undefined ? null : labelNode(shot, ctx, set, sky.labelLeft, sky.labelTop, labelAt);
+  const line = sky.segments.map((s, i) => segment(`${shot.id}.line${i}`, ctx, ...s));
+  const nodes = [
+    ...sunNodes(`${shot.id}.sun`, look, { ...sky.sun, at: undefined }), ...line,
+    ...earthNodes(`${shot.id}.earth`, look, { cx: sky.earth.x, cy: sky.earth.y, unit }),
+    ...lightNodes(`${shot.id}.light`, ctx, sky.light, times), figure.group, ...(label ? [label.node] : []),
+  ];
+  const boxes = { value: figure.box, ...(label ? { label: [sky.labelLeft, sky.labelTop, sky.labelWidth, label.bottom - sky.labelTop] } : {}) };
   if (shot.delta === undefined) return { nodes, boxes, hero: figure.hero };
-  const deltaTop = (label ? label.bottom : sky.below) + DELTA_GAP * unit;
-  const left = sky.align === 'center' ? sky.centre.x - width / HALF : sky.labelLeft;
-  const delta = parts.plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left, top: deltaTop, maxWidth: width, at: labelAt + DELTA_LAG });
+  const deltaTop = (label ? label.bottom : sky.baseline) + DELTA_GAP * unit;
+  const delta = parts.plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: sky.labelLeft, top: deltaTop, maxWidth: sky.labelWidth, at: labelAt + DELTA_LAG });
   return { nodes: [...nodes, ...delta.nodes], boxes: { ...boxes, delta: delta.box }, hero: figure.hero };
 }

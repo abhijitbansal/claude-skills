@@ -254,6 +254,7 @@ registries.kinds.add(KIND, {
   review: honesty,
   landing: chartLanding, // the highlighted value landing (else the marks grown): the cue plan's land event
   expand: expandChart,
+  lookData: true, // a look ships it only with a kinds.chart entry (engine/looks/index.mjs listedKinds)
   numbered: false, // its claim is its own heading: no slug
   showsWords: false, // its narration is not its picture: captioned (engine/captions)
 });

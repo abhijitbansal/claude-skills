@@ -21,7 +21,12 @@ import { openSession, pageErrorMessage, machineMessage } from './session.mjs';
 import { writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
 import { sessionFindings } from './review.mjs';
-import { NOT_RENDERED_NOTE, describeError, experimentalLook, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
+import { stampTags, tagArgs } from './stamp.mjs';
+import { readBeatsFile } from './sound/beats-file.mjs';
+import { snapFilm } from './sound/snap.mjs';
+import { posterFrame, posterPath, writePoster } from './poster.mjs';
+import { writeSubtitles } from './subtitles.mjs';
+import { NOT_RENDERED_NOTE, describeError, experimentalLook, experimentalKinds, experimentalKindLine, outlineOf, pageFinding, reportOf, reviewFinding, validationFinding } from './report.mjs';
 
 const MS_PER_SECOND = 1000;
 const MILLIS_DECIMALS = 1000;
@@ -54,7 +59,7 @@ const seconds = (started) => Math.round(((performance.now() - started) / MS_PER_
 
 const newState = () => ({
   validated: false, error: null, stages: [], findings: [], sheets: [], output: null, timed: null, voice: null, audio: null, post: null, capture: null,
-  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, outline: null, sheetsDir: null,
+  frames: 0, captured: 0, seconds: null, msPerFrame: null, bytes: null, mbps: null, outline: null, sheetsDir: null, provenance: null,
 });
 
 // Runs fn and records its stage in state.stages whether it returns or throws; each stage is also said to `log`.
@@ -79,7 +84,7 @@ async function stage(state, log, name, fn) {
 // unreadable file) is the machine's trouble and propagates.
 async function validate(options, state, log) {
   try {
-    return await stage(state, log, 'validate', () => loadFilm(options.specPath));
+    return await stage(state, log, 'validate', () => loadFilm(options.specPath, { values: options.values ?? {} }));
   } catch (err) {
     if (!(err instanceof SpecError)) throw err;
     state.findings = err.errors.map(validationFinding);
@@ -106,21 +111,23 @@ function outputPaths(options) {
 }
 
 // The stages that need the page: the sheets and the audit, then (unless --no-render) the video.
-async function reviewAndRender({ options, loaded, made, sound, state, io: { signal, log } }) {
+async function reviewAndRender({ options, loaded, made, sound, state, io: { signal, log, browser } }) {
   const { out, sheetsDir } = outputPaths(options);
   state.sheetsDir = sheetsDir;
-  const session = await openSession(loaded);
+  const session = await openSession(loaded, { browser });
   try {
     state.post = session.info.post;
     const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal }));
     state.sheets = review.files;
     state.findings = review.findings.map(reviewFinding);
     if (!options.noRender) {
+      const tags = stampTags({ generatedBy: loaded.film.generatedBy, flags: options.provenance ?? {}, provenance: loaded.film.provenance });
       const rendered = await stage(state, log, 'render', () => {
         log('make: render started');
-        return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined });
+        return renderFilm({ out, exact: options.exact, session, signal, onProgress: progressLogger(log), voice: made ?? undefined, sound: sound ?? undefined, stamp: tagArgs(tags),
+          workers: options.workers ?? 1, openPage: () => openSession(loaded, { browser: session.page.context().browser() }) });
       });
-      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, audio: rendered.audio });
+      Object.assign(state, { output: rendered.out, capture: rendered.capture, captured: rendered.captured, seconds: rendered.seconds, msPerFrame: rendered.msPerFrame, bytes: rendered.bytes, mbps: rendered.mbps, audio: rendered.audio, provenance: tags, workers: rendered.workers > 1 ? rendered.workers : null });
     }
   } finally {
     state.findings = [...state.findings, ...sessionFindings(session)];
@@ -222,16 +229,20 @@ async function timelineFor(film, made, state, log) {
 // The sound stage's modules, loaded only for a film with sound. (The validator loads sound/synth.mjs for every film, for
 // its list of cue names: spec-sound.mjs KNOWN_CUES.)
 async function soundSteps() {
-  const [cues, bed, synth, duck] = await Promise.all([
+  const [cues, bed, synth, duck, beatsFile, snap] = await Promise.all([
     import('./sound/cues.mjs'), import('./sound/bed.mjs'), import('./sound/synth.mjs'), import('./sound/duck.mjs'),
+    import('./sound/beats-file.mjs'), import('./sound/snap.mjs'),
   ]);
-  return { planCues: cues.planCues, ...bed, renderCues: synth.renderCues, duckEnvelope: duck.duckEnvelope, heardWordSpans: duck.heardWordSpans };
+  return {
+    planCues: cues.planCues, ...bed, renderCues: synth.renderCues, duckEnvelope: duck.duckEnvelope, heardWordSpans: duck.heardWordSpans,
+    readBeatsFile: beatsFile.readBeatsFile, snapFilm: snap.snapFilm,
+  };
 }
 
 // Whether `film` (defaults filled) has sound to make: not "sound": "off", and music, its own cue list, "sound": "on",
 // or a mode whose cues play by default.
 const wantsSound = (film) => film.sound !== 'off'
-  && (film.music !== undefined || Array.isArray(film.cues) || film.sound === 'on' || registries.modes.get(film.mode).cues === true);
+  && (film.music !== undefined || Array.isArray(film.cues) || film.sound === 'on' || registries.modes.get(film.mode).cues === true || film.audio?.length > 0);
 
 // A film error thrown by the cue plan (sound/cues.mjs): its message starts with the path of the cue at fault.
 const CUE_PATH_RE = /^(cues\[\d+\](?:\.[a-z]+)?): ([\s\S]+)$/;
@@ -256,23 +267,48 @@ function fileSummary(input, timeline, end, landEpsilon) {
   return { kind: 'file', bed: null, bpm, landed, cuts: cuts.length, short: end.short };
 }
 
-// The film's music as data: a bed fitted to the cuts, or a user's file checked and probed (musicInput). Null for none.
+// The beats `music.snap` moves the cuts onto, or a SpecError at music.snap when the music has no steady beat.
+function snapBeats(film, input) {
+  if (film.music.snap !== true || input.beats !== null) return input.beats;
+  throw new SpecError([{ path: 'music.snap', message: `no steady beat was found in ${JSON.stringify(film.music.src)}, so there is nothing to move the cuts onto; run scripts/beats.mjs on it (with --bpm for a tempo you know) and name its file in music.beats, or remove snap` }]);
+}
+
+// The film's anchors judged again on the snapped timeline (validateFilm judged them on the unsnapped one): a moved cut
+// can shorten a shot past an anchor in it. A SpecError at each anchor's path, saying the snap did it.
+function snappedAnchorCheck(film, snapped) {
+  if (!Array.isArray(snapped.moved) || snapped.moved.length === 0) return;
+  const errors = timedAnchorErrors(film, snapped.timeline);
+  if (errors.length > 0) throw new SpecError(errors.map((e) => ({ ...e, message: `${e.message} (after music.snap moved the cuts onto the beats)` })));
+}
+
+// A user's music file checked and probed (musicInput), its beats read from music.beats when the film names a beats file
+// (sound/beats-file.mjs: then nothing is detected), and the cuts moved onto them with music.snap (sound/snap.mjs).
+// -> { input, end, summary, timeline }: `timeline` the one the film is drawn with, the given one without snap.
+async function fileMusicPlan(steps, film, timeline, specDir, signal) {
+  const beats = film.music.beats === undefined ? undefined : steps.readBeatsFile(film.music.beats, specDir).beats;
+  const input = await steps.musicInput(film, specDir, { signal, seconds: timeline.duration, beats }); // silent for the film's length: refused
+  const snapped = steps.snapFilm(film, timeline, snapBeats(film, input));
+  snappedAnchorCheck(film, snapped);
+  const end = steps.musicEnd(input.seconds, snapped.timeline.duration);
+  const moved = snapped.moved === null ? {} : { moved: snapped.moved }; // only with snap: a film without it reports what it did
+  return { input, end, timeline: snapped.timeline, summary: { ...fileSummary(input, snapped.timeline, end, steps.LAND_EPSILON), ...moved } };
+}
+
+// The film's music as data: a bed fitted to the cuts, or a user's file (fileMusicPlan). Null for none.
 async function musicPlan(steps, film, timeline, specDir, signal) {
   const music = film.music;
   if (music === undefined) return null;
   if (music.bed !== undefined) {
     const grid = steps.fitBeatGrid(cutTimes(timeline), { bpm: music.bpm, seconds: timeline.duration, fps: timeline.fps });
-    return { bed: music.bed, grid, summary: { kind: 'bed', bed: music.bed, bpm: grid.bpm, landed: grid.landed, cuts: grid.cuts, short: false } };
+    return { bed: music.bed, grid, timeline, summary: { kind: 'bed', bed: music.bed, bpm: grid.bpm, landed: grid.landed, cuts: grid.cuts, short: false } };
   }
-  const input = await steps.musicInput(film, specDir, { signal, seconds: timeline.duration }); // silent for the film's length: refused
-  const end = steps.musicEnd(input.seconds, timeline.duration);
-  return { input, end, summary: fileSummary(input, timeline, end, steps.LAND_EPSILON) };
+  return fileMusicPlan(steps, film, timeline, specDir, signal);
 }
 
 
 // The cue track and the music written into `work` for the render: { cues, music } as renderFilm takes them, or null when
 // there is nothing to put in the film.
-async function soundFiles(steps, { film, timeline, cues, music, work }) {
+async function soundFiles(steps, { film, timeline, cues, music, tracks = [], work }) {
   const seconds = timeline.duration;
   // The count is of the cues the track holds: the plan holds every cue inside the film, so none is dropped today, but
   // the report would say so if one were.
@@ -286,7 +322,32 @@ async function soundFiles(steps, { film, timeline, cues, music, work }) {
       ? { file: await steps.renderBed({ bed: music.bed, grid: music.grid, seconds, seed: film.seed, out: path.join(work, 'bed.wav') }), recording: false, fadeFrom: null, duck, summary: music.summary }
       : { file: music.input.file, recording: true, fadeFrom: music.end.fadeFrom, duck, summary: music.summary };
   }
-  return cueTrack === null && musicTrack === null ? null : { cues: cueTrack, music: musicTrack };
+  // The extra audio files duck under the words as the music does.
+  const duck = tracks.length === 0 ? [] : steps.duckEnvelope(film.voice === undefined ? [] : steps.heardWordSpans(timeline), { seconds });
+  const extra = tracks.map((track) => ({ ...track, duck }));
+  return cueTrack === null && musicTrack === null && extra.length === 0 ? null : { cues: cueTrack, music: musicTrack, tracks: extra };
+}
+
+// A problem musicInput found with an extra audio file, at that file's path (musicInput names music.src).
+const atTrack = (err, i) => new SpecError(err.errors.map((e) => ({ ...e, path: e.path === 'music.src' ? `audio[${i}].src` : e.path })));
+
+// The film's extra audio files, each checked, probed and measured as a music file is (sound/bed.mjs musicInput, nothing
+// decoded for beats), and placed at `at`: [{ file, recording: true, fadeFrom: null, at }]. One starting after the film
+// ends is the film's mistake, at audio[i].at.
+async function audioTracks(steps, film, timeline, specDir, signal) {
+  const tracks = [];
+  for (const [i, item] of (film.audio ?? []).entries()) {
+    const at = item.at ?? 0;
+    if (at >= timeline.duration) throw new SpecError([{ path: `audio[${i}].at`, message: `starts at ${at} s, after the film ends (${timeline.duration.toFixed(2)} s)` }]);
+    let input;
+    try {
+      input = await steps.musicInput({ music: { src: item.src } }, specDir, { signal, seconds: timeline.duration - at, beats: [] });
+    } catch (err) {
+      throw err instanceof SpecError ? atTrack(err, i) : err;
+    }
+    tracks.push({ file: input.file, recording: true, fadeFrom: null, at });
+  }
+  return tracks;
 }
 
 /**
@@ -294,6 +355,8 @@ async function soundFiles(steps, { film, timeline, cues, music, work }) {
  * music file checked (sound/bed.mjs), recorded in the report's audio (planned, not yet measured); with `work` (a render
  * follows) the cue and bed WAVs are written there. -> { sound } (renderFilm's plan, or null), or null when the film is
  * at fault (its errors become findings: exit 1). Machine trouble (ffprobe or ffmpeg failing) and a stop propagate.
+ * The result's `timeline` is the one to draw: the given one, or its cuts moved onto the music's beats (music.snap); the
+ * cues are planned on it.
  */
 async function makeSound(loaded, timeline, state, io, work) {
   const { film, specDir } = loaded;
@@ -301,12 +364,15 @@ async function makeSound(loaded, timeline, state, io, work) {
     return await stage(state, io.log, 'sound', async () => {
       io.signal?.throwIfAborted();
       const steps = await soundSteps();
-      const cues = steps.planCues(film, timeline);
       const music = await musicPlan(steps, film, timeline, specDir, io.signal);
+      const drawn = music?.timeline ?? timeline;
+      const cues = steps.planCues(film, drawn);
       io.signal?.throwIfAborted();
       // Nothing planned is nothing to put in the film: no audio, as the render reports it (review Minor 10).
-      if (cues.length > 0 || music !== null) state.audio = { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: cues.length, music: music?.summary ?? null };
-      return { sound: work === null ? null : await soundFiles(steps, { film, timeline, cues, music, work }) };
+      const tracks = await audioTracks(steps, film, drawn, specDir, io.signal);
+      const extra = tracks.length > 0 ? { tracks: tracks.length } : {}; // the extra audio files, only when the film has some
+      if (cues.length > 0 || music !== null || tracks.length > 0) state.audio = { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: cues.length, music: music?.summary ?? null, ...extra };
+      return { timeline: drawn, sound: work === null ? null : await soundFiles(steps, { film, timeline: drawn, cues, music, tracks, work }) };
     });
   } catch (err) {
     const findings = io.signal?.aborted ? null : soundFindings(err);
@@ -316,11 +382,52 @@ async function makeSound(loaded, timeline, state, io, work) {
   }
 }
 
+// ---- the poster ----------------------------------------------------------------------------------------------------------
+
+// --poster: one still of the film's frame (poster.mjs) on its timeline (measured for a voiced film), no review, no
+// sound, no ffmpeg. A time past the end is the machine-trouble exit (2) with the film's length.
+async function makePoster(options, loaded, state, io) {
+  const frame = posterFrame(options.poster, loaded.timeline);
+  const file = posterPath(options.posterOut ?? null, outputPaths(options).out);
+  const session = await openSession(loaded, { browser: io.browser });
+  try {
+    state.poster = await stage(state, io.log, 'poster', () => writePoster({ session, frame, file }));
+  } finally {
+    state.findings = [...state.findings, ...sessionFindings(session)];
+    await session.close();
+  }
+}
+
+// ---- the outline ---------------------------------------------------------------------------------------------------------
+
+const ESTIMATE_NOTE = 'times are estimated from the word count (design 6.1): --outline makes no voice; the render measures them';
+const UNSNAPPED_NOTE = 'the cuts are shown before music.snap moves them: snapping needs the music\'s beats, so give music.beats (scripts/beats.mjs writes it)';
+
+// The timeline an outline shows: with music.snap and a beats file (read with Node alone), the cuts after the snap.
+function outlineTimeline({ film, specDir }, timeline) {
+  if (film.music?.snap !== true || typeof film.music.beats !== 'string') return { timeline, snapped: false };
+  return { timeline: snapFilm(film, timeline, readBeatsFile(film.music.beats, specDir).beats).timeline, snapped: true };
+}
+
+// What the outline says about its times, or null: estimated for a voiced film, unsnapped for a snap with no beats file.
+function outlineNote(film, options, snapped) {
+  const notes = [
+    film.voice !== undefined && options.outline === true ? ESTIMATE_NOTE : null,
+    film.music?.snap === true && !snapped ? UNSNAPPED_NOTE : null,
+  ].filter(Boolean);
+  return notes.length === 0 ? null : notes.join('; ');
+}
+
 async function execute(options, state, io) {
   const loaded = await validate(options, state, io.log);
   if (!loaded) return;
   state.validated = true;
   io.signal?.throwIfAborted(); // validation is synchronous (an own recording's word alignment included): a stop sent during it lands here
+  if (options.phonemes) {
+    // --phonemes: how the narration will be read, from the voice package's phonemizer; no voice, timeline or browser.
+    state.reading = await stage(state, io.log, 'phonemes', async () => (await import('./voice/reading.mjs')).readingOf(loaded.film, { phonemize: await io.loadPhonemizer() }));
+    return;
+  }
   const { film, specDir } = loaded;
   // a parked look renders as any other; the run says so once, and the report carries it (never a finding)
   const parked = experimentalLook(film);
@@ -328,14 +435,24 @@ async function execute(options, state, io) {
     state.look = parked;
     io.log(`make: look "${parked.name}" is experimental: it renders, but it is not one of the listed looks and may change`);
   }
-  const made = film.voice === undefined ? null
+  // so does a parked kind (or chart type) in the film's look: one line each, and the report's `kinds`
+  state.kinds = experimentalKinds(film);
+  for (const entry of state.kinds) io.log(experimentalKindLine(entry));
+  // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
+  const voiced = film.voice !== undefined && options.outline !== true;
+  const made = !voiced ? null
     : film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io);
-  if (film.voice !== undefined && made === null) return;
+  if (voiced && made === null) return;
   io.signal?.throwIfAborted(); // the voice can take minutes, and a cache hit returns whatever the signal
   const timeline = await timelineFor(film, made, state, io.log);
   if (!timeline) return;
-  if (options.outline) {
-    state.outline = outlineOf(film, timeline);
+  if (options.outline || options.outlineMeasured) {
+    const drawn = outlineTimeline(loaded, timeline);
+    Object.assign(state, { outline: outlineOf(film, drawn.timeline), outlineNote: outlineNote(film, options, drawn.snapped) });
+    return;
+  }
+  if (typeof options.poster === 'number') {
+    await makePoster(options, { film, timeline, specDir, prepared: loaded.prepared }, state, io);
     return;
   }
   // The cue and bed WAVs live in a work folder of this run only, removed on every way out of it.
@@ -343,9 +460,11 @@ async function execute(options, state, io) {
   try {
     const planned = wantsSound(film) ? await makeSound(loaded, timeline, state, io, work) : { sound: null };
     if (planned === null) return;
+    // --subtitles: the caption file from the timeline the film is drawn with (after music.snap), before the browser starts
+    if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out });
     if (!options.noRender) await findFfmpeg(); // fail before the browser starts, naming how to fix it
     io.signal?.throwIfAborted();
-    await reviewAndRender({ options, loaded: { film, timeline, specDir }, made, sound: planned.sound, state, io });
+    await reviewAndRender({ options, loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared }, made, sound: planned.sound, state, io });
   } finally {
     if (work !== null) rmSync(work, { recursive: true, force: true });
   }
@@ -391,21 +510,26 @@ function settle(state, err, signal) {
 }
 
 /**
- * @param {{ specPath: string, out: string | null, exact: boolean, noRender: boolean, outline: boolean }} options
+ * @param {{ specPath: string, out: string | null, exact: boolean, noRender: boolean, outline: boolean, provenance?: object }} options
+ *   provenance: the stamp flags (cli.mjs parseMakeArgs: model, effort, agent, noProvenance); the film's own fields apply without them.
+ *   outline: --outline, estimated times and no voice (`outlineNote` says so). outlineMeasured (not a flag: tests and
+ *   callers that want the measured times without a browser): the voice is made and the outline follows it.
  * @param {{ signal?: AbortSignal, log?: (line: string) => void, synthesise?: Function }} [io] log gets progress lines
  *   (the caller sends them to stderr); synthesise makes a voiced film's narration (default: voice/synth.mjs
  *   synthesiseFilm, which tests replace with a fake that returns a sidecar)
  * @returns {Promise<{ report: object, exitCode: number, sheetsDir: string | null, outline: object[] | null }>}
  */
-export async function runMake(options, { signal, log = () => {}, synthesise = synthesiseFilm } = {}) {
+const defaultPhonemizer = async () => (await import('./voice/reading.mjs')).loadPhonemizer();
+
+export async function runMake(options, { signal, log = () => {}, synthesise = synthesiseFilm, loadPhonemizer = defaultPhonemizer, browser } = {}) {
   const state = newState();
   let exitCode = null;
   try {
-    await execute(options, state, { signal, log, synthesise });
+    await execute(options, state, { signal, log, synthesise, loadPhonemizer, browser });
   } catch (err) {
     exitCode = settle(state, err, signal);
   }
   state.findings = reportFindings(state.findings, exitCode);
   const report = reportOf(state);
-  return { report, exitCode: exitCode ?? (report.ok ? EXIT_OK : EXIT_NOT_OK), sheetsDir: state.sheetsDir, outline: state.outline };
+  return { report, exitCode: exitCode ?? (report.ok ? EXIT_OK : EXIT_NOT_OK), sheetsDir: state.sheetsDir, outline: state.outline, outlineNote: state.outlineNote ?? null, reading: state.reading ?? null };
 }

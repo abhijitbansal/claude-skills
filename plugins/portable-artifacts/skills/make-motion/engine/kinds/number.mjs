@@ -318,8 +318,8 @@ function deskLabel(shot, ctx, left, step, right) {
 // the figure keeps its top margin and is at least MIN_HERO_RATIO times the label.
 // The desk figure, fitted to its span: columns 2 to DESK.toWide / toTall, or inside the 9:16 safe zone the whole safe
 // width (columns 1 to the last), where a look may let the figure go down to scale step `fromStep`
-// (look.kinds.number.fromStep), never under MIN_HERO_RATIO times the delta. (A look with an orbit and a sun composes
-// the number round the sun instead: number-sky.mjs.)
+// (look.kinds.number.fromStep), never under MIN_HERO_RATIO times the delta. (A look with sky data and a sun composes
+// the number on its sky instead: number-sky.mjs.)
 function figureFloor(shot, ctx, bounds) {
   const { look, unit } = ctx;
   const deltaFloor = shot.delta === undefined ? 0 : Math.ceil(MIN_HERO_RATIO * sizeAt(look, DELTA.step, unit)) + 1;
@@ -334,10 +334,10 @@ function deskFigure(shot, ctx, { bounds, maxSize, steps }) {
 
 function deskParts(shot, ctx, steps, times) {
   const { look, canvas, unit } = ctx;
-  const extra = look.kinds?.number ?? {}; // look data a number may carry (cosmos): besideGap, orbit, glow, fromStep
+  const extra = look.kinds?.number ?? {}; // look data a number may carry (cosmos): besideGap, sky, glow, fromStep
   const bounds = editorialBounds(ctx);
-  // with an orbit and a sun the number is composed round the sun (number-sky.mjs)
-  if (extra.orbit && hasSun(look)) {
+  // with sky data and a sun the number is composed on the sky: a line from the sun to Earth (number-sky.mjs)
+  if (extra.sky && hasSun(look)) {
     const maxSky = (digitCount(steps) <= SHORT_DIGITS ? DESK.maxShort : DESK.max) * unit;
     return skyParts(shot, ctx, steps, times, { figureAt, figureGroup, glowingFigure, plainDelta }, { minSize: figureFloor(shot, ctx, bounds), maxSize: maxSky });
   }

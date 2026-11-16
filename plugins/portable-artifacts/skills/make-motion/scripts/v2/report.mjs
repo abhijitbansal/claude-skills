@@ -2,7 +2,8 @@
 // outline of a film, and the shape of a finding. Pure: it builds strings and objects.
 //
 // The report has the same keys on every path, so a reader never has to guess which exist:
-//   ok, output, sheets, timed, voice, audio, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings
+//   ok, output, sheets, timed, voice, audio, post, capture, stages, frames, captured, seconds, msPerFrame, bytes, mbps, findings,
+//   provenance
 // and `error: { message, hint }` when a problem with the machine stopped the run (a missing film file, no browser, no
 // ffmpeg, ffmpeg failing, a crashed or closed browser, a lost WebGL context, a voice that cannot be made, an interrupt).
 // `timed` is 'estimated' or 'measured' (the timeline used), null before one was built. `voice` is
@@ -11,13 +12,16 @@
 // word's end in the file, model: null }; else null. `audio` is { lufs, truePeakDb, note, cues, music } of the sound in
 // the rendered MP4, as measured in that file (ebur128), for a film whose voice or sound was muxed into it; for a film
 // with sound that was not rendered, the plan alone (lufs and truePeakDb null, note NOT_RENDERED_NOTE); else null.
-// `cues` is the number of cues planned, `music` { kind: 'bed' | 'file', bed, bpm, landed, cuts, short } or null (bpm
-// and landed null for a file with no steady beat; short when a file ends before the film). What had been
+// `cues` is the number of cues planned, `music` { kind: 'bed' | 'file', bed, bpm, landed, cuts, short, moved? } or null
+// (bpm and landed null for a file with no steady beat; short when a file ends before the film; moved only with
+// music.snap: the cuts moved onto a beat as [{ shot, from, to }] in seconds). What had been
 // done by then
-// stays in it: the stages that ran, the findings already found. A film's own fault (it does not validate, the page
-// raises an error about it) is a finding, not an error.
+// stays in it: the stages that ran, the findings already found. `provenance` is { comment, artist } as stamped into the
+// MP4 (stamp.mjs; both null when the stamp is off), null when no MP4 was written. A film's own fault (it does not
+// validate, the page raises an error about it) is a finding, not an error.
 import { parseSay } from '../../engine/script/say.mjs';
 import { resolveLook } from '../../engine/graph/film.mjs';
+import { isParkedKind, isParkedChartType } from '../../engine/looks/index.mjs';
 
 /** The audio note of a film whose sound was planned (the sound stage) but not rendered: it is measured in the film only. */
 export const NOT_RENDERED_NOTE = 'not rendered: the sound is measured in the finished film';
@@ -66,7 +70,28 @@ export function experimentalLook(film) {
   return look.experimental === true ? { name: look.name, experimental: true } : null;
 }
 
-/** The report of a run in its state `state` (see run.mjs), with every key present (`look` only for an experimental look). */
+/**
+ * The parked kinds a film uses (look.kinds.<kind>.experimental, or a chart type in look.kinds.chart.experimentalTypes):
+ * one { name, type?, look, experimental: true } per kind (and chart type) used, in first-use order, for the report's
+ * `kinds` field. Empty when it uses none. Never a finding: a parked kind validates and renders.
+ */
+export function experimentalKinds(film) {
+  const look = resolveLook(film);
+  const seen = new Map();
+  for (const shot of film.shots ?? []) {
+    if (isParkedKind(look, shot.show)) seen.set(shot.show, { name: shot.show, look: look.name, experimental: true });
+    else if (shot.show === 'chart' && isParkedChartType(look, shot.type)) seen.set(`chart:${shot.type}`, { name: 'chart', type: shot.type, look: look.name, experimental: true });
+  }
+  return [...seen.values()];
+}
+
+/** The line make says, once per parked kind a film uses (the report carries the same in `kinds`). */
+export const experimentalKindLine = ({ name, type, look }) => (type === undefined
+  ? `make: kind "${name}" is experimental in look "${look}": it renders, but it is not one of the listed kinds and may change`
+  : `make: chart type "${type}" is experimental in look "${look}": it renders, but it is not one of the listed chart types and may change`);
+
+/** The report of a run in its state `state` (see run.mjs), with every key present (`look` only for an experimental look,
+ *  `kinds` only for a film that uses a parked kind). */
 export function reportOf(state) {
   const mechanical = state.findings.some((f) => f.kind === 'mechanical');
   return {
@@ -86,7 +111,12 @@ export function reportOf(state) {
     bytes: state.bytes,
     mbps: state.mbps,
     findings: state.findings,
+    provenance: state.provenance ?? null,
+    ...(state.poster ? { poster: state.poster } : {}), // --poster: { file, frame, seconds }
+    ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
+    ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed }
     ...(state.look ? { look: state.look } : {}),
+    ...(state.kinds?.length > 0 ? { kinds: state.kinds } : {}),
     ...(state.error === null ? {} : { error: state.error }),
   };
 }
@@ -119,7 +149,8 @@ function musicText(music) {
   const source = music.kind === 'bed' ? `bed ${music.bed}` : 'music file';
   const tempo = music.bpm === null ? `${source} with no steady beat` : `${source} at ${music.bpm} bpm`;
   const landed = music.landed === null || music.cuts === 0 ? '' : `, ${music.landed} of ${plural(music.cuts, 'cut')} on a beat`; // no cuts, no count
-  return `${tempo}${landed}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}`;
+  const moved = Array.isArray(music.moved) ? `, ${music.moved.length} moved onto a beat` : ''; // music.snap: how many cuts it moved
+  return `${tempo}${landed}${moved}${music.short ? ', shorter than the film: it ends early with a 1 s fade' : ''}`;
 }
 
 /** The text form's line for sound: the cue count, the bed or file and its tempo, the cuts on a beat; null for none. */

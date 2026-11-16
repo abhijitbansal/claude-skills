@@ -13,6 +13,7 @@ import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { FORCE_MARK } from '../text/breaks.mjs';
 import { colourOf, roundedRect } from '../devices/shared.mjs';
+import { earthNodes, earthReach } from '../devices/sun.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, arrivesMatched, fitDisplay, capBox, unionBox, rectPath, wordBoxes, stepUnder, fitLongestSide, cardOf, cardGroup, asTextCard,
@@ -141,8 +142,11 @@ function markNode(shot, ctx, lay, ox, oy, at) {
   const layout = layoutText({ text: OPEN_MARK, font, maxWidth: 1e6, measure });
   const ink = markInk(font, measure);
   const y = oy + top + ink.up - layout.lines[0].y;
-  return node('text', `${shot.id}.mark`, { x: ox + x - ink.left, y, layout, font, fill: look.palette.accent, role: 'affix', furniture: true }, { tracks: enterTracks(look, unit, at, { y }) });
+  return node('text', `${shot.id}.mark`, { x: ox + x - ink.left, y, layout, font, fill: markFill(look), role: 'affix', furniture: true }, { tracks: enterTracks(look, unit, at, { y }) });
 }
+
+// The large marks' colour: the look's markFill (cosmos: the lavender, gold being only for light), else the accent.
+const markFill = (look) => colourOf(look, look.kinds?.quote?.markFill ?? 'accent');
 
 // The matching closing mark (with a large opening mark, cosmos): the same size, in the accent, after the last line,
 // its ink top on that line's cap line, arriving with the last word.
@@ -157,7 +161,7 @@ function closeMarkNode(shot, ctx, lay, ox, oy, at) {
   const y = capTop + up - layout.lines[0].y;
   const inkRight = Number.isFinite(m.inkRight) ? m.inkRight : m.width;
   const x = lay.close.under ? ox + lay.textX + lay.quote.layout.width - inkRight : ox + lay.textX + lay.quote.layout.width + gap - (m.inkLeft ?? 0);
-  return node('text', `${shot.id}.close`, { x, y, layout, font, fill: look.palette.accent, role: 'affix', furniture: true }, { tracks: enterTracks(look, unit, at, { y }) });
+  return node('text', `${shot.id}.close`, { x, y, layout, font, fill: markFill(look), role: 'affix', furniture: true }, { tracks: enterTracks(look, unit, at, { y }) });
 }
 
 // Short sentences one per line (data.sentenceLines: { words }, cosmos): when every sentence has at most `words` words, a
@@ -199,10 +203,23 @@ function cardChildren(shot, ctx, lay, times) {
   const by = node('text', `${shot.id}.by`, { x: ox + lay.attrX, y: attrY, layout: lay.attr.layout, font: lay.attr.font, fill: byFill, role: 'label' }, {
     tracks: enterTracks(look, unit, times.by, { y: attrY }),
   });
-  const mark = lay.mark ? [markNode(shot, ctx, lay, ox, oy, times.words[0]?.at ?? 0)] : [];
+  // with no card (data.card false, cosmos) the opening mark is on screen from frame 0: the frame never opens on the field
+  const plain = ctx.look.kinds?.quote?.card === false;
+  const mark = lay.mark ? [markNode(shot, ctx, lay, ox, oy, plain ? 0 : times.words[0]?.at ?? 0)] : [];
   const close = lay.close ? [closeMarkNode(shot, ctx, lay, ox, oy, times.words.at(-1)?.at ?? 0)] : [];
-  const attribution = lay.dropped.length ? [] : lay.pill ? [pillNode(shot, ctx, lay, ox, oy, times.by), by] : [rule, by];
+  const attribution = lay.dropped.length ? [] : lay.pill ? [pillNode(shot, ctx, lay, ox, oy, times.by), by] : [rule, by, ...attributionEarth(shot, ctx, lay, ox, attrY, times.by)];
   return { children: [...highlightBands(shot.id, placed, times.words, ctx, 'quote'), ...mark, quote, ...close, ...attribution], placed, attrY };
+}
+
+// The Earth mark hung before the attribution on its cap middle (data.earth, cosmos: the pale blue dot the quotation
+// names), a gutter clear of its first letter, arriving with it. [] without it.
+function attributionEarth(shot, ctx, lay, ox, attrY, at) {
+  const { look, unit } = ctx;
+  if (look.kinds?.quote?.earth !== true) return [];
+  const { layout, font } = lay.attr;
+  const cx = ox + lay.attrX - look.grid.gutter * unit - earthReach(look, unit);
+  const cy = attrY + layout.lines[0].y - (CAP_HEIGHT * font.size) / HALF;
+  return earthNodes(`${shot.id}.earth`, look, { cx, cy, unit, tracks: enterTracks(look, unit, at, { y: cy }) });
 }
 
 // The card growing with the text (data.grow, cosmos): its paper scaled down from its top edge to the height of the
@@ -230,6 +247,12 @@ function growingCard(card, hero, children, lay, times, ctx) {
   return node('group', hero, { ...card.props }, { tracks: card.tracks, children: [grow, ...children] });
 }
 
+// The quotation's children on the card (growing with the text where data.grow says so).
+function withCard(ctx, hero, box, lay, children, times, data) {
+  const card = cardOf(ctx, hero, box, 0);
+  return data.grow ? growingCard(card, hero, children, lay, times, ctx) : cardGroup(card, hero, children);
+}
+
 /** The desk quote: { nodes (the card group, the portrait), boxes } with the card group carrying the hero id. */
 export function expandDeskQuote(shot, ctx, data, times, hero) {
   const { look, canvas, unit, seed } = ctx;
@@ -247,11 +270,12 @@ export function expandDeskQuote(shot, ctx, data, times, hero) {
   // a look may centre the card across the grid (data.centred, cosmos: a card on the margin left the frame lopsided)
   const grid = editorialSpan(ctx, 1, look.grid.columns);
   const box = [data.centred ? grid.x + (grid.w - lay.w) / HALF : span.x, top, lay.w, lay.h];
-  // the card is on the desk from the shot's first frame (its words arrive as spoken): a shot never opens on the field alone
-  const card = cardOf(ctx, hero, box, 0);
-  const { children, placed, attrY } = cardChildren(shot, ctx, lay, times);
-  const group = data.grow ? growingCard(card, hero, children, lay, times, ctx) : cardGroup(card, hero, children);
+  // the card is on the desk from the shot's first frame (its words arrive as spoken): a shot never opens on the field
+  // alone; a look may set the quotation with no card (data.card false, cosmos: plain type on the field, a frosted card
+  // read as a web component), its texts in a group at the block's centre
   const cx = box[0] + lay.w / HALF, cy = box[1] + lay.h / HALF;
+  const { children, placed, attrY } = cardChildren(shot, ctx, lay, times);
+  const group = data.card === false ? node('group', hero, { x: cx, y: cy }, { children }) : withCard(ctx, hero, box, lay, children, times, data);
   const words = wordBoxes(placed.layout, cx + placed.x, cy + placed.y);
   const attr = lay.attr.layout;
   const boxes = {

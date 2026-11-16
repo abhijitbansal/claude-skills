@@ -1,17 +1,18 @@
 #!/usr/bin/env node
 // node scripts/beats.mjs <audio> [--out <file>.json] [--min-confidence 0.5] [--bpm <n> | --min-bpm <n> --max-bpm <n>]
 // Finds the beat grid of an audio file with ffmpeg and writes { "source", "bpm", "confidence", "beats": [seconds…] } to
-// <audio-stem>.beats.json beside the audio (or --out). Name that file in a spec's root `beats`, then write a keyframe `t`
-// or a cue `at` as "beat:<n>". Prints the path, then "<bpm> BPM, <count> beats". Exit 1 when no steady beat is found
+// <audio-stem>.beats.json beside the audio (or --out). Name that file in a film's `music: { src, beats }` so the film uses
+// this grid (a corrected tempo: --bpm) instead of detecting one; `music.snap: true` then moves the cuts of a film with no
+// narration onto its beats. Prints the path, then "<bpm> BPM, <count> beats". Exit 1 when no steady beat is found
 // (confidence under --min-confidence) or ffmpeg cannot decode the file; exit 2 for a usage problem. --bpm forces the
 // grid at that tempo (the confidence is then the fit of that tempo); --min-bpm and --max-bpm narrow the tempo search.
-import { closeSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
+// It never writes over the audio it reads, and replaces only an older beats file.
+import { lstatSync, realpathSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { UsageError } from '../shared/cli.mjs';
 import { didYouMean } from '../shared/errors.mjs';
 import { findFfmpeg } from './lib/ffmpeg.mjs';
-import { inputClashes } from './lib/paths.mjs';
-import { MAX_BEATS_FILE_BYTES } from './lib/beats-file.mjs';
+import { isBeatsFile, writeBeatsFile } from './v2/sound/beats-file.mjs';
 import { SAMPLE_RATE, MIN_BPM, MAX_BPM, BPM_LIMITS, DRIFT_LIMIT, minSeconds, checkAudioPath, decodePcm, detectBeats } from './lib/beats.mjs';
 
 const USAGE = 'usage: node scripts/beats.mjs <audio> [--out <file>.json] [--min-confidence 0.5] [--bpm <n> | --min-bpm <n> --max-bpm <n>]';
@@ -78,27 +79,30 @@ function checkAudioFile(audio) {
   if (!stat.isFile()) throw new UsageError(`cannot read ${audio}: not a regular file`);
 }
 
-// An existing file may be replaced only when it is itself a beats file (a JSON object with a `beats` array): a rerun
-// refreshes it, and a motion spec or any other .json is never overwritten by a mistyped --out.
-function isBeatsFile(file) {
+// A path as the file system it lives on would compare it: through its links where it exists (the folder where the file
+// does not yet), then folded the way a case-insensitive file system (macOS, Windows) folds names.
+function comparable(file) {
+  const resolved = path.resolve(file);
+  let real;
   try {
-    const { size } = statSync(file);
-    if (size === 0) return true; // an interrupted write left nothing worth keeping
-    if (size > MAX_BEATS_FILE_BYTES) return false;
-    const data = JSON.parse(readFileSync(file, 'utf8'));
-    return data !== null && typeof data === 'object' && Array.isArray(data.beats);
+    real = realpathSync(resolved);
   } catch {
-    return false;
+    try {
+      real = path.join(realpathSync(path.dirname(resolved)), path.basename(resolved));
+    } catch {
+      real = resolved; // neither the file nor its folder exists yet: nothing it could be the same file as
+    }
   }
+  return real.normalize('NFC').toUpperCase().toLowerCase();
 }
 
 // Where the beats go: --out, else <audio-stem>.beats.json beside the audio. Never the audio itself (or a file that
-// reaches it), never a folder or a symbolic link, always a .json file, and over an existing file only a beats file.
+// reaches it), never a folder or a symbolic link, always a .json file, and over an existing file only a beats file
+// (sound/beats-file.mjs isBeatsFile: a rerun refreshes it; a film or any other .json is never overwritten).
 function outputPath(opts) {
   const parsed = path.parse(path.resolve(opts.audio));
   const out = path.resolve(opts.out ?? path.join(parsed.dir, `${parsed.name}.beats.json`));
-  const [clash] = inputClashes([{ index: 0, out }], [{ file: opts.audio, what: 'the audio' }], { reader: 'this command', fix: 'choose another --out' });
-  if (clash) throw new UsageError(`--out: ${clash.message}`);
+  if (comparable(out) === comparable(opts.audio)) throw new UsageError(`--out: ${path.basename(out)} is a file this command reads (the audio); choose another --out`);
   if (path.extname(out).toLowerCase() !== '.json') throw new UsageError(`--out: ${path.basename(out)} is not a .json file; a beats file ends in .json`);
   let stat = null;
   try { stat = lstatSync(out); } catch { /* not there yet: fine */ }
@@ -106,26 +110,6 @@ function outputPath(opts) {
   if (stat?.isDirectory()) throw new UsageError(`--out: ${out} is a folder; name the .json file`);
   if (stat?.isFile() && !isBeatsFile(out)) throw new UsageError(`--out: ${path.basename(out)} exists and is not a beats file; choose another --out`);
   return out;
-}
-
-// One object, the beats on a single line: a long list stays readable in a diff and in a prompt.
-function beatsText({ source, bpm, confidence, beats }) {
-  const head = JSON.stringify({ source, bpm: round2(bpm), confidence: round2(confidence) }, null, 2).slice(0, -2);
-  return `${head},\n  "beats": ${JSON.stringify(beats)}\n}\n`;
-}
-
-// The file appears whole or not at all: written beside the target, then renamed onto it.
-function writeBeats(out, text) {
-  mkdirSync(path.dirname(out), { recursive: true });
-  const partial = path.join(path.dirname(out), `.${path.basename(out)}.${process.pid}.partial`);
-  rmSync(partial, { force: true });
-  closeSync(openSync(partial, 'wx'));
-  try {
-    writeFileSync(partial, text);
-    renameSync(partial, out);
-  } finally {
-    rmSync(partial, { force: true });
-  }
 }
 
 // The reason a failure gives, if there is one to give: a forced tempo whose grid drifts is a few percent off; a found
@@ -159,7 +143,7 @@ async function main() {
     return;
   }
   const source = path.relative(path.dirname(out), path.resolve(opts.audio)).split(path.sep).join('/');
-  writeBeats(out, beatsText({ source, bpm, confidence, beats }));
+  writeBeatsFile(out, { source, bpm, confidence, beats });
   process.stdout.write(`${out}\n${round2(bpm)} BPM, ${beats.length} beats\n`);
 }
 

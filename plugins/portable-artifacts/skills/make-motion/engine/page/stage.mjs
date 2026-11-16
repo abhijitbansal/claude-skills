@@ -111,7 +111,7 @@ function installApi({ fps, draw, post, source, measure, frameState, keys, setGra
 }
 
 async function init() {
-  const { film, timeline, assets: srcs } = await fetchJson('/film.json');
+  const { film, timeline, assets: srcs, prepared = {} } = await fetchJson('/film.json');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
   const [w, h] = canvasSize(film);
   const canvas = { w, h };
@@ -126,7 +126,7 @@ async function init() {
   await loadFaces(facesFor({ film, fonts: look.fonts, stamp: { family: STAMP_FAMILY } }));
   const assets = await loadAssets(srcs);
   const measure = createMeasure(document.createElement('canvas').getContext('2d'));
-  const built = buildFilm({ film, timeline, measure, assets, canvas, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE) });
+  const built = buildFilm({ film, timeline, measure, assets, canvas, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE), prepared });
   const { fps, frameCount } = timeline;
   let grain = look.post.grain; // what the post pass is using now (a test may change it)
 
@@ -152,7 +152,9 @@ async function init() {
   };
   installApi({ fps, draw, post, source, measure, frameState, keys, snapshotOf, snapshotShot, setGrain: (value) => { grain = value; } });
   const notice = post.unavailable ? { postNotice: { ...post.unavailable, dropped: post.dropped } } : {};
-  return { frameCount, fps, size: [w, h], post: post.kind, backgrounds: [...built.backgrounds], ...notice };
+  // the size each picture loaded at, by src: what a kind's review needs to know of a picture (scripts/v2/review.mjs)
+  const pictures = Object.fromEntries([...assets].map(([src, bitmap]) => [src, [bitmap.width, bitmap.height]]));
+  return { frameCount, fps, size: [w, h], post: post.kind, backgrounds: [...built.backgrounds], pictures, ...notice };
 }
 
 window.__ready = init();

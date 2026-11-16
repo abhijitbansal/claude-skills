@@ -8,12 +8,12 @@ import assert from 'node:assert/strict';
 import { registries } from '../../engine/registry.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { compositionRect, runInk } from '../../engine/kinds/shared.mjs';
-import { listEntries } from '../../scripts/v2/list.mjs';
 import { editorialBounds } from '../../engine/kinds/editorial.mjs';
 import { expandIn, filmOf, all, measure, near } from './helpers/kinds.mjs';
 
+// every kind's example from the registry (a listing may leave a kind out: --list kinds shows only the listed ones)
 const example = (name) => {
-  const raw = listEntries('kinds').find((e) => e.name === name).example;
+  const raw = registries.kinds.get(name).example;
   return raw.src ? { ...raw, src: 'shot.png' } : raw;
 };
 const cosmosTall = (shot) => expandIn(filmOf([shot], 'cosmos', '9:16', { mode: 'viral' }));
@@ -28,40 +28,24 @@ const unit = (out) => out.ctx.unit;
 
 // ---- number ----
 
-const orbitOf = (out, id) => ({ group: byId(out.nodes, `${id}.orbit`), ring: byId(out.nodes, `${id}.orbit.ring`), spin: byId(out.nodes, `${id}.orbit.spin`) });
-// The orbit ellipse's half axes from its path (M0 -b ... a 0 ...).
-const axesOf = (ring) => { const v = numbers(ring.props.d); return { a: Math.max(...v.filter((_, i) => i % 2 === 0)), b: -v[1] }; };
 const NINE = { id: 'n', show: 'number', say: 'Nine kinds.', value: 9, label: 'kinds of shot' };
 
-test('number: a tilted orbit in the accent, faint from the first frame, lit at the landing, its dot circling once over the count', () => {
-  const out = cosmosWide(NINE);
-  const look = registries.looks.get('cosmos');
-  const { group, ring, spin } = orbitOf(out, 'n');
-  assert.ok(group && ring && spin, 'an orbit');
-  assert.equal(group.props.rotate, look.kinds.number.orbit.tilt);
-  assert.equal(ring.props.stroke, look.palette.accent);
-  assert.equal(sample(ring.tracks.opacity, 0), look.kinds.number.orbit.faint, 'visible, faint, on the first frame');
-  assert.equal(sample(ring.tracks.opacity, out.timing.duration), look.kinds.number.orbit.lit);
-  const turn = spin.tracks.rotate.points;
-  assert.equal(turn[0].v, 0);
-  assert.equal(turn.find((p) => p.v === 360).t > turn[1].t, true, 'one whole turn as the count runs');
-  assert.ok(turn.at(-1).v > 360 && turn.at(-1).t >= out.timing.duration - 1e-9, 'and it keeps circling to the end of the shot');
-  // the sun at its focus: cosmos-sun.test.mjs
-  assert.equal(byId(deskWide(NINE).nodes, 'n.orbit'), undefined, 'desk has none');
+// gate round 3: the orbit (the Sun on its rim) gave way to a line from the sun to Earth (cosmos-gate3.test.mjs)
+test('number: the sky line is cosmos only; desk has no sun, line or Earth', () => {
+  assert.ok(byId(cosmosWide(NINE).nodes, 'n.line0'), 'cosmos draws the line');
+  for (const id of ['n.sun', 'n.line0', 'n.earth', 'n.light']) assert.equal(byId(deskWide(NINE).nodes, id), undefined, `desk has no ${id}`);
 });
 
-test('number: the orbit holds the figure with air, every corner of its cap box well inside the ellipse', () => {
-  for (const shot of [NINE, example('number')]) {
-    const out = cosmosTall(shot);
-    const { group, ring } = orbitOf(out, shot.id);
-    const { a, b } = axesOf(ring);
-    const [x, y, w, h] = out.boxes.value;
-    const t = (group.props.rotate * Math.PI) / 180;
-    for (const [px, py] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
-      const dx = px - group.props.x, dy = py - group.props.y;
-      const u = dx * Math.cos(t) + dy * Math.sin(t), v = -dx * Math.sin(t) + dy * Math.cos(t);
-      assert.ok((u / a) ** 2 + (v / b) ** 2 < 0.9, `${shot.id}: corner ${Math.round(px)},${Math.round(py)} inside with air`);
-    }
+test('number at 9:16: the example with its delta keeps the figure, label and delta in the line\'s break, inside the band', () => {
+  const shot = example('number');
+  const out = cosmosTall(shot);
+  const bounds = editorialBounds(out.ctx);
+  const [upper, lower] = [byId(out.nodes, `${shot.id}.line0`), byId(out.nodes, `${shot.id}.line1`)];
+  const yEnd = (seg) => numbers(seg.props.d)[3], yStart = (seg) => numbers(seg.props.d)[1];
+  for (const key of ['value', 'label', 'delta']) {
+    const [, y, , h] = out.boxes[key];
+    assert.ok(y > yEnd(upper) && y + h < yStart(lower), `${key} in the break`);
+    assert.ok(y >= bounds.top && y + h <= bounds.bottom, `${key} inside the band`);
   }
 });
 
@@ -93,13 +77,14 @@ test('list: a dot rail, one dot per item, the current item lit in the accent, th
 
 const HOME = { id: 'home', show: 'quote', say: 'That is here. That is home. That is us.', by: 'Carl Sagan', role: 'Pale Blue Dot, 1994' };
 
-test('quote: matching large accent opening and closing marks, one short sentence per line, plain lavender attribution', () => {
+test('quote: matching large lavender opening and closing marks, one short sentence per line, plain lavender attribution', () => {
   const out = cosmosWide(HOME);
   const look = registries.looks.get('cosmos');
   const open = byId(out.nodes, 'home.mark'), close = byId(out.nodes, 'home.close'), text = byId(out.nodes, 'home.text');
   assert.ok(open && close && text);
   assert.equal(close.props.font.size, open.props.font.size, 'matching marks');
-  assert.equal(close.props.fill, look.palette.accent);
+  // gate round 3: gold is only for light, so the marks are the lavender (look.kinds.quote.markFill)
+  assert.equal(close.props.fill, look.palette.ink2);
   assert.deepEqual(linesOf(text), ['That is here.', 'That is home.', 'That is us.']);
   assert.equal(byId(out.nodes, 'home.pill'), undefined, 'no pill');
   assert.equal(byId(out.nodes, 'home.by').props.fill, look.palette.ink2, 'plain lavender text');
@@ -123,7 +108,8 @@ test('chart: marks in the lavender (accent2 is the lavender) with rounded far en
   const glow = byId(out.nodes, `${shot.id}.mark.${hl}.glow`);
   assert.equal(glow.props.blend, 'screen');
   assert.deepEqual({ ...glow.props.glow }, { color: look.palette.accent, alpha: glow.props.glow.alpha, radius: look.kinds.chart.glow * unit(out) });
-  assert.equal(byId(out.nodes, `${shot.id}.mark.${hl}.accent`).props.fill, look.palette.accent);
+  // gate round 3: the lit bar is ink, gold only its light
+  assert.equal(byId(out.nodes, `${shot.id}.mark.${hl}.accent`).props.fill, look.palette.ink);
   assert.equal(byId(deskWide(shot).nodes, `${shot.id}.mark.${hl}.glow`), undefined);
 });
 
@@ -144,16 +130,19 @@ test('end: a wordmark in the display weight with no pill outline, the ask readab
     const shot = example('end');
     const out = expand(shot);
     const mark = byId(out.nodes, `${shot.id}.mark.text`);
+    const title = byId(out.nodes, `${shot.id}.title`) ?? all(out.nodes).find((n) => n.props.role === 'hero');
+    // gate round 3: the mark is judged by the hero rule, so a title that cannot be set at the hero floor drops it with the ask
+    if (!mark) { assert.deepEqual(title.props.dropped, ['ask', 'mark'], 'what is left out is said so'); continue; }
     assert.equal(mark.props.font.weight, look.fonts.display.weight, 'display weight');
     assert.equal(byId(out.nodes, `${shot.id}.mark.ring`), undefined, 'no outline round the mark: not a button');
-    const title = byId(out.nodes, `${shot.id}.title`) ?? all(out.nodes).find((n) => n.props.role === 'hero');
     const ask = byId(out.nodes, `${shot.id}.ask`);
     if (!ask) { assert.deepEqual(title.props.dropped, ['ask'], 'an ask left out is said so'); continue; }
     assert.ok(ask.props.font.size >= look.secondary.min * out.ctx.unit - 1e-9, `ask ${ask.props.font.size}`);
     const descent = title.props.y + title.props.layout.lines.at(-1).y + 0.25 * title.props.font.size;
     const askCap = ask.props.y + ask.props.layout.lines[0].y - 0.72 * ask.props.font.size;
     assert.ok(askCap - descent >= 0.2 * title.props.font.size, `${askCap} vs descenders at ${descent}`);
-    assert.ok(Math.abs(mark.props.x + mark.props.layout.lines[0].x + mark.props.layout.lines[0].width / 2 - out.canvas.w / 2) < 0.05 * out.canvas.w, 'centred on the frame');
+    // centred under the sun on a tall frame; flush left beside it on a wide one (cosmos-gate3.test.mjs)
+    if (expand === cosmosTall) assert.ok(Math.abs(mark.props.x + mark.props.layout.lines[0].x + mark.props.layout.lines[0].width / 2 - out.canvas.w / 2) < 0.05 * out.canvas.w, 'centred on the frame');
   }
 });
 
@@ -294,7 +283,8 @@ test('statement: the look sun lights as the emphasised words are spoken (its pla
   const out = cosmosWide(LIGHT);
   const sun = byId(out.nodes, 'l.sun');
   assert.ok(sun, 'a sun');
-  assert.equal(sample(sun.tracks.opacity, 0), 0);
+  // gate round 3: it lights by growing from a point (sun.mjs), not by a fade
+  assert.equal(sample(sun.tracks.scale, 0), 0);
   assert.equal(byId(deskWide(LIGHT).nodes, 'l.sun'), undefined, 'desk has none');
 });
 
@@ -333,12 +323,13 @@ const radiusOf = (n) => { const v = numbers(n.props.d); return Math.max(...v.map
 test('compare with two numbers draws scale: the dot and the sun in the true ratio, the smaller at least a visible dot, the ratio printed', () => {
   for (const out of [cosmosWide(SUN), cosmosTall(SUN)]) {
     const look = registries.looks.get('cosmos');
-    const small = byId(out.nodes, 'sun.left.dot'), big = byId(out.nodes, 'sun.right.sun');
+    // gate round 3: the smaller disc at the floor is the Earth mark (its dot), the headline names its subject
+    const small = byId(out.nodes, 'sun.left.earth.dot'), big = byId(out.nodes, 'sun.right.sun');
     assert.ok(small && big, 'a dot and the sun');
     const ratio = big.props.radial.r / radiusOf(small);
     assert.ok(Math.abs(ratio - 1392700 / 12742) / (1392700 / 12742) < 0.01, `true ratio: ${ratio.toFixed(1)}`);
     assert.ok(2 * radiusOf(small) >= look.kinds.compare.discs.minDot * out.ctx.unit - 1e-6, 'a visible dot');
-    assert.equal(byId(out.nodes, 'sun.ratio').props.layout.lines[0].words.map((w) => w.text).join(' '), '109\u00d7');
+    assert.match(byId(out.nodes, 'sun.ratio').props.layout.lines.map((l) => l.words.map((w) => w.text).join(' ')).join(' '), /^The Sun is 109\u00d7$/);
     assert.equal(byId(out.nodes, 'sun.vs'), undefined, 'no cards, no vs');
   }
 });
@@ -360,9 +351,10 @@ test('compare: plainly numeric strings ("12,742") draw scale too; values with wo
 });
 
 test('statement at 16:9: a longer emphasised run stays on one line when any size allows it', () => {
-  const out = cosmosWide({ id: 'r', show: 'statement', say: 'The sunlight on *your face is eight minutes* old.' });
+  // gate round 3: the text starts beside the sun (columns 4 to 12), so the run is one that fits that measure
+  const out = cosmosWide({ id: 'r', show: 'statement', say: 'All the light on *your face is old* now.' });
   const lines = linesOf(byId(out.nodes, 'r.text'));
-  assert.ok(lines.some((l) => l.includes('your face is eight minutes')), lines.join(' / '));
+  assert.ok(lines.some((l) => l.includes('your face is old')), lines.join(' / '));
 });
 
 test('quote: short sentences each take their own line even where two would fit on one', () => {

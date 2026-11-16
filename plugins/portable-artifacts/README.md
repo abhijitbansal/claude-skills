@@ -306,6 +306,9 @@ Everything this plugin depends on is open source:
 | [lottie-web](https://github.com/airbnb/lottie-web) 5.13.0 (make-motion's `lottie` element; the page loads only its light SVG build, `build/player/esm/lottie_light.min.js`) | MIT |
 | [world-atlas](https://github.com/topojson/world-atlas) 2.0.2 (Natural Earth TopoJSON; make-motion's bundled world maps; the page fetches only `countries-110m.json` and `countries-50m.json`) | ISC |
 | [us-atlas](https://github.com/topojson/us-atlas) 3.0.1 (US Census TopoJSON; make-motion's bundled US maps; the page fetches only `states-10m.json` and `counties-10m.json`) | ISC |
+| [d3-geo](https://github.com/d3/d3-geo) 3.1.1 (`d3-geo`, with `d3-array` and `internmap`; make-motion 2 projects its maps with it in Node, never in the page) | ISC |
+| [topojson-client](https://github.com/topojson/topojson-client) 3.1.0 (`topojson-client`; make-motion 2 reads the atlases with it in Node, never in the page) | ISC |
+| `commander` 2.20.3 (topojson-client's command-line tools, installed, never run or served) | MIT |
 | shiki's other dependencies, installed by npm but never served to the page (`@shikijs/themes`, `@shikijs/engine-oniguruma`, `mdast-util-to-hast`, `micromark-util-*`, `unist-util-*`, `vfile`, `vfile-message`, `devlop`, `dequal`, `trim-lines`, `@types/hast`, `@types/mdast`, `@types/unist`) | MIT |
 | `@ungap/structured-clone` (a shiki dependency, installed, never served) | ISC |
 | [Playwright](https://playwright.dev) | Apache-2.0 |

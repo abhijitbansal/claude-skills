@@ -65,8 +65,26 @@ export function loudnessLimiter() {
 // check.mjs needs only the browser (it captures no video), so `check` leaves ffmpeg, kokoro and cutout out. A spec with a video
 // element is the exception (check decodes its frames with ffmpeg); `--for <spec.json>` asks for ffmpeg.
 export const targets = ['check', 'voiceover', 'cutout'];
+
+// A version 2 film whose narration the synthesiser speaks (`voice: { name }`) cannot render without the voice package,
+// so `--for <film.json>` asks for it as required. A film read here is data: only these two fields are looked at.
+function synthesisedVoice(specPath) {
+  let film;
+  try {
+    film = JSON.parse(fs.readFileSync(specPath, 'utf8'));
+  } catch (err) {
+    throw new Error(`cannot read ${specPath} as a film: ${String(err.message).split('\n')[0]}`, { cause: err });
+  }
+  return film?.version === 2 && typeof film.voice?.name === 'string';
+}
+const isSpecPath = (target) => typeof target === 'string' && target.endsWith('.json') && !targets.includes(target);
+
 // Optional in every target: the cheap-model agent file the SKILL.md may hand the build to.
-export const requirementsFor = (target) => (target === 'check'
+export const requirementsFor = (target) => (isSpecPath(target) && synthesisedVoice(target)
+  ? [...baseRequirementsFor(target), { ...kokoro(), required: true }]
+  : baseRequirementsFor(target));
+
+const baseRequirementsFor = (target) => (target === 'check'
   ? [nodeVersion(20), nodeModules({ omitDev: false }), browser({ required: true }), builderAgent()]
   : [
     nodeVersion(20),

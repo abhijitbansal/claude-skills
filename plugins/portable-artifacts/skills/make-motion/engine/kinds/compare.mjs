@@ -145,6 +145,7 @@ registries.kinds.add(KIND, {
   ],
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...sideProblems(shot), ...kindSupportProblems(KIND, look)],
   expand: expandCompare,
+  lookData: true, // a look ships it only with a kinds.compare entry (engine/looks/index.mjs listedKinds)
   numbered: (shot) => shot.kicker !== undefined, // with a kicker, a slug (desk) that counts among the numbered shots
   showsWords: true, // its sides restate the narration: never captioned (engine/captions)
   // the second side's arrival as a device event named `turn`, in shot seconds (for the cue plan: scripts/v2/sound/events.mjs)

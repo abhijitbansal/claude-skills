@@ -464,7 +464,7 @@ test('words that cannot be matched to the say are an invalid film at voice.words
 const makeOutline = (folder, film = FILM) => {
   const specPath = path.join(folder, 'film.json');
   writeFileSync(specPath, JSON.stringify(film));
-  return runMake({ specPath, out: path.join(folder, 'out', 'film.mp4'), exact: false, noRender: true, outline: true }, {
+  return runMake({ specPath, out: path.join(folder, 'out', 'film.mp4'), exact: false, noRender: true, outline: false, outlineMeasured: true }, {
     synthesise: () => { throw new Error('an own recording is never synthesised'); },
   });
 };

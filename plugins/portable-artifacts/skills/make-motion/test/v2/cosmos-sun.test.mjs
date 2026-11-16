@@ -82,33 +82,8 @@ test('sun: the statement, number and end kinds put their sun on the format ancho
   }
 });
 
-test('sun: the number orbit has the sun at its focus in both formats', () => {
-  for (const expand of [wide, tall]) {
-    const out = expand(COUNT);
-    const g = byId(out.nodes, 'n.orbit');
-    const { a, b } = g.props.axes;
-    const c = Math.sqrt(Math.abs(a * a - b * b));
-    // the focus on the major axis, toward the sun: along x for a wide orbit, up the frame for a tall one
-    const t = (g.props.rotate ?? 0) * RAD;
-    const [fx, fy] = a >= b ? [-c, 0] : [0, -c];
-    const focus = { x: g.props.x + fx * Math.cos(t) - fy * Math.sin(t), y: g.props.y + fx * Math.sin(t) + fy * Math.cos(t) };
-    const sun = sunAnchor(look, out.ctx);
-    assert.ok(Math.hypot(focus.x - sun.cx, focus.y - sun.cy) < 2, `${out.ctx.canvas.w}: focus ${JSON.stringify(focus)} sun ${JSON.stringify(sun)}`);
-  }
-});
-
-test('number at 9:16: recomposed tall, a tall ellipse inside the safe zone, the figure large in its lower middle, the label under it', () => {
-  const out = tall({ ...COUNT, say: 'Eight minutes.', value: 8, suffix: 'min', label: 'from the Sun to you' });
-  const span = editorialSpan(out.ctx, 1, look.grid.columns);
-  const g = byId(out.nodes, 'n.orbit');
-  const { a, b } = g.props.axes;
-  assert.ok(b > 1.4 * a, `a tall ellipse: ${a} x ${b}`);
-  assert.ok(g.props.x - a >= span.x - 1 && g.props.x + a <= span.x + span.w + 1, 'inside the safe width: nothing in the right rail');
-  assert.ok(g.props.y - b >= 0.04 * out.ctx.canvas.h, 'clear of the top edge');
-  const [, fy, , fh] = out.boxes.value;
-  assert.ok(fy + fh / 2 > g.props.y, 'the figure in the lower half of the ellipse');
-  assert.ok(out.boxes.label[1] > fy + fh, 'the label under the figure');
-});
+// gate round 3: the number's orbit (the sun on its rim) gave way to a line from the sun to Earth: its tests are in
+// cosmos-gate3.test.mjs
 
 test('number: a count never opens on a bare zero with its unit (review C I11: nor on any step short of the final digit count)', () => {
   for (const expand of [wide, tall]) {
@@ -135,39 +110,38 @@ const groupBox = (nodes, side) => {
   return [x0, y0, Math.max(...bs.map((b) => b[0] + b[2])) - x0, Math.max(...bs.map((b) => b[1] + b[3])) - y0];
 };
 
-test('sizes: the large disc is the same sun, gold from its first frame, with a bloom; Earth a dot with a ring', () => {
+// gate round 3: the sun grows in at the turn (its `rise` group moves; the body itself has no placeholder state), Earth
+// is the Earth mark; the reveal and the axis are tested in cosmos-gate3.test.mjs
+test('sizes: the large disc is the same sun, gold whenever it is on screen, with a bloom; Earth a dot with a ring', () => {
   for (const expand of [wide, tall]) {
     const out = expand(SIZES);
     const body = byId(out.nodes, 'z.right.sun');
     assert.ok(body, 'the Sun drawn as the sun');
     assert.equal(body.props.radial.stops[0][2], look.sun.core, 'a soft inner gradient toward the core colour');
     assert.equal(body.props.radial.stops.at(-1)[2], look.sun.limb, 'the gold limb at its edge');
-    assert.deepEqual(body.tracks ?? {}, {}, 'no placeholder state: gold from the first frame');
+    assert.deepEqual(body.tracks ?? {}, {}, 'no placeholder state: gold whenever it shows');
     assert.ok(byId(out.nodes, 'z.right.sun.bloom'), 'a bloom past the limb');
-    const dot = byId(out.nodes, 'z.left.dot'), ring = byId(out.nodes, 'z.left.ring');
+    const dot = byId(out.nodes, 'z.left.earth.dot'), ring = byId(out.nodes, 'z.left.earth.ring');
     assert.ok(dot && ring && ring.props.stroke, 'Earth: a dot with a ring round it');
   }
 });
 
-test('sizes: one headline with the Sun group ("109×", or the ratioLabel), groups name over number over unit in three styles', () => {
+test('sizes: one headline naming the Sun, groups number over unit (the Sun\'s name in the headline), in three styles', () => {
   for (const expand of [wide, tall]) {
     const out = expand({ ...SIZES, ratioLabel: '× wider' });
     const head = byId(out.nodes, 'z.ratio');
-    assert.equal(head.props.layout.lines.map((l) => l.words.map((w) => w.text).join(' ')).join(' '), '109× wider');
+    assert.equal(head.props.layout.lines.map((l) => l.words.map((w) => w.text).join(' ')).join(' '), 'The Sun is 109× wider');
     const floor = look.secondary.min * out.ctx.unit;
     assert.ok(head.props.font.size >= 3 * floor, 'the hero over the floor');
-    for (const side of ['left', 'right']) {
-      const [name, value, unitText] = ['title', 'value', 'points'].map((p) => byId(out.nodes, `z.${side}.${p}`));
-      assert.ok(name.props.y < value.props.y && value.props.y < unitText.props.y, `${side}: name, number, unit`);
-      assert.equal(new Set([name.props.font.weight, value.props.font.weight, unitText.props.font.weight]).size, 3, 'three weights');
-      assert.ok(name.props.font.size >= floor - 1e-9 && unitText.props.font.size >= floor - 1e-9, 'secondary at the floor');
-    }
+    const [name, value, unitText] = ['title', 'value', 'points'].map((p) => byId(out.nodes, `z.left.${p}`));
+    assert.ok(name.props.y < value.props.y && value.props.y < unitText.props.y, 'Earth: name, number, unit');
+    assert.equal(new Set([name.props.font.weight, value.props.font.weight, unitText.props.font.weight]).size, 3, 'three weights');
+    assert.ok(name.props.font.size >= floor - 1e-9 && unitText.props.font.size >= floor - 1e-9, 'secondary at the floor');
+    assert.equal(byId(out.nodes, 'z.right.title'), undefined, 'the headline names the Sun');
     const [sun, earth] = [groupBox(out.nodes, 'right'), groupBox(out.nodes, 'left')];
     const hb = boxOf(head);
-    const gapTo = (b) => Math.max(b[1] - (hb[1] + hb[3]), hb[1] - (b[1] + b[3]), b[0] - (hb[0] + hb[2]), hb[0] - (b[0] + b[2]));
-    assert.ok(gapTo(sun) < gapTo(earth), 'the headline set by the Sun group, apart from Earth');
-    const apart = Math.max(sun[0] - (earth[0] + earth[2]), earth[0] - (sun[0] + sun[2]), sun[1] - (earth[1] + earth[3]), earth[1] - (sun[1] + sun[3]));
-    assert.ok(apart >= floor, `two clearly separated groups (${apart})`);
+    const apart = (a, b) => Math.max(a[1] - (b[1] + b[3]), b[1] - (a[1] + a[3]));
+    assert.ok(apart(sun, hb) >= 0.25 * head.props.font.size && apart(earth, hb) >= 0.25 * head.props.font.size, 'the groups clear of the headline');
   }
 });
 

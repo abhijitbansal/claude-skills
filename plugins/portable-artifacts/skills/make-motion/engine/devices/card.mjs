@@ -70,6 +70,16 @@ function shadowNode(id, d, look, unit) {
   });
 }
 
+// The look's shadow under a rounded card (cosmos) without a blur filter: a soft-edged rounded rectangle of stacked
+// rings (shared.mjs softRoundedRect) inset by half the shadow's blur, its edge falling off over the whole blur, where a
+// blurred copy's would.
+function softShadow(id, [w, h], radius, look, unit) {
+  const { dx, dy, blur, alpha, color } = look.shadow;
+  const reach = blur * unit, inset = reach / HALF;
+  const rect = [-w / HALF + inset + dx * unit, -h / HALF + inset + dy * unit, Math.max(0, w - reach), Math.max(0, h - reach)];
+  return softRoundedRect({ id: `${id}.shadow`, rect, radius: Math.max(0, radius - inset), reach, alpha, fill: colourOf(look, color) });
+}
+
 // A faint ground glow behind a card (style.ground: { color, alpha, blur and dy units }, cosmos): the card's outline
 // again, set down by `dy`, its canvas glow in `color` alone (draw.mjs path glow `only`: no fill), screened: light
 // pooling behind the card.
@@ -90,7 +100,7 @@ function roundedCard({ id, box, at, look, unit }, style) {
   const sheenRect = [-w / HALF + reach, -h / HALF + reach, Math.max(0, w - HALF * reach), Math.max(0, h * SHEEN.height - reach)];
   const parts = [
     ...groundGlow(id, d, fill, look, unit, style.ground),
-    shadowNode(id, d, look, unit),
+    softShadow(id, [w, h], radius, look, unit),
     node('path', `${id}.paper`, { d, fill }),
     softRoundedRect({ id: `${id}.sheen`, rect: sheenRect, radius: Math.max(0, radius - reach), reach, alpha: SHEEN.alpha, fill: lighten(fill, SHEEN.lighter) }),
     node('path', `${id}.edge`, { d, stroke: lighten(fill, EDGE.lighter), strokeWidth: EDGE.width * unit }),

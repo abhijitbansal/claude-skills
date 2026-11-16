@@ -177,12 +177,13 @@ function writeStderr(text) {
 }
 
 /**
- * @param {{ film: object, timeline: object, specDir: string, onError?: (err: Error) => void }} opts
- *   specDir: the folder the film's src paths are relative to. onError: told of every failure the server meets after it
+ * @param {{ film: object, timeline: object, specDir: string, prepared?: object, onError?: (err: Error) => void }} opts
+ *   specDir: the folder the film's src paths are relative to. prepared: the prepared shot data (scripts/v2/prepare), sent
+ *   with the film in /film.json. onError: told of every failure the server meets after it
  *   starts (a request that threw, a server error); each is also written to stderr, and none reaches a client.
  * @returns {Promise<{ url: string, close(): Promise<void>, server: import('node:http').Server }>} server is for tests
  */
-export async function startV2Server({ film, timeline, specDir, onError }) {
+export async function startV2Server({ film, timeline, specDir, prepared = {}, onError }) {
   if (!film || !Array.isArray(film.shots)) throw new TypeError('startV2Server: film must have a shots array');
   if (!timeline || !Array.isArray(timeline.shots)) throw new TypeError('startV2Server: timeline must have a shots array (see buildTimeline)');
   if (typeof specDir !== 'string') throw new TypeError('startV2Server: specDir must be a path');
@@ -197,7 +198,7 @@ export async function startV2Server({ film, timeline, specDir, onError }) {
       writeStderr(`v2 server: onError threw: ${callbackErr?.stack ?? callbackErr}\n`);
     }
   };
-  const ctx = { assets: files, filmJson: JSON.stringify({ film, timeline, assets: srcs }), allowedHosts: new Set(), report };
+  const ctx = { assets: files, filmJson: JSON.stringify({ film, timeline, assets: srcs, prepared }), allowedHosts: new Set(), report };
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {
     server.once('error', reject);

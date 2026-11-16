@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildTimeline } from '../../../engine/script/timing.mjs';
 import { openSession } from '../../../scripts/v2/session.mjs';
+import { prepareFilm } from '../../../scripts/v2/prepare/index.mjs';
 import { findFfmpeg } from '../../../scripts/lib/ffmpeg.mjs';
 import { launchBrowser } from '../../../scripts/lib/browser.mjs';
 
@@ -13,11 +14,13 @@ export const DEFAULT_FPS = 30;
 export const HERE = path.dirname(fileURLToPath(import.meta.url));
 const required = () => process.env.PA_REQUIRE_BROWSER === '1';
 
-/** A session on `film` (fps defaults to 30), or null when there is no browser and none is required. */
+/** A session on `film` (fps defaults to 30), or null when there is no browser and none is required. The film is prepared
+ *  first (scripts/v2/prepare), as make does, for the kinds that need a Node-only library. */
 export async function sessionOrNull(film, { specDir = HERE, ...options } = {}) {
   const timeline = buildTimeline(film, { fps: film.fps ?? DEFAULT_FPS });
+  const { prepared } = prepareFilm(film, { filmDir: specDir });
   try {
-    return await openSession({ film: { fps: DEFAULT_FPS, ...film }, timeline, specDir }, options);
+    return await openSession({ film: { fps: DEFAULT_FPS, ...film }, timeline, specDir, prepared }, options);
   } catch (err) {
     if (NO_BROWSER.test(err.message) && !required()) return null;
     throw err;

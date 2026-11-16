@@ -82,7 +82,11 @@ export function pinnedCards(nodes, duration) {
 
 // ---- a shot's captions ----
 
-const captioned = (kind, ctx) => kind.showsWords !== true && ctx.timing.words.length > 0;
+/** Does `kind` show the narration of `shot` itself? Its `showsWords`: true, or a function of the shot (media: only
+ *  when it has a caption). */
+export const showsWordsOf = (kind, shot) => (typeof kind.showsWords === 'function' ? kind.showsWords(shot) === true : kind.showsWords === true);
+
+const captioned = (kind, ctx, shot) => !showsWordsOf(kind, shot) && ctx.timing.words.length > 0;
 
 /**
  * The ctx a shot's kind composes in. A captioned shot whose look composes inside the platform safe zone (compositionRect
@@ -92,7 +96,7 @@ const captioned = (kind, ctx) => kind.showsWords !== true && ctx.timing.words.le
  * @param {object} film @param {object} kind @param {object} ctx the shot's ctx (shotContext)
  */
 export function kindContext(film, kind, ctx) {
-  if (!ctx.viralInsets || !captionsOn(film, ctx.mode) || !captioned(kind, ctx)) return ctx;
+  if (!ctx.viralInsets || !captionsOn(film, ctx.mode) || !captioned(kind, ctx, film.shots[ctx.timing.index])) return ctx;
   const rect = compositionRect(ctx);
   if (!rect.safe) return ctx;
   const zone = registries.captions.get(ctx.look.captions).zone(ctx);
@@ -107,7 +111,7 @@ export function kindContext(film, kind, ctx) {
  *   kind's nodes; camera: the shot's camera, (t) => { x, y, zoom, rotate } (graph/film.mjs), for where its marks stand
  */
 export function shotCaptions(shot, ctx, { kind, hero, filmStart, nodes, camera }) {
-  if (!captioned(kind, ctx)) return [];
+  if (!captioned(kind, ctx, shot)) return [];
   const style = registries.captions.get(ctx.look.captions);
   const ids = markIds(shot);
   const marks = marksOver(nodes, camera, ctx.canvas, ctx.timing.duration, ids);

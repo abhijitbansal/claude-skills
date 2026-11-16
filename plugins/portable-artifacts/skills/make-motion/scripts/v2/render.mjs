@@ -18,6 +18,8 @@ import { registries } from '../../engine/registry.mjs';
 import '../../engine/modes/index.mjs'; // registers the modes whose loudness a voiced film is mastered to
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
+import { withStamp } from './stamp.mjs';
+import { captureParallel, workerRanges } from './workers.mjs';
 
 // The voice steps, loaded only for a voiced film: a silent film imports nothing of the voice (nor version 1's loudness
 // module, which brings its whole spec validator, about 200 ms of loading measured on the dev machine).
@@ -48,11 +50,15 @@ export const ENCODER = Object.freeze({ preset: 'medium', crf: 23, tune: 'film' }
  * range, since a JPEG decodes to full-range YUV) into H.264 yuv420p. Built here rather than from the version 1 helper,
  * which cannot express a crf or a tune.
  */
-export function encoderArgs({ fps, out, exact }) {
+export function encoderArgs({ fps, out, exact, stamp = [] }) {
   const input = ['-y', '-f', 'image2pipe', '-framerate', String(fps), '-c:v', exact ? 'png' : 'mjpeg', '-i', '-', ...(exact ? [] : JPEG_RANGE_FILTER)];
   const video = ['-c:v', 'libx264', '-preset', ENCODER.preset, '-crf', String(ENCODER.crf), '-tune', ENCODER.tune, '-pix_fmt', 'yuv420p', '-movflags', '+faststart'];
-  return [...input, ...video, out];
+  return [...input, ...video, ...stamp, out];
 }
+
+// The runner for the mux of a film with sound: the stamp goes on the one command that writes `out` (voice/master.mjs
+// muxVoice also measures the finished file through the same runner, and that command is left as it is).
+const stampedRunner = (run, out, stamp) => (args) => run(args.at(-1) === out ? withStamp(args, stamp) : args);
 
 // A promise that rejects when `signal` aborts (never settles without one); a stalled ffmpeg must not hold a stop request.
 function abortion(signal) {
@@ -139,8 +145,21 @@ async function encodeFrames({ session, encoder, exact, signal, onProgress }) {
   return captured;
 }
 
+// --workers: the first page plus one opened through openPage per further range (workers.mjs), closed after.
+async function encodeWithWorkers({ session, encoder, exact, signal, onProgress, workers, openPage }) {
+  const frames = session.timeline.frameCount;
+  const extra = [];
+  try {
+    for (let k = 1; k < workerRanges(frames, workers).length; k++) extra.push(await openPage());
+    const pages = [session.page, ...extra.map((s) => s.page)];
+    return await captureParallel({ pages, frames, capture: (page) => capture(page, exact), write: (buffer) => encoder.write(buffer), onProgress, signal });
+  } finally {
+    await Promise.all(extra.map((s) => s.close()));
+  }
+}
+
 // Whether the run's sound plan has anything to put in the film: a cue track or music.
-const hasSound = (sound) => Boolean(sound?.cues) || Boolean(sound?.music);
+const hasSound = (sound) => Boolean(sound?.cues) || Boolean(sound?.music) || (sound?.tracks?.length ?? 0) > 0;
 
 // The mode's loudness targets for a film with a voice or sound (validateMode required them when the mode registered); a
 // voiced film rendered without its voice is refused, never rendered silent as if it had none. null: nothing to master.
@@ -151,16 +170,18 @@ function loudnessFor(film, voice, sound) {
 }
 
 // The report's audio: the level measured in the finished file, with what the sound plan put in it.
-const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, music: sound?.music?.summary ?? null });
+const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, music: sound?.music?.summary ?? null, ...(sound?.tracks?.length > 0 ? { tracks: sound.tracks.length } : {}) });
 
 /**
  * @param {{ specPath?: string, out: string, exact?: boolean, onProgress?: (p: { frame: number, frames: number, captured: number }) => void,
- *   session?: object, signal?: AbortSignal, voice?: { dir: string, sidecar: object },
+ *   session?: object, signal?: AbortSignal, voice?: { dir: string, sidecar: object }, stamp?: string[],
  *   sound?: { cues: { file: string, count: number } | null, music: { file: string, recording: boolean, fadeFrom: number | null,
  *   duck: object[], summary: object } | null } }} opts a session (openSession) is used and left open when given;
  *   otherwise the film at specPath is loaded and opened here and closed after. exact: PNG capture (default: JPEG at quality
  *   98). voice: what the voice stage made, required for a film with `voice`. sound: the run's sound plan (run.mjs: the cue
  *   track and the music, as files in the run's work folder), mixed with the voice into one master (voice/master.mjs).
+ *   stamp: the provenance tags as ffmpeg arguments (stamp.mjs stampArgs), written by the last step that writes the
+ *   output: the encode of a film with neither a voice nor sound, else the mux.
  * @returns {Promise<{ out: string, frames: number, captured: number, seconds: number, msPerFrame: number, capture: 'fast' | 'exact', post: string, bytes: number, mbps: number,
  *   audio: { lufs: number | null, truePeakDb: number | null, note: string | null, cues: number, music: object | null } | null }>}
  *   audio: the sound as measured in the finished file (lufs null, with a note, when it is too short to measure), with the
@@ -169,7 +190,7 @@ const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, mu
  *   the render (voice/master.mjs judgeLevel): the AAC encode of the master is judged before any frame is captured, and
  *   the finished file again after the mux (the same stream, copied).
  */
-export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice, sound }) {
+export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice, sound, stamp = [], workers = 1, openPage }) {
   const ffmpeg = await findFfmpeg();
   const own = session === undefined;
   const loaded = own ? loadFilm(specPath) : null;
@@ -190,7 +211,7 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     mkdirSync(path.dirname(out), { recursive: true });
     sweepPartials(path.dirname(out));
     if (steps !== null) work = mkdtempSync(path.join(tmpdir(), 'mm-voice-'));
-    const master = (headroomDb) => steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work, cues: sound?.cues ?? undefined, music: sound?.music ?? undefined, headroomDb });
+    const master = (headroomDb) => steps.masterTrack({ run, voice, timeline: open.timeline, loudness, workDir: work, cues: sound?.cues ?? undefined, music: sound?.music ?? undefined, tracks: sound?.tracks ?? [], headroomDb });
     // Before any frame is captured: the master encoded to the AAC the film ships (raised by what AAC took from it, and
     // mastered again with room for that when it peaks at the ceiling: encodeToTarget), and that encode judged with the
     // finished file's rule, so a film that would fail after the capture fails here. The mux copies this stream, so the
@@ -199,17 +220,17 @@ export async function renderFilm({ specPath, out, exact = false, onProgress, ses
     // A shortfall the last-stage hold caused (heldFrom: the level it lowered from) is noted, not refused.
     const judgement = { noVoice: !narrated, heldFrom: encoded?.heldFrom ?? null };
     if (encoded !== null) steps.judgeLevel(encoded.level, loudness, subject, judgement);
-    encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact })], signal);
-    const captured = await encodeFrames({ session: open, encoder, exact, signal, onProgress });
+    encoder = startEncoder(ffmpeg, [...QUIET, ...encoderArgs({ fps: open.timeline.fps, out: partial, exact, stamp: steps === null ? stamp : [] })], signal);
+    const captured = workers > 1 && openPage ? await encodeWithWorkers({ session: open, encoder, exact, signal, onProgress, workers, openPage }) : await encodeFrames({ session: open, encoder, exact, signal, onProgress });
     await encoder.finish();
     encoder = null;
-    const audio = encoded === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run, video: partial, audio: encoded.file, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
+    const audio = encoded === null ? null : audioOf(steps.judgeLevel(await steps.muxVoice({ run: stampedRunner(run, muxed, stamp), video: partial, audio: encoded.file, out: muxed, duration: open.timeline.duration }), loudness, undefined, judgement), sound);
     renameSync(audio === null ? partial : muxed, out);
     const seconds = (performance.now() - started) / MS_PER_SECOND;
     const frames = open.timeline.frameCount;
     const bytes = statSync(out).size;
     const mbps = (bytes * BITS_PER_BYTE) / (frames / open.timeline.fps) / MEGA;
-    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps, audio };
+    return { out, frames, captured, seconds, msPerFrame: (seconds * MS_PER_SECOND) / frames, capture: exact ? 'exact' : 'fast', post: open.info.post, bytes, mbps, audio, workers: workers > 1 && openPage ? Math.min(workers, frames) : 1 };
   } finally {
     if (encoder) await encoder.stop();
     rmSync(partial, { force: true });

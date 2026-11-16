@@ -6,6 +6,7 @@ import path from 'node:path';
 import Ajv from 'ajv';
 import { registries as defaultRegistries } from '../../engine/registry.mjs';
 import { validateMode } from '../../engine/modes/index.mjs';
+import { listedKinds } from '../../engine/looks/index.mjs';
 import { parseSay, SayError } from '../../engine/script/say.mjs';
 import { hintRefusals } from './voice/calls.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
@@ -15,7 +16,7 @@ import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { REGION_PREFIX } from '../../engine/kinds/shared.mjs';
 import { fieldAt } from '../../engine/assets.mjs';
 import { SpecError, isPlainObject, quote, schemaErrors, srcProblem } from './spec-common.mjs';
-import { CUES_MAX, MUSIC_SCHEMA, VOICE_SCHEMA, checkCueItems, checkMusic, checkVoice, isRecordingVoice, readRecording } from './spec-sound.mjs';
+import { AUDIO_SCHEMA, CUES_MAX, MUSIC_SCHEMA, VOICE_SCHEMA, checkAudio, checkCueItems, checkMusic, checkVoice, isRecordingVoice, readRecording } from './spec-sound.mjs';
 
 // What other modules import from here, wherever it now lives.
 export { SpecError } from './spec-common.mjs';
@@ -60,6 +61,10 @@ const ROOT_SCHEMA = {
     seed: { type: 'integer', minimum: 0, maximum: SEED_MAX },
     accent: { type: 'string' }, // #rrggbb: checkAccent shows an example
     generatedBy: GENERATED_BY_SCHEMA,
+    provenance: { type: 'boolean' }, // false: the MP4 carries no provenance tags (stamp.mjs), as --no-provenance
+    loop: { type: 'boolean' }, // true: the review checks the last frame against the first (loop.mjs)
+    audio: AUDIO_SCHEMA, // checkAudio: each { src, at? }, src inside the folder
+    vars: {}, // vars.mjs varsErrors checks it, and substitute puts the values in before validation
     voice: VOICE_SCHEMA, // checkVoice: one of the two shapes, a voice that exists
     // Items are not listed: Ajv would walk and report every one of a huge array.
     // checkShots reports a shot that is not an object, for the first SHOTS_MAX.
@@ -203,14 +208,23 @@ function checkShotId(shot, base, seen) {
   return [];
 }
 
+// The kinds a hint offers: the listed ones (a kind parked in every listed look still resolves, but is never offered).
+const offeredKinds = (regs) => (regs.looks ? listedKinds(regs.kinds, regs.looks) : regs.kinds.names());
+
+// The unknown-kind message, naming only the offered kinds: unknown kind "x"; did you mean "y"? (have: ...)
+function unknownKind(name, regs) {
+  const have = offeredKinds(regs);
+  const hint = didYouMean(echoValue(name), have);
+  return `unknown kind ${quote(echoValue(name))}${hint ? `; did you mean "${hint}"?` : ''} (have: ${have.join(', ')})`;
+}
+
 // Which kind a shot shows: { kind, name } or { errors }.
 function resolveKind(shot, base, regs) {
   const at = pathJoin(base, 'show');
-  if (shot.show === undefined) return { errors: [{ path: at, message: `required; one of: ${regs.kinds.names().join(', ')}` }] };
+  if (shot.show === undefined) return { errors: [{ path: at, message: `required; one of: ${offeredKinds(regs).join(', ')}` }] };
   if (typeof shot.show !== 'string') return { errors: [] }; // the schema says "must be string"
-  const found = lookup(regs.kinds, shot.show);
-  if (found.error) return { errors: [{ path: at, message: found.error }] };
-  return { kind: found.value, name: shot.show, errors: [] };
+  if (!regs.kinds.has(shot.show)) return { errors: [{ path: at, message: unknownKind(shot.show, regs) }] };
+  return { kind: regs.kinds.get(shot.show), name: shot.show, errors: [] };
 }
 
 // A say worth parsing: a string within the schema's length range. A longer or
@@ -306,12 +320,20 @@ const supportsLook = (device, look) => typeof device.supports !== 'function' || 
 const kindDrawsIt = (item, kind) => Array.isArray(kind?.regionDevices) && kind.regionDevices.includes(item.do)
   && typeof item.target === 'string' && item.target.startsWith(REGION_PREFIX);
 
+// A layout device (numeral, sticker, the photo treatments) declares `on: false`: kinds build it, an on event cannot place it.
+const isPlaceable = (device) => device.on !== false;
+
 function checkDevice(item, at, ctx, kind) {
   if (typeof item.do !== 'string' || item.do === '') return [];
   const found = lookup(ctx.regs.devices, item.do);
   if (found.error) return [{ path: pathJoin(at, 'do'), message: found.error }];
+  const placeable = ctx.regs.devices.names().filter((name) => isPlaceable(ctx.regs.devices.get(name)));
+  if (!isPlaceable(found.value)) {
+    const can = ctx.look ? placeable.filter((name) => supportsLook(ctx.regs.devices.get(name), ctx.look)) : placeable;
+    return [{ path: pathJoin(at, 'do'), message: `"${item.do}" is built by shot kinds, not placed by an on event; the devices an on event can place: ${can.join(', ')}` }];
+  }
   if (!ctx.look || supportsLook(found.value, ctx.look) || kindDrawsIt(item, kind)) return [];
-  const supported = ctx.regs.devices.names().filter((name) => supportsLook(ctx.regs.devices.get(name), ctx.look));
+  const supported = placeable.filter((name) => supportsLook(ctx.regs.devices.get(name), ctx.look));
   const message = `device "${item.do}" is not supported by look "${ctx.look.name}"; it supports: ${supported.join(', ') || 'no devices'}`;
   return [{ path: pathJoin(at, 'do'), message }];
 }
@@ -529,6 +551,7 @@ function collectErrors(spec, specDir, regs) {
     ...checkVoice(spec),
     ...checkRecording(spec, specDir),
     ...checkMusic(spec, specDir),
+    ...checkAudio(spec, specDir),
     ...checkCueItems(spec),
     ...checkAccent(spec),
     ...settings,
