@@ -63,7 +63,7 @@ test('cosmos styles the card, tag, highlight, circle, underline and arrow, and n
   for (const name of ['card', 'tag', 'highlight', 'circle', 'underline', 'arrow']) {
     assert.equal(registries.devices.get(name).supports(cosmos), true, name);
   }
-  assert.deepEqual({ ...cosmos.devices.card }, { edge: 'rounded', radius: 28, fill: '#2e2770' });
+  assert.deepEqual({ ...cosmos.devices.card, ground: { ...cosmos.devices.card.ground } }, { edge: 'rounded', radius: 28, fill: '#2e2770', ground: { color: 'ink2', alpha: 0.3, blur: 64, dy: 28 } });
   assert.equal(cosmos.devices.tag.shape, 'pill');
   assert.equal(cosmos.devices.highlight.shape, 'pill');
   for (const mark of ['circle', 'underline', 'arrow']) assert.equal(cosmos.devices[mark].cap, 'round', mark);
@@ -107,7 +107,13 @@ test('rounded card: a faint lighter soft sheen whose edge stays inside the card,
   assert.equal(edge.props.strokeWidth, 1 * unit);
   assert.ok(contrast(edge.props.stroke, '#000000') > contrast(sheenFill, '#000000'), 'the edge is lighter still');
   const order = group.children.map((n) => n.id);
-  assert.deepEqual(order, ['d.shadow', 'd.paper', 'd.sheen', 'd.edge']);
+  assert.deepEqual(order, ['d.ground', 'd.shadow', 'd.paper', 'd.sheen', 'd.edge']);
+  // the ground glow: the card's outline set down, screened, with a soft ink2 light (depth from light)
+  const ground = part([group], 'ground');
+  assert.equal(ground.props.d, part([group], 'paper').props.d);
+  assert.equal(ground.props.blend, 'screen');
+  assert.equal(ground.props.glow.color, cosmos.palette.ink2);
+  assert.ok(ground.props.y > 0 && ground.props.glow.alpha <= 0.3, 'set down, faint');
 });
 
 test('ink on the rounded card holds 4.5:1 against the card at its sheen', () => {

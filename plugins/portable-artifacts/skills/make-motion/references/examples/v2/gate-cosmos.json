@@ -1,0 +1,102 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "cosmos",
+  "voice": {
+    "name": "af_heart"
+  },
+  "sound": "on",
+  "music": {
+    "bed": "drift",
+    "bpm": 90
+  },
+  "format": "16:9",
+  "seed": 7,
+  "shots": [
+    {
+      "id": "light",
+      "show": "statement",
+      "say": "The sunlight on your face is *eight minutes* old."
+    },
+    {
+      "id": "distance",
+      "show": "number",
+      "say": "One hundred fifty million kilometres. One astronomical unit.",
+      "value": 150,
+      "suffix": "M km",
+      "label": "from the Sun to Earth"
+    },
+    {
+      "id": "path",
+      "show": "list",
+      "title": "On the way",
+      "say": "It passes Mercury. Then Venus. Then it reaches Earth.",
+      "items": [
+        "Mercury",
+        "Venus",
+        "Earth"
+      ]
+    },
+    {
+      "id": "sizes",
+      "show": "compare",
+      "say": "Earth is small. Jupiter is eleven Earths wide.",
+      "left": {
+        "title": "Earth",
+        "value": "12,742",
+        "points": [
+          "kilometres across"
+        ]
+      },
+      "right": {
+        "title": "Jupiter",
+        "value": "139,820",
+        "points": [
+          "kilometres across"
+        ]
+      }
+    },
+    {
+      "id": "giants",
+      "show": "chart",
+      "type": "bar",
+      "title": "Jupiter dwarfs the rest",
+      "say": "Neptune is four Earths wide. Saturn, nine. Jupiter beats them all.",
+      "unit": "km",
+      "data": [
+        {
+          "label": "Earth",
+          "value": 12742
+        },
+        {
+          "label": "Neptune",
+          "value": 49244
+        },
+        {
+          "label": "Saturn",
+          "value": 116460
+        },
+        {
+          "label": "Jupiter",
+          "value": 139820
+        }
+      ],
+      "highlight": "Jupiter",
+      "source": "NASA planetary fact sheet"
+    },
+    {
+      "id": "home",
+      "show": "quote",
+      "say": "That's here. That's home. That's us.",
+      "by": "Carl Sagan",
+      "role": "Pale Blue Dot, 1994"
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "Scale changes everything.",
+      "ask": "Look up tonight",
+      "mark": "cosmos"
+    }
+  ]
+}

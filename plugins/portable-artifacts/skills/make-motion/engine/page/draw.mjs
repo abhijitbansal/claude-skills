@@ -18,10 +18,14 @@ const unit01 = (v) => Math.min(1, Math.max(0, v));
 
 // ---- text ----
 
-// A word's glyph glow: its own glyphs blurred (canvas shadow) in glow.color at `share` of glow.alpha, under the word.
-// The shadow is a blur of the glyph mask alone, so it hugs the letters and costs about what the word does.
+// A word's glyph glow: its own glyphs blurred (canvas shadow) in glow.color at `share` of glow.alpha, under the word,
+// screened so it only lightens (over a dark field a source-over gold read as brown mud in the counters). The shadow is
+// a blur of the glyph mask alone, so it hugs the letters and costs about what the word does.
 function drawGlow(ctx, text, x, glow, share) {
+  ctx.save();
+  ctx.globalCompositeOperation = 'screen';
   withGlow(ctx, glow, share, () => ctx.fillText(text, x, 0));
+  ctx.restore();
 }
 
 // Runs paint() with a canvas shadow of glow.color at `share` of glow.alpha, glow.radius px of blur, then clears it.
@@ -78,15 +82,29 @@ function strokeTrimmed(ctx, path, length, draw) {
   ctx.setLineDash([]);
 }
 
-// props.glow ({ color, alpha, radius }) on a filled path: a soft light round its edge, the canvas shadow of its fill
-// (a smooth blur, so no steps), drawn under the fill.
+// The glow of `path` alone, without its fill: the fill is drawn FAR_OFF user units away and its shadow offset back by
+// the same distance in device pixels (canvas shadow offsets ignore the transform), so only the light lands.
+const FAR_OFF = 100000;
+function glowOnly(ctx, path, glow) {
+  const m = ctx.getTransform();
+  ctx.save();
+  ctx.translate(FAR_OFF, 0);
+  ctx.shadowOffsetX = -m.a * FAR_OFF;
+  ctx.shadowOffsetY = -m.b * FAR_OFF;
+  withGlow(ctx, glow, 1, () => ctx.fill(path));
+  ctx.restore();
+}
+
+// props.glow ({ color, alpha, radius, only }) on a filled path: a soft light round its edge, the canvas shadow of its
+// fill (a smooth blur, so no steps), drawn under the fill; with `only`, the light without the fill.
 function drawPath(ctx, n) {
   const { fill, stroke, strokeWidth = DEFAULT_STROKE_WIDTH, lineCap = 'round', glow } = n.props;
   const { path, length } = shapeOf(n);
   const draw = unit01(n.draw);
   if (fill && draw >= 1) {
     ctx.fillStyle = fill;
-    if (glow) withGlow(ctx, glow, 1, () => ctx.fill(path));
+    if (glow?.only) glowOnly(ctx, path, glow);
+    else if (glow) withGlow(ctx, glow, 1, () => ctx.fill(path));
     else ctx.fill(path);
   }
   if (!stroke) return;

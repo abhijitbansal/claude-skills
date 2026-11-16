@@ -79,7 +79,9 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const place = (layout, at) => ({ layout, font: at, x: span.x, y: bounds.at(DESK.centre) - (inkSpan(layout).top + inkSpan(layout).bottom) / HALF, span });
   const accept = clear ? (layout) => !overlaps(clear, blockInk(place(layout, { ...font, size: layout.size }), ctx.measure)) : undefined;
   const opts = { text, font, maxWidth: span.w, align: 'left', measure: ctx.measure, optical: true, together: highlightTogether(text, ctx), accept };
-  const fitted = fitDisplay(opts, { min, max, maxHeight: bounds.height(DESK.height), maxLines: look.maxLines.display, tradeFloor }, look, unit);
+  // a look may allow more lines on a tall frame (look.maxLinesTall, cosmos: a wide face would set the hook small)
+  const maxLines = !isWide(ctx.canvas) && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;
+  const fitted = fitDisplay(opts, { min, max, maxHeight: bounds.height(DESK.height), maxLines, tradeFloor }, look, unit);
   return place(fitted.layout, fitted.font);
 }
 

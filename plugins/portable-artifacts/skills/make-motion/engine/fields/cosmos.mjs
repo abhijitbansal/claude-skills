@@ -49,7 +49,16 @@ const VIGNETTE_INNER = 0.55; // share of the half diagonal that stays clear
 const VIGNETTE_ALPHA = 0.35;
 const HALF = 2;
 
-const RULES = Object.freeze({ stars: { min: 0, max: MAX_STARS, int: true } });
+// The bloom (param `bloom`: its alpha at the centre, 0 for none): a large soft disc of light low on the field, a sun or a
+// nebula behind the content, drifting slowly round its place. One cached surface drawn at an offset each frame.
+const MAX_BLOOM = 0.2;
+const BLOOM_AT = Object.freeze([0.7, 0.86]); // share of the field's width and height
+const BLOOM_RADIUS = 0.6; // share of the field's short side
+const BLOOM_MIX = 0.5; // the bloom colour: the accent pushed this far toward ink2
+const BLOOM_STOPS = Object.freeze([[0, 1], [0.35, 0.55], [1, 0]]);
+const BLOOM_DRIFT = 0.025; // share of the field's short side it wanders either way
+const BLOOM_PERIOD = 40; // seconds for one slow loop
+const RULES = Object.freeze({ stars: { min: 0, max: MAX_STARS, int: true }, bloom: { min: 0, max: MAX_BLOOM } });
 
 // sRGB relative luminance, as WCAG defines it (shared/contrast.mjs is not served to the page).
 const LINEAR_KNEE = 0.03928, LINEAR_SLOPE = 12.92, GAMMA_OFFSET = 0.055, GAMMA_SCALE = 1.055, GAMMA = 2.4;
@@ -99,6 +108,11 @@ function planLayer(rng, spec, { w, h, unit }, count, heading) {
   };
 }
 
+function planBloom({ w, h }, palette, alpha) {
+  const short = Math.min(w, h);
+  return { x: BLOOM_AT[0] * w, y: BLOOM_AT[1] * h, r: BLOOM_RADIUS * short, drift: BLOOM_DRIFT * short, color: mix(palette.accent, palette.ink2, BLOOM_MIX), alpha };
+}
+
 function planLift({ w, h }, palette, top, bottom) {
   const lift = {
     x: LIFT_AT[0] * w, y: LIFT_AT[1] * h, r: LIFT_RADIUS * Math.min(w, h),
@@ -122,9 +136,13 @@ export function plan(input) {
     return planLayer(rng, spec, { w, h, unit }, count, heading);
   });
   const top = palette.deep, bottom = palette.paper;
-  const { lift, peak } = planLift({ w, h }, palette, top, bottom);
+  const { lift, peak: liftPeak } = planLift({ w, h }, palette, top, bottom);
+  const bloom = params.bloom > 0 ? planBloom({ w, h }, palette, params.bloom) : null;
+  // the lightest colour under text: the bloom's centre over the bottom of the gradient, when it is lighter still
+  const behindBloom = bloom ? mix(bottom, bloom.color, bloom.alpha) : liftPeak;
+  const peak = luminance(behindBloom) > luminance(liftPeak) ? behindBloom : liftPeak;
   return deepFreeze({
-    field: 'cosmos', w, h, unit, top, bottom, lift, peak, starColor: palette.ink,
+    field: 'cosmos', w, h, unit, top, bottom, lift, bloom, peak, starColor: palette.ink,
     vignette: { color: palette.deep, alpha: VIGNETTE_ALPHA, inner: VIGNETTE_INNER },
     layers,
   });
@@ -166,6 +184,19 @@ function buildVignette(c, p) {
   c.fillRect(0, 0, p.w, p.h);
 }
 
+function buildBloom(c, b) {
+  const glow = c.createRadialGradient(b.r, b.r, 0, b.r, b.r, b.r);
+  for (const [at, share] of BLOOM_STOPS) glow.addColorStop(at, rgba(b.color, b.alpha * share));
+  c.fillStyle = glow;
+  c.fillRect(0, 0, HALF * b.r, HALF * b.r);
+}
+
+// Where the bloom's surface goes at time t: its place, wandering on a slow loop.
+function bloomAt(b, t) {
+  const turn = (TAU * t) / BLOOM_PERIOD;
+  return [b.x - b.r + b.drift * Math.sin(turn), b.y - b.r + (b.drift / HALF) * Math.cos(turn)];
+}
+
 const cache = new WeakMap();
 
 // The plan's two still surfaces, built on first use and kept for the plan's life.
@@ -174,7 +205,9 @@ function stillsOf(p) {
     const ground = createSurface(p.w, p.h), vignette = createSurface(p.w, p.h);
     buildGround(ground.ctx, p);
     buildVignette(vignette.ctx, p);
-    cache.set(p, { ground: ground.canvas, vignette: vignette.canvas });
+    const bloom = p.bloom ? createSurface(Math.ceil(HALF * p.bloom.r), Math.ceil(HALF * p.bloom.r)) : null;
+    if (bloom) buildBloom(bloom.ctx, p.bloom);
+    cache.set(p, { ground: ground.canvas, vignette: vignette.canvas, bloom: bloom?.canvas ?? null });
   }
   return cache.get(p);
 }
@@ -201,12 +234,13 @@ export function paint(ctx, fieldPlan, t) {
   withSavedState(ctx, (c) => {
     const stills = stillsOf(fieldPlan);
     c.drawImage(stills.ground, 0, 0);
+    if (stills.bloom) c.drawImage(stills.bloom, ...bloomAt(fieldPlan.bloom, t));
     drawStars(c, fieldPlan, t);
     c.drawImage(stills.vignette, 0, 0);
   });
 }
 
 registries.fields.add('cosmos', {
-  summary: 'Deep navy to violet with a soft lift behind the hero, two layers of seeded stars drifting slowly, and a faint vignette.',
+  summary: 'Deep navy to violet with a soft lift behind the hero, an optional slow bloom of light low on the field, two layers of seeded stars drifting slowly, and a faint vignette.',
   animated: true, plan, paint,
 });

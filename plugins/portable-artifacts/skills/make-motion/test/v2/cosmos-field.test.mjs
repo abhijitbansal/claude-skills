@@ -253,3 +253,17 @@ test('the field source avoids document, window, Math.random, Date, performance a
     assert.doesNotMatch(source, banned);
   }
 });
+
+test('the bloom param plans a large soft disc low on the field, and the peak the review reads takes it into account', async () => {
+  const { registries: regs } = await import('../../engine/registry.mjs');
+  await import('../../engine/fields/index.mjs');
+  const palette = { paper: '#2a1a5e', deep: '#0b1030', ink: '#f4f1ff', ink2: '#a9a4d6', accent: '#ffd166', accent2: '#4de2c5', rule: '#3d3478' };
+  const field = regs.fields.get('cosmos');
+  const none = field.plan({ w: 1920, h: 1080, unit: 1, seed: 1, palette, params: {} });
+  const lit = field.plan({ w: 1920, h: 1080, unit: 1, seed: 1, palette, params: { bloom: 0.08 } });
+  assert.equal(none.bloom, null, 'no bloom by default');
+  assert.ok(lit.bloom.y > 0.75 * 1080, 'low on the field');
+  assert.ok(lit.bloom.r >= 0.5 * 1080, 'large');
+  assert.equal(lit.bloom.alpha, 0.08);
+  assert.throws(() => field.plan({ w: 1920, h: 1080, unit: 1, seed: 1, palette, params: { bloom: 0.5 } }), /bloom/);
+});

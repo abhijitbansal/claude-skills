@@ -36,6 +36,9 @@ export function chartStyle(ctx, data) {
     // look data a chart may carry (cosmos): `marks`, palette keys the columns and bars take in turn (else ink); `round`,
     // the far ends' corner radius in units; `glow`, units of soft accent light round the highlighted column or bar
     marks: data.marks ? data.marks.map((key) => colourOf(look, key)) : null, round: data.round ? data.round * unit : 0, glow: data.glow ? data.glow * unit : 0,
+    // `direct`: every mark carries its value, so no baseline rule is drawn (refs off drops the gridlines and ticks);
+    // `fill`, the share of its band a column or bar takes
+    axis: data.direct !== true, fill: data.fill,
   };
 }
 
@@ -129,7 +132,7 @@ export function valueAxis(shot, ctx, style, { plot, scale, yOf, gutterX, refs })
     });
   }
   const base = yOf(scale.baseline);
-  nodes.push(rule(`${shot.id}.axis`, [[plot.x, base], [plot.x + plot.w, base]], style.strong, style.axisWidth));
+  if (style.axis) nodes.push(rule(`${shot.id}.axis`, [[plot.x, base], [plot.x + plot.w, base]], style.strong, style.axisWidth));
   const broken = isBroken(shot);
   if (broken) nodes.push(breakMark(`${shot.id}.break`, ctx, [plot.x, base], style.axisWidth));
   if (broken || refs) {
@@ -148,14 +151,22 @@ export function axisGutter(shot, ctx, style, scale, refs) {
   return widths.length === 0 ? 0 : Math.max(...widths) + style.gap + (isBroken(shot) ? BREAK.size * ctx.unit : 0);
 }
 
+// A direct-labelled chart's label font (style.axis false, cosmos): its size set down in proportion until the widest
+// category fits `width`, so every column keeps its label (thinning them dropped every other one at 9:16).
+function directFont(ctx, font, keys, width) {
+  const widest = Math.max(...keys.map((key) => labelWidth(ctx, font, key)));
+  return widest <= width ? font : { ...font, size: (font.size * width) / widest };
+}
+
 /** Columns in `area`: { nodes, boxes, plot, highlight } (highlight: { index, text } of the highlighted value, or null). */
 export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
   const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing);
-  const { font, gap } = style;
-  const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
+  const { gap } = style;
   const hl = highlightIndex(shot, data), decimals = valueDecimals(data.items.map((i) => i.value));
   const gutter = axisGutter(shot, ctx, style, scale, style.refs);
   const plotW = area.w - gutter, band = plotW / Math.max(1, data.items.length);
+  const font = style.axis ? style.font : directFont(ctx, style.font, data.items.map((it) => it.key), band * LABEL_SHARE);
+  const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
   const catLayouts = data.items.map((it) => layoutText({ text: setCase(ctx.look, 'label', it.key), font, maxWidth: band * LABEL_SHARE, measure: ctx.measure }));
   // labels that cannot fit their band are thinned, not stacked on each other: every `stride`-th, flagged as not fitting
   const fits = catLayouts.every((l) => l.lines.length <= CATEGORY_LINES && l.width <= band * LABEL_SHARE + FIT_EPSILON);
@@ -167,7 +178,7 @@ export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom
   const top = ink + gap + headroom, bottom = gap + catH + (negative ? ink + gap : 0);
   const plot = { x: area.x + gutter, y: area.y + top, w: plotW, h: Math.max(1, area.h - top - bottom) };
   const yOf = (v) => plot.y + plot.h - ((Math.min(scale.hi, Math.max(scale.lo, v)) - scale.lo) / (scale.hi - scale.lo)) * plot.h;
-  const marks = columnMarks(data.items, plot, scale);
+  const marks = columnMarks(data.items, plot, scale, style.fill);
   const nodes = [...valueAxis(shot, ctx, style, { plot, scale, yOf, gutterX: plot.x - gap, refs: style.refs })];
   const values = [], labels = [], boxes = {};
   marks.forEach((m) => {
@@ -211,7 +222,7 @@ export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 
   const below = rows === 0 ? 0 : gap + rows * ink + (rows - 1) * (gap / HALF);
   const plot = { x: area.x + labelCol + gap, y: area.y + headroom, w: Math.max(1, area.w - labelCol - gap - valueCol - gap), h: Math.max(1, area.h - below - headroom) };
   const xOf = (v) => plot.x + ((Math.min(scale.hi, Math.max(scale.lo, v)) - scale.lo) / (scale.hi - scale.lo)) * plot.w;
-  const marks = barMarks(data.items, plot, scale);
+  const marks = barMarks(data.items, plot, scale, style.fill);
   const nodes = [], values = [], labels = [], boxes = {};
   const tickY = plot.y + plot.h + gap + CAP_HEIGHT * font.size;
   if (style.refs) {
@@ -222,7 +233,7 @@ export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 
     });
   }
   const base = xOf(scale.baseline);
-  nodes.push(rule(`${shot.id}.axis`, [[base, plot.y], [base, plot.y + plot.h]], style.strong, style.axisWidth));
+  if (style.axis) nodes.push(rule(`${shot.id}.axis`, [[base, plot.y], [base, plot.y + plot.h]], style.strong, style.axisWidth));
   if (isBroken(shot)) {
     nodes.push(breakMark(`${shot.id}.break`, ctx, [base, plot.y + plot.h], style.axisWidth));
     const row = style.refs ? ink + gap / HALF : 0;

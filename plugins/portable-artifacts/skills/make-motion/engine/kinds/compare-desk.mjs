@@ -11,7 +11,8 @@ import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
 import { landing, isHand, colourOf, smoothPath, polyline, pathPoints } from '../devices/shared.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, fitInBox, numeralLayout, cardOf, cardGroup } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, enterTracks, unionBox, fitInBox, numeralLayout, cardOf, cardGroup, asTextCard } from './shared.mjs';
+import { track } from '../time/track.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
 import { paperScrim } from './shared.mjs';
@@ -20,6 +21,7 @@ import { slugBox, slugNodes } from './slug.mjs';
 const EPSILON = 1e-6;
 const HALF = 2;
 const DEGREES_TO_RADIANS = Math.PI / 180;
+const VS_WORD = 'vs';
 const VS = Object.freeze({ height: 96, width: 1.5 }); // units, and the mark's width as a share of its height
 // the vs strokes as shares of the mark's width (x) and height (y) from its top left: a v, then an s drawn from its top end
 const VS_STROKES = Object.freeze({
@@ -64,7 +66,7 @@ function sidesAt(shot, ctx, data, { size, width, values }) {
   const pointFont = fontFor(look, 'display', pointSize(look, data, { hero, title: size }, unit), unit);
   return SIDES.map((k, i) => {
     const title = layoutText({ text: setCase(look, 'display', shot[k].title), font: titleFont, maxWidth: width, measure });
-    const text = pointsText(shot[k]);
+    const text = pointsText(shot[k], { dash: !data.plainPoints });
     const points = text === null ? null : layoutText({ text, font: pointFont, maxWidth: width, measure });
     const valueH = values ? CAP_HEIGHT * values.size + data.valueGap * values.size : 0;
     const titleH = CAP_HEIGHT * size + title.lines.at(-1).y - title.lines[0].y;
@@ -79,7 +81,7 @@ function sidesAt(shot, ctx, data, { size, width, values }) {
 function fitSides(shot, ctx, data, width, height) {
   const { look, unit } = ctx;
   const values = valueSet(shot, ctx, data, width);
-  const hasPoints = SIDES.some((k) => pointsText(shot[k]) !== null);
+  const hasPoints = SIDES.some((k) => pointsText(shot[k], { dash: !data.plainPoints }) !== null);
   const floor = Math.max(sizeAt(look, data.titleFromStep, unit), hasPoints ? POINT_TITLE_RATIO * data.pointScale * sizeAt(look, data.pointStep, unit) : 0);
   const fits = (set) => set.every((s) => s.title.lines.length <= data.titleLines && s.title.width <= width + EPSILON && s.height <= height + EPSILON);
   // breaks by sense: the largest size with no title line of one word, else the largest that fits at all
@@ -118,19 +120,21 @@ function sidePicture(shot, ctx, data, key, room, { w, h }) {
 }
 
 // One side's text nodes in its card's centred space, all arriving at `at`, starting `top` under the content's top.
-function sideTexts(shot, ctx, data, side, { w, h, at, top }) {
+function sideTexts(shot, ctx, data, side, { w, h, at, top, valueFill }) {
   const { look, unit } = ctx;
   const pad = data.pad * unit, ox = -w / HALF + pad;
   let cursor = -h / HALF + pad + top; // the next cap line
   const out = [];
   const copy = `${shot.id}.${side.key}.copy`; // the size class of a side's title and points
-  const place = (id, layout, font, fill, role, stack) => {
+  const place = (id, layout, font, fill, role, stack, wordTracks) => {
     const y = cursor + CAP_HEIGHT * font.size - layout.lines[0].y;
-    out.push(node('text', id, { x: ox, y, layout, font, fill, role, ...(stack ? { stack } : {}) }, { tracks: enterTracks(look, unit, at, { y }) }));
+    out.push(node('text', id, { x: ox, y, layout, font, fill, role, ...(stack ? { stack } : {}) }, { tracks: enterTracks(look, unit, at, { y }), ...(wordTracks ? { wordTracks } : {}) }));
     return y + layout.lines.at(-1).y; // the last baseline
   };
   const id = `${shot.id}.${side.key}`;
-  if (side.value !== null) cursor = place(`${id}.value`, side.value, fontFor(look, 'display', side.value.size, unit), look.palette.ink, 'hero') + data.valueGap * side.value.size;
+  // the value is the hero: in ink, or with a fill track (cosmos: the accent while its side is spoken)
+  const words = valueFill && side.value ? side.value.lines.flatMap((l) => l.words).map(() => ({ fill: valueFill })) : undefined;
+  if (side.value !== null) cursor = place(`${id}.value`, side.value, fontFor(look, 'display', side.value.size, unit), look.palette.ink, 'hero', undefined, words) + data.valueGap * side.value.size;
   const grouped = side.points !== null && side.value === null ? copy : undefined;
   const last = place(`${id}.title`, side.title, side.titleFont, look.palette.ink, 'hero', grouped);
   if (side.points !== null) {
@@ -194,13 +198,43 @@ function versusMark(id, ctx, [cx, cy], at) {
   ];
 }
 
+// A value's fill while its side is spoken (look data `valueAccent`, cosmos): the accent on the left card until the
+// turn and on the right one after it, else ink, over the draw move (under the scrim an accent read as olive).
+function spokenFill(look, turn, lifts) {
+  const { dur, ease } = look.moves.draw;
+  const { ink, accent } = look.palette;
+  const [from, to] = lifts ? [ink, accent] : [accent, ink];
+  return track([{ t: 0, v: from }, { t: turn, v: from }, { t: turn + dur, v: to, ease }]);
+}
+
+// The vs as a pill (look data `vs: 'pill'`, cosmos): the look's tag round "vs", centred on (cx, cy), in at the turn.
+function versusPill(id, ctx, [cx, cy], at) {
+  const tag = registries.devices.get('tag');
+  const params = { id: `${id}.vs`, text: VS_WORD, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure };
+  const [, , w, h] = tag.build({ ...params, box: [0, 0, 1, 1] }).boxes.tag;
+  return tag.build({ ...params, box: [cx - w / HALF, cy - h / HALF, w, h] }).nodes;
+}
+
+// The spoken card's rim light (look data `rim: { alpha, blur }`, cosmos): the card's paper again under it with an
+// accent canvas glow (draw.mjs path glow), screened; lit on the left card until the turn and on the right one after,
+// over the draw move, so the turn reads as light moving from one card to the other.
+function rimLight(id, card, ctx, data, turn, lifts) {
+  const { look } = ctx;
+  const paper = card.children.find((n) => n.id.endsWith('.paper'));
+  const { dur, ease } = look.moves.draw;
+  const [from, to] = lifts ? [0, 1] : [1, 0];
+  const opacity = track([{ t: 0, v: from }, { t: turn, v: from }, { t: turn + dur, v: to, ease }]);
+  const glow = { color: look.palette.accent, alpha: data.rim.alpha, radius: data.rim.blur * ctx.unit };
+  return node('path', `${id}.rim`, { d: paper.props.d, fill: paper.props.fill, blend: 'screen', glow }, { tracks: { opacity } });
+}
+
 // Between the cards: the vs or the arrow, from the turn.
-function betweenMarks(shot, ctx, [a, b], turn) {
+function betweenMarks(shot, ctx, data, [a, b], turn) {
   const { look, unit, seed, canvas } = ctx;
   const wide = isWide(canvas);
   if (shot.mode !== 'before-after') {
     const centre = wide ? [(a[0] + a[2] + b[0]) / HALF, a[1] + a[3] / HALF] : [a[0] + a[2] / HALF, (a[1] + a[3] + b[1]) / HALF];
-    return versusMark(shot.id, ctx, centre, turn);
+    return data.vs === 'pill' ? versusPill(shot.id, ctx, centre, turn) : versusMark(shot.id, ctx, centre, turn);
   }
   const inset = look.grid.gutter * unit;
   const from = wide ? [a[0] + a[2] - inset, a[1] + a[3] / HALF] : [a[0] + a[2] / HALF, a[1] + a[3] - inset];
@@ -227,16 +261,23 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
   const room = pictureRoom(shot, ctx, data, cardW - HALF * pad, avail);
   const top = room === null ? 0 : room.h + room.gap;
   const set = fitSides(shot, ctx, data, cardW - HALF * pad, avail - top);
-  const boxes = cardBoxes(ctx, data, Math.max(...set.sides.map((s) => s.height)) + top + HALF * pad, below);
+  // a look may give the cards at least `fill` of the height they could take (cosmos), the copy centred in them
+  const content = Math.max(...set.sides.map((s) => s.height)) + top + HALF * pad;
+  const height = Math.max(content, data.fill ? data.fill * (avail + HALF * pad) : 0);
+  const inset = room === null ? (height - content) / HALF : 0;
+  const boxes = cardBoxes(ctx, data, height, below);
   const cards = set.sides.map((side, i) => {
     const id = `${shot.id}.${side.key}`, at = 0; // both cards from frame 0, the unspoken one dimmed
     const card = cardOf(ctx, id, boxes[i], at);
     const size = { w: boxes[i][2], h: boxes[i][3] };
-    const texts = sideTexts(shot, ctx, data, side, { ...size, at, top });
+    const valueFill = data.valueAccent ? spokenFill(look, turn, i === 1) : undefined;
+    const texts = sideTexts(shot, ctx, data, side, { ...size, at, top: top + inset, valueFill });
     const picture = sidePicture(shot, ctx, data, side.key, room, size);
     const scrim = [dimScrim(id, card, look, turn, { lifts: i === 1 })];
-    return cardGroup(card, id, [...picture, ...texts, ...scrim]);
+    if (!data.rim) return cardGroup(card, id, [...picture, ...texts, ...scrim]);
+    const rim = rimLight(id, card, ctx, data, turn, i === 1);
+    return node('group', id, { ...card.props }, { tracks: card.tracks, children: [rim, ...asTextCard(id, card.children), ...picture, ...texts, ...scrim] });
   });
   const group = node('group', hero, {}, { children: cards });
-  return { nodes: [...slugNodes(shot, ctx), group, ...betweenMarks(shot, ctx, boxes, turn)], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };
+  return { nodes: [...slugNodes(shot, ctx), group, ...betweenMarks(shot, ctx, data, boxes, turn)], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };
 }

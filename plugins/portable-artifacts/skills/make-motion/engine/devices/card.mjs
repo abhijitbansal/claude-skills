@@ -70,7 +70,16 @@ function shadowNode(id, d, look, unit) {
   });
 }
 
-// A rounded card: shadow, paper, a soft sheen over the top `SHEEN.height` of the card inset by its reach (so its soft
+// A faint ground glow behind a card (style.ground: { color, alpha, blur and dy units }, cosmos): the card's outline
+// again, set down by `dy`, its canvas glow in `color` alone (draw.mjs path glow `only`: no fill), screened: light
+// pooling behind the card.
+function groundGlow(id, d, fill, look, unit, ground) {
+  if (!ground) return [];
+  const glow = { color: colourOf(look, ground.color), alpha: ground.alpha, radius: ground.blur * unit, only: true };
+  return [node('path', `${id}.ground`, { d, fill, y: ground.dy * unit, blend: 'screen', glow })];
+}
+
+// A rounded card: a ground glow where the style has one, shadow, paper, a soft sheen over the top `SHEEN.height` of the card inset by its reach (so its soft
 // edge never spills past the paper), and the lighter edge.
 function roundedCard({ id, box, at, look, unit }, style) {
   const [x, y, w, h] = box;
@@ -80,6 +89,7 @@ function roundedCard({ id, box, at, look, unit }, style) {
   const reach = Math.min(SHEEN.reach * unit, SHEEN.maxReachShare * Math.min(w, h));
   const sheenRect = [-w / HALF + reach, -h / HALF + reach, Math.max(0, w - HALF * reach), Math.max(0, h * SHEEN.height - reach)];
   const parts = [
+    ...groundGlow(id, d, fill, look, unit, style.ground),
     shadowNode(id, d, look, unit),
     node('path', `${id}.paper`, { d, fill }),
     softRoundedRect({ id: `${id}.sheen`, rect: sheenRect, radius: Math.max(0, radius - reach), reach, alpha: SHEEN.alpha, fill: lighten(fill, SHEEN.lighter) }),

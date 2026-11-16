@@ -29,6 +29,6 @@ export function valueText(value) {
 /** Does the shot set values (on both sides: the validator refuses one side alone)? */
 export const hasValues = (shot) => shot.left.value !== undefined && shot.right.value !== undefined;
 
-/** A side's points as one text, each on its own line after a dash, or null. */
-export const pointsText = (side) => (Array.isArray(side.points) && side.points.length > 0
-  ? side.points.map((p) => `${POINT_DASH} ${p}`).join(LINE_BREAK) : null);
+/** A side's points as one text, each on its own line after a dash (none when `dash` is false: cosmos), or null. */
+export const pointsText = (side, { dash = true } = {}) => (Array.isArray(side.points) && side.points.length > 0
+  ? side.points.map((p) => (dash ? `${POINT_DASH} ${p}` : p)).join(LINE_BREAK) : null);

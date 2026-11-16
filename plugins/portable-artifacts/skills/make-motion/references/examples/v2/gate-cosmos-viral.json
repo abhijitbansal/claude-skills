@@ -1,0 +1,93 @@
+{
+  "version": 2,
+  "mode": "viral",
+  "look": "cosmos",
+  "voice": {
+    "name": "af_heart"
+  },
+  "music": {
+    "bed": "drift",
+    "bpm": 104
+  },
+  "format": "9:16",
+  "seed": 7,
+  "shots": [
+    {
+      "id": "hook",
+      "show": "statement",
+      "say": "This sunlight is *eight minutes* old."
+    },
+    {
+      "id": "minutes",
+      "show": "number",
+      "say": "Eight minutes. That is how long sunlight takes to reach you.",
+      "value": 8,
+      "suffix": "min",
+      "label": "from the Sun to you"
+    },
+    {
+      "id": "sizes",
+      "show": "compare",
+      "say": "Earth is small. Jupiter is eleven Earths wide.",
+      "left": {
+        "title": "Earth",
+        "value": "12,742",
+        "points": [
+          "kilometres across"
+        ]
+      },
+      "right": {
+        "title": "Jupiter",
+        "value": "139,820",
+        "points": [
+          "kilometres across"
+        ]
+      }
+    },
+    {
+      "id": "giants",
+      "show": "chart",
+      "type": "column",
+      "title": "Jupiter dwarfs the rest",
+      "say": "Neptune, four Earths. Saturn, nine. Jupiter beats them all.",
+      "data": [
+        {
+          "label": "Earth",
+          "value": 13
+        },
+        {
+          "label": "Neptune",
+          "value": 49
+        },
+        {
+          "label": "Saturn",
+          "value": 116
+        },
+        {
+          "label": "Jupiter",
+          "value": 140
+        }
+      ],
+      "highlight": "Jupiter",
+      "source": "Width in thousand km, NASA"
+    },
+    {
+      "id": "path",
+      "show": "list",
+      "title": "On the way",
+      "say": "Past Mercury. Past Venus. Then you.",
+      "items": [
+        "Mercury",
+        "Venus",
+        "You"
+      ]
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "Scale changes everything.",
+      "ask": "Look up tonight",
+      "mark": "cosmos"
+    }
+  ]
+}

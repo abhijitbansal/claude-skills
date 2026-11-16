@@ -91,3 +91,55 @@ test('a path with props.glow lights a smooth falloff outside its edge in the glo
   const plain = await pathGlow(null);
   assert.equal(plain.ray[0], 0x2a, 'no glow without props.glow');
 });
+
+// The figure "808" in ink at 232 px on the lift peak, lit: the centre of the 0's counter against the same pixel unlit.
+// A glow is light round the glyph: the counters keep the field, never a muddy fill.
+function counter() {
+  return stage.page.evaluate(async () => {
+    const { registries } = await import('/engine/registry.mjs');
+    await import('/engine/looks/index.mjs');
+    const { node } = await import('/engine/graph/node.mjs');
+    const { track } = await import('/engine/time/track.mjs');
+    const { sampleGraph } = await import('/engine/graph/sample.mjs');
+    const { drawFrame } = await import('/engine/page/draw.mjs');
+    const { createMeasure } = await import('/engine/page/text-style.mjs');
+    const { layoutText } = await import('/engine/text/layout.mjs');
+    const { fontFor } = await import('/engine/kinds/shared.mjs');
+    const { glowStyle } = await import('/engine/devices/glow.mjs');
+    const look = registries.looks.get('cosmos');
+    const peak = registries.fields.get('cosmos').plan({ w: 1920, h: 1080, unit: 1, seed: 1, palette: look.palette, params: {} }).peak;
+    const font = fontFor(look, 'display', 232, 1);
+    const measure = createMeasure(new OffscreenCanvas(8, 8).getContext('2d'));
+    const layout = layoutText({ text: '0', font, maxWidth: 1e6, measure });
+    const w = 600, h = 500, x = 150, y = 120;
+    const draw = (props) => {
+      const c = new OffscreenCanvas(w, h).getContext('2d');
+      c.fillStyle = peak;
+      c.fillRect(0, 0, w, h);
+      drawFrame(c, sampleGraph([node('text', 't', { x, y, layout, font, fill: look.palette.ink, ...props }, { wordTracks: [{ glow: track([{ t: 0, v: 1 }]) }] })], 0), { canvas: { w, h } });
+      return c;
+    };
+    const cx = Math.round(x + layout.lines[0].x + layout.lines[0].words[0].x + layout.lines[0].words[0].width / 2);
+    const cy = Math.round(y + layout.lines[0].y - 0.36 * font.size);
+    const px = (c) => [...c.getImageData(cx, cy, 1, 1).data.slice(0, 3)];
+    const lum = ([r, g, b]) => [r, g, b].map((v) => { const s = v / 255; return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0);
+    const [plain, lit] = [px(draw({})), px(draw(glowStyle(look, font, 1)))];
+    return { plain, lit, ratio: (lum(lit) + 0.05) / (lum(plain) + 0.05) };
+  });
+}
+
+test('the glow keeps a counter close to the field: the 0 of a 232 px figure is no more than 1.15 times as light inside', async (t) => {
+  if (!stage) return t.skip('no browser');
+  const { plain, lit, ratio } = await counter();
+  assert.notDeepEqual(plain, [244, 241, 255], 'the probe is in the counter, not on the glyph');
+  assert.ok(ratio <= 1.15, `${ratio.toFixed(3)} (${plain} -> ${lit})`);
+  // light, never mud: no channel of the field gets darker (a source-over gold pulled the blue down to brown)
+  lit.forEach((v, i) => assert.ok(v >= plain[i], `channel ${i}: ${plain[i]} -> ${v}`));
+});
+
+test('a path glow with `only` lights round the shape and leaves its inside as the ground: no fill is drawn', async (t) => {
+  if (!stage) return t.skip('no browser');
+  const lit = await pathGlow({ color: '#ffd166', alpha: 0.5, radius: 24, only: true });
+  assert.ok(lit.ray[0] > 0x2a + 20, `light at the edge: red ${lit.ray[0]}`);
+  assert.ok(lit.inside[0] >= 0x2a && lit.inside[0] !== 0x2e, `no fill inside: ${lit.inside}`);
+});

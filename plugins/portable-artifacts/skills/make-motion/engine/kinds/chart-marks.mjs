@@ -47,21 +47,21 @@ const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 const along = (scale, v) => (clamp(v, scale.lo, scale.hi) - scale.lo) / (scale.hi - scale.lo);
 
 /** Columns: { key, value, index, x (centre), width, base, tip } in px, growing up from the baseline (down for a value under it). */
-export function columnMarks(items, plot, scale) {
+export function columnMarks(items, plot, scale, fill = BAND_FILL) {
   const band = plot.w / Math.max(1, items.length);
   const yOf = (v) => plot.y + plot.h - along(scale, v) * plot.h;
   return items.map((it, index) => ({
-    key: it.key, value: it.value, index, x: plot.x + band * (index + 1 / HALF), width: band * BAND_FILL, band,
+    key: it.key, value: it.value, index, x: plot.x + band * (index + 1 / HALF), width: band * fill, band,
     base: yOf(scale.baseline), tip: yOf(Number.isFinite(it.value) ? it.value : scale.baseline),
   }));
 }
 
 /** Bars: { key, value, index, y (centre), height, base, tip } in px, growing right from the baseline (left for a value under it). */
-export function barMarks(items, plot, scale) {
+export function barMarks(items, plot, scale, fill = BAND_FILL) {
   const band = plot.h / Math.max(1, items.length);
   const xOf = (v) => plot.x + along(scale, v) * plot.w;
   return items.map((it, index) => ({
-    key: it.key, value: it.value, index, y: plot.y + band * (index + 1 / HALF), height: band * BAND_FILL, band,
+    key: it.key, value: it.value, index, y: plot.y + band * (index + 1 / HALF), height: band * fill, band,
     base: xOf(scale.baseline), tip: xOf(Number.isFinite(it.value) ? it.value : scale.baseline),
   }));
 }

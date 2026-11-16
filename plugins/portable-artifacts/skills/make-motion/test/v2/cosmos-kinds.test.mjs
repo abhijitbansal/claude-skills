@@ -27,36 +27,62 @@ const unit = (out) => out.ctx.unit;
 
 // ---- number ----
 
-test('number: an orbit ring in the accent draws on from the count start to its landing, round the figure', () => {
-  const out = cosmosWide({ id: 'n', show: 'number', say: 'Nine kinds.', value: 9, label: 'kinds of shot' });
-  const ring = byId(out.nodes, 'n.ring');
-  assert.ok(ring, 'a ring');
-  assert.equal(ring.props.stroke, registries.looks.get('cosmos').palette.accent);
-  assert.equal(ring.props.lineCap, 'round');
-  const draw = ring.tracks.draw.points;
-  assert.equal(draw[0].v, 0);
-  assert.equal(draw.at(-1).v, 1);
-  assert.ok(draw.at(-1).t > draw[1].t, 'it draws over the count');
-  assert.equal(byId(deskWide({ id: 'n', show: 'number', say: 'Nine kinds.', value: 9, label: 'kinds of shot' }).nodes, 'n.ring'), undefined, 'desk has none');
+const orbitOf = (out, id) => ({ group: byId(out.nodes, `${id}.orbit`), ring: byId(out.nodes, `${id}.orbit.ring`), spin: byId(out.nodes, `${id}.orbit.spin`) });
+// The orbit ellipse's half axes from its path (M0 -b ... a 0 ...).
+const axesOf = (ring) => { const v = numbers(ring.props.d); return { a: Math.max(...v.filter((_, i) => i % 2 === 0)), b: -v[1] }; };
+const NINE = { id: 'n', show: 'number', say: 'Nine kinds.', value: 9, label: 'kinds of shot' };
+
+test('number: a tilted orbit in the accent, faint from the first frame, lit at the landing, its dot circling once over the count', () => {
+  const out = cosmosWide(NINE);
+  const look = registries.looks.get('cosmos');
+  const { group, ring, spin } = orbitOf(out, 'n');
+  assert.ok(group && ring && spin, 'an orbit');
+  assert.equal(group.props.rotate, look.kinds.number.orbit.tilt);
+  assert.equal(ring.props.stroke, look.palette.accent);
+  assert.equal(sample(ring.tracks.opacity, 0), look.kinds.number.orbit.faint, 'visible, faint, on the first frame');
+  assert.equal(sample(ring.tracks.opacity, out.timing.duration), look.kinds.number.orbit.lit);
+  const turn = spin.tracks.rotate.points;
+  assert.equal(turn[0].v, 0);
+  assert.equal(turn.at(-1).v, 360, 'one whole turn, ending as the count lands');
+  assert.equal(byId(deskWide(NINE).nodes, 'n.orbit'), undefined, 'desk has none');
 });
 
-test('number: one digit takes an ellipse (cubic arcs), a wide figure a stadium (lines and round ends) that holds it', () => {
-  const one = byId(cosmosWide({ id: 'n', show: 'number', say: 'Nine.', value: 9, label: 'kinds' }).nodes, 'n.ring');
-  assert.match(one.props.d, /C/, 'an ellipse');
-  const out = cosmosTall(example('number'));
-  const wide = byId(out.nodes, 'rows.ring');
-  assert.match(wide.props.d, /L.*Q/, 'a stadium');
-  const value = out.boxes.value;
-  assert.ok(Math.min(...xsOf(wide.props.d)) < value[0] && Math.max(...xsOf(wide.props.d)) > value[0] + value[2], 'round the whole row');
+test('number: the orbit holds the figure with air, every corner of its cap box well inside the ellipse', () => {
+  for (const shot of [NINE, example('number')]) {
+    const out = cosmosTall(shot);
+    const { group, ring } = orbitOf(out, shot.id);
+    const { a, b } = axesOf(ring);
+    const [x, y, w, h] = out.boxes.value;
+    const t = (group.props.rotate * Math.PI) / 180;
+    for (const [px, py] of [[x, y], [x + w, y], [x, y + h], [x + w, y + h]]) {
+      const dx = px - group.props.x, dy = py - group.props.y;
+      const u = dx * Math.cos(t) + dy * Math.sin(t), v = -dx * Math.sin(t) + dy * Math.cos(t);
+      assert.ok((u / a) ** 2 + (v / b) ** 2 < 0.9, `${shot.id}: corner ${Math.round(px)},${Math.round(py)} inside with air`);
+    }
+  }
 });
 
-test('number at 9:16: the label clears the ring, the ring stays at least half a margin from the frame edge', () => {
-  const out = cosmosTall({ id: 'n', show: 'number', say: 'Nine kinds.', value: 9, label: 'kinds of shot' });
-  const ring = byId(out.nodes, 'n.ring');
-  const bottom = Math.max(...ysOf(ring.props.d));
-  assert.ok(out.boxes.label[1] > bottom, `label top ${out.boxes.label[1]} under the ring ${bottom}`);
-  const margin = registries.looks.get('cosmos').grid.margin * unit(out) / 2;
-  assert.ok(Math.min(...xsOf(ring.props.d)) >= margin - 1e-6, `ring left ${Math.min(...xsOf(ring.props.d))}`);
+test('number: the figure opens in ink, counting, never fading in grey', () => {
+  const out = cosmosWide(NINE);
+  const value = byId(out.nodes, 'n.value');
+  assert.equal(value.tracks.opacity, undefined, 'no fade on the figure');
+});
+
+test('number at 9:16: the label clears the orbit and its descenders stay in the band; the orbit stays on the frame', () => {
+  const shot = { id: 'm', show: 'number', say: 'Eight minutes.', value: 8, suffix: 'min', label: 'from the Sun to you, past every planet on the way' };
+  const out = cosmosTall(shot);
+  const rect = compositionRect(out.ctx);
+  const { group, ring } = orbitOf(out, 'm');
+  const { a, b } = axesOf(ring);
+  const t = (group.props.rotate * Math.PI) / 180;
+  const hx = Math.hypot(a * Math.cos(t), b * Math.sin(t)), hy = Math.hypot(a * Math.sin(t), b * Math.cos(t));
+  assert.ok(out.boxes.label[1] > group.props.y + hy, 'the label under the orbit');
+  const label = byId(out.nodes, 'm.label');
+  const last = label.props.layout.lines.at(-1);
+  assert.ok(label.props.y + last.y + runInk(last, label.props.font, measure).down <= rect.top + rect.h + 1e-6, 'descenders in the band');
+  const margin = (registries.looks.get('cosmos').grid.margin * unit(out)) / 2;
+  assert.ok(group.props.x - hx >= margin - 1e-6, `orbit left ${group.props.x - hx}`);
+  assert.ok(group.props.x + hx <= rect.left + rect.w + 1e-6, `orbit right ${group.props.x + hx}`);
 });
 
 // ---- list ----
@@ -183,4 +209,76 @@ test('compare: two rounded cards, the unspoken side under a deep scrim, an arrow
   assert.ok(byId(out.nodes, `${id}.arrow`));
   const [l, r] = [out.boxes.left, out.boxes.right];
   assert.ok(l[1] + l[3] < r[1], 'stacked on a tall frame, apart');
+});
+
+// ---- director's round ----
+
+const SIZES = { id: 'sizes', show: 'compare', say: 'Earth is small. Jupiter is eleven Earths wide.', left: { title: 'Earth', value: 12742, points: ['kilometres across'] }, right: { title: 'Jupiter', value: 139820, points: ['kilometres across'] } };
+
+test('compare: a vs pill in the look weight, points without a dash, the value in the accent only while its side is spoken', () => {
+  const out = cosmosWide(SIZES);
+  const look = registries.looks.get('cosmos');
+  assert.ok(byId(out.nodes, 'sizes.vs'), 'a vs pill (the look tag)');
+  assert.equal(all(out.nodes).filter((n) => /\.vs\.[vs]$/.test(n.id)).length, 0, 'no hand-drawn strokes');
+  const points = byId(out.nodes, 'sizes.left.points');
+  assert.ok(!/^–/.test(points.props.layout.lines[0].words[0].text), 'no dash glyph');
+  const turn = out.timing.duration / 2;
+  const [left, right] = ['left', 'right'].map((k) => byId(out.nodes, `sizes.${k}.value`).wordTracks[0].fill);
+  assert.equal(sample(left, 0), look.palette.accent);
+  assert.equal(sample(right, 0), look.palette.ink);
+  assert.equal(sample(left, out.timing.duration), look.palette.ink);
+  assert.equal(sample(right, out.timing.duration), look.palette.accent);
+  assert.ok(turn > 0);
+});
+
+test('compare: the spoken card has a rim light that moves to the other card at the turn; the cards are at least `fill` tall', () => {
+  const out = cosmosWide(SIZES);
+  const [l, r] = ['left', 'right'].map((k) => byId(out.nodes, `sizes.${k}.rim`));
+  assert.equal(l.props.blend, 'screen');
+  assert.equal(sample(l.tracks.opacity, 0), 1);
+  assert.equal(sample(r.tracks.opacity, 0), 0);
+  assert.equal(sample(l.tracks.opacity, out.timing.duration), 0);
+  assert.equal(sample(r.tracks.opacity, out.timing.duration), 1);
+  assert.ok(out.boxes.left[3] >= 0.45 * out.canvas.h, `cards ${out.boxes.left[3]} of ${out.canvas.h}`);
+  assert.equal(byId(deskWide(SIZES).nodes, 'sizes.left.rim'), undefined, 'desk has none');
+});
+
+const GIANTS = { id: 'g', show: 'chart', type: 'column', title: 'Jupiter dwarfs the rest', say: 'Neptune, four Earths. Saturn, nine. Jupiter beats them all.', data: [{ label: 'Earth', value: 13 }, { label: 'Neptune', value: 49 }, { label: 'Saturn', value: 116 }, { label: 'Jupiter', value: 140 }], highlight: 'Jupiter', source: 'Width in thousand km, NASA planetary fact sheet, 2026 edition' };
+
+test('chart: every mark labelled directly: no axis, gridlines or ticks; every category keeps its label; marks fill most of their band', () => {
+  const out = cosmosTall(GIANTS);
+  assert.equal(byId(out.nodes, 'g.axis'), undefined);
+  assert.equal(all(out.nodes).filter((n) => /\.(ref|tick)\.\d+$/.test(n.id)).length, 0);
+  assert.equal(all(out.nodes).filter((n) => /^g\.label\.\d+$/.test(n.id)).length, 4, 'no label thinned');
+  assert.ok(byId(deskWide(GIANTS).nodes, 'g.axis'), 'desk keeps its axis');
+});
+
+test('chart at 9:16: a long source line is set smaller to stay inside the safe zone', () => {
+  const out = cosmosTall(GIANTS);
+  const rect = compositionRect(out.ctx);
+  const source = byId(out.nodes, 'g.source');
+  const right = source.props.x + source.props.layout.width;
+  assert.ok(right <= rect.left + rect.w + 1e-6, `source right ${right} vs ${rect.left + rect.w}`);
+});
+
+test('number: a count runs within the final digit count (150 counts from 100), so it opens near its value', () => {
+  const out = cosmosWide({ id: 'd', show: 'number', say: 'One hundred fifty million kilometres.', value: 150, suffix: 'M km', label: 'from the Sun to Earth' });
+  const digits = byId(out.nodes, 'd.value.digits');
+  const first = digits.props.steps[0].text;
+  assert.equal(first.length, 3, `opens on ${first}`);
+  const desk = byId(deskWide({ id: 'd', show: 'number', say: 'One hundred fifty.', value: 150, label: 'x' }).nodes, 'd.value.digits');
+  assert.equal(desk.props.steps[0].text, '0', 'desk counts from 0');
+});
+
+test('statement on a tall frame may take five lines (maxLinesTall), so a six-word hook is set large', () => {
+  const out = cosmosTall({ id: 'h', show: 'statement', say: 'This sunlight is *eight minutes* old.' });
+  const hero = byId(out.nodes, 'h.text');
+  assert.ok(hero.props.layout.lines.length <= 5);
+  assert.ok(out.boxes.text[3] >= 0.3 * out.canvas.h, `block ${out.boxes.text[3]} of ${out.canvas.h}`);
+});
+
+test('slug at 9:16: a short kicker stays on one line (no line ends on an article)', () => {
+  const out = cosmosTall({ id: 'p', show: 'list', kicker: 'On the way', say: 'Past Mercury. Past Venus. Then you.', items: ['Mercury', 'Venus', 'You'] });
+  const kicker = byId(out.nodes, 'p.kicker');
+  assert.equal(kicker.props.layout.lines.length, 1, kicker.props.layout.lines.map((l) => l.words.map((w) => w.text).join(' ')).join(' / '));
 });

@@ -23,9 +23,11 @@ test('glowFill: the word turns from ink to the accent and its glow rises from 0 
   assert.deepEqual([sample(glow, 0), sample(glow, 2), sample(glow, end)], [0, 0, 1]);
 });
 
-test('glowStyle: cosmos gives a warm glow at a third of the cap height; desk and pop give none', () => {
+test('glowStyle: cosmos gives a faint warm glow at a third of the cap height, at most maxRadius units; desk and pop give none', () => {
+  const small = fontFor(cosmos, 'display', 76, 1);
+  assert.deepEqual(glowStyle(cosmos, small, 1), { glow: { color: '#ffb040', alpha: 0.45, radius: (CAP_HEIGHT * 76) / 3 } });
   const font = fontFor(cosmos, 'display', 136, 1);
-  assert.deepEqual(glowStyle(cosmos, font, 1), { glow: { color: '#ffb040', alpha: 0.65, radius: (CAP_HEIGHT * 136) / 3 } });
+  assert.deepEqual(glowStyle(cosmos, font, 1), { glow: { color: '#ffb040', alpha: 0.45, radius: cosmos.glow.maxRadius } }, 'capped: a counter keeps the field');
   for (const look of [desk, pop]) assert.deepEqual(glowStyle(look, fontFor(look, 'display', 136, 1), 1), {});
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(cosmos.glow.color.slice(i, i + 2), 16));
   assert.ok(r > g && g > b, 'warm: more red than green, more green than blue');

@@ -28,7 +28,8 @@ export const hasSlug = (shot, look) => shot.kicker !== undefined && isEditorial(
 function kickerLayout(text, font, ctx) {
   const { look, canvas, measure } = ctx;
   const one = layoutText({ text, font, maxWidth: NO_WRAP, measure });
-  const max = gridSpan(look, canvas, 1, SLUG.maxColumns).w;
+  // a look may let its slug run wider (look.slug.maxColumns, cosmos: three columns of a 9:16 frame broke 'On the / way')
+  const max = gridSpan(look, canvas, 1, look.slug?.maxColumns ?? SLUG.maxColumns).w;
   if (one.width <= max) return one;
   const fits = (word) => layoutText({ text: word, font, maxWidth: NO_WRAP, measure }).width <= max;
   const words = text.split(/\s+/).flatMap((word) => (fits(word) || !word.includes('-') ? [word] : word.split(/(?<=-)/).map((part, i, all) => (i < all.length - 1 ? `${part}|` : part))));
