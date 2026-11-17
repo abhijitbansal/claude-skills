@@ -53,7 +53,8 @@ test('the cover sheet takes the incoming shot\'s ground colour', () => {
 });
 
 const emphasisFilm = (format) => filmFor([{ id: 'e', show: 'statement', say: 'Rents climbed *fast* in every single city this year.' }], NAME, format);
-const lineSizes = (nodes, hero) => all(nodes).filter((n) => n.type === 'text' && n.props.stack === hero).map((n) => ({ size: n.props.font.size, text: n.props.layout.lines[0].words.map((w) => w.text).join(' '), node: n }));
+// a beat's knockout copy (props.beatOf, gate-poster-2 ruling 3) stands in for a line and is not one of the stack's lines
+const lineSizes = (nodes, hero) => all(nodes).filter((n) => n.type === 'text' && n.props.stack === hero && n.props.beatOf === undefined).map((n) => ({ size: n.props.font.size, text: n.props.layout.lines[0].words.map((w) => w.text).join(' '), node: n }));
 
 test('scale emphasis: the stack sets exactly two sizes, the emphasised line the large one, and recolours nothing', () => {
   for (const format of ['16:9', '9:16']) {

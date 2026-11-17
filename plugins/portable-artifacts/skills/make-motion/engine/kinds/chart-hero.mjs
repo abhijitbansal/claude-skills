@@ -76,7 +76,8 @@ export function expandHeroChart(shot, ctx, data, hero, heroValue) {
       const floor = source === null ? bottom : source.box[1] - style.gap;
       return { x: area.left, y, w: area.w, h: Math.max(1, floor - y) };
     })();
-  const plot = drawPlot(shot, ctx, style, box, { valueOnHighlight: false, headroom: 0 });
+  // data.heroLabel (poster, gate-poster-2 ruling 6): the highlighted bar carries its own value label too
+  const plot = drawPlot(shot, ctx, style, box, { valueOnHighlight: data.heroLabel === true, headroom: 0 });
   return {
     nodes: [...(numeral === null ? [] : [numeral.node]), title.node, node('group', hero, {}, { children: plot.nodes }), ...(source === null ? [] : [source.node])],
     boxes: { chart: [box.x, box.y, box.w, box.h], title: title.box, ...plot.boxes },

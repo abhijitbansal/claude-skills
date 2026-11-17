@@ -34,7 +34,8 @@ test('poster viral 9:16: the hook is set at or over the floor, its emphasised ro
   if (!session) { t.skip('no browser'); return; }
   t.after(() => session.close());
   const tree = await session.page.evaluate(() => window.__snapshot(3));
-  const rows = all(tree).filter((n) => n.type === 'text' && n.props?.stack === 'hook.text');
+  // a beat's knockout copy (props.beatOf, gate-poster-2 ruling 3) stands in for a row and is not one of the stack's rows
+  const rows = all(tree).filter((n) => n.type === 'text' && n.props?.stack === 'hook.text' && n.props?.beatOf === undefined);
   const unit = 1; // 1080 x 1920: one unit is one pixel
   const sizes = rows.map((n) => n.layout.size / unit);
   const texts = rows.map((n) => n.layout.lines[0].words.map((w) => w.text).join(' '));

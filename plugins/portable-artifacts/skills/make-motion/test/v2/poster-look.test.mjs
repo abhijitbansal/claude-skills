@@ -183,7 +183,8 @@ test('9:16 in pro keeps the 72-unit margins at the sides and the band; in viral 
 test('a viral hook opens at full ink on frame 0: no ghost, no fade, every word in the ground\'s ink', () => {
   const film = filmFor([{ id: 'h', show: 'statement', say: 'Rent ate *half* the pay.' }], NAME, '9:16', { mode: 'viral' });
   const ink = shotLook(look(), 0, 1).palette.ink;
-  const lines = all(film.sampleShot(0, 0)).filter((n) => n.type === 'text' && n.props.stack === 'h.text');
+  // a beat's knockout copy (props.beatOf, gate-poster-2 ruling 3) is off on frame 0 and not one of the stack's lines
+  const lines = all(film.sampleShot(0, 0)).filter((n) => n.type === 'text' && n.props.stack === 'h.text' && n.props.beatOf === undefined);
   assert.ok(lines.length > 0);
   for (const line of lines) {
     assert.equal(line.opacity, 1);

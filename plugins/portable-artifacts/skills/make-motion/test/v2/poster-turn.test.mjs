@@ -20,14 +20,17 @@ function heroLines(shots, look, format, mode, index = 0) {
   const built = filmFor(shots, look, format, { mode });
   const shot = shots[index];
   const nodes = all(snapshotOf(built.sampleShot(index, SAMPLE_AT)));
-  const lines = nodes.filter((n) => n.type === 'text' && n.props.stack === `${shot.id}.text`);
+  // a beat's knockout copy (props.beatOf, gate-poster-2 ruling 3) stands in for a line and is not one of the stack's lines
+  const lines = nodes.filter((n) => n.type === 'text' && n.props.stack === `${shot.id}.text` && n.props.beatOf === undefined);
   const { ctx, boxes } = expandIn(filmOf(shots, look, format, { mode }), index);
   return { lines, area: stackArea(ctx), boxes };
 }
 const turned = (lines) => lines.filter((n) => Math.abs((n.rotate ?? 0) + 90) < 1e-9);
 
-// the turned cases: a pro statement, and a viral statement after the hook (the lead's ruling: the hook never turns)
-const TURNED = Object.freeze([['pro', [STATEMENT], 0], ['viral', [FILLER, STATEMENT], 1]]);
+// the turned case: a pro statement (the lead's ruling: the hook never turns; gate-poster-2 ruling 2: in viral no reading
+// text is turned, so the viral statement after the hook that turned here stands upright: poster-gate-4.test.mjs)
+const TURNED = Object.freeze([['pro', [STATEMENT], 0]]);
+void FILLER;
 
 test('poster: the viral hook (a viral film\'s first statement) at 9:16 stays upright on frame 0', () => {
   const { lines } = heroLines([STATEMENT], 'poster', '9:16', 'viral');
@@ -80,11 +83,12 @@ test('pop (no stack.turn data): a short statement at 9:16 is not turned', () => 
   assert.equal(turned(lines).length, 0);
 });
 
-test('poster: the viral hook sets its emphasised row large when it is the widest row, the others the ratio smaller', () => {
+test('poster: the viral hook sets its emphasised row large when it is the widest row, the others the hook ratio smaller', () => {
   const { lines } = heroLines([STATEMENT], 'poster', '9:16', 'viral');
   const sizes = lines.map((n) => n.props.font.size);
   const lead = lines.findIndex((n) => n.props.layout.lines[0].words.some((w) => /SOURCES/.test(w.text)));
   const others = sizes.filter((_, k) => k !== lead);
-  const ratio = registries.looks.get('poster').stack.ratio;
+  // gate-poster-2 ruling 1: in the hook the others are stack.hookRatio smaller (one word dominates); was stack.ratio
+  const ratio = registries.looks.get('poster').stack.hookRatio;
   for (const s of others) assert.ok(Math.abs(sizes[lead] / s - ratio) < 0.01, `sizes ${sizes.map((v) => v.toFixed(1))}: the lead ${sizes[lead].toFixed(1)} over ${s.toFixed(1)}`);
 });

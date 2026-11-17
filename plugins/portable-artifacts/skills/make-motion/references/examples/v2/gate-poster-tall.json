@@ -77,11 +77,6 @@
       "source": "make-motion test suite, running total"
     },
     {
-      "id": "range",
-      "show": "statement",
-      "say": "One script. Sixteen kinds of *shot*."
-    },
-    {
       "id": "chat",
       "show": "feed",
       "title": "Studio",

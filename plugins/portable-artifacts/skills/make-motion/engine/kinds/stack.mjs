@@ -109,8 +109,7 @@ export function kickerHeight(shot, ctx) {
 // look whose emphasis leads, poster's `scale`), the rows holding one take the large size, at most what each fits, and
 // every other row the small one: at most what each fits and never more than the large size over the ratio, so the
 // emphasised row reads larger even when it is the widest (the viral hook).
-export function keepRatio(lines, rows, words, ctx, lead) {
-  const ratio = ctx.look.stack?.ratio;
+export function keepRatio(lines, rows, words, ctx, lead, ratio = ctx.look.stack?.ratio) {
   if (!Number.isFinite(ratio) || lines.length < 2) return lines;
   // two sizes (look review 2: line-by-line fitting read as auto-fit): the smallest fitted size, and the ratio times it
   // for every line that fits that large
@@ -166,22 +165,33 @@ function hookCandidates(words, own, ctx, lead) {
 // then the larger smallest line (the hook set as large as it goes), then the larger largest line, then the fewer rows
 // (no more wrapping than the size needs). A line wider than the area counts at the size that would fit it (fitLine
 // clamps it to the floor, which would rank a one-row set of the whole hook above every wrap).
-function betterHook(area, min) {
+// `largeFirst` (a look with stack.hookRatio: one word dominates): the larger largest line ranks before the smallest.
+function betterHook(area, min, largeFirst = false) {
   const sizes = ({ lines }) => lines.map((l) => l.font.size * Math.min(1, area.w / l.width));
   const clean = (set) => sizes(set).every((s) => s >= min - EPSILON);
+  const bySmall = (a, b) => {
+    const [smallA, smallB] = [Math.min(...sizes(a)), Math.min(...sizes(b))];
+    return Math.abs(smallA - smallB) > EPSILON ? (smallB > smallA ? b : a) : null;
+  };
+  const byLarge = (a, b) => {
+    const [largeA, largeB] = [Math.max(...sizes(a)), Math.max(...sizes(b))];
+    return Math.abs(largeA - largeB) > EPSILON ? (largeB > largeA ? b : a) : null;
+  };
+  const order = largeFirst ? [byLarge, bySmall] : [bySmall, byLarge];
   return (a, b) => {
     if (clean(a) !== clean(b)) return clean(b) ? b : a;
-    const [smallA, smallB] = [Math.min(...sizes(a)), Math.min(...sizes(b))];
-    if (Math.abs(smallA - smallB) > EPSILON) return smallB > smallA ? b : a;
-    const [largeA, largeB] = [Math.max(...sizes(a)), Math.max(...sizes(b))];
-    if (Math.abs(largeA - largeB) > EPSILON) return largeB > largeA ? b : a;
+    for (const rank of order) {
+      const won = rank(a, b);
+      if (won !== null) return won;
+    }
     return b.rows.length < a.rows.length ? b : a;
   };
 }
 
 // A hook (a viral film's first statement) may be set in other rows when that sets it larger (hookCandidates), each set
 // kept to look.stack.hook of the area's height.
-function hookLines(words, own, fitted, area, ctx, lead) {
+// `min`: the floor a clean set's lines keep; `largeFirst`: rank by the dominant word first (betterHook).
+function hookLines(words, own, fitted, area, ctx, lead, { min = sizeAt(ctx.look, STACK.fromStep, ctx.unit), largeFirst = false } = {}) {
   const share = ctx.look.stack?.hook;
   const plain = words.map(bare);
   const forced = words.some((w) => w.endsWith(FORCE_MARK));
@@ -203,7 +213,7 @@ function hookLines(words, own, fitted, area, ctx, lead) {
     return capped(low);
   };
   const setOf = (rows) => ({ rows, lines: within(rows === own.rows ? own.lines : fitted(rows), rows) });
-  if (ctx.look.stack?.hookWrap === true) return sets.map(setOf).reduce(betterHook(area, sizeAt(ctx.look, STACK.fromStep, ctx.unit)));
+  if (ctx.look.stack?.hookWrap === true) return sets.map(setOf).reduce(betterHook(area, min, largeFirst));
   const smallest = ({ lines }) => Math.min(...lines.map((l) => l.font.size));
   return sets.map(setOf).reduce((best, c) => (smallest(c) > smallest(best) + EPSILON ? c : best));
 }
@@ -254,11 +264,16 @@ export function centredTop(area, height, ctx) {
 }
 
 // Does an upright block `height` tall leave a tall frame's area short of the look's turn share (look.stack.turn)? A
-// look without the share never turns.
+// look without the share never turns, nor does a look whose look.stack.turnSafe is false where it composes in a platform
+// safe zone (poster, gate-poster-2 ruling 2: a feed reads upright, turned type stays a pro composition).
 function shortOnTall(height, area, ctx) {
   const share = ctx.look.stack?.turn;
+  if (uprightOnly(ctx)) return false;
   return Number.isFinite(share) && !isWide(ctx.canvas) && height < share * area.h;
 }
+
+/** Does the look keep its stacks upright here (look.stack.turnSafe false, in a platform mode's safe zone)? */
+export const uprightOnly = (ctx) => ctx.look.stack?.turnSafe === false && ctx.mode?.platformSafeZone === true;
 
 /** The stack laid out: { rows (word indexes per line), lines [{ font, layout, ink, x, baseline }], area, kicker } . */
 // `lead`: the word indexes whose rows take the large size (keepRatio); `widen`: a stretch keyword a one-line stack is
@@ -267,11 +282,18 @@ function shortOnTall(height, area, ctx) {
 export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = false, maxSize = Infinity, lead, widen, turn = false } = {}) {
   const { look, unit } = ctx;
   const words = markedWords(text);
-  const limits = { min: sizeAt(look, STACK.fromStep, unit), max: Math.min(STACK.max * unit, maxSize) };
-  const fitted = (rows) => keepRatio(rows.map((row) => fitLine(row.map((i) => bare(words[i])), area.w, limits, ctx)), rows, words, ctx, lead);
+  // look.stack.hookRatio and hookFloor (poster, gate-poster-2 ruling 1): in a hook with an emphasised word that word's row
+  // is set as large as the width allows and the other rows hookRatio smaller, down to scale step hookFloor (one word
+  // dominates; at the stack's ratio and floor the starred row read 1.35 times the others)
+  const dominant = hook && Number.isFinite(look.stack?.hookRatio) && lead instanceof Set && lead.size > 0;
+  const limits = { min: sizeAt(look, dominant ? look.stack.hookFloor ?? STACK.fromStep : STACK.fromStep, unit), max: Math.min(STACK.max * unit, maxSize) };
+  const ratio = dominant ? look.stack.hookRatio : look.stack?.ratio;
+  const fitted = (rows) => keepRatio(rows.map((row) => fitLine(row.map((i) => bare(words[i])), area.w, limits, ctx)), rows, words, ctx, lead, ratio);
   let rows = stackLines(words);
   let lines = fitted(rows);
-  if (hook) ({ rows, lines } = hookLines(words, { rows, lines }, fitted, area, ctx, lead));
+  // a stack that may not turn where it would (uprightOnly) fills its tall area by the hook's row search instead
+  const fills = hook || (turn && uprightOnly(ctx) && !isWide(ctx.canvas) && words.length <= HOOK_WRAP_MAX_WORDS);
+  if (fills) ({ rows, lines } = hookLines(words, { rows, lines }, fitted, area, ctx, lead, { min: limits.min, largeFirst: dominant }));
   else ({ rows, lines } = grownLines(words, { rows, lines }, fitted, area, ctx));
   if (widen !== undefined && rows.length === 1) lines = [fitLine(rows[0].map((i) => bare(words[i])), area.w, limits, ctx, { width: widen })];
   const tag = kickerHeight(shot, ctx);
@@ -290,15 +312,37 @@ export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = fa
     const turned = turnedStack(words, shot, ctx, area, { lead });
     if (turned !== null) return turned;
   }
-  let top = centredTop(area, blockHeight(lines) + above, ctx) + above;
-  const placed = lines.map((line, k) => {
-    if (k > 0) top += STACK.gap * Math.max(line.font.size, lines[k - 1].font.size);
-    const baseline = top + line.ink.up;
-    top = baseline + line.ink.down;
+  // look.stack.spread (poster, gate-poster-2 ruling 1): a filled tall stack (the hook, an upright fill) is spaced down
+  // its whole area, row gaps opened evenly, so a dominant word with smaller rows round it still fills the frame
+  // (in a platform mode only: a pro 9:16 close spread to its band's foot put its ask past the review's safe area)
+  const spread = fills && uprightOnly(ctx) && Number.isFinite(look.stack?.spread) && lines.length > 1;
+  const placed = spread ? spreadRows(lines, area.top + above, area.h - above, look.stack.spread * area.h, area) : placeRows(lines, centredTop(area, blockHeight(lines) + above, ctx) + above, area);
+  const kicker = tag === 0 ? null : { top: placed[0].baseline - placed[0].ink.up - STACK.kickerGap * unit - tag, left: area.left };
+  return { rows, lines: placed, area, kicker, ...(spread ? { spread: look.stack.spread } : {}) };
+}
+
+// Lines placed flush left from `top`, STACK.gap of the larger neighbour apart, or `gap` px apart when given.
+function placeRows(lines, top, area, gap) {
+  let y = top;
+  return lines.map((line, k) => {
+    if (k > 0) y += gap ?? STACK.gap * Math.max(line.font.size, lines[k - 1].font.size);
+    const baseline = y + line.ink.up;
+    y = baseline + line.ink.down;
     return { ...line, x: area.left - line.ink.left, baseline };
   });
-  const kicker = tag === 0 ? null : { top: placed[0].baseline - placed[0].ink.up - STACK.kickerGap * unit - tag, left: area.left };
-  return { rows, lines: placed, area, kicker };
+}
+
+// Lines spaced down `room` px from `top`: the gaps opened evenly to fill it, each at least the stack's own and at most
+// `most` px; a block that cannot fill it at that is centred in it.
+function spreadRows(lines, top, room, most, area) {
+  // the last line's layout box below its ink stays inside the room too (its descent: nothing set below the band's foot)
+  const last = lines.at(-1);
+  room -= Math.max(0, last.layout.height - last.layout.lines[0].y - last.ink.down);
+  const ink = lines.reduce((sum, l) => sum + l.ink.up + l.ink.down, 0);
+  const least = Math.max(...lines.slice(1).map((l, k) => STACK.gap * Math.max(l.font.size, lines[k].font.size)));
+  const gap = Math.min(most, Math.max(least, (room - ink) / (lines.length - 1)));
+  const height = ink + gap * (lines.length - 1);
+  return placeRows(lines, top + Math.max(0, (room - height) / HALF), area, gap);
 }
 
 // A word's tracks: lit from a ghost when spoken (a mode that reads from frame 0), or fading in on its time; an emphasised
@@ -336,7 +380,9 @@ function baseWordTracks(look, { at, emphasised }, { ghost, matched, widen }) {
 export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bars = new Map() }) {
   const { look, unit, seed, measure } = ctx;
   const boxes = [];
-  const children = placed.lines.map((line, k) => {
+  const beats = beatWindows(placed, times, look);
+  const beatOf = new Map(beats.map((b) => [b.k, b]));
+  const lineNodes = placed.lines.map((line, k) => {
     const row = placed.rows[k];
     const y = line.baseline - line.layout.lines[0].y;
     line.layout.lines[0].words.forEach((w, j) => {
@@ -346,16 +392,57 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bar
     const widen = line.layout.reserve?.width;
     // a turned line (stack-turn.mjs) is placed by its layout's top-left corner and turned about it
     const at = line.turn === undefined ? { x: line.x, y } : { x: line.turn.x, y: line.turn.y, rotate: line.turn.rotate };
+    const beat = beatOf.get(k);
+    // a beat row is hidden while its bar and knockout copy (beatNodes) stand in for it
     return node('text', `${hero}.line${k}`, { ...at, layout: line.layout, font: line.font, fill: look.palette.ink, role: 'hero', stack: hero }, {
       wordTracks: row.map((i) => wordTracks(look, times[i], { ghost, matched, widen, bar: bars.get(i) })),
+      ...(beat === undefined ? {} : { tracks: { opacity: stepped(1, 0, beat) } }),
     });
   });
-  const group = node('group', hero, {}, { children });
+  // the beat's bars and their knockout copies draw after every line, inside the hero group: a bar is then never under a
+  // neighbouring line, which the contrast review would judge against it
+  const beatNodes = beats.flatMap((b) => beatPair(`${hero}.beat${b.k}`, b, placed.rows[b.k].map((i) => boxes[i]), lineNodes[b.k], placed.lines[b.k], ctx));
+  const group = node('group', hero, {}, { children: [...lineNodes, ...beatNodes] });
   const kicker = placed.kicker === null ? [] : registries.devices.get('tag').build({
     // set on the shot's first frame in a look whose shots open set (poster: gate-poster-1 ruling 7, chips not faded in)
     id: `${shot.id}.kicker`, text: shot.kicker, box: [placed.kicker.left, placed.kicker.top, 1, 1], at: opensSet(look) ? 0 : look.moves.enter.dur, look, unit, seed, measure,
   }).nodes;
   return { group, kicker, boxes: Object.fromEntries([['text', unionBox(boxes)], ...boxes.map((box, i) => [`word:${i}`, box])]) };
+}
+
+// ---- the beat (look.stack.beat 'bar', poster: gate-poster-2 rulings 1 and 3, kinetic type) ----
+
+// A cut-paper bar under the row being spoken: it lands under the first row holding an emphasised word (else the first
+// row) on that row's first spoken word, steps to each later row on its first word and stays on the last, so the frame at
+// the end is never the frame at 0. Rows whose words are untimed (all at 0: a list item, a compare side) or turned get
+// none. [{ k (row index), at, until }]
+function beatWindows(placed, times, look) {
+  if (look.stack?.beat !== 'bar') return [];
+  const rows = placed.rows.map((row, k) => ({ k, at: Math.min(...row.map((i) => times[i]?.at ?? 0)), lead: row.some((i) => times[i]?.emphasised === true) }))
+    .filter((r) => r.at > 0 && placed.lines[r.k].turn === undefined);
+  const live = rows.slice(Math.max(0, rows.findIndex((r) => r.lead)));
+  return live.map((r, j) => ({ k: r.k, at: r.at, until: live[j + 1]?.at ?? Infinity }));
+}
+
+// Hard steps on [at, until): `on` from at, `off` again from until (none when until is Infinity).
+const stepped = (off, on, { at, until }) => track([{ t: 0, v: off }, { t: at, v: off }, { t: at, v: on }, ...(Number.isFinite(until) ? [{ t: until, v: on }, { t: until, v: off }] : [])]);
+
+// The beat for one row: the look's highlight bar (one builder, devices/highlight.mjs) round the row's word boxes,
+// look.stack.beatPad units wider each side and the line's ink high, and a knockout copy of the row's line over it in the
+// bar's text colour (look.devices.highlight.text), both on by a hard step on the row's first spoken word and off on the
+// next row's: the row changes ground. [bar, copy]
+function beatPair(id, beat, rowBoxes, lineNode, line, ctx) {
+  const { look, unit, seed } = ctx;
+  const [x, , w] = unionBox(rowBoxes);
+  const y = line.baseline - line.ink.up, h = line.ink.up + line.ink.down;
+  const padX = (look.stack.beatPad ?? 0) * unit;
+  const built = registries.devices.get('highlight').build({ id, box: [x - padX, y, w + HALF * padX, h], at: beat.at, look, unit, seed }).nodes[0];
+  const on = { opacity: stepped(0, 1, beat) };
+  const bar = node('path', id, built.props, { tracks: on });
+  const wordTracks = lineNode.wordTracks.map(({ fill, ...rest }) => rest); // the copy keeps the words' moves, not their colour
+  // the copy stands in for its row while the bar is under it (`beatOf`: that row's line), in the stack's size class
+  const copy = node('text', `${id}.text`, { ...lineNode.props, fill: colourOf(look, look.devices.highlight.text), beatOf: lineNode.id }, { wordTracks, tracks: on });
+  return [bar, copy];
 }
 
 // ---- a stack set again with room above and below it (end, list, quote, compare) ----
@@ -364,7 +451,6 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bar
 const textLine = (text, size, ctx) => lineAt([text], size, ctx);
 
 const lineText = (line) => line.layout.lines[0].words.map((w) => w.text).join(' ');
-const lineGap = (a, b) => STACK.gap * Math.max(a.font.size, b.font.size);
 
 /**
  * A composed stack (stack.mjs composeStack) set again with room kept `above` its tag (or first line) and `below` its last
@@ -385,13 +471,10 @@ export function restack(placed, ctx, { above = 0, below = 0 }) {
       return next.font.size < min ? { ...next, layout: { ...next.layout, overflow: true } } : next;
     });
   }
-  let top = centredTop(area, blockHeight(lines) + tag + above + below, ctx) + above + tag;
-  const out = lines.map((line, k) => {
-    if (k > 0) top += lineGap(line, lines[k - 1]);
-    const baseline = top + line.ink.up;
-    top = baseline + line.ink.down;
-    return { ...line, x: area.left - line.ink.left, baseline };
-  });
+  // a spread stack (composeStack, look.stack.spread) is spaced down the room left to it
+  const out = Number.isFinite(placed.spread) && lines.length > 1
+    ? spreadRows(lines, area.top + above + tag, room, placed.spread * area.h, area)
+    : placeRows(lines, centredTop(area, blockHeight(lines) + tag + above + below, ctx) + above + tag, area);
   const kicker = placed.kicker === null ? null : { ...placed.kicker, top: out[0].baseline - out[0].ink.up - tag };
   return { ...placed, lines: out, kicker };
 }

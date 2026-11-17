@@ -24,7 +24,8 @@ const SAMPLE_AT = 0.5;
 
 function hookLines(shot) {
   const built = filmFor([shot], LOOK, '9:16', { mode: 'viral' });
-  return all(snapshotOf(built.sampleShot(0, SAMPLE_AT))).filter((n) => n.type === 'text' && n.props.stack === `${shot.id}.text`);
+  // a beat's knockout copy (props.beatOf, gate-poster-2 ruling 3) stands in for a line and is not one of the stack's lines
+  return all(snapshotOf(built.sampleShot(0, SAMPLE_AT))).filter((n) => n.type === 'text' && n.props.stack === `${shot.id}.text` && n.props.beatOf === undefined);
 }
 const rowText = (n) => n.props.layout.lines[0].words.map((w) => w.text).join(' ');
 
@@ -66,9 +67,12 @@ const viralCtx = () => {
 };
 // A turned line as annotate() reports it (the numbers of render 1's "MP4", measured in the browser): the layout 553.1 x
 // 382 at 351.3 px, its ascent box 300 px over the baseline, turned -90 degrees about its top-left corner at (x, y); its
-// glyphs reach 245.9 px over the baseline and end 3.5 px past the advance (the 4's overhang).
+// glyphs reach 245.9 px over the baseline and end 3.5 px past the advance (the 4's overhang). Its corner sits 115.2 px
+// higher than render 1's (1497.6): gate-poster-2 ruling 4 raised the viral band's foot from 0.78 to 0.72 of 1920 px, so
+// the fixture keeps the same place against the safe bottom.
 const ADVANCE = 553.1, THICK = 382, ASCENT = 300, SIZE = 351.3;
-function turnedLine({ x = 502, y = 1497.6 } = {}) {
+const RAISED = 115.2;
+function turnedLine({ x = 502, y = 1497.6 - RAISED } = {}) {
   return {
     type: 'text', id: 'how.item2.text.line1', depth: 0, props: { role: 'hero' }, x, y, scale: 1, scaleX: 1, scaleY: 1, rotate: -90, opacity: 1, visible: true, children: [],
     words: [{ opacity: 1, x: 0, y: 0, scale: 1 }],
@@ -93,7 +97,7 @@ test('review: a turned line past the safe right edge is reported', () => {
 test('review: a turned line past the safe bottom along its length is reported', () => {
   // the line moved 30 px down: its ink (from 14.2 px along the line) ends about 16 px under the safe bottom; its glyphs
   // end inside the advance here, so no overhang across the frame can report it instead
-  const n = turnedLine({ y: 1527.6 });
+  const n = turnedLine({ y: 1527.6 - RAISED });
   assert.equal(safeFindings({ ...n, lineInk: [{ ...n.lineInk[0], words: [{ left: 14.2, right: 540 }] }] }).length, 1);
 });
 

@@ -69,9 +69,19 @@ export const poster = {
   // word, so that word takes a row of its own at the large size (upright, "THE SCRIPT." capped the emphasised row at
   // about 178 units: p5 concern 1); `hook` 0.95: the five rows may take the band's height (at 0.65 the ceiling brought
   // the starred row down to the others' size); the hook then fills about 77 percent of the band (real glyphs)
-  stack: { ratio: 1.35, centre: 0.45, hook: 0.95, grow: 0.65, turn: 0.65, hookWrap: true, hookLead: true },
-  // on 9:16 in viral, the composition band as shares of the height inside the platform sides
+  // gate-poster-2 ruling 2: `turnSafe: false`, no stack turns where it composes in the platform safe zone (viral reads
+  // upright; the 16:9 quote keeps its turn)
+  // gate-poster-2 ruling 1 (one word dominates the viral hook): `hookRatio` 1.8, the starred word's row as large as the
+  // width allows and the others 1.8 times smaller, down to scale step `hookFloor` 2 (the stack's own floor is step 3);
+  // `spread` 0.3: a filled tall stack is spaced down its area, each row gap at most 0.3 of it (stack.mjs spreadRows)
+  stack: { ratio: 1.35, centre: 0.45, hook: 0.95, grow: 0.65, turn: 0.65, turnSafe: false, hookWrap: true, hookLead: true, hookRatio: 1.8, hookFloor: 2, spread: 0.3, beat: 'bar', beatPad: 18 },
+  // `beat: 'bar'` (gate-poster-2 rulings 1 and 3, kinetic type): a cut-paper bar steps under each spoken row from the
+  // first emphasised one, and the words over it take the bar's text colour (stack.mjs beatWindows), `beatPad` units wide
+  // on 9:16 in viral, the composition band as shares of the height inside the platform sides; in a platform mode its foot
+  // at 0.72 (`bandPlatform`, gate-poster-2 ruling 4: nothing below 72 percent of the height, clear of the Reels caption
+  // zone; a pro 9:16 frame keeps 0.78)
   band: { top: 0.14, bottom: 0.78 },
+  bandPlatform: { bottom: 0.72 },
   // a viral hook opens at full ink on frame 0 (ban 5); every shot opens composed, its words set from the first frame
   hookInk: true,
   opens: 'set',
@@ -137,7 +147,9 @@ export const poster = {
     // askHold: the ask is on screen at least 1.6 s before the cut (gate-poster-1 ruling 3: at least 1.5 s)
     // fillTall: on a tall frame the closing line is set in the rows that set it largest in the band (gate-poster-1 ruling
     // 1: the 9:16 close left its lower 45 percent empty), so the ask also reaches step 2, over secondary.min (ruling 2)
-    end: { fillTall: true, askHold: 1.6, askSteps: [1, 2], askGap: 40, askFill: 'accent', askText: 'accentText' },
+    // gate-poster-2 ruling 6: `askSteps` [2] only (step 1 is 38 units, under secondary.min 52; the viral band's lower
+    // foot left the tall title too small for the hero rule to allow step 2)
+    end: { fillTall: true, askHold: 1.6, askSteps: [2], askGap: 40, askFill: 'accent', askText: 'accentText' },
     // clipping: the picture without a card: on the cut card the line caption under a pushed picture landed on the card's
     // ink and read ink on ink (the frame review's contrast rule at 16:9)
     clipping: { card: false, turn: 0 },
@@ -170,7 +182,9 @@ export const poster = {
     // only where the red accent reads (paper, ink: grounds.mjs groundKeys); the claimed bar grows in the accent and the
     // others in the ground's ink from the first frame (`startFinal`, `dimTo: 'ink'`: never a grey under 3:1), each from
     // `growFrom` of its height, so the shot opens on every bar's base; the source wraps to two lines (`sourceLines`)
-    chart: { heroTop: true, grounds: ['paper', 'ink'], heroColumn: 0.46, heroGap: 64, titleStep: 3, numeralShareTall: 0.2, sourceLines: 2, growFrom: 0.06, tight: true, together: true, startFinal: true, settle: 1.2, pointLabels: true, pointFace: 'text', tagSteps: [2, 3], tagGap: 32, numeralMax: 360, numeralShare: 0.3, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, dimTo: 'ink', refs: false, minPlot: 0.4, point: 14 },
+    // gate-poster-2: `heroLabel`, the highlighted bar carries its value label (ruling 6); `numeralShareTall` 0.12 (was
+    // 0.2): the viral band's foot rose to 0.72 (ruling 4) and the plot keeps its tallest bar over 30 percent of the frame
+    chart: { heroLabel: true, heroTop: true, grounds: ['paper', 'ink'], heroColumn: 0.46, heroGap: 64, titleStep: 3, numeralShareTall: 0.12, sourceLines: 2, growFrom: 0.06, tight: true, together: true, startFinal: true, settle: 1.2, pointLabels: true, pointFace: 'text', tagSteps: [2, 3], tagGap: 32, numeralMax: 360, numeralShare: 0.3, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, dimTo: 'ink', refs: false, minPlot: 0.4, point: 14 },
     // at 9:16 the route to the region panel draws once the panel is in (linkAfter), and a panel crop of 80 percent of the
     // picture's width or more takes all of it (wholeWidth): words were cut at its edge
     screen: { linkAfter: true, wholeWidth: 0.8, fill: 'ink', line: 'ink', lineWidth: 10, dots: 'rule', pill: 'cardPlate', text: 'inkText', urlText: 'cardPlateText', wideShare: 0.8, gap: 44 },

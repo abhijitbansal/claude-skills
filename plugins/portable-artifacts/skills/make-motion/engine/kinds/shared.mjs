@@ -81,7 +81,7 @@ export function compositionRect(ctx) {
   if (!insets || !isPortrait916(canvas)) {
     return { left: 0, top: 0, w: canvas.w, h: canvas.h, cx: canvas.w / HALF, cy: canvas.h / HALF, safe: false };
   }
-  return bandRect(look, canvas, insets, ctx.captionRoom);
+  return bandRect(look, canvas, insets, ctx.captionRoom, platform);
 }
 
 // The look's grid margin on every side, as insets in pixels.
@@ -91,12 +91,14 @@ function marginInsets(look, canvas) {
 }
 
 // The composition rectangle inside `insets`, its top and bottom set by the look's band when it has one.
-function bandRect(look, canvas, viralInsets, captionRoom) {
+function bandRect(look, canvas, viralInsets, captionRoom, platform = false) {
   // a look's band (look.band: shares of the height) sets the top and bottom inside the platform sides (look review 2:
-  // the safe zone's own bottom left the lower half of a vertical frame empty)
+  // the safe zone's own bottom left the lower half of a vertical frame empty); in a platform mode look.bandPlatform's
+  // bottom, when given, replaces the band's (poster, gate-poster-2 ruling 4: nothing below 72 percent in viral)
   const top = look.band ? Math.max(viralInsets.top, look.band.top * canvas.h) : viralInsets.top;
+  const foot = platform && Number.isFinite(look.bandPlatform?.bottom) ? look.bandPlatform.bottom : look.band?.bottom;
   // ctx.captionRoom: what a captioned shot gives up for its captions (captions/index.mjs kindContext)
-  const bottom = (look.band ? look.band.bottom * canvas.h : canvas.h - viralInsets.bottom) - (captionRoom ?? 0);
+  const bottom = (look.band ? foot * canvas.h : canvas.h - viralInsets.bottom) - (captionRoom ?? 0);
   const w = canvas.w - viralInsets.left - viralInsets.right, h = bottom - top;
   return { left: viralInsets.left, top, w, h, cx: viralInsets.left + w / HALF, cy: top + h / HALF, safe: true };
 }
