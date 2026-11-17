@@ -11,7 +11,7 @@ import { layoutText } from '../text/layout.mjs';
 import { colourOf, roundedRect } from '../devices/shared.mjs';
 import { fontFor, sizeAt, setCase, shownFrom, isWide } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
-import { slugBox, slugNodes } from './slug.mjs';
+import { slugBox, slugNodes, tagSlugOf } from './slug.mjs';
 import { wordForm } from './words.mjs';
 
 const HALF = 2;
@@ -236,10 +236,12 @@ export function feedLayout(shot, ctx, data, given, times) {
 // messages take the room under it, data.titleGap units down; else the given room and no slug.
 function slugRoom(shot, ctx, data, room) {
   const staged = { ...shot, kicker: shot.title };
-  const placed = data.titleSlug && shot.title !== undefined ? slugBox(staged, ctx) : null;
-  if (placed === null) return { room, slug: [] };
+  if (!data.titleSlug || shot.title === undefined) return { room, slug: [] };
+  // a look with no slug of its own (a stack look, poster) sets the title on its tag as the slug (slug.mjs tagSlugOf)
+  const own = slugBox(staged, ctx);
+  const placed = own ?? tagSlugOf(staged, ctx);
   const top = placed.box[1] + placed.box[3] + data.titleGap * ctx.unit;
-  return { room: { ...room, y: top, h: room.y + room.h - top }, slug: slugNodes(staged, ctx) };
+  return { room: { ...room, y: top, h: room.y + room.h - top }, slug: own === null ? placed.nodes : slugNodes(staged, ctx) };
 }
 
 // A message's colour track when the spoken one is lit (data.lit, ledger): `spoken` while it is current (from its time

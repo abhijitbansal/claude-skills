@@ -8,9 +8,9 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { landing } from '../devices/shared.mjs';
-import { setCase, arrivesMatched, ghostWords, fitLongestSide, opensSet } from './shared.mjs';
+import { setCase, arrivesMatched, ghostWords, fitLongestSide, opensSet, isWide, sizeAt } from './shared.mjs';
 import { plainTag } from './plain-tag.mjs';
-import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
+import { STACK, stackArea, composeStack, stackNodes, restack, lineAt, fitLine } from './stack.mjs';
 import { quotationOf, attributionOf } from './quote-text.mjs';
 
 // One opening mark (a "6") in a 0.45 x 0.8 box, as cubic curves from its tail's tip; the pair sets two of them 0.55 apart.
@@ -85,19 +85,74 @@ function placeStack(first, ctx, data, { portrait, area, below }) {
   return at(high);
 }
 
+// ---- the wide turn (look data turnWide, poster: gate-poster-1 rulings 1 and 3) ----
+
+const TURN = -90; // degrees: the turned line reads bottom to top, as stack-turn.mjs sets it
+const MARK_WIDTH = 1.225; // the mark pair's width over its height (two sixes, 0.98 of the shape box over MARK_HEIGHT)
+const TURN_PASSES = 2; // the turned line's size and the mark under it settle in two passes
+const TURN_ROWS = 3; // a stack of fewer lines keeps its upright composition
+
+// The turned first line and the mark under it in the left column of `area`: the line fitted to the column's height less
+// the mark's room, its size the stack's large size, else its small one, else its own fit; the mark as wide as the line is
+// thick, on the area's bottom edge. { line, markH, thickness } or null when the line falls under the stack's floor.
+function turnedFirst(texts, sizes, area, ctx) {
+  const limits = { min: sizeAt(ctx.look, STACK.fromStep, ctx.unit), max: STACK.max * ctx.unit };
+  const gap = STACK.kickerGap * ctx.unit;
+  let room = 0, line = null;
+  for (let i = 0; i < TURN_PASSES; i++) {
+    const length = area.h - room;
+    const own = fitLine(texts, length, limits, ctx);
+    const size = sizes.find((s) => s <= own.font.size + EPSILON) ?? own.font.size;
+    line = lineAt(texts, size, ctx);
+    room = line.layout.height / MARK_WIDTH + gap;
+  }
+  if (line.font.size < limits.min - EPSILON || line.layout.width > area.h - room + 1) return null;
+  return { line, markH: line.layout.height / MARK_WIDTH, thickness: line.layout.height, gap };
+}
+
+/**
+ * The quote set with its first line turned up the left edge of a wide frame, over the opening mark, and the rest of the
+ * quotation stacked in the room to its right (the attribution under it): the frame filled in both directions with the
+ * stack's two sizes, read up the edge and then down the column. null where it does not apply (no look data, a tall
+ * frame, a portrait, a stack of under three lines) or does not fit.
+ */
+function wideTurn(shot, ctx, data, text, staged, below) {
+  if (data.turnWide !== true || !isWide(ctx.canvas) || shot.src !== undefined) return null;
+  const area = stackArea(ctx);
+  const words = text.split(/\s+/).filter((w) => w !== '');
+  const whole = composeStack(text, staged, ctx);
+  if (whole.rows.length < TURN_ROWS || whole.rows.flat().length !== words.length) return null;
+  const count = whole.rows[0].length;
+  const guess = turnedFirst(words.slice(0, count), [], area, ctx);
+  if (guess === null) return null;
+  const left = area.left + guess.thickness + data.turnGap * ctx.unit;
+  const right = { left, top: area.top, w: area.left + area.w - left, h: area.h };
+  const rest = restack(composeStack(words.slice(count).join(' '), staged, ctx, right), ctx, { below });
+  const sizes = [...new Set(rest.lines.map((l) => l.font.size))].sort((a, b) => b - a);
+  const first = turnedFirst(words.slice(0, count), sizes, area, ctx);
+  if (first === null) return null;
+  const bottom = area.top + area.h - first.markH - first.gap;
+  const turn = { x: area.left, y: bottom, rotate: TURN };
+  const lines = [{ ...first.line, x: turn.x, baseline: turn.y, turn }, ...rest.lines];
+  const rows = [whole.rows[0], ...rest.rows.map((row) => row.map((i) => i + count))];
+  return { placed: { rows, lines, area: right, kicker: null }, mark: { left: area.left, top: area.top + area.h - first.markH, h: first.markH } };
+}
+
 /** The pop quote: { nodes, boxes } with the stack group carrying the hero id. */
 export function expandPopQuote(shot, ctx, data, times, hero) {
   const { look, unit, seed } = ctx;
   const area = stackArea(ctx);
   const staged = { ...shot, kicker: undefined };
-  const first = composeStack(setCase(look, 'display', quotationOf(shot)), staged, ctx);
+  const text = setCase(look, 'display', quotationOf(shot));
   const portrait = portraitSize(shot, ctx, data);
   const markAbove = (size) => data.mark * size * (1 - data.into);
   const tagProbe = byTag(shot, ctx, { left: 0, top: 0, maxWidth: area.w, at: 0, steps: data.tagSteps });
-  const placed = placeStack(first, ctx, data, { portrait, area, below: data.tagGap * unit + tagProbe.height });
+  const below = data.tagGap * unit + tagProbe.height;
+  const turned = wideTurn(shot, ctx, data, text, staged, below);
+  const placed = turned?.placed ?? placeStack(composeStack(text, staged, ctx), ctx, data, { portrait, area, below });
   const line0 = placed.lines[0];
-  const markH = data.mark * line0.font.size;
-  const markTop = line0.baseline - line0.ink.up - markAbove(line0.font.size);
+  const markH = turned?.mark.h ?? data.mark * line0.font.size;
+  const markTop = turned?.mark.top ?? line0.baseline - line0.ink.up - markAbove(line0.font.size);
   // the mark lands over the enter move, or is whole from frame 0 in a look that opens set (ban 5)
   const mark = node('path', `${shot.id}.mark`, { d: markPath(area.left, markTop, markH), fill: look.palette.accent }, {
     tracks: opensSet(look) ? {} : { opacity: landing(look.moves.enter.dur, look.moves.enter, 0, 1) },
@@ -106,7 +161,7 @@ export function expandPopQuote(shot, ctx, data, times, hero) {
   const stackTimes = times.words.map(({ at, spoken }) => ({ at, emphasised: spoken !== null && ctx.timing.words[spoken].emphasis }));
   const built = stackNodes(staged, ctx, placed, { times: stackTimes, hero, ...flags });
   const last = placed.lines.at(-1);
-  const tag = byTag(shot, ctx, { left: area.left, top: last.baseline + last.ink.down + data.tagGap * unit, maxWidth: area.w, at: times.by, steps: data.tagSteps });
+  const tag = byTag(shot, ctx, { left: placed.area.left, top: last.baseline + last.ink.down + data.tagGap * unit, maxWidth: placed.area.w, at: times.by, steps: data.tagSteps });
   const boxes = { text: built.boxes.text, ...Object.fromEntries(Object.entries(built.boxes).filter(([k]) => k.startsWith('word:'))), by: tag.box };
   const nodes = [mark, built.group, ...tag.nodes];
   if (portrait === null) return { nodes, boxes };

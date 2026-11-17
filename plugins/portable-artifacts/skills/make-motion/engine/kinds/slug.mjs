@@ -94,6 +94,17 @@ function inkedBox(card, cx, cy, turn) {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
 }
 
+/**
+ * The look's tag as the shot's slug, in any look: its box and its nodes, the tag's text the shot's kicker (frame
+ * furniture, as a slug's is), pinned to the frame. A tag-slug look (ledger) sets every slug so; a stack look sets one only
+ * where a kind's data asks (poster's feed title, look.kinds.feed.titleSlug: gate-poster-1 ruling 1).
+ */
+export function tagSlugOf(shot, ctx) {
+  const { box, group } = tagSlug(shot, ctx);
+  const children = group.children.map((n) => (n.type === 'text' ? node('text', `${shot.id}.kicker`, { ...n.props, role: 'kicker', furniture: true }, { tracks: n.tracks }) : n));
+  return { box, nodes: [node('group', group.id, { ...group.props, fixed: true }, { tracks: group.tracks, children })] };
+}
+
 /** The slug's unturned box [x, y, w, h] in canvas pixels, its box once turned (axis-aligned), and the box its card's
  *  paper and tape cover (`inked`, axis-aligned), or null. */
 export function slugBox(shot, ctx) {
@@ -119,12 +130,7 @@ export function slugNodes(shot, ctx) {
   const placed = slugBox(shot, ctx);
   if (placed === null) return [];
   const { look } = ctx;
-  if (isTagSlug(look)) {
-    // the tag's text is the shot's kicker (frame furniture, as a slug's is), pinned to the frame
-    const { group } = tagSlug(shot, ctx);
-    const children = group.children.map((n) => (n.type === 'text' ? node('text', `${shot.id}.kicker`, { ...n.props, role: 'kicker', furniture: true }, { tracks: n.tracks }) : n));
-    return [node('group', group.id, { ...group.props, fixed: true }, { tracks: group.tracks, children })];
-  }
+  if (isTagSlug(look)) return tagSlugOf(shot, ctx).nodes;
   const parts = slugParts(shot, ctx);
   const id = `${shot.id}.slug`;
   const card = slugCard(shot, ctx, placed.box);

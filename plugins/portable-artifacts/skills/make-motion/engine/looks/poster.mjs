@@ -135,7 +135,9 @@ export const poster = {
     // the ask's tag in the accent with the accent's own ink (on the ink ground the accent tag set the ground's ink on
     // red; the plate is red on the blue ground, a banned pair)
     // askHold: the ask is on screen at least 1.6 s before the cut (gate-poster-1 ruling 3: at least 1.5 s)
-    end: { askHold: 1.6, askSteps: [1, 2], askGap: 40, askFill: 'accent', askText: 'accentText' },
+    // fillTall: on a tall frame the closing line is set in the rows that set it largest in the band (gate-poster-1 ruling
+    // 1: the 9:16 close left its lower 45 percent empty), so the ask also reaches step 2, over secondary.min (ruling 2)
+    end: { fillTall: true, askHold: 1.6, askSteps: [1, 2], askGap: 40, askFill: 'accent', askText: 'accentText' },
     // clipping: the picture without a card: on the cut card the line caption under a pushed picture landed on the card's
     // ink and read ink on ink (the frame review's contrast rule at 16:9)
     clipping: { card: false, turn: 0 },
@@ -148,10 +150,16 @@ export const poster = {
     list: { noteGap: 32, smallSteps: [1, 2] },
     // the opening mark 1.4 times the first line (pop's 1.1): a poster's mark is display type, and it carries the tall
     // quote's top (the 65 percent fill at 9:16 in viral)
-    quote: { mark: 1.4, into: -0.15, tagGap: 40, tagSteps: [1, 2], portrait: 0.24 },
+    // gate-poster-1 rulings 1 and 3: on a wide frame the first line turns up the left edge over the mark and the rest
+    // stacks to its right, `turnGap` units on (quote-pop.mjs wideTurn)
+    quote: { turnWide: true, turnGap: 32, mark: 1.4, into: -0.15, tagGap: 40, tagSteps: [1, 2], portrait: 0.24 },
     // a tall frame stacks both sides with a cut bar between (the plan's tall compare): nothing dims (dim 1: no opacity on
     // an unspoken side, bans 5 and 6), the bar in the accent (a colour every ground permits) punches in at the turn
-    compare: { pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32, stackTall: true, sideGap: 64, dim: 1, valueTall: 0.3 },
+    // gate-poster-1 ruling 1: the payoff side's title in the accent (`payoff`: the two heroes differ), so a compare stands
+    // only where the accent reads at display size (`grounds`: paper, ink); on a tall frame the unspoken side stands in the
+    // opaque dim and the sides trade on the turn (`swapTall`), A's block from the band's top and B's to its bottom
+    // (`spreadTall`); the points stay at the side tag's step 2 at most (step 3 set a third size beside the tag)
+    compare: { payoff: 'accent', grounds: ['paper', 'ink'], swapTall: true, spreadTall: true, pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32, stackTall: true, sideGap: 64, dim: 1, valueTall: 0.3 },
     // the claim as the tag, bars as flat cut paper, the numeral the only accent, the other marks the opaque `dim`; the
     // finished chart held 1.2 s before the cut and every point of a line labelled (the ledger gate's rulings)
     // gate-poster-1 ruling 2, for a column or bar chart: `heroTop` (kinds/chart-hero.mjs) sets the highlighted value as
@@ -169,14 +177,20 @@ export const poster = {
     // land on textPlate: the place labels (ink, text size) read on it on every ground (red land put ink on red)
     // wholeTall: at 9:16 the whole land fits the width (the tall crop cut the Americas off at the frame edge, ban 10)
     map: { wholeTall: true, card: false, land: 'textPlate', coast: 'coastLine', borders: 'landLine', borderWidth: 1.5, highlight: 'ink', multiply: false, pin: 'ink', titleTo: 4, titleSteps: [3], listGap: 12, gap: 36, keyFill: 'ink', keyText: 'inkText', keyLine: 'ink', keyLineWidth: 4 },
-    diagram: { card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 18, gap: 56, margin: 12, platePad: 10, plate: 'paper', arrow: 'ink', arrowWidth: 12, head: 34, text: 'paper', edgeText: 'ink', titleSteps: [3], titleGap: 40, dim: 1, current: false, advance: 0.48 },
+    // gate-poster-1 ruling 1 (fill, hierarchy): on a wide frame the title is the hero in the display capitals
+    // (`titleWide`, at the largest of `titleWideSteps` that holds), so the labels take step 3 (a third of it) and the
+    // row's cards spread across the full width under it; the first two cards and the edge between them are on from
+    // frame 0 (`openNodes`)
+    diagram: { titleWide: 'display', titleWideSteps: [5, 4, 3], openNodes: 2, card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 18, gap: 56, margin: 12, platePad: 10, plate: 'paper', arrow: 'ink', arrowWidth: 12, head: 34, text: 'paper', edgeText: 'ink', titleSteps: [3], titleGap: 40, dim: 1, current: false, advance: 0.48 },
     timeline: { whenSteps: [5, 4], whatSteps: [3, 2], whenLines: 2, whatLines: 3, rail: 48, dot: 12, ring: 1.7, rule: 'ink', ruleWidth: 4, dotFill: 'ink', lit: 'ink', when: 'ink', what: 'ink', partGap: 24, gap: 24, titleSteps: [3], titleGap: 40, advance: 0.45 },
     // lineHeight 1.3 (pop's 1.4): at 16:9 the 72-unit margins leave room for 10 rows at 1.4, and the example has 11
     // gate-poster-1 ruling 1: the title is the hero in display capitals at 16:9 too (`heroWide`, for code of at most
     // `heroWideRows` rows), the code takes the full width under it at up to a third of the hero, and every line is set on
     // frame 0 (`setOnOpen`)
     code: { heroWide: true, heroWideRows: 6, heroMax: 300, setOnOpen: true, font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.3, pad: 32, steps: [2, 3], card: false, fill: 'ink', line: 'ink', lineWidth: 10, roles: { plain: 'inkText', keyword: 'inkText', string: 'inkText', number: 'inkText', comment: 'inkText', name: 'inkText', punct: 'inkText' }, highlight: { band: 'cardPlate', text: 'cardPlateText' }, removed: 'inkText', added: 'inkText', strike: 6, prompt: 'inkText', heroAdvance: 0.45 },
-    feed: { steps: [2, 3, 4], maxLines: 4, pad: 26, gap: 24, share: 0.82, radius: 0, bold: 900, me: { fill: 'ink', text: 'inkText' }, them: { fill: 'accent', text: 'accentText' }, card: { fill: 'ink', text: 'inkText' }, discs: ['ink'], discText: 'inkText', dots: 'ink', title: 'ink', line: 'ink', lineWidth: 6, shadow: false },
+    // gate-poster-1 ruling 1: the title is the slug (`titleSlug`, frame furniture, `titleGap` units over the thread) and
+    // the messages are the hero in the display capitals (`face`), as large as the band holds
+    feed: { titleSlug: true, titleGap: 48, face: 'display', steps: [2, 3, 4], maxLines: 4, pad: 26, gap: 24, share: 0.82, radius: 0, bold: 900, me: { fill: 'ink', text: 'inkText' }, them: { fill: 'accent', text: 'accentText' }, card: { fill: 'ink', text: 'inkText' }, discs: ['ink'], discText: 'inkText', dots: 'ink', title: 'ink', line: 'ink', lineWidth: 6, shadow: false },
     // fitTall: at 9:16 the picture is a cut-out filling the band over its caption in the ground's ink (a bleed's caption
     // card in ink was lost on the ink ground and left the band's lower part to a dark picture)
     media: { fitTall: 'cutout', treatment: 'halftone', push: 1.06, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 28, toWide: 7, toTall: 12, besideFrom: 8, gap: 40 },

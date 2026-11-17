@@ -11,7 +11,7 @@ import { didYouMean } from '../../shared/errors.mjs';
 import { HERO_SCHEMA, fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks, unionBox, isWide, sizeAt } from './shared.mjs';
 import { defaultCamera } from './camera.mjs';
 import { landBy, namedTimes, latestLanding, editorialLeft } from './arrivals.mjs';
-import { diagramLayout, floorStep } from './diagram-draw.mjs';
+import { diagramLayout, floorStep, titleSteps } from './diagram-draw.mjs';
 import { fitDiagram } from './diagram-layout.mjs';
 import { unmarked } from './shared.mjs';
 
@@ -23,11 +23,13 @@ const EDGE_LABEL_MAX = 16;
 const TITLE_MAX = 60;
 const HALF = 2;
 
-/** When the nodes, edges and the highlight arrive, and when each node is lit ([from, to)), in shot seconds. */
-export function arrivals(shot, timing) {
-  const nodes = namedTimes(shot.nodes.map((n) => n.label), timing).map((t, k) => (k === 0 ? 0 : t));
+/** When the nodes, edges and the highlight arrive, and when each node is lit ([from, to)), in shot seconds. `open`
+ *  (look data openNodes, poster): the first `open` nodes are on from frame 0, and an edge between two of them too. */
+export function arrivals(shot, timing, open = 1) {
+  const nodes = namedTimes(shot.nodes.map((n) => n.label), timing).map((t, k) => (k < open ? 0 : t));
   const at = new Map(shot.nodes.map((n, k) => [n.id, nodes[k]]));
-  const edges = (shot.edges ?? []).map((e) => landBy(Math.max(at.get(e.from) ?? 0, at.get(e.to) ?? 0) + EDGE_LAG, timing));
+  const edgeAt = (ends) => (open > 1 && ends <= 0 ? 0 : landBy(ends + EDGE_LAG, timing));
+  const edges = (shot.edges ?? []).map((e) => edgeAt(Math.max(at.get(e.from) ?? 0, at.get(e.to) ?? 0)));
   const built = Math.max(...nodes, ...edges);
   const highlight = shot.highlight === undefined ? null : Math.min(latestLanding(timing), Math.max(built, at.get(shot.highlight) ?? 0));
   const lit = nodes.map((from, k) => {
@@ -79,7 +81,7 @@ const estimate = (advance) => (text, font) => {
 function reviewArea(shot, look, canvas, data, unit) {
   const margin = look.grid.margin * unit;
   const band = !isWide(canvas) && look.band ? [look.band.top * canvas.h, look.band.bottom * canvas.h] : [margin, canvas.h - margin];
-  const title = shot.title === undefined ? 0 : sizeAt(look, Math.max(...data.titleSteps), unit) * HALF + data.titleGap * unit;
+  const title = shot.title === undefined ? 0 : sizeAt(look, Math.max(...titleSteps(data, canvas)), unit) * HALF + data.titleGap * unit;
   const left = editorialLeft(look, canvas, unit); // the kind's room (arrivals.mjs roomOf)
   return { x: left, y: band[0] + title, w: canvas.w - HALF * left, h: band[1] - band[0] - title };
 }
@@ -101,7 +103,7 @@ function expandDiagram(shot, ctx) {
   assertNoBlanks(shot, KIND);
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
-  const laid = diagramLayout(shot, { ...ctx, data }, arrivals(shot, timing));
+  const laid = diagramLayout(shot, { ...ctx, data }, arrivals(shot, timing, data.openNodes));
   const boxes = { diagram: unionBox(shot.nodes.map((n) => laid.boxes[`node:${n.id}`])), ...laid.boxes };
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'diagram' });
   return {

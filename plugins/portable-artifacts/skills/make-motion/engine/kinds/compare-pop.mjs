@@ -9,7 +9,7 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { landing } from '../devices/shared.mjs';
+import { landing, colourOf } from '../devices/shared.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, fitInBox, numeralLayout } from './shared.mjs';
 import { STACK, composeStack, stackNodes, stackArea, restack } from './stack.mjs';
@@ -81,9 +81,11 @@ function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinit
     children.push(node('text', `${staged.id}.points`, { x: area.left, y, layout: points, font, fill: look.palette.ink2, role: 'body' }));
     under = y + points.lines.at(-1).y + WORD_DESCENT * font.size;
   }
-  // the whole side, its tag (or first line) to its lowest ink: the turn bar keeps clear of it
+  // the whole side, its tag (or first line) to its lowest ink: the turn bar keeps clear of it; `foot`: the lowest text
+  // layout box's bottom (descent included), which a spread side keeps inside the band (spreadAreas)
   const top = placed.kicker === null ? placed.lines[0].baseline - placed.lines[0].ink.up : placed.kicker.top;
-  return { id: staged.id, children, box: built.boxes.text, block: [area.left, top, area.w, under - top], largest: Math.max(...placed.lines.map((line) => line.font.size)) };
+  const foot = Math.max(...children.filter((n) => n.type === 'text').map((n) => n.props.y + n.props.layout.height), ...built.group.children.map((n) => n.props.y + n.props.layout.height));
+  return { id: staged.id, children, box: built.boxes.text, block: [area.left, top, area.w, under - top], foot, largest: Math.max(...placed.lines.map((line) => line.font.size)) };
 }
 
 // Both values' one size: the largest, up to a stack line's cap (and `valueTall` of a side's height when both sides share
@@ -125,14 +127,53 @@ export function expandPopCompare(shot, ctx, data, { turn, both }) {
   const areas = both ? sideAreas(ctx, data) : [stackArea(ctx), stackArea(ctx)];
   const fitted = sharedValue(shot, ctx, data, both ? areas[0].h : Infinity);
   // a side's picture is whole the moment its side is (the stack is too): no fade in after the hard cut at the turn
-  const partsAt = (maxSize, value) => SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: both ? 0 : spans[k][0], value, area: areas[k], maxSize }));
-  const { parts, value } = sharedSizes(fitted, partsAt, { both, look: ctx.look, unit: ctx.unit });
+  const partsIn = (inside) => (maxSize, value) => SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: both ? 0 : spans[k][0], value, area: inside[k], maxSize }));
+  const shared = sharedSizes(fitted, partsIn(areas), { both, look: ctx.look, unit: ctx.unit });
+  const { value } = shared;
+  const parts = both && data.spreadTall === true ? partsIn(spreadAreas(areas, shared.parts))(Math.min(...shared.parts.map((p) => p.largest)), value) : shared.parts;
   const opacity = (k) => (both ? dimTrack(ctx.look, data, k, turn) : shownFrom(spans[k][0], spans[k][1]));
-  const wrappers = parts.map((p, k) => ({ id: p.id, tracks: { opacity: opacity(k) }, children: p.children }));
+  const wrappers = parts.map((p, k) => ({ id: p.id, tracks: { opacity: opacity(k) }, children: sideColours(p, k, ctx, data, { turn, both }) }));
   const boxes = { left: parts[0].box, right: parts[1].box, leftBlock: parts[0].block, rightBlock: parts[1].block };
   if (!both) return { wrappers, boxes };
   const bar = turnBar(shot, ctx, areas[0], { left: parts[0].block, right: parts[1].block }, turn);
   return { wrappers, boxes: { ...boxes, turn: bar.box }, extra: [bar.node] };
+}
+
+// data.spreadTall (poster, gate-poster-1 ruling 1): both sides on a tall frame take the band's two ends, A's block from
+// its top and B's to its bottom, each area its block down to its lowest layout box (a pixel over, so the set again never
+// shrinks it; a text's descent stays inside the band), the turn bar midway: the frame filled to its lower third, not two
+// half areas each centred with the bottom one short.
+const SPREAD_SLACK = 1; // px
+function spreadAreas([a, b], parts) {
+  const [ha, hb] = parts.map((p) => p.block[3] + SPREAD_SLACK);
+  const overhang = Math.max(0, parts[1].foot - (parts[1].block[1] + parts[1].block[3])); // B's descent under its ink
+  return [{ ...a, h: ha }, { ...b, top: b.top + b.h - hb - overhang, h: hb }];
+}
+
+// A side's colours (look data, poster: gate-poster-1 ruling 1): B's title, the payoff, in data.payoff (a palette key)
+// so the two heroes differ; on a tall frame with data.swapTall the unspoken side's title and points stand in the opaque
+// `dim` (ink mixed toward the ground, ban 6) and step to their colour on the turn (A steps down to the dim), a hard step
+// of the look's emphasize move: the swap reads, and nothing is translucent (ban 5).
+function sideColours(part, k, ctx, data, { turn, both }) {
+  const { look } = ctx;
+  const swaps = both && data.swapTall === true;
+  if (!swaps && data.payoff === undefined) return part.children; // a look without the data: the side as built
+  const hero = k === 1 && data.payoff !== undefined ? colourOf(look, data.payoff) : look.palette.ink;
+  const stepped = (full) => {
+    const [from, to] = k === 0 ? [full, look.palette.dim] : [look.palette.dim, full];
+    return track([{ t: 0, v: from }, { t: turn, v: from }, { t: turn + look.moves.emphasize.dur, v: to }]);
+  };
+  const recolour = (n, full) => {
+    const count = n.props.layout.lines.reduce((sum, l) => sum + l.words.length, 0);
+    const base = n.wordTracks?.length === count ? n.wordTracks : Array.from({ length: count }, () => ({}));
+    const props = { ...n.props, fill: full };
+    return node('text', n.id, props, { tracks: n.tracks, ...(swaps ? { wordTracks: base.map((w) => ({ ...w, fill: stepped(full) })) } : { wordTracks: n.wordTracks }) });
+  };
+  return part.children.map((n) => {
+    if (n.id === `${part.id}.title`) return node('group', n.id, n.props, { tracks: n.tracks, children: n.children.map((line) => recolour(line, hero)) });
+    if (n.id === `${part.id}.points`) return recolour(n, n.props.fill);
+    return n;
+  });
 }
 
 // The sides' sizes. Both on one frame: the two titles one size, the smaller side's largest (twice: a side set again may

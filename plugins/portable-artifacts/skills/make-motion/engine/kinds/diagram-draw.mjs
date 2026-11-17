@@ -23,6 +23,16 @@ const HEAD_ANGLE = Math.PI / 6;
 // The look's floor step for the author's words: its second on a tall frame, its first on a wide one.
 export const floorStep = (canvas) => (isWide(canvas) ? 1 : HALF);
 
+/** Is the title the display heading (not the look's tag) on this frame by look data (`titleWide: 'display'`)? */
+export const displayTitle = (data, canvas) => data.titleWide === 'display' && isWide(canvas);
+
+/** The steps the title is tried at: data.titleWideSteps for a display title on a wide frame, else data.titleSteps. */
+export const titleSteps = (data, canvas) => (displayTitle(data, canvas) ? data.titleWideSteps ?? data.titleSteps : data.titleSteps);
+
+// Every node whose index is under `open` (data.openNodes, poster) is on from the first frame, and so is every edge
+// between two of them, drawn whole: the shot opens on a composed chain, not a lone card (gate-poster-1 ruling 1).
+const opensDrawn = (at) => at <= 0;
+
 // Opacity: hidden until `at` (shown from the start at 0), then dimmed to `dim` from `dimAt` (null: never dimmed).
 function presence(at, dimAt, dim) {
   const keys = at <= 0 ? [{ t: 0, v: 1 }] : [{ t: 0, v: 0 }, { t: at, v: 0 }, { t: at, v: 1 }];
@@ -38,7 +48,7 @@ function windowed(from, to, off, on) {
 // The desk title: the largest of `steps` that holds in TITLE_LINES lines within `width`; null without a title.
 function deskTitle(shot, ctx, width) {
   if (shot.title === undefined) return null;
-  const sets = [...ctx.data.titleSteps].sort((a, b) => b - a).map((step) => {
+  const sets = [...titleSteps(ctx.data, ctx.canvas)].sort((a, b) => b - a).map((step) => {
     const font = fontFor(ctx.look, 'display', sizeAt(ctx.look, step, ctx.unit), ctx.unit);
     return { font, layout: layoutText({ text: setCase(ctx.look, 'display', shot.title), font, maxWidth: width, measure: ctx.measure }) };
   });
@@ -48,7 +58,9 @@ function deskTitle(shot, ctx, width) {
 // The title's nodes, the height it takes and the largest label size it allows (Infinity for a tag).
 function titleOf(shot, ctx, room) {
   if (shot.title === undefined) return { nodes: [], h: 0, maxSize: Infinity };
-  if (isEditorial(ctx.look)) {
+  // a look whose data sets `titleWide: 'display'` (poster, gate-poster-1 ruling 1) takes the display heading on a wide
+  // frame too: the title the hero in the display capitals, the labels at most a third of it
+  if (isEditorial(ctx.look) || displayTitle(ctx.data, ctx.canvas)) {
     const set = deskTitle(shot, ctx, room.w);
     return { nodes: [node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: set.layout, font: set.font, fill: ctx.look.palette.ink, role: 'hero' })], h: set.layout.height, maxSize: set.font.size / HERO_RATIO };
   }
@@ -90,7 +102,8 @@ function edgeOf(shot, ctx, route, j, at) {
   const { look, unit, data } = ctx;
   const colour = colourOf(look, data.arrow), width = data.arrowWidth * unit;
   const step = isHand(look) ? look.moves.draw.step : undefined;
-  const line = node('path', `${shot.id}.edge${j}.line`, { d: route.d, stroke: colour, strokeWidth: width, lineCap: 'round' }, { tracks: { draw: landing(at, look.moves.draw, 0, 1, step) }, step });
+  const draw = opensDrawn(at) ? track([{ t: 0, v: 1 }]) : landing(at, look.moves.draw, 0, 1, step);
+  const line = node('path', `${shot.id}.edge${j}.line`, { d: route.d, stroke: colour, strokeWidth: width, lineCap: 'round' }, { tracks: { draw }, step });
   const from = route.control ?? route.from, tip = route.to;
   const heading = Math.atan2(tip[1] - from[1], tip[0] - from[0]);
   const len = data.head * unit;

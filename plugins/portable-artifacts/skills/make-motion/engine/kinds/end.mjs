@@ -236,7 +236,11 @@ function expandPop(shot, ctx, data, times) {
   const picture = shot.src === undefined ? null : pictureSize(ctx.asset(shot.src), ctx.canvas);
   const above = picture === null ? 0 : picture.h + STACK.kickerGap * unit;
   const staged = { ...shot, kicker: shot.mark };
-  const first = composeStack(setCase(look, 'display', titleOf(shot)), staged, ctx);
+  // data.fillTall (poster, gate-poster-1 ruling 1): on a tall frame the closing line is tried in every set of rows its
+  // words allow and set in the one that sets it largest within the band, as the viral hook is (stack.mjs hookLines), so
+  // the card fills the frame; the ask then takes the larger step the hero rule allows
+  const fills = data.fillTall === true && !isWide(ctx.canvas);
+  const first = composeStack(setCase(look, 'display', titleOf(shot)), staged, ctx, area, { hook: fills });
   // with the hero margin: at exactly three times, the page's measured sizes read 2.99 (review-browser, captions-browser)
   const stepFor = (p) => stepUnder(look, data.askSteps, unit, [{ size: Math.max(...p.lines.map((l) => l.font.size)), ratio: HERO_MARGIN * MIN_HERO_RATIO }]);
   const tagAt = (step) => (top, at) => plainTag(ctx, `${shot.id}.ask`, shot.ask, {
