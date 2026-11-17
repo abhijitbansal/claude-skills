@@ -45,11 +45,19 @@ function kindEntry(entry, def, name) {
 // A move's entry: its values in each listed look (null where the look does not use it).
 const moveLooks = (name) => Object.fromEntries(registries.looks.names().map((look) => [look, registries.looks.get(look).moves?.[name] ?? null]));
 
+// A cut's entry: its family, its directions (the first the default, or null), its default length, whether it takes
+// `smear`, one valid `cut` value, and the listed looks whose palette holds it (every look may use every cut).
+const cutPalettes = (name) => registries.looks.names().filter((look) => registries.looks.get(look).cutPalette?.includes(name));
+const cutEntry = (entry, def, name) => ({
+  ...entry, family: def.family, directions: def.directions, dur: def.dur, smear: def.smearable === true, example: def.example, palettes: cutPalettes(name),
+});
+
 function entryOf(listName, name) {
   const def = registries[listName].get(name);
   const entry = { name, summary: def.summary ?? '', ...(def.experimental === true ? { experimental: true } : {}) };
   if (listName === 'kinds') return kindEntry(entry, def, name);
   if (listName === 'moves') return { ...entry, looks: moveLooks(name) };
+  if (listName === 'cuts') return cutEntry(entry, def, name);
   return entry;
 }
 
@@ -85,13 +93,24 @@ function moveText(move) {
   return parts.join(', ');
 }
 
-/** The text --list prints: one block per entry; a kind lists its fields and its example, a move its values per look. */
+// A cut's options as one short line: "node, from right (default), left, up or down; 0.4 s; takes smear".
+function cutText(e) {
+  const [first, ...rest] = e.directions ?? [];
+  const tail = rest.length < 2 ? rest.join('') : `${rest.slice(0, -1).join(', ')} or ${rest.at(-1)}`;
+  const directions = first === undefined ? 'no direction' : `from ${first} (default)${rest.length > 0 ? `, ${tail}` : ''}`;
+  const palettes = e.palettes.length > 0 ? `; in the palette of ${e.palettes.join(', ')}` : '';
+  return `${e.family}, ${directions}; ${e.dur === 0 ? 'no window' : `${e.dur} s`}; ${e.smear ? 'takes smear' : 'no smear'}${palettes}`;
+}
+
+/** The text --list prints: one block per entry; a kind lists its fields and its example, a move its values per look, a
+ *  cut its options and its example. */
 export function formatList(listName, entries) {
   const head = [`${listName} (${entries.length})`];
   if (listName === 'kinds') head.push(`every shot also takes: ${COMMON_SHOT_FIELDS.map(fieldText).join(', ')} (* required; give say or hold, not both)`);
   const blocks = entries.map((e) => {
     const lines = [`${e.name}  ${e.experimental ? '(experimental) ' : ''}${e.summary}`];
     if (e.fields) lines.push(`  fields: ${e.fields.map(fieldText).join(', ') || 'none of its own'}`);
+    if (listName === 'cuts') lines.push(`  ${cutText(e)}`);
     if (e.example) lines.push(`  example: ${JSON.stringify(e.example)}`);
     if (listName === 'moves') lines.push(...Object.entries(e.looks).map(([look, move]) => `  ${look}: ${moveText(move)}`));
     return lines.join('\n');

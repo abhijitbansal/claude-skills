@@ -9,13 +9,14 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
-import { colourOf, at2 } from '../devices/shared.mjs';
+import { colourOf, at2, pathPoints, styleOf } from '../devices/shared.mjs';
 import { fontFor, sizeAt, isWide, isEditorial, setCase, overlaps, cardOf, tagBox } from './shared.mjs';
 import { arrivalTrack, roomOf } from './arrivals.mjs';
 
 const HALF = 2;
 const PIN = 11; // units: a pin's radius
 const NO_WRAP = 1e6;
+const STICKER_PAD = 18; // units: the sticker device's own default pad (engine/devices/sticker.mjs)
 
 // The look's floor for the author's words on this format: its second step on a tall frame, its first on a wide one.
 const floorSize = (ctx) => sizeAt(ctx.look, isWide(ctx.canvas) ? 1 : 2, ctx.unit);
@@ -51,24 +52,85 @@ function mapGroup(shot, ctx, data, { x, y, s }, times) {
 }
 
 // Each place: its pin and its label (the label device, at the floor size, kept inside the map box), arriving together;
-// a label that would cover one already placed is left out, and the first kept label names the places left out.
+// a label that would cover one already placed is left out, and the first kept label names the places left out. A look
+// whose map data says `labelPlate: 'sticker'` sets each name on the sticker device (its own plate), so a name reads on
+// the land and on a highlight alike (pop: white on the lime highlight did not read).
 function placeNodes(shot, ctx, data, view, times) {
   const { look, unit, seed, measure } = ctx;
   const size = floorSize(ctx);
   const kept = [];
   const dropped = [];
+  const areas = data.highlights.map((h) => boxOf(pathPoints(h.d).map(([x, y]) => [view.x + x * view.s, view.y + y * view.s])));
   const nodes = data.places.flatMap((p, i) => {
     const at = times.places[i] ?? 0;
     const [px, py] = [view.x + p.x * view.s, view.y + p.y * view.s];
     const pin = node('path', `${shot.id}.place${i}.pin`, { d: disc(px, py, PIN * unit), fill: colourOf(look, ctx.data.pin) }, { tracks: { opacity: arrivalTrack(at) } });
-    const side = sideAwayFromRoutes(data, p);
-    const built = registries.devices.get('label').build({ id: `${shot.id}.place${i}`, box: view.box, at, look, unit, seed, measure, text: p.name, anchor: [px, py], size, ...(side ? { side } : {}) });
-    if (kept.some((b) => overlaps(b, built.boxes.label))) { dropped.push(`places[${i}].name`); return [pin]; }
-    kept.push(built.boxes.label);
-    return [pin, ...stepIn(built.nodes, at)];
+    const label = (side) => {
+      const built = registries.devices.get('label').build({ id: `${shot.id}.place${i}`, box: view.box, at, look, unit, seed, measure, text: p.name, anchor: [px, py], size, ...(side ? { side } : {}) });
+      return ctx.data.labelPlate === 'sticker' ? onSticker(built, ctx, at) : { nodes: stepIn(built.nodes, at), box: built.boxes.label };
+    };
+    const plated = keepOff(label, sideAwayFromRoutes(data, p), areas);
+    if (kept.some((b) => overlaps(b, plated.box))) { dropped.push(`places[${i}].name`); return [pin]; }
+    kept.push(plated.box);
+    return [pin, ...plated.nodes];
   });
   return { nodes: noteDropped(nodes, shot, dropped), labels: kept };
 }
+
+// The label `make(side)` gives on the side that covers least of the highlighted areas (a name over the area it is in
+// hides the highlight the narration names), the preferred side first, then the label device's own choice, then the
+// four sides in turn; ties keep that order.
+const SIDES = Object.freeze([undefined, 'right', 'left', 'above', 'below']);
+const coverOf = (box, areas) => areas.reduce((sum, a) => sum + Math.max(0, Math.min(box[0] + box[2], a[0] + a[2]) - Math.max(box[0], a[0])) * Math.max(0, Math.min(box[1] + box[3], a[1] + a[3]) - Math.max(box[1], a[1])), 0);
+function keepOff(make, preferred, areas) {
+  const tries = (preferred ? [preferred, ...SIDES] : SIDES).map(make);
+  return tries.reduce((best, t) => (coverOf(t.box, areas) < coverOf(best.box, areas) ? t : best));
+}
+
+function boxOf(points) {
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+}
+
+// A label's text moved onto the sticker device over its leader; the sticker arrives as a step on `at` like every reveal
+// here (a spring from 0.6 would show the name under the reading floor mid-pop). -> { nodes, box: the sticker's box }.
+function onSticker(built, ctx, at) {
+  const [group] = built.nodes;
+  const leader = group.children.find((c) => c.type === 'path');
+  const label = group.children.find((c) => c.type === 'text');
+  // moved out from the anchor by the sticker's pad, so the plate keeps the label's gap and the leader shows
+  const pad = (styleOf(ctx.look, 'sticker').pad ?? STICKER_PAD) * ctx.unit;
+  const [dx, dy] = { right: [pad, 0], left: [-pad, 0], above: [0, -pad], below: [0, pad] }[built.side];
+  const [bx, by, bw, bh] = built.boxes.label;
+  const words = node('text', label.id, { ...label.props, x: label.props.x + dx, y: label.props.y + dy });
+  const made = registries.devices.get('sticker').build({ id: `${group.id}.sticker`, box: [bx + dx, by + dy, bw, bh], at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, children: [words] });
+  const [sticker] = made.nodes;
+  const landed = node(sticker.type, sticker.id, sticker.props, { children: sticker.children, tracks: { opacity: arrivalTrack(at) } });
+  return { nodes: [node('group', group.id, {}, { children: [leader, landed] })], box: made.boxes.sticker };
+}
+
+// A tall frame keys its places: each pin is a disc holding the place's number, and the names are listed under the map
+// beside the same discs (listNodes), so a name is drawn once. The number is set at the names' size (one size on the
+// frame) in the label face; the disc's colours are look data (keyFill, keyText, keyLine).
+const KEY_DISC = 0.72; // a key disc's radius, in em of the names' size
+function keyDisc(shot, ctx, id, [cx, cy], number, at) {
+  const { look, unit } = ctx;
+  const size = floorSize(ctx);
+  const r = KEY_DISC * size;
+  const set = text(ctx, 'label', size, String(number), NO_WRAP);
+  const line = ctx.data.keyLine ? { stroke: colourOf(look, ctx.data.keyLine), strokeWidth: ctx.data.keyLineWidth * unit } : {};
+  const plate = node('path', `${id}.disc`, { d: disc(cx, cy, r), fill: colourOf(look, ctx.data.keyFill), ...line });
+  const num = node('text', `${id}.num`, { x: cx - set.layout.width / HALF, y: cy - set.layout.height / HALF, layout: set.layout, font: set.font, fill: colourOf(look, ctx.data.keyText) });
+  return node('group', id, {}, { children: [plate, num], tracks: { opacity: arrivalTrack(at) } });
+}
+
+function keyedPlaces(shot, ctx, data, view, times) {
+  const nodes = data.places.map((p, i) => keyDisc(shot, ctx, `${shot.id}.key${i}.pin`, [view.x + p.x * view.s, view.y + p.y * view.s], i + 1, times.places[i] ?? 0));
+  return { nodes, labels: [] };
+}
+
+// The height of one row of the tall frame's key: a disc or a line of the names, the taller, and the gap under it.
+const keyRow = (ctx) => Math.max(HALF * KEY_DISC * floorSize(ctx), floorSize(ctx) * ctx.look.lineHeight.text) + ctx.data.listGap * ctx.unit;
 
 // The side of a place its label takes so that it keeps off the place's routes: the side away from where they leave
 // (left when they mostly leave rightwards); undefined (the label chooses) for a place with no route.
@@ -97,15 +159,18 @@ function routeNodes(shot, ctx, data, view, times) {
   }).nodes));
 }
 
-// The places as a column of names in the text face under the map (tall frames), each arriving with its pin.
+// The places as the key under the map (tall frames): each row the place's numbered disc and its name in the text face,
+// arriving with its pin.
 function listNodes(shot, ctx, data, [x, y, w], times) {
   const size = floorSize(ctx);
-  let top = y;
+  const r = KEY_DISC * size;
+  const row = keyRow(ctx);
   return data.places.map((p, i) => {
-    const set = text(ctx, 'text', size, p.name, w);
-    const n = node('text', `${shot.id}.list${i}`, { x, y: top, layout: set.layout, font: set.font, fill: ctx.look.palette.ink }, { tracks: { opacity: arrivalTrack(times.places[i] ?? 0) } });
-    top += set.layout.height + ctx.data.listGap * ctx.unit;
-    return n;
+    const at = times.places[i] ?? 0;
+    const mid = y + i * row + (row - ctx.data.listGap * ctx.unit) / HALF;
+    const set = text(ctx, 'text', size, p.name, w - HALF * r - size);
+    const name = node('text', `${shot.id}.list${i}`, { x: x + HALF * r + size / HALF, y: mid - set.layout.height / HALF, layout: set.layout, font: set.font, fill: ctx.look.palette.ink }, { tracks: { opacity: arrivalTrack(at) } });
+    return node('group', `${shot.id}.key${i}`, {}, { children: [keyDisc(shot, ctx, `${shot.id}.key${i}.mark`, [x + r, mid], i + 1, at), name] });
   });
 }
 
@@ -142,6 +207,8 @@ function viewIn(data, area, tall) {
   return { x, y, s, box: shown };
 }
 
+const pinBox = (x, y, r) => [x - r, y - r, HALF * r, HALF * r];
+
 /** The map's nodes and boxes for the shot, from its prepared data and arrival times. */
 export function mapLayout(shot, ctx, data, times) {
   const { look, canvas, unit } = ctx;
@@ -151,19 +218,19 @@ export function mapLayout(shot, ctx, data, times) {
   const side = wide && isEditorial(look) ? gridSpan(look, canvas, 1, ctx.data.titleTo) : { x: room.x, w: room.w };
   const title = titleNodes(shot, ctx, side.x, room.y, side.w);
   const sourceH = shot.source === undefined ? 0 : floorSize(ctx) * HALF + gap;
-  const listH = wide ? 0 : data.places.length * (floorSize(ctx) * look.lineHeight.text + ctx.data.listGap * unit) + gap;
+  const listH = wide ? 0 : data.places.length * keyRow(ctx) + gap;
   const beside = wide && isEditorial(look);
   const left = beside ? gridSpan(look, canvas, ctx.data.titleTo + 1, look.grid.columns).x : room.x;
   const top = beside ? room.y : room.y + title.h + (title.h > 0 ? gap : 0);
   const area = { x: left, y: top, w: room.x + room.w - left, h: room.y + room.h - top - sourceH - listH };
   const view = viewIn(data, area, !wide);
   const card = ctx.data.card ? [cardOf(ctx, `${shot.id}.sheet`, [view.box[0] - gap / HALF, view.box[1] - gap / HALF, view.box[2] + gap, view.box[3] + gap], 0)] : [];
-  const places = placeNodes(shot, ctx, data, view, times);
+  const places = wide ? placeNodes(shot, ctx, data, view, times) : keyedPlaces(shot, ctx, data, view, times);
   const below = view.box[1] + view.box[3] + gap;
   const list = wide ? [] : listNodes(shot, ctx, data, [room.x, below, room.w], times);
   const listEnd = wide ? below : below + listH;
   return {
     nodes: [...card, mapGroup(shot, ctx, data, view, times), ...routeNodes(shot, ctx, data, view, times), ...places.nodes, ...title.nodes, ...list, ...sourceNode(shot, ctx, view.box[0], listEnd)],
-    boxes: { map: view.box, ...Object.fromEntries(data.places.map((p, i) => [`place:${p.name}`, [view.x + p.x * view.s - PIN * unit, view.y + p.y * view.s - PIN * unit, HALF * PIN * unit, HALF * PIN * unit]])) },
+    boxes: { map: view.box, ...Object.fromEntries(data.places.map((p, i) => [`place:${p.name}`, pinBox(view.x + p.x * view.s, view.y + p.y * view.s, wide ? PIN * unit : KEY_DISC * floorSize(ctx))])) },
   };
 }

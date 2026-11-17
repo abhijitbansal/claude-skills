@@ -191,14 +191,15 @@ test('slide and punch smear what they move: 12 samples over half a frame of trav
   assert.ok(texts('two.text').some((n) => n.x < canvas.w), 'the incoming text is on screen at p 0.5');
 });
 
-// A look that asks for the cut smear: `base` with smear: true (neither shipped look does).
+// A look that asks for the cut smear: `base` with cutStyle smear: true on slide and punch (neither shipped look does yet).
 function smearLook(base) {
   const name = `${base}-smear-test`;
-  if (!registries.looks.has(name)) registries.looks.add(name, Object.freeze({ ...registries.looks.get(base), name, smear: true }));
+  const cutStyle = { slide: { smear: true }, punch: { smear: true } };
+  if (!registries.looks.has(name)) registries.looks.add(name, Object.freeze({ ...registries.looks.get(base), name, cutStyle }));
   return name;
 }
 
-test('the smear is look data: desk and pop draw one copy of each shot through a slide and a punch; a look with smear: true draws the averaged samples', () => {
+test('the smear is look data: desk and pop draw one copy of each shot through a slide and a punch; a look whose cutStyle asks for it draws the averaged samples', () => {
   const statements = (cut) => [{ id: 'one', show: 'statement', say: 'Your charts lie.' }, { id: 'two', show: 'statement', say: 'No cloud.', cut }];
   for (const [look, format, cut] of [['desk', '16:9', 'slide'], ['pop', '9:16', 'slide'], ['pop', '9:16', 'punch']]) {
     const f = filmFor(statements(cut), look, format);
@@ -212,8 +213,8 @@ test('the smear is look data: desk and pop draw one copy of each shot through a 
     const smeared = filmFor(statements(cut), smearLook(look), format).sampleAt(smearStart + registries.cuts.get(cut).dur / 2);
     assert.equal(smeared.filter((n) => n.props.layer === true).length, 12, `${look}-smear-test ${cut}: twelve samples`);
   }
-  assert.equal(registries.looks.get('desk').smear, undefined);
-  assert.equal(registries.looks.get('pop').smear, undefined);
+  assert.equal(registries.looks.get('desk').cutStyle.slide?.smear, undefined);
+  assert.equal(registries.looks.get('pop').cutStyle.punch?.smear, undefined);
 });
 
 test('match interpolates a shared node at p 0.5 and fades the others', () => {

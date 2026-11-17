@@ -2,7 +2,8 @@
 // into the shot camera: zoom 1 a millisecond before `at` (so it jumps instead of ramping from an earlier key), the
 // peak zoom on `at`, and back to 1 with an exponential ease-out. The peak and the return time come from the look's
 // `devices.punch` entry (`scale`, `dur`) and are 1.12 and 0.12 s when the look has none. A look supports it when it
-// is supported by the usual rule (a `devices.punch` entry), or when its cuts include `punch`, or when its emphasis
+// is supported by the usual rule (a `devices.punch` entry), or when its own cut set (its cutPalette: every look may
+// name every cut, engine/looks) includes `punch`, or when its emphasis
 // move is a spring. Pure and DOM-free.
 import { checkParams, styleOf, styledBy } from './shared.mjs';
 
@@ -30,6 +31,6 @@ function buildPunch(params) {
 export const punch = Object.freeze({
   name: 'punch',
   summary: 'An instant camera scale-up on a word, then a quick settle.',
-  supports: (look) => styledBy('punch')(look) || look.cuts.includes('punch') || SPRING_EASE.test(look.moves.emphasize.ease),
+  supports: (look) => styledBy('punch')(look) || look.cutPalette?.includes('punch') === true || SPRING_EASE.test(look.moves.emphasize.ease),
   build: buildPunch,
 });

@@ -8,6 +8,7 @@ import '../looks/index.mjs';
 import '../modes/index.mjs';
 import '../kinds/index.mjs';
 import '../cuts/index.mjs';
+import { resolveShotCut, explicitCut } from '../cuts/resolve.mjs';
 import { applyAccent, gridX } from '../looks/index.mjs';
 import { unitOf } from '../units.mjs';
 import { srcsOfShot } from '../assets.mjs';
@@ -19,7 +20,6 @@ import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs'
 
 const DEFAULT_MODE = 'pro';
 const DEFAULT_SEED = 1;
-const DEFAULT_CUT = 'cut';
 const DEFAULT_BACKGROUND = '#000000';
 const TIME_DECIMALS = 1e9; // shot-local time is rounded to 1e-9 s, so float noise cannot change a sample
 
@@ -138,11 +138,14 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
   const ctx = shotContext({ film, index, timeline, canvas, measure, assets, look, viralInsets, prepared });
-  const out = kind.expand(shot, kindContext(film, kind, ctx)); // a captioned shot's kind keeps clear of the captions
+  // the cut that opens the shot (the film's root cut and the look's cutStyle included), and the shot as its kind sees it:
+  // with that cut written out in full, so a kind reading shot.cut (its camera, its opening) sees the cut the film draws
+  const cut = resolveShotCut(film, index, { look });
+  const kindShot = cut === null ? shot : { ...shot, cut: explicitCut(cut) };
+  const out = kind.expand(kindShot, kindContext(film, kind, ctx)); // a captioned shot's kind keeps clear of the captions
   if (!out || !Array.isArray(out.nodes)) throw new Error(`kind "${shot.show}" must return { nodes: [...] } for shot "${shot.id}"`);
   const heroNode = out.hero === undefined ? undefined : out.nodes.find((n) => n.id === out.hero);
   const box = kind.heroTarget === undefined ? undefined : out.boxes?.[kind.heroTarget];
-  const cut = index === 0 ? null : registries.cuts.get(shot.cut ?? DEFAULT_CUT);
   const cam = cameraOf(out.camera, canvas, `shot "${shot.id}"`);
   return {
     start: timing.start,
@@ -193,10 +196,22 @@ export function buildFilm({ film, timeline, measure, assets = new Map(), canvas,
     const local = shotTime(t, shot.start);
     if (!shot.cut || local >= shot.cutDur) return { background: shot.background, sampled: sampleShot(index, local) };
     const from = sampleShot(index - 1, shots[index - 1].duration);
-    // `frame`: how far p moves in one frame, for the cuts that smear what they move, given only in a look that asks for the
-    // smear (look.smear); `background`: painted under each smear sample so that it covers the frame
-    const frame = look.smear === true ? 1 / (timeline.fps * shot.cutDur) : undefined;
-    const sampled = shot.cut.apply({ from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, frame, background: shot.background });
+    // a layer or shader cut composes two pictures in the page: the incoming shot live, the outgoing one frozen at its end
+    // (`t`: the film second it froze at, the time its fields are painted with)
+    if (shot.cut.family !== 'node') {
+      const prev = shots[index - 1];
+      return {
+        background: shot.background,
+        sampled: sampleShot(index, local),
+        cut: { name: shot.cut.name, family: shot.cut.family, p: local / shot.cutDur, direction: shot.cut.direction },
+        from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration },
+      };
+    }
+    // `frame`: how far p moves in one frame, for the cuts that smear what they move, given only when the resolved cut asks
+    // for the smear (the shot's, the root cut's or the look's cutStyle); `background`: painted under each smear sample so
+    // that it covers the frame
+    const frame = shot.cut.smear ? 1 / (timeline.fps * shot.cutDur) : undefined;
+    const sampled = shot.cut.entry.apply({ from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, frame, background: shot.background, direction: shot.cut.direction });
     return { background: shot.background, sampled };
   };
 

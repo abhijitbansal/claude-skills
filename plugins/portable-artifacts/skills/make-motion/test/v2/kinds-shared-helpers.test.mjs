@@ -45,6 +45,7 @@ test('a snapped plain tag (the pop quote attribution) takes a scale step, never 
 // Each kind's own files: its module and the ones named after it (clipping also owns its close-ups and region marks).
 const KIND_FILES = Object.freeze({
   free: [], statement: [], number: [], end: [], list: [], quote: [], compare: [], chart: [], clipping: [], media: [], screen: [], map: [],
+  diagram: [], timeline: [], code: [], feed: [],
 });
 // editorial.mjs: the editorial family's columns and bounds, canvas or 9:16 safe zone (its own module: see its header)
 // camera.mjs, highlighter.mjs, plain-tag.mjs: split out of shared.mjs by responsibility (review B M21); values.mjs: the
@@ -84,11 +85,13 @@ function textFields(schema, at = '') {
 
 test('every text field of every kind refuses a blank string: its schema says not blank', async () => {
   const { registries } = await import('../../engine/registry.mjs');
-  const { NOT_BLANK } = await import('../../engine/kinds/shared.mjs');
+  const { NOT_BLANK, HERO_SCHEMA } = await import('../../engine/kinds/shared.mjs');
   assert.equal(typeof NOT_BLANK, 'string', 'shared.mjs names the not-blank pattern');
   let fields = 0;
+  // an id (a diagram node's id, the node a highlight names) takes the id pattern, which refuses a blank string too
+  const refusesBlank = (s) => s.pattern === NOT_BLANK || s.pattern === HERO_SCHEMA.pattern;
   for (const name of registries.kinds.names()) {
-    for (const [at, s] of textFields(registries.kinds.get(name).schema)) { fields += 1; assert.equal(s.pattern, NOT_BLANK, `${name}.${at}`); }
+    for (const [at, s] of textFields(registries.kinds.get(name).schema)) { fields += 1; assert.ok(refusesBlank(s), `${name}.${at}: pattern ${s.pattern}`); }
   }
   assert.ok(fields > 30, `the walk finds the text fields (${fields})`);
   const chartFields = textFields(registries.kinds.get('chart').schema).map(([at]) => at);

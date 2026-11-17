@@ -16,6 +16,8 @@ import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { REGION_PREFIX } from '../../engine/kinds/shared.mjs';
 import { fieldAt } from '../../engine/assets.mjs';
 import { SpecError, isPlainObject, quote, schemaErrors, srcProblem } from './spec-common.mjs';
+import { cutErrors } from './spec-cuts.mjs';
+import { cutNameOf } from '../../engine/cuts/resolve.mjs';
 import { AUDIO_SCHEMA, CUES_MAX, MUSIC_SCHEMA, VOICE_SCHEMA, checkAudio, checkCueItems, checkMusic, checkVoice, isRecordingVoice, readRecording } from './spec-sound.mjs';
 
 // What other modules import from here, wherever it now lives.
@@ -60,6 +62,7 @@ const ROOT_SCHEMA = {
     fps: { enum: [...FPS_CHOICES] },
     seed: { type: 'integer', minimum: 0, maximum: SEED_MAX },
     accent: { type: 'string' }, // #rrggbb: checkAccent shows an example
+    cut: {}, // the default cut of every shot after the first, as a shot's: checkRootCut
     generatedBy: GENERATED_BY_SCHEMA,
     provenance: { type: 'boolean' }, // false: the MP4 carries no provenance tags (stamp.mjs), as --no-provenance
     loop: { type: 'boolean' }, // true: the review checks the last frame against the first (loop.mjs)
@@ -88,7 +91,7 @@ const SHOT_PROPERTIES = {
   show: { type: 'string' },
   say: { type: 'string', minLength: 1, maxLength: SAY_MAX },
   hold: { type: 'number', minimum: HOLD_MIN, maximum: HOLD_MAX },
-  cut: { type: 'string', minLength: 1 },
+  cut: {}, // a name or { type, direction?, duration?, smear? }: checkCut says what to write
   on: { type: 'array', maxItems: ON_MAX, items: ON_ITEM_SCHEMA },
 };
 
@@ -270,17 +273,14 @@ function checkNarration(shot, base) {
 }
 
 function checkCut(shot, index, base, ctx) {
-  if (typeof shot.cut !== 'string' || shot.cut === '') return [];
-  const at = pathJoin(base, 'cut');
-  if (index === 0) {
-    if (shot.cut === 'cut') return [];
-    return [{ path: at, message: `the first shot has nothing before it to cut from; remove "cut", or write "cut": "cut" (got ${quote(shot.cut)})` }];
-  }
-  if (!ctx.look) return [];
-  const cuts = ctx.look.cuts ?? [];
-  if (cuts.includes(shot.cut)) return [];
-  const hint = didYouMean(shot.cut, cuts);
-  return [{ path: at, message: `look "${ctx.look.name}" has no cut ${quote(shot.cut)}; ${hint ? `did you mean "${hint}"? Its` : 'its'} cuts are: ${cuts.join(', ')}` }];
+  if (shot.cut === undefined) return [];
+  return cutErrors(shot.cut, pathJoin(base, 'cut'), { look: ctx.look, first: index === 0, regs: ctx.regs });
+}
+
+// The root `cut`: every shot after the first takes it when it names none, so it is checked as theirs is.
+function checkRootCut(spec, ctx) {
+  if (spec.cut === undefined) return [];
+  return cutErrors(spec.cut, 'cut', { look: ctx.look, regs: ctx.regs });
 }
 
 // The shot as the timeline sees it, so anchors resolve against real word times.
@@ -503,7 +503,7 @@ function checkMatchCuts(spec, regs) {
   if (!Array.isArray(spec.shots)) return [];
   const shots = spec.shots.slice(0, SHOTS_MAX);
   return shots.flatMap((shot, index) => {
-    if (index === 0 || !isPlainObject(shot) || shot.cut !== 'match') return [];
+    if (index === 0 || !isPlainObject(shot) || cutNameOf(shot.cut, spec.cut) !== 'match') return [];
     const prev = shots[index - 1];
     const before = shotIds(prev, regs), after = shotIds(shot, regs);
     if (before === null || after === null || after.some((id) => before.includes(id))) return [];
@@ -555,6 +555,7 @@ function collectErrors(spec, specDir, regs) {
     ...checkCueItems(spec),
     ...checkAccent(spec),
     ...settings,
+    ...checkRootCut(spec, ctx),
     ...checkShots(spec, ctx),
     ...checkMatchCuts(spec, regs),
   ];

@@ -4,8 +4,8 @@
 // gets a strip of every frame of its window (the first `cut.dur` seconds of the incoming shot; a hard cut's window is
 // its first frame) plus two frames each side. auditMoments adds a frame every quarter second and each shot's first and
 // last frame so the audit sees more than the sheets do.
-import { registries } from '../../engine/registry.mjs';
 import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
+import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { shotAtFrame } from '../../engine/review/pacing.mjs';
 
@@ -63,7 +63,7 @@ function shotSheet(film, timeline, index) {
 // at most the shot), plus CUT_SIDE_FRAMES each side, inside the film.
 function cutFrames(film, timeline, index) {
   const to = timeline.shots[index];
-  const cut = registries.cuts.get(film.shots[index].cut ?? 'cut');
+  const cut = resolveShotCut(film, index);
   const first = firstFrameOf(timeline, to);
   const windowFrames = Math.max(1, Math.min(Math.round(cut.dur * timeline.fps), lastFrameOf(timeline, to) - first + 1));
   const from = Math.max(0, first - CUT_SIDE_FRAMES), until = Math.min(timeline.frameCount - 1, first + windowFrames - 1 + CUT_SIDE_FRAMES);
@@ -112,7 +112,7 @@ export function auditMoments(film, timeline) {
     frames.add(lastFrameOf(timeline, shot));
     // the first frame that shows the shot alone after its cut (a punch's frame after p 0, the frame after a slide's
     // window), for the opening rule
-    const alone = index === 0 ? null : aloneAfterFrame(film.shots[index].cut, timeline.fps);
+    const alone = index === 0 ? null : aloneAfterFrame(resolveShotCut(film, index), timeline.fps);
     if (alone !== null) frames.add(Math.min(lastFrameOf(timeline, shot), firstFrameOf(timeline, shot) + alone));
   });
   for (let t = 0; t < timeline.duration; t += AUDIT_STEP) frames.add(Math.min(timeline.frameCount - 1, Math.round(t * timeline.fps)));

@@ -6,6 +6,8 @@ import { createRegistry, registries } from '../registry.mjs';
 import { unitOf } from '../units.mjs';
 // A look must name a sound for every registered cut and device, so they are registered before any look is.
 import '../cuts/index.mjs';
+import { cutOptionProblems } from '../cuts/resolve.mjs';
+import { didYouMean } from '../../shared/errors.mjs';
 import '../devices/index.mjs';
 // ...and a look must name a caption style, so the styles are registered before any look is.
 import '../captions/index.mjs';
@@ -54,9 +56,12 @@ import { cosmos } from './cosmos.mjs';
  *   with `experimental: true` parks the kind in this look (isParkedKind), `chart.experimentalTypes` parks chart types
  * @property {number} wordStagger  seconds between words that have no spoken time; 0 means words follow their spoken times
  * @property {{ drift: number, style: 'desk' | 'locked' }} camera  drift is a travel in units
- * @property {string[]} cuts  a subset of cut, match, slide, punch
- * @property {boolean} [smear]  true: slide and punch draw a motion smear (cuts/index.mjs) while they run; absent, they
- *   draw each shot once, crisp (neither shipped look sets it)
+ * @property {string[]} cuts  the cuts a film in this look may name: registered cut names (every shipped look lists all)
+ * @property {string[]} cutPalette  the look's preferred cuts, in order: a non-empty subset of `cuts` holding "cut" (what
+ *   --list cuts names per look and the director reaches for; a cut outside it is not a finding)
+ * @property {Record<string, { direction?: string, duration?: number, smear?: boolean }>} [cutStyle]  the look's defaults
+ *   per cut, each checked against that cut's options (engine/cuts/resolve.mjs resolveCut reads them after the shot's and
+ *   the film's root cut); `smear: true` makes a smearable cut draw its motion smear
  * @property {number} keyline  width of a cut-out's keyline
  * @property {{ dx: number, dy: number, blur: number, alpha: number, color: string }} shadow  offset and blur in units, color #rrggbb
  * @property {Record<string, object>} devices  styling per device name; colours are palette keys or #rrggbb
@@ -163,6 +168,36 @@ function movesErrors(name, moves, names) {
     .map((key) => `look "${name}": moves.${key} must be a move { ease, dur } or null, got ${JSON.stringify(moves[key]) ?? 'undefined'}`);
 }
 
+const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear']);
+const PALETTE_SHAPE = 'cutPalette must be a non-empty list of its cuts holding "cut"';
+
+// The errors of a look's cut set (`cuts`: registered cut names) and its palette (a non-empty subset holding "cut").
+function cutSetErrors(name, look, cuts) {
+  if (!Array.isArray(look.cuts)) return [`look "${name}": cuts must be a list of registered cut names, got ${String(look.cuts)}`];
+  const unknown = look.cuts.map((cut, i) => (cuts.has(cut) ? null : `look "${name}": cuts.${i} ${JSON.stringify(cut)} is not a registered cut`)).filter(Boolean);
+  const palette = look.cutPalette;
+  if (!Array.isArray(palette) || palette.length === 0 || !palette.includes('cut')) return [...unknown, `look "${name}": ${PALETTE_SHAPE}, got ${JSON.stringify(palette)}`];
+  const outside = palette.map((cut, i) => (look.cuts.includes(cut) ? null : `look "${name}": cutPalette.${i} ${JSON.stringify(cut)} is not one of its cuts`)).filter(Boolean);
+  return [...unknown, ...outside];
+}
+
+// The errors of a look's cutStyle (absent, or { [cut]: { direction?, duration?, smear? } }), each entry checked against
+// that cut's own options (engine/cuts/resolve.mjs cutOptionProblems). The boolean `smear` of earlier looks is refused.
+function cutStyleErrors(name, look, cuts) {
+  if (look.smear !== undefined) return [`look "${name}": smear is gone; write cutStyle: { slide: { smear: true } } for each cut that smears`];
+  const style = look.cutStyle;
+  if (style === undefined) return [];
+  if (!isPlainObject(style)) return [`look "${name}": cutStyle must be an object of cut names to { direction?, duration?, smear? }, got ${String(style)}`];
+  return Object.entries(style).flatMap(([cut, options]) => {
+    if (!cuts.has(cut)) {
+      const hint = didYouMean(cut, cuts.names());
+      return [`look "${name}": cutStyle.${cut} is not a registered cut${hint ? `; did you mean "${hint}"?` : ''}`];
+    }
+    if (!isPlainObject(options)) return [`look "${name}": cutStyle.${cut} must be an object, got ${String(options)}`];
+    return cutOptionProblems(options, cut, { keys: CUT_STYLE_KEYS, cuts }).map((p) => `look "${name}": cutStyle.${cut}.${p.key}: ${p.message}`);
+  });
+}
+
 /** Does `look` carry composition data for `kind` (look.kinds[kind])? */
 export const supportsKind = (look, kind) => isPlainObject(look?.kinds) && isPlainObject(look.kinds[kind]);
 
@@ -226,6 +261,8 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
   if (kinds.length > 0) throw new RangeError(kinds.join('\n'));
   const moveErrors = movesErrors(look.name, look.moves, moves.names());
   if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
+  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts)];
+  if (cutErrors.length > 0) throw new RangeError(cutErrors.join('\n'));
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {
     throw new RangeError(`look "${name}": sounds must be { cut, device, emphasis, land }, got ${String(sounds)}`);

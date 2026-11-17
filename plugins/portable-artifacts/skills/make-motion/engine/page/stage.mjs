@@ -16,6 +16,7 @@ import { annotate } from './bounds.mjs';
 import { applyFont, createMeasure } from './text-style.mjs';
 import { facesFor, loadFaces } from './fonts-shared.mjs';
 import { createPost, grainPhase } from './post.mjs';
+import { createCutPictures } from './cut-pictures.mjs';
 
 // The face the review sheets stamp their tiles with; the sheet code reads window.__stampFamily.
 const STAMP_FAMILY = 'JetBrains Mono';
@@ -48,13 +49,24 @@ async function loadAssets(srcs) {
   return new Map(srcs.map((src, n) => [src, bitmaps[n]]));
 }
 
+const KEY_DECIMALS = 1e9; // a cut's progress in a key, rounded so float noise cannot split two equal frames
+
+// The key of a frame's 2D state. Inside a layer or shader window the sampled nodes are the incoming shot's alone, which
+// can stand still while the cut moves: the key then carries the cut, its direction, its progress and the outgoing shot.
+function stateKeyOf(state) {
+  const base = stateKey({ background: state.background, sampled: state.sampled });
+  if (state.cut === undefined) return base;
+  const { name, direction, p } = state.cut;
+  return `${base}|cut:${name}:${direction}:${Math.round(p * KEY_DECIMALS) / KEY_DECIMALS}|from:${state.from.shot}`;
+}
+
 // The keys that say whether two frames look alike, over `frameState(i)`. drawKey: the sampled state, plus the frame itself
 // when a field on screen is painted from the time (the sampled state alone does not say such a field moved). captureKey:
 // what frame i looks like once the post pass has run, the 2D key plus the grain pattern when there is grain.
 function frameKeys({ frameState, fps, grainNow }) {
   const drawKey = (i) => {
     const state = frameState(i);
-    return hasAnimatedField(state.sampled) ? `${stateKey(state)}|frame${i}` : stateKey(state);
+    return hasAnimatedField(state.sampled) ? `${stateKeyOf(state)}|frame${i}` : stateKeyOf(state);
   };
   const captureKey = (i) => (grainNow() > 0 ? `${drawKey(i)}|grain${grainPhase(i / fps)}` : drawKey(i));
   return { drawKey, captureKey };
@@ -90,12 +102,34 @@ function lineInkOf(ctx) {
   };
 }
 
+// The recipe a frame inside a cut window is composed by (engine/cuts/layers.mjs).
+function cutRecipe(cut, canvas) {
+  const entry = registries.cuts.get(cut.name);
+  if (entry.family === 'layer') return entry.layers({ p: cut.p, direction: cut.direction, canvas });
+  throw new Error(`cut "${cut.name}": the page cannot compose a ${entry.family} cut`);
+}
+
+// A frame state without the film's captions (engine/captions: every caption node's id starts with <shot id>.captions),
+// also inside a smear sample (a layer group) and in the outgoing picture of a cut window. The layout is not touched.
+function captionFilter(film) {
+  const prefixes = film.shots.map((shot) => `${shot.id}.captions`);
+  const isCaption = (n) => prefixes.some((p) => n.id === p || n.id.startsWith(`${p}.`));
+  const strip = (nodes) => nodes.filter((n) => !isCaption(n)).map((n) => (n.props.layer === true ? { ...n, children: strip(n.children) } : n));
+  return (state) => ({
+    ...state,
+    sampled: strip(state.sampled),
+    ...(state.from === undefined ? {} : { from: { ...state.from, sampled: strip(state.from.sampled) } }),
+  });
+}
+
 // The page's API: what the render, the review and the tests call.
-function installApi({ fps, draw, post, source, measure, frameState, keys, setGrain, snapshotOf, snapshotShot }) {
-  window.__seek = (i) => {
-    draw(i);
+function installApi({ fps, draw, post, source, measure, frameState, keys, setGrain, snapshotOf, snapshotShot, cutPictures }) {
+  // captions: false leaves the film's captions out of the frame (a poster), the rest drawn as laid out
+  window.__seek = (i, { captions = true } = {}) => {
+    draw(i, { captions });
     post.render(source, i / fps);
   };
+  window.__cutCanvases = cutPictures.made; // how many second pictures the cuts have made, for tests
   window.__snapshotShot = snapshotShot;
   window.__source = source; // the frame before the post pass, for tests
   window.__setPost = (next) => { // new strengths for the next __seek, for tests
@@ -134,14 +168,22 @@ async function init() {
     if (!Number.isInteger(i) || i < 0 || i > frameCount) throw new Error(`frame must be an integer in 0..${frameCount}, got ${i}`);
     return built.frameAt(i / fps);
   };
-  const draw = (i) => {
-    const { background, sampled } = frameState(i);
+  // One shot's whole frame onto c: its background, then its nodes, its fields painted at film second t.
+  const drawShot = (c, { background, sampled, t }) => {
+    resetContext(c); // a seek that threw halfway must not leave its clip, alpha or save stack to the next one
+    c.fillStyle = background;
+    c.fillRect(0, 0, w, h);
+    drawFrame(c, sampled, { assets, canvas, time: t });
+  };
+  const cutPictures = createCutPictures({ w, h, drawShot });
+  const withoutCaptions = captionFilter(film);
+  const draw = (i, { captions = true } = {}) => {
+    const state = captions ? frameState(i) : withoutCaptions(frameState(i));
     // frame frameCount is the instant the film ends: it can be sampled but there is no frame to draw
     if (i === frameCount) throw new Error(`frame must be an integer in 0..${frameCount - 1} to draw, got ${i}`);
-    resetContext(ctx); // a seek that threw halfway must not leave its clip, alpha or save stack to the next one
-    ctx.fillStyle = background;
-    ctx.fillRect(0, 0, w, h);
-    drawFrame(ctx, sampled, { assets, canvas, time: i / fps });
+    if (state.cut === undefined) return drawShot(ctx, { ...state, t: i / fps });
+    resetContext(ctx);
+    return cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas), i / fps);
   };
   const keys = frameKeys({ frameState, fps, grainNow: () => grain });
   const snapshotOf = (sampled) => annotate(sampled, { lineInk: lineInkOf(document.createElement('canvas').getContext('2d')) });
@@ -150,7 +192,7 @@ async function init() {
     frameState(i);
     return snapshotOf(built.sampleShot(index, Math.max(0, shotTime(i / fps, timeline.shots[index].start))));
   };
-  installApi({ fps, draw, post, source, measure, frameState, keys, snapshotOf, snapshotShot, setGrain: (value) => { grain = value; } });
+  installApi({ fps, draw, post, source, measure, frameState, keys, snapshotOf, snapshotShot, cutPictures, setGrain: (value) => { grain = value; } });
   const notice = post.unavailable ? { postNotice: { ...post.unavailable, dropped: post.dropped } } : {};
   // the size each picture loaded at, by src: what a kind's review needs to know of a picture (scripts/v2/review.mjs)
   const pictures = Object.fromEntries([...assets].map(([src, bitmap]) => [src, [bitmap.width, bitmap.height]]));

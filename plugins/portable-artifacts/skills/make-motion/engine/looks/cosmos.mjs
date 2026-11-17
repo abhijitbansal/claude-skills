@@ -98,7 +98,10 @@ export const cosmos = {
   wordStagger: 0,
   // the resting camera: a slow linear drift across each shot (the 'desk' camera style), no shake
   camera: { drift: 10, style: 'desk' },
-  cuts: ['cut', 'match'],
+  // every registered cut may be named; the palette is cosmos's own set, in its order, cutStyle its defaults per cut
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur'],
+  cutPalette: ['cut', 'match', 'crossfade', 'fade', 'iris'],
+  cutStyle: {},
   keyline: 8,
   // a soft shadow in a darker navy: depth from light, not from paper
   shadow: { dx: 0, dy: 12, blur: 32, alpha: 0.35, color: '#05081c' },
@@ -194,11 +197,12 @@ export const cosmos = {
   post: { grain: 0.01, halftone: 0, bloom: 0 },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: null, slide: 'whoosh', punch: 'sub', match: null },
+    cut: { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', zoom: null, blur: null },
     device: {
       highlight: 'chime', circle: 'chime', underline: 'chime', arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'pop', turn: 'whoosh',
       // the second-wave devices: silent in the parked look
       label: null, focus: null, route: null, numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null, pin: null, link: null,
+      node: null, event: null,
     },
     emphasis: null,
     land: 'ding',

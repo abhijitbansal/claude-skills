@@ -20,7 +20,7 @@ import { validateFilm, withFilmDefaults } from '../../scripts/v2/spec.mjs';
 const LANDSCAPE = { w: 1920, h: 1080 };
 const PORTRAIT = { w: 1080, h: 1920 };
 const UHD = { w: 3840, h: 2160 };
-const KNOWN_CUTS = ['cut', 'match', 'slide', 'punch'];
+const KNOWN_CUTS = ['cut', 'match', 'slide', 'punch', 'cover', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur'];
 const FONT_ROLES = ['display', 'text', 'label'];
 const ACCENT_SAMPLE = '#ff6600';
 const lookNames = () => registries.looks.names();
@@ -146,7 +146,7 @@ test('desk values are the brief values', () => {
   assert.equal(l.moves.emphasize.step, 12);
   assert.equal(l.wordStagger, 0);
   assert.deepEqual({ ...l.camera }, { drift: 12, style: 'desk' });
-  assert.deepEqual([...l.cuts], ['cut', 'match', 'slide']);
+  assert.deepEqual([...l.cutPalette], ['cut', 'match', 'slide', 'crossfade', 'wipe', 'fade']);
   assert.equal(l.post.grain, 0.02);
   assert.deepEqual({ ...l.caps }, { display: false, label: true });
   assert.deepEqual({ ...l.lineHeight }, { display: 1.1, text: 1.3 });
@@ -168,7 +168,7 @@ test('pop values are the brief values', () => {
   assert.deepEqual({ ...l.moves.emphasize }, { ease: 'spring(300,12)', dur: 0.2, scale: 1.12 });
   assert.deepEqual({ ...l.moves.draw }, { ease: 'outExpo', dur: 0.2 });
   assert.deepEqual({ ...l.camera }, { drift: 0, style: 'locked' });
-  assert.deepEqual([...l.cuts], ['cut', 'punch', 'slide']);
+  assert.deepEqual([...l.cutPalette], ['cut', 'punch', 'slide', 'cover', 'zoom']);
   assert.deepEqual({ ...l.post }, { grain: 0.02, halftone: 0, bloom: 0 });
   assert.deepEqual({ ...l.caps }, { display: true, label: true });
   assert.deepEqual({ ...l.lineHeight }, { display: 0.92, text: 1.15 });
@@ -347,13 +347,12 @@ test('the validator refuses mode viral with look desk, and pro with pop', () => 
   assert.deepEqual(pro.errors, [{ path: 'look', message: 'look "pop" does not serve mode "pro" (it serves: viral)' }]);
 });
 
-test('the validator reads each look cuts: punch is pop only, match is desk only', () => {
+test('the validator reads each look cuts: every registered cut in either look (decision 2), an unknown one refused with the list', () => {
   assert.equal(validate({ version: 2, mode: 'pro', shots: shots(undefined, 'match', 'slide', 'cut') }).ok, true);
   assert.equal(validate({ version: 2, mode: 'viral', shots: shots(undefined, 'punch', 'slide', 'cut') }).ok, true);
-  const proPunch = validate({ version: 2, mode: 'pro', shots: shots(undefined, 'punch') });
-  assert.match(proPunch.errors[0].message, /look "desk" has no cut "punch".* its cuts are: cut, match, slide/);
-  const viralMatch = validate({ version: 2, mode: 'viral', shots: shots(undefined, 'match') });
-  assert.match(viralMatch.errors[0].message, /look "pop" has no cut "match".* its cuts are: cut, punch, slide/);
+  assert.equal(validate({ version: 2, mode: 'pro', shots: shots(undefined, 'punch') }).ok, true, 'outside desk\'s palette is not an error');
+  const proSwoosh = validate({ version: 2, mode: 'pro', shots: shots(undefined, 'swoosh') });
+  assert.match(proSwoosh.errors[0].message, /look "desk" has no cut "swoosh".* its cuts are: cut, slide, cover, punch, match, crossfade, fade, wipe, iris, zoom, blur/);
 });
 
 test('an unknown look still lists the real ones', () => {
@@ -381,12 +380,13 @@ test('revision 1 look data: desk display line height 1.1; pop word space, recolo
 
 test('desk sounds are the brief values: paper cuts and slides, marker hand marks, a paper card, a click on the landing', () => {
   const { sounds } = registries.looks.get('desk');
-  assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null });
+  assert.deepEqual({ ...sounds.cut }, { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
     // the second wave's devices and the screen's zoom event (plan 2026-11-16-pa2-shot-kinds-b)
     label: null, focus: null, route: 'marker', numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,
     pin: 'paper', link: 'marker', // the map's place and route events
+    node: 'paper', event: 'paper', // the diagram's node arrivals, the timeline's events
   });
   assert.equal(sounds.emphasis, null);
   assert.equal(sounds.land, 'click');
@@ -394,12 +394,13 @@ test('desk sounds are the brief values: paper cuts and slides, marker hand marks
 
 test('pop sounds are the brief values: click, whoosh and impact cuts, a pop highlight, an impact punch, a pop on emphasis, a sub on the landing', () => {
   const { sounds } = registries.looks.get('pop');
-  assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null });
+  assert.deepEqual({ ...sounds.cut }, { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, zoom: 'whoosh', blur: null });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
     // the second wave's devices and the screen's zoom event (plan 2026-11-16-pa2-shot-kinds-b)
     label: null, focus: null, route: null, numeral: null, sticker: 'pop', sweep: 'whoosh', duotone: null, halftone: null, zoom: 'whoosh',
     pin: 'pop', link: 'whoosh', // the map's place and route events
+    node: 'pop', event: 'pop', // the diagram's node arrivals, the timeline's events
   });
   assert.equal(sounds.emphasis, 'pop');
   assert.equal(sounds.land, 'sub');
@@ -411,7 +412,7 @@ const kindDevices = () => registries.kinds.names().flatMap((k) => registries.kin
 test('every look names a sound (or null) for exactly the registered cuts, the registered devices and the devices kinds declare, and its sounds are frozen', () => {
   assert.deepEqual(registries.cuts.names().sort(), [...KNOWN_CUTS].sort(), 'the look index registers the cuts it checks against');
   assert.equal(registries.devices.names().length, 17, 'the look index registers the devices it checks against (nine, six second-wave, two treatments)');
-  assert.deepEqual(kindDevices(), ['item', 'turn', 'zoom', 'pin', 'link'], 'the list kind declares its item event, compare its turn, screen its zoom, map its pin and link');
+  assert.deepEqual(kindDevices(), ['item', 'turn', 'zoom', 'pin', 'link', 'node', 'event'], 'the list kind declares its item event, compare its turn, screen its zoom, map its pin and link, diagram its node, timeline its event');
   assert.ok(kindDevices().every((d) => !registries.devices.has(d)), 'a kind\'s event device is not also a registered device');
   const wanted = [...registries.devices.names(), ...kindDevices()].sort();
   for (const name of lookNames()) {

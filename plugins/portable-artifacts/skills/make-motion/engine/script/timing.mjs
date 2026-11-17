@@ -5,6 +5,7 @@
 import { parseSay, SayError } from './say.mjs';
 import { registries } from '../registry.mjs';
 import '../modes/index.mjs';
+import { cutNameOf, filmLook, resolveShotCut } from '../cuts/resolve.mjs';
 
 const LETTERS_PER_WORD = 5;
 const LENGTH_FACTOR_MIN = 0.6;
@@ -262,11 +263,12 @@ function layoutFrames(shots, starts, fps, tail, errors) {
 }
 
 // A cut runs over the first `dur` seconds of the shot it opens (engine/cuts): it must end inside that shot.
-function cutErrors(film, frames, fps, cuts) {
+function cutErrors(film, frames, fps, cuts, modes) {
+  const look = filmLook(film, { modes });
   return film.shots.flatMap((shot, index) => {
-    const name = shot.cut ?? 'cut';
+    const name = cutNameOf(shot.cut, film.cut);
     if (index === 0 || !cuts?.has?.(name)) return [];
-    const { dur } = cuts.get(name);
+    const { dur } = resolveShotCut(film, index, { look, cuts });
     if (dur * fps <= frames[index] + FRAME_EPSILON) return [];
     return [{ path: `shots[${index}].cut`, message: `the "${name}" cut into "${shot.id}" lasts ${secondsText(dur)} s, but the shot lasts ${secondsText(frames[index] / fps)} s; use a shorter cut, or leave a longer pause before the next shot in the recording` }];
   });
@@ -279,12 +281,12 @@ function cutErrors(film, frames, fps, cuts) {
 // shot; the last narrated shot runs to its last word end plus the mode's tail; say-less shots after it follow with their
 // holds. Shots are whole frames back to back, so a word may sit up to a frame from a shot edge. Throws a PlacementError
 // when a say-less shot or a cut cannot be laid without moving a word.
-function recordedTimeline(film, { fps, pace, words, cuts }) {
+function recordedTimeline(film, { fps, pace, words, cuts, modes }) {
   const shots = film.shots.map((shot, index) => recordedShot(shot, index, words[index], fps));
   const errors = [];
   const starts = narratedStarts(shots, fps, errors);
   const frames = layoutFrames(shots, starts, fps, pace.tail, errors);
-  errors.push(...cutErrors(film, frames, fps, cuts));
+  errors.push(...cutErrors(film, frames, fps, cuts, modes));
   if (errors.length > 0) throw new PlacementError(errors);
   let startFrame = 0;
   const entries = shots.map((shot, index) => {
@@ -315,7 +317,7 @@ export function buildTimeline(film, { fps, modes = registries.modes, words, reco
   const pace = paceOf(film.mode ?? DEFAULT_MODE, modes);
   if (recording) {
     if (words === undefined) throw new TypeError('buildTimeline: a recorded film needs its words');
-    return recordedTimeline(film, { fps, pace, words, cuts });
+    return recordedTimeline(film, { fps, pace, words, cuts, modes });
   }
 
   let startFrame = 0;

@@ -62,7 +62,10 @@ export const pop = {
   },
   wordStagger: 0,
   camera: { drift: 0, style: 'locked' },
-  cuts: ['cut', 'punch', 'slide'],
+  // every registered cut may be named; the palette is pop's own set, in its order, cutStyle its defaults per cut
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur'],
+  cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom'],
+  cutStyle: {},
   keyline: 14,
   // the hard offset shadow in the accent (look review 1: the orange-red was the film's only second hue)
   shadow: { dx: 10, dy: 10, blur: 0, alpha: 1, color: '#d7ff3f' },
@@ -123,16 +126,26 @@ export const pop = {
     // chrome's dots and pill in greys, its text in the field colour
     screen: { fill: 'ink', line: 'ink', lineWidth: 10, dots: 'rule', pill: 'ink2', text: 'paper', urlText: 'paper', wideShare: 0.8, gap: 44 },
     // map (engine/kinds/map.mjs): the land in the dark `rule` grey on the field (white land would take the white labels'
-    // contrast), field-coloured borders, highlights in the accent, accent2 pins, the title as the look's tag above
-    map: { card: false, land: 'rule', borders: 'paper', borderWidth: 1.5, highlight: 'accent', multiply: false, pin: 'accent2', titleTo: 4, titleSteps: [3], listGap: 12, gap: 36 },
+    // contrast), field-coloured borders, highlights in the accent, accent2 pins, the title as the look's tag above;
+    // place names on stickers (`labelPlate`: white on the lime highlight did not read); on a tall frame numbered discs
+    // in the field colour with a white ring (`keyLine`, `keyLineWidth` units) key the places listed under the map
+    map: { card: false, land: 'rule', borders: 'paper', borderWidth: 1.5, highlight: 'accent', multiply: false, pin: 'accent2', titleTo: 4, titleSteps: [3], listGap: 12, gap: 36, labelPlate: 'sticker', keyFill: 'paper', keyText: 'ink', keyLine: 'ink', keyLineWidth: 4 },
+    // diagram (engine/kinds/diagram.mjs): nodes as stickers (`pad` is the sticker's own), the node being spoken lit in
+    // the accent (`current`: an accent plate, its words in the field colour) until the next arrives; thick accent arrows
+    // that jab; edge labels in ink2 on a field-coloured plate; the title as the look's tag; values as desk's
+    diagram: { card: false, steps: [4, 3, 2, 1], maxLines: 2, pad: 18, gap: 56, margin: 12, platePad: 10, plate: 'paper', arrow: 'accent', arrowWidth: 12, head: 34, text: 'ink', litText: 'paper', litFill: 'accent', edgeText: 'ink2', titleSteps: [3], titleGap: 40, dim: 0.35, current: true, advance: 0.48 },
+    // timeline (engine/kinds/timeline.mjs): one event at a time, `when` in the accent over `what` in white (sizes as
+    // desk's); a progress rail `rail` units deep along the room's edge: a `rule` line `ruleWidth` wide, `dot`-radius
+    // dots in `dotFill`, the current one lit in `lit`, the highlighted one ringed `ring` times wider
+    timeline: { whenSteps: [5, 4], whatSteps: [3, 2, 1], whenLines: 2, whatLines: 3, rail: 48, dot: 12, ring: 1.7, rule: 'rule', ruleWidth: 4, dotFill: 'ink2', lit: 'accent', when: 'accent', what: 'ink', partGap: 24, gap: 24, titleSteps: [3], titleGap: 40, advance: 0.45 },
     media: { treatment: 'halftone', push: 1.06, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 28, toWide: 7, toTall: 12, besideFrom: 8, gap: 40 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null },
+    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, zoom: 'whoosh', blur: null },
     device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
       label: null, focus: null, route: null, numeral: null, sticker: 'pop', sweep: 'whoosh', duotone: null, halftone: null, zoom: 'whoosh',
-      pin: 'pop', link: 'whoosh' },
+      pin: 'pop', link: 'whoosh', node: 'pop', event: 'pop' },
     emphasis: 'pop',
     land: 'sub',
   },

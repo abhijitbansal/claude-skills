@@ -88,6 +88,28 @@ test('refused pairs and a wrong --poster-out extension are usage errors', () => 
   assert.match(make(['f.json', '--poster', 'soon']).stderr, /--poster takes a time in seconds/);
 });
 
-test('a captioned film\'s poster has no caption ink; the rest of the frame is the film\'s', { todo: 'needs the engine: window.__seek(i, { captions: false }) in engine/page/stage.mjs (see the report, For the engine)' }, async () => {
-  assert.fail('the page cannot leave captions out yet');
+test('a captioned film\'s poster has no caption ink; the rest of the frame is the film\'s', async (t) => {
+  if (!await browserAvailable()) return t.skip('no browser');
+  // a narrated free shot: its kind shows no words of its own, so the film's captions (desk: a card low on the grid) say them
+  const shot = { id: 'a', show: 'free', say: 'Every chart on this page shows where its number came from.', background: '#f3eee3', nodes: [BAR('#15130f')] };
+  const captioned = writeFilm('captioned', { version: 2, fps: 30, captions: true, shots: [shot] });
+  const plain = writeFilm('plain', { version: 2, fps: 30, captions: false, shots: [shot] });
+  const out = path.join(dir, 'captioned.png');
+  const run = make([captioned, '--poster', '1', '--poster-out', out, '--json'], NO_FFMPEG);
+  assert.equal(run.status, 0, run.stdout + run.stderr);
+  const still = readPng(readFileSync(out));
+  const frameOf = async (file, options) => {
+    const session = await openSession(loadFilm(file));
+    try {
+      await session.page.evaluate(([i, o]) => window.__seek(i, o), [30, options]);
+      return readPng(await session.page.screenshot({ type: 'png' }));
+    } finally {
+      await session.close();
+    }
+  };
+  const withCaptions = await frameOf(captioned, {});
+  const withoutCaptions = await frameOf(plain, {});
+  assert.ok(!withCaptions.data.equals(withoutCaptions.data), 'the film\'s own frame 30 shows its captions');
+  assert.ok(still.data.equals(withoutCaptions.data), 'the poster is the frame with the captions left out, the rest as the film draws it');
+  return undefined;
 });

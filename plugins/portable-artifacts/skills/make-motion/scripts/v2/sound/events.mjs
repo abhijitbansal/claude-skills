@@ -2,7 +2,8 @@
 // no randomness; every time is read off the timeline (engine/script/timing.mjs), never estimated here.
 //
 // An event is { kind, t, shot, cut?, device? }:
-//   cut       the first frame of each shot after the first (`cut` names the cut, default "cut")
+//   cut       the first frame of each shot after the first (`cut` names the cut as resolved: the shot's, else the
+//             film's root cut, else "cut")
 //   device    each `on` entry's resolved time (`device` is its `do`)
 //   emphasis  the first word of each run of emphasised words (one event per run), when it is heard
 //   land      the moment a shot's figure reaches its value, for a kind that says when (its `landing(shot, timing)`)
@@ -12,16 +13,16 @@ import { registries } from '../../../engine/registry.mjs';
 import '../../../engine/kinds/index.mjs';
 import { resolveAnchor, AnchorError } from '../../../engine/script/anchors.mjs';
 import { resolveLook } from '../../../engine/graph/film.mjs';
+import { resolveShotCut } from '../../../engine/cuts/resolve.mjs';
 import { isHidden } from '../../../engine/kinds/shared.mjs';
 import { canvasSize } from '../../../template/formats.mjs';
 
-const DEFAULT_CUT = 'cut';
-
 const event = (fields) => Object.freeze(fields);
 
-function cutEvents(shot, entry) {
+// The cut that opens shot `index`, as the film draws it (engine/cuts/resolve.mjs: the film's root cut included).
+function cutEvents(film, index, entry, look) {
   if (entry.index === 0) return [];
-  return [event({ kind: 'cut', t: entry.start, shot: entry.id, cut: shot.cut ?? DEFAULT_CUT })];
+  return [event({ kind: 'cut', t: entry.start, shot: entry.id, cut: resolveShotCut(film, index, { look }).name })];
 }
 
 // Each `on` entry at its anchor in the shot, as the frame draws it (engine/graph/film.mjs resolves it the same way). An
@@ -85,7 +86,7 @@ export function soundEvents(film, timeline, { kinds = registries.kinds } = {}) {
   const events = film.shots.flatMap((shot, index) => {
     const entry = timeline.shots[index];
     if (entry?.id !== shot.id) throw new RangeError(`timeline shot ${index} is ${JSON.stringify(entry?.id)}, the film's shot is "${shot.id}"`);
-    return [...cutEvents(shot, entry), ...deviceEvents(shot, entry, { kinds, look, canvas }), ...kindEvents(shot, entry, kinds), ...emphasisEvents(entry), ...landEvents(shot, entry, kinds)];
+    return [...cutEvents(film, index, entry, look), ...deviceEvents(shot, entry, { kinds, look, canvas }), ...kindEvents(shot, entry, kinds), ...emphasisEvents(entry), ...landEvents(shot, entry, kinds)];
   });
   return Object.freeze([...events].sort((a, b) => a.t - b.t));
 }

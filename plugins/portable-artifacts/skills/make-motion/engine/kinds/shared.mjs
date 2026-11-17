@@ -10,6 +10,7 @@ import { fitText } from '../text/layout.mjs';
 import { landing, colourOf, polyline, scrimColour } from '../devices/shared.mjs';
 import { ease } from '../time/ease.mjs';
 import { aloneFromFrame } from '../cuts/index.mjs';
+import { resolveCut } from '../cuts/resolve.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import { wordTimes } from './words.mjs';
 
@@ -81,7 +82,7 @@ export function compositionRect(ctx) {
 }
 
 /** A shot that arrives on a match cut keeps its hero on screen from the first frame: no entrance. */
-export const arrivesMatched = (shot, ctx) => ctx.timing.index > 0 && shot.cut === 'match';
+export const arrivesMatched = (shot, ctx) => ctx.timing.index > 0 && resolveCut(shot.cut).name === 'match';
 
 const EASE_SAMPLES = 100;
 /** The highest value an ease reaches between 0 and 1 (1 for one that does not overshoot). */
@@ -89,7 +90,7 @@ export const easePeak = (name) => Math.max(1, ...Array.from({ length: EASE_SAMPL
 
 /** A shot the viewer sees whole from its first frames: the film's first shot, or one whose cut shows it alone from the
  *  start (a hard cut, or a punch once it is under way: cuts/index.mjs aloneFromFrame). */
-export const opensWhole = (shot, ctx) => ctx.timing.index === 0 || aloneFromFrame(shot.cut) !== null;
+export const opensWhole = (shot, ctx) => ctx.timing.index === 0 || aloneFromFrame(resolveCut(shot.cut)) !== null;
 
 /**
  * landing() for a hero's entrance, except that in a shot seen whole (opensWhole) an entrance that would start on the

@@ -22,6 +22,7 @@ import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
+import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { auditMoments } from './plan.mjs';
 import { pageFinding } from './report.mjs';
 import { loopFindings } from './loop.mjs';
@@ -94,10 +95,10 @@ export function auditPlan(film, timeline) {
   const windowShot = (frame) => {
     const shot = shotAtFrame(timeline, frame);
     if (shot.index === 0) return NOT_A_CUT_SHOT;
-    const cut = registries.cuts.get(film.shots[shot.index].cut ?? 'cut');
+    const cut = resolveShotCut(film, shot.index, { shotDuration: shot.duration });
     // once p > 0 a punch draws only the incoming shot: its frames are audited as drawn (a pinned overlay's place included)
-    if (cut.incomingOnly === true && frame > Math.round(shot.start * timeline.fps)) return NOT_A_CUT_SHOT;
-    return frame / timeline.fps - shot.start < Math.min(cut.dur, shot.duration) ? shot.index : NOT_A_CUT_SHOT;
+    if (cut.incomingOnly && frame > Math.round(shot.start * timeline.fps)) return NOT_A_CUT_SHOT;
+    return frame / timeline.fps - shot.start < cut.dur ? shot.index : NOT_A_CUT_SHOT;
   };
   return auditMoments(film, timeline).map((frame) => [windowShot(frame), frame]);
 }
@@ -188,7 +189,7 @@ export function openingFrameOf(film, timeline, index) {
   const shot = timeline.shots[index];
   const first = Math.round(shot.start * timeline.fps);
   if (index === 0) return registries.modes.get(film.mode ?? DEFAULT_MODE).hookFromFrameZero === true ? first : null;
-  const offset = aloneAfterFrame(film.shots[index].cut, timeline.fps);
+  const offset = aloneAfterFrame(resolveShotCut(film, index), timeline.fps);
   return first + offset > Math.round(shot.end * timeline.fps) - 1 ? null : first + offset;
 }
 

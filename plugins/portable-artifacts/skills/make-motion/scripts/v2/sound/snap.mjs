@@ -2,21 +2,22 @@
 // user's music (detected, or read from music.beats). A narrated film's cuts are fixed by its words, so the validator
 // refuses snap there (spec-sound.mjs). Pure: a new timeline is returned, the input is never changed.
 import { registries } from '../../../engine/registry.mjs';
+import { cutNameOf, filmLook, resolveShotCut } from '../../../engine/cuts/resolve.mjs';
 
 /** The shortest a shot may be, as the timeline makes every shot (engine/script/timing.mjs MIN_SHOT_SECONDS). */
 export const SNAP_MIN_SHOT_SECONDS = 1;
 /** How far a cut may move to reach a beat: a quarter of a second, half a beat at 120 BPM. */
 export const SNAP_MAX_SHIFT_SECONDS = 0.25;
-const DEFAULT_CUT = 'cut'; // as engine/script/timing.mjs cutErrors names a shot's cut when it gives none
 
 /**
  * The shortest each shot of `film` may become: SNAP_MIN_SHOT_SECONDS, or the length of the cut that opens it when that
  * is longer (a cut runs over the first `dur` seconds of the shot it opens, engine/cuts).
  */
 export function shotFloors(film, cuts = registries.cuts) {
+  const look = filmLook(film);
   return film.shots.map((shot, index) => {
-    const name = shot.cut ?? DEFAULT_CUT;
-    const dur = index > 0 && cuts?.has?.(name) ? cuts.get(name).dur ?? 0 : 0;
+    const name = cutNameOf(shot.cut, film.cut);
+    const dur = index > 0 && cuts?.has?.(name) ? resolveShotCut(film, index, { look, cuts }).dur ?? 0 : 0;
     return Math.max(SNAP_MIN_SHOT_SECONDS, dur);
   });
 }

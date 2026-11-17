@@ -1,6 +1,6 @@
 // The kinds' camera (split out of shared.mjs): the look's resting drift, the push onto a box (a deliberate close-up),
 // and the establishing view a region event waits for. Pure and DOM-free.
-import { registries } from '../registry.mjs';
+import { resolveCut } from '../cuts/resolve.mjs';
 import { FIELD_BLEED, compositionRect, cutsToCloseUp, regionOf } from './shared.mjs';
 
 // the region fills `share` of the width (look review 2: at 0.58 the payoff was too small on the phone), at most `tall`
@@ -71,7 +71,7 @@ const ESTABLISH = 0.6; // seconds of the whole picture, after the incoming cut h
 /** When the incoming cut of a shot ends, in shot seconds: 0 for the first shot and for a hard cut. */
 export function cutEnd(shot, timing) {
   if (timing.index === 0) return 0;
-  return Math.min(registries.cuts.get(shot.cut ?? 'cut').dur, timing.duration);
+  return resolveCut(shot.cut, { shotDuration: timing.duration }).dur;
 }
 
 /**

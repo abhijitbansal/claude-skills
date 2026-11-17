@@ -55,7 +55,11 @@ export const desk = {
   },
   wordStagger: 0,
   camera: { drift: 12, style: 'desk' },
-  cuts: ['cut', 'match', 'slide'],
+  // every registered cut may be named (transitions plan, decision 2); the palette is the look's own set, in its order,
+  // and cutStyle its defaults per cut (engine/cuts/resolve.mjs)
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur'],
+  cutPalette: ['cut', 'match', 'slide', 'crossfade', 'wipe', 'fade'],
+  cutStyle: {},
   keyline: 8,
   shadow: { dx: 10, dy: 14, blur: 18, alpha: 0.25, color: '#000000' },
   // Styling for the devices this look draws. Colours are palette keys (or #rrggbb), sizes are units.
@@ -127,16 +131,29 @@ export const desk = {
     screen: { fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
     // map (engine/kinds/map.mjs): a printed sheet (`card`) with the land in paper, ink hairline borders `borderWidth`
     // units, highlights under the highlighter (multiply), red pins; the title on columns 1 to `titleTo` at the largest of
-    // `titleSteps`, the map beside it; on a tall frame the places listed under the map `listGap` apart; `gap` between parts
-    map: { card: true, land: 'paper', borders: 'ink', borderWidth: 1.2, highlight: 'accent', multiply: true, pin: 'accent2', titleTo: 4, titleSteps: [5, 4, 3], listGap: 10, gap: 40 },
+    // `titleSteps`, the map beside it; on a tall frame the places keyed: numbered ink discs (`keyFill`, numbers in
+    // `keyText`) on the map and listed under it beside the same discs `listGap` apart; `gap` between parts
+    map: { card: true, land: 'paper', borders: 'ink', borderWidth: 1.2, highlight: 'accent', multiply: true, pin: 'accent2', titleTo: 4, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'paper' },
+    // diagram (engine/kinds/diagram.mjs): nodes as paper cards (`card`), `pad` in, labels in the display face at the
+    // largest of `steps` that fits (at most a third of the title), in `maxLines`; boxes at least `gap` apart; arrows in
+    // ink `arrowWidth` wide with a `head`, `margin` off the boxes, stepping on twos; edge labels in ink2 on a paper plate
+    // `platePad` in; the title at the largest of `titleSteps`, `titleGap` over the diagram; a highlight dims the rest to
+    // `dim`; `advance` (em a character) estimates fit for the review
+    diagram: { card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 28, gap: 48, margin: 10, platePad: 8, plate: 'paper', arrow: 'ink', arrowWidth: 5, head: 26, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: false, advance: 0.55 },
+    // timeline (engine/kinds/timeline.mjs): `when` in the display face at the largest of `whenSteps` that holds three
+    // times `what` (text face, `whatSteps`, at or above the floor), in `whenLines` and `whatLines`; 16:9 a column per event
+    // `gap` apart, text `inset` from its tick and `lineGap` off the line; 9:16 the line `lineX` in from the left, the text
+    // `textGap` beside it, `partGap` between when and what; the line and ticks (`tick` long) in ink `lineWidth` wide; the
+    // title at the largest of `titleSteps` in two lines; `advance` (em a character) estimates fit for the review
+    timeline: { whenSteps: [4, 3], whatSteps: [2, 1], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 28, lineX: 12, textGap: 48, partGap: 12, line: 'ink', lineWidth: 3, tick: 18, titleSteps: [4, 3], titleGap: 48, advance: 0.55 },
     media: { treatment: 'duotone', push: 1.05, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 40, toWide: 6, toTall: 12, besideFrom: 8, gap: 48 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: 'paper', slide: 'paper', punch: null, match: null },
+    cut: { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null },
     device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
       label: null, focus: null, route: 'marker', numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,
-      pin: 'paper', link: 'marker' },
+      pin: 'paper', link: 'marker', node: 'paper', event: 'paper' },
     emphasis: null,
     land: 'click',
   },

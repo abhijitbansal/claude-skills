@@ -15,3 +15,5 @@ import './chart.mjs';
 import './media.mjs';
 import './screen.mjs';
 import './map.mjs';
+import './diagram.mjs';
+import './timeline.mjs';

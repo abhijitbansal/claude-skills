@@ -85,6 +85,7 @@ function mapField(shot, id) {
   if (id === `${shot.id}.title` || id === `${shot.id}.title.text`) return 'title';
   if (id === `${shot.id}.source`) return 'source';
   if (id === `${shot.id}.land`) return 'region';
+  if (/\.key\d+(\.|$)/.test(id)) return null; // a tall frame's key: the numbered discs and their rows (the names are list<i>)
   if (/\.(place\d+|list\d+)(\.|$)/.test(id)) return 'places';
   if (/\.hl\d+$/.test(id)) return 'highlight';
   if (/\.route\d+(\.|$)/.test(id)) return 'routes';

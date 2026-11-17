@@ -8,12 +8,14 @@ import { geoPath, geoAlbersUsa } from 'd3-geo';
 import { feature } from 'topojson-client';
 import { registries } from '../../engine/registry.mjs';
 import { sample } from '../../engine/time/track.mjs';
+import { sampleGraph } from '../../engine/graph/sample.mjs';
+import { contrastRatio } from '../../engine/review/contrast.mjs';
 import { WORLD_NAMES, US_NAMES } from '../../engine/kinds/map-names.mjs';
 import { prepareMap } from '../../scripts/v2/prepare/map.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
-import { expandIn, filmOf, all } from './helpers/kinds.mjs';
-import { assertBar } from './helpers/bar.mjs';
+import { expandIn, filmOf, all, overlaps } from './helpers/kinds.mjs';
+import { assertBar, drawnLeaves } from './helpers/bar.mjs';
 
 const map = registries.kinds.get('map');
 const require = createRequire(import.meta.url);
@@ -113,13 +115,73 @@ test('view: whole is drawn; places is not drawn yet and says so', () => {
   assert.deepEqual(map.review(base({ hold: 2 }), {}), []);
 });
 
-// ---- the bar ----
+// ---- place names: drawn once, readable on what is under them (controller defect: pop US 9:16 drew Austin twice, and
+// white on the lime highlight) ----
 
-const example = () => map.example;
+const MIN_NAME_CONTRAST = 4.5; // WCAG AA for text: a place name is small beside the map
 const full = () => base({
   say: 'We ship from Paris to Nairobi and Tokyo. Kenya is our largest market.', title: 'Where we ship', source: 'Our shipping data, 2026',
   highlight: ['Kenya'], routes: [{ from: 'Paris', to: 'Nairobi' }, { from: 'Paris', to: 'Tokyo' }],
 });
+const US = { id: 'u', show: 'map', region: 'us', say: 'Texas and Ohio lead, with Austin on top.', title: 'Where it grew', highlight: ['Texas', 'Ohio'], places: [{ name: 'Austin', at: [-97.74, 30.27] }] };
+const wordsIn = (n) => n.props.layout.lines.flatMap((l) => l.words.map((w) => w.text)).join(' ');
+
+// The visible texts at time t with the fill of the nearest plate drawn under them in their group chain (null: none).
+function visibleTexts(nodes, t) {
+  const out = [];
+  const walk = (list, alpha, plate) => list.forEach((n) => {
+    const a = alpha * (n.opacity ?? 1);
+    if (a <= 0) return;
+    const own = n.children.find((c) => c.id.endsWith('.plate'))?.props.fill ?? plate;
+    if (n.type === 'text') out.push({ node: n, plate });
+    walk(n.children, a, own);
+  });
+  walk(sampleGraph(nodes, t), 1, null);
+  return out;
+}
+
+for (const look of ['desk', 'pop']) {
+  for (const format of ['16:9', '9:16']) {
+    for (const [name, shot] of [['US', US], ['world', full()]]) {
+      test(`map names: each place is named once on the last frame (${name}, ${look} ${format})`, () => {
+        const out = expand(shot, look, format);
+        const names = visibleTexts(out.nodes, out.timing.duration).filter((x) => map.nodeField(shot, x.node.id) === 'places').map((x) => wordsIn(x.node).toLowerCase());
+        assert.deepEqual([...names].sort(), shot.places.map((p) => p.name.toLowerCase()).sort(), `names drawn: ${names.join(', ')}`);
+      });
+      test(`map names: a place name reads against what may lie under it (${name}, ${look} ${format})`, () => {
+        const out = expand(shot, look, format);
+        const style = registries.looks.get(look).kinds.map;
+        const lookDef = registries.looks.get(look);
+        const colour = (k) => lookDef.palette[k] ?? k;
+        const leaves = drawnLeaves(sampleGraph(out.nodes, out.timing.duration));
+        const land = leaves.find((l) => l.node.id === `${shot.id}.land`).box;
+        const boxOf = (id) => leaves.find((l) => l.node.id === id).box;
+        for (const { node: n, plate } of visibleTexts(out.nodes, out.timing.duration).filter((x) => map.nodeField(shot, x.node.id) === 'places')) {
+          // on a plate: the plate; over the map: the land and the highlight (a name may sit on either); off it: the field
+          const onMap = overlaps(boxOf(n.id), land);
+          const grounds = plate ? [plate] : onMap ? [colour(style.land), colour(style.highlight)] : [lookDef.palette.paper];
+          for (const g of grounds) assert.ok(contrastRatio(n.props.fill, g) >= MIN_NAME_CONTRAST, `${n.id} ${n.props.fill} on ${g}: ${contrastRatio(n.props.fill, g).toFixed(2)}`);
+        }
+      });
+    }
+  }
+}
+
+for (const look of ['desk', 'pop']) {
+  test(`map names: a name keeps off the highlighted areas when a side allows it (Nairobi beside Kenya, ${look} 16:9)`, () => {
+    const shot = full();
+    const out = expand(shot, look, '16:9');
+    const leaves = drawnLeaves(sampleGraph(out.nodes, out.timing.duration));
+    const kenya = leaves.find((l) => l.node.id === 'm.hl0').box;
+    const plates = leaves.filter((l) => /\.place\d+\.(text|sticker\.plate)$/.test(l.node.id));
+    assert.ok(plates.length >= 3, 'the names are drawn');
+    for (const l of plates) assert.ok(!overlaps(l.box, kenya), `${l.node.id} covers Kenya: ${l.box.map(Math.round)} vs ${kenya.map(Math.round)}`);
+  });
+}
+
+// ---- the bar ----
+
+const example = () => map.example;
 for (const look of ['desk', 'pop']) {
   for (const format of ['16:9', '9:16']) {
     test(`map bar: the example in ${look} at ${format}`, () => assertBar('map', example(), { look, format, prepare: true }));
