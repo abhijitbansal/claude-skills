@@ -10,7 +10,7 @@ import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
 import { pathPoints } from '../devices/shared.mjs';
-import { sizeAt, fontFor, setCase, isEditorial, inkExtent, asTextCard } from './shared.mjs';
+import { sizeAt, fontFor, setCase, isEditorial, inkExtent, asTextCard, opensSet } from './shared.mjs';
 import { editorialBounds, editorialRight, editorialSpan } from './editorial.mjs';
 
 export const SLUG = Object.freeze({ top: 0.14, turn: 3, pad: 30, gap: 18, numeralStep: 3, kickerStep: 2, digits: 2, maxColumns: 3 });
@@ -36,7 +36,9 @@ function tagSlug(shot, ctx) {
   const bounds = editorialBounds(ctx);
   const x = bounds.safe ? editorialSpan(ctx, 1, 1).x : gridX(look, canvas, TEXT_COLUMN);
   const right = editorialRight(ctx);
-  const probe = registries.devices.get('tag').build({ id: `${shot.id}.slug`, box: [x, bounds.top, right - x, 1], at: look.moves.enter.dur, look, unit, seed: ctx.seed, measure, text: shot.kicker });
+  // in a look that opens composed (opensSet) the tag is on from the first frame
+  const at = opensSet(look) ? 0 : look.moves.enter.dur;
+  const probe = registries.devices.get('tag').build({ id: `${shot.id}.slug`, box: [x, bounds.top, right - x, 1], at, look, unit, seed: ctx.seed, measure, text: shot.kicker });
   const box = [x, bounds.top, right - x, probe.boxes.tag[3]];
   return { box, group: probe.nodes[0] };
 }

@@ -32,7 +32,7 @@ function segmentNodes(shot, ctx, style, { seg, ring, times, hl }) {
 
 /** A donut in `box`: { nodes, boxes, plot, highlight }. */
 export function drawDonut(shot, ctx, style, box, { valueOnHighlight }) {
-  const data = chartData(shot), times = chartTimes(shot, ctx.timing);
+  const data = chartData(shot), times = chartTimes(shot, ctx.timing, ctx.look);
   const { font, gap } = style;
   const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size, lineGap = LINE_GAP * font.size;
   const hl = highlightIndex(shot, data), decimals = valueDecimals(data.items.map((i) => i.value));

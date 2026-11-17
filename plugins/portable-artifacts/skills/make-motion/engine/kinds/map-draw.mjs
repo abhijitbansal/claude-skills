@@ -63,7 +63,7 @@ function placeNodes(shot, ctx, data, view, times) {
   const kept = [];
   const dropped = [];
   const areas = data.highlights.map((h) => boxOf(pathPoints(h.d).map(([x, y]) => [view.x + x * view.s, view.y + y * view.s])));
-  const trace = routeTrace(data, view);
+  const trace = routeTrace(data, view, ctx.data.unwrapped === true);
   const pins = data.places.map((q) => pinBox(view.x + q.x * view.s, view.y + q.y * view.s, PIN * unit));
   const nodes = data.places.flatMap((p, i) => {
     const at = times.places[i] ?? 0;
@@ -103,8 +103,8 @@ const TRACE_STEPS = 8; // samples between two prepared route points
 
 // Points along every route's prepared line on screen (each part of a clipped route), dense enough that a label box
 // cannot sit across a route between two samples.
-function routeTrace(data, view) {
-  const lines = data.routes.flatMap((r) => r.parts ?? [r.points]);
+function routeTrace(data, view, unwrapped = false) {
+  const lines = data.routes.flatMap((r) => (r.parts && unwrapped ? [unwrappedPoints(data, r)] : r.parts ?? [r.points]));
   return lines.flatMap((pts) => pts.slice(1).flatMap((q, k) => Array.from({ length: TRACE_STEPS }, (_, s) => {
     const t = s / TRACE_STEPS, p = pts[k];
     return [view.x + (p[0] + (q[0] - p[0]) * t) * view.s, view.y + (p[1] + (q[1] - p[1]) * t) * view.s];
@@ -178,14 +178,33 @@ function noteDropped(nodes, shot, dropped) {
   return nodes.map(mark);
 }
 
+// A route across the antimeridian drawn the long way inside the map (look data `unwrapped`, ledger: gate-ledger-1 ruling
+// 2, every route starts and ends on a placed city): a shallow arc in map space from one place to the other, bowed
+// north by UNWRAP_BOW of the distance between them, UNWRAP_POINTS points along it.
+const UNWRAP_BOW = 0.15;
+const UNWRAP_POINTS = 17;
+function unwrappedPoints(data, r) {
+  const at = new Map(data.places.map((p) => [p.name, [p.x, p.y]]));
+  const [a, b] = [at.get(r.from), at.get(r.to)];
+  const bow = UNWRAP_BOW * Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const c = [(a[0] + b[0]) / HALF, (a[1] + b[1]) / HALF - bow];
+  return Array.from({ length: UNWRAP_POINTS }, (_, k) => {
+    const t = k / (UNWRAP_POINTS - 1), u = 1 - t;
+    return [u * u * a[0] + HALF * u * t * c[0] + t * t * b[0], u * u * a[1] + HALF * u * t * c[1] + t * t * b[1]];
+  });
+}
+
 // Each route: the route device through its prepared points, drawing on once both its ends are on. A route across the
-// antimeridian arrives in parts clipped at the map's edges (routePartNodes).
+// antimeridian arrives in parts clipped at the map's edges (routePartNodes), or, in a look that keeps routes whole
+// (`unwrapped`), as one line the long way inside the map (unwrappedPoints).
 function routeNodes(shot, ctx, data, view, times) {
   const onScreen = (points) => points.map(([x, y]) => [view.x + x * view.s, view.y + y * view.s]);
   return data.routes.flatMap((r, j) => {
-    if (r.parts) return routePartNodes(`${shot.id}.route${j}`, ctx, r.parts.map(onScreen).filter((p) => p.length >= HALF), times.routes[j]);
-    return r.points.length < HALF ? [] : registries.devices.get('route').build({
-      id: `${shot.id}.route${j}`, at: times.routes[j], look: ctx.look, unit: ctx.unit, seed: ctx.seed, points: onScreen(r.points),
+    const whole = r.parts && ctx.data.unwrapped === true ? unwrappedPoints(data, r) : null;
+    if (r.parts && whole === null) return routePartNodes(`${shot.id}.route${j}`, ctx, r.parts.map(onScreen).filter((p) => p.length >= HALF), times.routes[j]);
+    const points = whole ?? r.points;
+    return points.length < HALF ? [] : registries.devices.get('route').build({
+      id: `${shot.id}.route${j}`, at: times.routes[j], look: ctx.look, unit: ctx.unit, seed: ctx.seed, points: onScreen(points),
     }).nodes;
   });
 }

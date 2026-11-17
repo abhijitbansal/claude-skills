@@ -118,13 +118,21 @@ function handCircle([x, y, w, h], unit, width, rng) {
   return smoothPath(points);
 }
 
+// A ruled box `pad` outside [x, y, w, h], drawn on from its top left clockwise: straight sides, square corners (a look
+// whose circle style is `shape: 'box'`, ledger: gate-ledger-1 ruling 1, a ruled rectangle, never a loose ellipse).
+function boxPath([x, y, w, h], pad) {
+  const [l, t, r, b] = [x - pad, y - pad, x + w + pad, y + h + pad];
+  return `M${at2([l, t])}L${at2([r, t])}L${at2([r, b])}L${at2([l, b])}Z`;
+}
+
 function buildCircle(params) {
   const { id, box, at, look, unit, seed } = checkParams('circle', params);
   const [x, y, w, h] = box;
-  const width = styleOf(look, 'circle').width ?? DEFAULT_WIDTH;
-  const d = isHand(look)
-    ? handCircle(box, unit, width, deviceRng(seed, id, 'circle'))
-    : ellipsePath(x + w / HALF, y + h / HALF, (w * CIRCLE_SCALE) / HALF, (h * CIRCLE_SCALE) / HALF);
+  const style = styleOf(look, 'circle');
+  const width = style.width ?? DEFAULT_WIDTH;
+  const ellipse = () => ellipsePath(x + w / HALF, y + h / HALF, (w * CIRCLE_SCALE) / HALF, (h * CIRCLE_SCALE) / HALF);
+  const ruled = () => (style.shape === 'box' ? boxPath(box, (style.pad ?? 0) * unit) : ellipse());
+  const d = isHand(look) ? handCircle(box, unit, width, deviceRng(seed, id, 'circle')) : ruled();
   return markNode({ id, d, look, unit, at, name: 'circle', fallbackColour: 'accent2' });
 }
 

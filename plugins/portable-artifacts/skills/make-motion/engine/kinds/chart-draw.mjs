@@ -194,7 +194,7 @@ function linePitch(layouts) {
 
 /** Columns in `area`: { nodes, boxes, plot, highlight } (highlight: { index, text } of the highlighted value, or null). */
 export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
-  const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing);
+  const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing, ctx.look);
   const { gap } = style;
   const hl = highlightIndex(shot, data), decimals = valueDecimals(data.items.map((i) => i.value));
   const gutter = axisGutter(shot, ctx, style, scale, style.refs);
@@ -259,7 +259,7 @@ function liftBar(m, size, gap, fill) {
 
 /** Bars in `area`, labels in a left column (or over each bar), values at the bar ends: { nodes, boxes, plot, highlight }. */
 export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
-  const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing);
+  const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing, ctx.look);
   const { font, gap } = style;
   const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
   const hl = highlightIndex(shot, data), decimals = valueDecimals(data.items.map((i) => i.value));

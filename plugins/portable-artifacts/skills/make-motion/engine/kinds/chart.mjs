@@ -331,7 +331,7 @@ registries.kinds.add(KIND, {
   validate: chartProblems,
   review: honesty,
   // the highlighted value landing (else the marks grown), a race's last period: the cue plan's land event
-  landing: (shot, timing) => (shot.type === 'race' ? raceLanding(shot, timing) : chartLanding(shot, timing)),
+  landing: (shot, timing, look) => (shot.type === 'race' ? raceLanding(shot, timing) : chartLanding(shot, timing, look)),
   // how the rest is drawn, not texts of their own: the type, the highlighted mark, which rows a race shows
   steeringFields: ['type', 'highlight', 'top'],
   expand: (shot, ctx) => expandChart(unmarked(shot), ctx),

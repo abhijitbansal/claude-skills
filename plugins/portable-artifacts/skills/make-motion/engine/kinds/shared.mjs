@@ -502,6 +502,13 @@ export function formatValue(value, decimals) {
 export const ghostWords = (ctx) => ctx.mode.hookFromFrameZero === true && ctx.look.emphasis !== 'highlight';
 
 /**
+ * A look whose shots open composed (look.opens 'set', ledger: ban 5, gate-ledger-1 ruling 4): on a shot's first frame
+ * its claim or title is fully set and its frame furniture (the tag slug, the end mark) is on; only the marks the
+ * narration speaks arrive after. Other looks keep their entrances.
+ */
+export const opensSet = (look) => look.opens === 'set';
+
+/**
  * The scale steps of `steps` at which every limit holds: a text at that step stays `ratio` times under `size` for each
  * { size, ratio } (the review's hero rule, and any second ratio a kind keeps).
  */

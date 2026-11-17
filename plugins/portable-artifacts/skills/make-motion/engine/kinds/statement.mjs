@@ -25,7 +25,7 @@ import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { composeStack, stackNodes } from './stack.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
-import { unmarked } from './shared.mjs';
+import { unmarked, opensSet } from './shared.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
@@ -165,7 +165,10 @@ function composeEditorial(text, shot, ctx) {
     if (unclean(narrower.layout, together) && !unclean(placed.layout, together) && dropped) break;
     placed = narrower;
   }
-  if (!clear || clears(placed)) return placed;
+  // a look whose claim hangs under its tag on a wide frame (look.kinds.statement.hang, ledger: the top third) moves up
+  // to it too; a tall frame keeps its claim centred in the band
+  const hang = clear && isWide(canvas) && look.kinds?.statement?.hang === true;
+  if (!clear || (clears(placed) && !hang)) return placed;
   return dropBelow(placed, clear, ctx);
 }
 
@@ -253,7 +256,9 @@ function wordTracksFor(words, times, ctx, matched) {
       const lit = hookTracks(look, at, emphasised ? look.palette.accent : look.palette.ink, scales ? word.peak : undefined);
       return style.hookTracks(look, { ...word, tracks: lit }, at);
     }
-    const entered = matched ? {} : enterTracks(look, unit, at);
+    // a look that opens composed (shared.mjs opensSet, ledger) sets every word from frame 0, as a matched hero does; the
+    // emphasis still lands on its spoken word
+    const entered = matched || opensSet(look) ? {} : enterTracks(look, unit, at);
     const lands = scales && !matched && look.moves.enter.scale !== undefined;
     const tracks = lands ? { ...entered, scale: landing(at, look.moves.enter, word.start, 1) } : entered;
     return style.wordTracks(look, { ...word, tracks }, at, ctx);

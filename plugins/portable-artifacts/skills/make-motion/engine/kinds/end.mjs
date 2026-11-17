@@ -16,7 +16,7 @@ import { track } from '../time/track.mjs';
 import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase, isEditorial, heroProblems, fieldNode, enterTracks, onDevices, placeDevices, deviceCamera, unionBox, runInk, plainSay, endTimes, cutReveal, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup,
+  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase, isEditorial, heroProblems, fieldNode, enterTracks, onDevices, placeDevices, deviceCamera, unionBox, runInk, plainSay, endTimes, cutReveal, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup, opensSet,
 } from './shared.mjs';
 import { defaultCamera, driftReach } from './camera.mjs';
 import { plainTag } from './plain-tag.mjs';
@@ -121,7 +121,9 @@ function cardNodes(shot, ctx, parts, placed, data) {
 // rule. Its text is the film's mark (role 'mark', judged like any text).
 function tagMark(shot, ctx, id, box) {
   const { look, unit, seed, measure } = ctx;
-  const build = (x, y) => registries.devices.get('tag').build({ id, box: [x, y, 1, 1], at: look.moves.enter.dur, look, unit, seed, measure, text: shot.mark });
+  // in a look that opens composed (opensSet) the mark is on from the first frame
+  const at = opensSet(look) ? 0 : look.moves.enter.dur;
+  const build = (x, y) => registries.devices.get('tag').build({ id, box: [x, y, 1, 1], at, look, unit, seed, measure, text: shot.mark });
   const [, , w, h] = build(0, 0).boxes.tag;
   const [group] = build(box[0] + box[2] - w, box[1] + box[3] - h).nodes;
   const children = group.children.map((n) => (n.type === 'text' ? node('text', `${id}.text`, { ...n.props, role: 'mark' }, { tracks: n.tracks }) : n));
@@ -205,7 +207,8 @@ function expandDesk(shot, ctx, data, times) {
   const hero = heroId(shot, 'title');
   const matched = arrivesMatched(shot, ctx);
   const title = node('text', hero, { x, y, layout: block.title.layout, font: block.title.font, fill: look.palette.ink, role: 'hero' }, {
-    wordTracks: times.title.map(({ at }) => (matched ? {} : enterTracks(look, unit, at))),
+    // a look that opens composed (opensSet, ledger) sets the closing line whole on the first frame
+    wordTracks: times.title.map(({ at }) => (matched || opensSet(look) ? {} : enterTracks(look, unit, at))),
   });
   const words = wordBoxes(block.title.layout, x, y);
   const boxes = { title: unionBox(words), ...Object.fromEntries(words.map((box, i) => [`word:${i}`, box])) };

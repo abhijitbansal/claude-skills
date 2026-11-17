@@ -137,7 +137,7 @@ export function drawScatter(shot, ctx, style, area, { headroom = 0 } = {}) {
   const { look, unit } = ctx;
   const { font, gap } = style;
   const f = frame(shot, ctx, style, area, headroom);
-  const times = chartTimes(shot, ctx.timing);
+  const times = chartTimes(shot, ctx.timing, ctx.look);
   const r = (look.kinds?.chart?.point ?? style.line) * unit;
   const hl = shot.highlight === undefined ? -1 : shot.data.findIndex((p) => String(p.label) === shot.highlight);
   const n = shot.data.length;

@@ -10,6 +10,7 @@ import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { colourOf, roundedRect } from '../devices/shared.mjs';
 import { fontFor, sizeAt, setCase, shownFrom, isWide } from './shared.mjs';
+import { MIN_HERO_RATIO } from '../review/frame.mjs';
 
 const HALF = 2;
 const DOTS = 0.4; // s the typing dots lead a `them` message
@@ -25,6 +26,20 @@ export const floorStep = (canvas) => (isWide(canvas) ? 1 : HALF);
 
 const isChat = (shot) => (shot.style ?? 'chat') === 'chat';
 
+const ORPHAN_STEP = 0.94; // a ruled row re-set this much narrower, each try, until its last line holds two words
+const ORPHAN_TRIES = 8;
+
+// `text` laid out at `maxWidth`, or, for ruled rows (data.rows, ledger), at the widest of a few narrower widths whose
+// last line holds at least two words (no orphan: gate-ledger-1 ruling 1); the first try when none does.
+function layNoOrphan(lay, text, font, maxWidth) {
+  const first = lay(text, font, maxWidth);
+  let width = maxWidth;
+  for (let i = 0, set = first; i < ORPHAN_TRIES; i++, width *= ORPHAN_STEP, set = lay(text, font, width)) {
+    if (set.lines.length < HALF || set.lines.at(-1).words.length >= HALF) return set;
+  }
+  return first;
+}
+
 // Each item's text laid out at `size`, with its box height: { text, app?, w, h } in px.
 function itemsAt(shot, ctx, data, room, size) {
   const { look, unit, measure } = ctx;
@@ -33,11 +48,13 @@ function itemsAt(shot, ctx, data, room, size) {
   const bold = { ...font, weight: data.bold };
   const pad = data.pad * unit;
   const width = room.w * data.share;
-  const lay = (text, f, maxWidth) => layoutText({ text: setCase(look, face, text), font: f, maxWidth, measure });
+  const plain = (text, f, maxWidth) => layoutText({ text: setCase(look, face, text), font: f, maxWidth, measure });
+  const lay = data.rows ? (text, f, maxWidth) => layNoOrphan(plain, text, f, maxWidth) : plain;
   return shot.items.map((item) => {
     if (isChat(shot)) {
       const text = lay(item.text, font, width - HALF * pad);
-      return { text, w: text.width + HALF * pad, h: text.height + HALF * pad };
+      // a ruled row runs the full width; a bubble is as wide as its text
+      return { text, w: data.rows ? width : text.width + HALF * pad, h: text.height + HALF * pad };
     }
     const app = lay(item.app, bold, width - HALF * pad - (DISC + DISC_GAP) * size);
     const text = lay(item.text, font, width - HALF * pad);
@@ -53,7 +70,9 @@ function itemsAt(shot, ctx, data, room, size) {
 export function feedFit(shot, ctx, data, room) {
   const { look, unit, canvas } = ctx;
   const least = Math.round(sizeAt(look, floorStep(canvas), unit) / unit);
-  const most = Math.round(sizeAt(look, Math.max(...data.steps), unit) / unit);
+  // ruled rows set the title MIN_HERO_RATIO times the messages, at most data.titleMax units: the messages no larger
+  const capped = data.rows ? Math.floor(data.titleMax / MIN_HERO_RATIO) : Infinity;
+  const most = Math.min(capped, Math.round(sizeAt(look, Math.max(...data.steps), unit) / unit));
   const tries = [];
   for (let units = most; units >= least; units -= 1) {
     const t = tryAt(shot, ctx, data, room, units * unit);
@@ -70,17 +89,24 @@ function tryAt(shot, ctx, data, room, size) {
   const face = data.face ?? 'text';
   const bold = { ...fontFor(look, face, size, unit), weight: data.bold };
   // the title in the look's `titleFace` (desk: the label face, a speaker tag) at its own weight, else bold messages' face
+  // ruled rows (data.rows): the title over the body in the hierarchy, MIN_HERO_RATIO times the messages
   const titleFace = data.titleFace ?? face;
-  const titleFont = data.titleFace ? fontFor(look, titleFace, size, unit) : bold;
+  const titleSize = data.rows ? MIN_HERO_RATIO * size : size;
+  const titleFont = data.titleFace ? fontFor(look, titleFace, titleSize, unit) : bold;
   const title = shot.title === undefined ? null : layoutText({ text: setCase(look, titleFace, shot.title), font: titleFont, maxWidth: room.w, measure });
   const height = (title ? title.height + data.gap * unit : 0) + items.reduce((h, it) => h + it.h, 0) + (items.length - 1) * data.gap * unit;
   const holds = items.every((it) => it.text.lines.length <= data.maxLines && (!it.app || it.app.lines.length === 1));
   return { size, font: fontFor(look, face, size, unit), bold, titleFont, items, title, holds, fits: holds && height <= room.h };
 }
 
-// A slip or bubble at `box`: the look's shadow (desk), the body, and its outline (pop).
+// A slip or bubble at `box`: the look's shadow (desk), the body, and its outline (pop); for ruled rows (data.rows,
+// ledger) only a hairline across the row's top, no body.
 function plate(id, box, style, ctx, data) {
   const { look, unit } = ctx;
+  if (data.rows) {
+    const [x, y, w] = box;
+    return [node('path', `${id}.rule`, { d: `M${x} ${y}H${x + w}`, stroke: colourOf(look, data.line), strokeWidth: data.lineWidth * unit })];
+  }
   const d = roundedRect(...box, data.radius * unit);
   const out = [];
   if (data.shadow) {
@@ -170,12 +196,20 @@ export function feedLayout(shot, ctx, data, room, times) {
   return { nodes: [...titleNodes, ...laid.nodes], boxes: laid.boxes, times };
 }
 
+// Ruled rows (data.rows) share the room's spare height between them, so the thread fills the frame; 0 otherwise.
+function rowSpread(fit, data, { top, bottom, gap }) {
+  if (!data.rows) return 0;
+  const used = fit.items.reduce((h, it) => h + it.h, 0) + (fit.items.length - 1) * gap;
+  return Math.max(0, bottom - top - used) / fit.items.length;
+}
+
 function chatThread(shot, ctx, data, fit, { room, top, bottom, gap, times }) {
-  const ys = fit.items.reduce((acc, it, k) => [...acc, k === 0 ? top : acc[k - 1] + fit.items[k - 1].h + gap], []);
+  const step = gap + rowSpread(fit, data, { top, bottom, gap });
+  const ys = fit.items.reduce((acc, it, k) => [...acc, k === 0 ? top : acc[k - 1] + fit.items[k - 1].h + step], []);
   const starts = times.map((t, k) => dotsWindow(shot, k, times)?.[0] ?? t); // when each takes its place
   const offsets = fit.items.map((it, k) => Math.max(0, ys[k] + it.h - bottom));
   const hideAt = fit.items.map((_, k) => starts.find((s, j) => j > k && ys[k] < top + offsets[j] - 1e-6));
-  const xOf = (k) => (shot.items[k].from === 'me' ? room.x + room.w - fit.items[k].w : room.x);
+  const xOf = (k) => (shot.items[k].from === 'me' && !data.rows ? room.x + room.w - fit.items[k].w : room.x);
   const children = fit.items.flatMap((it, k) => {
     const id = `${shot.id}.item${k}`;
     const win = dotsWindow(shot, k, times);

@@ -119,8 +119,9 @@ function sidePicture(shot, ctx, data, key, room, { w, h }) {
   return [node('image', `${shot.id}.${key}.src`, { src: shot[key].src, w: fit.w, h: fit.h, x: -w / HALF + pad, y: -h / HALF + pad })];
 }
 
-// One side's text nodes in its card's centred space, all arriving at `at`, starting `top` under the content's top.
-function sideTexts(shot, ctx, data, side, { w, h, at, top, valueFill }) {
+// One side's text nodes in its card's centred space, all arriving at `at`, starting `top` under the content's top;
+// `ink` the colour its title and points are set in (the look's ink unless a columns look claims this side, columnInk).
+function sideTexts(shot, ctx, data, side, { w, h, at, top, valueFill, ink = ctx.look.palette.ink }) {
   const { look, unit } = ctx;
   const pad = data.pad * unit, ox = -w / HALF + pad;
   let cursor = -h / HALF + pad + top; // the next cap line
@@ -135,13 +136,50 @@ function sideTexts(shot, ctx, data, side, { w, h, at, top, valueFill }) {
   // the value is the hero: in ink, or with a fill track (cosmos: the accent while its side is spoken)
   const words = valueFill && side.value ? side.value.lines.flatMap((l) => l.words).map(() => ({ fill: valueFill })) : undefined;
   if (side.value !== null) cursor = place(`${id}.value`, side.value, fontFor(look, 'display', side.value.size, unit), look.palette.ink, 'hero', words) + data.valueGap * side.value.size;
-  const last = place(`${id}.title`, side.title, side.titleFont, look.palette.ink, 'hero');
+  const last = place(`${id}.title`, side.title, side.titleFont, ink, 'hero');
   if (side.points !== null) {
     cursor = last + data.titleGap * side.titleFont.size;
-    place(`${id}.points`, side.points, side.pointFont, look.palette.ink, 'body');
+    place(`${id}.points`, side.points, side.pointFont, ink, 'body');
   }
   return out;
 }
+
+// ---- ruled columns (look data `columns`, ledger: gate-ledger-1 ruling 1) ----
+
+const FIRST_NUMBER = /\d[\d,]*(?:\.\d+)?/;
+
+// The first figure a side states (its value, else its points, else its title), or null.
+function figureOf(side) {
+  const said = [side.value, ...(Array.isArray(side.points) ? side.points : []), side.title].filter((s) => s !== undefined).join(' ');
+  const found = String(said).match(FIRST_NUMBER);
+  return found ? Number(found[0].replace(/,/g, '')) : null;
+}
+
+/** The side a columns compare claims: the one stating the larger figure ('left' | 'right'), or null when either side
+ *  states none or both state the same. */
+export function claimedSide(shot) {
+  const [a, b] = SIDES.map((k) => figureOf(shot[k]));
+  if (a === null || b === null || a === b) return null;
+  return a > b ? 'left' : 'right';
+}
+
+// The colour a side's title and points take in a columns compare: the accent on the claimed side, else the ink.
+const columnInk = (look, shot, key) => (claimedSide(shot) === key ? look.palette.accent : look.palette.ink);
+
+// The ruled divider between the two columns: a straight hairline down the gutter (wide) or across it (tall), the
+// columns' full extent, in data.divider's colour and width.
+function columnDivider(shot, ctx, data, [a, b]) {
+  const { unit, look } = ctx;
+  const wide = isWide(ctx.canvas);
+  const ends = wide
+    ? [[(a[0] + a[2] + b[0]) / HALF, a[1]], [(a[0] + a[2] + b[0]) / HALF, a[1] + a[3]]]
+    : [[a[0], (a[1] + a[3] + b[1]) / HALF], [a[0] + a[2], (a[1] + a[3] + b[1]) / HALF]];
+  const props = { d: polyline(ends), stroke: colourOf(look, data.divider.color), strokeWidth: data.divider.width * unit, lineCap: 'butt' };
+  return node('path', `${shot.id}.divider`, props);
+}
+
+// One column: the card's place and entrance with nothing of the card drawn (no paper, no edge, no scrim), its texts.
+const columnGroup = (card, id, children) => node('group', id, { ...card.props }, { tracks: card.tracks, children });
 
 // What the scrim covers: the card's paper and tape strips, each through its own place and turn, in the card's space.
 function coverOf(card) {
@@ -267,18 +305,25 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
   const height = Math.max(content, data.fill ? data.fill * (avail + HALF * pad) : 0);
   const inset = room === null ? (height - content) / HALF : 0;
   const boxes = cardBoxes(ctx, data, height, below);
+  const columns = data.columns === true;
   const cards = set.sides.map((side, i) => {
     const id = `${shot.id}.${side.key}`, at = 0; // both cards from frame 0, the unspoken one dimmed
     const card = cardOf(ctx, id, boxes[i], at);
     const size = { w: boxes[i][2], h: boxes[i][3] };
     const valueFill = data.valueAccent ? spokenFill(look, turn, i === 1) : undefined;
-    const texts = sideTexts(shot, ctx, data, side, { ...size, at, top: top + inset, valueFill });
+    const ink = columns ? columnInk(look, shot, side.key) : look.palette.ink;
+    // stacked ruled columns (tall) hold their copy to the frame's top and foot, the rule between: no card fills the gap
+    const offset = columns && !wide ? i * HALF * inset : inset;
+    const texts = sideTexts(shot, ctx, data, side, { ...size, at, top: top + offset, valueFill, ink });
     const picture = sidePicture(shot, ctx, data, side.key, room, size);
+    // ruled columns: no card, no scrim; both sides read in full, the claimed one in the accent
+    if (columns) return columnGroup(card, id, [...picture, ...texts]);
     const scrim = [dimScrim(id, card, look, turn, { lifts: i === 1 })];
     if (!data.rim) return cardGroup(card, id, [...picture, ...texts, ...scrim]);
     const rim = rimLight(id, card, ctx, data, turn, i === 1);
     return node('group', id, { ...card.props }, { tracks: card.tracks, children: [rim, ...asTextCard(id, card.children), ...picture, ...texts, ...scrim] });
   });
   const group = node('group', hero, {}, { children: cards });
-  return { nodes: [...slugNodes(shot, ctx), group, ...betweenMarks(shot, ctx, data, boxes, turn)], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };
+  const between = columns ? [columnDivider(shot, ctx, data, boxes)] : betweenMarks(shot, ctx, data, boxes, turn);
+  return { nodes: [...slugNodes(shot, ctx), group, ...between], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };
 }

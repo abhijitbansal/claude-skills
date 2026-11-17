@@ -69,11 +69,12 @@ function kindEvents(shot, entry, kinds) {
   });
 }
 
-function landEvents(shot, entry, kinds) {
+// a kind's landing may read the film's look (chart-time.mjs: a look that holds its finished chart lands it earlier)
+function landEvents(shot, entry, kinds, look) {
   if (typeof shot.show !== 'string' || !kinds.has(shot.show)) return [];
   const { landing } = kinds.get(shot.show);
   if (typeof landing !== 'function') return [];
-  return [event({ kind: 'land', t: entry.start + landing(shot, entry), shot: entry.id })];
+  return [event({ kind: 'land', t: entry.start + landing(shot, entry, look), shot: entry.id })];
 }
 
 /**
@@ -88,7 +89,7 @@ export function soundEvents(film, timeline, { kinds = registries.kinds } = {}) {
   const events = film.shots.flatMap((shot, index) => {
     const entry = timeline.shots[index];
     if (entry?.id !== shot.id) throw new RangeError(`timeline shot ${index} is ${JSON.stringify(entry?.id)}, the film's shot is "${shot.id}"`);
-    return [...cutEvents(film, index, entry, look), ...deviceEvents(shot, entry, { kinds, look, canvas }), ...kindEvents(shot, entry, kinds), ...emphasisEvents(entry), ...landEvents(shot, entry, kinds)];
+    return [...cutEvents(film, index, entry, look), ...deviceEvents(shot, entry, { kinds, look, canvas }), ...kindEvents(shot, entry, kinds), ...emphasisEvents(entry), ...landEvents(shot, entry, kinds, look)];
   });
   return Object.freeze([...events].sort((a, b) => a.t - b.t));
 }

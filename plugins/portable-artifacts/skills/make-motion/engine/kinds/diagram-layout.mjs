@@ -94,7 +94,11 @@ function tryAt(shot, env, size) {
   const max = labelWidth(layout, n, area, minGap, pad);
   const sets = setLabels(shot, env, size, Math.max(1, max));
   const held = sets.nodes.every((l) => l.lines.length <= data.maxLines && l.width <= max + EPS);
-  const box = [Math.max(...sets.nodes.map((l) => l.width)) + HALF * pad, Math.max(...sets.nodes.map((l) => l.height)) + HALF * pad];
+  // a look may run a column's boxes across the label room (data.fullColumn, ledger: gate-ledger-1 ruling 5, a narrow
+  // centre column left 40% of a tall frame empty either side), each label centred in its box
+  const labelled = Math.max(...sets.nodes.map((l) => l.width)) + HALF * pad;
+  const across = layout === 'column' && data.fullColumn === true ? Math.max(labelled, max + HALF * pad) : labelled;
+  const box = [across, Math.max(...sets.nodes.map((l) => l.height)) + HALF * pad];
   // an edge label sits on its arrow where the gap holds it and moves off it (beside the nodes) where it does not
   // (labelPlates), so no gap is widened for a label and seven short nodes still fit a row or a column
   const need = minGap;

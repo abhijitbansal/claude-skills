@@ -98,11 +98,15 @@ test('finding 2: the 16:9 map under its title is drawn at least half the frame t
   assert.ok(height >= MAP_SHARE * input.canvas.h, `the map is ${height.toFixed(0)} units tall of ${input.canvas.h}`);
 });
 
+// The 16:9 film's quote shot was removed by the controller (gate-ledger-1: off-topic); the finding is kept on a
+// twelve-word quotation of the same length, built on its own.
+const QUOTE_SHOT = Object.freeze({ id: 'bar', show: 'quote', say: 'Every print we sold this year left the shop on a Friday morning.', by: 'Ridgeline Prints owner' });
+
 test('finding 3: the 16:9 twelve-word quote keeps its attribution at the secondary floor', () => {
-  const { input } = build('16:9', 'bar');
+  const input = barInput('quote', QUOTE_SHOT, { look: LOOK, format: '16:9' });
   const texts = flat(sampleGraph(input.nodes, input.duration)).filter((n) => n.type === 'text');
   assert.ok(texts.every((n) => n.props.dropped === undefined), 'nothing is dropped');
-  const attribution = texts.find((n) => /make-motion design notes/.test(n.props.layout.lines.map((l) => l.text ?? '').join(' ')) || /\.by$|\.attr/.test(n.id));
+  const attribution = texts.find((n) => /\.by$|\.attr/.test(n.id));
   assert.ok(attribution !== undefined, `an attribution text among ${texts.map((n) => n.id).join(', ')}`);
   assert.ok(attribution.props.font.size >= input.look.secondary.min - 1e-6, `attribution at ${attribution.props.font.size}`);
 });
