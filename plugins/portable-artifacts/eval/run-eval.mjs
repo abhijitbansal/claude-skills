@@ -7,6 +7,7 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { SKILLS, LOCAL_MODEL_GATED_SKILLS, buildPrompt, expandCmd, loadPrompts, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
+import { readSession } from './session.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 let opts;
@@ -17,6 +18,7 @@ try {
     host: { type: 'string' },
     model: { type: 'string' },
     agent: { type: 'string' },
+    budget: { type: 'string' },
     set: { type: 'string' },
     limit: { type: 'string' },
     only: { type: 'string' },
@@ -32,7 +34,7 @@ try {
 }
 
 function usageText() {
-  return `usage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--agent name] [--set name] [--limit n] [--only id,id] [--timeout sec] [--abort-no-spec sec] [--allow-local-models] [--out dir] [--help]\n`;
+  return `usage: node eval/run-eval.mjs --skill ${Object.keys(SKILLS).join('|')} --host <${Object.keys(JSON.parse(fs.readFileSync(path.join(here, 'hosts.json'), 'utf8'))).join('|')}> [--model m] [--agent name] [--budget usd] [--set name] [--limit n] [--only id,id] [--timeout sec] [--abort-no-spec sec] [--allow-local-models] [--out dir] [--help]\n`;
 }
 
 function usage(msg) {
@@ -53,6 +55,13 @@ if (!host) usage(`unknown --host ${opts.host ?? ''}`);
 if (opts.agent !== undefined) {
   if (opts.agent === '') usage('--agent needs a name');
   if (!host.agentArgs) usage(`host "${opts.host}" has no agentArgs`);
+}
+// --budget is the per-case spend cap of a billed host that has budgetArgs: refused where it would be ignored, required where
+// a case would otherwise run uncapped.
+if (opts.budget !== undefined && !host.budgetArgs) usage(`host "${opts.host}" has no budgetArgs, so --budget would be ignored`);
+if (opts.budget === undefined && host.budgetArgs) usage(`host "${opts.host}" is billed per prompt and needs --budget <usd>`);
+if (opts.budget !== undefined && !(Number.isFinite(Number(opts.budget)) && Number(opts.budget) > 0)) {
+  usage(`--budget must be a positive number of dollars, got "${opts.budget}"`);
 }
 // A host without modelArgs runs whatever model its own settings pick (claude-frontmatter: the SKILL.md frontmatter), so a --model would be ignored.
 if (opts.model !== undefined && !host.modelArgs) usage(`host "${opts.host}" has no modelArgs, so --model would be ignored; leave it out`);
@@ -107,9 +116,9 @@ fs.mkdirSync(resultsDir, { recursive: true });
 
 const rows = [];
 for (const p of prompts) {
-  const { work, seedSpec } = prepareWorkdir(p, { skillCfg, skillsRoot: path.resolve(here, '../skills'), evalDir: here });
-  const prompt = buildPrompt(skillCfg, p.prompt);
-  const argv = expandCmd(host, { prompt, cwd: work, model: opts.model, agent: opts.agent });
+  const { work, seedSpec } = prepareWorkdir(p, { skillCfg, skillsRoot: path.resolve(here, '../skills'), evalDir: here, host });
+  const prompt = buildPrompt(skillCfg, p.prompt, host);
+  const argv = expandCmd(host, { prompt, cwd: work, model: opts.model, agent: opts.agent, budget: opts.budget });
   process.stdout.write(`▶ ${p.id} (${work})\n`);
   const caseDir = path.join(resultsDir, p.id);
   fs.mkdirSync(caseDir, { recursive: true });
@@ -126,7 +135,9 @@ for (const p of prompts) {
     abortIf: abortNoSpecSec > 0 ? { afterMs: abortNoSpecSec * 1000, done: madeProgress } : undefined,
   });
   const score = await scoreRun({ work, skillCfg, skillDir: path.join(work, 'skills', skillCfg.dir), seedSpec, expect: p.expect, maxChanged: p.maxChanged });
-  const row = { id: p.id, hostExit: r.code, timedOut: r.timedOut, aborted: r.aborted, seconds: r.seconds, ...score };
+  // A host that streams its session (agentFile) is read for evidence of a delegation; the transcript is the stream.
+  const session = host.agentFile ? readSession(path.join(caseDir, 'transcript.txt'), { specName: skillCfg.spec }) : null;
+  const row = { id: p.id, hostExit: r.code, timedOut: r.timedOut, aborted: r.aborted, seconds: r.seconds, ...score, ...(session ? { session } : {}) };
   rows.push(row);
   // .eval-log.jsonl is every validate call the host made, in order: kept so a retry loop can be read back, not just counted.
   for (const f of [skillCfg.spec, 'output.log', 'check.log', '.eval-log.jsonl', ...skillCfg.artifacts]) {
@@ -135,10 +146,10 @@ for (const p of prompts) {
   }
   fs.rmSync(work, { recursive: true, force: true }); // artifacts already copied; rmSync does not follow the node_modules symlink
   const tri = (x) => (x === null ? '-' : x ? '✓' : '✗');
-  process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  check ${tri(row.checkOk)}  feature ${tri(row.featureOk)}  ${row.seconds.toFixed(0)}s  model ${row.model}${row.aborted ? '  (aborted: no spec)' : ''}\n`);
+  process.stdout.write(`  spec ${row.specExists ? '✓' : '✗'}  valid ${row.finalValid ? '✓' : '✗'}  runs ${row.validateRuns}  output ${row.outputOk ? '✓' : '✗'}  check ${tri(row.checkOk)}  feature ${tri(row.featureOk)}  ${row.seconds.toFixed(0)}s  model ${row.model}${row.aborted ? '  (aborted: no spec)' : ''}${session ? `  delegated ${session.readable ? (session.delegated ? '✓' : 'no (director ran it)') : 'unreadable'}` : ''}\n`);
 }
 
-fs.writeFileSync(path.join(resultsDir, 'results.json'), `${JSON.stringify({ host: opts.host, skill: opts.skill, model: opts.model ?? null, agent: opts.agent ?? null, rows }, null, 2)}\n`);
+fs.writeFileSync(path.join(resultsDir, 'results.json'), `${JSON.stringify({ host: opts.host, skill: opts.skill, model: opts.model ?? null, agent: opts.agent ?? null, budget: opts.budget ?? null, rows }, null, 2)}\n`);
 const summary = summarize(rows, { host: opts.host, skill: opts.skill, model: opts.model, agent: opts.agent });
 fs.writeFileSync(path.join(resultsDir, 'summary.md'), summary);
 process.stdout.write(`\n${summary}\nresults: ${resultsDir}\n`);

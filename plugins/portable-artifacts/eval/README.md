@@ -23,6 +23,7 @@ node run-eval.mjs --skill dashboard --host codex-oss --model gemma4
 node run-eval.mjs --skill motion --host codex-oss --model gemma4 --allow-local-models
 node run-eval.mjs --skill explainer --host copilot --agent artifact-builder --model "Claude Haiku 5.5"
 node run-eval.mjs --skill diagram --host claude-frontmatter     # no --model: the account default model; frontmatter use unverified
+node run-eval.mjs --skill dashboard --host claude-director --only rev-by-region --budget 2   # billed, one case, capped at 2 USD
 ```
 
 Each command above runs a real host, and a billed host is billed per prompt: count the prompts first (`--limit`,
@@ -43,6 +44,47 @@ A host marked `"local": true` (`codex-oss`) is not run on `motion` or `explainer
 [`results/INDEX.md`](results/INDEX.md)), and each such run waited out the whole timeout. A run that has written no spec and
 made no `validate` call after `--abort-no-spec <sec>` seconds (default: the host's `abortNoSpecSec`, 240 for
 `codex-oss`; `0` turns it off) is killed and marked `aborted` in the summary. For an edit prompt, a seed left unchanged counts as no spec.
+
+## The `claude-director` host: seeing a delegation
+
+`claude-director` runs the session as Claude Code does for a user and records what it did, so the evidence of who
+built what comes from the session's own events, not from what an agent says about itself. Its command is the `claude`
+one plus `--output-format stream-json --verbose --forward-subagent-text --include-hook-events`, the subagent tool
+(`Agent`, and `Task` as an older name) in `--allowedTools`, and `--setting-sources project`, so only the workdir's
+`.claude/` is read and the owner's user-level setup (global rules, hooks, plugins) is not loaded. It names no `--model`:
+the director runs as the account default, and `--model` is refused. For each case the harness writes the `claude`
+operator agent file (`shared/agents.mjs`) to `<work>/.claude/agents/artifact-builder.md`, and the prompt ends with "follow
+the skill's Director and operator section; stop when the build is done" instead of "stop after validate and
+build/render" (the other hosts' prompt is unchanged). A skill whose `SKILL.md` has no such section gives the session
+nothing to follow, and its rows read "director ran it".
+
+`--budget <usd>` is the per-case spend cap (`--max-budget-usd`). The host needs it, and any host without `budgetArgs`
+refuses it. A case that reaches the cap is marked `hit the budget cap` in the notes.
+
+`eval/session.mjs` reads each case's `transcript.txt` (the stream) into a record kept in `results.json` as `session`:
+whether the director delegated, to which agent name, the model each side ran as (`director` events versus events with a
+parent tool-use id, which are the subagent's), the model the delegating call asked for (`requestedModel`: a model named
+there overrides the agent file), who wrote the spec, ran `make.mjs` and viewed a sheet or page, the agents, plugins,
+setting sources and hooks the stream lists, cost and cap. These columns follow `first try` in `summary.md`:
+
+| Column | Meaning |
+|---|---|
+| first build valid | `ok` of the report from the first `make.mjs` run in the session (`✓`, `✗`, or `-` when none ran or its result was not a report) |
+| spec by, make by | `director`, `operator`, or `director+operator`, with `×n` for n steps; `-` for none |
+| operator model | the model of the subagent's own messages; `director ran it` when nobody delegated (the case is kept); `(director requested <m>: overrides the agent file)` when the delegating call named a model |
+| director model | the model of the session's own messages |
+
+`model reported` is kept and its header reads `model reported (self-reported)` in these summaries: it is
+`generatedBy.model` as the agent wrote it, never evidence of which model ran. A stream the parser cannot read gives
+`unreadable` in every new column and a note. The summary also prints `Delegated d/n · first build valid v/m` and a
+`Session setup (read from the stream)` line (setting sources, plugins, hooks that fired). A `make.mjs` run adds a
+`{ "command": "make" }` line to `.eval-log.jsonl`; `validate runs` and `first try` ignore those lines.
+
+Status of the parser: the stream shapes it reads (an `init` event listing model, agents and plugins; `tool_use` and
+`tool_result` blocks; `parent_tool_use_id` on a subagent's events; the `result` event) are written from the plan and
+tested on hand-written, synthetic streams only (`test/helpers/stream-fixtures.mjs`). No real stream has been captured
+yet: the first billed case replaces the fixtures and the parser is corrected against it. Until then the setting
+sources, hook names and the `error_max_budget_usd` cap marker are expectations, not observations.
 
 `--set <name>` runs the prompts in `prompts/<skill>-<name>.json` instead of
 the default `prompts/<skill>.json` (which stays as it is, so committed
@@ -172,7 +214,8 @@ committed. A test checks `music.wav` byte for byte against the helper.
 
 `node --test "test/**/*.test.mjs"` uses a fake skill and fake host, so it
 needs no LLM. `test/lib.test.mjs` covers scoring, the prompt files (every block, section type and chart kind has a
-prompt that expects it) and the run-eval flags; `test/validate-fuzz.test.mjs` runs the five `validate.mjs` scripts on specs
+prompt that expects it) and the run-eval flags; `test/session.test.mjs` and `test/director-host.test.mjs` cover the stream
+parser, the `claude-director` host, `--budget` and the new columns on synthetic streams (a fake `claude` prints one); `test/validate-fuzz.test.mjs` runs the five `validate.mjs` scripts on specs
 whose keys and lookup values are `constructor`, `__proto__` and `toString`, and shows it catches a scratch validator
 that accepts them; `test/docs-facts.test.mjs` ties the plugin README and USAGE to the code. They need each skill's
 `node_modules` installed, and none opens a browser or calls a model.

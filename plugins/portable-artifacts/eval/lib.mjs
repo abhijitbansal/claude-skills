@@ -4,6 +4,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { agentFile } from '../shared/agents.mjs';
+import { SESSION_HEADERS, sessionCells, sessionNotes, sessionTotals, sessionSetup } from './session-columns.mjs';
 
 export const SKILLS = {
   dashboard: {
@@ -123,10 +125,16 @@ export function copySkill(src, work) {
 
 // A fresh work directory for one prompt: the skill and its sibling skills under skills/, the data fixtures
 // under data/, ./repo for a `"repo": true` prompt, and the seed spec for an edit prompt.
-// `skillsRoot` holds the skill folders, `evalDir` the fixtures. -> { work, seedSpec }.
-export function prepareWorkdir(p, { skillCfg, skillsRoot, evalDir, tmpDir = os.tmpdir() }) {
+// `skillsRoot` holds the skill folders, `evalDir` the fixtures. A host with `agentFile` (claude-director) also gets
+// that host's builder agent file at <work>/.claude/agents/, so the session can delegate to it. -> { work, seedSpec }.
+export function prepareWorkdir(p, { skillCfg, skillsRoot, evalDir, tmpDir = os.tmpdir(), host }) {
   const work = fs.mkdtempSync(path.join(tmpDir, `pa-eval-${p.id}-`));
   for (const name of [skillCfg.dir, ...(skillCfg.siblings ?? [])]) copySkill(path.join(skillsRoot, name), work);
+  if (host?.agentFile) {
+    const { fileName, content } = agentFile(host.agentFile);
+    fs.mkdirSync(path.join(work, '.claude', 'agents'), { recursive: true });
+    fs.writeFileSync(path.join(work, '.claude', 'agents', fileName), content);
+  }
   if (p.repo) createFixtureRepo(path.join(work, 'repo'));
   fs.cpSync(path.join(evalDir, 'fixtures', 'data'), path.join(work, 'data'), { recursive: true });
   let seedSpec = null;
@@ -151,27 +159,35 @@ export function loadPrompts(promptsDir, skill, set) {
   return JSON.parse(fs.readFileSync(path.join(promptsDir, `${skill}-${set}.json`), 'utf8'));
 }
 
-export function buildPrompt(skillCfg, task) {
+// A host with `agentFile` runs the director and operator hand-off, so "stop after validate and build/render" (which
+// steers a host around make.mjs and the agent) becomes "follow the Director and operator section". Every other host's
+// prompt is unchanged, so committed summaries stay comparable.
+export function buildPrompt(skillCfg, task, host) {
+  const stop = host?.agentFile
+    ? "follow the skill's Director and operator section; stop when the build is done."
+    : 'stop after validate and build/render.';
   return [
     `Read skills/${skillCfg.dir}/SKILL.md and follow its workflow exactly.`,
     `The skill's scripts are in skills/${skillCfg.dir}/scripts/ and its dependencies are already installed.`,
     'Work only inside the current directory.',
-    'Do not start serve.mjs or preview.mjs (they never exit); stop after validate and build/render.',
+    `Do not start serve.mjs or preview.mjs (they never exit); ${stop}`,
     `Task: ${task}`,
     `Save the spec as ./${skillCfg.spec}.`,
   ].join(' ');
 }
 
-// Substitute {prompt} {cwd} {model} {agent} in a host command template.
+// Substitute {prompt} {cwd} {model} {agent} {budget} in a host command template.
 // One pass, function replacer: text inside the prompt is never re-substituted
 // and `$&`-style patterns stay literal. agentArgs is appended only when an agent
-// is named (run-eval.mjs rejects --agent for a host that has none).
-export function expandCmd(host, { prompt, cwd, model, agent }) {
-  const values = { prompt, cwd, model: model ?? '', agent: agent ?? '' };
-  const sub = (s) => s.replace(/\{(prompt|cwd|model|agent)\}/g, (_, k) => values[k]);
+// is named, budgetArgs only when a budget is (run-eval.mjs rejects --agent and
+// --budget for a host that has none).
+export function expandCmd(host, { prompt, cwd, model, agent, budget }) {
+  const values = { prompt, cwd, model: model ?? '', agent: agent ?? '', budget: budget ?? '' };
+  const sub = (s) => s.replace(/\{(prompt|cwd|model|agent|budget)\}/g, (_, k) => values[k]);
   const argv = host.cmd.map(sub);
   if (model && host.modelArgs) argv.push(...host.modelArgs.map(sub));
   if (agent && host.agentArgs) argv.push(...host.agentArgs.map(sub));
+  if (budget && host.budgetArgs) argv.push(...host.budgetArgs.map(sub));
   return argv;
 }
 
@@ -249,9 +265,15 @@ export function linkNodeModules(srcNodeModules, dstNodeModules) {
   }
 }
 
+// make.mjs adds its own `{ command: "make", ... }` line to the same log (and its validate stage adds the validate line),
+// so a make line is never a validate call.
+const isMakeLine = (line) => {
+  try { return JSON.parse(line)?.command === 'make'; } catch { return false; }
+};
+
 export function countValidateRuns(logPath) {
   if (!fs.existsSync(logPath)) return 0;
-  return fs.readFileSync(logPath, 'utf8').split('\n').filter((l) => l.trim()).length;
+  return fs.readFileSync(logPath, 'utf8').split('\n').filter((l) => l.trim() && !isMakeLine(l)).length;
 }
 
 // One record per validate call the host made, from $EVAL_LOG ({ ts, ok, errors } per line; a writer may add
@@ -268,6 +290,7 @@ export function readValidateLog(logPath) {
     let parsed;
     try { parsed = JSON.parse(line); } catch { continue; }
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+    if (parsed.command === 'make') continue;
     records.push({
       ts: typeof parsed.ts === 'string' ? parsed.ts : null,
       ok: typeof parsed.ok === 'boolean' ? parsed.ok : null,
@@ -428,13 +451,17 @@ export function summarize(rows, { host, skill, model, agent }) {
   const pct = (k) => `${rows.filter((r) => r[k]).length}/${n}`;
   const checkedRows = rows.filter((r) => r.checkOk === true || r.checkOk === false); // a skipped or unrun check is not a miss
   const featureRows = rows.filter((r) => r.featureOk === true || r.featureOk === false); // a prompt that names no feature is not a miss
+  // Rows from a host that streams its session (claude-director) carry `session`: five more columns, a totals line and a
+  // setup line. Other hosts' summaries keep their old shape, so committed ones stay comparable.
+  const sessions = rows.filter((r) => r.session).map((r) => r.session);
   const lines = [
     `# Eval — ${skill} on ${host}${model ? ` (${model})` : ''}${agent ? ` as agent ${agent}` : ''}`,
     '',
     `Spec written ${pct('specExists')} · valid ${pct('finalValid')} · output ok ${pct('outputOk')}${checkedRows.length ? ` · check ok ${checkedRows.filter((r) => r.checkOk).length}/${checkedRows.length}` : ''}${featureRows.length ? ` · feature used ${featureRows.filter((r) => r.featureOk).length}/${featureRows.length}` : ''}`,
     '',
-    '| id | spec | valid | validate runs | output | seconds | model reported | notes | check | feature | first try |',
-    '|---|---|---|---|---|---|---|---|---|---|---|',
+    ...(sessions.length ? [sessionTotals(sessions), '', sessionSetup(sessions), ''] : []),
+    `| id | spec | valid | validate runs | output | seconds | model reported${sessions.length ? ' (self-reported)' : ''} | notes | check | feature | first try |${sessions.length ? ` ${SESSION_HEADERS.join(' | ')} |` : ''}`,
+    `|---|---|---|---|---|---|---|---|---|---|---|${sessions.length ? '---|'.repeat(SESSION_HEADERS.length) : ''}`,
   ];
   const tri = (x) => (x === true ? '✓' : x === false ? '✗' : '-');
   for (const r of rows) {
@@ -445,9 +472,11 @@ export function summarize(rows, { host, skill, model, agent }) {
       r.changedPaths ? `changed: ${r.changedPaths.join(', ')}` : '',
       r.editOk === false ? `edit too broad: ${r.changedPaths.length} paths changed, limit ${r.editLimit}` : '',
       r.missingFeatures?.length ? `missing feature: ${r.missingFeatures.join(', ')}` : '',
+      ...(r.session ? sessionNotes(r.session) : []),
     ].filter(Boolean).join('; ').replaceAll('|', '\\|');
     const b = (x) => (x ? '✓' : '✗');
-    lines.push(`| ${r.id} | ${b(r.specExists)} | ${b(r.finalValid)} | ${r.validateRuns} | ${b(r.outputOk)} | ${r.seconds.toFixed(0)} | ${String(r.model ?? '-').replaceAll('|', '\\|')} | ${notes} | ${tri(r.checkOk)} | ${tri(r.featureOk)} | ${tri(r.firstTryValid)} |`);
+    const extra = r.session ? ` ${sessionCells(r.session).join(' | ')} |` : '';
+    lines.push(`| ${r.id} | ${b(r.specExists)} | ${b(r.finalValid)} | ${r.validateRuns} | ${b(r.outputOk)} | ${r.seconds.toFixed(0)} | ${String(r.model ?? '-').replaceAll('|', '\\|')} | ${notes} | ${tri(r.checkOk)} | ${tri(r.featureOk)} | ${tri(r.firstTryValid)} |${extra}`);
   }
   return `${lines.join('\n')}\n`;
 }
