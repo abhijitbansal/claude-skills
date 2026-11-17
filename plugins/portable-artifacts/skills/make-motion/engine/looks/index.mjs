@@ -8,6 +8,7 @@ import { unitOf } from '../units.mjs';
 import '../cuts/index.mjs';
 import { cutOptionProblems } from '../cuts/resolve.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
+import { ease } from '../time/ease.mjs';
 import '../devices/index.mjs';
 // ...and a look must name a caption style, so the styles are registered before any look is.
 import '../captions/index.mjs';
@@ -228,6 +229,35 @@ function coverEdgeErrors(name, look) {
   return [...unknown, ...Object.keys(EDGE_PARTS).filter((part) => edge[part] !== undefined).flatMap((part) => edgePartErrors(name, look, part, edge[part]))];
 }
 
+// look.cutMotion (absent, or { punchZoom?, punchEase?, smearShutter? }): how hard the punch lands and on what ease
+// (engine/cuts/index.mjs punchParts), and the share of a frame the smear's shutter is open (engine/cuts/smear.mjs).
+const CUT_MOTION = Object.freeze({
+  punchZoom: [(v) => typeof v === 'number' && v > 1 && v <= 2, 'must be a number above 1 and at most 2'],
+  punchEase: [(v) => typeof v === 'string' && easeProblem(v) === null, 'must be an ease name (linear; in, out or inOut with Quad, Cubic, Quart, Expo or Back)'],
+  smearShutter: [(v) => typeof v === 'number' && v > 0 && v <= 1, 'must be a number above 0 and at most 1'],
+});
+
+// The error ease(name) throws, or null when it names a curve.
+function easeProblem(name) {
+  try {
+    ease(name);
+    return null;
+  } catch (error) {
+    return error.message;
+  }
+}
+
+function cutMotionErrors(name, look) {
+  const motion = look.cutMotion;
+  if (motion === undefined) return [];
+  if (!isPlainObject(motion)) return [`look "${name}": cutMotion must be an object of ${Object.keys(CUT_MOTION).join(', ')}, got ${String(motion)}`];
+  return Object.entries(motion).flatMap(([key, value]) => {
+    if (!(key in CUT_MOTION)) return [`look "${name}": cutMotion.${key} is not a field; it takes ${Object.keys(CUT_MOTION).join(', ')}`];
+    const [ok, message] = CUT_MOTION[key];
+    return ok(value) ? [] : [`look "${name}": cutMotion.${key} ${message}, got ${JSON.stringify(value)}`];
+  });
+}
+
 /** Does `look` carry composition data for `kind` (look.kinds[kind])? */
 export const supportsKind = (look, kind) => isPlainObject(look?.kinds) && isPlainObject(look.kinds[kind]);
 
@@ -291,7 +321,7 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
   if (kinds.length > 0) throw new RangeError(kinds.join('\n'));
   const moveErrors = movesErrors(look.name, look.moves, moves.names());
   if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
-  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look)];
+  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look), ...cutMotionErrors(look.name, look)];
   if (cutErrors.length > 0) throw new RangeError(cutErrors.join('\n'));
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {

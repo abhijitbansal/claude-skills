@@ -25,6 +25,7 @@ import { expandWordmark } from './end-mark.mjs';
 import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { HERO_MARGIN } from './secondary.mjs';
+import { unmarked } from './shared.mjs';
 
 const KIND = 'end';
 const TITLE_MAX = 120;
@@ -331,7 +332,7 @@ registries.kinds.add(KIND, {
     return undefined;
   },
   validate: endProblems,
-  expand: expandEnd,
+  expand: (shot, ctx) => expandEnd(unmarked(shot), ctx),
   review: endReview,
   lookData: true, // a look ships it only with a kinds.end entry (engine/looks/index.mjs listedKinds)
   numbered: false, // no slug: the card closes the film and takes no place among its numbered shots

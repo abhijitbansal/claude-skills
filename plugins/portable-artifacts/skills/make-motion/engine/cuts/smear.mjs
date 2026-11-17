@@ -19,14 +19,15 @@ const COUNT_EPSILON = 1e-9; // keeps 10.000000000000009 px of travel at 10 sampl
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 /**
- * @param {{ p: number, frame: number, travel: (q0: number, q1: number) => number }} options the frame's progress, how far
- *   progress moves in one frame, and the largest distance in pixels a moving point covers between two progress values
+ * @param {{ p: number, frame: number, travel: (q0: number, q1: number) => number, shutter?: number }} options the frame's
+ *   progress, how far progress moves in one frame, the largest distance in pixels a moving point covers between two
+ *   progress values, and the share of a frame the shutter is open (the look's cutMotion.smearShutter; SMEAR_SHUTTER)
  * @returns {{ samples: number[], gapPx: number }} the progress of each sample (inside 0..1, in order) and the distance
  *   between neighbouring copies in pixels: the width of the box filter the page applies when it is over SMEAR_GAP_PX
  */
-export function smearPlan({ p, frame, travel }) {
+export function smearPlan({ p, frame, travel, shutter = SMEAR_SHUTTER }) {
   if (!Number.isFinite(p) || !(frame > 0)) throw new Error(`smearPlan: p must be a number and frame > 0, got p ${p}, frame ${frame}`);
-  const q0 = clamp01(p - (frame * SMEAR_SHUTTER) / HALF), q1 = clamp01(p + (frame * SMEAR_SHUTTER) / HALF);
+  const q0 = clamp01(p - (frame * shutter) / HALF), q1 = clamp01(p + (frame * shutter) / HALF);
   const span = Math.max(0, travel(q0, q1));
   const count = Math.min(SMEAR_MAX_SAMPLES, Math.max(SMEAR_MIN_SAMPLES, Math.ceil(span / SMEAR_GAP_PX - COUNT_EPSILON)));
   const samples = Array.from({ length: count }, (_, k) => q0 + ((q1 - q0) * (k + 1 / HALF)) / count);

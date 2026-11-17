@@ -28,12 +28,14 @@ const JS = { id: 'c', show: 'code', lang: 'js', code: 'const a = 1;\nconst b = 2
 
 // ---- the reading-floor table ----
 
-test('the table: characters a line holds at the smallest step, from the look data (90, 44, 79, 32)', () => {
-  const cases = [['desk', '16:9', 90], ['desk', '9:16', 44], ['pop', '16:9', 79], ['pop', '9:16', 32]];
+// the smallest code step is the reading floor, step 2, and the desk 16:9 room starts at column 2 (gate-kinds-b-1):
+// desk 16:9 floor(1340 / 26.4), desk 9:16 floor(792 / 26.4), pop 16:9 floor(1712 / 33.6), pop 9:16 its safe band
+test('the table: characters a line holds at the smallest step, from the look data (50, 30, 50, 20)', () => {
+  const cases = [['desk', '16:9', 50], ['desk', '9:16', 30], ['pop', '16:9', 50], ['pop', '9:16', 20]];
   for (const [name, format, chars] of cases) {
     const l = look(name), canvas = canvasOf(format), unit = Math.min(canvas.w, canvas.h) / 1080;
     const inner = innerOf(reviewRoom(l, canvas, platformOf(canvas)), l.kinds.code, unit);
-    assert.equal(holds(inner, l.kinds.code, sizeAt(l, 1, unit)).chars, chars, `${name} ${format}`);
+    assert.equal(holds(inner, l.kinds.code, sizeAt(l, Math.min(...l.kinds.code.steps), unit)).chars, chars, `${name} ${format}`);
   }
 });
 
@@ -51,9 +53,11 @@ test('short code is set large: one size for every text, as large as the lines an
   assert.equal(sizes.size, 1);
   assert.equal([...sizes][0], sizeAt(look('desk'), 3, 1), 'three short lines at desk 16:9 take the top code step (72)');
   const size = (shot, name, format) => texts(expand(shot, name, format))[0].props.layout.size;
-  assert.equal(size({ ...JS, code: 'x'.repeat(60) }, 'desk', '16:9'), 45, 'floor(1632 / (0.6 x 60)) = 45');
-  assert.equal(size({ ...JS, code: 'x'.repeat(70) }, 'desk', '16:9'), 38, 'floor(1632 / (0.6 x 70)) = 38');
-  assert.equal(size({ ...code.example }, 'pop', '16:9'), 47, 'a title and 12 lines in 872: floor(872 / (1.4 x 13)) = 47, not the floor step 36');
+  // the room starts at column 2 since gate-kinds-b-1 (1920 - 2 x 242 = 1436 wide, less 2 x 48 pad = 1340 inside)
+  assert.equal(size({ ...JS, code: 'x'.repeat(40) }, 'desk', '16:9'), 55, 'floor(1340 / (0.6 x 40)) = 55');
+  assert.equal(size({ ...JS, code: 'x'.repeat(45) }, 'desk', '16:9'), 49, 'floor(1340 / (0.6 x 45)) = 49');
+  assert.equal(size({ ...JS, code: 'x'.repeat(60) }, 'desk', '16:9'), 44, 'too long for the floor: set at the floor (44), never under; the review says to cut');
+  assert.equal(size({ ...code.example }, 'pop', '16:9'), 56, 'a title and 10 lines in 872: floor(872 / (1.4 x 11)) = 56, the floor step');
 });
 
 test('tall frames: the title is the hero over the card (at least 3x the code), the card takes the room\'s width; a run without a title heroes its command', () => {
@@ -100,9 +104,10 @@ test('validation: a field of another mode, a missing field, lang did-you-mean, l
 // ---- the review ----
 
 test('review: a line longer than the format holds is a finding at its field; the same line at 16:9 is fine', () => {
-  const shot = { id: 'c', show: 'code', code: `const x = "${'a'.repeat(45)}";` };
+  // the reading floor (step 2) is the smallest code step since gate-kinds-b-1: desk 9:16 holds 30, desk 16:9 holds 50
+  const shot = { id: 'c', show: 'code', code: `const x = "${'a'.repeat(32)}";` };
   const found = reviewOf(shot, 'desk', '9:16');
-  assert.ok(found.some((f) => f.path === 'code' && f.message === 'line 1 is 58 characters; at 9:16 in the desk look a line holds 44: break it or cut it'), JSON.stringify(found));
+  assert.ok(found.some((f) => f.path === 'code' && f.message === 'line 1 is 45 characters; at 9:16 in the desk look a line holds 30: break it or cut it'), JSON.stringify(found));
   assert.deepEqual(reviewOf(shot, 'desk', '16:9'), []);
 });
 

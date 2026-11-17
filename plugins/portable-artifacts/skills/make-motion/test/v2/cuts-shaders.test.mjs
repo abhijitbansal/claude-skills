@@ -31,16 +31,20 @@ test('ripple and cube are registered shader cuts of 0.6 s; cube takes the four e
 
 // The six cases below are version 1's numbers, copied from test/gl-transitions.test.mjs ("glUniforms: the cube turns 0
 // to 90 degrees ..." and "glUniforms: progress outside 0 to 1 is clamped ..."), for the same progress, direction and size.
-test('cube uniforms at progress 0 are version 1\'s: no turn, no pull, the front face lit and the other at 0.55', () => {
+// The face turned away is shaded to 0.35 (version 1: 0.55; look review gate-cuts-1 P6 found the faces alike).
+const AWAY = 0.35;
+
+test('cube uniforms at progress 0: no turn, no pull, the front face lit and the other in shade', () => {
   const start = cube(0);
-  assert.deepEqual([start.uSin, start.uCos, start.uPull, start.uShadeFrom, start.uShadeTo], [0, 1, 0, 1, 0.55]);
+  assert.deepEqual([start.uSin, start.uCos, start.uPull, start.uShadeFrom], [0, 1, 0, 1]);
+  near(start.uShadeTo, AWAY, 'shade to');
 });
 
-test('cube uniforms at progress 1 are version 1\'s: a quarter turn, the pull back to 0, the shades swapped', () => {
+test('cube uniforms at progress 1: a quarter turn, the pull back to 0, the shades swapped', () => {
   const end = cube(1);
   assert.equal(end.uSin, 1);
   assert.ok(Math.abs(end.uCos) < 1e-12 && Math.abs(end.uPull) < 1e-12);
-  near(end.uShadeFrom, 0.55, 'shade from'); near(end.uShadeTo, 1, 'shade to');
+  near(end.uShadeFrom, AWAY, 'shade from'); near(end.uShadeTo, 1, 'shade to');
 });
 
 test('cube uniforms at progress 0.5 are version 1\'s: an eighth of a turn with the largest pull', () => {
@@ -49,11 +53,11 @@ test('cube uniforms at progress 0.5 are version 1\'s: an eighth of a turn with t
   near(middle.uPull, 0.5, 'pull');
 });
 
-test('cube swap and flip per direction are version 1\'s', () => {
+test('cube swap and flip per direction: version 1\'s across, and up and down name the way the box turns (edges.mjs)', () => {
   assert.deepEqual([cube(0.5, 'left').uSwap, cube(0.5, 'left').uFlip], [0, 0]);
   assert.deepEqual([cube(0.5, 'right').uSwap, cube(0.5, 'right').uFlip], [0, 1]);
-  assert.deepEqual([cube(0.5, 'up').uSwap, cube(0.5, 'up').uFlip], [1, 0]);
-  assert.deepEqual([cube(0.5, 'down').uSwap, cube(0.5, 'down').uFlip], [1, 1]);
+  assert.deepEqual([cube(0.5, 'up').uSwap, cube(0.5, 'up').uFlip], [1, 1]);
+  assert.deepEqual([cube(0.5, 'down').uSwap, cube(0.5, 'down').uFlip], [1, 0]);
 });
 
 test('cube uRatio is version 1\'s: the face across the turn in units of its extent along it', () => {
@@ -61,12 +65,12 @@ test('cube uRatio is version 1\'s: the face across the turn in units of its exte
   assert.equal(cube(0.5, 'up').uRatio, 320 / 180);
 });
 
-test('progress outside 0 to 1 is clamped, as version 1 clamped it; ripple keeps version 1\'s constants', () => {
+test('progress outside 0 to 1 is clamped, as version 1 clamped it; ripple runs at half version 1\'s amplitude, frequency and shine (gate-cuts-1 P7)', () => {
   assert.equal(ripple(-3).progress, 0);
   assert.equal(ripple(7).progress, 1);
   assert.equal(cube(9).uSin, 1);
   const r = ripple(0.3);
-  assert.deepEqual([r.progress, r.amplitude, r.frequency, r.speed, r.shine], [0.3, 0.03, 28, 14, 0.06]);
+  assert.deepEqual([r.progress, r.amplitude, r.frequency, r.speed, r.shine], [0.3, 0.015, 14, 14, 0.03]);
   assert.equal(r.ratio, 320 / 180);
 });
 
@@ -74,11 +78,16 @@ test('progress outside 0 to 1 is clamped, as version 1 clamped it; ripple keeps 
 const declared = (source) => new Set([...source.matchAll(/^\s*uniform\s+\w+\s+(\w+)\s*;/gm)].map((m) => m[1]));
 const firstDirection = (module) => (module.directions ? Object.keys(module.directions)[0] : null);
 
+// The uniforms the wrapper declares and shaderUniforms sets for every module (engine/page/post-cut.mjs).
+const WRAPPER_SET = ['uGround', 'uClearFrom', 'uClearTo', 'uHashCell'];
+
 test('every shader body declares exactly the uniforms its module sets (a typo would be a silent zero), and none of the wrapper\'s', () => {
+  const wrapper = declared(wrapTransition('vec4 transition(vec2 uv) { return vec4(0.0); }'));
+  for (const name of WRAPPER_SET) assert.ok(wrapper.has(name), `the wrapper declares ${name}`);
   for (const [name, module] of Object.entries(SHADER_MODULES)) {
-    const set = Object.keys(shaderUniforms(module, { p: 0.5, direction: firstDirection(module), canvas: CANVAS })).filter((k) => k !== 'progress' && k !== 'ratio');
+    const set = Object.keys(shaderUniforms(module, { p: 0.5, direction: firstDirection(module), canvas: CANVAS })).filter((k) => k !== 'progress' && k !== 'ratio' && !WRAPPER_SET.includes(k));
     assert.deepEqual([...declared(module.source)].sort(), [...new Set(set)].sort(), name);
-    for (const reserved of ['progress', 'ratio', 'uFrom', 'uTo', 'uRes', 'uSeed']) assert.ok(!declared(module.source).has(reserved), `${name} declares ${reserved}`);
+    for (const reserved of ['progress', 'ratio', 'uFrom', 'uTo', 'uRes', 'uSeed', ...WRAPPER_SET]) assert.ok(!declared(module.source).has(reserved), `${name} declares ${reserved}`);
   }
 });
 
@@ -106,7 +115,8 @@ test('a module whose source declares no transition() is refused, as is a stand-i
 test('the wrapper writes alpha 1 whatever a body returns, flips the pictures to the bottom-left uv, and hashes with integers only', () => {
   const source = wrapTransition('vec4 transition(vec2 uv) { return vec4(0.0); }');
   assert.match(source, /outColor = vec4\(transition\(uv\)\.rgb, 1\.0\);/);
-  assert.match(source, /vec4 getFromColor\(vec2 uv\) \{ return texture\(uFrom, vec2\(uv\.x, 1\.0 - uv\.y\)\); \}/);
+  assert.match(source, /vec4 getFromColor\(vec2 uv\) \{\n {2}vec4 c = texture\(uFrom, vec2\(uv\.x, 1\.0 - uv\.y\)\);/);
+  assert.match(source, /vec4 getToColor\(vec2 uv\) \{\n {2}vec4 c = texture\(uTo, vec2\(uv\.x, 1\.0 - uv\.y\)\);/);
   assert.doesNotMatch(source.replace(/vec4 transition[\s\S]*$/, ''), /\bsin\(/, 'no sin() in the wrapper');
   for (const module of Object.values(SHADER_MODULES)) assert.doesNotMatch(module.source, /fract\(sin\(dot\(/, `${module.name}: no sin() hash left`);
 });

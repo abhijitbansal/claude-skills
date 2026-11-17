@@ -7,12 +7,13 @@
 import { node } from '../graph/node.mjs';
 import { registries } from '../registry.mjs';
 import { polyline, roundedRect } from '../devices/shared.mjs';
-import { CAP_HEIGHT, WORD_DESCENT } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, setCase } from './shared.mjs';
 import { niceTicks, valueText } from './chart-scale.mjs';
 import { label, labelWidth, arriveAt } from './chart-labels.mjs';
 import { chartTimes } from './chart-time.mjs';
 import { dimTracks } from './chart-draw.mjs';
 import { arrivalTrack } from './arrivals.mjs';
+import { contrastRatio, MIN_CONTRAST } from '../review/contrast.mjs';
 
 export const SCATTER_MIN = 3;
 export const SCATTER_MAX = 40;
@@ -25,6 +26,19 @@ const MECHANICAL = 'mechanical';
 const meets = (a, b) => a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 // Is a w x h label at `spot` clear of every dot and every label placed before it?
 const clearOf = ([x, y], dots, taken, w, h) => ![...dots, ...taken].some((b) => meets(b, [x, y, w, h]));
+
+// The opacity a dimmed point takes: the look's `dim`, raised (in DIM_STEP steps) until the point blended over the
+// ground keeps MIN_CONTRAST against it, so the trend the highlight stands out from still reads (gate-kinds-b-1: pop's
+// dimmed dots vanished on a phone). Canvas blends in sRGB, as `mix` does.
+const DIM_STEP = 0.01;
+const channels = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+const mix = (fg, bg, a) => `#${channels(fg).map((c, i) => Math.round(a * c + (1 - a) * channels(bg)[i]).toString(16).padStart(2, '0')).join('')}`;
+export function readableDim(mark, ground, dim) {
+  if (contrastRatio(mark, ground) === null) return dim;
+  let a = dim;
+  while (a < 1 && contrastRatio(mix(mark, ground, a), ground) < MIN_CONTRAST) a = Math.min(1, a + DIM_STEP);
+  return Math.round(a * 100) / 100;
+}
 
 /** The labelled points' labels, in data order (the marks a highlight may name). */
 export const scatterNames = (shot) => (Array.isArray(shot.data) ? shot.data.filter((p) => p?.label !== undefined).map((p) => String(p.label)) : []);
@@ -48,6 +62,31 @@ export function scatterHonesty(shot) {
   return [...few, ...bad];
 }
 
+const finite = (p) => Number.isFinite(p?.x) && Number.isFinite(p?.y);
+
+/**
+ * Does point k carry a direct label? Only the highlighted point and a point holding an extreme of the data (the least or
+ * greatest x, or the least or greatest y, among the finite points) is labelled: every label sits at the reading floor, so
+ * a few labels keep the plot clear (k6 ruling a). The rest are plain marks.
+ */
+export function labelledPoint(shot, k) {
+  const data = Array.isArray(shot.data) ? shot.data : [];
+  const p = data[k];
+  if (p?.label === undefined || !finite(p)) return false;
+  if (shot.highlight !== undefined && String(p.label) === shot.highlight) return true;
+  const pts = data.filter(finite);
+  return ['x', 'y'].some((a) => p[a] === Math.min(...pts.map((q) => q[a])) || p[a] === Math.max(...pts.map((q) => q[a])));
+}
+
+/** A label on a point that is neither highlighted nor an extreme is not drawn: a creative finding at its path says so. */
+export function scatterPlainLabels(shot) {
+  const data = Array.isArray(shot.data) ? shot.data : [];
+  return data.flatMap((p, i) => (p?.label === undefined || !finite(p) || labelledPoint(shot, i) ? [] : [{
+    kind: 'creative', path: `data[${i}].label`, at: 0,
+    message: `"${p.label}" is drawn as a plain mark: a scatter labels only the highlighted point and the points with the least or greatest x or y; highlight it, or leave its label out`,
+  }]));
+}
+
 /** The field a scatter node shows: a point's label, an axis name, or null for a tick or a mark. */
 export function scatterField(shot, rest) {
   if (rest === 'xLabel' || rest === 'yLabel') return rest;
@@ -56,12 +95,23 @@ export function scatterField(shot, rest) {
   return /^(point|mark)\.\d+(\.|$)/.test(rest) ? 'data' : null; // the points show the data
 }
 
+/** Is the plot too short for its y ticks to stand one row apart? Then the claim over it has taken the room (chart-pop). */
+export const plotIsShort = (ticks, plotH, row) => ticks.length > 1 && plotH / (ticks.length - 1) < row;
+
+// The y ticks drawn: every one, or on a plot too short for them only the lowest and highest (only the lowest when even
+// those two would meet), so tick labels never overlap; the short plot is reported by its caller.
+function keptTicks(ticks, plotH, row) {
+  if (!plotIsShort(ticks, plotH, row)) return ticks;
+  return plotH >= row ? [ticks[0], ticks.at(-1)] : [ticks[0]];
+}
+
 // The two axes: ticks (each a label), the rules along the left and the foot of the plot.
-function axes(shot, ctx, style, { plot, xs, ys, xOf, yOf }) {
+function axes(shot, ctx, style, f) {
+  const { plot, xs, ys, xOf, yOf } = f;
   const { font, gap } = style;
   const rule = (id, a, b) => node('path', `${shot.id}.${id}`, { d: polyline([a, b]), stroke: style.strong, strokeWidth: style.axisWidth, lineCap: 'butt' });
   const foot = plot.y + plot.h;
-  const ticksY = ys.ticks.map((t, k) => label(ctx, { id: `${shot.id}.tick.y${k}`, text: valueText(t, ys.decimals), font, x: plot.x - gap, y: yOf(t) + (CAP_HEIGHT * font.size) / HALF, align: 'right', fill: style.text, numeric: true }).node);
+  const ticksY = keptTicks(ys.ticks, plot.h, f.rowH + gap).map((t, k) => label(ctx, { id: `${shot.id}.tick.y${k}`, text: valueText(t, ys.decimals), font, x: plot.x - gap, y: yOf(t) + (CAP_HEIGHT * font.size) / HALF, align: 'right', fill: style.text, numeric: true }).node);
   const ticksX = xs.ticks.map((t, k) => label(ctx, { id: `${shot.id}.tick.x${k}`, text: valueText(t, xs.decimals), font, x: xOf(t), y: foot + gap + CAP_HEIGHT * font.size, align: 'center', fill: style.text, numeric: true }).node);
   return [rule('axis.y', [plot.x, plot.y], [plot.x, foot]), rule('axis.x', [plot.x, foot], [plot.x + plot.w, foot]), ...ticksY, ...ticksX];
 }
@@ -95,7 +145,7 @@ export function drawScatter(shot, ctx, style, area, { headroom = 0 } = {}) {
     if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return [];
     const at = (times.growEnd * (k + 1)) / n;
     const d = roundedRect(f.xOf(p.x) - r, f.yOf(p.y) - r, HALF * r, HALF * r, r);
-    const dims = hl >= 0 && k !== hl ? dimTracks(look, times.highlightAt, style.dim) : {};
+    const dims = hl >= 0 && k !== hl ? dimTracks(look, times.highlightAt, readableDim(style.mark, look.palette.paper, style.dim)) : {};
     const point = node('path', `${shot.id}.mark.${k}`, { d, fill: style.mark }, { tracks: { opacity: arrivalTrack(at) } });
     const out = [node('group', `${shot.id}.point.${k}`, {}, { tracks: dims, children: [point] })];
     if (k === hl) out.push(node('path', `${shot.id}.mark.${k}.accent`, { d, fill: style.hlFill ?? style.accent }, { tracks: arriveAt(look, times.highlightAt) }));
@@ -107,7 +157,7 @@ export function drawScatter(shot, ctx, style, area, { headroom = 0 } = {}) {
   ];
   const labels = pointLabels(shot, ctx, style, f, { r, hl, times, n });
   const boxes = Object.fromEntries(shot.data.map((p, k) => [`mark:${k}`, [f.xOf(p.x) - r, f.yOf(p.y) - r, HALF * r, HALF * r]]));
-  return { nodes: [...axes(shot, ctx, style, f), ...marks, ...labels, ...names], boxes: { plot: [f.plot.x, f.plot.y, f.plot.w, f.plot.h], ...boxes }, plot: f.plot, highlight: null };
+  return { nodes: [...axes(shot, ctx, style, f), ...marks, ...labels, ...names], boxes: { plot: [f.plot.x, f.plot.y, f.plot.w, f.plot.h], ...boxes }, plot: f.plot, highlight: null, short: plotIsShort(f.ys.ticks, f.plot.h, f.rowH + gap) };
 }
 
 // The labelled points' labels: right of their points, spread so none meets the next; the highlighted one by the label
@@ -115,7 +165,7 @@ export function drawScatter(shot, ctx, style, area, { headroom = 0 } = {}) {
 function pointLabels(shot, ctx, style, f, { r, hl, times, n }) {
   const { font, gap } = style;
   const { look, unit, seed, measure } = ctx;
-  const labelled = shot.data.map((p, k) => ({ p, k })).filter(({ p, k }) => p.label !== undefined && k !== hl && Number.isFinite(p.x) && Number.isFinite(p.y));
+  const labelled = shot.data.map((p, k) => ({ p, k })).filter(({ k }) => k !== hl && labelledPoint(shot, k));
   const h = (CAP_HEIGHT + WORD_DESCENT) * font.size;
   const pad = r + gap / HALF;
   // every point's box, kept clear by each label (a label over a dot hides it: the contrast rule caught ink2 on ink)
@@ -123,7 +173,10 @@ function pointLabels(shot, ctx, style, f, { r, hl, times, n }) {
   const taken = [];
   const out = labelled.map(({ p, k }) => {
     const text = String(p.label), w = labelWidth(ctx, font, text), cx = f.xOf(p.x), cy = f.yOf(p.y);
-    const tries = [[cx + pad, cy - h / HALF], [cx - pad - w, cy - h / HALF], [cx - w / HALF, cy - pad - h], [cx - w / HALF, cy + pad]];
+    // right, left, above, below; then above or below flush with the point's left or right edge, for a point near the
+    // plot's side (an extreme x has no room to centre its label over it)
+    const tries = [[cx + pad, cy - h / HALF], [cx - pad - w, cy - h / HALF], [cx - w / HALF, cy - pad - h], [cx - w / HALF, cy + pad],
+      [cx + r - w, cy - pad - h], [cx - r, cy - pad - h], [cx + r - w, cy + pad], [cx - r, cy + pad]];
     const inside = ([x, y]) => x >= f.plot.x && x + w <= f.plot.x + f.plot.w + pad && y >= f.plot.y - h && y + h <= f.plot.y + f.plot.h;
     const clear = (spot) => clearOf(spot, dots, taken, w, h);
     const spot = tries.find((t) => inside(t) && clear(t)) ?? tries.find(inside) ?? tries[0];
@@ -136,7 +189,7 @@ function pointLabels(shot, ctx, style, f, { r, hl, times, n }) {
     const w = labelWidth(ctx, font, String(p.label)) * 1.2, cx = f.xOf(p.x), cy = f.yOf(p.y), lead = 28 * unit + r;
     const sides = [['right', [cx + lead, cy - h / HALF]], ['left', [cx - lead - w, cy - h / HALF]], ['above', [cx - w / HALF, cy - lead - h]], ['below', [cx - w / HALF, cy + lead]]];
     const side = (sides.find(([, s]) => clearOf(s, dots.filter((_, i) => i !== hl), taken, w, h)) ?? sides[0])[0];
-    const built = registries.devices.get('label').build({ id: `${shot.id}.label.${hl}`, box: [f.plot.x, f.plot.y, f.plot.w, f.plot.h], at: times.highlightAt, look, unit, seed, measure, text: String(p.label), anchor: [cx, cy], size: font.size, side });
+    const built = registries.devices.get('label').build({ id: `${shot.id}.label.${hl}`, box: [f.plot.x, f.plot.y, f.plot.w, f.plot.h], at: times.highlightAt, look, unit, seed, measure, text: setCase(look, 'label', String(p.label)), anchor: [cx, cy], size: font.size, side, face: style.face ?? 'label' }); // the other labels' face and case
     out.push(...built.nodes);
   }
   return out;

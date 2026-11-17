@@ -18,10 +18,12 @@ vec4 transition (vec2 p) {
 }
 `;
 
+import { MIXED_CLEAR } from './clear.mjs';
+
 export const windowSlices = Object.freeze({
   name: 'window-slices',
   source: SOURCE,
-  params: Object.freeze({ count: 10, smoothness: 0.5 }),
+  params: Object.freeze({ count: 10, smoothness: 0.5, ...MIXED_CLEAR }), // clear windows: no A|ftast interleave (gate-cuts-1 D12)
   standIn: 'wipe',
   license: Object.freeze({ spdx: 'MIT', author: 'gre', origin: 'transitions/WindowSlices.glsl', commit: 'e7c6ce2c9173ab57382279b58d056133caed5d1f' }),
   summary: 'The next shot shows through vertical slices that widen from the left, over 0.6 s (WebGL2; a wipe without it).',

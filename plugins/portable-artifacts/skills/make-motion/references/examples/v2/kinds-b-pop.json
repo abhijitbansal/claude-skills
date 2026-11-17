@@ -1,0 +1,143 @@
+{
+  "version": 2,
+  "mode": "viral",
+  "voice": { "name": "af_heart" },
+  "sound": "on",
+  "music": { "bed": "pulse", "bpm": 124 },
+  "look": "pop",
+  "format": "9:16",
+  "seed": 11,
+  "shots": [
+    {
+      "id": "hook",
+      "show": "statement",
+      "text": "Your orders | know what | to *print*.",
+      "say": "Your orders know what to *print*."
+    },
+    {
+      "id": "print",
+      "show": "media",
+      "src": "photo.png",
+      "caption": "Dawn Ridge sells best",
+      "say": "Dawn Ridge sells best. A ridge at first light."
+    },
+    {
+      "id": "year",
+      "show": "timeline",
+      "events": [
+        { "when": "Mar", "what": "First print sold" },
+        { "when": "Jun", "what": "Shop online" },
+        { "when": "Dec", "what": "Orders dashboard" }
+      ],
+      "say": "March: first print sold. June: shop online. December: a dashboard."
+    },
+    {
+      "id": "dash",
+      "show": "screen",
+      "src": "dashboard.png",
+      "title": "Orders dashboard",
+      "regions": { "regions": [0.4963, 0.226, 0.4875, 0.483] },
+      "zoom": "regions",
+      "say": "The dashboard counts every paid order. The North leads."
+    },
+    {
+      "id": "reach",
+      "show": "map",
+      "region": "world",
+      "title": "Where prints go",
+      "places": [
+        { "name": "Denver", "at": [-104.99, 39.74] },
+        { "name": "Oslo", "at": [10.75, 59.91] },
+        { "name": "Lima", "at": [-77.04, -12.05] }
+      ],
+      "routes": [
+        { "from": "Denver", "to": "Oslo" },
+        { "from": "Denver", "to": "Lima" }
+      ],
+      "say": "Printed in Denver. Shipped to Oslo and Lima."
+    },
+    {
+      "id": "flow",
+      "show": "diagram",
+      "nodes": [
+        { "id": "order", "label": "Order" },
+        { "id": "print", "label": "Print" },
+        { "id": "pack", "label": "Pack" },
+        { "id": "ship", "label": "Ship" }
+      ],
+      "edges": [
+        { "from": "order", "to": "print" },
+        { "from": "print", "to": "pack" },
+        { "from": "pack", "to": "ship" }
+      ],
+      "say": "Order. Print. Pack. Ship."
+    },
+    {
+      "id": "count",
+      "show": "code",
+      "lang": "js",
+      "title": "By region",
+      "highlight": [5, 6, 7],
+      "code": "// count by region\nconst n = {}\nfor (let r of rows)\n  if (r.paid)\n    n[r.region] =\n      (n[r.region]\n        ?? 0) + 1\nlog(n)",
+      "say": "Eight lines count the paid orders by region."
+    },
+    {
+      "id": "lead",
+      "show": "chart",
+      "type": "race",
+      "title": "Orders by region",
+      "valueLabel": "orders to date",
+      "data": {
+        "periods": ["Q1", "Q2", "Q3", "Q4"],
+        "rows": [
+          { "name": "North", "values": [1, 14, 66, 182] },
+          { "name": "South", "values": [3, 18, 56, 121] },
+          { "name": "East", "values": [2, 13, 40, 97] },
+          { "name": "West", "values": [0, 7, 20, 59] }
+        ]
+      },
+      "highlight": "North",
+      "say": "The North starts third. Quarter by quarter it pulls ahead, to one eighty two."
+    },
+    {
+      "id": "price",
+      "show": "chart",
+      "type": "scatter",
+      "title": "Dawn on top",
+      "xLabel": "Price, $",
+      "yLabel": "Orders",
+      "highlight": "Dawn",
+      "data": [
+        { "x": 5, "y": 85, "label": "Card" },
+        { "x": 12, "y": 70 },
+        { "x": 18, "y": 60 },
+        { "x": 25, "y": 46 },
+        { "x": 30, "y": 42 },
+        { "x": 40, "y": 28 },
+        { "x": 48, "y": 20 },
+        { "x": 60, "y": 90, "label": "Dawn" },
+        { "x": 75, "y": 12 },
+        { "x": 90, "y": 6 }
+      ],
+      "say": "Cheap prints sell more. Dawn costs sixty and sells the most."
+    },
+    {
+      "id": "chat",
+      "show": "feed",
+      "title": "Studio",
+      "items": [
+        { "from": "them", "text": "North nearly tripled." },
+        { "from": "me", "text": "Print more Dawn." },
+        { "from": "them", "text": "Paper comes Friday." }
+      ],
+      "say": "North nearly tripled. Print more Dawn. Paper comes Friday."
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "Next: a ridge for the North.",
+      "ask": "ridgelineprints.shop",
+      "mark": "Ridgeline"
+    }
+  ]
+}

@@ -65,6 +65,14 @@ function numeralNode(shot, ctx, set, { cx, cy, at }) {
   return node('group', `${shot.id}.numeral.punch`, { x: cx, y: cy }, { tracks, children: [textNode] });
 }
 
+// `nodes` with the text `id` marked as not fitting (layout.overflow), as new objects.
+function flagOverflow(nodes, id) {
+  const rebuilt = (n, props, children) => node(n.type, n.id, props, { tracks: n.tracks, children, depth: n.depth, step: n.step, wordTracks: n.wordTracks });
+  return nodes.map((n) => (n.id === id
+    ? rebuilt(n, { ...n.props, layout: { ...n.props.layout, overflow: true } }, n.children)
+    : rebuilt(n, n.props, flagOverflow(n.children, id))));
+}
+
 /**
  * The pop chart: { nodes, boxes } with the chart group carrying the hero id. The plot starts right under the claim tag
  * and runs to the bottom of the stack area; the highlighted numeral sits inside it, top right with the marks kept under
@@ -105,8 +113,11 @@ export function expandPopChart(shot, ctx, data, hero) {
   } else if (set !== null) {
     numeral = [numeralNode(shot, ctx, set, { cx: box.x + box.w - set.layout.width / HALF, cy: box.y + set.height / HALF, at })];
   }
+  // a scatter whose claim leaves the plot too short for its ticks: the claim says to cut words (the review's fit finding);
+  // its size stays three times the labels, which stay at the reading floor (k6 ruling a)
+  const tagNodes = shot.type === 'scatter' && plot.short ? flagOverflow(tag.nodes, `${shot.id}.title.text`) : tag.nodes;
   return {
-    nodes: [...tag.nodes, node('group', hero, {}, { children: plot.nodes }), ...numeral, ...(source === null ? [] : [source.node])],
+    nodes: [...tagNodes, node('group', hero, {}, { children: plot.nodes }), ...numeral, ...(source === null ? [] : [source.node])],
     boxes: { chart: [box.x, box.y, box.w, box.h], title: tag.box, ...plot.boxes },
   };
 }

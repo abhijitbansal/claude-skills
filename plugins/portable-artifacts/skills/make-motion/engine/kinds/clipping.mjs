@@ -24,6 +24,7 @@ import {
   HERO_SCHEMA, REGION_PREFIX, heroId, isWide, arrivesMatched, regionOf, isEditorial, cutsToCloseUp, requireDevice, compositionRect, fieldNode, onDevices, placeDevices, deviceCamera, captionTop, openingLanding, easePeak, NOT_BLANK, assertNoBlanks, unionBox,
 } from './shared.mjs';
 import { defaultCamera, pushLayer, withEstablishingView } from './camera.mjs';
+import { unmarked } from './shared.mjs';
 
 const CAPTION_MAX = 80;
 const KICKER_MAX = 40;
@@ -454,7 +455,7 @@ registries.kinds.add('clipping', {
   // A highlight on a region is drawn by this kind (region-mark.mjs, close-ups.mjs), in any look.
   regionDevices: ['highlight'],
   validate: clippingProblems,
-  expand: expandClipping,
+  expand: (shot, ctx) => expandClipping(unmarked(shot), ctx),
   review: (shot, ctx) => establishingFindings(shot, ctx),
   numbered: true, // counts toward the slug numbers of a film
 });

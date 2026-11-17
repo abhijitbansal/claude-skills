@@ -16,10 +16,13 @@ vec4 transition(vec2 uv) {
 }
 `;
 
+import { MIXED_CLEAR } from './clear.mjs';
+
 export const polkaDots = Object.freeze({
   name: 'polka-dots',
   source: SOURCE,
-  params: Object.freeze({ dots: 20, center: [0, 0] }),
+  // 8 dots across, not 20, so they read as dots and not as halftone bites (look review gate-cuts-1 P8); clear windows
+  params: Object.freeze({ dots: 8, center: [0, 0], ...MIXED_CLEAR }),
   standIn: 'crossfade',
   license: Object.freeze({ spdx: 'MIT', author: 'bobylito', origin: 'transitions/PolkaDotsCurtain.glsl', commit: 'e7c6ce2c9173ab57382279b58d056133caed5d1f' }),
   summary: 'The next shot shows through polka dots that grow from a corner, over 0.6 s (WebGL2; a crossfade without it).',

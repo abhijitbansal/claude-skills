@@ -28,11 +28,12 @@ const isChat = (shot) => (shot.style ?? 'chat') === 'chat';
 // Each item's text laid out at `size`, with its box height: { text, app?, w, h } in px.
 function itemsAt(shot, ctx, data, room, size) {
   const { look, unit, measure } = ctx;
-  const font = fontFor(look, 'text', size, unit);
+  const face = data.face ?? 'text'; // the messages' face: the look's `face`, else its text face
+  const font = fontFor(look, face, size, unit);
   const bold = { ...font, weight: data.bold };
   const pad = data.pad * unit;
   const width = room.w * data.share;
-  const lay = (text, f, maxWidth) => layoutText({ text: setCase(look, 'text', text), font: f, maxWidth, measure });
+  const lay = (text, f, maxWidth) => layoutText({ text: setCase(look, face, text), font: f, maxWidth, measure });
   return shot.items.map((item) => {
     if (isChat(shot)) {
       const text = lay(item.text, font, width - HALF * pad);
@@ -66,11 +67,15 @@ export function feedFit(shot, ctx, data, room) {
 function tryAt(shot, ctx, data, room, size) {
   const { look, unit, measure } = ctx;
   const items = itemsAt(shot, ctx, data, room, size);
-  const bold = { ...fontFor(look, 'text', size, unit), weight: data.bold };
-  const title = shot.title === undefined ? null : layoutText({ text: setCase(look, 'text', shot.title), font: bold, maxWidth: room.w, measure });
+  const face = data.face ?? 'text';
+  const bold = { ...fontFor(look, face, size, unit), weight: data.bold };
+  // the title in the look's `titleFace` (desk: the label face, a speaker tag) at its own weight, else bold messages' face
+  const titleFace = data.titleFace ?? face;
+  const titleFont = data.titleFace ? fontFor(look, titleFace, size, unit) : bold;
+  const title = shot.title === undefined ? null : layoutText({ text: setCase(look, titleFace, shot.title), font: titleFont, maxWidth: room.w, measure });
   const height = (title ? title.height + data.gap * unit : 0) + items.reduce((h, it) => h + it.h, 0) + (items.length - 1) * data.gap * unit;
   const holds = items.every((it) => it.text.lines.length <= data.maxLines && (!it.app || it.app.lines.length === 1));
-  return { size, font: fontFor(look, 'text', size, unit), bold, items, title, holds, fits: holds && height <= room.h };
+  return { size, font: fontFor(look, face, size, unit), bold, titleFont, items, title, holds, fits: holds && height <= room.h };
 }
 
 // A slip or bubble at `box`: the look's shadow (desk), the body, and its outline (pop).
@@ -136,13 +141,17 @@ function settling(values, times, look) {
 }
 
 /** When each item appears: one per sentence when the counts match, else evenly over the narration (or the shot); the
- *  first on frame 0, every one landed by `latest`. */
+ *  first on frame 0, the second by FIRST_BEAT (a lone first message held for a whole sentence read as an unfinished
+ *  frame: gate-kinds-b-1), every one landed by `latest`. */
 export function feedTimes(n, timing, latest) {
   const sentences = timing.sentences ?? [];
-  if (sentences.length === n) return sentences.map((s, k) => (k === 0 ? 0 : Math.min(s.start, latest)));
   const end = Math.min(latest, timing.words?.length ? timing.words.at(-1).end ?? latest : latest);
-  return Array.from({ length: n }, (_, k) => (n <= 1 ? 0 : (k * end) / (n - 1)));
+  const times = sentences.length === n
+    ? sentences.map((s, k) => (k === 0 ? 0 : Math.min(s.start, latest)))
+    : Array.from({ length: n }, (_, k) => (n <= 1 ? 0 : (k * end) / (n - 1)));
+  return times.map((t, k) => (k === 1 ? Math.min(t, FIRST_BEAT, latest) : t));
 }
+const FIRST_BEAT = 0.8; // s: the longest a feed shows its first item alone
 
 /** When a `them` message's dots show, or null: DOTS before it, after the message before it, never on frame 0. */
 export function dotsWindow(shot, k, times) {
@@ -156,7 +165,7 @@ export function feedLayout(shot, ctx, data, room, times) {
   const { look, unit } = ctx;
   const fit = feedFit(shot, ctx, data, room);
   const gap = data.gap * unit;
-  const titleNodes = fit.title ? [node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: fit.title, font: fit.bold, fill: colourOf(look, data.title) })] : [];
+  const titleNodes = fit.title ? [node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: fit.title, font: fit.titleFont, fill: colourOf(look, data.title) })] : [];
   const top = room.y + (fit.title ? fit.title.height + gap : 0);
   const bottom = room.y + room.h;
   const laid = isChat(shot) ? chatThread(shot, ctx, data, fit, { room, top, bottom, gap, times }) : cardStack(shot, ctx, data, fit, { room, top, bottom, gap, times });

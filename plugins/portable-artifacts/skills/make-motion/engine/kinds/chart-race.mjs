@@ -90,6 +90,7 @@ export function raceField(shot, rest) {
   if (m) return shot.unit === undefined ? `data.rows[${m[1]}].values[${m[2]}]` : 'unit'; // a value label shows the unit too
   m = /^period\.(\d+)(\.|$)/.exec(rest);
   if (m) return 'data.periods';
+  if (rest === 'counts') return 'valueLabel';
   return /^(row|mark)\.\d+$/.test(rest) ? 'data' : null; // the bars show the data
 }
 
@@ -100,6 +101,21 @@ function moving(values, times, move) {
     const from = keys.at(-1).v;
     if (v !== from) keys.push({ t: times[i + 1], v: from }, { t: times[i + 1] + move.dur, v, ease: move.ease });
   });
+  return track(keys);
+}
+
+// A row's opacity: shown while it is in the top rows (a step at each period), and dimmed to OVERTAKEN while it moves
+// down a rank, so the row passing over it reads and the two names never sit on each other at full strength.
+const OVERTAKEN = 0.35;
+function rowOpacity(ranks, ys, times, move) {
+  const shownAt = (p) => (ranks[p] ? 1 : 0);
+  const keys = [{ t: 0, v: shownAt(0) }];
+  for (let p = 1; p < ranks.length; p++) {
+    keys.push({ t: times[p], v: shownAt(p - 1) }, { t: times[p], v: shownAt(p) });
+    if (ranks[p - 1] && ranks[p] && ys[p] > ys[p - 1]) {
+      keys.push({ t: times[p] + move.dur / HALF, v: OVERTAKEN, ease: 'inOutQuad' }, { t: times[p] + move.dur, v: 1, ease: 'inOutQuad' });
+    }
+  }
   return track(keys);
 }
 
@@ -140,14 +156,35 @@ export function drawRace(shot, ctx, style, area, { headroom = 0 } = {}) {
     const ranks = table.map((t) => t.ranked.find((r) => r.index === k) ?? null);
     const ys = ranks.map((r) => (r === null ? shown : r.rank) * rowH);
     const lengths = ranks.map((r) => (r === null ? 0 : r.value / max));
-    const visible = track(ranks.flatMap((r, p) => (p === 0 ? [{ t: 0, v: r ? 1 : 0 }] : [{ t: times[p], v: ranks[p - 1] ? 1 : 0 }, { t: times[p], v: r ? 1 : 0 }])));
+    const visible = rowOpacity(ranks, ys, times, look.moves.settle);
     const hl = row.name === shot.highlight;
     const mid = plot.y + rowH / HALF;
     const bar = node('path', `${shot.id}.mark.${k}`, { d: rectPath(plot.w, thick), x: plot.x, y: mid - thick / HALF, fill: hl ? (style.hlFill ?? style.accent) : style.mark }, { tracks: { scaleX: moving(lengths, times, look.moves.settle) } });
     const name = label(ctx, { id: `${shot.id}.name.${k}`, text: String(row.name), font, x: plot.x - gap, y: mid + (CAP_HEIGHT * font.size) / HALF, align: 'right', fill: hl ? style.strong : style.text, tracks: {} }).node;
-    const values = ranks.map((r, p) => (r === null ? null : label(ctx, { id: `${shot.id}.value.${k}.${p}`, text: valueText(r.value, decimals, shot.unit), font, x: plot.x + plot.w * lengths[p] + gap / HALF, y: mid + (CAP_HEIGHT * font.size) / HALF, fill: style.text, numeric: true, tracks: { opacity: shownFrom(p === 0 ? 0 : times[p] + look.moves.settle.dur, times[p + 1]) } }).node)).filter(Boolean);
+    const values = valueNodes(shot, ctx, { ranks, lengths, times, plot, gap, font, decimals, k, y: mid + (CAP_HEIGHT * font.size) / HALF, fill: style.text });
     return node('group', `${shot.id}.row.${k}`, {}, { tracks: { y: moving(ys, times, look.moves.settle), opacity: visible }, children: [bar, name, ...values] });
   });
   const boxes = Object.fromEntries(rowsOf(shot).map((_, k) => [`mark:${k}`, [plot.x, plot.y + k * rowH, plot.w, rowH]]));
-  return { nodes: [...period.nodes, ...rows], boxes: { plot: [plot.x, plot.y, plot.w, plot.h], ...boxes }, plot, highlight: null };
+  const counts = countsNode(shot, ctx, style, { x: area.x, y: area.y + headroom + CAP_HEIGHT * style.font.size });
+  return { nodes: [...period.nodes, ...counts, ...rows], boxes: { plot: [plot.x, plot.y, plot.w, plot.h], ...boxes }, plot, highlight: null };
+}
+
+// A row's value labels, one per period: each rides its bar's end (the same move as the bar) and stays until the next
+// period's bars have settled, so a value is never off screen while its bar moves (gate-kinds-b-1: values vanished
+// mid-reorder); the next value takes over as the bar lands.
+function valueNodes(shot, ctx, { ranks, lengths, times, plot, gap, font, decimals, k, y, fill }) {
+  const settle = ctx.look.moves.settle;
+  const x = moving(lengths.map((len) => plot.x + plot.w * len + gap / HALF), times, settle);
+  const until = (p) => (times[p + 1] === undefined ? undefined : times[p + 1] + settle.dur);
+  return ranks.map((r, p) => (r === null ? null : label(ctx, {
+    id: `${shot.id}.value.${k}.${p}`, text: valueText(r.value, decimals, shot.unit), font, x: plot.x + plot.w * lengths[p] + gap / HALF, y, fill, numeric: true,
+    tracks: { x, opacity: shownFrom(p === 0 ? 0 : times[p] + settle.dur, until(p)) },
+  }).node)).filter(Boolean);
+}
+
+// What the values count (`valueLabel`, "orders to date" for a running total), in the label face on the period's row at
+// the left, so the clock and its measure read together.
+function countsNode(shot, ctx, style, { x, y }) {
+  if (shot.valueLabel === undefined) return [];
+  return [label(ctx, { id: `${shot.id}.counts`, text: shot.valueLabel, font: style.font, x, y, fill: style.text, tracks: {} }).node];
 }

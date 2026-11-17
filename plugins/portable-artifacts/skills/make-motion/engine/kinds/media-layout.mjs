@@ -11,9 +11,9 @@ import { layoutText } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { colourOf } from '../devices/shared.mjs';
 import { treatmentFor } from '../devices/treatments.mjs';
-import { fontFor, sizeAt, isWide, compositionRect, captionTop, setCase, easePeak, cardOf, cardGroup } from './shared.mjs';
+import { fontFor, sizeAt, isWide, isEditorial, compositionRect, captionTop, setCase, easePeak, cardOf, cardGroup } from './shared.mjs';
 import { driftReach } from './camera.mjs';
-import { arrivalTrack, revealTimes } from './arrivals.mjs';
+import { arrivalTrack, revealTimes, editorialLeft, EDITORIAL_WIDE_COLUMN } from './arrivals.mjs';
 
 const HALF = 2;
 const STEP_EPSILON = 1e-6;
@@ -151,7 +151,7 @@ export function bleedLayout(shot, ctx) {
   const clip = coverCrop(picture, { w: cover[2], h: cover[3] }, focus);
   const room = roomOf(ctx);
   const span = gridSpan(look, canvas, 1, isWide(canvas) ? data.toWide : data.toTall);
-  const left = Math.max(span.x, room.left), width = Math.min(span.x + span.w, room.right) - left;
+  const left = Math.max(span.x, room.left, editorialLeft(look, canvas, unit)), width = Math.min(span.x + span.w, room.right) - left;
   const pad = data.cardPad * unit;
   const caption = fitCaption(shot, ctx, data.captionSteps, width - HALF * pad, data.captionLines);
   const credit = fitCredit(shot, ctx, caption);
@@ -185,7 +185,8 @@ function cutoutWide(shot, ctx, picture) {
   const room = roomOf(ctx);
   const text = gridSpan(look, canvas, data.besideFrom, look.grid.columns);
   const caption = fitCaption(shot, ctx, data.heroSteps, text.w, data.maxLines);
-  const area = caption ? gridSpan(look, canvas, 1, data.besideFrom - 2) : gridSpan(look, canvas, 2, look.grid.columns - 1);
+  const first = isEditorial(look) ? EDITORIAL_WIDE_COLUMN : 1; // one left margin with the statement and the chart
+  const area = caption ? gridSpan(look, canvas, first, data.besideFrom - 2) : gridSpan(look, canvas, 2, look.grid.columns - 1);
   const [w, h] = contain(picture.width / picture.height, area.w, room.bottom - room.top);
   const box = [caption ? area.x : area.x + (area.w - w) / HALF, room.top + (room.bottom - room.top - h) / HALF, w, h];
   const placed = caption ? [text.x, box[1] + h / HALF - caption.layout.height / HALF] : null;

@@ -14,7 +14,8 @@ let specDir;
 before(() => {
   specDir = mkdtempSync(path.join(tmpdir(), 'mm-v2-screen-browser-'));
   // a page-like screenshot: a light page with a dark header band and a few grey rows
-  writeFileSync(path.join(specDir, 'page.png'), pngOf(480, 300, (x, y) => (y < 40 ? [30, 40, 60] : (y % 40 < 20 && x > 30 && x < 450 ? [200, 205, 215] : [245, 246, 248]))));
+  // 1600 px wide: a screen's zoom stops at the picture's own pixels (gate-kinds-b-1), and 480 px carries no push at all
+  writeFileSync(path.join(specDir, 'page.png'), pngOf(1600, 1000, (x, y) => (y < 133 ? [30, 40, 60] : (y % 133 < 66 && x > 100 && x < 1500 ? [200, 205, 215] : [245, 246, 248]))));
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
 
@@ -27,7 +28,8 @@ async function open(t, film) {
 
 const SHOT = {
   id: 's', show: 'screen', src: 'page.png', say: 'This is the weekly report. The total sits at the bottom of the page.',
-  title: 'Weekly report', url: 'example.com/report', regions: { total: [0.1, 0.6, 0.6, 0.25] }, zoom: 'total',
+  // a region the picture carries at the full push (gate-kinds-b-1: a narrower one is a resolution finding)
+  title: 'Weekly report', url: 'example.com/report', regions: { total: [0.05, 0.6, 0.9, 0.3] }, zoom: 'total',
 };
 
 test('the url is drawn, never requested: the page asks nothing of anything but the film own server', async (t) => {

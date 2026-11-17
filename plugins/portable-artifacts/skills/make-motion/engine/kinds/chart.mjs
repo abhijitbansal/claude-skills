@@ -19,8 +19,9 @@ import { VALUE_SCHEMA, showsAsZero, zeroMessage } from './values.mjs';
 import { chartLanding } from './chart-time.mjs';
 import { expandDeskChart } from './chart-desk.mjs';
 import { expandPopChart } from './chart-pop.mjs';
-import { SCATTER_MAX, scatterNames, scatterProblems, scatterHonesty, scatterField } from './chart-scatter.mjs';
+import { SCATTER_MAX, scatterNames, scatterProblems, scatterHonesty, scatterPlainLabels, scatterField } from './chart-scatter.mjs';
 import { TOP_MAX, raceNames, raceProblems, raceHonesty, raceField, raceLanding } from './chart-race.mjs';
+import { unmarked } from './shared.mjs';
 
 // The marks `on` events may target (mark:<i>): items, series, a scatter's points or a race's rows.
 const marksOf = (shot) => {
@@ -46,6 +47,7 @@ const LABEL_MAX = 24;
 const X_MAX = 12;
 const TITLE_MAX = 90;
 const UNIT_MAX = 4;
+const VALUE_LABEL_MAX = 24;
 const SOURCE_MAX = 60;
 const DONUT_MIN = 2;
 const DONUT_MAX = 6;
@@ -104,7 +106,7 @@ const isScatter = (data) => Array.isArray(data) && data.every((d) => d !== null 
 const isRace = (data) => data !== null && typeof data === 'object' && !Array.isArray(data) && 'periods' in data && 'rows' in data;
 const OWN_SHAPES = Object.freeze({ scatter: { test: isScatter, shape: '[{ x, y, label? }]' }, race: { test: isRace, shape: '{ periods, rows }' } });
 // Fields only some types read: refused on the others, so a field is never silently ignored.
-const TYPE_FIELDS = Object.freeze({ xLabel: ['scatter'], yLabel: ['scatter'], top: ['race'], unit: ['bar', 'column', 'line', 'area', 'donut', 'race'] });
+const TYPE_FIELDS = Object.freeze({ xLabel: ['scatter'], yLabel: ['scatter'], top: ['race'], valueLabel: ['race'], unit: ['bar', 'column', 'line', 'area', 'donut', 'race'] });
 
 // The input rules of a scatter or a race: its shape, its own rules, a highlight naming a mark, its fields.
 function ownProblems(shot, look) {
@@ -190,7 +192,7 @@ function duplicateProblems(shot) {
 
 // The honesty rules, as mechanical findings at the field to fix (review.mjs kindFindings).
 function honesty(shot) {
-  if (shot.type === 'scatter') return scatterHonesty(shot);
+  if (shot.type === 'scatter') return [...scatterHonesty(shot), ...scatterPlainLabels(shot)];
   if (shot.type === 'race') return raceHonesty(shot);
   const finding = (path, message) => ({ kind: MECHANICAL, path, at: 0, message });
   const data = chartData(shot);
@@ -316,6 +318,8 @@ registries.kinds.add(KIND, {
       xLabel: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: AXIS_NAME_MAX },
       yLabel: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: AXIS_NAME_MAX },
       top: { type: 'integer', minimum: TOP_MIN, maximum: TOP_MAX },
+      // a race's measure, said once beside its period ("orders to date" for a running total)
+      valueLabel: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: VALUE_LABEL_MAX },
       hero: HERO_SCHEMA,
     },
   },
@@ -330,7 +334,7 @@ registries.kinds.add(KIND, {
   landing: (shot, timing) => (shot.type === 'race' ? raceLanding(shot, timing) : chartLanding(shot, timing)),
   // how the rest is drawn, not texts of their own: the type, the highlighted mark, which rows a race shows
   steeringFields: ['type', 'highlight', 'top'],
-  expand: expandChart,
+  expand: (shot, ctx) => expandChart(unmarked(shot), ctx),
   lookData: true, // a look ships it only with a kinds.chart entry (engine/looks/index.mjs listedKinds)
   numbered: false, // its claim is its own heading: no slug
   showsWords: false, // its narration is not its picture: captioned (engine/captions)

@@ -54,6 +54,13 @@ export function createCutPictures({ w, h, drawShot }) {
     ctx.scale(pose.scale, pose.scale);
     ctx.translate(-w / HALF, -h / HALF);
     ctx.drawImage(picture, 0, 0);
+    if (pose.dim > 0) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // the clip stays; the dim covers the whole canvas inside it
+      ctx.filter = 'none';
+      ctx.globalAlpha = pose.opacity * pose.dim;
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, w, h);
+    }
     ctx.restore();
   }
 

@@ -12,10 +12,12 @@ const SOURCE = String.raw`vec4 transition(vec2 p) {
 }
 `;
 
+import { MIXED_CLEAR } from './clear.mjs';
+
 export const crossWarp = Object.freeze({
   name: 'cross-warp',
   source: SOURCE,
-  params: Object.freeze({}),
+  params: Object.freeze({ ...MIXED_CLEAR }), // clear windows: no grey ghost glyphs or stretched blobs (gate-cuts-1 D14)
   standIn: 'crossfade',
   license: Object.freeze({ spdx: 'MIT', author: 'Eke Péter <peterekepeter@gmail.com>', origin: 'transitions/CrossWarp.glsl', commit: 'e7c6ce2c9173ab57382279b58d056133caed5d1f' }),
   summary: 'The shot zooms in while the next one zooms out into place, sweeping from right to left, over 0.6 s (WebGL2; a crossfade without it).',

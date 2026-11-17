@@ -1,9 +1,9 @@
 // The film's own events as data, in film seconds: what the cue plan (cues.mjs) asks a look to sound. Pure: no clock,
 // no randomness; every time is read off the timeline (engine/script/timing.mjs), never estimated here.
 //
-// An event is { kind, t, shot, cut?, device? }:
+// An event is { kind, t, shot, cut?, dur?, direction?, device? }:
 //   cut       the first frame of each shot after the first (`cut` names the cut as resolved: the shot's, else the
-//             film's root cut, else "cut")
+//             film's root cut, else "cut"; `dur` its window in seconds, `direction` its direction or null)
 //   device    each `on` entry's resolved time (`device` is its `do`)
 //   emphasis  the first word of each run of emphasised words (one event per run), when it is heard
 //   land      the moment a shot's figure reaches its value, for a kind that says when (its `landing(shot, timing)`)
@@ -19,10 +19,12 @@ import { canvasSize } from '../../../template/formats.mjs';
 
 const event = (fields) => Object.freeze(fields);
 
-// The cut that opens shot `index`, as the film draws it (engine/cuts/resolve.mjs: the film's root cut included).
+// The cut that opens shot `index`, as the film draws it (engine/cuts/resolve.mjs: the film's root cut and the look's
+// cutStyle included): its name, its window clamped to the shot, and its direction (null for a cut that has none).
 function cutEvents(film, index, entry, look) {
   if (entry.index === 0) return [];
-  return [event({ kind: 'cut', t: entry.start, shot: entry.id, cut: resolveShotCut(film, index, { look }).name })];
+  const cut = resolveShotCut(film, index, { look, shotDuration: entry.duration });
+  return [event({ kind: 'cut', t: entry.start, shot: entry.id, cut: cut.name, dur: cut.dur, direction: cut.direction })];
 }
 
 // Each `on` entry at its anchor in the shot, as the frame draws it (engine/graph/film.mjs resolves it the same way). An

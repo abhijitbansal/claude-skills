@@ -123,12 +123,14 @@ const plain = (id, x, y, depth = 0) => Object.freeze({ type: 'path', id, depth, 
 const OUT = [plain('field', 0, 0, 1), plain('a', 900, 200)];
 const IN = [plain('field', 0, 0, 1), plain('b', 100, 900)];
 const E = 0.0625; // inOutCubic(0.25) = 4 * 0.25^3
-// [direction, outgoing a at p 0.25, incoming b at p 0.25]: the incoming shot comes from that edge, the outgoing leaves by the other
+// [direction, outgoing a at p 0.25, incoming b at p 0.25]: the incoming shot comes in by the edge the direction enters
+// by (left and right name it; up enters at the bottom and moves up, down at the top: engine/cuts/edges.mjs), the
+// outgoing leaves by the other
 const SLIDE_AT = [
   ['right', [900 - E * W, 200], [100 + (1 - E) * W, 900]],
   ['left', [900 + E * W, 200], [100 - (1 - E) * W, 900]],
-  ['up', [900, 200 + E * H], [100, 900 - (1 - E) * H]],
-  ['down', [900, 200 - E * H], [100, 900 + (1 - E) * H]],
+  ['up', [900, 200 - E * H], [100, 900 + (1 - E) * H]],
+  ['down', [900, 200 + E * H], [100, 900 - (1 - E) * H]],
 ];
 
 for (const [direction, a, b] of SLIDE_AT) {

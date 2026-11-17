@@ -258,7 +258,8 @@ test('a cut starts on the plain outgoing frame and ends on the plain incoming on
     const s = [{ ...THREE[0], hero: 'h' }, { ...THREE[0], id: 'b', say: 'One file. No server.', cut, hero: 'h' }];
     const f = filmFor(s, look);
     const [first, second] = buildTimeline(filmOf(s, look), { fps: FPS }).shots;
-    const dur = registries.cuts.get(cut).dur;
+    // the window the look gives the cut (pop's punch runs 0.3 s: look review gate-cuts-1 P1), else the registry's
+    const dur = registries.looks.get(look).cutStyle?.[cut]?.duration ?? registries.cuts.get(cut).dur;
     assert.equal(stateKey(f.sampleAt(second.start)), stateKey(f.sampleShot(0, first.duration)), `${look} ${cut} starts on the outgoing end`);
     assert.equal(stateKey(f.sampleAt(second.start + dur)), stateKey(f.sampleShot(1, dur)), `${look} ${cut} ends on the incoming frame`);
     assert.notEqual(stateKey(f.sampleAt(second.start + dur / 2)), stateKey(f.sampleShot(1, dur / 2)), `${look} ${cut} differs mid-cut`);
@@ -391,7 +392,9 @@ test('a kind that needs a device the look does not style fails naming the look a
   assert.throws(() => expandIn(film), /look "bare-test".*"cutout"|"cutout".*look "bare-test"/);
 });
 
-test('a match between unlike heroes does not scale them: the outgoing one drifts up to half the way and fades over the first 60%, the incoming one fades and moves in over the last 60%', () => {
+// Lead ruling 2 (look review gate-cuts-1 D1) replaced the drift-and-fade hand-off this test pinned: an unlike pair is
+// now carried on one path from the old place and size to the new one, handing over at the middle (cuts-match.test.mjs).
+test('a match between unlike heroes carries one slot from the old place and size to the new one, the words changing in flight', () => {
   const canvas = { w: 1920, h: 1080 };
   const layoutOf = (...words) => ({ lines: [{ x: 0, y: 40, width: 100, words: words.map((text, index) => ({ text, index, x: 0, width: 50 })) }] });
   const heroText = { ...fakeSampled('h', 200, { scale: 1.5 }), type: 'text', props: { layout: layoutOf('Hello', 'there') }, bbox: [200, 100, 400, 100] };
@@ -399,35 +402,21 @@ test('a match between unlike heroes does not scale them: the outgoing one drifts
   const cut = registries.cuts.get('match');
   const kicker = fakeSampled('k', 300);
   const at = (p) => cut.apply({ from: [kicker, heroText], to: [heroFigure], p, canvas });
-  const [fromCentre, toCentre] = [[400, 150], [1100, 600]];
-  // p 0.3: half of the fade (p / 0.6)
-  const early = at(0.3);
-  const leaving = early.find((n) => n.id === 'h' && n.type === 'text');
-  const arriving = early.find((n) => n.id === 'h' && n.type === 'group');
-  near(leaving.scale, 1.5, 'the outgoing hero is not scaled');
-  near(leaving.opacity, 0.5, 'half faded');
-  near(leaving.x, 200 + (toCentre[0] - fromCentre[0]) * 0.5 * 0.5, 'drifted half of the half way');
-  near(arriving.opacity, 0, 'the incoming hero has not started');
-  near(early.find((n) => n.id === 'k').x, 300 + (toCentre[0] - fromCentre[0]) * 0.5 * 0.5, 'the rest of the outgoing frame drifts with its hero, so a highlight is not left behind the text');
-  // the shot leaves as one group: its devices and slug fade on the hero's own curve, not ahead of it
-  for (const p of [0.15, 0.3, 0.45, 0.6]) {
-    const frame = at(p);
-    near(frame.find((n) => n.id === 'k').opacity, frame.find((n) => n.id === 'h' && n.type === 'text').opacity, `p ${p}: the kicker fades with the hero`);
-  }
-  // p 0.6: the outgoing one is gone and has gone half the way; the incoming one is a third of the way in
-  const middle = at(0.6);
-  const gone = middle.find((n) => n.id === 'h' && n.type === 'text');
-  near(gone.opacity, 0); near(gone.x, 200 + (toCentre[0] - fromCentre[0]) * 0.5, 'at most half the way');
-  near(middle.find((n) => n.type === 'group').opacity, (0.6 - 0.4) / 0.6, 'fading in over the last 60%');
-  // the end: the incoming hero is home
-  const end = at(0.999);
-  const home = end.find((n) => n.type === 'group');
-  assert.ok(Math.abs(home.x - 1000) < 1 && Math.abs(home.opacity - 1) < 0.01, 'the incoming hero ends where it belongs');
+  const copy = (p, id) => at(p).find((n) => n.id === 'h').children.find((n) => n.id === id);
+  // early the words are the outgoing ones, on their way and already resized toward the figure's box
+  assert.ok(copy(0.3, 'h.from').opacity > 0.9 && copy(0.3, 'h.to').opacity === 0, 'outgoing words only');
+  assert.ok(copy(0.3, 'h.from').scale > 1.5, 'resized on the way (the figure box is larger)');
+  // late the figure, near its place; the kicker left before it arrived
+  assert.ok(copy(0.7, 'h.to').opacity > 0.9 && copy(0.7, 'h.from').opacity === 0, 'incoming figure only');
+  assert.equal(at(0.45).find((n) => n.id === 'k').opacity, 0, 'the rest of the outgoing frame is gone by the hand-over');
+  const home = copy(0.999, 'h.to');
+  assert.ok(Math.abs(home.x - 1000) < 2 && Math.abs(home.opacity - 1) < 0.01, 'the incoming hero ends where it belongs');
   // identical heroes still morph
   const twin = { ...heroText, bbox: [1000, 500, 400, 100], x: 1000 };
   const morphed = cut.apply({ from: [heroText], to: [twin], p: 0.5, canvas }).find((n) => n.id === 'h');
   assert.equal(morphed.props.match, true, 'a like pair morphs into one group of two copies');
 });
+
 
 // ---- final wave M9: a statement with nothing to show is a validation error at its path ----
 

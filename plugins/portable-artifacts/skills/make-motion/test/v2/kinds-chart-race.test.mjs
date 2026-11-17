@@ -48,6 +48,20 @@ test('bar lengths at each period and halfway between two (the settle move on its
   assert.equal(chart.landing(shot, out.timing), t[2], 'the land event is the last period');
 });
 
+test('a row overtaken (moving down a rank) dims while it moves, so the row passing over it reads; a row moving up or staying stays whole', () => {
+  for (const look of ['desk', 'pop']) {
+    const shot = RACE();
+    const out = expand(shot, look);
+    const t = raceTimes(shot, out.timing);
+    const half = t[2] + registries.looks.get(look).moves.settle.dur / 2;
+    const opacity = (k, at) => sample(find(out, `r.row.${k}`).tracks.opacity, at);
+    // 2024 to 2025: Ada climbs 3 -> 1, Di 4 -> 2; Bo 2 -> 3 and Cy 1 -> 4 are overtaken
+    assert.ok(opacity(1, half) < 1 && opacity(2, half) < 1, `${look}: the overtaken rows dim mid-move`);
+    assert.equal(opacity(0, half), 1, `${look}: the climbing row stays whole`);
+    [0, 1, 2, 3].forEach((k) => assert.equal(opacity(k, t[2] + 0.7), 1, `${look}: row ${k} whole once settled`));
+  }
+});
+
 test('the period shows top right in each window: a label in desk, a numeral (hero) in pop', () => {
   const shot = RACE();
   for (const look of ['desk', 'pop']) {

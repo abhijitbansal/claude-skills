@@ -169,7 +169,7 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
  */
 function smearedFrame(shot, args, frame) {
   const parts = shot.cut.entry.parts(args);
-  const plan = smearPlan({ p: args.p, frame, travel: parts.travel });
+  const plan = smearPlan({ p: args.p, frame, travel: parts.travel, shutter: args.look?.cutMotion?.smearShutter });
   return {
     background: shot.background,
     sampled: Object.freeze(parts.still),

@@ -2,8 +2,9 @@
 // tiling its start + 0.1 s, a frame every 1.2 s after that, its middle, its 85% point and each `on` event's landing +
 // 0.05 s, in time order, plus the 85% frame again as a 360 px phone tile, so a reviewer can judge its motion; each cut
 // gets a strip of every frame of its window (the first `cut.dur` seconds of the incoming shot; a hard cut's window is
-// its first frame) plus two frames each side. auditMoments adds a frame every quarter second and each shot's first and
-// last frame so the audit sees more than the sheets do.
+// its first frame) plus two frames each side, at most CUT_STRIP_MAX_TILES tiles (a longer window is sampled), each tile
+// inside the window labelled with the cut and its progress. auditMoments adds a frame every quarter second and each
+// shot's first and last frame so the audit sees more than the sheets do.
 import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
@@ -16,6 +17,10 @@ const LATE = 0.85;
 const LANDING_OFFSET = 0.05;
 const STEP = 1.2; // seconds: a shot sheet has a tile at least this often
 const CUT_SIDE_FRAMES = 2; // frames shown before and after a cut's window
+/** The most tiles a cut strip shows: five rows of five, every frame of a 0.6 s window at 30 fps with its side frames. */
+export const CUT_STRIP_MAX_TILES = 25;
+const PERCENT = 100;
+const FRAME_EPSILON = 1e-9; // as engine/cuts aloneAfterFrame: 0.4 s x 30 fps is 12 frames, not 13
 const AUDIT_STEP = 0.25;
 const MIDDLE_DOT = '·';
 const SECOND_DECIMALS = 2;
@@ -59,20 +64,56 @@ function shotSheet(film, timeline, index) {
   return { name: `${shot.id}.png`, kind: 'shot', shot: shot.id, tiles: [...tiles, tile(timeline, 'phone', late, shot.id, { width: PHONE_TILE_WIDTH })] };
 }
 
-// The frames of a cut's window, from the incoming shot's first frame for the cut's length (at least that one frame,
-// at most the shot), plus CUT_SIDE_FRAMES each side, inside the film.
-function cutFrames(film, timeline, index) {
+const range = (from, to) => Array.from({ length: Math.max(0, to - from + 1) }, (_, k) => from + k);
+
+// The window of the cut that opens shot `index`: its first frame and how many frames the film draws inside it, the
+// frames whose shot time is under the window's length (as engine/graph/film.mjs frameAt decides), at least one (a hard
+// cut's first frame) and at most the shot; `cutDur` is the window's length in seconds after the same clamp.
+function cutWindow(film, timeline, index) {
   const to = timeline.shots[index];
   const cut = resolveShotCut(film, index);
   const first = firstFrameOf(timeline, to);
-  const windowFrames = Math.max(1, Math.min(Math.round(cut.dur * timeline.fps), lastFrameOf(timeline, to) - first + 1));
-  const from = Math.max(0, first - CUT_SIDE_FRAMES), until = Math.min(timeline.frameCount - 1, first + windowFrames - 1 + CUT_SIDE_FRAMES);
-  return Array.from({ length: until - from + 1 }, (_, k) => from + k);
+  const shotFrames = lastFrameOf(timeline, to) - first + 1;
+  const frames = Math.max(1, Math.min(Math.ceil(cut.dur * timeline.fps - FRAME_EPSILON), shotFrames));
+  return { cut, first, frames, cutDur: Math.min(cut.dur, to.duration) };
+}
+
+// `count` picks of 0 .. n - 1 spread evenly, in order (3 <= count < n): the first, the middle and the last among them.
+function spread(n, count) {
+  const picks = Array.from({ length: count }, (_, j) => Math.round((j * (n - 1)) / (count - 1)));
+  const middle = Math.floor((n - 1) / 2);
+  const nearest = picks.reduce((best, v, j) => (Math.abs(v - middle) < Math.abs(picks[best] - middle) ? j : best), 0);
+  return picks.map((v, j) => (j === nearest ? middle : v));
+}
+
+// The frames of a cut's strip: every frame of its window plus CUT_SIDE_FRAMES each side (inside the film) when that is
+// at most CUT_STRIP_MAX_TILES; a longer window keeps the side frames and shows its first, middle and last frames and the
+// rest spread evenly, in time order, no frame twice.
+function cutFrames(timeline, { first, frames }) {
+  const before = range(Math.max(0, first - CUT_SIDE_FRAMES), first - 1);
+  const after = range(first + frames, Math.min(timeline.frameCount - 1, first + frames - 1 + CUT_SIDE_FRAMES));
+  const room = CUT_STRIP_MAX_TILES - before.length - after.length;
+  const inside = frames <= room ? range(0, frames - 1) : spread(frames, room);
+  return [...before, ...inside.map((k) => first + k), ...after];
+}
+
+// "slide 50%" for a frame inside a cut's window (its progress as engine/graph/film.mjs computes it), else null; a hard
+// cut has no progress.
+function progressLabel(timeline, span, frame) {
+  const k = frame - span.first;
+  if (span.cut.dur === 0 || k < 0 || k >= span.frames) return null;
+  const local = frame / timeline.fps - shotAtFrame(timeline, frame).start;
+  return `${span.cut.name} ${Math.round((local / span.cutDur) * PERCENT)}%`;
 }
 
 function cutSheet(film, timeline, index) {
   const [from, to] = [timeline.shots[index - 1], timeline.shots[index]];
-  const tiles = cutFrames(film, timeline, index).map((frame) => tile(timeline, 'frame', frame, shotAtFrame(timeline, frame).id));
+  const span = cutWindow(film, timeline, index);
+  const tiles = cutFrames(timeline, span).map((frame) => {
+    const plain = tile(timeline, 'frame', frame, shotAtFrame(timeline, frame).id);
+    const progress = progressLabel(timeline, span, frame);
+    return progress === null ? plain : { ...plain, label: `${plain.label} ${MIDDLE_DOT} ${progress}` };
+  });
   return { name: `cut-${from.id}-${to.id}.png`, kind: 'cut', shot: to.id, tiles };
 }
 

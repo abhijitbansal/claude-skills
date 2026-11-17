@@ -409,6 +409,26 @@ const STEP_EPSILON = 1e-6;
 export const SCRIM = 0.8; // the clipping's paper scrim over a picture's surroundings
 const SCRIM_EASE = 'outCubic';
 
+// Emphasis markers: a run of `*` at the start or the end of a word ("*print*.", "*two words*"). A star with space on
+// both sides ("5 * 3") is not a marker. The emphasis itself comes from the say (the timeline's words), never from here.
+const MARK_OPEN_RE = /(^|\s)\*+(?=\S)/g;
+const MARK_CLOSE_RE = /(?<=\S)\*+(?=\s|$|[.,;:!?)"'’”])/g;
+const UNMARKED_KEEP = new Set(['say', 'code', 'id', 'show', 'src', 'lang']);
+const stripMarks = (s) => s.replace(MARK_OPEN_RE, '$1').replace(MARK_CLOSE_RE, '');
+
+/**
+ * The shot as its kind draws it: every on-screen string (at any depth) without emphasis markers, so a `*word*` in a
+ * text, title, caption, item or label is never drawn with its stars. The say keeps them (the timeline reads emphasis
+ * from it), and code, ids, sources and the language keep every character.
+ */
+export function unmarked(value, key = '') {
+  if (UNMARKED_KEEP.has(key)) return value;
+  if (typeof value === 'string') return stripMarks(value);
+  if (Array.isArray(value)) return value.map((v) => unmarked(v, key));
+  if (value !== null && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, unmarked(v, k)]));
+  return value;
+}
+
 /** A say's plain words; a say that does not parse (it has its own validation error) gives none. */
 export function plainSay(say) {
   if (typeof say !== 'string') return '';

@@ -80,17 +80,17 @@
     "name": "gate-pop",
     "frames": {
       "frame 73": "2bbe89c908af310faf81fcaa95009d899f1f73a49748f4efbb4376f7b9ae17e2",
-      "frame 74": "9f550d58665b9e3d2a01972284c61be216228db2ece2d87c4fb98b23611daef7",
-      "frame 75": "e7bf41c06f3b2b2942f5b5145c3e3a92f9427bbbdce79dfd10af7d937b555352",
-      "frame 76": "91b48b10198b3588f95d454bfd04463a5852047c4a211837e13fa94727b40da0",
-      "frame 77": "4f5764813c8cea7e3435b46fb5cedad781683da8af0239e26ea716a09464b4d9",
-      "frame 78": "69832a263da52d8d10c5e5dc734fe08670c77703c0d9286dc38b107acd6d4bc2",
+      "frame 74": "c0769a43765127c630c805c69fe2f01d0a577202a18c005d22b59431d8dd6935",
+      "frame 75": "a3229ead187166d3c70b412bd2d16a73d5c25dde765bebbaf638d7a41bbca9d1",
+      "frame 76": "243b7882626509cfe29bd01b013eb2acaf6dc1e6bd09d6b1f7d3fb320a9743be",
+      "frame 77": "8525e01ba6157b3369132d320156d6d994f411a47a828f40baf3a65f7bba8fd0",
+      "frame 78": "c443de890e636fe2a631d78912fae5f0fa0d56a0bb39b832f69ab2242fa9eafd",
       "frame 298": "4811a458a55dd5eaf090cce2714ae0206a6fa2e44c0d2d6d0e3a5ca6c892247b",
-      "frame 299": "0366bf967447320bca6390070063f586475f2d6707f213f3baa9573e2322d25f",
-      "frame 300": "7e8e014cc05b08cc1c58f8e4e21be241db5864e287fc1b0d6cf0160f38f64272",
-      "frame 301": "2fd4f09de9f1ff2694f7e0a0e3a85ac7e41a6d7a778fef92260a74d793988138",
-      "frame 302": "62c2dacf421b12a2ccca86c350d7cacd82b280b8c5344953ebb9e9a1555c7ca0",
-      "frame 303": "c9447cb5324ec7b6314e528318bc65194dadb1297b530fcec74898e65b4e5ff6"
+      "frame 299": "4bbaea9f087a4b662d48fcd3652ae9caaf5473174e16bcb98d30d57fef592927",
+      "frame 300": "490994ccbea972218fb07f45a773458ceb6997a8fe417936b52847349ef67181",
+      "frame 301": "9e6f886fed386ac152f959e8b5e69bdb757d29527821ca237d94388d911d10f4",
+      "frame 302": "843cc7cdbc3f21044fedb7ba7c63cccf72c0ffff2a416d2a3d937cc56f853f3d",
+      "frame 303": "fb7bbe3005d1321a637beede15108b45e919cd8fe7630def179cdd5e135347dd"
     }
   },
   "regenerated": "transitions Task 6: the smear left apply() (engine/cuts/smear.mjs, engine/page/accumulate.mjs); the slide and punch \"frame\" keys are now their \"still\" keys; transitions Task 6 option A: gate-pop's punch windows are smeared in pop, so their film frames moved"

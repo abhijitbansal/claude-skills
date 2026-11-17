@@ -42,17 +42,25 @@ function panLimit(size, zoom, drift) {
 const clampAbs = (v, limit) => Math.min(limit, Math.max(-limit, v));
 const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
+/** The zoom a push on `box` would take with no cap: PUSH.share of the composition width, at most PUSH.full (or, over
+ *  captions, PUSH.tall) of its height, clamped to PUSH.min..PUSH.max. */
+export function pushZoom(ctx, box, { caption = false } = {}) {
+  const rect = compositionRect(ctx);
+  return clampTo(Math.min((PUSH.share * rect.w) / box[2], ((caption ? PUSH.tall : PUSH.full) * rect.h) / box[3]), PUSH.min, PUSH.max);
+}
+
 /**
  * A camera layer for a deliberate close-up on `box` (canvas pixels): the zoom that makes the box PUSH.share of the
  * composition width and at most PUSH.tall of its height (clamped to PUSH.min..PUSH.max), its top kept under `below`, panned so the box centre sits on the composition centre (as far
  * as the field allows), easing with the look's enter ease over PUSH.dur and landing on `at`. A node at depth 0 moves
  * to c + (x - c) zoom - pan, so pan = c + (boxCentre - c) zoom - target; the drift's own pan at the landing time is
- * taken off, since the camera adds the layers.
+ * taken off, since the camera adds the layers. `max` caps the zoom (a picture's own resolution: a push past it is a soft
+ * upscale), never under 1.
  */
-export function pushLayer(ctx, box, at, { below = -Infinity, caption = false } = {}) {
+export function pushLayer(ctx, box, at, { below = -Infinity, caption = false, max = Infinity } = {}) {
   const { look, canvas, unit, timing } = ctx;
   const rect = compositionRect(ctx);
-  const zoom = clampTo(Math.min((PUSH.share * rect.w) / box[2], ((caption ? PUSH.tall : PUSH.full) * rect.h) / box[3]), PUSH.min, PUSH.max);
+  const zoom = Math.min(pushZoom(ctx, box, { caption }), Math.max(1, max));
   const drift = driftReach(look, unit);
   const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
   const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx) - driftAt(look, timing, unit, at);

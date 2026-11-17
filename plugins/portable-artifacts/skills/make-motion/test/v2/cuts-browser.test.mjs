@@ -58,17 +58,19 @@ test('wipe from the left at mid-window: the left half is the incoming blue, the 
   assert.deepEqual(s.errors, []);
 });
 
-test('crossfade at mid-window is the mean of the two colours', async (t) => {
+// gate-cuts-1 PF3 / lead ruling 3: the outgoing picture is cleared by the middle, over the incoming background
+test('crossfade at mid-window: no outgoing colour is left, the frame is the incoming background and picture', async (t) => {
   const s = await open(t, film('crossfade')); if (!s) return;
   const [px] = await pixelsAt(s, MID, [[960, 540]]);
-  near(px, [127.5, 0, 127.5], 2, 'centre');
+  near(px, BLUE, 2, 'centre');
 });
 
-test('iris at mid-window: the centre is the incoming colour, a corner the outgoing one', async (t) => {
+// gate-cuts-1 D8: the outgoing picture outside the circle is dimmed by 0.3, so the edge reads
+test('iris at mid-window: the centre is the incoming colour, a corner the outgoing one dimmed', async (t) => {
   const s = await open(t, film('iris')); if (!s) return;
   const [centre, corner] = await pixelsAt(s, MID, [[960, 540], [4, 4]]);
   near(centre, BLUE, 1, 'centre');
-  near(corner, RED, 1, 'corner');
+  near(corner, [255 * 0.7, 0, 0], 2, 'corner');
 });
 
 test('a layer window\'s first frame is the outgoing picture and the frame after it the incoming one', async (t) => {

@@ -58,6 +58,55 @@ test('arrivals: the points arrive together over the first sentence, none on fram
   assert.equal(chart.landing(shot, out.timing), highlightAt);
 });
 
+// ---- direct labels: the highlighted point and the extremes only (k6 ruling a) ----
+
+// Flat (62, 300) holds no extreme; House (120, 500) holds the greatest x; Loft (90, 520) the greatest y and is highlighted.
+const HOMES = [{ x: 40, y: 210 }, { x: 55, y: 260 }, { x: 62, y: 300, label: 'Flat' }, { x: 70, y: 310 }, { x: 85, y: 380 },
+  { x: 90, y: 520, label: 'Loft' }, { x: 110, y: 470 }, { x: 120, y: 500, label: 'House' }, { x: 75, y: 330 }, { x: 98, y: 430 }];
+const HOMES_SHOT = (extra = {}) => SCATTER({ hold: undefined, title: 'Bigger homes cost more', xLabel: 'Size, m2', yLabel: 'Price, k', highlight: 'Loft', say: 'Price rises with size. The loft is the outlier.', data: HOMES, ...extra });
+const textOf = (out, id) => all(out.nodes).find((n) => n.id === id && n.type === 'text');
+const textBox = (n) => [n.props.x, n.props.y, n.props.layout.width, n.props.layout.height];
+
+test('labels: only the highlighted point and the points holding an extreme x or y are labelled; the rest are plain marks', () => {
+  for (const [look, format] of [['desk', '16:9'], ['pop', '9:16']]) {
+    const out = expand(HOMES_SHOT(), look, format);
+    assert.equal(textOf(out, 's.label.2'), undefined, `${look} ${format}: Flat is a plain mark`);
+    assert.ok(find(out, 's.mark.2'), 'its mark is still drawn');
+    assert.ok(textOf(out, 's.label.7'), `${look} ${format}: House holds the greatest x`);
+    assert.ok(all(out.nodes).some((n) => n.id.startsWith('s.label.5') && n.type === 'text'), 'the highlighted point keeps its label device');
+  }
+});
+
+test('labels: a point at the plot\'s right edge with a neighbour beside it is labelled above, flush with its right edge', () => {
+  const data = [{ x: 0, y: 0 }, { x: 4, y: 4 }, { x: 9.3, y: 4.9 }, { x: 10, y: 5, label: 'Edge' }, { x: 2, y: 10 }];
+  const out = expand(SCATTER({ data }));
+  const n = textOf(out, 's.label.3'), [cx, cy] = centre(find(out, 's.mark.3'));
+  assert.notEqual(n.props.layout.overflow, true, 'not crowded');
+  assert.ok(n.props.y + n.props.layout.height < cy, 'above its point');
+  assert.ok(Math.abs(n.props.x + n.props.layout.width - cx) < 30, `ends at its point: ${n.props.x + n.props.layout.width} vs ${cx}`);
+});
+
+test('review: a label on a point that is neither highlighted nor an extreme is a creative finding at its path', () => {
+  const found = chart.review(HOMES_SHOT(), {});
+  assert.deepEqual(found.map((f) => [f.kind, f.path]), [['creative', 'data[2].label']], JSON.stringify(found));
+  assert.match(found[0].message, /plain mark/);
+  assert.deepEqual(chart.review(HOMES_SHOT({ data: HOMES.map((p, k) => (k === 2 ? { x: p.x, y: p.y } : p)) }), {}), []);
+});
+
+test('pop 9:16: a claim that leaves the plot too short for its ticks is a fit finding on the claim, and the y ticks never overlap', () => {
+  const out = expand(HOMES_SHOT(), 'pop', '9:16');
+  assert.equal(textOf(out, 's.title.text').props.layout.overflow, true, 'the claim says to cut words');
+  const ticks = all(out.nodes).filter((n) => n.type === 'text' && n.id.startsWith('s.tick.y')).map(textBox);
+  ticks.forEach((a, i) => ticks.slice(i + 1).forEach((b) => assert.ok(a[1] + a[3] <= b[1] || b[1] + b[3] <= a[1], `ticks overlap: ${a} ${b}`)));
+});
+
+test('pop 9:16: a two-line claim leaves the plot its room; nothing is flagged', () => {
+  const out = expand(HOMES_SHOT({ title: 'Space costs' }), 'pop', '9:16');
+  assert.notEqual(textOf(out, 's.title.text').props.layout.overflow, true);
+  assert.ok(out.boxes.plot[3] >= 300, `plot ${out.boxes.plot[3]} tall`);
+  assert.equal(all(out.nodes).filter((n) => n.id.startsWith('s.tick.y') && n.type === 'text').length >= 3, true, 'every tick drawn');
+});
+
 // ---- the bar ----
 
 const full = () => SCATTER({ hold: undefined, say: 'Bigger homes cost more. Top is the outlier.', highlight: 'Top', source: 'Listings, 2026',

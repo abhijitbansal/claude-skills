@@ -3,7 +3,8 @@
 // step (never part-way, so frame 0 is whole and no reveal is half drawn on a sampled frame). Pure and DOM-free.
 import { track } from '../time/track.mjs';
 import { wordTimes, wordForm } from './words.mjs';
-import { compositionRect, captionTop } from './shared.mjs';
+import { compositionRect, captionTop, isEditorial, isWide } from './shared.mjs';
+import { gridX } from '../looks/index.mjs';
 
 export const LANDED_BEFORE_END = 0.6; // s: the last reveal lands at least this long before the shot ends
 
@@ -32,7 +33,17 @@ export function roomOf(ctx) {
   if (rect.safe) return { x: rect.left, y: rect.top, w: rect.w, h: rect.h };
   const margin = look.grid.margin * unit;
   const bottom = Math.min(canvas.h - margin, captionTop(ctx) - look.grid.gutter * unit);
-  return { x: margin, y: margin, w: canvas.w - 2 * margin, h: bottom - margin };
+  const left = editorialLeft(look, canvas, unit);
+  return { x: left, y: margin, w: canvas.w - 2 * left, h: bottom - margin };
+}
+
+export const EDITORIAL_WIDE_COLUMN = 2; // where an editorial composition's text starts on a wide frame (statement, chart, end)
+
+/** The left edge every kind's text keeps in an editorial look on a wide frame: column EDITORIAL_WIDE_COLUMN, where
+ *  the statement, the chart and the end card start (gate-kinds-b-1: one left margin per format); the grid margin
+ *  otherwise. */
+export function editorialLeft(look, canvas, unit) {
+  return isEditorial(look) && isWide(canvas) ? gridX(look, canvas, EDITORIAL_WIDE_COLUMN) : look.grid.margin * unit;
 }
 
 /** When each name of `names` lands: on the first spoken word that is its first word; else (none matched) one per sentence

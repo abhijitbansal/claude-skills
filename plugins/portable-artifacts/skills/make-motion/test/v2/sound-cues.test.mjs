@@ -63,9 +63,9 @@ test('soundEvents: a statement emphasis per run, a slide and a highlight on the 
   const want = [
     { kind: 'emphasis', t: 0.5, shot: 'open' },
     { kind: 'emphasis', t: 2.2, shot: 'open' },
-    { kind: 'cut', t: 3, shot: 'clip', cut: 'slide' },
+    { kind: 'cut', t: 3, shot: 'clip', cut: 'slide', dur: 0.4, direction: 'right' },
     { kind: 'device', t: 3.8, shot: 'clip', device: 'highlight' },
-    { kind: 'cut', t: 5.5, shot: 'rows', cut: 'cut' },
+    { kind: 'cut', t: 5.5, shot: 'rows', cut: 'cut', dur: 0, direction: null },
     { kind: 'land', t: 6.1, shot: 'rows' },
   ];
   assert.equal(events.length, want.length, JSON.stringify(events));
@@ -93,7 +93,7 @@ test('soundEvents: a shot whose kind has no landing makes no land event, and a c
       { id: 'b', index: 1, start: 2, end: 4, duration: 2, words: [word('Two.', 0, 0.4)], sentences: [] },
     ],
   };
-  assert.deepEqual(soundEvents(f, timeline), [{ kind: 'cut', t: 2, shot: 'b', cut: 'cut' }]);
+  assert.deepEqual(soundEvents(f, timeline), [{ kind: 'cut', t: 2, shot: 'b', cut: 'cut', dur: 0, direction: null }]);
 });
 
 // ---- whether cues play ----

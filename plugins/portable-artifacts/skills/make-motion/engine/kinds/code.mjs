@@ -14,7 +14,7 @@ import { roomOf } from './arrivals.mjs';
 import { LANG_NAMES, CODE_LANGS, resolveLang } from './code-langs.mjs';
 import { reviewRoom, innerOf, fitCode, panelHeight } from './code-fit.mjs';
 import { codeLayout, measureOf, heroOf } from './code-layout.mjs';
-import { compositionRect, setCase } from './shared.mjs';
+import { compositionRect, setCase, unmarked } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { diffLines } from './code-diff.mjs';
 import { changeTime, opensAt, runTimes, narrationEnd, typedBy } from './code-time.mjs';
@@ -182,9 +182,10 @@ const LINE_NUMBER = { type: 'integer', minimum: 1 };
 registries.kinds.add(KIND, {
   summary: 'Code on a printout (desk) or a dark panel (pop), set at one size in the look\'s mono with its tokens coloured by role: typed on over the narration (type), a change shown as a line diff (diff), or a command and what it printed (run). The text is drawn, never run.',
   example: {
+    // at most 20 characters a line and 10 lines: it holds at the reading floor in every look and format (pop 9:16 holds 20)
     id: 'total', show: KIND, lang: 'js', title: 'total.js', highlight: [6],
     say: 'Total walks the rows and adds up what was paid. That one line does the work.',
-    code: '// add up what was paid\nfunction total(rows) {\n  let sum = 0\n  for (const r of rows) {\n    if (!r.paid) continue\n    sum += r.price * r.n\n  }\n  return sum\n}\n\nconst rows = load("q3")\nlog(total(rows))',
+    code: '// add up the paid\nfunction total(rs) {\n  let sum = 0\n  for (let r of rs)\n    if (r.paid)\n      sum += r.price\n  return sum\n}\n\nlog(total(load()))',
   },
   schema: {
     properties: {
@@ -205,7 +206,8 @@ registries.kinds.add(KIND, {
   nodeField: codeField,
   validate: codeProblems,
   review: codeReview,
-  expand: expandCode,
+  // only the title loses emphasis markers: a star in the code is code
+  expand: (shot, ctx) => expandCode(shot.title === undefined ? shot : { ...shot, title: unmarked(shot.title) }, ctx),
   prepared: true,
   eventDevices: Object.freeze(['change', 'output']),
   events: eventsOf,

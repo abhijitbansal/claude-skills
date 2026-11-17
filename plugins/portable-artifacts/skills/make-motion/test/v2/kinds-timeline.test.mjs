@@ -56,9 +56,11 @@ test('validation: 2 to 6 events, when at most 14 characters, what at most 60, hi
 
 // ---- desk ----
 
-test('desk 16:9: four ticks on a line across the grid, one per column (hand-computed: 96, 534, 972, 1410)', () => {
+// the room starts at column 2 (242) since gate-kinds-b-1 (one left margin with the statement and the chart): 1436 wide,
+// four columns of (1436 - 3 x 24) / 4 = 341; the years are evenly apart, so by date is even
+test('desk 16:9: four ticks on a line across the grid, one per column (hand-computed: 242, 607, 972, 1337)', () => {
   const out = expand(base({ hold: 4 }));
-  [96, 534, 972, 1410].forEach((x, k) => near(nums(find(out, `t.tick${k}`).props.d)[0], x, `tick ${k} x`));
+  [242, 607, 972, 1337].forEach((x, k) => near(nums(find(out, `t.tick${k}`).props.d)[0], x, `tick ${k} x`));
 });
 
 test('desk 9:16: four ticks down a line on the left, one per equal slot of the room (hand-computed: 312, 744, 1176, 1608)', () => {

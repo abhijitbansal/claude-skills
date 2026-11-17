@@ -67,9 +67,13 @@ export const pop = {
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom'],
   // the motion blur on the cuts that move (engine/cuts/smear.mjs)
-  cutStyle: { slide: { smear: true }, cover: { smear: true }, punch: { smear: true } },
+  // the punch gets 0.3 s to land and settle (look review gate-cuts-1 P1: 0.2 s read as a 3% nudge)
+  cutStyle: { slide: { smear: true }, cover: { smear: true }, punch: { smear: true, duration: 0.3 } },
   // a cover's sheet leads with a hard accent keyline: a shadow would not show on the dark paper
   coverEdge: { line: { color: 'accent', width: 6, alpha: 1 } },
+  // a punch lands 1.25 times its size with a small overshoot; the smear's shutter is a quarter frame, half the
+  // default, so a vertical slide does not stretch letters into striped bars (gate-cuts-1 P1, P2, P3)
+  cutMotion: { punchZoom: 1.25, punchEase: 'outBack', smearShutter: 0.25 },
   keyline: 14,
   // the hard offset shadow in the accent (look review 1: the orange-red was the film's only second hue)
   shadow: { dx: 10, dy: 10, blur: 0, alpha: 1, color: '#d7ff3f' },
@@ -125,7 +129,9 @@ export const pop = {
     // dim to `dim`; no reference lines (`refs`): the values are labelled on the marks; a donut or line plot keeps at least
     // `minPlot` of its box however long its labels (chart-draw.mjs)
     // (`point`: a scatter point's radius in units, engine/kinds/chart-scatter.mjs)
-    chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false, minPlot: 0.4, point: 14 },
+    // `pointFace`: the race's and the scatter's labels in the condensed text face (one display system; the wide label
+    // face is the tags' alone)
+    chart: { pointFace: 'text', tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false, minPlot: 0.4, point: 14 },
     // media (engine/kinds/media.mjs): as desk's, the bleed caption on the look's white plate (its card) in the safe zone
     // screen (engine/kinds/screen.mjs): a white frame with a thick white outline and the look's offset accent shadow; the
     // chrome's dots and pill in greys, its text in the field colour
@@ -142,13 +148,13 @@ export const pop = {
     // timeline (engine/kinds/timeline.mjs): one event at a time, `when` in the accent over `what` in white (sizes as
     // desk's); a progress rail `rail` units deep along the room's edge: a `rule` line `ruleWidth` wide, `dot`-radius
     // dots in `dotFill`, the current one lit in `lit`, the highlighted one ringed `ring` times wider
-    timeline: { whenSteps: [5, 4], whatSteps: [3, 2, 1], whenLines: 2, whatLines: 3, rail: 48, dot: 12, ring: 1.7, rule: 'rule', ruleWidth: 4, dotFill: 'ink2', lit: 'accent', when: 'accent', what: 'ink', partGap: 24, gap: 24, titleSteps: [3], titleGap: 40, advance: 0.45 },
+    timeline: { whenSteps: [5, 4], whatSteps: [3, 2], whenLines: 2, whatLines: 3, rail: 48, dot: 12, ring: 1.7, rule: 'rule', ruleWidth: 4, dotFill: 'ink2', lit: 'accent', when: 'accent', what: 'ink', partGap: 24, gap: 24, titleSteps: [3], titleGap: 40, advance: 0.45 },
     // code (engine/kinds/code.mjs): a dark panel (`fill`) with a thick outline (`line`, `lineWidth` units) and the offset
     // accent shadow, `pad` units in, one size in `font` (pop has no mono of its own: the stage loads it for a code shot)
     // at the largest of `steps` that holds every line; roles in white and the two accents; a highlighted line on a
     // `highlight.band` with its words turned `highlight.text` (dark on the lime); diff signs in `removed` / `added`; on a tall frame
     // the title (or a run's command) is the hero over the card
-    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.4, pad: 32, steps: [1, 2, 3], card: false, fill: 'paper', line: 'ink', lineWidth: 10, roles: { plain: 'ink', keyword: 'accent', string: 'accent2', number: 'accent2', comment: 'ink2', name: 'ink', punct: 'ink2' }, highlight: { band: 'accent', text: 'paper' }, removed: 'accent2', added: 'accent', strike: 6, prompt: 'accent', heroAdvance: 0.45 },
+    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.4, pad: 32, steps: [2, 3], card: false, fill: 'paper', line: 'ink', lineWidth: 10, roles: { plain: 'ink', keyword: 'accent', string: 'accent2', number: 'accent2', comment: 'ink2', name: 'ink', punct: 'ink2' }, highlight: { band: 'accent', text: 'paper' }, removed: 'accent2', added: 'accent', strike: 6, prompt: 'accent', heroAdvance: 0.45 },
     // feed (engine/kinds/feed.mjs): thick-outlined bubbles (`line`, `lineWidth` units), `me` in the accent with dark words,
     // `them` dark with white words; one text size as desk's; notifications as dark cards; the frame is the look's own,
     // never a platform's

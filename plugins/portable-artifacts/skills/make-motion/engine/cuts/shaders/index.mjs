@@ -55,13 +55,34 @@ export function defineShaderCut(module) {
 }
 
 /**
- * The uniforms of shader module `module` at progress p (clamped to 0..1) and edge `direction` on a canvas { w, h }:
- * progress and ratio, then its params, then its direction's params, then what derive() computes.
+ * The wrapper's clear windows (engine/page/post-cut.mjs) that never clear: the outgoing picture fades to the ground over
+ * progress `from` = [start, end] and the incoming one rises from it over `to`; these lie outside 0..1, so the pictures
+ * reach the body untouched. A module that mixes two pictures sets uClearFrom / uClearTo in its params so that only one
+ * set of words reads at a time (look review gate-cuts-1; lead ruling 3).
  */
-export function shaderUniforms(module, { p, direction = null, canvas }) {
+export const CLEAR_NONE = Object.freeze({ from: Object.freeze([2, 3]), to: Object.freeze([-2, -1]) });
+/** The cell of the wrapper's integer hash in uv (mmHash rounds uv x this): one texel of a 1024 picture. */
+export const HASH_CELL = 1024;
+const HEX = 16;
+const BYTE = 255;
+const HEX_RGB = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i;
+
+// '#rrggbb' as [r, g, b] in 0..1; black for anything else (a shot's background is always #rrggbb).
+const rgbOf = (hex) => {
+  const m = HEX_RGB.exec(hex ?? '');
+  return m ? [1, 2, 3].map((k) => parseInt(m[k], HEX) / BYTE) : [0, 0, 0];
+};
+
+/**
+ * The uniforms of shader module `module` at progress p (clamped to 0..1) and edge `direction` on a canvas { w, h }, with
+ * `ground` the incoming shot's background (#rrggbb): progress and ratio, the wrapper's defaults (uGround, the clear
+ * windows CLEAR_NONE, uHashCell), then its params, then its direction's params, then what derive() computes.
+ */
+export function shaderUniforms(module, { p, direction = null, canvas, ground }) {
   const own = direction === null ? {} : (module.directions?.[direction] ?? {});
   const derived = typeof module.derive === 'function' ? module.derive({ p: clamp01(p), direction, canvas }) : {};
-  return Object.freeze({ progress: clamp01(p), ratio: canvas.w / canvas.h, ...module.params, ...own, ...derived });
+  const wrapper = { uGround: rgbOf(ground), uClearFrom: CLEAR_NONE.from, uClearTo: CLEAR_NONE.to, uHashCell: HASH_CELL };
+  return Object.freeze({ progress: clamp01(p), ratio: canvas.w / canvas.h, ...wrapper, ...module.params, ...own, ...derived });
 }
 
 /**

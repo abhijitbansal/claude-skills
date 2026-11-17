@@ -11,6 +11,7 @@ import { defaultCamera } from './camera.mjs';
 import { landBy, namedTimes } from './arrivals.mjs';
 import { WORLD_NAMES, US_NAMES } from './map-names.mjs';
 import { mapLayout } from './map-draw.mjs';
+import { unmarked } from './shared.mjs';
 
 const KIND = 'map';
 const ROUTE_LAG = 0.5; // s after both ends are on that a route has drawn
@@ -123,7 +124,7 @@ registries.kinds.add(KIND, {
   nodeField: mapField,
   validate: mapProblems,
   review: mapReview,
-  expand: expandMap,
+  expand: (shot, ctx) => expandMap(unmarked(shot), ctx),
   arrivals,
   eventDevices: Object.freeze(['pin', 'link']),
   events: (shot, timing) => {

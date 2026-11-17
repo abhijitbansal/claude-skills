@@ -11,11 +11,12 @@ import { fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBl
 import { layoutText } from '../text/layout.mjs';
 import { node } from '../graph/node.mjs';
 import { defaultCamera } from './camera.mjs';
-import { roomOf } from './arrivals.mjs';
+import { roomOf, editorialLeft } from './arrivals.mjs';
 import { eventTimes, eventRoom, fitEvents, floorStep } from './timeline-fit.mjs';
 import { deskTimeline } from './timeline-desk.mjs';
 import { popTimeline } from './timeline-pop.mjs';
 import { plainTag } from './plain-tag.mjs';
+import { unmarked } from './shared.mjs';
 
 const KIND = 'timeline';
 const WHEN_MAX = 14;
@@ -71,10 +72,10 @@ function expandTimeline(shot, ctx) {
   };
 }
 
-// The block beside pop's rail: the area less the rail's band (right of a tall frame, bottom of a wide one).
+// The block beside pop's rail: the area less the rail's band (left of a tall frame, bottom of a wide one).
 function popArea(area, data, canvas, unit) {
   const rail = data.rail * unit;
-  return isWide(canvas) ? { ...area, h: area.h - rail } : { ...area, w: area.w - rail };
+  return isWide(canvas) ? { ...area, h: area.h - rail } : { ...area, x: area.x + rail, w: area.w - rail };
 }
 
 // An estimate of the page's measure from the look's average advance (em per character), for the review.
@@ -93,7 +94,8 @@ function timelineReview(shot, { look, canvas } = {}) {
   const titleSize = sizeAt(look, Math.max(...data.titleSteps), unit);
   const titleLines = shot.title === undefined ? 0 : Math.min(TITLE_LINES, Math.ceil((shot.title.length * titleSize * data.advance) / (canvas.w - HALF * margin)));
   const titleH = titleLines === 0 ? 0 : titleLines * titleSize * look.lineHeight.display + data.titleGap * unit;
-  const area = { x: margin, y: band[0] + titleH, w: canvas.w - HALF * margin, h: band[1] - band[0] - titleH };
+  const left = editorialLeft(look, canvas, unit); // the kind's room (arrivals.mjs roomOf)
+  const area = { x: left, y: band[0] + titleH, w: canvas.w - HALF * left, h: band[1] - band[0] - titleH };
   const room = eventRoom(look, data, canvas, area, shot.events.length, unit);
   if (fitEvents(shot.events, { look, data, unit, measure: estimate(data.advance), room, floorStep: floorStep(canvas) }).fits) return [];
   const i = shot.events.reduce((best, e, k) => (e.when.length > shot.events[best].when.length ? k : best), 0);
@@ -112,7 +114,7 @@ function timelineField(shot, id) {
 const EVENT = { type: 'object', additionalProperties: false, required: ['when', 'what'], properties: { when: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: WHEN_MAX }, what: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: WHAT_MAX } } };
 
 registries.kinds.add(KIND, {
-  summary: 'Two to six events in the order given, evenly spaced: the line shows sequence, not scale. Each event is a date shown as written over what happened, arriving one per sentence: a ruled line that draws on with earlier events dimmed (desk), or one event at a time with a progress rail (pop).',
+  summary: 'Two to six events in the order given: spaced by date when every `when` is a date (a month, a year, "Mar 2024", "2024-03"), with room for each event\'s words, else evenly (sequence, not scale). Each event is a date shown as written over what happened, arriving one per sentence: a ruled line that draws on with earlier events dimmed (desk), or one event at a time with a progress rail (pop).',
   example: {
     id: 'history', show: KIND, say: 'We sketched it. Then a beta. Then a million users.',
     events: [{ when: '2019', what: 'First sketch' }, { when: '2021', what: 'Open beta' }, { when: '2023', what: 'One million users' }],
@@ -133,7 +135,7 @@ registries.kinds.add(KIND, {
   nodeField: timelineField,
   validate: timelineProblems,
   review: timelineReview,
-  expand: expandTimeline,
+  expand: (shot, ctx) => expandTimeline(unmarked(shot), ctx),
   arrivals: eventTimes,
   eventDevices: Object.freeze(['event']),
   events: (shot, timing) => eventTimes(shot, timing).slice(1).map((t) => ({ kind: 'device', device: 'event', t })),

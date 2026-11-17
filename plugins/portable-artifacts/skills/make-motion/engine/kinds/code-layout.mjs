@@ -21,6 +21,7 @@ const PROMPT_COLUMNS = 2; // the prompt sign and its space
 const ADVANCE_PROBE = '0';
 const PROBE_SIZE = 100;
 const NO_WRAP = 1e6;
+const COL_EPSILON = 1e-6;
 
 const textOf = (tokens) => tokens.map((t) => t.text).join('');
 const titleTokens = (shot) => (shot.title === undefined ? null : [{ text: shot.title, role: 'comment' }]);
@@ -97,13 +98,18 @@ export function geometryOf(shot, ctx, data, room) {
   const advance = measure(ADVANCE_PROBE, font).width;
   const rowH = data.lineHeight * size;
   const pad = data.pad * unit;
-  const w = probe ? room.w : Math.min(room.w, need.chars * advance + HALF * pad), h = need.rows * rowH + HALF * pad;
+  // rows past what the room holds at the reading floor are left out (the review says how many to cut), so the panel
+  // never runs out of the room
+  const rowLimit = Math.max(1, Math.floor((cardRoom.h - HALF * pad) / rowH + COL_EPSILON));
+  const w = probe ? room.w : Math.min(room.w, need.chars * advance + HALF * pad), h = Math.min(need.rows, rowLimit) * rowH + HALF * pad;
   const block = (probe ? probe.h + gap : 0) + h;
   const top = room.y + (room.h - block) / HALF; // the block centred in the room
   const panel = [room.x + (room.w - w) / HALF, top + (probe ? probe.h + gap : 0), w, h];
   const inner = { x: panel[0] + pad, y: panel[1] + pad, w: w - HALF * pad, h: h - HALF * pad };
   const hero = probe ? { ...probe, x: room.x + probe.left, y: top } : null;
-  return { fit: { ...fit, size }, font, advance, rowH, inner, panel, measure, x: inner.x, top: (k) => inner.y + k * rowH, titleRow: shot.title !== undefined && hero?.field !== 'title', hero };
+  // cols: the columns the panel holds; a line longer than that at the reading floor drops its runs past it (the review
+  // says which line to cut), never shrinking under the floor nor spilling out of the panel
+  return { fit: { ...fit, size }, font, advance, rowH, inner, panel, measure, x: inner.x, cols: Math.floor(inner.w / advance + COL_EPSILON), rowLimit, top: (k) => inner.y + k * rowH, titleRow: shot.title !== undefined && hero?.field !== 'title', hero };
 }
 
 // The title row (row 0 when the panel has one) with desk's rule under it.
@@ -138,6 +144,7 @@ function typeMode(shot, ctx, data, geo) {
   const hl = new Set(highlightedLines(shot.highlight));
   const at = (i) => landBy(Math.max(Math.max(0, ...lineTimes[i]), lastSentence), ctx.timing);
   const nodes = lines.flatMap((tokens, i) => {
+    if (first + i >= geo.rowLimit) return []; // past the rows the room holds at the floor
     const row = { id: `${shot.id}.l${i + 1}`, tokens, top: geo.top(first + i) };
     const lit = hl.has(i) && data.highlight.text ? { lit: colourOf(ctx.look, data.highlight.text), litAt: at(i) } : {};
     const mark = hl.has(i) ? [highlightNode(`${row.id}.mark`, geo, { top: row.top, chars: widthOf(tokens), data, look: ctx.look, at: at(i) })] : [];

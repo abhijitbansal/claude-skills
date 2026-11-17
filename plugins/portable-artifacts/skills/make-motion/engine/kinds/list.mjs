@@ -16,6 +16,7 @@ import { defaultCamera } from './camera.mjs';
 import { itemsOf, isNumbered } from './list-items.mjs';
 import { expandDeskList } from './list-desk.mjs';
 import { expandPopList } from './list-pop.mjs';
+import { unmarked } from './shared.mjs';
 
 const KIND = 'list';
 export const MAX_ITEMS = 6; // the review's limit; the schema allows up to ITEMS_LIMIT so the advice can be given
@@ -161,7 +162,7 @@ registries.kinds.add(KIND, {
   targets: (shot) => ['items', ...(Array.isArray(shot.items) ? shot.items.map((_, k) => `${ITEM_PREFIX}${k}`) : [])],
   ids: (shot) => [heroId(shot, 'items')],
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...kindSupportProblems(KIND, look)],
-  expand: expandList,
+  expand: (shot, ctx) => expandList(unmarked(shot), ctx),
   review: listReview,
   partWindow: itemWindow, // when an `on` target is on screen (an event outside it is a finding and plans no cue)
   nodeField: listNodeField,

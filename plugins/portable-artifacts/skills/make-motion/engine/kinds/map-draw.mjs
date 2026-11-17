@@ -11,15 +11,17 @@ import { layoutText } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { colourOf, at2, pathPoints, styleOf } from '../devices/shared.mjs';
 import { fontFor, sizeAt, isWide, isEditorial, setCase, overlaps, cardOf, tagBox } from './shared.mjs';
-import { arrivalTrack, roomOf } from './arrivals.mjs';
+import { arrivalTrack, roomOf, EDITORIAL_WIDE_COLUMN } from './arrivals.mjs';
 
 const HALF = 2;
 const PIN = 11; // units: a pin's radius
 const NO_WRAP = 1e6;
 const STICKER_PAD = 18; // units: the sticker device's own default pad (engine/devices/sticker.mjs)
 
-// The look's floor for the author's words on this format: its second step on a tall frame, its first on a wide one.
-const floorSize = (ctx) => sizeAt(ctx.look, isWide(ctx.canvas) ? 1 : 2, ctx.unit);
+// The look's reading floor for the map's words, its second step on every format: a place name at the wide frame's first
+// step did not read on the phone tile (gate-kinds-b-1).
+const READING_STEP = 2;
+const floorSize = (ctx) => sizeAt(ctx.look, READING_STEP, ctx.unit);
 const text = (ctx, role, size, words, maxWidth) => {
   const font = fontFor(ctx.look, role, size, ctx.unit);
   return { font, layout: layoutText({ text: setCase(ctx.look, role, words), font, maxWidth, measure: ctx.measure }) };
@@ -61,15 +63,17 @@ function placeNodes(shot, ctx, data, view, times) {
   const kept = [];
   const dropped = [];
   const areas = data.highlights.map((h) => boxOf(pathPoints(h.d).map(([x, y]) => [view.x + x * view.s, view.y + y * view.s])));
+  const trace = routeTrace(data, view);
+  const pins = data.places.map((q) => pinBox(view.x + q.x * view.s, view.y + q.y * view.s, PIN * unit));
   const nodes = data.places.flatMap((p, i) => {
     const at = times.places[i] ?? 0;
     const [px, py] = [view.x + p.x * view.s, view.y + p.y * view.s];
     const pin = node('path', `${shot.id}.place${i}.pin`, { d: disc(px, py, PIN * unit), fill: colourOf(look, ctx.data.pin) }, { tracks: { opacity: arrivalTrack(at) } });
     const label = (side) => {
-      const built = registries.devices.get('label').build({ id: `${shot.id}.place${i}`, box: view.box, at, look, unit, seed, measure, text: p.name, anchor: [px, py], size, ...(side ? { side } : {}) });
+      const built = registries.devices.get('label').build({ id: `${shot.id}.place${i}`, box: view.box, at, look, unit, seed, measure, text: p.name, anchor: [px, py], size, ...(side ? { side } : {}), ...(ctx.data.labelFace ? { face: ctx.data.labelFace } : {}) });
       return ctx.data.labelPlate === 'sticker' ? onSticker(built, ctx, at) : { nodes: stepIn(built.nodes, at), box: built.boxes.label };
     };
-    const plated = keepOff(label, sideAwayFromRoutes(data, p), areas);
+    const plated = keepOff(label, sideAwayFromRoutes(data, p), areas, { trace, boxes: [...pins.filter((_, k) => k !== i), ...kept] });
     if (kept.some((b) => overlaps(b, plated.box))) { dropped.push(`places[${i}].name`); return [pin]; }
     kept.push(plated.box);
     return [pin, ...plated.nodes];
@@ -77,14 +81,34 @@ function placeNodes(shot, ctx, data, view, times) {
   return { nodes: noteDropped(nodes, shot, dropped), labels: kept };
 }
 
-// The label `make(side)` gives on the side that covers least of the highlighted areas (a name over the area it is in
-// hides the highlight the narration names), the preferred side first, then the label device's own choice, then the
+// The label `make(side)` gives on the side that keeps clear of the routes, the other pins and the labels already placed
+// (`clear`: { trace, boxes }), and among those covers least of the highlighted areas (a name over the area it is in
+// hides the highlight the narration names); the preferred side first, then the label device's own choice, then the
 // four sides in turn; ties keep that order.
 const SIDES = Object.freeze([undefined, 'right', 'left', 'above', 'below']);
+const CLASH = 1e12; // a label on a route, a pin or a label costs more than any highlight it could cover
+const CLEARANCE = 4; // units round a label kept free of a route's line
 const coverOf = (box, areas) => areas.reduce((sum, a) => sum + Math.max(0, Math.min(box[0] + box[2], a[0] + a[2]) - Math.max(box[0], a[0])) * Math.max(0, Math.min(box[1] + box[3], a[1] + a[3]) - Math.max(box[1], a[1])), 0);
-function keepOff(make, preferred, areas) {
+function clashesOf([x, y, w, h], { trace, boxes }) {
+  const onRoute = trace.filter(([px, py]) => px > x - CLEARANCE && px < x + w + CLEARANCE && py > y - CLEARANCE && py < y + h + CLEARANCE).length;
+  return onRoute + boxes.filter((b) => overlaps(b, [x, y, w, h])).length;
+}
+function keepOff(make, preferred, areas, clear) {
   const tries = (preferred ? [preferred, ...SIDES] : SIDES).map(make);
-  return tries.reduce((best, t) => (coverOf(t.box, areas) < coverOf(best.box, areas) ? t : best));
+  const cost = (t) => CLASH * clashesOf(t.box, clear) + coverOf(t.box, areas);
+  return tries.reduce((best, t) => (cost(t) < cost(best) ? t : best));
+}
+
+const TRACE_STEPS = 8; // samples between two prepared route points
+
+// Points along every route's prepared line on screen (each part of a clipped route), dense enough that a label box
+// cannot sit across a route between two samples.
+function routeTrace(data, view) {
+  const lines = data.routes.flatMap((r) => r.parts ?? [r.points]);
+  return lines.flatMap((pts) => pts.slice(1).flatMap((q, k) => Array.from({ length: TRACE_STEPS }, (_, s) => {
+    const t = s / TRACE_STEPS, p = pts[k];
+    return [view.x + (p[0] + (q[0] - p[0]) * t) * view.s, view.y + (p[1] + (q[1] - p[1]) * t) * view.s];
+  })).concat(pts.length > 0 ? [[view.x + pts.at(-1)[0] * view.s, view.y + pts.at(-1)[1] * view.s]] : []));
 }
 
 function boxOf(points) {
@@ -96,7 +120,8 @@ function boxOf(points) {
 // here (a spring from 0.6 would show the name under the reading floor mid-pop). -> { nodes, box: the sticker's box }.
 function onSticker(built, ctx, at) {
   const [group] = built.nodes;
-  const leader = group.children.find((c) => c.type === 'path');
+  const drawn = group.children.find((c) => c.type === 'path');
+  const leader = node('path', drawn.id, drawn.props, { tracks: { opacity: arrivalTrack(at) } }); // with its pin, as stepIn
   const label = group.children.find((c) => c.type === 'text');
   // moved out from the anchor by the sticker's pad, so the plate keeps the label's gap and the leader shows
   const pad = (styleOf(ctx.look, 'sticker').pad ?? STICKER_PAD) * ctx.unit;
@@ -141,9 +166,10 @@ function sideAwayFromRoutes(data, place) {
   return away.reduce((sum, q) => sum + (q.x - place.x), 0) > 0 ? 'left' : 'right';
 }
 
-// The label device fades its text in over the enter move; here every reveal is a step on its time (arrivals.mjs).
-const stepIn = (nodes, at) => nodes.map((g) => node(g.type, g.id, g.props, { tracks: g.tracks, children: g.children.map((c) => (c.type === 'text'
-  ? node('text', c.id, c.props, { tracks: { opacity: arrivalTrack(at) } }) : c)) }));
+// The label device fades its text in over the enter move and draws its leader on before it; here every reveal is a step
+// on its time (arrivals.mjs), the leader too, so no leader shows as a stray dash before its pin.
+const stepIn = (nodes, at) => nodes.map((g) => node(g.type, g.id, g.props, { tracks: g.tracks, children: g.children.map((c) => (c.type === 'text' || c.type === 'path'
+  ? node(c.type, c.id, c.props, { tracks: { opacity: arrivalTrack(at) } }) : c)) }));
 
 function noteDropped(nodes, shot, dropped) {
   if (dropped.length === 0) return nodes;
@@ -152,11 +178,37 @@ function noteDropped(nodes, shot, dropped) {
   return nodes.map(mark);
 }
 
-// Each route: the route device through its prepared points, drawing on once both its ends are on.
+// Each route: the route device through its prepared points, drawing on once both its ends are on. A route across the
+// antimeridian arrives in parts clipped at the map's edges (routePartNodes).
 function routeNodes(shot, ctx, data, view, times) {
-  return data.routes.flatMap((r, j) => (r.points.length < HALF ? [] : registries.devices.get('route').build({
-    id: `${shot.id}.route${j}`, at: times.routes[j], look: ctx.look, unit: ctx.unit, seed: ctx.seed, points: r.points.map(([x, y]) => [view.x + x * view.s, view.y + y * view.s]),
-  }).nodes));
+  const onScreen = (points) => points.map(([x, y]) => [view.x + x * view.s, view.y + y * view.s]);
+  return data.routes.flatMap((r, j) => {
+    if (r.parts) return routePartNodes(`${shot.id}.route${j}`, ctx, r.parts.map(onScreen).filter((p) => p.length >= HALF), times.routes[j]);
+    return r.points.length < HALF ? [] : registries.devices.get('route').build({
+      id: `${shot.id}.route${j}`, at: times.routes[j], look: ctx.look, unit: ctx.unit, seed: ctx.seed, points: onScreen(r.points),
+    }).nodes;
+  });
+}
+
+const lengthOf = (points) => points.slice(1).reduce((sum, p, k) => sum + Math.hypot(p[0] - points[k][0], p[1] - points[k][1]), 0);
+
+// A route's parts draw one after the other inside the route's own draw (each its share of the time by length), landing
+// on `at`; only the route's true ends keep their marks: the first part's start pin, the last part's end pin (desk) or
+// arrow head (pop). A clipped end at the map's edge has none.
+function routePartNodes(id, ctx, parts, at) {
+  if (parts.length === 0) return [];
+  const draw = ctx.look.moves.draw;
+  const lengths = parts.map(lengthOf);
+  const total = lengths.reduce((a, b) => a + b, 0) || 1;
+  const last = parts.length - 1;
+  const children = parts.map((points, k) => {
+    const done = lengths.slice(0, k + 1).reduce((a, b) => a + b, 0);
+    const look = { ...ctx.look, moves: { ...ctx.look.moves, draw: { ...draw, dur: (draw.dur * lengths[k]) / total } } };
+    const [group] = registries.devices.get('route').build({ id: `${id}.part${k}`, at: at - draw.dur * (1 - done / total), look, unit: ctx.unit, seed: ctx.seed, points }).nodes;
+    const kept = group.children.filter((c) => !((c.id.endsWith('.pin0') && k > 0) || (c.id.endsWith('.pin1') && k < last) || (c.id.endsWith('.head') && k < last)));
+    return node('group', group.id, group.props, { children: kept, tracks: group.tracks });
+  });
+  return [node('group', id, {}, { children })];
 }
 
 // The places as the key under the map (tall frames): each row the place's numbered disc and its name in the text face,
@@ -168,7 +220,7 @@ function listNodes(shot, ctx, data, [x, y, w], times) {
   return data.places.map((p, i) => {
     const at = times.places[i] ?? 0;
     const mid = y + i * row + (row - ctx.data.listGap * ctx.unit) / HALF;
-    const set = text(ctx, 'text', size, p.name, w - HALF * r - size);
+    const set = text(ctx, ctx.data.labelFace ?? 'text', size, p.name, w - HALF * r - size); // the labels' face
     const name = node('text', `${shot.id}.list${i}`, { x: x + HALF * r + size / HALF, y: mid - set.layout.height / HALF, layout: set.layout, font: set.font, fill: ctx.look.palette.ink }, { tracks: { opacity: arrivalTrack(at) } });
     return node('group', `${shot.id}.key${i}`, {}, { children: [keyDisc(shot, ctx, `${shot.id}.key${i}.mark`, [x + r, mid], i + 1, at), name] });
   });
@@ -215,7 +267,7 @@ export function mapLayout(shot, ctx, data, times) {
   const room = roomOf(ctx);
   const gap = ctx.data.gap * unit;
   const wide = isWide(canvas);
-  const side = wide && isEditorial(look) ? gridSpan(look, canvas, 1, ctx.data.titleTo) : { x: room.x, w: room.w };
+  const side = wide && isEditorial(look) ? gridSpan(look, canvas, EDITORIAL_WIDE_COLUMN, ctx.data.titleTo) : { x: room.x, w: room.w };
   const title = titleNodes(shot, ctx, side.x, room.y, side.w);
   const sourceH = shot.source === undefined ? 0 : floorSize(ctx) * HALF + gap;
   const listH = wide ? 0 : data.places.length * keyRow(ctx) + gap;

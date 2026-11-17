@@ -1,11 +1,12 @@
 // The `label` device: a short text beside a point (`anchor`) with a leader line from the text's nearest edge to it, as
-// a map labels a place or a diagram an edge. The text is set in the look's text face at the one size the caller gives
+// a map labels a place or a diagram an edge. The text is set in the look's text face (or the `face` given) at the one size the caller gives
 // (`size`, px), on the side of the anchor with room inside `box` (the area the label may use; `side` keeps a given
 // side), and never leaves `box`. The leader draws on with the look's draw move and the text fades in, both landing on
 // `at`. Returns { nodes: [group], boxes: { label: the text's box }, side }. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { checkParams, isHand, styleOf, colourOf, landing, polyline, styledBy } from './shared.mjs';
+import { setCase } from '../kinds/shared.mjs';
 
 const SIDES = Object.freeze(['right', 'left', 'above', 'below']);
 const GAP = 28; // units between the anchor and the text's nearest edge
@@ -13,9 +14,11 @@ const DEFAULT_LINE_WIDTH = 2; // units
 const NO_WRAP = 1e6; // px: a label is one line
 const HALF = 2;
 
-function textFont(look, size, unit) {
-  const { family, weight, width } = look.fonts.text;
-  return { family, weight, width, size, tracking: look.tracking(size / unit, 'text') };
+const FACES = Object.freeze(['text', 'label', 'display']);
+
+function textFont(look, size, unit, face = 'text') {
+  const { family, weight, width } = look.fonts[face];
+  return { family, weight, width, size, tracking: look.tracking(size / unit, face) };
 }
 
 // The text's top-left corner on `side` of the anchor, `gap` px from it, before it is kept inside the box.
@@ -43,14 +46,18 @@ function nearestEdge([x, y, w, h], side) {
 }
 
 function buildLabel(params) {
-  const { id, box, at, look, unit, measure } = checkParams('label', params, ['text', 'anchor', 'size', 'side']);
-  const { text, anchor, size } = params;
+  const { id, box, at, look, unit, measure } = checkParams('label', params, ['text', 'anchor', 'size', 'side', 'face']);
+  const { anchor, size } = params;
+  // `face`: the look's font role to set the text in (default 'text'); a 'label' face takes the look's label case
+  const face = params.face ?? 'text';
+  if (!FACES.includes(face)) throw new Error(`label: face must be one of ${FACES.join(', ')}, got ${JSON.stringify(face)}`);
+  const text = face === 'text' || typeof params.text !== 'string' ? params.text : setCase(look, face, params.text);
   if (typeof text !== 'string' || text.trim() === '') throw new Error('label: text must be a non-empty string');
   if (!Array.isArray(anchor) || anchor.length !== HALF || !anchor.every(Number.isFinite)) throw new Error(`label: anchor must be [x, y], got ${JSON.stringify(anchor)}`);
   if (!(Number.isFinite(size) && size > 0)) throw new Error(`label: size must be a font size in px > 0, got ${size}`);
   if (params.side !== undefined && !SIDES.includes(params.side)) throw new Error(`label: side must be one of ${SIDES.join(', ')}, got ${JSON.stringify(params.side)}`);
   if (measure === undefined) throw new Error('label: needs params.measure to size its text');
-  const font = textFont(look, size, unit);
+  const font = textFont(look, size, unit, face);
   const layout = layoutText({ text, font, maxWidth: NO_WRAP, measure });
   const gap = GAP * unit;
   const side = params.side ?? SIDES.reduce((best, s) => (overflowOf(s, anchor, layout.width, layout.height, gap, box) < overflowOf(best, anchor, layout.width, layout.height, gap, box) ? s : best));

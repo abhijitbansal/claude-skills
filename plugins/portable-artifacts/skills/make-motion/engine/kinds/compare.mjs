@@ -16,6 +16,7 @@ import { SIDES, compareTurn, valueText } from './compare-text.mjs';
 import { VALUE_SCHEMA, showsAsZero, zeroMessage } from './values.mjs';
 import { expandDeskCompare } from './compare-desk.mjs';
 import { expandPopCompare } from './compare-pop.mjs';
+import { unmarked } from './shared.mjs';
 
 export { compareTurn, valueText } from './compare-text.mjs';
 
@@ -144,7 +145,7 @@ registries.kinds.add(KIND, {
     ...hiddenOnFindings(shot, { timing, at }, (target) => sideWindow(shot, timing, target, look, canvas)),
   ],
   validate: (shot, { look } = {}) => [...heroProblems(shot), ...sideProblems(shot), ...kindSupportProblems(KIND, look)],
-  expand: expandCompare,
+  expand: (shot, ctx) => expandCompare(unmarked(shot), ctx),
   lookData: true, // a look ships it only with a kinds.compare entry (engine/looks/index.mjs listedKinds)
   numbered: (shot) => shot.kicker !== undefined, // with a kicker, a slug (desk) that counts among the numbered shots
   showsWords: true, // its sides restate the narration: never captioned (engine/captions)

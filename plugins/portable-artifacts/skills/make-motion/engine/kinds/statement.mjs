@@ -25,6 +25,7 @@ import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { composeStack, stackNodes } from './stack.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
+import { unmarked } from './shared.mjs';
 
 const TEXT_MAX = 200;
 const KICKER_MAX = 40;
@@ -380,7 +381,7 @@ registries.kinds.add('statement', {
   targets: statementTargets,
   ids: (shot) => [heroId(shot, 'text')],
   validate: statementProblems,
-  expand: expandStatement,
+  expand: (shot, ctx) => expandStatement(unmarked(shot), ctx),
   review: emphasisFindings,
   numbered: true, // a slug shows its place among the film's numbered shots
   showsWords: true, // its narration is the picture: never captioned (engine/captions)

@@ -3,22 +3,23 @@
 // in perspective; the outgoing shot is its front face and the incoming one the face that swings round to replace it,
 // from edge `direction`. Same constants and maths as version 1: the uniforms come from derive() in JavaScript, and the
 // body turns the contract's bottom-left uv into version 1's top-left pixel place before it starts. Pure and DOM-free.
+import { ENTRY_EDGE } from '../edges.mjs';
 
 const CUBE_FOCAL = 2.4; // camera distance from the screen plane, in half widths (half heights when it turns about the other axis)
 const CUBE_PULL = 0.5; // how far the cube backs away from the screen at the middle of the turn, in the same unit
-const CUBE_SHADE = 0.45; // how much darker a face is as it turns away
+const CUBE_SHADE = 0.65; // how much darker a face is as it turns away (0.45 in version 1: the faces read alike, gate-cuts-1 P6)
 const QUARTER_TURN = Math.PI / 2;
 const DOUBLE = 2;
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
-// uSwap 1: the cube turns about the horizontal axis; uFlip 1: the incoming face comes from the right or the bottom.
-const DIRECTIONS = Object.freeze({
-  left: Object.freeze({ uSwap: 0, uFlip: 0 }),
-  right: Object.freeze({ uSwap: 0, uFlip: 1 }),
-  up: Object.freeze({ uSwap: 1, uFlip: 0 }),
-  down: Object.freeze({ uSwap: 1, uFlip: 1 }),
-});
+// uSwap 1: the cube turns about the horizontal axis; uFlip 1: the incoming face comes from the right or the bottom. The
+// edge each direction enters by is edges.mjs's (a cube up turns its new face in from the bottom).
+const CUBE_ORDER = Object.freeze(['left', 'right', 'up', 'down']);
+const DIRECTIONS = Object.freeze(Object.fromEntries(CUBE_ORDER.map((direction) => {
+  const edge = ENTRY_EDGE[direction];
+  return [direction, Object.freeze({ uSwap: edge === 'top' || edge === 'bottom' ? 1 : 0, uFlip: edge === 'right' || edge === 'bottom' ? 1 : 0 })];
+})));
 
 // The uniforms that move with progress, version 1's glUniforms: the turn, the pull, the shade of each face, and the
 // face's extent across the turn in units of its extent along it.
@@ -65,7 +66,7 @@ vec4 transition(vec2 uv) {
   vec3 origin = vec3(-uSin * depth, 0.0, uCos * depth);
   vec3 dir = vec3(uCos * s + uSin * uFocal, c, uSin * s - uCos * uFocal);
   float best = 1.0e9;
-  vec3 colour = vec3(0.0);
+  vec3 colour = uGround; // behind the box: the incoming shot's ground, never a black void (gate-cuts-1 P6)
   if (dir.z < 0.0) {
     float t = (1.0 - origin.z) / dir.z;
     vec2 hit = vec2(origin.x + t * dir.x, t * dir.y);
@@ -93,6 +94,6 @@ export const cube = Object.freeze({
   derive,
   standIn: 'wipe',
   license: null,
-  summary: 'The shot turns away as one face of a box and the next one turns in from an edge (left by default), over 0.6 s (WebGL2; a wipe without it).',
+  summary: 'The shot turns away as one face of a box and the next one turns in from the left (right; up: the box rolls up, the new face from below; down: from above), over 0.6 s (WebGL2; a wipe without it).',
   example: { type: 'cube', direction: 'up' },
 });

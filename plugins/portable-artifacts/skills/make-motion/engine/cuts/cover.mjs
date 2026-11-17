@@ -7,11 +7,12 @@
 // Registered by index.mjs, which this file imports only inside functions (the two import each other). Pure and DOM-free.
 import { ease } from '../time/ease.mjs';
 import { EDGES, shifted, edgeOffset, edgeTravel, backgroundIds, backgroundNode, backdropNode } from './index.mjs';
+import { ENTRY_EDGE, OPPOSITE_EDGE } from './edges.mjs';
 
 const COVER_EASE = 'inOutCubic';
 const COVER_ID = 'cover'; // the backdrop and the copies of the shared background the incoming shot carries: <id>.cover
-// The side of the sheet that leads, for the edge the sheet comes from: it moves away from that edge.
-const LEADING = Object.freeze({ right: 'left', left: 'right', up: 'bottom', down: 'top' });
+// The side of the sheet that leads, for a direction: the side across from the edge it enters by.
+const LEADING = Object.freeze(Object.fromEntries(Object.entries(ENTRY_EDGE).map(([direction, edge]) => [direction, OPPOSITE_EDGE[edge]])));
 
 // The shared background's copy that travels with the incoming shot: the same node under its own id.
 const travelling = (n) => Object.freeze({ ...n, id: `${n.id}.${COVER_ID}` });
@@ -61,8 +62,10 @@ export function coverParts({ from, to, p, canvas, look, background, direction })
     ...(background === undefined ? [] : [backdropNode(`${COVER_ID}.backdrop`, canvas, background)]),
     ...ground.map(travelling),
     ...to.filter((n) => !shared.has(n.id)),
-    ...coverEdgeNodes(look?.coverEdge, direction, canvas, look?.palette ?? {}),
   ];
   const moving = (q) => shifted(sheet, ...edgeOffset(direction, curve(q), canvas));
-  return { still, moving, travel: edgeTravel(curve, direction, canvas), vector: [...EDGES[direction]], over: [] };
+  // The leading edge rides with the sheet but is drawn over the smear, sharp at this frame's place: a thin keyline
+  // averaged over the shutter loses its colour (look review gate-cuts-1, pop cover).
+  const edge = shifted(coverEdgeNodes(look?.coverEdge, direction, canvas, look?.palette ?? {}), ...edgeOffset(direction, curve(p), canvas));
+  return { still, moving, travel: edgeTravel(curve, direction, canvas), vector: [...EDGES[direction]], over: edge };
 }

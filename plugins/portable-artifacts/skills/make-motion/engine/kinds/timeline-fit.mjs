@@ -34,11 +34,13 @@ export function eventRoom(look, data, canvas, area, n, unit) {
 
 const fontOf = (look, role, size, unit) => ({ ...look.fonts[role], size, tracking: look.tracking(size / unit, role) });
 
-// Every event's `when` (display face) and `what` (text face) set at the two sizes, wrapped to `width`.
+// Every event's `when` (display face) and `what` (the look's `whatFace`, else the text face) set at the two sizes,
+// wrapped to `width`.
 function setAt(events, env, whenSize, whatSize) {
-  const { look, unit, measure, room } = env;
+  const { look, unit, measure, room, data } = env;
+  const face = data.whatFace ?? 'text';
   const set = (role, size, text) => layoutText({ text: setCase(look, role, text), font: fontOf(look, role, size, unit), maxWidth: Math.max(1, room.width), measure });
-  return { when: events.map((e) => set('display', whenSize, e.when)), what: events.map((e) => set('text', whatSize, e.what)), whenFont: fontOf(look, 'display', whenSize, unit), whatFont: fontOf(look, 'text', whatSize, unit) };
+  return { when: events.map((e) => set('display', whenSize, e.when)), what: events.map((e) => set(face, whatSize, e.what)), whenFont: fontOf(look, 'display', whenSize, unit), whatFont: fontOf(look, face, whatSize, unit) };
 }
 
 // Does every event hold in its room: lines within the look's limits, no wider than the room, both parts in its height?

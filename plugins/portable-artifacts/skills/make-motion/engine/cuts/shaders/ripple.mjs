@@ -3,10 +3,13 @@
 // from the centre and cross over; the wave dies away at both ends of the window, so progress 0 is the outgoing shot and
 // progress 1 the incoming one. Same constants and maths as version 1; only the names changed (uP is progress, the
 // aspect is ratio). Pure and DOM-free.
+import { MIXED_CLEAR } from './clear.mjs';
 
 // How far a wave pushes a pixel (canvas heights), radians of wave per canvas height from the centre, radians the wave
 // travels outwards over the whole window, and how much a crest brightens and a trough darkens: version 1's values.
-const PARAMS = Object.freeze({ amplitude: 0.03, frequency: 28, speed: 14, shine: 0.06 });
+// Half version 1's amplitude, frequency and shine (look review gate-cuts-1 P7: moire bands and bow-tie pinches), and
+// the clear windows, so the two pictures' words never pile up.
+const PARAMS = Object.freeze({ amplitude: 0.015, frequency: 14, speed: 14, shine: 0.03, ...MIXED_CLEAR });
 
 const SOURCE = `uniform float amplitude; // = 0.03
 uniform float frequency; // = 28.0

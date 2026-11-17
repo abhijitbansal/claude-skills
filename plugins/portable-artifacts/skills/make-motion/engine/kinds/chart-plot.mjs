@@ -5,17 +5,27 @@ import { drawSeries } from './chart-series.mjs';
 import { drawDonut } from './chart-donut.mjs';
 import { drawScatter } from './chart-scatter.mjs';
 import { drawRace } from './chart-race.mjs';
+import { fontFor } from './shared.mjs';
 
 /** The plot of `shot` in `area` ({ x, y, w, h }), its marks kept `headroom` px under the area's top: { nodes, boxes, plot, highlight, times }. */
 export function drawPlot(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
-  if (shot.type === 'scatter') return drawScatter(shot, ctx, style, area, { headroom });
-  if (shot.type === 'race') return drawRace(shot, ctx, style, area, { headroom });
+  if (shot.type === 'scatter') return drawScatter(shot, ctx, pointStyle(ctx, style), area, { headroom });
+  if (shot.type === 'race') return drawRace(shot, ctx, pointStyle(ctx, style), area, { headroom });
   // a look that sets bar labels over the bars on a tall frame (style.labelsAbove) draws its columns there as such bars:
   // four columns across a phone's width cannot carry labels at the look's secondary floor
   if (shot.type === 'column' && !style.labelsAbove) return drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom });
   if (shot.type === 'bar' || shot.type === 'column') return drawBars(shot, ctx, style, area, { valueOnHighlight, headroom });
   if (shot.type === 'donut') return drawDonut(shot, ctx, style, area, { valueOnHighlight });
   return drawSeries(shot, ctx, style, area, { valueOnHighlight, area: shot.type === 'area', headroom });
+}
+
+// The race's and the scatter's labels in the look's `kinds.chart.pointFace` (pop: its condensed text face, so the
+// film keeps one display system; a wide label face is the tags' alone), else the label face; `face` names it for a
+// device the plot builds (the scatter's highlighted label). The first-wave types keep the label face.
+function pointStyle(ctx, style) {
+  const face = ctx.look.kinds?.chart?.pointFace;
+  if (face === undefined) return { ...style, face: 'label' };
+  return { ...style, face, font: fontFor(ctx.look, face, style.font.size, ctx.unit) };
 }
 
 export { captionTop } from './shared.mjs'; // moved there: the clipping keeps clear of the band too

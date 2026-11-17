@@ -10,6 +10,7 @@ import { fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBl
 import { defaultCamera } from './camera.mjs';
 import { roomOf, latestLanding } from './arrivals.mjs';
 import { feedLayout, feedTimes } from './feed-layout.mjs';
+import { unmarked } from './shared.mjs';
 
 const KIND = 'feed';
 const TEXT_MAX = 90; // characters: four lines hold at least 100 at 9:16 in both looks (measured advances, kinds-feed-browser)
@@ -86,7 +87,7 @@ registries.kinds.add(KIND, {
   ids: (shot) => [`${shot.id}.item0`],
   nodeField: feedField,
   validate: feedProblems,
-  expand: expandFeed,
+  expand: (shot, ctx) => expandFeed(unmarked(shot), ctx),
   arrivals: timesOf,
   eventDevices: Object.freeze(['message']),
   events: (shot, timing) => timesOf(shot, timing).slice(1).map((t) => ({ kind: 'device', device: 'message', t })),

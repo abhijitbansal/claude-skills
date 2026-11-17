@@ -15,7 +15,7 @@
 // (engine/review/frame.mjs judges landed, settled texts) when the text also rests on another sampled frame, and
 // anything the audit has no rule for.
 import { registries } from '../../engine/registry.mjs';
-import { resolveLook } from '../../engine/graph/film.mjs';
+import { resolveLook, shotTime } from '../../engine/graph/film.mjs';
 import { auditFrame, textStatesIn, textLandings } from '../../engine/review/frame.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
@@ -98,7 +98,8 @@ export function auditPlan(film, timeline) {
     const cut = resolveShotCut(film, shot.index, { shotDuration: shot.duration });
     // once p > 0 a punch draws only the incoming shot: its frames are audited as drawn (a pinned overlay's place included)
     if (cut.incomingOnly && frame > Math.round(shot.start * timeline.fps)) return NOT_A_CUT_SHOT;
-    return frame / timeline.fps - shot.start < cut.dur ? shot.index : NOT_A_CUT_SHOT;
+    // shot time as the film reads it (rounded: 72 / 30 - 2 is 0.3999..., which the film draws as after a 0.4 s window)
+    return shotTime(frame / timeline.fps, shot.start) < cut.dur ? shot.index : NOT_A_CUT_SHOT;
   };
   return auditMoments(film, timeline).map((frame) => [windowShot(frame), frame]);
 }
@@ -287,6 +288,55 @@ function kindFindings(film, timeline, pictures = {}) {
   });
 }
 
+const CUT_SHARE_MAX = 0.5; // a window may take up to half of its shot
+const FRAME_EPSILON = 1e-9;
+const seconds = (t) => `${Number(t.toFixed(SECOND_DECIMALS))} s`;
+
+/**
+ * What the review says about each cut's window against its shot (the resolved cut, unclamped): mechanical when the
+ * window is longer than the shot (the film clamps it, so the cut never finishes), creative when it takes more than half
+ * of it. The path is the shot's `cut`, or the root `cut` the shot takes it from.
+ * @returns {{ kind: 'mechanical' | 'creative', shot: string, path: string, t: number, rule: 'cut-window', node: '', message: string }[]}
+ */
+export function cutWindowFindings(film, timeline) {
+  return timeline.shots.flatMap((shot, index) => {
+    const cut = resolveShotCut(film, index);
+    if (cut === null || cut.dur === 0) return [];
+    const frames = Math.round(shot.duration * timeline.fps);
+    const over = cut.dur * timeline.fps > frames + FRAME_EPSILON;
+    if (!over && cut.dur <= shot.duration * CUT_SHARE_MAX + FRAME_EPSILON) return [];
+    const message = over
+      ? `the ${cut.name} needs ${seconds(cut.dur)} but its shot lasts ${seconds(shot.duration)}, so it never finishes; shorten the cut or lengthen the shot`
+      : `the ${cut.name} is on screen for ${seconds(cut.dur)} of this ${seconds(shot.duration)} shot; shorten it or lengthen the shot`;
+    const path = film.shots[index].cut === undefined ? 'cut' : `shots[${index}].cut`;
+    return [{ kind: over ? MECHANICAL_KIND : CREATIVE_KIND, shot: shot.id, path, t: shot.start, rule: 'cut-window', node: '', message }];
+  });
+}
+
+// The ids a whole snapshot shows in front of the picture plane (depth > 0 is the film's shared background).
+const frontIds = (tree) => new Set(tree.filter((n) => !(n.depth > 0) && n.visible !== false && n.opacity > 0).map((n) => n.id));
+
+/**
+ * A match that carries nothing (lead ruling 2): the last whole snapshot of the shot before and the first whole snapshot
+ * of the matched shot share no node in front of the background, so the match could only crossfade. Creative.
+ * @returns {{ kind: 'creative', shot: string, path: string, t: number, rule: 'match', node: '', message: string }[]}
+ */
+export function matchFindings(film, timeline, snapshots) {
+  const whole = snapshots.filter((snap) => snap.whole);
+  const inShot = (shot) => whole.filter((snap) => shotAtFrame(timeline, snap.frame).index === shot.index);
+  return timeline.shots.flatMap((shot, index) => {
+    if (index === 0 || resolveShotCut(film, index).name !== 'match') return [];
+    const prev = timeline.shots[index - 1];
+    const before = inShot(prev).at(-1), after = inShot(shot)[0];
+    if (!before || !after) return [];
+    const kept = frontIds(before.tree);
+    if ([...frontIds(after.tree)].some((id) => kept.has(id))) return [];
+    const path = film.shots[index].cut === undefined ? 'cut' : `shots[${index}].cut`;
+    const message = `the match into "${shot.id}" carries nothing: it shares no node with shot "${prev.id}"; name the same "hero" on both shots, or use another cut`;
+    return [{ kind: CREATIVE_KIND, shot: shot.id, path, t: shot.start, rule: 'match', node: '', message }];
+  });
+}
+
 // The first shot of a mode that reads from frame 0 must show all of its text on frame 0: in a kind that says its hero
 // reads so (kind.hookText: the statement), every word of the hero is on screen (opacity above 0) in the first frame.
 // Mechanical when not.
@@ -319,7 +369,7 @@ export async function reviewFilm({ session, signal }) {
   const deduped = dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots);
   const still = pacingFindings(film, timeline, await heldFlags(session, signal));
   const loop = await loopFindings(session); // root loop: true (loop.mjs)
-  return [...deduped, ...still, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...loop].sort((a, b) => a.t - b.t);
+  return [...deduped, ...still, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop].sort((a, b) => a.t - b.t);
 }
 
 const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });

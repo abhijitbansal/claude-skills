@@ -36,16 +36,28 @@ uniform float progress;
 uniform float ratio;
 uniform vec2 uRes;
 uniform uint uSeed;
+uniform vec3 uGround;
+uniform vec2 uClearFrom;
+uniform vec2 uClearTo;
+uniform float uHashCell;
 out vec4 outColor;
-vec4 getFromColor(vec2 uv) { return texture(uFrom, vec2(uv.x, 1.0 - uv.y)); }
-vec4 getToColor(vec2 uv) { return texture(uTo, vec2(uv.x, 1.0 - uv.y)); }
+// The clear windows (engine/cuts/shaders CLEAR_NONE): the outgoing picture fades to the incoming ground over progress
+// uClearFrom and the incoming one rises from it over uClearTo; outside 0..1 they leave the pictures as they are.
+vec4 getFromColor(vec2 uv) {
+  vec4 c = texture(uFrom, vec2(uv.x, 1.0 - uv.y));
+  return vec4(mix(c.rgb, uGround, smoothstep(uClearFrom.x, uClearFrom.y, progress)), c.a);
+}
+vec4 getToColor(vec2 uv) {
+  vec4 c = texture(uTo, vec2(uv.x, 1.0 - uv.y));
+  return vec4(mix(uGround, c.rgb, smoothstep(uClearTo.x, uClearTo.y, progress)), c.a);
+}
 uint mmPcg(uint v) {
   uint state = v * 747796405u + 2891336365u;
   uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
   return (word >> 22u) ^ word;
 }
 float mmHash(vec2 co) {
-  uvec2 q = uvec2(ivec2(round(co * 1024.0)));
+  uvec2 q = uvec2(ivec2(round(co * uHashCell)));
   return float(mmPcg(q.x ^ mmPcg(q.y ^ mmPcg(uSeed)))) / 4294967295.0;
 }
 ${body}

@@ -15,6 +15,7 @@ import { registries } from '../registry.mjs';
 import { ease } from '../time/ease.mjs';
 import { stateKey } from '../graph/sample.mjs';
 import { coverParts } from './cover.mjs';
+import { ENTRY_EDGE, entryVector } from './edges.mjs';
 import { LAYER_CUTS } from './layers.mjs';
 import { SHADER_CUTS } from './shaders/index.mjs';
 
@@ -38,9 +39,9 @@ const smoothstep = (lo, hi, v) => {
   return x * x * (3 - 2 * x);
 };
 
-/** The edges a moving cut can bring the incoming shot from, first the default, each as the unit vector from the centre
- *  of the canvas toward that edge. */
-export const EDGES = Object.freeze({ right: Object.freeze([1, 0]), left: Object.freeze([-1, 0]), up: Object.freeze([0, -1]), down: Object.freeze([0, 1]) });
+/** The directions a moving cut takes, first the default, each as the unit vector from the centre of the canvas toward
+ *  the edge the incoming shot enters by (edges.mjs: `up` enters at the bottom and moves up). */
+export const EDGES = Object.freeze(Object.fromEntries(Object.keys(ENTRY_EDGE).map((direction) => [direction, entryVector(direction)])));
 const EDGE_NAMES = Object.freeze(Object.keys(EDGES));
 
 // The endpoints are the plain frames; `blend` only ever sees 0 < p < 1. A node cut's registry entry (resolve.mjs reads
@@ -130,9 +131,12 @@ function slideParts({ from, to, p, canvas, direction }) {
 // The punch zooms the incoming shot about the centre of the canvas. A fixed node stays put, as it does under the camera,
 // and in its place in the shot's order: a locked look's field at the back (still), a pinned overlay (slug, kicker tag,
 // caption) over the picture it sits on (over, or inside the moving run when a zoomed node lies over it).
-function punchParts({ to, canvas }) {
+// The zoom it lands at and its ease are the look's (look.cutMotion.punchZoom, punchEase; engine/looks), else PUNCH's.
+function punchParts({ to, canvas, look }) {
   const cx = canvas.w / HALF, cy = canvas.h / HALF;
-  const zoomOf = (q) => lerp(PUNCH.zoom, 1, ease(PUNCH.ease)(q));
+  const zoom0 = look?.cutMotion?.punchZoom ?? PUNCH.zoom;
+  const curve = ease(look?.cutMotion?.punchEase ?? PUNCH.ease);
+  const zoomOf = (q) => lerp(zoom0, 1, curve(q));
   const first = to.findIndex((n) => n.props.fixed !== true);
   const last = to.findLastIndex((n) => n.props.fixed !== true);
   const [lead, run, tail] = first < 0 ? [to, [], []] : [to.slice(0, first), to.slice(first, last + 1), to.slice(last + 1)];
@@ -195,8 +199,11 @@ const faded = (n, factor) => Object.freeze({ ...n, opacity: n.opacity * factor, 
 // The same node in the same state in both frames (its bbox aside) passes through untouched.
 const identical = (a, b) => stateKey({ ...a, bbox: undefined }) === stateKey({ ...b, bbox: undefined });
 
-const MATCH_FADE = 0.6; // of the cut: an unlike pair leaves over its first 60% and arrives over its last 60%
-const HALF_WAY = 0.5; // an outgoing hero of an unlike pair drifts this share of the way toward the incoming one
+// An unlike pair hands over on one path: the outgoing copy is gone and the incoming one arrives between these points of
+// p, so the two sets of words are never legible at once (look review gate-cuts-1 D1).
+const HAND_FROM = 0.4;
+const HAND_TO = 0.6;
+const HAND_MID = (HAND_FROM + HAND_TO) / HALF;
 
 // What a node shows, for deciding whether two heroes are the same: the words of its texts and the src of its images,
 // through its groups.
@@ -209,45 +216,36 @@ function contentOf(n) {
 // morphs one into the other. Unlike ones (a statement into a number) are not scaled or reflowed into each other.
 const sameHero = (a, b) => a.type === b.type && contentOf(a) === contentOf(b);
 
-const centreOf = (n) => (Array.isArray(n.bbox) && boxSize(n.bbox) > 0 ? boxCentre(n.bbox) : [n.x, n.y]);
-
-// How far the outgoing hero of an unlike pair has drifted toward the incoming one at progress p.
-function offsetOf(from, into, p) {
-  const f = clamp01(p / MATCH_FADE);
-  const [a, b] = [centreOf(from), centreOf(into)];
-  return [(b[0] - a[0]) * HALF_WAY * f, (b[1] - a[1]) * HALF_WAY * f];
-}
-
-// The outgoing hero of an unlike pair: not scaled, drifting up to half the way toward where the incoming hero stands
-// while it fades out over the first MATCH_FADE of the cut.
-function handOff(from, into, p) {
-  const f = clamp01(p / MATCH_FADE);
-  const [dx, dy] = offsetOf(from, into, p);
-  return Object.freeze({ ...from, x: from.x + dx, y: from.y + dy, opacity: from.opacity * (1 - f), visible: from.opacity * (1 - f) > 0 });
-}
-
-// The incoming hero of an unlike pair: it fades in over the last MATCH_FADE of the cut, moving in from where the
-// outgoing hero stands.
-function handIn(from, into, p) {
-  const f = clamp01((p - (1 - MATCH_FADE)) / MATCH_FADE);
-  const e = ease(MATCH.ease)(f);
-  const [a, b] = [centreOf(from), centreOf(into)];
+// An unlike pair (a line into a different line) handed over on one path: both copies ride the same centre and size
+// from where the outgoing hero stood to where the incoming one stands, as morph() carries a like pair, but the outgoing
+// copy is gone before the incoming one shows (HAND_FROM to HAND_TO), so the slot is carried and the words change in
+// flight instead of piling up.
+function handOver(a, b, e, p) {
+  const useBox = Array.isArray(a.bbox) && Array.isArray(b.bbox) && boxSize(a.bbox) > 0 && boxSize(b.bbox) > 0;
+  const pa = placeOf(a, useBox), pb = placeOf(b, useBox);
+  const centre = [lerp(pa.centre[0], pb.centre[0], e), lerp(pa.centre[1], pb.centre[1], e)];
+  const size = lerp(pa.size, pb.size, e);
+  const turn = b.rotate - a.rotate;
+  const copies = [
+    carry(a, { c0: pa.centre, c1: centre, k: size / pa.size, turn: turn * e, opacity: a.opacity * (1 - smoothstep(HAND_FROM, HAND_MID, p)), id: `${a.id}.from` }),
+    carry(b, { c0: pb.centre, c1: centre, k: size / pb.size, turn: -turn * (1 - e), opacity: b.opacity * smoothstep(HAND_MID, HAND_TO, p), id: `${b.id}.to` }),
+  ];
   return Object.freeze({
-    ...into, x: into.x + (a[0] - b[0]) * (1 - e), y: into.y + (a[1] - b[1]) * (1 - e),
-    opacity: into.opacity * f, visible: into.opacity * f > 0,
+    type: 'group', id: b.id, depth: b.depth, props: Object.freeze({ match: true }),
+    x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, draw: 1, reveal: 1, blur: 0, visible: true,
+    children: Object.freeze(copies), ...(useBox ? { bbox: a.bbox.map((v, i) => lerp(v, b.bbox[i], e)) } : {}),
   });
 }
 
 // Drawing order: the shared background the incoming frame starts with (shared nodes behind the picture plane, depth
 // > 0, such as the field: see backgroundNode()), then the outgoing nodes fading out, then the rest of the incoming frame
 // in its own order, a node identical in both passing through, a like shared node morphing in place and an unlike one
-// handed over (handOff, handIn).
+// handed over on the same path (handOver). The rest of the outgoing frame is gone before the rest of the incoming one
+// arrives (MATCH.outgoingShare), so two kickers never stand at once.
 function match({ from, to, p }) {
   const e = ease(MATCH.ease)(p);
   const outgoing = new Map(from.map((n) => [n.id, n]));
   const shared = new Set(to.filter((n) => outgoing.has(n.id)).map((n) => n.id));
-  const unlike = new Set(to.filter((n) => shared.has(n.id) && !(n.depth > 0) && !sameHero(outgoing.get(n.id), n)).map((n) => n.id));
-  const leaving = new Set([...shared].filter((id) => !unlike.has(id)));
   const out = clamp01(1 - p / MATCH.outgoingShare);
   const into = clamp01((p - MATCH.outgoingShare) / (1 - MATCH.outgoingShare));
   const lead = to.findIndex((n) => !shared.has(n.id) || !(n.depth > 0));
@@ -255,23 +253,13 @@ function match({ from, to, p }) {
   const blend = (n) => {
     if (!shared.has(n.id)) return faded(n, into);
     const a = outgoing.get(n.id);
-    if (unlike.has(n.id)) return handIn(a, n, p);
     if (identical(a, n)) return n;
-    return n.depth > 0 ? backgroundNode(a, n, e) : morph(a, n, e);
-  };
-  // The rest of the outgoing frame (a kicker, a highlight, a slug) leaves with its hero as one group: it drifts with it,
-  // or the band would be left behind the text, and fades on the hero's own curve (handOff), not ahead of it.
-  const lead0 = [...unlike][0];
-  const drift = lead0 === undefined ? null : offsetOf(outgoing.get(lead0), to.find((t) => t.id === lead0), p);
-  const withHero = 1 - clamp01(p / MATCH_FADE);
-  const outgoingNode = (n) => {
-    if (unlike.has(n.id)) return handOff(n, to.find((t) => t.id === n.id), p);
-    const gone = faded(n, drift ? withHero : out);
-    return drift && !(n.depth > 0) ? Object.freeze({ ...gone, x: gone.x + drift[0], y: gone.y + drift[1] }) : gone;
+    if (n.depth > 0) return backgroundNode(a, n, e);
+    return sameHero(a, n) ? morph(a, n, e) : handOver(a, n, e, p);
   };
   return [
     ...to.slice(0, split).map(blend),
-    ...from.filter((n) => !leaving.has(n.id)).map(outgoingNode),
+    ...from.filter((n) => !shared.has(n.id)).map((n) => faded(n, out)),
     ...to.slice(split).map(blend),
   ];
 }
@@ -280,11 +268,11 @@ export const CUTS = Object.freeze({
   cut: defineCut({ dur: 0, blend: ({ to }) => to, summary: 'A hard cut: the next shot replaces the last on its first frame.', example: 'cut' }),
   slide: defineCut({
     dur: SLIDE.dur, parts: slideParts, directions: EDGE_NAMES, example: { type: 'slide', direction: 'left' },
-    summary: 'The next shot slides in from an edge (right by default) and pushes the last one out by the other over 0.4 s.',
+    summary: 'The next shot slides in from the right (left: from the left; up: from below, moving up; down: from above, moving down) and pushes the last one out by the other side over 0.4 s.',
   }),
   cover: defineCut({
     dur: COVER.dur, parts: coverParts, directions: EDGE_NAMES, example: { type: 'cover', direction: 'up' },
-    summary: 'The next shot slides in from an edge (right by default) over the last one, which stays where it is, over 0.4 s.',
+    summary: 'The next shot slides in from the right (left, up: moving up from below, down: moving down from above) over the last one, which stays where it is, over 0.4 s.',
   }),
   punch: defineCut({
     dur: PUNCH.dur, parts: punchParts, incomingOnly: true, example: 'punch',

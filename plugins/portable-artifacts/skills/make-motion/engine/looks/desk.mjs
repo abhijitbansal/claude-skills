@@ -132,13 +132,15 @@ export const desk = {
     // of `heroSteps` in `maxLines`, beside the picture from column `besideFrom` (wide) or `gap` under it (tall)
     // screen (engine/kinds/screen.mjs): a white card frame with an ink hairline (`line`, `lineWidth` units) and the
     // contact shadow; window dots and the address pill in `dots` and `pill`, chrome text in `text` and `urlText`; on a
-    // wide frame the framed screen is at most `wideShare` of the room's width; a tall frame's panel `gap` under it
-    screen: { fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
+    // wide frame the framed screen is at most `wideShare` of the room's width; a tall frame's panel `gap` under it; a
+    // push masks the rest with the paper at `pushDim` (1: the region alone at rest, no part-cut UI at the frame edge)
+    screen: { fill: '#ffffff', line: 'ink', lineWidth: 2, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56, pushDim: 1 },
     // map (engine/kinds/map.mjs): a printed sheet (`card`) with the land in paper, ink hairline borders `borderWidth`
     // units, highlights under the highlighter (multiply), red pins; the title on columns 1 to `titleTo` at the largest of
     // `titleSteps`, the map beside it; on a tall frame the places keyed: numbered ink discs (`keyFill`, numbers in
-    // `keyText`) on the map and listed under it beside the same discs `listGap` apart; `gap` between parts
-    map: { card: true, land: 'paper', borders: 'ink', borderWidth: 1.2, highlight: 'accent', multiply: true, pin: 'accent2', titleTo: 4, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'paper' },
+    // `keyText`) on the map and listed under it beside the same discs `listGap` apart; `gap` between parts; place
+    // labels in the `labelFace` (the mono label face: the look has no grotesk for words)
+    map: { card: true, land: 'paper', borders: 'ink', borderWidth: 1.2, highlight: 'accent', multiply: true, pin: 'accent2', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'paper' },
     // diagram (engine/kinds/diagram.mjs): nodes as paper cards (`card`), `pad` in, labels in the display face at the
     // largest of `steps` that fits (at most a third of the title), in `maxLines`; boxes at least `gap` apart; arrows in
     // ink `arrowWidth` wide with a `head`, `margin` off the boxes, stepping on twos; edge labels in ink2 on a paper plate
@@ -146,25 +148,27 @@ export const desk = {
     // `dim`; `advance` (em a character) estimates fit for the review
     diagram: { card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 28, gap: 48, margin: 10, platePad: 8, plate: 'paper', arrow: 'ink', arrowWidth: 5, head: 26, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: false, advance: 0.55 },
     // timeline (engine/kinds/timeline.mjs): `when` in the display face at the largest of `whenSteps` that holds three
-    // times `what` (text face, `whatSteps`, at or above the floor), in `whenLines` and `whatLines`; 16:9 a column per event
+    // times `what` (`whatFace`, the display serif; `whatSteps`, at or above the floor), in `whenLines` and `whatLines`; 16:9 a column per event
     // `gap` apart, text `inset` from its tick and `lineGap` off the line; 9:16 the line `lineX` in from the left, the text
     // `textGap` beside it, `partGap` between when and what; the line and ticks (`tick` long) in ink `lineWidth` wide; the
     // title at the largest of `titleSteps` in two lines; `advance` (em a character) estimates fit for the review
-    timeline: { whenSteps: [4, 3], whatSteps: [2, 1], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 28, lineX: 12, textGap: 48, partGap: 12, line: 'ink', lineWidth: 3, tick: 18, titleSteps: [4, 3], titleGap: 48, advance: 0.55 },
+    timeline: { whatFace: 'display', whenSteps: [4, 3], whatSteps: [2], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 28, lineX: 12, textGap: 48, partGap: 12, line: 'ink', lineWidth: 3, tick: 18, titleSteps: [4, 3], titleGap: 48, advance: 0.55 },
     // code (engine/kinds/code.mjs): a printout on a paper card (`card`), `pad` units in, one size in `font` (the label
     // face's mono) as large as every line fits, between the smallest and the largest of `steps` (step 3: larger reads as
-    // a poster, seen on the sheets), `advance` em a character, `lineHeight` em a row;
+    // a poster, seen on the sheets; step 2, the reading floor, at the least: smaller did not read on the phone tile),
+    // `advance` em a character, `lineHeight` em a row;
     // token roles in palette keys (`roles`); a highlighted line under the highlighter (`highlight.band`, multiply); a
     // diff's signs in `removed` and `added`, a removed line struck `strike` units thick; the run prompt in `prompt`; on a
     // tall frame the title (or a run's command) is the hero over the card, `heroAdvance` (em a character) the review's
     // estimate of its width
-    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.4, pad: 48, steps: [1, 2, 3], card: true, roles: { plain: 'ink', keyword: 'accent2', string: 'ink2', number: 'accent2', comment: 'ink2', name: 'ink', punct: 'ink2' }, highlight: { band: 'accent', multiply: true }, removed: 'accent2', added: 'ink', strike: 4, prompt: 'ink2', heroAdvance: 0.5 },
+    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.4, pad: 48, steps: [2, 3], card: true, roles: { plain: 'ink', keyword: 'accent2', string: 'ink2', number: 'accent2', comment: 'ink2', name: 'ink', punct: 'ink2' }, highlight: { band: 'accent', multiply: true }, removed: 'accent2', added: 'ink', strike: 4, prompt: 'ink2', heroAdvance: 0.5 },
     // feed (engine/kinds/feed.mjs): paper slips down one column of the room, every text one size (the largest of `steps`
     // from the format's floor that holds each message in `maxLines` and, where it can, the whole thread), `pad` in,
     // `gap` apart, at most `share` of the room wide; `me` right on the highlighter tint, `them` left on white; names and
-    // the title in the text face at `bold`; notifications as white cards, the app's disc in `discs` (by app) with its
+    // messages in `face` (the display serif) at `bold` for names, the title in `titleFace` (the mono label face, a
+    // speaker tag); notifications as white cards, the app's disc in `discs` (by app) with its
     // initial in `discText`; typing dots in `dots`; the contact shadow under each slip
-    feed: { steps: [2, 3, 4], maxLines: 4, pad: 24, gap: 20, share: 0.82, radius: 6, bold: 700, me: { fill: 'accent', text: 'ink' }, them: { fill: '#ffffff', text: 'ink' }, card: { fill: '#ffffff', text: 'ink' }, discs: ['accent2', 'ink', 'ink2'], discText: 'paper', dots: 'ink2', title: 'ink2', lineWidth: 0, shadow: true },
+    feed: { face: 'display', titleFace: 'label', steps: [2, 3, 4], maxLines: 4, pad: 24, gap: 20, share: 0.82, radius: 6, bold: 700, me: { fill: 'accent', text: 'ink' }, them: { fill: '#ffffff', text: 'ink' }, card: { fill: '#ffffff', text: 'ink' }, discs: ['accent2', 'ink', 'ink2'], discText: 'paper', dots: 'ink2', title: 'ink2', lineWidth: 0, shadow: true },
     media: { treatment: 'duotone', push: 1.05, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 40, toWide: 6, toTall: 12, besideFrom: 8, gap: 48 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.

@@ -26,6 +26,7 @@ import { skyParts } from './number-sky.mjs';
 import { hasSun } from '../devices/sun.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { VALUE_SCHEMA } from './values.mjs';
+import { unmarked } from './shared.mjs';
 
 const AFFIX_MAX = 8;
 const LABEL_MAX = 60;
@@ -180,7 +181,10 @@ function digitsLayout(steps, font, measure, centred, right = false) {
     const m = measure(w.text, font);
     return { left: Number.isFinite(m.inkLeft) ? m.inkLeft : 0, right: Number.isFinite(m.inkRight) ? m.inkRight : w.width };
   };
-  const inkLeft = final[0].x + edges(final[0]).left;
+  // the left ink edge is the leftmost of every step the count shows, not only the final value's: a digit whose ink
+  // reaches further left (a 3's flared terminal) never pokes past the edge the figure is set on mid-count (k6 ruling b);
+  // where the final value's ink is already the leftmost this is the same edge
+  const inkLeft = Math.min(...meta.map((m) => words[m.words[0]]).map((w) => w.x + edges(w).left));
   return { layout, wordTracks, steps: meta, advance, ascent, inkLeft, inkWidth: final.at(-1).x + edges(final.at(-1)).right - inkLeft };
 }
 
@@ -478,7 +482,7 @@ registries.kinds.add('number', {
   targets: (shot) => ['value', 'label', ...(shot.delta === undefined ? [] : ['delta'])],
   ids: (shot) => [heroId(shot, 'value')],
   validate: heroProblems,
-  expand: expandNumber,
+  expand: (shot, ctx) => expandNumber(unmarked(shot), ctx),
   landing: landingOf, // when the figure reaches its value, as expand lands it (read by scripts/v2/sound/events.mjs)
   numbered: true, // counts toward the slug numbers of a film
   showsWords: true, // the figure, its label and delta restate the narration: never captioned (engine/captions)

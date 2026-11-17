@@ -44,7 +44,11 @@ function runNode(id, run, { x, top, font, measure, fill, tracks, wordFill }) {
  * row: { id, tokens, top, field }; geo: { x (inner left), advance (px a column), font, measure }.
  */
 export function rowNodes(row, geo, { look, data, times = [], from = 0, lit, litAt }) {
-  return runsOf(row.tokens).map((run, j) => {
+  // the part of a line past the panel's last column (geo.cols: a line too long for the reading floor) is cut off at the
+  // panel's edge, not spilled; the review names the line to cut
+  const room = (run) => (geo.cols === undefined ? Infinity : geo.cols - from - run.col);
+  const kept = runsOf(row.tokens).map((run, j) => ({ run: room(run) >= [...run.text].length ? run : { ...run, text: [...run.text].slice(0, Math.max(0, room(run))).join('') }, j }));
+  return kept.filter(({ run }) => run.text !== '').map(({ run, j }) => {
     const fill = colourOf(look, data.roles[run.role] ?? data.roles.plain);
     const wordFill = lit !== undefined ? track([{ t: 0, v: fill }, { t: litAt, v: fill }, { t: litAt, v: lit }]) : undefined;
     return runNode(`${row.id}.c${run.col}`, run, { x: geo.x + (from + run.col) * geo.advance, top: row.top, font: geo.font, measure: geo.measure, fill, tracks: { opacity: arrivalTrack(times[j] ?? 0) }, wordFill });

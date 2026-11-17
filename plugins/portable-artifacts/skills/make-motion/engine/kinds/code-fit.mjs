@@ -5,6 +5,7 @@
 // The panel fills the room the kind composes in (arrivals.mjs roomOf) less `pad` units each side. The review has no
 // page, so it rebuilds that room from the platform insets the review passes. Pure and DOM-free.
 import { compositionRect, sizeAt } from './shared.mjs';
+import { editorialLeft } from './arrivals.mjs';
 
 const HALF = 2;
 const REFERENCE_WIDTH = 1080; // units: `platform` sides are measured on a 1080-wide canvas
@@ -16,7 +17,8 @@ export function reviewRoom(look, canvas, viralInsets) {
   const margin = look.grid.margin * unit;
   const rect = compositionRect({ canvas, look, viralInsets });
   if (rect.safe) return { x: rect.left, y: rect.top, w: rect.w, h: rect.h };
-  return { x: margin, y: margin, w: canvas.w - HALF * margin, h: canvas.h - HALF * margin };
+  const left = editorialLeft(look, canvas, unit); // as roomOf: the one left margin of an editorial wide frame
+  return { x: left, y: margin, w: canvas.w - HALF * left, h: canvas.h - HALF * margin };
 }
 
 /** The panel's inner box in px: the room less `pad` units each side. */

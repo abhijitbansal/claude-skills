@@ -27,10 +27,13 @@ vec4 transition (vec2 uv) {
 }
 `;
 
+import { MIXED_CLEAR } from './clear.mjs';
+
 export const wind = Object.freeze({
   name: 'wind',
   source: SOURCE,
-  params: Object.freeze({ size: 0.2, reversed: false }),
+  // a ragged row is a band 1/40 of the frame high, not one texel (gate-cuts-1 D11: scanline stripes); clear windows
+  params: Object.freeze({ size: 0.2, reversed: false, uHashCell: 40, ...MIXED_CLEAR }),
   standIn: 'wipe',
   license: Object.freeze({ spdx: 'MIT', author: 'gre', origin: 'transitions/Wind.glsl', commit: 'e7c6ce2c9173ab57382279b58d056133caed5d1f' }),
   summary: 'A ragged wipe from the left, as if the shot blew away, over 0.6 s (WebGL2; a wipe without it).',

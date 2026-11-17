@@ -10,9 +10,10 @@ import { kindData, kindSupportProblems, supportsKind } from '../looks/index.mjs'
 import { didYouMean } from '../../shared/errors.mjs';
 import { HERO_SCHEMA, fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks, unionBox, isWide, sizeAt } from './shared.mjs';
 import { defaultCamera } from './camera.mjs';
-import { landBy, namedTimes, latestLanding } from './arrivals.mjs';
+import { landBy, namedTimes, latestLanding, editorialLeft } from './arrivals.mjs';
 import { diagramLayout, floorStep } from './diagram-draw.mjs';
 import { fitDiagram } from './diagram-layout.mjs';
+import { unmarked } from './shared.mjs';
 
 const KIND = 'diagram';
 const EDGE_LAG = 0.4; // s after both ends are on that an edge has drawn
@@ -79,7 +80,8 @@ function reviewArea(shot, look, canvas, data, unit) {
   const margin = look.grid.margin * unit;
   const band = !isWide(canvas) && look.band ? [look.band.top * canvas.h, look.band.bottom * canvas.h] : [margin, canvas.h - margin];
   const title = shot.title === undefined ? 0 : sizeAt(look, Math.max(...data.titleSteps), unit) * HALF + data.titleGap * unit;
-  return { x: margin, y: band[0] + title, w: canvas.w - HALF * margin, h: band[1] - band[0] - title };
+  const left = editorialLeft(look, canvas, unit); // the kind's room (arrivals.mjs roomOf)
+  return { x: left, y: band[0] + title, w: canvas.w - HALF * left, h: band[1] - band[0] - title };
 }
 
 // Labels that do not fit at the look's floor in the layout: a finding at the longest node label.
@@ -149,7 +151,7 @@ registries.kinds.add(KIND, {
   nodeField: diagramField,
   validate: diagramProblems,
   review: diagramReview,
-  expand: expandDiagram,
+  expand: (shot, ctx) => expandDiagram(unmarked(shot), ctx),
   arrivals,
   eventDevices: Object.freeze(['node']),
   events: (shot, timing) => arrivals(shot, timing).nodes.slice(1).map((t) => ({ kind: 'device', device: 'node', t })),

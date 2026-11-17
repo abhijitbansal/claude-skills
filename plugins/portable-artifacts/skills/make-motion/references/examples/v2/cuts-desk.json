@@ -1,0 +1,138 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "voice": { "name": "af_heart" },
+  "sound": "on",
+  "look": "desk",
+  "format": "16:9",
+  "seed": 11,
+  "cut": { "type": "crossfade", "duration": 0.5 },
+  "shots": [
+    {
+      "id": "open",
+      "show": "statement",
+      "hero": "line",
+      "kicker": "Between shots",
+      "say": "Every shot has to end *somewhere*."
+    },
+    {
+      "id": "carry",
+      "show": "statement",
+      "cut": "match",
+      "hero": "line",
+      "kicker": "Match",
+      "say": "A match carries one line *across* the cut, from where it stood to where it lands."
+    },
+    {
+      "id": "push",
+      "show": "number",
+      "cut": "slide",
+      "kicker": "Slide",
+      "say": "A slide pushes the last shot out by one of its four edges.",
+      "value": 4,
+      "label": "edges a slide can use"
+    },
+    {
+      "id": "back",
+      "show": "statement",
+      "cut": { "type": "slide", "direction": "left" },
+      "kicker": "Slide, from the left",
+      "say": "This one came in from the *left*."
+    },
+    {
+      "id": "dissolve",
+      "show": "quote",
+      "say": "A crossfade lets one picture melt into the next.",
+      "by": "The film's own default cut"
+    },
+    {
+      "id": "dip",
+      "show": "statement",
+      "cut": "fade",
+      "kicker": "Fade",
+      "say": "A fade dips through the next background, then rises."
+    },
+    {
+      "id": "page",
+      "show": "clipping",
+      "cut": { "type": "wipe", "direction": "left" },
+      "src": "clipping.png",
+      "kicker": "Wipe",
+      "caption": "A straight edge",
+      "say": "A wipe uncovers the next picture with one straight edge.",
+      "regions": { "query": [0.58, 0.14, 0.37, 0.24] },
+      "on": [{ "at": "word:edge", "do": "highlight", "target": "region:query" }]
+    },
+    {
+      "id": "steps",
+      "show": "list",
+      "cut": { "type": "wipe", "direction": "right" },
+      "title": "A wipe from the right",
+      "style": "steps",
+      "say": "The edge starts on the right. It crosses the frame. It ends on the left.",
+      "items": ["Start on the right", "Cross the frame", "End on the left"]
+    },
+    {
+      "id": "circle",
+      "show": "media",
+      "cut": { "type": "iris", "direction": "in" },
+      "src": "photo.png",
+      "caption": "Iris",
+      "say": "An iris opens a circle from the centre of the frame."
+    },
+    {
+      "id": "focus",
+      "show": "statement",
+      "cut": { "type": "blur", "duration": 0.8 },
+      "kicker": "Blur, held longer",
+      "say": "A blur brings the next shot into focus, slowly, over most of a second."
+    },
+    {
+      "id": "curl",
+      "show": "clipping",
+      "cut": "page-curl",
+      "src": "dashboard.png",
+      "caption": "Page curl",
+      "say": "A page curl turns the whole frame over like paper."
+    },
+    {
+      "id": "gust",
+      "show": "timeline",
+      "cut": "wind",
+      "say": "Wind blows the shot away in ragged rows, from left to right, until it is gone.",
+      "events": [{ "when": "First", "what": "Ragged rows" }, { "when": "Then", "what": "Left to right" }, { "when": "Last", "what": "Gone" }]
+    },
+    {
+      "id": "slats",
+      "show": "compare",
+      "cut": "window-slices",
+      "mode": "before-after",
+      "say": "Window slices open in slats. Before, one shot. After, the next.",
+      "left": { "title": "Before", "points": ["One shot"] },
+      "right": { "title": "After", "points": ["The next one"] }
+    },
+    {
+      "id": "drop",
+      "show": "statement",
+      "cut": "water-drop",
+      "kicker": "Water drop",
+      "say": "A drop lands in the middle, and the next shot rides the *ripple*."
+    },
+    {
+      "id": "warp",
+      "show": "diagram",
+      "cut": "cross-warp",
+      "say": "A cross warp swells one shot as the next one settles in.",
+      "nodes": [{ "id": "old", "label": "Old shot" }, { "id": "new", "label": "New shot" }],
+      "edges": [{ "from": "old", "to": "new" }]
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "cut": "cut",
+      "say": "And sometimes the best cut is no transition at all.",
+      "ask": "Pick one per shot",
+      "mark": "make-motion"
+    }
+  ]
+}

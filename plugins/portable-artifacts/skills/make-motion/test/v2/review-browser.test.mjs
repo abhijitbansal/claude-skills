@@ -37,7 +37,8 @@ let specDir;
 before(() => {
   specDir = mkdtempSync(path.join(tmpdir(), 'mm-v2-review-browser-'));
   mkdirSync(path.join(specDir, 'assets'));
-  writeFileSync(path.join(specDir, 'assets', 'screenshot.png'), stripedPng(640, 400));
+  // 1600 px wide: the screen example's zoom stops at the picture's own pixels (gate-kinds-b-1)
+  writeFileSync(path.join(specDir, 'assets', 'screenshot.png'), stripedPng(1600, 1000));
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
 

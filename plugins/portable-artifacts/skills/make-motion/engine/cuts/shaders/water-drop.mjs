@@ -69,10 +69,13 @@ vec4 transition(vec2 uv) {
 }
 `;
 
+import { MIXED_CLEAR } from './clear.mjs';
+
 export const waterDrop = Object.freeze({
   name: 'water-drop',
   source: SOURCE,
-  params: Object.freeze({ amplitude: 30, speed: 30, center: [0.5, 0.5], refraction: 0.015, highlight: 0.5 }),
+  // fewer, flatter rings with half the glint (look review gate-cuts-1 D13: an embossed target); clear windows
+  params: Object.freeze({ amplitude: 18, speed: 30, center: [0.5, 0.5], refraction: 0.008, highlight: 0.2, ...MIXED_CLEAR }),
   standIn: 'crossfade',
   license: Object.freeze({ spdx: 'MIT', author: 'Paweł Płóciennik', origin: 'transitions/WaterDrop.glsl', commit: 'e7c6ce2c9173ab57382279b58d056133caed5d1f' }),
   summary: 'A drop falls into the shot: ripples spread and the next shot shows inside the leading one, over 0.6 s (WebGL2; a crossfade without it).',

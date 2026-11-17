@@ -15,7 +15,9 @@ import { landBy } from './arrivals.mjs';
 import { REGION_PREFIX, regionOf, cutsToCloseUp, isWide, fieldNode, onDevices, placeDevices, deviceCamera, requireDevice, NOT_BLANK, assertNoBlanks } from './shared.mjs';
 import { defaultCamera } from './camera.mjs';
 import { FRAMES } from './screen-frame.mjs';
-import { frameFor, isTwoPanel, twoPanelLayout, singleLayout } from './screen-layout.mjs';
+import { frameFor, isTwoPanel, twoPanelLayout, singleLayout, zoomReach } from './screen-layout.mjs';
+import { unmarked } from './shared.mjs';
+import { unitOf } from '../units.mjs';
 
 const KIND = 'screen';
 const TITLE_MAX = 40;
@@ -56,18 +58,32 @@ function zoomProblems(shot) {
   return [{ path: 'zoom', message: `no region "${shot.zoom}"${hint ? `; did you mean "${hint}"?` : ''} (regions: ${names.join(', ') || 'none'})` }];
 }
 
+// A zoom the picture's pixels cannot carry stops at its own resolution (screen-layout.mjs: a push's cap, a panel drawn
+// no larger than its crop) and says so, with the picture width the whole zoom needs.
+const ZOOM_SLACK = 1.01; // a zoom within 1% of the picture's resolution is not reported
+function zoomResolution(shot, { canvas, look, viralInsets }, picture) {
+  const region = shot.regions?.[zoomRegion(shot)];
+  if (!region || !supportsKindData(look)) return [];
+  const reach = zoomReach(shot, { look, canvas, unit: unitOf(canvas), viralInsets, captions: false, data: kindData(look, KIND) }, picture, region);
+  if (reach === null || reach.wanted <= reach.cap * ZOOM_SLACK) return [];
+  const need = Math.ceil((picture.width * reach.wanted) / reach.cap);
+  return [{ path: 'zoom', at: 0, message: `the picture is ${picture.width} px wide, so the zoom to "${zoomRegion(shot)}" stops at its own resolution instead of a soft upscale; give a picture at least ${need} px wide for the whole zoom` }];
+}
+const supportsKindData = (look) => look.kinds?.[KIND] !== undefined;
+
 function screenProblems(shot, { look, at } = {}) {
   return [...kindSupportProblems(KIND, look), ...regionProblems(shot), ...zoomProblems(shot), ...closeUpProblems(shot, look, at)];
 }
 
 // Creative advice: nothing to go to (a still), a wide screen on a tall frame with nothing to enlarge, chrome text the
 // frame has no row for. `asset(src)` is the picture's loaded size (scripts/v2/review.mjs), undefined when unknown.
-function screenReview(shot, { canvas, asset }) {
+function screenReview(shot, { canvas, asset, look, viralInsets }) {
   const out = [];
   const none = zoomRegion(shot) === null;
   if (none) out.push({ path: 'zoom', at: 0, message: 'name a region to go to, or mark one with an on event: a screen that only sits there is a still' });
   const picture = typeof asset === 'function' ? asset(shot.src) : undefined;
   if (!picture) return out;
+  if (!none && look) out.push(...zoomResolution(shot, { canvas, look, viralInsets }, picture));
   if (none && isTwoPanel(shot, picture, canvas)) out.push({ path: 'regions', at: 0, message: 'name a region to enlarge: a wide screen on a tall frame leaves half of it empty' });
   const frame = frameFor(shot, picture);
   if (shot.title !== undefined && !['browser', 'window'].includes(frame)) out.push({ path: 'title', at: 0, message: `a ${frame} frame has no title row, so the title is not drawn; use frame "browser" or "window", or remove it` });
@@ -107,7 +123,8 @@ registries.kinds.add(KIND, {
   summary: 'A screenshot upright in a device frame (browser, window, phone or none) with its title and url in the chrome; the camera goes to a named region (zoom, or the first region an on event marks): a push in desk, a cut to a close-up in pop, or on a tall frame the region enlarged under the screen.',
   example: {
     id: 'report', show: KIND, src: 'assets/screenshot.png', say: 'This is the weekly report. The total sits at the bottom.',
-    title: 'Weekly report', url: 'example.com/report', regions: { total: [0.1, 0.6, 0.5, 0.25] }, zoom: 'total',
+    // a region the picture's own pixels carry at the full push (a narrower one is a resolution finding)
+    title: 'Weekly report', url: 'example.com/report', regions: { total: [0.05, 0.6, 0.9, 0.3] }, zoom: 'total',
   },
   schema: {
     required: ['src'],
@@ -128,7 +145,7 @@ registries.kinds.add(KIND, {
   nodeField: screenField,
   validate: screenProblems,
   review: screenReview,
-  expand: expandScreen,
+  expand: (shot, ctx) => expandScreen(unmarked(shot), ctx),
   // the zoom's arrival: a device event the looks name a sound for (sounds.device.zoom)
   eventDevices: Object.freeze(['zoom']),
   events: (shot, timing) => {

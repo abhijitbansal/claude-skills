@@ -158,7 +158,8 @@ test('a wide screen on a tall frame with no region to enlarge is a creative find
 test('a screen with nothing to point at is a creative finding at zoom', () => {
   const found = reviewOf({ id: 's', show: 'screen', src: 'shot.png', hold: 3 }, 'desk', '16:9');
   assert.deepEqual(found.filter((f) => f.path === 'zoom').map((f) => f.message), ['name a region to go to, or mark one with an on event: a screen that only sits there is a still']);
-  assert.deepEqual(reviewOf(base({ hold: 3, zoom: 'query' }), 'desk', '16:9'), []);
+  // with a zoom, the only advice left is that the 1600 px picture cannot carry the whole push (gate-kinds-b-1 ruling 3)
+  assert.deepEqual(reviewOf(base({ hold: 3, zoom: 'query' }), 'desk', '16:9').map((f) => f.message.replace(/\d+ px wide for/, 'N px wide for')), ['the picture is 1600 px wide, so the zoom to "query" stops at its own resolution instead of a soft upscale; give a picture at least N px wide for the whole zoom']);
 });
 
 test('zoom must name a region, with did-you-mean', () => {

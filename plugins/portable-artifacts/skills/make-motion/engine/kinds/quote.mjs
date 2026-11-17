@@ -15,6 +15,7 @@ import { defaultCamera } from './camera.mjs';
 import { quotationOf, quoteTimes } from './quote-text.mjs';
 import { expandDeskQuote } from './quote-desk.mjs';
 import { expandPopQuote } from './quote-pop.mjs';
+import { unmarked } from './shared.mjs';
 
 export { OPEN_MARK, CLOSE_MARK, BY_SEPARATOR, quoteBody, quotationOf, attributionOf, quoteTimes } from './quote-text.mjs';
 
@@ -73,7 +74,7 @@ registries.kinds.add(KIND, {
     return undefined;
   },
   validate: quoteProblems,
-  expand: expandQuote,
+  expand: (shot, ctx) => expandQuote(unmarked(shot), ctx),
   lookData: true, // a look ships it only with a kinds.quote entry (engine/looks/index.mjs listedKinds)
   numbered: false, // no slug
   showsWords: true, // its narration is the picture: never captioned (engine/captions)

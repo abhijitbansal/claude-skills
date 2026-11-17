@@ -1,7 +1,7 @@
 // The `map` kind's preparer: projects the shot's atlas (geoEqualEarth for the world, geoAlbersUsa for the US, both from
 // d3-geo, fitted to a box WIDTH wide) into plain JSON the page draws: the land and the borders as path strings (to 0.1),
 // each highlighted area's path, each place's point, each route as points along it (a great-circle arc on the world, a
-// straight line on the US), and the padded box round the places and highlights. A place the projection cannot show (the
+// straight line on the US; a world route that crosses the antimeridian as `parts` clipped at the map's edges), and the padded box round the places and highlights. A place the projection cannot show (the
 // US map shows no Paris) is a problem at its path. Deterministic and bounded; never touches the network. Node only.
 import { geoEqualEarth, geoAlbersUsa, geoPath, geoInterpolate } from 'd3-geo';
 import { feature, mesh } from 'topojson-client';
@@ -10,6 +10,7 @@ import { atlasOf } from './atlases.mjs';
 export const WIDTH = 1000; // the projected map's width; the page scales it to its box
 const DIGITS = 1; // path coordinates to 0.1
 const ROUTE_POINTS = 9; // points along a route
+const CROSSING_POINTS = 25; // points along a route that crosses the antimeridian (split into parts at the map's edge)
 const EXTENT_PAD = 0.12; // of the extent's larger side, round the places and highlights...
 const EXTENT_MIN = 160; // ...and never smaller than this (a single place)
 const round = (v) => Math.round(v * 10 ** DIGITS) / 10 ** DIGITS + 0;
@@ -28,16 +29,49 @@ function placesOf(shot, projection, problems) {
   });
 }
 
+const HALF_TURN = 180; // degrees: the antimeridian
+const EDGE_IN = 1e-6; // degrees inside the antimeridian, so a point on it projects onto its own side's edge
+
+// The great circle from a to b as [lon, lat] runs, cut where it crosses the antimeridian: each run ends (or starts) on
+// the map's edge at the latitude where the arc crosses it, so a route the short way across the Pacific is drawn as two
+// pieces clipped at the edges instead of a line back across the whole map. `steps` points along the arc.
+function arcRuns(a, b, steps) {
+  const along = geoInterpolate(a, b);
+  const pts = Array.from({ length: steps }, (_, k) => along(k / (steps - 1)));
+  const runs = [[pts[0]]];
+  for (let k = 1; k < pts.length; k++) {
+    const [[lon0, lat0], [lon1, lat1]] = [pts[k - 1], pts[k]];
+    if (Math.abs(lon1 - lon0) > HALF_TURN) {
+      const side = Math.sign(lon0) || 1;
+      const lon1Unwrapped = lon1 + side * 2 * HALF_TURN;
+      const t = (side * HALF_TURN - lon0) / (lon1Unwrapped - lon0);
+      const lat = lat0 + (lat1 - lat0) * t;
+      runs.at(-1).push([side * (HALF_TURN - EDGE_IN), lat]);
+      runs.push([[-side * (HALF_TURN - EDGE_IN), lat]]);
+    }
+    runs.at(-1).push(pts[k]);
+  }
+  return runs;
+}
+
+const projected = (projection, run) => run.map((p) => projection(p)).filter(Boolean).map(([x, y]) => [round(x), round(y)]);
+
 function routesOf(shot, projection) {
   const byName = new Map((shot.places ?? []).map((p) => [p.name, p.at]));
   return (shot.routes ?? []).map((route) => {
     const [a, b] = [byName.get(route.from), byName.get(route.to)];
-    const along = shot.region === 'world' ? geoInterpolate(a, b) : null;
-    const points = Array.from({ length: ROUTE_POINTS }, (_, k) => {
+    if (shot.region === 'world') {
+      const runs = arcRuns(a, b, ROUTE_POINTS);
+      if (runs.length === 1) return { from: route.from, to: route.to, points: projected(projection, runs[0]) };
+      // a route across the antimeridian: more points, so each clipped part keeps its curve
+      const parts = arcRuns(a, b, CROSSING_POINTS).map((run) => projected(projection, run));
+      return { from: route.from, to: route.to, parts };
+    }
+    const [p, q] = [projection(a), projection(b)];
+    const points = p && q ? Array.from({ length: ROUTE_POINTS }, (_, k) => {
       const t = k / (ROUTE_POINTS - 1);
-      const xy = along ? projection(along(t)) : (() => { const [p, q] = [projection(a), projection(b)]; return p && q ? [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t] : null; })();
-      return xy ? [round(xy[0]), round(xy[1])] : null;
-    }).filter(Boolean);
+      return [round(p[0] + (q[0] - p[0]) * t), round(p[1] + (q[1] - p[1]) * t)];
+    }) : [];
     return { from: route.from, to: route.to, points };
   });
 }

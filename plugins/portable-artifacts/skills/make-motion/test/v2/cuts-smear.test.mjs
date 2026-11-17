@@ -102,7 +102,7 @@ test('cover\'s leading edge is look data: a keyline and a fading shadow just out
   assert.equal(nodes[0].props.d, 'M-9 0H-3V1080H-9Z');
   assert.deepEqual(nodes.map((n) => n.props.fill), ['#111111', '#111111', '#111111', '#111111', '#cccccc']);
   assert.ok(nodes[0].opacity > nodes[3].opacity, 'the shadow fades outwards');
-  assert.equal(coverEdgeNodes(edge, 'up', CANVAS, palette).at(-1).props.d, 'M0 1080H1920V1083H0Z', 'from the top it leads with its bottom');
+  assert.equal(coverEdgeNodes(edge, 'down', CANVAS, palette).at(-1).props.d, 'M0 1080H1920V1083H0Z', 'down: from the top it leads with its bottom');
   assert.deepEqual(coverEdgeNodes(undefined, 'up', CANVAS, palette), [], 'no edge in a look that gives none');
 });
 

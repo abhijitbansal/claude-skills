@@ -59,7 +59,8 @@ test('the directions are version 1\'s: wipe from left, right, up, down; iris and
 });
 
 test('wipe from each edge at p 0.5 clips the incoming picture to the half on that side', () => {
-  const half = { left: [0, 0, 960, 1080], right: [960, 0, 960, 1080], up: [0, 0, 1920, 540], down: [0, 540, 1920, 540] };
+  // a wipe up grows from the bottom edge, a wipe down from the top (engine/cuts/edges.mjs)
+  const half = { left: [0, 0, 960, 1080], right: [960, 0, 960, 1080], up: [0, 540, 1920, 540], down: [0, 0, 1920, 540] };
   for (const [direction, rect] of Object.entries(half)) {
     const r = recipe('wipe', 0.5, direction);
     assert.deepEqual(r.to.clip, { rect }, direction);
@@ -90,10 +91,12 @@ test('fade dips through the incoming background: neither picture shows at p 0.5'
   assert.ok(recipe('fade', 0.75).to.opacity > 0 && recipe('fade', 0.75).from.opacity === 0, 'the incoming shot fades up over the second half');
 });
 
-test('crossfade at p 0.5 lays the incoming picture at half strength over the outgoing one', () => {
+// gate-cuts-1 PF3 / lead ruling 3: the outgoing picture is cleared by the middle (cuts-revise.test.mjs has the rule).
+test('crossfade at p 0.5: the outgoing picture is gone and the incoming one is on its way up, over the incoming background', () => {
   const r = recipe('crossfade', 0.5);
   assert.equal(r.under, 'from');
-  assert.equal(r.to.opacity, 0.5);
+  assert.equal(r.from.opacity, 0);
+  assert.ok(r.to.opacity > 0 && r.to.opacity < 0.5, `incoming at ${r.to.opacity}`);
 });
 
 test('blur never returns a negative radius, and its radius grows with the canvas', () => {

@@ -228,10 +228,12 @@ vec4 transition(vec2 p) {
 }
 `;
 
+import { MIXED_CLEAR } from './clear.mjs';
+
 export const pageCurl = Object.freeze({
   name: 'page-curl',
   source: SOURCE,
-  params: Object.freeze({}),
+  params: Object.freeze({ ...MIXED_CLEAR }), // clear windows: the back of the page shows faint ground, not mirrored words (gate-cuts-1 D10)
   standIn: 'wipe',
   license: Object.freeze({ spdx: 'BSD-3-Clause', author: 'Hewlett-Packard', origin: 'transitions/InvertedPageCurl.glsl', commit: 'e7c6ce2c9173ab57382279b58d056133caed5d1f' }),
   summary: 'The shot curls away like a page and shows the next one under it, over 0.6 s (WebGL2; a wipe without it).',

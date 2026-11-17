@@ -1,0 +1,150 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "voice": { "name": "af_heart" },
+  "sound": "on",
+  "music": { "bed": "drift", "bpm": 92 },
+  "look": "desk",
+  "format": "16:9",
+  "seed": 11,
+  "shots": [
+    {
+      "id": "hook",
+      "show": "statement",
+      "kicker": "A small print shop",
+      "say": "One year of orders told us what to *print*."
+    },
+    {
+      "id": "print",
+      "show": "media",
+      "src": "photo.png",
+      "caption": "Dawn Ridge, our best seller",
+      "say": "Dawn Ridge, our best seller, is a ridge at first light."
+    },
+    {
+      "id": "year",
+      "show": "timeline",
+      "title": "Our first year",
+      "events": [
+        { "when": "Mar", "what": "The first print sold" },
+        { "when": "Jun", "what": "The shop went online" },
+        { "when": "Sep", "what": "Orders from abroad" },
+        { "when": "Dec", "what": "A dashboard for orders" }
+      ],
+      "say": "March: the first print sold. June: the shop went online. September: orders from abroad. December: a dashboard for orders."
+    },
+    {
+      "id": "dash",
+      "show": "screen",
+      "src": "dashboard.png",
+      "title": "Orders dashboard",
+      "url": "ridgelineprints.shop/orders",
+      "regions": { "regions": [0.4963, 0.226, 0.4875, 0.483] },
+      "zoom": "regions",
+      "say": "The dashboard counts every paid order. The North leads, with one hundred and eighty two."
+    },
+    {
+      "id": "reach",
+      "show": "map",
+      "region": "world",
+      "title": "Where the prints go",
+      "places": [
+        { "name": "Denver", "at": [-104.99, 39.74] },
+        { "name": "Oslo", "at": [10.75, 59.91] },
+        { "name": "Kyoto", "at": [135.77, 35.01] },
+        { "name": "Lima", "at": [-77.04, -12.05] }
+      ],
+      "routes": [
+        { "from": "Denver", "to": "Oslo" },
+        { "from": "Denver", "to": "Kyoto" },
+        { "from": "Denver", "to": "Lima" }
+      ],
+      "say": "We print in Denver and ship to Oslo, Kyoto and Lima."
+    },
+    {
+      "id": "flow",
+      "show": "diagram",
+      "title": "One order",
+      "nodes": [
+        { "id": "order", "label": "Order" },
+        { "id": "print", "label": "Print" },
+        { "id": "pack", "label": "Pack" },
+        { "id": "ship", "label": "Ship" }
+      ],
+      "edges": [
+        { "from": "order", "to": "print" },
+        { "from": "print", "to": "pack" },
+        { "from": "pack", "to": "ship" }
+      ],
+      "say": "Each order goes to print, then to pack, then to ship."
+    },
+    {
+      "id": "count",
+      "show": "code",
+      "lang": "js",
+      "title": "Count by region",
+      "highlight": [4, 5, 6],
+      "code": "const n = {}\nfor (let r of rows)\n  if (r.paid)\n    n[r.region] =\n      (n[r.region]\n        ?? 0) + 1\nlog(n)",
+      "say": "Seven lines count the paid orders by region. One statement does the counting."
+    },
+    {
+      "id": "lead",
+      "show": "chart",
+      "type": "race",
+      "title": "The North pulls ahead",
+      "valueLabel": "orders to date",
+      "data": {
+        "periods": ["Q1", "Q2", "Q3", "Q4"],
+        "rows": [
+          { "name": "North", "values": [1, 14, 66, 182] },
+          { "name": "South", "values": [3, 18, 56, 121] },
+          { "name": "East", "values": [2, 13, 40, 97] },
+          { "name": "West", "values": [0, 7, 20, 59] }
+        ]
+      },
+      "highlight": "North",
+      "say": "In the first quarter the North came third. Quarter by quarter it pulled ahead, to one hundred and eighty two orders."
+    },
+    {
+      "id": "price",
+      "show": "chart",
+      "type": "scatter",
+      "title": "Dawn breaks the rule",
+      "xLabel": "Price, $",
+      "yLabel": "Orders",
+      "highlight": "Dawn",
+      "data": [
+        { "x": 5, "y": 85, "label": "Card" },
+        { "x": 12, "y": 70 },
+        { "x": 18, "y": 60 },
+        { "x": 25, "y": 46 },
+        { "x": 30, "y": 42 },
+        { "x": 40, "y": 28 },
+        { "x": 48, "y": 20 },
+        { "x": 60, "y": 90, "label": "Dawn" },
+        { "x": 75, "y": 12 },
+        { "x": 90, "y": 6, "label": "Mural" }
+      ],
+      "say": "Cheaper prints sell more. Dawn costs sixty dollars and sells the most."
+    },
+    {
+      "id": "chat",
+      "show": "feed",
+      "title": "Studio",
+      "items": [
+        { "from": "them", "text": "North nearly tripled." },
+        { "from": "me", "text": "Then we print more of Dawn." },
+        { "from": "them", "text": "The paper arrives on Friday." },
+        { "from": "me", "text": "I will tell the North." }
+      ],
+      "say": "North nearly tripled. Then we print more of Dawn. The paper arrives on Friday. I will tell the North."
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "Next year: a second ridge, printed for the North.",
+      "ask": "ridgelineprints.shop",
+      "mark": "Ridgeline"
+    }
+  ]
+}

@@ -10,6 +10,7 @@ import { treatmentsOf } from '../devices/treatments.mjs';
 import { fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks } from './shared.mjs';
 import { defaultCamera } from './camera.mjs';
 import { bleedLayout, cutoutLayout, isBleed } from './media-layout.mjs';
+import { unmarked } from './shared.mjs';
 
 const KIND = 'media';
 const CAPTION_MAX = 60;
@@ -84,7 +85,7 @@ registries.kinds.add(KIND, {
   ids: (shot) => [`${shot.id}.picture`],
   nodeField: mediaField,
   validate: mediaProblems,
-  expand: expandMedia,
+  expand: (shot, ctx) => expandMedia(unmarked(shot), ctx),
   lookData: true, // a look ships it only with a kinds.media entry (engine/looks/index.mjs listedKinds)
   numbered: false,
   // with a caption its words are on screen as they are spoken: never captioned; without one, the narration is captioned
