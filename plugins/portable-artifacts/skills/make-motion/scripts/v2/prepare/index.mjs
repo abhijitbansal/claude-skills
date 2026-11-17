@@ -6,13 +6,14 @@ import { registries } from '../../../engine/registry.mjs';
 import '../../../engine/kinds/index.mjs';
 import { pathJoin } from '../../../shared/errors.mjs';
 import { prepareMap } from './map.mjs';
+import { prepareCode } from './code.mjs';
 
 /**
  * The preparer of each kind that declares `prepared: true`, by kind name:
  * (shot, { filmDir, index }) -> { data: object | null, problems: { path, message }[] }, `path` relative to the shot
  * (`places[1].at`). It must be deterministic (same shot, same JSON) and never touch the network.
  */
-export const PREPARERS = Object.freeze({ map: prepareMap });
+export const PREPARERS = Object.freeze({ map: prepareMap, code: prepareCode });
 
 // A preparer's path ("places[1].at", "word") under the shot's: shots[3].places[1].at.
 const fullPath = (index, rel) => String(rel).split('.').reduce((acc, part) => {

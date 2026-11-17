@@ -1,7 +1,9 @@
 // Today's cut frames, pinned (cuts-resolve.test.mjs, fixtures/cuts/baseline-keys.json). Two halves:
 //   - what each of cut, slide, punch and match returns from apply() at BASELINE_PS for two small hand-written node lists
 //     (a shared background behind the picture plane, a shared hero with a box, two unshared nodes, one of them pinned),
-//     with and without `frame`. The lists live here, so a change to a kind or a look cannot move them.
+//     with and without `frame`. The lists live here, so a change to a kind or a look cannot move them. Since transitions
+//     Task 6 apply() no longer smears (engine/cuts/smear.mjs), so the `frame` keys equal the still ones (the fixture's
+//     `regenerated` says so).
 //   - the state of every frame inside the cut windows of references/examples/v2/gate-pop.json (two punches; gate-desk
 //     has hard cuts only), built with buildFilm, the estimated timeline and the stand-in text measure of helpers/kinds.mjs.
 //     This half is regenerated, with a stated reason, if that film or the pop look changes under it.

@@ -8,9 +8,15 @@
 // names the ones the look asked for. A shader that will not compile or link falls back to that path on a fresh canvas
 // (the old one has taken a WebGL context and cannot give a 2D one) and says why in `unavailable`.
 //
-// createPost(canvas, { grain, halftone, bloom, seed }) -> { kind: 'webgl2' | '2d', canvas, render(sourceCanvas, t),
-//   setStrengths, unavailable?: { reason, failed }, dropped }. render throws when the WebGL context is lost or a GL call
-//   failed, so a blank frame is never encoded as if it were good.
+// createPost(canvas, { grain, halftone, bloom, seed, shaders }) -> { kind: 'webgl2' | '2d', canvas,
+//   render(sourceCanvas, t, cut?), setStrengths, unavailable?: { reason, failed }, dropped, cuts: { ran, replaced,
+//   reason } }. render throws when the WebGL context is lost or a GL call failed, so a blank frame is never encoded as if
+//   it were good. `shaders` names the shader cuts the film uses (engine/cuts/shaders); they are all compiled here
+//   (post-cut.mjs). `cuts.ran` lists them when every one built; otherwise (no WebGL2, or one would not build) they are all
+//   in `cuts.replaced` with the reason, and the page draws their stand-ins. With `cut` = { from, shader, params } render
+//   runs that shader over `from` and the source first and the effects over its result.
+import { createCutPass, CutShaderError } from './post-cut.mjs';
+
 export const GRAIN_FPS = 12;
 const REFERENCE_SIDE = 1080;
 const GRAIN_GAIN = 2; // the grain swings +-strength around the picture: 0.05 is about +-13/255
@@ -121,8 +127,24 @@ function checkGl(gl) {
   if (error !== gl.NO_ERROR) throw new Error(`post pass: WebGL error 0x${error.toString(16)} while drawing the frame`);
 }
 
-function glPost(gl, canvas, initial, seed) {
+const NO_CUTS = Object.freeze({ ran: Object.freeze([]), replaced: Object.freeze([]), reason: null });
+const replacedAll = (shaders, reason) => (shaders.length === 0 ? NO_CUTS : Object.freeze({ ran: Object.freeze([]), replaced: Object.freeze([...shaders]), reason }));
+
+// The shader pass of the film's shader cuts, or null with every cut replaced when one will not build (or there are none).
+function cutPassOf(gl, canvas, shaders, seed) {
+  if (shaders.length === 0) return { pass: null, cuts: NO_CUTS };
+  try {
+    const pass = createCutPass(gl, { names: shaders, seed, width: canvas.width, height: canvas.height });
+    return { pass, cuts: Object.freeze({ ran: Object.freeze([...shaders]), replaced: Object.freeze([]), reason: null }) };
+  } catch (err) {
+    if (!(err instanceof CutShaderError)) throw err;
+    return { pass: null, cuts: replacedAll(shaders, err.message) };
+  }
+}
+
+function glPost(gl, canvas, initial, seed, shaders) {
   const program = link(gl);
+  const { pass, cuts } = cutPassOf(gl, canvas, shaders, seed);
   gl.useProgram(program);
   const at = (name) => gl.getUniformLocation(program, name);
   const texture = gl.createTexture();
@@ -137,14 +159,31 @@ function glPost(gl, canvas, initial, seed) {
   gl.uniform1f(at('uUnit'), Math.min(canvas.width, canvas.height) / REFERENCE_SIDE);
   gl.uniform1ui(at('uSeed'), seed >>> 0);
   let strengths = initial;
+  // The frame the effects run over: the source as it is, or the cut's shader run over `from` and the source. After a
+  // shader frame the post program, its texture and the screen are bound again (the cut pass leaves them changed); a film
+  // with no shader cut never pays for the rebinding.
+  let rebind = false;
+  const frameTexture = (source, cut) => {
+    const drawn = cut ? pass.draw({ from: cut.from, to: source, shader: cut.shader, params: cut.params }) : null;
+    if (drawn || rebind) {
+      gl.useProgram(program);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, drawn ?? texture);
+      gl.viewport(0, 0, canvas.width, canvas.height);
+    }
+    rebind = drawn !== null;
+    if (!drawn) gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  };
   return {
     kind: 'webgl2',
     canvas,
     dropped: [],
+    cuts,
     setStrengths(next) { strengths = { ...strengths, ...next }; },
-    render(source, t) {
+    render(source, t, cut) {
       if (gl.isContextLost()) throw new Error('post pass: the WebGL context was lost');
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      if (cut && !cuts.ran.includes(cut.shader)) throw new Error(`post pass: shader cut "${cut.shader}" is not one this film compiled`);
+      frameTexture(source, cut);
       gl.uniform1f(at('uGrain'), strengths.grain);
       gl.uniform1f(at('uHalftone'), strengths.halftone);
       gl.uniform1f(at('uBloom'), strengths.bloom);
@@ -169,7 +208,7 @@ function addGrain(data, { width, height, strength, phase, seed }) {
   }
 }
 
-function twoDPost(canvas, initial, seed, unavailable) {
+function twoDPost(canvas, initial, seed, unavailable, cuts) {
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   let strengths = initial;
   return {
@@ -177,8 +216,10 @@ function twoDPost(canvas, initial, seed, unavailable) {
     canvas,
     unavailable,
     dropped: EFFECTS_NEEDING_WEBGL.filter((name) => initial[name] > 0),
+    cuts,
     setStrengths(next) { strengths = { ...strengths, ...next }; },
-    render(source, t) {
+    render(source, t, cut) {
+      if (cut) throw new Error(`post pass: shader cut "${cut.shader}" cannot run without WebGL2; its stand-in is drawn instead`);
       ctx.drawImage(source, 0, 0);
       if (strengths.grain <= 0) return;
       const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -200,16 +241,18 @@ function freshCanvas(old) {
 
 /**
  * @param {HTMLCanvasElement} canvas the visible canvas, width and height already set; it takes the first context here
- * @param {{ grain: number, halftone: number, bloom: number, seed: number }} options strengths 0 to 1 and the film seed
+ * @param {{ grain: number, halftone: number, bloom: number, seed: number, shaders?: string[] }} options strengths 0 to
+ *   1, the film seed and the shader cuts the film uses
  */
-export function createPost(canvas, { grain, halftone, bloom, seed }) {
+export function createPost(canvas, { grain, halftone, bloom, seed, shaders = [] }) {
   const strengths = { grain, halftone, bloom };
   const gl = canvas.getContext('webgl2', { preserveDrawingBuffer: true, antialias: false, alpha: false, depth: false, stencil: false });
-  if (!gl) return twoDPost(canvas, strengths, seed, { reason: 'this browser has no WebGL2', failed: false });
+  const NO_WEBGL2 = 'this browser has no WebGL2';
+  if (!gl) return twoDPost(canvas, strengths, seed, { reason: NO_WEBGL2, failed: false }, replacedAll(shaders, NO_WEBGL2));
   try {
-    return glPost(gl, canvas, strengths, seed);
+    return glPost(gl, canvas, strengths, seed, shaders);
   } catch (err) {
     if (!(err instanceof ShaderError)) throw err;
-    return twoDPost(freshCanvas(canvas), strengths, seed, { reason: err.message, failed: true });
+    return twoDPost(freshCanvas(canvas), strengths, seed, { reason: err.message, failed: true }, replacedAll(shaders, err.message));
   }
 }

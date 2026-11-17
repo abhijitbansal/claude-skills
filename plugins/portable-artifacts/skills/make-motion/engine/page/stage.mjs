@@ -17,6 +17,9 @@ import { applyFont, createMeasure } from './text-style.mjs';
 import { facesFor, loadFaces } from './fonts-shared.mjs';
 import { createPost, grainPhase } from './post.mjs';
 import { createCutPictures } from './cut-pictures.mjs';
+import { createAccumulator } from './accumulate.mjs';
+import { resolveShotCut } from '../cuts/resolve.mjs';
+import { shaderUniforms, standInOf } from '../cuts/shaders/index.mjs';
 
 // The face the review sheets stamp their tiles with; the sheet code reads window.__stampFamily.
 const STAMP_FAMILY = 'JetBrains Mono';
@@ -51,13 +54,20 @@ async function loadAssets(srcs) {
 
 const KEY_DECIMALS = 1e9; // a cut's progress in a key, rounded so float noise cannot split two equal frames
 
+const keyOfP = (p) => Math.round(p * KEY_DECIMALS) / KEY_DECIMALS;
+
 // The key of a frame's 2D state. Inside a layer or shader window the sampled nodes are the incoming shot's alone, which
 // can stand still while the cut moves: the key then carries the cut, its direction, its progress and the outgoing shot.
+// Inside a smeared window they are the still nodes alone (none for a punch): the key carries the smeared cut the same way.
 function stateKeyOf(state) {
   const base = stateKey({ background: state.background, sampled: state.sampled });
+  if (state.smear !== undefined) {
+    const { name, direction, p } = state.smear.cut;
+    return `${base}|smear:${name}:${direction}:${keyOfP(p)}`;
+  }
   if (state.cut === undefined) return base;
   const { name, direction, p } = state.cut;
-  return `${base}|cut:${name}:${direction}:${Math.round(p * KEY_DECIMALS) / KEY_DECIMALS}|from:${state.from.shot}`;
+  return `${base}|cut:${name}:${direction}:${keyOfP(p)}|from:${state.from.shot}`;
 }
 
 // The keys that say whether two frames look alike, over `frameState(i)`. drawKey: the sampled state, plus the frame itself
@@ -102,32 +112,46 @@ function lineInkOf(ctx) {
   };
 }
 
-// The recipe a frame inside a cut window is composed by (engine/cuts/layers.mjs).
+// The recipe a frame inside a cut window is composed by in 2D (engine/cuts/layers.mjs): a layer cut's own, or the
+// stand-in of a shader cut the post pass cannot run.
 function cutRecipe(cut, canvas) {
   const entry = registries.cuts.get(cut.name);
   if (entry.family === 'layer') return entry.layers({ p: cut.p, direction: cut.direction, canvas });
+  if (entry.family === 'shader') {
+    const standIn = standInOf(entry, cut.direction);
+    return standIn.entry.layers({ p: cut.p, direction: standIn.direction, canvas });
+  }
   throw new Error(`cut "${cut.name}": the page cannot compose a ${entry.family} cut`);
 }
 
+// The shader cuts `film` uses, each once, in the order the film first uses them: the post pass compiles them up front.
+function shaderCutsOf(film, look) {
+  const cuts = film.shots.map((_, index) => resolveShotCut(film, index, { look }));
+  return [...new Set(cuts.filter((cut) => cut?.family === 'shader').map((cut) => cut.name))];
+}
+
 // A frame state without the film's captions (engine/captions: every caption node's id starts with <shot id>.captions),
-// also inside a smear sample (a layer group) and in the outgoing picture of a cut window. The layout is not touched.
+// also inside a layer group, in each smear sample and in the outgoing picture of a cut window. The layout is not touched.
 function captionFilter(film) {
   const prefixes = film.shots.map((shot) => `${shot.id}.captions`);
   const isCaption = (n) => prefixes.some((p) => n.id === p || n.id.startsWith(`${p}.`));
   const strip = (nodes) => nodes.filter((n) => !isCaption(n)).map((n) => (n.props.layer === true ? { ...n, children: strip(n.children) } : n));
+  const stripSmear = (smear) => ({ ...smear, layers: smear.layers.map(strip), over: strip(smear.over), whole: strip(smear.whole) });
   return (state) => ({
     ...state,
     sampled: strip(state.sampled),
     ...(state.from === undefined ? {} : { from: { ...state.from, sampled: strip(state.from.sampled) } }),
+    ...(state.smear === undefined ? {} : { smear: stripSmear(state.smear) }),
   });
 }
 
 // The page's API: what the render, the review and the tests call.
 function installApi({ fps, draw, post, source, measure, frameState, keys, setGrain, snapshotOf, snapshotShot, cutPictures }) {
-  // captions: false leaves the film's captions out of the frame (a poster), the rest drawn as laid out
-  window.__seek = (i, { captions = true } = {}) => {
-    draw(i, { captions });
-    post.render(source, i / fps);
+  // captions: false leaves the film's captions out of the frame (a poster), the rest drawn as laid out; progress (tests
+  // only) draws a frame inside a cut window at that progress of the cut instead of its own
+  window.__seek = (i, { captions = true, progress } = {}) => {
+    const cut = draw(i, { captions, progress });
+    post.render(source, i / fps, cut ?? undefined);
   };
   window.__cutCanvases = cutPictures.made; // how many second pictures the cuts have made, for tests
   window.__snapshotShot = snapshotShot;
@@ -138,7 +162,11 @@ function installApi({ fps, draw, post, source, measure, frameState, keys, setGra
   };
   window.__stampFamily = STAMP_FAMILY;
   window.__measure = measure; // the layout measure, for tests
-  window.__snapshot = (i) => snapshotOf(frameState(i).sampled);
+  // a smeared frame is audited at its own progress, without the smear (engine/graph/film.mjs smear.whole)
+  window.__snapshot = (i) => {
+    const state = frameState(i);
+    return snapshotOf(state.smear?.whole ?? state.sampled);
+  };
   window.__stateKey = keys.captureKey;
   // withGrain: compared by __stateKey (what is captured), else by the 2D state alone.
   window.__heldFlags = (from, to, withGrain) => heldFlags(withGrain ? keys.captureKey : keys.drawKey)(from, to);
@@ -155,7 +183,8 @@ async function init() {
   const source = new OffscreenCanvas(w, h);
   const ctx = source.getContext('2d');
   const look = resolveLook(film);
-  const post = createPost(element, { ...look.post, seed: film.seed ?? DEFAULT_SEED });
+  const seed = film.seed ?? DEFAULT_SEED;
+  const post = createPost(element, { ...look.post, seed, shaders: shaderCutsOf(film, look) });
   // The designed kinds take their type from the look, so the look's fonts load with any the film names itself.
   await loadFaces(facesFor({ film, fonts: look.fonts, stamp: { family: STAMP_FAMILY } }));
   const assets = await loadAssets(srcs);
@@ -176,14 +205,40 @@ async function init() {
     drawFrame(c, sampled, { assets, canvas, time: t });
   };
   const cutPictures = createCutPictures({ w, h, drawShot });
+  const accumulator = createAccumulator({ w, h });
+  // A smeared frame (engine/graph/film.mjs): the still nodes, the mean of the moving layers over them, then `over`.
+  const drawSmeared = (state, t) => {
+    const { layers, gapPx, vector, over } = state.smear;
+    drawShot(ctx, { background: state.background, sampled: state.sampled, t });
+    const mean = accumulator.mean((layer, k) => drawFrame(layer, layers[k], { assets, canvas, time: t }), layers.length, { vector, gapPx });
+    ctx.drawImage(mean, 0, 0);
+    drawFrame(ctx, over, { assets, canvas, time: t });
+  };
   const withoutCaptions = captionFilter(film);
-  const draw = (i, { captions = true } = {}) => {
-    const state = captions ? frameState(i) : withoutCaptions(frameState(i));
+  // Draws frame i into the source. Returns the shader cut the post pass is to run over it, or null: inside a shader cut's
+  // window the source then holds the incoming picture alone.
+  const draw = (i, { captions = true, progress } = {}) => {
+    const plain = captions ? frameState(i) : withoutCaptions(frameState(i));
+    const state = progress === undefined || plain.cut === undefined ? plain : { ...plain, cut: { ...plain.cut, p: progress } };
     // frame frameCount is the instant the film ends: it can be sampled but there is no frame to draw
     if (i === frameCount) throw new Error(`frame must be an integer in 0..${frameCount - 1} to draw, got ${i}`);
-    if (state.cut === undefined) return drawShot(ctx, { ...state, t: i / fps });
+    const t = i / fps;
+    if (state.smear !== undefined) {
+      drawSmeared(state, t);
+      return null;
+    }
+    if (state.cut === undefined) {
+      drawShot(ctx, { ...state, t });
+      return null;
+    }
     resetContext(ctx);
-    return cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas), i / fps);
+    if (state.cut.family === 'shader' && post.cuts.ran.includes(state.cut.name)) {
+      drawShot(ctx, { ...state, t });
+      const { shader } = registries.cuts.get(state.cut.name);
+      return { from: cutPictures.outgoing(state), shader: state.cut.name, params: shaderUniforms(shader, { p: state.cut.p, direction: state.cut.direction, canvas }) };
+    }
+    cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas), t);
+    return null;
   };
   const keys = frameKeys({ frameState, fps, grainNow: () => grain });
   const snapshotOf = (sampled) => annotate(sampled, { lineInk: lineInkOf(document.createElement('canvas').getContext('2d')) });
@@ -196,7 +251,7 @@ async function init() {
   const notice = post.unavailable ? { postNotice: { ...post.unavailable, dropped: post.dropped } } : {};
   // the size each picture loaded at, by src: what a kind's review needs to know of a picture (scripts/v2/review.mjs)
   const pictures = Object.fromEntries([...assets].map(([src, bitmap]) => [src, [bitmap.width, bitmap.height]]));
-  return { frameCount, fps, size: [w, h], post: post.kind, backgrounds: [...built.backgrounds], pictures, ...notice };
+  return { frameCount, fps, size: [w, h], post: post.kind, cuts: post.cuts, backgrounds: [...built.backgrounds], pictures, ...notice };
 }
 
 window.__ready = init();

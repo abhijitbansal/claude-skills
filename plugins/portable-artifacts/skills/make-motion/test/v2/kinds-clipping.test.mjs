@@ -17,6 +17,7 @@ import { establishingFindings } from '../../engine/kinds/clipping-rules.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { validateFilm, SpecError } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
+import { safeRectFor } from '../../scripts/v2/review.mjs';
 import '../../engine/looks/index.mjs';
 import '../../engine/modes/index.mjs';
 import '../../engine/devices/index.mjs';
@@ -530,4 +531,30 @@ test('the validator checks a crop like a region', () => {
   assert.equal(zero[0].path, 'shots[0].crop');
   assert.match(zero[0].message, /w and h must be above 0/);
   assert.ok(check([0.1, 0.1, 0.5]).length > 0, 'four numbers');
+});
+
+// k5: with no highlight the pop caption captions the whole picture from frame 0, and the close-up an underline cuts to
+// is larger than the picture: the caption ran onto its white keyline and lime shadow (the contrast rule's partial ground
+// caught it, white on white). The caption keeps clear of every cut-out it shares the frame with, keyline and shadow included.
+test('pop: a caption shown from frame 0 clears the close-ups the shot cuts to, keyline and shadow included', () => {
+  const look = registries.looks.get('pop');
+  const shot = { ...registries.kinds.get('clipping').example, src: 'shot.png', on: [{ at: 'word:query', do: 'underline', target: 'region:query' }] };
+  for (const format of ['16:9', '9:16']) {
+    const out = expandShot(shot, 'pop', format);
+    const unit = Math.min(out.canvas.w, out.canvas.h) / 1080;
+    const close = out.boxes['region:query'];
+    const reach = (look.keyline + Math.max(look.shadow.dx, look.shadow.dy)) * unit;
+    const caption = out.boxes.caption;
+    const meets = caption[1] < close[1] + close[3] + reach && close[1] - reach < caption[1] + caption[3];
+    assert.ok(!meets, `${format}: caption ${caption.map(Math.round)} meets the close-up ${close.map(Math.round)} (reach ${reach})`);
+    // the underline drawn under the close-up is above the caption's cap line (where its capitals start), by at least the
+    // caption's own gap (24 units, clipping-captions.mjs LINE_CAPTION.gap): the browser frame showed it crossing the caps
+    const line = all(out.nodes).find((n) => n.id === 'query.on0');
+    const lineBottom = Number(/^M[\d.]+ ([\d.]+)/.exec(line.props.d)[1]) + line.props.strokeWidth / 2;
+    const cap = textNode(out.nodes, 'query.caption');
+    const capTop = cap.props.y + cap.props.layout.lines[0].y - 0.7 * cap.props.layout.size;
+    assert.ok(capTop - lineBottom >= 24 * unit - 1e-6, `${format}: the caption's cap line ${Math.round(capTop)} is not 24 units under the underline's bottom ${Math.round(lineBottom)}`);
+    const safe = safeRectFor(out.canvas, look); // the rectangle the frame review keeps text inside
+    inside(caption, { left: safe.left, top: safe.top, right: out.canvas.w - safe.right, bottom: out.canvas.h - safe.bottom }, out.canvas, `${format}: caption`);
+  }
 });

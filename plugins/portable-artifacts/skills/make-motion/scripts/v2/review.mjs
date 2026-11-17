@@ -282,7 +282,8 @@ function kindFindings(film, timeline, pictures = {}) {
     const review = registries.kinds.get(shot.show).review;
     if (typeof review !== 'function') return [];
     const timing = timeline.shots[index];
-    return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h }, asset }).map((f) => kindFinding(shot, index, timing, f));
+    // viralInsets: the platform safe zone the stage composes a viral look in (compositionRect), for a kind that sizes to it
+    return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h }, asset, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE) }).map((f) => kindFinding(shot, index, timing, f));
   });
 }
 
@@ -323,6 +324,8 @@ export async function reviewFilm({ session, signal }) {
 
 const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });
 const listOf = (names) => names.map((name) => EFFECTS[name] ?? name).join(' and ');
+// a shader cut the page could not run, with the layer cut it drew instead (engine/cuts/shaders)
+const drawnAs = (name) => `${name} (drawn as ${registries.cuts.get(name).standIn})`;
 
 /**
  * What the page and the post pass say about themselves, as findings (shot null, path ''): a post pass that had to fall
@@ -338,6 +341,8 @@ export function sessionFindings(session) {
   } else if (notice?.dropped.length > 0) {
     out.push(pageFinding('creative', `post: ${notice.reason}, so ${listOf(notice.dropped)} from the look are dropped; the 2D post pass has grain only`));
   }
+  const replaced = session.info?.cuts?.replaced ?? [];
+  if (replaced.length > 0) out.push(pageFinding('creative', `post: shader cuts replaced: ${replaced.map(drawnAs).join(', ')}, because ${session.info.cuts.reason}`));
   for (const message of new Set(session.errors ?? [])) out.push(pageFinding('mechanical', `page: ${message}`));
   for (const url of new Set(session.blocked ?? [])) out.push(pageFinding('mechanical', `page: request blocked: ${url}`));
   return out;

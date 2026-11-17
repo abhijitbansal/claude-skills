@@ -15,6 +15,14 @@ const HEIGHT_SHARE = 0.7; // of the available height, at most
 const CLEARANCE = 16; // units between the cut-out's shadow and a device placed against it
 const HALF = 2;
 
+/** The band, in px past the keyline and shadow, that the drawn devices of a shot's region events take under a close-up
+ *  (CLEARANCE and the widest stroke): 0 when none draws one. A caption pinned under the picture keeps this too. */
+export function markRoom(shot, look, unit) {
+  const drawn = (shot.on ?? []).filter((e) => regionOf(e.target) !== null && !(e.do === 'highlight' && emphasisStyled(look)));
+  if (drawn.length === 0) return 0;
+  return (CLEARANCE + Math.max(0, ...drawn.map((e) => look.devices?.[e.do]?.width ?? 0))) * unit;
+}
+
 // The look marks a highlighted close-up through its cut-out (devices.cutout.emphasis) rather than a frame.
 const emphasisStyled = (look) => look.devices?.cutout?.emphasis !== undefined;
 
@@ -67,6 +75,7 @@ export function closeUps(shot, ctx, { picture, area, centre, plan }) {
   const reach = (look.keyline + Math.max(look.shadow.dx, look.shadow.dy) + CLEARANCE) * unit;
   const boxes = {};
   const camera = [];
+  const marks = []; // the band each drawn device takes round its close-up, its stroke included (a pinned caption clears it)
   const nodes = plan.cuts.map((cut, k) => {
     const [fx, fy, fw, fh] = shot.regions[cut.region];
     const clip = [fx * picture.width, fy * picture.height, fw * picture.width, fh * picture.height];
@@ -79,9 +88,13 @@ export function closeUps(shot, ctx, { picture, area, centre, plan }) {
     const lift = emphasisStyled(look) ? mine.find((e) => e.item.do === 'highlight')?.at : undefined;
     const cutout = registries.devices.get('cutout').build({ id: `${id}.cutout`, box, at: 0, look, unit, seed, image, ...(lift === undefined ? {} : { emphasisAt: lift }) }).nodes;
     const devices = mine.map((e) => closeUpDevice(shot, ctx, e, box, reach));
+    mine.filter((e, i) => devices[i].nodes.length > 0).forEach((e) => {
+      const stroke = (look.devices?.[e.item.do]?.width ?? 0) * unit;
+      marks.push([box[0] - reach, box[1] - reach, box[2] + HALF * reach, box[3] + HALF * reach + stroke]);
+    });
     camera.push(registries.devices.get('punch').build({ id: `${id}.punch`, box, at: cut.at, look, unit, seed }).camera);
     camera.push(...devices.map((d) => d.camera).filter((keys) => keys.length > 0));
     return node('group', id, {}, { tracks: { opacity: shownFrom(cut.at, cut.until) }, children: [...cutout, ...devices.flatMap((d) => d.nodes)] });
   });
-  return { nodes, camera, boxes };
+  return { nodes, camera, boxes, marks };
 }

@@ -3,6 +3,7 @@
 // facesFor(film) is the seam: it returns every face the film needs, each as { family, url, descriptors }. A later
 // task widens it (theme fonts); the stage only ever calls facesFor and loadFaces.
 import { fontFaces } from '../fonts/index.mjs';
+import { resolveLook } from '../graph/film.mjs';
 
 const FONT_URL_PREFIX = '/engine/fonts/shared/';
 
@@ -45,8 +46,17 @@ function familiesIn(value, found = new Set()) {
   return found;
 }
 
+// A film with a code shot needs the mono its look's code data names (look.kinds.code.font): pop loads no mono of its own.
+// `input` is what the stage passes ({ film, fonts, ... }); a bare film object has no `film` and adds nothing.
+function codeFonts(input) {
+  const film = input?.film;
+  if (!Array.isArray(film?.shots) || !film.shots.some((shot) => shot?.show === 'code')) return [];
+  const font = resolveLook(film).kinds?.code?.font;
+  return font ? [font] : [];
+}
+
 export function facesFor(film) {
-  const wanted = familiesIn(film);
+  const wanted = familiesIn([film, codeFonts(film)]);
   const available = [...SHARED_FACES, ...fontFaces()];
   const bundled = new Set(available.map((face) => face.family));
   for (const family of wanted) {

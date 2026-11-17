@@ -62,6 +62,23 @@ test('the ground is what is drawn directly under the text: a plate that covers i
   assert.deepEqual(contrast([field('#111111'), image(), textNode({ fill: '#111111' })]), [], 'over a picture: its pixels are not known, not judged');
 });
 
+// k4's map defect: a white place name overhung a lime highlight (1.15:1) and the rule gave no finding, because only a
+// ground under all of a text's ink was its ground. A fill drawn after that ground and under part of the ink is a ground
+// too: the text is judged against each of them.
+test('a filled shape under part of a text is a ground too: white words running onto the pop lime are judged against it', () => {
+  const lime = registries.looks.get('pop').palette.accent;
+  const found = contrast([field('#111111'), plate(lime, [300, 380, 400, 200]), textNode({ fill: '#ffffff' })]);
+  assert.equal(found.length, 1, JSON.stringify(found));
+  assert.match(found[0].message, new RegExp(lime));
+  assert.match(found[0].message, /1\.15:1/);
+  assert.deepEqual(contrast([field('#111111'), plate('#333333', [300, 380, 400, 200]), textNode({ fill: '#ffffff' })]), [], 'white reads on both grounds');
+  assert.deepEqual(contrast([field('#111111'), plate(lime, [300, 380, 400, 200]), plate('#111111'), textNode({ fill: '#ffffff' })]), [], 'a plate drawn later over all of the text covers the part under it');
+  assert.deepEqual(contrast([field('#111111'), plate(lime, [300, 380, 400, 200], { blend: 'multiply' }), textNode({ fill: '#ffffff' })]), [], 'a blended shape is not a ground, partly or wholly');
+  assert.deepEqual(contrast([field('#111111'), textNode({ fill: '#ffffff' }), plate(lime, [300, 380, 400, 200])]), [], 'drawn after the text: on top, not under');
+  // cosmos's quote draws its attribution rule 0 wide: a shape with no area paints nothing under the text
+  assert.deepEqual(contrast([field('#111111'), plate('#f4f1ff', [250, 450, 0, 3]), textNode({ fill: '#ffffff' })]), [], 'a 0-wide rule is not a ground');
+});
+
 test('per word: each word fill counts; a word at opacity 0, and a text still fading in, are not judged', () => {
   const found = contrast([field('#111111'), textNode({ fill: '#ffffff', words: [{}, { fill: '#111111' }] })]);
   assert.equal(found.length, 1, 'the second word is in the paper colour');

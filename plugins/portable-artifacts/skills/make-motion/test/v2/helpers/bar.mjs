@@ -272,7 +272,7 @@ const fieldsOf = (kind, shot) => Object.keys(kind.schema?.properties ?? {})
 function kindFindings(kind, shot, { look, timing, canvas }) {
   const at = (ref) => resolveAnchor(ref, timing);
   const asset = (src) => IMAGES.get(src); // as the page reports the loaded pictures (scripts/v2/review.mjs)
-  const review = typeof kind.review === 'function' ? kind.review(shot, { look, timing, at, canvas, asset }) : [];
+  const review = typeof kind.review === 'function' ? kind.review(shot, { look, timing, at, canvas, asset, viralInsets: platformOf(canvas) }) : [];
   const rules = typeof kind.validate === 'function' ? kind.validate(shot, { look, at }) : [];
   return [...review, ...rules];
 }

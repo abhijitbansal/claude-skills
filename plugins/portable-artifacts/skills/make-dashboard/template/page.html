@@ -20,7 +20,7 @@
 body { margin: 0; background: var(--page); color: var(--text); font: var(--fs-sm)/1.5 var(--font); /* dense UI: 1.5, not --lh-body (R13) */ -webkit-text-size-adjust: 100%; }
 main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 0; }
 .page-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
-h1 { margin: 0; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); font-synthesis: none; /* press and mono ship a 400 display face only: no faux bold */ letter-spacing: var(--track-display); overflow-wrap: anywhere; }
+h1 { margin: 0; font: var(--display-weight) var(--fs-xl)/var(--lh-head) var(--font-display); font-synthesis: none; /* press and mono ship a 400 display face only: no faux bold */ letter-spacing: var(--track-display); overflow-wrap: anywhere; }
 .desc { margin: 6px 0 0; color: var(--text-2); }
 .refreshed { margin: 0; color: var(--text-3); font-size: var(--fs-xs); }
 .pa-footer { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; max-width: 1168px; width: calc(100% - 32px); margin: 32px auto 48px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -30,7 +30,7 @@ button { font: inherit; color: inherit; }
 .theme-toggle:hover { color: var(--text); }
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
 /* the tile is a size container so the value can be sized from the tile's width (cqi) and never spills */
-.kpi { container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; }
+.kpi { container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; min-width: 0; box-shadow: var(--elev-1); }
 .kpi-label { color: var(--text-2); font-size: var(--fs-sm); }
 /* the whole value is one line ("87%", "1,204 ms"). --n (its character count, set by the builder) gives the
    size at which it just fills the tile: --kpi-fit = 100cqi / (n * 0.7em per character), never below --fs-md.
@@ -46,7 +46,7 @@ button { font: inherit; color: inherit; }
 .kpis:has(.kpi-wide) { display: flex; flex-wrap: wrap; }
 .kpis:has(.kpi-wide) > .kpi { flex: 1 1 160px; }
 .kpis:has(.kpi-wide) > .kpi-wide { flex: 2 1 18rem; }
-.kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); margin-top: 4px; font-size: min(var(--fs-lg), var(--kpi-fit)); line-height: var(--lh-head); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); margin-top: 4px; font-size: min(var(--fs-lg), var(--kpi-fit)); line-height: var(--lh-head); font-weight: var(--strong-weight); font-variant-numeric: var(--num); white-space: nowrap; }
 .kpi-long .kpi-value { white-space: normal; overflow-wrap: anywhere; }
 .kpi-sql { font-size: var(--fs-xs); }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
@@ -54,14 +54,14 @@ button { font: inherit; color: inherit; }
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .card.full { grid-column: 1 / -1; }
 }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; }
-.card h2 { margin: 0 0 8px; font-size: var(--fs-base); font-weight: 600; overflow-wrap: anywhere; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; min-width: 0; box-shadow: var(--elev-1); }
+.card h2 { margin: 0 0 8px; font-size: var(--fs-base); font-weight: var(--strong-weight); overflow-wrap: anywhere; }
 .card-head { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .card-head h2 { margin: 0; }
 .export { position: relative; margin: 0; border: 0; padding: 0; font-size: var(--fs-xs); }
 .export summary { list-style: none; border: 1px solid var(--line); border-radius: 8px; padding: 2px 10px; color: var(--text-2); cursor: pointer; }
 .export summary::-webkit-details-marker { display: none; }
-.export .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; display: grid; min-width: 96px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
+.export .menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 2; display: grid; min-width: 96px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 4px; box-shadow: var(--elev-2); }
 .export .menu button { border: 0; background: none; text-align: left; padding: 4px 8px; border-radius: 6px; cursor: pointer; color: var(--text); font: inherit; }
 .export .menu button:hover { background: var(--accent-soft); }
 .export .menu button[hidden] { display: none; }
@@ -71,7 +71,7 @@ button { font: inherit; color: inherit; }
 .panes.pair { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 @media (min-width: 900px) { .panes.pair { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .table-view { max-height: 320px; overflow: auto; }
-.table-view th button { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--text-2); cursor: pointer; }
+.table-view th button { border: 0; background: none; padding: 0; font: inherit; font-weight: var(--strong-weight); color: var(--text-2); cursor: pointer; }
 .table-view th[aria-sort] button::after { content: attr(data-arrow); margin-left: 4px; }
 .chart { position: relative; width: 100%; min-height: 120px; }
 .chart .pa-pending { position: absolute; top: 0; left: 0; right: 0; visibility: hidden; }
@@ -82,10 +82,11 @@ details { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px;
 summary { cursor: pointer; color: var(--text-2); }
 pre.sql { margin: 8px 0 0; padding: 10px 12px; background: var(--page); border-radius: 8px; overflow-x: auto; font: var(--fs-xs)/1.5 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .tablewrap { overflow-x: auto; margin-top: 6px; max-height: 280px; overflow-y: auto; }
-table { border-collapse: collapse; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; font-size: var(--fs-xs); font-variant-numeric: var(--num); }
 th, td { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; border-bottom: 1px solid var(--line); }
-th { color: var(--text-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
-th.num, td.num { text-align: right; padding: 4px 0 4px 12px; font-variant-numeric: tabular-nums; }
+th { color: var(--text-2); font-weight: var(--strong-weight); position: sticky; top: 0; background: var(--surface); }
+th.num, td.num { text-align: right; padding: 4px 0 4px 12px; font-variant-numeric: var(--num); }
+@media print { .kpi, .card, .export .menu { box-shadow: none; } }
 </style>
 <style><!--@TOGGLE_CSS--></style>
 </head>

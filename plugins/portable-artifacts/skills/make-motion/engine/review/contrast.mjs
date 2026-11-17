@@ -5,7 +5,9 @@
 // The ground of a text is the last thing drawn before it that lies under all of its ink: an opaque filled shape (a
 // path with a #rrggbb fill, at full opacity, fully drawn, not blended: a card's paper, a tag's plate) whose box holds
 // the text's ink box; else the film's field (its palette's paper, drawn under everything); else the shot's background
-// (ctx.background). A picture (an image node) under the text's centre makes the ground unknown.
+// (ctx.background). A picture (an image node) under the text's centre makes the ground unknown. An opaque filled shape
+// drawn after that ground and before the text, under part of its ink (by box), is a ground too: the text is judged
+// against each, so white words that run onto a lime fill are caught (k4: a map place name over a highlight, 1.15:1).
 //
 // Which words count: those on screen at opacity 1 in a text at accumulated opacity 1 (a fade blends with whatever is
 // behind it). A word's colour is its sampled `fill`, else the text's. A ghost word (an unspoken word in a mode that reads
@@ -19,8 +21,9 @@
 // falling off over its radius outside. Source-over, or screen and lighter where the node blends so.
 //
 // What escapes: a text over a picture or over a translucent or blended shape that is not light, a colour that is not
-// #rrggbb, a ground that lies under only part of a text (a highlight marker behind some of its words: the text is
-// judged against what lies under all of it), and texts still fading in.
+// #rrggbb, a picture under only part of a text, a light over a ground that lies under only part of it (lights are
+// composited over each ground alike), and texts still fading in. A box is a shape's bounding box, so a shape whose box
+// meets the ink while its outline does not is judged as if it did.
 import { colourChannels } from '../time/track.mjs';
 import { GLOW_EDGE } from '../devices/glow.mjs';
 
@@ -98,6 +101,8 @@ function groundsOf(sampled) {
 
 const holds = (box, [x, y, w, h]) => box[0] <= x && box[1] <= y && box[0] + box[2] >= x + w && box[1] + box[3] >= y + h;
 const holdsPoint = (box, [px, py]) => px >= box[0] && py >= box[1] && px <= box[0] + box[2] && py <= box[1] + box[3];
+// Does a shape's box `a` share some area with the ink box `b` (not only an edge; a shape with no area paints nothing)?
+const meets = (a, b) => a[2] > 0 && a[3] > 0 && a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
 
 // How far the box [x, y, w, h] is from the point (px, py): 0 when it holds it.
 const distanceTo = ([x, y, w, h], px, py) => Math.hypot(Math.max(x - px, 0, px - (x + w)), Math.max(y - py, 0, py - (y + h)));
@@ -143,17 +148,21 @@ function lightBehind(light, ink) {
   return { colour, alpha: strength * (1 - gap / radius) };
 }
 
-// The colour directly under a text's ink, null when unknown (a picture, or nothing known at all): the last ground that
-// holds it, then every light drawn after that ground and before the text, at its brightest behind the ink.
-function groundUnder(ink, order, { grounds, lights }, background) {
+// A ground's colour with every light drawn after it and before the text (order), at its brightest behind the ink.
+const lit = (ground, ink, order, lights) => lights.filter((l) => l.order > ground.order && l.order < order).reduce((colour, light) => {
+  const behind = lightBehind(light, ink);
+  return behind === null ? colour : composite(colour, behind.colour, behind.alpha * light.alpha, light.blend);
+}, ground.colour);
+
+// The colours directly under a text's ink, [] when unknown (a picture, or nothing known at all): the last ground that
+// holds it, and each opaque fill drawn after that one under part of the ink, each lit by the lights drawn after it.
+function groundsUnder(ink, order, { grounds, lights }, background) {
   const centre = [ink[0] + ink[2] / HALF, ink[1] + ink[3] / HALF];
   const under = grounds.filter((g) => g.order < order && (g.box === null || (g.picture ? holdsPoint(g.box, centre) : holds(g.box, ink))));
   const base = under.length > 0 ? under.at(-1) : (colourChannels(background) ? { order: 0, colour: background } : null);
-  if (base === null || base.colour === null) return null;
-  return lights.filter((l) => l.order > base.order && l.order < order).reduce((colour, light) => {
-    const behind = lightBehind(light, ink);
-    return behind === null ? colour : composite(colour, behind.colour, behind.alpha * light.alpha, light.blend);
-  }, base.colour);
+  if (base === null || base.colour === null) return [];
+  const partly = grounds.filter((g) => g.order > base.order && g.order < order && !g.picture && g.box !== null && meets(g.box, ink));
+  return [base, ...partly].map((g) => lit(g, ink, order, lights));
 }
 
 // A text's own glyph glow (props.glow, lit by its words' glow tracks) over its ground: screened (draw.mjs), at its full
@@ -180,12 +189,12 @@ function wordColours(node) {
 export function contrastFindings(texts, sampled, ctx, finding) {
   const drawn = groundsOf(sampled);
   return texts.filter((t) => t.opacity >= 1).flatMap((t) => {
-    const ground = withGlyphGlow(t.node, groundUnder(t.ink, drawn.textOrder.get(t.node.id) ?? Infinity, drawn, ctx.background));
-    if (ground === null) return [];
-    const worst = wordColours(t.node).map((fill) => ({ fill, ratio: contrastRatio(fill, ground) })).filter((c) => c.ratio !== null)
+    const grounds = groundsUnder(t.ink, drawn.textOrder.get(t.node.id) ?? Infinity, drawn, ctx.background).map((g) => withGlyphGlow(t.node, g));
+    const fills = wordColours(t.node);
+    const worst = grounds.flatMap((ground) => fills.map((fill) => ({ fill, ground, ratio: contrastRatio(fill, ground) }))).filter((c) => c.ratio !== null)
       .reduce((low, c) => (low === null || c.ratio < low.ratio ? c : low), null);
     if (worst === null || worst.ratio >= MIN_CONTRAST) return [];
     const ratio = worst.ratio.toFixed(RATIO_DECIMALS);
-    return [finding('mechanical', 'contrast', t.node.id, `text "${t.node.id}" is ${worst.fill} on ${ground}, a contrast of ${ratio}:1; it needs at least ${MIN_CONTRAST}:1, so change its colour (the film's accent, or the look) or what lies under it`, t.role)];
+    return [finding('mechanical', 'contrast', t.node.id, `text "${t.node.id}" is ${worst.fill} on ${worst.ground}, a contrast of ${ratio}:1; it needs at least ${MIN_CONTRAST}:1, so change its colour (the film's accent, or the look) or what lies under it`, t.role)];
   });
 }

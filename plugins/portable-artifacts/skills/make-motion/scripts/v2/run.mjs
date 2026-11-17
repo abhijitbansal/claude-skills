@@ -117,6 +117,7 @@ async function reviewAndRender({ options, loaded, made, sound, state, io: { sign
   const session = await openSession(loaded, { browser });
   try {
     state.post = session.info.post;
+    state.cuts = session.info.cuts ?? null; // the shader cuts the page ran or replaced (engine/page/post.mjs)
     const review = await stage(state, log, 'review', () => writeSheets({ session, dir: sheetsDir, signal }));
     state.sheets = review.files;
     state.findings = review.findings.map(reviewFinding);

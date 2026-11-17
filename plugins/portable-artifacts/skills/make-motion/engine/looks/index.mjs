@@ -62,6 +62,9 @@ import { cosmos } from './cosmos.mjs';
  * @property {Record<string, { direction?: string, duration?: number, smear?: boolean }>} [cutStyle]  the look's defaults
  *   per cut, each checked against that cut's options (engine/cuts/resolve.mjs resolveCut reads them after the shot's and
  *   the film's root cut); `smear: true` makes a smearable cut draw its motion smear
+ * @property {{ line?: { color: string, width: number, alpha: number }, shadow?: { color: string, width: number,
+ *   alpha: number, steps: number } }} [coverEdge]  the leading edge of a cover cut's sheet (engine/cuts/cover.mjs):
+ *   palette colour names, widths in pixels
  * @property {number} keyline  width of a cut-out's keyline
  * @property {{ dx: number, dy: number, blur: number, alpha: number, color: string }} shadow  offset and blur in units, color #rrggbb
  * @property {Record<string, object>} devices  styling per device name; colours are palette keys or #rrggbb
@@ -198,6 +201,33 @@ function cutStyleErrors(name, look, cuts) {
   });
 }
 
+const EDGE_PARTS = Object.freeze({ line: ['color', 'width', 'alpha'], shadow: ['color', 'width', 'alpha', 'steps'] });
+const MAX_EDGE_STEPS = 16;
+
+// The errors of one part of look.coverEdge ({ color, width, alpha } and a shadow's `steps`).
+function edgePartErrors(name, look, part, value) {
+  const at = `look "${name}": coverEdge.${part}`;
+  if (!isPlainObject(value)) return [`${at} must be an object of ${EDGE_PARTS[part].join(', ')}, got ${String(value)}`];
+  const extra = Object.keys(value).filter((key) => !EDGE_PARTS[part].includes(key)).map((key) => `${at}.${key} is not a field; it takes ${EDGE_PARTS[part].join(', ')}`);
+  const checks = [
+    [typeof look.palette?.[value.color] === 'string', `${at}.color must name a palette colour (${Object.keys(look.palette ?? {}).join(', ')}), got ${JSON.stringify(value.color)}`],
+    [typeof value.width === 'number' && value.width > 0, `${at}.width must be a number of pixels > 0, got ${JSON.stringify(value.width)}`],
+    [typeof value.alpha === 'number' && value.alpha > 0 && value.alpha <= 1, `${at}.alpha must be a number above 0 and at most 1, got ${JSON.stringify(value.alpha)}`],
+    [part !== 'shadow' || (Number.isInteger(value.steps) && value.steps >= 1 && value.steps <= MAX_EDGE_STEPS), `${at}.steps must be a whole number from 1 to ${MAX_EDGE_STEPS}, got ${JSON.stringify(value.steps)}`],
+  ];
+  return [...extra, ...checks.filter(([ok]) => !ok).map(([, message]) => message)];
+}
+
+// The errors of a look's coverEdge (absent, or { line?, shadow? }): the visible leading edge of a cover cut's sheet
+// (engine/cuts/cover.mjs).
+function coverEdgeErrors(name, look) {
+  const edge = look.coverEdge;
+  if (edge === undefined) return [];
+  if (!isPlainObject(edge)) return [`look "${name}": coverEdge must be an object of line and shadow, got ${String(edge)}`];
+  const unknown = Object.keys(edge).filter((key) => !(key in EDGE_PARTS)).map((key) => `look "${name}": coverEdge.${key} is not a field; it takes line, shadow`);
+  return [...unknown, ...Object.keys(EDGE_PARTS).filter((part) => edge[part] !== undefined).flatMap((part) => edgePartErrors(name, look, part, edge[part]))];
+}
+
 /** Does `look` carry composition data for `kind` (look.kinds[kind])? */
 export const supportsKind = (look, kind) => isPlainObject(look?.kinds) && isPlainObject(look.kinds[kind]);
 
@@ -261,7 +291,7 @@ export function validateLook(look, { cuts = registries.cuts, devices = registrie
   if (kinds.length > 0) throw new RangeError(kinds.join('\n'));
   const moveErrors = movesErrors(look.name, look.moves, moves.names());
   if (moveErrors.length > 0) throw new RangeError(moveErrors.join('\n'));
-  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts)];
+  const cutErrors = [...cutSetErrors(look.name, look, cuts), ...cutStyleErrors(look.name, look, cuts), ...coverEdgeErrors(look.name, look)];
   if (cutErrors.length > 0) throw new RangeError(cutErrors.join('\n'));
   const { name, sounds } = look;
   if (sounds === null || typeof sounds !== 'object') {

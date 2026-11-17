@@ -338,6 +338,7 @@ Everything this plugin depends on is open source:
 | [ELK](https://github.com/kieler/elkjs) (`elkjs`) | EPL-2.0 |
 | [Lucide](https://lucide.dev) icons (make-diagram's icon catalog; make-motion's hand-drawn style flattens some to polylines) | ISC |
 | [Feather](https://feathericons.com) (the icons Lucide derived from it, used in make-motion's hand-drawn style; the list and licence text are in `skills/make-motion/template/sketch/LICENSES`) | MIT |
+| [gl-transitions](https://github.com/gl-transitions/gl-transitions) (ten fragment shaders ported into make-motion version 2's shader cuts, `engine/cuts/shaders`; the list, authors, pinned commit and licence texts are in `skills/make-motion/THIRD_PARTY_NOTICES.md`) | MIT, BSD-3-Clause |
 | [Simple Icons](https://simpleicons.org) brand marks | CC0-1.0 |
 | [SVG Logos](https://github.com/gilbarbara/logos) (`@iconify-json/logos` 1.2.19; make-diagram's 60 AWS and 4 Google Cloud `cloud:` icons). The marks remain the trademarks of Amazon Web Services and Google; CC0 covers the drawings, not the trademarks | CC0-1.0 |
 | [Caveat](https://github.com/googlefonts/caveat) 700 (`@fontsource/caveat` 5.3.0, latin subset; make-motion's hand-drawn writing) | OFL-1.1 |

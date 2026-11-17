@@ -37,7 +37,7 @@ html, body { height: 100%; overflow: hidden; }
 /* Projection scale: slide type grows with the screen. Body and headline run between type tokens; the headline's
    3.5rem cap, the lead's clamp and the cover title and subtitle clamps are slide-only sizes above the page scale,
    because a deck is read from across a room. */
-.slide-title { margin: 0 0 32px; max-width: 20em; font: 600 clamp(var(--fs-lg), 1.2rem + 2.6vw, 3.5rem)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; }
+.slide-title { margin: 0 0 32px; max-width: 20em; font: var(--display-weight) clamp(var(--fs-lg), 1.2rem + 2.6vw, 3.5rem)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; }
 .slide .prose > * { max-width: 66ch; }
 .slide .lead { font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.2rem); max-width: 28ch; }
 .slide .points { font-size: 1.05em; }
@@ -53,7 +53,7 @@ html, body { height: 100%; overflow: hidden; }
   .deck-progress > span { transition: width 0.25s ease; }
 }
 .deck-controls { display: flex; align-items: center; gap: 10px; max-width: 76rem; margin: 0 auto; padding: 8px 24px; }
-.deck-count { margin-left: auto; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.deck-count { margin-left: auto; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: var(--num); white-space: nowrap; }
 .nw { white-space: nowrap; }
 .deck-controls .btn { padding: 4px 12px; font-size: var(--fs-sm); }
 .slide .pa-footer { width: 100%; max-width: 60rem; margin: 24px auto 0; padding: 12px 0 0; }
@@ -64,12 +64,12 @@ html, body { height: 100%; overflow: hidden; }
 .outline[open] { display: flex; flex-direction: column; }
 .outline::backdrop { background: rgb(0 0 0 / 0.5); }
 .outline-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
-.outline-head h2 { margin: 0; font-size: var(--fs-base); font-weight: 600; }
+.outline-head h2 { margin: 0; font-size: var(--fs-base); font-weight: var(--strong-weight); }
 .outline-list { margin: 0; padding: 8px 18px 14px 44px; overflow: auto; }
-.outline-list li { padding: 2px 0; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.outline-list li { padding: 2px 0; color: var(--text-3); font-variant-numeric: var(--num); }
 .outline-list a { display: block; padding: 5px 4px; color: var(--text); text-decoration: none; line-height: 1.35; overflow-wrap: anywhere; }
 .outline-list a:hover { background: var(--accent-soft); border-radius: 4px; }
-.outline-list a[aria-current="location"] { color: var(--accent); font-weight: 600; }
+.outline-list a[aria-current="location"] { color: var(--accent); font-weight: var(--strong-weight); }
 
 @media (max-width: 640px) {
   .slide { padding: 28px 16px 80px; }

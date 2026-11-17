@@ -30,7 +30,7 @@ test('every shipped look has a palette: a subset of its cuts, never empty, holdi
 test('the palettes hold the plan\'s starting cuts among those registered, in the look\'s order', () => {
   const registered = (list) => list.filter((cut) => registries.cuts.has(cut));
   assert.deepEqual([...desk().cutPalette], registered(['cut', 'match', 'slide', 'crossfade', 'wipe', 'fade', 'page-curl']));
-  assert.deepEqual([...registries.looks.get('pop').cutPalette], registered(['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch', 'cross-zoom']));
+  assert.deepEqual([...registries.looks.get('pop').cutPalette], registered(['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom']));
   assert.deepEqual([...registries.looks.get('cosmos').cutPalette], registered(['cut', 'match', 'crossfade', 'fade', 'iris', 'ripple']));
 });
 
@@ -76,7 +76,7 @@ test('resolveCut reads cutStyle: a look\'s slide with no option takes the look\'
   assert.deepEqual([cut.direction, cut.dur, cut.smear], ['up', 0.6, true]);
   const own = resolveCut({ type: 'slide', direction: 'left', smear: false }, { look });
   assert.deepEqual([own.direction, own.dur, own.smear], ['left', 0.6, false], 'the shot\'s own options win; the look fills the rest');
-  assert.deepEqual([resolveCut('slide', { look: registries.looks.get('pop') }).direction, resolveCut('slide', { look: registries.looks.get('pop') }).smear], ['right', false], 'pop sets no slide style yet (the smear is Task 6)');
+  assert.deepEqual([resolveCut('slide', { look: registries.looks.get('pop') }).direction, resolveCut('slide', { look: registries.looks.get('pop') }).smear], ['right', true], 'pop smears its slide (Task 6) and keeps the default direction');
 });
 
 test('--list cuts names, per cut, the looks whose palette holds it', () => {

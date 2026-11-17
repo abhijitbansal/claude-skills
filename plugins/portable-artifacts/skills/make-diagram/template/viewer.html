@@ -16,7 +16,6 @@
 <style id="pa-theme-css">
 <!--@THEME-->
 </style>
-<style id="pa-weights"><!--@WEIGHTS--></style>
 <style id="pa-diagram-css">
 <!--@DIAGRAM_CSS-->
 </style>
@@ -58,7 +57,7 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 .pa-ring-arc { stroke: var(--accent); }
 /* Full screen, real (the root element is :fullscreen) or the window-filling fallback (.pa-fill on the root, when the browser refused, as inside a sandboxed iframe): the same chrome goes, the canvas takes the room; the tabs, Fit, Find, the chapters and the way out stay. Any root works, the page's or a dialog's (fullscreen.js marks it data-pa-full-root). */
 .pa-fill .titles, [data-pa-full-root]:fullscreen .titles, .pa-fill [data-act]:not([data-act="fit"]), [data-pa-full-root]:fullscreen [data-act]:not([data-act="fit"]), .pa-fill .zoom-label, [data-pa-full-root]:fullscreen .zoom-label, .pa-fill .grp-export, [data-pa-full-root]:fullscreen .grp-export, .pa-fill [data-export], [data-pa-full-root]:fullscreen [data-export], .pa-fill [data-theme-toggle], [data-pa-full-root]:fullscreen [data-theme-toggle] { display: none; }
-.zoom-label { min-width: 3.2em; text-align: center; color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
+.zoom-label { min-width: 3.2em; text-align: center; color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: var(--num); }
 .export-error { flex: none; margin: 0; padding: 6px 16px; color: var(--bad); font-size: var(--fs-sm); border-bottom: 1px solid var(--line); background: var(--surface); }
 .export-error[hidden] { display: none; }
 .body { flex: 1 1 0; min-height: 0; display: flex; }
@@ -77,7 +76,7 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 .lg-wire { width: 22px; height: 0; border-top: 1.5px solid var(--text-3); }
 .lg-wire-dashed { border-top-style: dashed; }
 .lg-wire-dotted { border-top-style: dotted; border-top-width: 2px; }
-.tip { position: absolute; z-index: 2; max-width: 260px; padding: 4px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: var(--fs-xs); pointer-events: none; overflow-wrap: anywhere; }
+.tip { position: absolute; z-index: 2; max-width: 260px; padding: 4px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: var(--fs-xs); pointer-events: none; overflow-wrap: anywhere; box-shadow: var(--elev-2); }
 .tip[hidden] { display: none; }
 .panel { flex: none; width: 300px; min-height: 0; overflow: auto; padding: 12px 16px; background: var(--surface); border-left: 1px solid var(--line); font-size: var(--fs-sm); }
 .panel[hidden] { display: none; }
@@ -87,9 +86,9 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 .panel-body[hidden], .panel-empty[hidden], .panel-close[hidden] { display: none; }
 .panel-icon { margin: 8px 0; font-size: var(--fs-lg); line-height: 1; }
 .panel-glyph { width: 24px; height: 24px; color: var(--text-2); }
-.panel-kind { margin: 0; color: var(--text-3); font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; }
+.panel-kind { margin: 0; color: var(--text-3); font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
 .panel-note, .panel-detail { margin: 8px 0 0; color: var(--text-2); overflow-wrap: anywhere; }
-.panel h3 { margin: 14px 0 4px; color: var(--text-3); font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; }
+.panel h3 { margin: 14px 0 4px; color: var(--text-3); font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
 .panel ul { margin: 0; padding: 0; list-style: none; }
 .panel ol { margin: 0; padding-left: 1.4em; }
 .panel li { overflow-wrap: anywhere; }
@@ -112,7 +111,7 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 .beats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
 .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .scrub { flex: 1 1 160px; min-width: 120px; margin: 0; }
-.cap-count { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cap-count { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: var(--num); white-space: nowrap; }
 /* Play on a phone, portrait or landscape (narrow, or short): the tool row and the transport scroll sideways instead of wrapping, and the legend overlay steps aside, so the stage keeps about half the screen. */
 @media (max-width: 719px), (max-height: 500px) {
   body.pa-presenting .tools, body.pa-presenting .transport { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }

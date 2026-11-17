@@ -9,6 +9,7 @@ import '../modes/index.mjs';
 import '../kinds/index.mjs';
 import '../cuts/index.mjs';
 import { resolveShotCut, explicitCut } from '../cuts/resolve.mjs';
+import { smearPlan } from '../cuts/smear.mjs';
 import { applyAccent, gridX } from '../looks/index.mjs';
 import { unitOf } from '../units.mjs';
 import { srcsOfShot } from '../assets.mjs';
@@ -160,6 +161,30 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
 }
 
 /**
+ * A frame inside a smeared cut's window (engine/cuts/smear.mjs): `sampled` holds the nodes that do not move, and
+ * `smear` the moving nodes at each sample's progress (layers), the gap between neighbouring copies in pixels, the unit
+ * vector of the motion (null for a zoom), the nodes drawn over them, the cut, its direction and progress (the frame's
+ * key), and `whole`, the frame's nodes at its own progress without the smear: what the review audits and sampleAt gives.
+ * The page draws the still nodes, the mean of the layers over them, then `over`.
+ */
+function smearedFrame(shot, args, frame) {
+  const parts = shot.cut.entry.parts(args);
+  const plan = smearPlan({ p: args.p, frame, travel: parts.travel });
+  return {
+    background: shot.background,
+    sampled: Object.freeze(parts.still),
+    smear: Object.freeze({
+      layers: Object.freeze(plan.samples.map((q) => Object.freeze(parts.moving(q)))),
+      gapPx: plan.gapPx,
+      vector: parts.vector,
+      over: Object.freeze(parts.over),
+      cut: Object.freeze({ name: shot.cut.name, direction: shot.cut.direction, p: args.p }),
+      whole: Object.freeze([...parts.still, ...parts.moving(args.p), ...parts.over]),
+    }),
+  };
+}
+
+/**
  * @param {{ film: object, timeline: object, measure: Function, assets?: Map<string, { width: number, height: number }>,
  *   canvas: { w: number, h: number }, viralInsets?: { top, right, bottom, left }, prepared?: Record<string, object> }} opts the film (defaults resolved here: mode, look, seed, accent), its timeline
  *   (buildTimeline), the text measure, the pictures by src, the canvas size of the film's format, the platform safe
@@ -207,12 +232,10 @@ export function buildFilm({ film, timeline, measure, assets = new Map(), canvas,
         from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration },
       };
     }
-    // `frame`: how far p moves in one frame, for the cuts that smear what they move, given only when the resolved cut asks
-    // for the smear (the shot's, the root cut's or the look's cutStyle); `background`: painted under each smear sample so
-    // that it covers the frame
-    const frame = shot.cut.smear ? 1 / (timeline.fps * shot.cutDur) : undefined;
-    const sampled = shot.cut.entry.apply({ from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, frame, background: shot.background, direction: shot.cut.direction });
-    return { background: shot.background, sampled };
+    const args = { from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, background: shot.background, direction: shot.cut.direction };
+    // the smear, when the resolved cut asks for it (the shot's, the root cut's or the look's cutStyle), inside the window
+    if (shot.cut.smear && args.p > 0 && args.p < 1) return smearedFrame(shot, args, 1 / (timeline.fps * shot.cutDur));
+    return { background: shot.background, sampled: shot.cut.entry.apply(args) };
   };
 
   return {
@@ -220,7 +243,10 @@ export function buildFilm({ film, timeline, measure, assets = new Map(), canvas,
     frameCount: timeline.frameCount,
     look,
     frameAt,
-    sampleAt: (t) => frameAt(t).sampled,
+    sampleAt: (t) => {
+      const frame = frameAt(t);
+      return frame.smear?.whole ?? frame.sampled;
+    },
     sampleShot,
     backgrounds: Object.freeze(shots.map((s) => s.background)), // per shot, the colour painted under it
   };

@@ -130,8 +130,9 @@ test('a punch keeps the incoming shot\'s order: a pinned kicker stays over the p
   near(out[2].x, 300, 'the pinned kicker is not zoomed');
   near(out[2].scale, 1);
   assert.ok(out[1].scale > 1, 'the picture is');
-  const smeared = registries.cuts.get('punch').apply({ from: [], to, p: 0.5, canvas, frame: 1 / 6, background: '#000000' });
-  smeared.forEach((layer) => assert.deepEqual(ids(layer.children), [`${layer.id}.backdrop`, 'field', 'picture', 'kicker']));
+  // smeared, the same order: the fixed field still at the back, the picture averaged, the kicker drawn over it
+  const parts = registries.cuts.get('punch').parts({ from: [], to, p: 0.5, canvas });
+  assert.deepEqual([ids(parts.still), ids(parts.moving(0.4)), ids(parts.over)], [['field'], ['picture'], ['kicker']]);
   // a real film: a pop clipping with a kicker tag, arriving on a punch
   const shot = { id: 'c', show: 'clipping', src: 'shot.png', cut: 'punch', hold: 3, kicker: 'The proof' };
   const f = filmFor([FILLER, shot], 'pop', '9:16');
@@ -139,82 +140,75 @@ test('a punch keeps the incoming shot\'s order: a pinned kicker stays over the p
   assert.ok(mid.indexOf('c.kicker') > mid.indexOf('c.image'), `the kicker over the picture mid-punch: ${mid}`);
 });
 
-test('slide and punch smear what they move: 12 samples over half a frame of travel centred on p, each a whole picture (a layer) drawn at 1/(k+1) over the ones before, so every sample weighs the same; a slide shows both shots at p 0.5', () => {
+test('slide and punch smear what they move (Task 6): the still nodes once, the moving ones in samples over half a frame of travel, a slide shows both shots at p 0.5', () => {
   const canvas = { w: 1920, h: 1080 };
-  const frame = 1 / (30 * 0.4); // the p of one frame of a 0.4 s slide at 30 fps
   const field = Object.freeze({ ...fakeSampled('field', -20), depth: 1 });
   const e = (q) => ease('inOutCubic')(q);
-  const q = (k, p, f) => p + f * 0.5 * (k / 11 - 0.5); // sample k of 12 across half a frame centred on p
-  near(q(11, 0.5, frame) - q(0, 0.5, frame), frame / 2, 'the samples span half a frame of travel');
-  const out = registries.cuts.get('slide').apply({ from: [field, fakeSampled('a', 1500)], to: [field, fakeSampled('b', 200)], p: 0.5, canvas, frame, background: '#123456' });
-  assert.equal(out.length, 12, 'twelve layers and nothing else');
-  out.forEach((layer, k) => {
-    assert.equal(layer.type, 'group');
-    assert.equal(layer.props.layer, true, `layer ${k} composites as one picture`);
-    near(layer.opacity, 1 / (k + 1), `layer ${k}: a running average`);
-    // the backdrop (the shot background) and the field first, so every layer covers the frame
-    assert.deepEqual(layer.children.map((n) => n.id), [`${layer.id}.backdrop`, 'field', 'a', 'b'], `layer ${k}`);
-    const [backdrop, , a, b] = layer.children;
-    assert.equal(backdrop.props.fill, '#123456');
-    near(a.x, 1500 - e(q(k, 0.5, frame)) * 1920, `outgoing sample ${k}`);
-    near(b.x, 200 + (1 - e(q(k, 0.5, frame))) * 1920, `incoming sample ${k}`);
+  const parts = registries.cuts.get('slide').parts({ from: [field, fakeSampled('a', 1500)], to: [field, fakeSampled('b', 200)], p: 0.5, canvas, background: '#123456' });
+  assert.deepEqual(parts.still.map((n) => n.id), ['field'], 'the shared field is drawn once');
+  for (const q of [0.48, 0.5, 0.52]) {
+    const [a, b] = parts.moving(q);
+    near(a.x, 1500 - e(q) * 1920, `outgoing at ${q}`);
+    near(b.x, 200 + (1 - e(q)) * 1920, `incoming at ${q}`);
     near(a.opacity, 1, 'no sample carries an opacity of its own');
-    near(b.opacity, 1, 'no sample carries an opacity of its own');
-  });
+  }
   const onScreen = (n) => n.x + 10 > 0 && n.x < canvas.w; // the fake node is a 10 px square at its x
-  assert.ok(out.some((l) => onScreen(l.children[2])) && out.some((l) => onScreen(l.children[3])), 'both shots on screen mid-cut');
-  const punch = registries.cuts.get('punch').apply({ from: [], to: [fakeSampled('ground', 0, { fixed: true }), fakeSampled('b', 500)], p: 0.5, canvas, frame: 1 / 6, background: '#000000' });
-  assert.equal(punch.length, 12);
-  punch.forEach((layer, k) => {
-    near(layer.opacity, 1 / (k + 1), `punch layer ${k}`);
-    assert.deepEqual(layer.children.map((n) => n.id), [`${layer.id}.backdrop`, 'ground', 'b'], 'a fixed node is in every layer, unmoved');
-    near(layer.children[1].x, 0, 'the fixed node stays put');
-    near(layer.children[2].scale, 1.15 + (1 - 1.15) * ease('outExpo')(q(k, 0.5, 1 / 6)), `punch sample ${k}`);
-  });
-  // without `frame` a cut draws each node once
+  assert.ok(parts.moving(0.5).every(onScreen), 'both shots on screen mid-cut');
+  // apply draws the parts at p: each node once
   assert.deepEqual(registries.cuts.get('slide').apply({ from: [field, fakeSampled('a', 1500)], to: [field, fakeSampled('b', 200)], p: 0.5, canvas }).map((n) => n.id), ['field', 'a', 'b']);
-  // a real film in a look that asks for the smear (smear: true): a slide has both shots' text in every sample mid-cut,
-  // and none once it has run
+  const punch = registries.cuts.get('punch').parts({ from: [], to: [fakeSampled('ground', 0, { fixed: true }), fakeSampled('b', 500)], p: 0.5, canvas });
+  assert.deepEqual(punch.still.map((n) => n.id), ['ground'], 'a fixed node at the back is still');
+  near(punch.moving(0.3)[0].scale, 1.15 + (1 - 1.15) * ease('outExpo')(0.3), 'punch sample');
+  // a real film in a look that asks for the smear: a slide has both shots' text in every layer mid-cut, and no smear once
+  // it has run
   const shots = [{ id: 'one', show: 'statement', say: 'Your charts lie.' }, { id: 'two', show: 'statement', say: 'No cloud.', cut: 'slide' }];
   const f = filmFor(shots, smearLook('pop'), '9:16');
   const second = buildTimeline(filmOf(shots, smearLook('pop'), '9:16'), { fps: FPS }).shots[1];
-  const mid = f.sampleAt(second.start + 0.2);
-  assert.equal(mid.length, 12);
-  assert.ok(mid.every((l) => l.props.layer === true && l.children.some((n) => n.id === 'one.text') && l.children.some((n) => n.id === 'two.text')), 'both statements in every sample');
-  assert.equal(f.sampleAt(second.start + 0.5).filter((n) => n.id === 'two.text').length, 1, 'crisp once the cut has run');
+  const { smear } = f.frameAt(second.start + 0.2);
+  assert.ok(smear.layers.length > 1);
+  assert.ok(smear.layers.every((l) => l.some((n) => n.id === 'one.text') && l.some((n) => n.id === 'two.text')), 'both statements in every sample');
+  assert.equal(f.frameAt(second.start + 0.5).smear, undefined, 'crisp once the cut has run');
+  assert.equal(f.sampleAt(second.start + 0.5).filter((n) => n.id === 'two.text').length, 1);
   // a desk slide between two statements: at p 0.5 the outgoing text still reaches onto the canvas and the incoming one has arrived on it
   const desk = [{ id: 'one', show: 'statement', say: 'Most dashboards cannot tell you where a number came from.' }, { id: 'two', show: 'statement', say: 'This one is different.', cut: 'slide' }];
   const g = filmFor(desk, smearLook('desk'), '16:9');
   const at = buildTimeline(filmOf(desk, smearLook('desk'), '16:9'), { fps: FPS }).shots[1].start + 0.2;
-  const texts = (id) => g.sampleAt(at).flatMap((l) => l.children).filter((n) => n.id === id);
+  const texts = (id) => g.frameAt(at).smear.layers.flat().filter((n) => n.id === id);
   assert.ok(texts('one.text').some((n) => n.x + n.props.layout.width > 0), 'the outgoing text is on screen at p 0.5');
   assert.ok(texts('two.text').some((n) => n.x < canvas.w), 'the incoming text is on screen at p 0.5');
 });
 
-// A look that asks for the cut smear: `base` with cutStyle smear: true on slide and punch (neither shipped look does yet).
-function smearLook(base) {
-  const name = `${base}-smear-test`;
-  const cutStyle = { slide: { smear: true }, punch: { smear: true } };
+// A look whose cutStyle is `cutStyle`: `base` under a test name (the shipped looks smear some cuts and not others).
+function styledLook(base, suffix, cutStyle) {
+  const name = `${base}-${suffix}-test`;
   if (!registries.looks.has(name)) registries.looks.add(name, Object.freeze({ ...registries.looks.get(base), name, cutStyle }));
   return name;
 }
+// A look that asks for the cut smear on slide and punch; one that asks for none.
+const smearLook = (base) => styledLook(base, 'smear', { slide: { smear: true }, punch: { smear: true } });
+const plainLook = (base) => styledLook(base, 'plain', {});
 
-test('the smear is look data: desk and pop draw one copy of each shot through a slide and a punch; a look whose cutStyle asks for it draws the averaged samples', () => {
+test('the smear is look data: a look whose cutStyle does not ask for it draws one copy of each shot through a slide and a punch; one that asks draws the averaged samples', () => {
   const statements = (cut) => [{ id: 'one', show: 'statement', say: 'Your charts lie.' }, { id: 'two', show: 'statement', say: 'No cloud.', cut }];
-  for (const [look, format, cut] of [['desk', '16:9', 'slide'], ['pop', '9:16', 'slide'], ['pop', '9:16', 'punch']]) {
+  for (const [base, format, cut] of [['desk', '16:9', 'slide'], ['pop', '9:16', 'slide'], ['pop', '9:16', 'punch']]) {
+    const look = plainLook(base);
     const f = filmFor(statements(cut), look, format);
     const second = buildTimeline(filmOf(statements(cut), look, format), { fps: FPS }).shots[1];
-    const mid = f.sampleAt(second.start + registries.cuts.get(cut).dur / 2);
-    assert.ok(!mid.some((n) => n.props.layer === true), `${look} ${cut}: no smear layers`);
+    const t = second.start + registries.cuts.get(cut).dur / 2;
+    const mid = f.sampleAt(t);
+    assert.equal(f.frameAt(t).smear, undefined, `${look} ${cut}: no smear`);
     assert.equal(mid.filter((n) => n.id === 'two.text').length, 1, `${look} ${cut}: one copy of the incoming shot`);
     if (cut === 'slide') assert.equal(mid.filter((n) => n.id === 'one.text').length, 1, `${look} ${cut}: one copy of the outgoing shot`);
     // the test look's own timeline (a test look's mode follows its name, so its timing may differ)
-    const smearStart = buildTimeline(filmOf(statements(cut), smearLook(look), format), { fps: FPS }).shots[1].start;
-    const smeared = filmFor(statements(cut), smearLook(look), format).sampleAt(smearStart + registries.cuts.get(cut).dur / 2);
-    assert.equal(smeared.filter((n) => n.props.layer === true).length, 12, `${look}-smear-test ${cut}: twelve samples`);
+    const smearStart = buildTimeline(filmOf(statements(cut), smearLook(base), format), { fps: FPS }).shots[1].start;
+    const smeared = filmFor(statements(cut), smearLook(base), format).frameAt(smearStart + registries.cuts.get(cut).dur / 2);
+    assert.ok(smeared.smear.layers.length > 1, `${base}-smear-test ${cut}: averaged samples`);
   }
-  assert.equal(registries.looks.get('desk').cutStyle.slide?.smear, undefined);
-  assert.equal(registries.looks.get('pop').cutStyle.punch?.smear, undefined);
+  // transitions Task 6: desk and pop smear their three moving cuts; cosmos none
+  const smears = (name) => Object.keys(registries.looks.get(name).cutStyle).filter((cut) => registries.looks.get(name).cutStyle[cut].smear === true).sort();
+  assert.deepEqual(smears('desk'), ['cover', 'punch', 'slide']);
+  assert.deepEqual(smears('pop'), ['cover', 'punch', 'slide']);
+  assert.deepEqual(smears('cosmos'), []);
 });
 
 test('match interpolates a shared node at p 0.5 and fades the others', () => {

@@ -22,7 +22,8 @@ const DEFAULT_PUNCH = Object.freeze({ scale: 1.08, dur: 0.12 }); // for a look w
 
 // The highlighted value's text, or null (the same text the plot would have labelled it with).
 function highlightedText(shot) {
-  if (shot.highlight === undefined) return null;
+  // a scatter's highlight is its point's label; a race shows its own period numeral (chart-race.mjs)
+  if (shot.highlight === undefined || shot.type === 'scatter' || shot.type === 'race') return null;
   const data = chartData(shot);
   if (data.items) {
     const item = data.items.find((i) => i.key === shot.highlight);
@@ -79,7 +80,8 @@ export function expandPopChart(shot, ctx, data, hero) {
   // the claim is read as part of the hierarchy, so the hero rule judges it (role 'claim', review B I10); until the
   // highlighted numeral punches in (and with no highlight, always) it is the frame's largest text: at least three times
   // the labels
-  const minSize = Math.ceil(HERO_MARGIN * MIN_HERO_RATIO * font.size);
+  // a race carries its own hero, the period numeral at three times the labels (chart-race.mjs): its claim need not be
+  const minSize = shot.type === 'race' ? 0 : Math.ceil(HERO_MARGIN * MIN_HERO_RATIO * font.size);
   const tag = plainTag(ctx, `${shot.id}.title`, shot.title, {
     left: area.left, top: area.top, maxWidth: area.w, at: 0, fromStep: Math.min(...data.tagSteps), toStep: Math.max(...data.tagSteps), fill: tagStyle.fill ?? 'ink', text: tagStyle.text ?? 'paper', snap: true, role: 'claim', minSize,
   });

@@ -1,26 +1,28 @@
 // Cuts between shots for the v2 engine. Importing this file registers the node cuts `cut`, `slide`, `cover` (cover.mjs),
-// `punch` and `match`, and the layer cuts of layers.mjs, in registries.cuts (once: a second evaluation leaves the registry
+// `punch` and `match`, the layer cuts of layers.mjs and the shader cuts of shaders/index.mjs, in registries.cuts (once: a second evaluation leaves the registry
 // as it is). A node cut is { family, dur, apply,
-// ... } (defineCut lists the fields) where apply({ from, to, p, canvas, look, frame, background, direction }) blends two
+// ... } (defineCut lists the fields) where apply({ from, to, p, canvas, look, background, direction }) blends two
 // sampled, camera-applied frames: `from` is the
 // outgoing shot frozen at its end, `to` the incoming shot sampled live, p runs 0..1 over the first `dur` seconds of the
-// incoming shot. Every cut returns `from` unchanged at p <= 0 and `to` unchanged at p >= 1. `frame`, when given, is
-// how much p moves in one frame: `slide` and `punch` then draw a motion smear, the true average of SMEAR.samples
-// pictures spread over SMEAR.span of a frame of travel, which exists only while the cut runs. `background` is the
-// incoming shot's background colour (#rrggbb), painted under each sample so that every sample covers the frame.
-// Pure and DOM-free.
+// incoming shot. Every cut returns `from` unchanged at p <= 0 and `to` unchanged at p >= 1. `background` is the
+// incoming shot's background colour (#rrggbb). A cut that can smear (slide, cover, punch) also has
+// parts({ from, to, p, canvas, look, background, direction }) -> { still, moving(q), travel(q0, q1), vector, over }: the
+// nodes that do not move (drawn first), the moving nodes at progress q, the largest distance in pixels a moving point
+// covers between two progress values, the unit vector of the motion (null for a zoom), and the nodes drawn over the
+// moving ones; [...still, ...moving(p), ...over] is what apply returns. engine/graph/film.mjs draws the smear from it
+// (engine/cuts/smear.mjs). Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { ease } from '../time/ease.mjs';
 import { stateKey } from '../graph/sample.mjs';
-import { cover } from './cover.mjs';
+import { coverParts } from './cover.mjs';
 import { LAYER_CUTS } from './layers.mjs';
+import { SHADER_CUTS } from './shaders/index.mjs';
 
 const HALF = 2;
 const SLIDE = Object.freeze({ dur: 0.4, ease: 'inOutCubic' });
 const COVER = Object.freeze({ dur: 0.4 }); // its ease is cover.mjs's
 const PUNCH = Object.freeze({ dur: 0.2, ease: 'outExpo', zoom: 1.15 });
 const MATCH = Object.freeze({ dur: 0.5, ease: 'inOutCubic', outgoingShare: 0.4 });
-const SMEAR = Object.freeze({ samples: 12, span: 0.5 }); // samples over this share of one frame of travel, centred on p
 // A shared node's incoming copy fades in over its outgoing one between these points of the eased p; the outgoing copy
 // stays at full strength until the incoming one is fully in, then leaves, so the pair never reads thinner than either.
 const CROSS_FROM = 0.25;
@@ -45,25 +47,34 @@ const EDGE_NAMES = Object.freeze(Object.keys(EDGES));
 // it): `family` 'node', `dur` its default length, `directions` (the first the default) or null, `smearable` (it takes
 // `smear`), `incomingOnly` (once p > 0 it draws only the incoming shot, as punch does, where a slide or a match still
 // shows the outgoing one) and `example`, one valid `cut` value for --list cuts. `direction` reaches the blend as given,
-// else the cut's first.
-function defineCut({ dur, blend, summary, example, directions = null, smearable = false, incomingOnly = false }) {
+// else the cut's first. A cut given `parts` (see the head of this file) smears: its blend is the parts drawn at p.
+function defineCut({ dur, blend, parts = null, summary, example, directions = null, incomingOnly = false }) {
+  const checked = (args) => {
+    const { from, to, p, direction } = args;
+    if (!Array.isArray(from) || !Array.isArray(to)) throw new Error('cut.apply needs from and to sampled frames');
+    if (!Number.isFinite(p)) throw new Error(`cut.apply: p must be a finite number, got ${p}`);
+    if (direction !== undefined && direction !== null && !directions?.includes(direction)) throw new Error(`cut.apply: direction must be one of ${(directions ?? ['none']).join(', ')}, got ${direction}`);
+    return { ...args, direction: direction ?? directions?.[0] ?? null };
+  };
+  const draw = parts === null ? blend : (args) => {
+    const { still, moving, over } = parts(args);
+    return [...still, ...moving(args.p), ...over];
+  };
   return Object.freeze({
     family: 'node',
     dur,
     summary,
     example,
     directions,
-    smearable,
+    smearable: parts !== null,
     incomingOnly,
-    apply({ from, to, p, canvas, look, frame, background, direction }) {
-      if (!Array.isArray(from) || !Array.isArray(to)) throw new Error('cut.apply needs from and to sampled frames');
-      if (!Number.isFinite(p)) throw new Error(`cut.apply: p must be a finite number, got ${p}`);
-      if (frame !== undefined && !(Number.isFinite(frame) && frame > 0)) throw new Error(`cut.apply: frame must be a number > 0, got ${frame}`);
-      if (direction !== undefined && direction !== null && !directions?.includes(direction)) throw new Error(`cut.apply: direction must be one of ${(directions ?? ['none']).join(', ')}, got ${direction}`);
-      if (p <= 0) return from;
-      if (p >= 1) return to;
-      return blend({ from, to, p, canvas, look, frame, background, direction: direction ?? directions?.[0] ?? null });
+    apply(args) {
+      const ready = checked(args);
+      if (ready.p <= 0) return ready.from;
+      if (ready.p >= 1) return ready.to;
+      return draw(ready);
     },
+    ...(parts === null ? {} : { parts: (args) => parts(checked(args)) }),
   });
 }
 
@@ -90,62 +101,49 @@ export const backgroundIds = (from, to) => {
   return new Set(to.filter((n) => n.depth > 0 && outgoing.has(n.id)).map((n) => n.id));
 };
 
-// A group node at the identity, as sampleGraph would give it, holding `children`; `props` are its own.
-const groupNode = (id, props, children, opacity = 1) => Object.freeze({
-  type: 'group', id, depth: 0, props: Object.freeze(props),
-  x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity, draw: 1, reveal: 1, blur: 0, visible: opacity > 0,
-  children: Object.freeze(children),
-});
-
 // A rectangle over the whole canvas in the shot's background colour: what the page paints before a frame.
 export const backdropNode = (id, canvas, fill) => Object.freeze({
   type: 'path', id, depth: 0, props: Object.freeze({ d: `M0 0H${canvas.w}V${canvas.h}H0Z`, fill }),
   x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, draw: 1, reveal: 1, blur: 0, visible: true, children: Object.freeze([]),
 });
 
-// `place(q)` gives the moving nodes where the cut has them at progress q; `still` are the nodes that do not move (the
-// shared background). Without `frame` they are drawn once, at p. With it, the cut is SMEAR.samples pictures at the
-// progress of evenly spread moments across SMEAR.span of a frame centred on p, each a layer (drawn as one picture: the
-// page composites it whole, engine/page/draw.mjs) holding the backdrop, the still nodes and the moving nodes at that
-// moment, so every layer covers the frame. Layer k is drawn at opacity 1 / (k + 1) over the layers before it: a running
-// average, so each sample weighs 1 / samples in the result and no copy stands out (the first build drew 5 copies with
-// a whole one on top, which read as separate echoes).
-export function smeared(place, still, { p, frame, canvas, background }) {
-  if (frame === undefined) return [...still, ...place(p)];
-  const n = SMEAR.samples;
-  return Array.from({ length: n }, (_, k) => {
-    const q = clamp01(p + frame * SMEAR.span * (k / (n - 1) - 1 / HALF));
-    const id = `smear${k}`;
-    const backdrop = background === undefined ? [] : [backdropNode(`${id}.backdrop`, canvas, background)];
-    return groupNode(id, { layer: true }, [...backdrop, ...still, ...place(q)], 1 / (k + 1));
-  });
-}
+/** How far a point moves along an edge cut's axis between eased progress values of `curve`: the canvas side along the
+ *  edge times the eased distance. */
+export const edgeTravel = (curve, direction, canvas) => (q0, q1) => Math.abs(curve(q1) - curve(q0)) * (EDGES[direction][0] === 0 ? canvas.h : canvas.w);
 
 // Only the shot slides: the shared background stays (see backgroundNode()), so the cut happens over one surface. The
 // incoming shot comes in from edge `direction` and pushes the outgoing one out by the opposite edge.
-function slide({ from, to, p, canvas, frame, background, direction }) {
-  const e = ease(SLIDE.ease)(p);
+function slideParts({ from, to, p, canvas, direction }) {
+  const curve = ease(SLIDE.ease);
   const [ux, uy] = EDGES[direction];
   const outgoing = new Map(from.map((n) => [n.id, n]));
   const shared = backgroundIds(from, to);
   const leaving = from.filter((n) => !shared.has(n.id)), arriving = to.filter((n) => !shared.has(n.id));
-  const still = to.filter((n) => shared.has(n.id)).map((n) => backgroundNode(outgoing.get(n.id), n, e));
-  const place = (q) => {
-    const eq = ease(SLIDE.ease)(q);
+  const still = to.filter((n) => shared.has(n.id)).map((n) => backgroundNode(outgoing.get(n.id), n, curve(p)));
+  const moving = (q) => {
+    const eq = curve(q);
     return [...shifted(leaving, -ux * eq * canvas.w, -uy * eq * canvas.h), ...shifted(arriving, ...edgeOffset(direction, eq, canvas))];
   };
-  return smeared(place, still, { p, frame, canvas, background });
+  return { still, moving, travel: edgeTravel(curve, direction, canvas), vector: [ux, uy], over: [] };
 }
 
-function punch({ to, p, canvas, frame, background }) {
+// The punch zooms the incoming shot about the centre of the canvas. A fixed node stays put, as it does under the camera,
+// and in its place in the shot's order: a locked look's field at the back (still), a pinned overlay (slug, kicker tag,
+// caption) over the picture it sits on (over, or inside the moving run when a zoomed node lies over it).
+function punchParts({ to, canvas }) {
   const cx = canvas.w / HALF, cy = canvas.h / HALF;
-  // a fixed node stays put, as it does under the camera, and in its place in the shot's order: a locked look's field
-  // at the back, a pinned overlay (slug, kicker tag, caption) over the picture it sits on
-  const zoomed = (q) => {
-    const zoom = lerp(PUNCH.zoom, 1, ease(PUNCH.ease)(q));
-    return to.map((n) => (n.props.fixed === true ? n : Object.freeze({ ...n, x: cx + (n.x - cx) * zoom, y: cy + (n.y - cy) * zoom, scale: n.scale * zoom })));
+  const zoomOf = (q) => lerp(PUNCH.zoom, 1, ease(PUNCH.ease)(q));
+  const first = to.findIndex((n) => n.props.fixed !== true);
+  const last = to.findLastIndex((n) => n.props.fixed !== true);
+  const [lead, run, tail] = first < 0 ? [to, [], []] : [to.slice(0, first), to.slice(first, last + 1), to.slice(last + 1)];
+  const moving = (q) => {
+    const zoom = zoomOf(q);
+    return run.map((n) => (n.props.fixed === true ? n : Object.freeze({ ...n, x: cx + (n.x - cx) * zoom, y: cy + (n.y - cy) * zoom, scale: n.scale * zoom })));
   };
-  return smeared(zoomed, [], { p, frame, canvas, background });
+  // a point shown at the corner of the canvas at zoom z sits (corner reach) / z from the centre in the shot
+  const reach = Math.hypot(cx, cy);
+  const travel = (q0, q1) => (reach * Math.abs(zoomOf(q1) - zoomOf(q0))) / Math.min(zoomOf(q0), zoomOf(q1));
+  return { still: lead, moving, travel, vector: null, over: tail };
 }
 
 // ---- match ----
@@ -281,15 +279,15 @@ function match({ from, to, p }) {
 export const CUTS = Object.freeze({
   cut: defineCut({ dur: 0, blend: ({ to }) => to, summary: 'A hard cut: the next shot replaces the last on its first frame.', example: 'cut' }),
   slide: defineCut({
-    dur: SLIDE.dur, blend: slide, directions: EDGE_NAMES, smearable: true, example: { type: 'slide', direction: 'left' },
+    dur: SLIDE.dur, parts: slideParts, directions: EDGE_NAMES, example: { type: 'slide', direction: 'left' },
     summary: 'The next shot slides in from an edge (right by default) and pushes the last one out by the other over 0.4 s.',
   }),
   cover: defineCut({
-    dur: COVER.dur, blend: cover, directions: EDGE_NAMES, smearable: true, example: { type: 'cover', direction: 'up' },
+    dur: COVER.dur, parts: coverParts, directions: EDGE_NAMES, example: { type: 'cover', direction: 'up' },
     summary: 'The next shot slides in from an edge (right by default) over the last one, which stays where it is, over 0.4 s.',
   }),
   punch: defineCut({
-    dur: PUNCH.dur, blend: punch, smearable: true, incomingOnly: true, example: 'punch',
+    dur: PUNCH.dur, parts: punchParts, incomingOnly: true, example: 'punch',
     summary: 'The next shot lands zoomed in and settles to full size over 0.2 s.',
   }),
   match: defineCut({
@@ -298,7 +296,7 @@ export const CUTS = Object.freeze({
   }),
 });
 
-for (const [name, cut] of Object.entries({ ...CUTS, ...LAYER_CUTS })) {
+for (const [name, cut] of Object.entries({ ...CUTS, ...LAYER_CUTS, ...SHADER_CUTS })) {
   if (!registries.cuts.has(name)) registries.cuts.add(name, cut);
 }
 

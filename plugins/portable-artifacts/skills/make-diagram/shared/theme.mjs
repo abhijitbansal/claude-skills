@@ -17,6 +17,9 @@ export const DEFAULT_THEME = 'paper';
 // and template/runtime.js read; keep them stable.
 const VARS = {
   page: '--page', surface: '--surface', text: '--text', text2: '--text-2', text3: '--text-3',
+  // surface steps above --surface (light: darker wells and bands; dark: lighter raised steps) and the colour the
+  // elevation scale (--elev-1..3) mixes its shadows from
+  surface2: '--surface-2', surface3: '--surface-3', shadow: '--shadow',
   line: '--line', grid: '--grid', accent: '--accent', accentSoft: '--accent-soft',
   warn: '--warn', good: '--good', bad: '--bad',
   cat1: '--s1', cat2: '--s2', cat3: '--s3', cat4: '--s4', cat5: '--s5', cat6: '--s6', cat7: '--s7', cat8: '--s8',
@@ -47,11 +50,28 @@ export function loadTheme(name) {
 
 const family = (f) => `"${f.family}", ${f.fallback}`;
 
-function vars(tokens, fonts) {
+const WANTED_WEIGHT = 600; // what headings and strong labels ask for
+/**
+ * The weight of `role` (a theme font role) nearest to `wanted`, the heavier on a tie. A weight the font does not
+ * ship is drawn by the browser as synthesised bold (Young Serif in press ships 400 only), so pages ask for a real one.
+ */
+export function nearestWeight(role, wanted = WANTED_WEIGHT) {
+  const have = Object.keys(role.weights).map(Number).sort((a, b) => a - b);
+  return have.reduce((best, w) => (Math.abs(w - wanted) < Math.abs(best - wanted) || (Math.abs(w - wanted) === Math.abs(best - wanted) && w > best) ? w : best), have[0]);
+}
+
+/** { display, strong }: the heading weight (display font) and the emphasis weight (body font) the theme ships. */
+export const themeWeights = (theme) => ({ display: nearestWeight(theme.fonts.display), strong: nearestWeight(theme.fonts.body) });
+
+// Fonts and weights are mode-independent: they are declared once, on the light :root, and never repeated, so no
+// later block can override them.
+function vars(tokens, theme) {
   const colours = TOKENS.map((k) => `${VARS[k]}:${tokens[k]}`).join(';');
-  return fonts
-    ? `${colours};--font-display:${family(fonts.display)};--font:${family(fonts.body)};--mono:${family(fonts.mono)}`
-    : colours;
+  if (!theme) return colours;
+  const { fonts } = theme;
+  const w = themeWeights(theme);
+  return `${colours};--font-display:${family(fonts.display)};--font:${family(fonts.body)};--mono:${family(fonts.mono)}`
+    + `;--display-weight:${w.display};--strong-weight:${w.strong}`;
 }
 
 // One @font-face per distinct family+weight across the three roles.
@@ -67,6 +87,20 @@ export function fontPayloadBytes(theme) {
   return [...new Set(faces(theme).map((f) => f.file))].reduce((n, file) => n + fs.statSync(path.join(FONTS, file)).size, 0);
 }
 
+// The elevation scale: two shadow layers per level as [y, blur, strength %]. One light source (straight above), so
+// every level only moves down. With color-mix the shadows take the theme's --shadow hue (tinted, never plain grey);
+// older browsers get black at the same strength, declared first.
+const ELEVATION = [
+  [[1, 2, 8], [2, 6, 6]],
+  [[2, 6, 10], [10, 24, 10]],
+  [[6, 16, 14], [20, 48, 16]],
+];
+const elevation = (paint) => ELEVATION.map((layers, i) => `--elev-${i + 1}:${layers.map(([y, blur, p]) => `0 ${y}px ${blur}px ${paint(p)}`).join(',')}`).join(';');
+const ELEVATION_CSS = [
+  `:root{${elevation((p) => `rgba(0,0,0,${p / 100})`)}}`,
+  `@supports (color: color-mix(in srgb, red, red)){:root{${elevation((p) => `color-mix(in srgb, var(--shadow) ${p}%, transparent)`)}}}`,
+].join('\n');
+
 export function themeCss(theme) {
   const fontFaces = faces(theme).map(({ family: fam, weight, file }) => {
     const b64 = fs.readFileSync(path.join(FONTS, file)).toString('base64');
@@ -74,9 +108,10 @@ export function themeCss(theme) {
   });
   return [
     ...fontFaces,
-    `:root{color-scheme:light;${vars(theme.light, theme.fonts)}}`,
+    `:root{color-scheme:light;${vars(theme.light, theme)}}`,
     `@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;${vars(theme.dark)}}}`,
     `:root[data-theme="dark"]{color-scheme:dark;${vars(theme.dark)}}`,
+    ELEVATION_CSS,
     typeCss(),
   ].join('\n');
 }

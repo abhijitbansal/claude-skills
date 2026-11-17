@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_THEME, TOKENS, listThemes, loadTheme, themeCss, fontPayloadBytes, ThemeError } from '../theme.mjs';
+import { DEFAULT_THEME, TOKENS, listThemes, loadTheme, themeCss, fontPayloadBytes, ThemeError, themeWeights, nearestWeight } from '../theme.mjs';
 
 test('nine themes ship, paper is the default', () => {
   assert.deepEqual(listThemes(), ['blueprint', 'brief', 'dusk', 'editorial', 'ink', 'mono', 'paper', 'poster', 'press']);
@@ -31,6 +31,18 @@ test('every theme defines every token in both modes and stays within the font bu
     assert.ok(files.size <= 6, `${name} uses ${files.size} font files`);
     assert.ok(fontPayloadBytes(t) <= 200 * 1024, `${name} fonts ${fontPayloadBytes(t)} bytes`);
   }
+});
+
+test('surface steps and the shadow colour are tokens; the elevation scale has a plain fallback before color-mix', () => {
+  for (const k of ['surface2', 'surface3', 'shadow']) assert.ok(TOKENS.includes(k), k);
+  const css = themeCss(loadTheme('editorial'));
+  assert.ok(css.includes('--surface-2:#f8f7f4') && css.includes('--surface-3:#f1f0ed') && css.includes('--shadow:#1b1a17'), 'light steps on :root');
+  assert.ok(css.includes('--surface-2:#21201d') && css.includes('--shadow:#080706'), 'dark steps');
+  const plain = css.indexOf(':root{--elev-1:');
+  const mixed = css.indexOf('@supports (color: color-mix(in srgb, red, red)){:root{--elev-1:');
+  assert.ok(plain >= 0 && mixed > plain, 'fallback first, then the color-mix scale');
+  for (const n of [1, 2, 3]) assert.match(css.slice(mixed), new RegExp(`--elev-${n}:[^;}]*color-mix\\(in srgb, var\\(--shadow\\) \\d+%, transparent\\)`));
+  assert.doesNotMatch(css.slice(plain, mixed), /var\(--shadow\)/, 'the fallback needs no color-mix');
 });
 
 test('kind hues and the glow are tokens with their own CSS variables', () => {
@@ -66,4 +78,26 @@ test('type systems: Geist for paper/blueprint/ink, serif editorial and brief, mo
   assert.equal(fam('brief', 'display'), 'Newsreader');
   assert.equal(fam('brief', 'body'), 'Atkinson Hyperlegible');
   assert.equal(fam('brief', 'mono'), 'Geist Mono');
+});
+
+test('weights: --display-weight and --strong-weight are declared once, and the value is a weight the theme ships', () => {
+  for (const name of listThemes()) {
+    const theme = loadTheme(name);
+    const css = themeCss(theme);
+    for (const [v, role] of [['--display-weight', 'display'], ['--strong-weight', 'body']]) {
+      // one declaration only: a later default (typeCss, a dark block) would override the theme value at equal specificity
+      const all = [...css.matchAll(new RegExp(`${v}:(\\d+)`, 'g'))].map((m) => Number(m[1]));
+      assert.equal(all.length, 1, `${name}: ${v} declared ${all.length} times`);
+      assert.ok(Object.keys(theme.fonts[role].weights).map(Number).includes(all[0]), `${name}: ${v} ${all[0]} is not shipped by ${role}`);
+    }
+  }
+});
+
+test('weights: nearest to 600, heavier on a tie; press draws Young Serif at 400, editorial strong text at 700', () => {
+  assert.equal(nearestWeight({ weights: { 400: 'a', 700: 'b' } }), 700);
+  assert.equal(nearestWeight({ weights: { 400: 'a', 800: 'b' } }), 800, 'a tie goes to the heavier');
+  assert.equal(nearestWeight({ weights: { 400: 'a' } }), 400);
+  assert.deepEqual(themeWeights(loadTheme('press')), { display: 400, strong: 700 });
+  assert.deepEqual(themeWeights(loadTheme('blueprint')), { display: 600, strong: 600 });
+  assert.equal(themeWeights(loadTheme('editorial')).strong, 700);
 });

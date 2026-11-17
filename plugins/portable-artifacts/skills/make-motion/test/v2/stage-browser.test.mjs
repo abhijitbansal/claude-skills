@@ -152,7 +152,8 @@ test('the page reports its size, frame count, which post pass it runs and each s
   assert.match(a.info.post, /^(webgl2|2d)$/);
   // backgrounds: the colour painted under each shot, the contrast rule's last ground (final wave I3)
   // pictures: each loaded picture's size by src (none here), for a kind's review (scripts/v2/review.mjs)
-  assert.deepEqual(a.info, { frameCount: LAST_FRAME, fps: FPS, size: [1920, 1080], post: a.info.post, backgrounds: ['#101820'], pictures: {} });
+  // cuts: the shader cuts the post pass ran or replaced (none in this film; engine/page/post.mjs)
+  assert.deepEqual(a.info, { frameCount: LAST_FRAME, fps: FPS, size: [1920, 1080], post: a.info.post, cuts: { ran: [], replaced: [], reason: null }, backgrounds: ['#101820'], pictures: {} });
 });
 
 test('frames differ over time and the frame is not blank', async (t) => {

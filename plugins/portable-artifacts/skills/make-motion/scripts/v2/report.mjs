@@ -90,8 +90,18 @@ export const experimentalKindLine = ({ name, type, look }) => (type === undefine
   ? `make: kind "${name}" is experimental in look "${look}": it renders, but it is not one of the listed kinds and may change`
   : `make: chart type "${type}" is experimental in look "${look}": it renders, but it is not one of the listed chart types and may change`);
 
+// Whether the page ran or replaced any shader cut (engine/page/post.mjs `cuts`): a film without one carries no `cuts`.
+const hasShaderCuts = (cuts) => (cuts?.ran?.length ?? 0) + (cuts?.replaced?.length ?? 0) > 0;
+
+// The post part of the frames line: `webgl2`, then the shader cuts that ran or were replaced, when the film has any.
+function postText({ post, cuts }) {
+  if (!hasShaderCuts(cuts)) return post;
+  if (cuts.replaced.length > 0) return `${post}, shader cuts replaced: ${cuts.replaced.join(', ')} (${cuts.reason})`;
+  return `${post}, shader cuts: ${cuts.ran.length}`;
+}
+
 /** The report of a run in its state `state` (see run.mjs), with every key present (`look` only for an experimental look,
- *  `kinds` only for a film that uses a parked kind). */
+ *  `kinds` only for a film that uses a parked kind, `cuts` only for a film with shader cuts). */
 export function reportOf(state) {
   const mechanical = state.findings.some((f) => f.kind === 'mechanical');
   return {
@@ -115,6 +125,7 @@ export function reportOf(state) {
     ...(state.poster ? { poster: state.poster } : {}), // --poster: { file, frame, seconds }
     ...(state.workers ? { workers: state.workers } : {}), // --workers above 1: the pages that captured the frames
     ...(state.subtitles ? { subtitles: state.subtitles } : {}), // --subtitles: { file, format, timed }
+    ...(hasShaderCuts(state.cuts) ? { cuts: state.cuts } : {}), // a film with shader cuts: { ran, replaced, reason }
     ...(state.look ? { look: state.look } : {}),
     ...(state.kinds?.length > 0 ? { kinds: state.kinds } : {}),
     ...(state.error === null ? {} : { error: state.error }),
@@ -181,7 +192,7 @@ export function formatText(report, { sheetsDir }) {
   if (report.timed === null || timelineFailed(report.stages)) return lines.join('\n');
   lines.push(`sheets: ${sheetsDir} (${report.sheets.length} ${report.sheets.length === 1 ? 'file' : 'files'})`);
   lines.push(`output: ${report.output ?? 'none (not rendered)'}`);
-  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${report.post}, ${report.msPerFrame.toFixed(1)} ms per frame); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
+  const counts = report.output === null ? `${report.frames}` : `${report.frames}, captured: ${report.captured} (capture ${report.capture}, post ${postText(report)}, ${report.msPerFrame.toFixed(1)} ms per frame); size: ${(report.bytes / 1e6).toFixed(1)} MB, ${report.mbps.toFixed(1)} Mbit/s`;
   lines.push(`frames: ${counts}`);
   const sound = soundLine(report.audio);
   if (sound !== null) lines.push(sound);

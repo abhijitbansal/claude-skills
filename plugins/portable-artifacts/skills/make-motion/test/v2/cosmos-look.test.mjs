@@ -97,7 +97,7 @@ test('composition, emphasis, field, camera, cuts, grain, captions and modes', ()
   assert.equal(l.camera.style, 'desk', 'the resting drift: linear, no shake');
   assert.ok(l.camera.drift > 0 && l.camera.drift <= 12, `a slow drift: ${l.camera.drift} units`);
   assert.deepEqual([...l.cuts].sort(), registries.cuts.names().sort(), 'every cut may be named (transitions decision 2)');
-  assert.deepEqual([...l.cutPalette], ['cut', 'match', 'crossfade', 'fade', 'iris'], 'its own set');
+  assert.deepEqual([...l.cutPalette], ['cut', 'match', 'crossfade', 'fade', 'iris', 'ripple'], 'its own set');
   assert.equal(l.post.grain, 0.01);
   assert.equal(l.post.halftone, 0, 'no halftone');
   assert.equal(registries.captions.has(l.captions), true);
@@ -119,12 +119,13 @@ test('motion: smooth curves, entrances scale from 0.92 with a fade and a small o
 
 test('sounds are the brief values, one for every registered cut, device and kind event device', () => {
   const { sounds } = look();
-  assert.deepEqual({ ...sounds.cut }, { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', zoom: null, blur: null });
+  assert.deepEqual({ ...sounds.cut }, { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
+    'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null });
   assert.deepEqual({ ...sounds.device }, {
     highlight: 'chime', circle: 'chime', underline: 'chime', arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'pop', turn: 'whoosh',
     // the second-wave devices and kind events: silent in cosmos, which ships none of the second-wave kinds
     label: null, focus: null, route: null, numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null, pin: null, link: null,
-    node: null, event: null,
+    node: null, event: null, change: null, output: null, message: null,
   });
   assert.equal(sounds.emphasis, null);
   assert.equal(sounds.land, 'ding');

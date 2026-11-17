@@ -35,22 +35,55 @@ export function mixHex(a, b, share) {
 const TEXT = ['text', 'text2', 'text3'];
 const UI = ['accent', 'warn', 'good', 'bad'];
 const SEQ = ['seq1', 'seq2', 'seq3', 'seq4', 'seq5', 'seq6', 'seq7'];
+const SURFACES = ['surface', 'surface2', 'surface3'];
+const BACKGROUNDS = ['page', ...SURFACES];
 const fmt = (r) => `${r.toFixed(2)}:1`;
+const HEX = /^#[0-9a-f]{6}$/i;
+
+// Neighbouring surface steps (surface -> surface2 -> surface3) must differ by at least this contrast ratio, or the
+// step cannot be seen. Light mode steps go darker (wells and bands: surface is white or near white in most
+// themes); dark mode steps go lighter (raised). Lift in light mode comes from the elevation scale (--elev-*).
+export const MIN_SURFACE_STEP = 1.04;
+
+function surfaceOrder(t, mode, errors) {
+  const darker = mode === 'light';
+  for (let i = 1; i < SURFACES.length; i++) {
+    const [below, k] = [SURFACES[i - 1], SURFACES[i]];
+    const [lb, lk] = [relativeLuminance(t[below]), relativeLuminance(t[k])];
+    if (darker ? !(lk < lb) : !(lk > lb)) {
+      errors.push({ path: `${mode}.${k}`, message: `${t[k]} must be ${darker ? 'darker' : 'lighter'} than ${below} in ${mode} mode` });
+      continue;
+    }
+    const r = contrastRatio(t[k], t[below]);
+    if (r < MIN_SURFACE_STEP) errors.push({ path: `${mode}.${k}`, message: `${t[k]} step is ${fmt(r)} from ${below}; needs at least ${fmt(MIN_SURFACE_STEP)}` });
+  }
+}
 
 export function checkTheme(theme) {
   const errors = [];
   for (const mode of ['light', 'dark']) {
     const t = theme[mode];
+    const missing = [...TEXT, ...BACKGROUNDS, ...UI].filter((k) => typeof t?.[k] !== 'string' || !HEX.test(t[k]));
+    for (const k of missing) errors.push({ path: `${mode}.${k}`, message: `missing; needs a #rrggbb colour` });
+    if (missing.length) continue;
     for (const k of TEXT) {
-      for (const bg of ['page', 'surface']) {
+      for (const bg of BACKGROUNDS) {
         const r = contrastRatio(t[k], t[bg]);
         if (r < 4.5) errors.push({ path: `${mode}.${k}`, message: `${t[k]} is ${fmt(r)} against ${bg}; needs 4.5:1` });
       }
     }
     for (const k of UI) {
-      const r = contrastRatio(t[k], t.surface);
-      if (r < 3) errors.push({ path: `${mode}.${k}`, message: `${t[k]} is ${fmt(r)} against surface; needs 3:1` });
+      for (const bg of SURFACES) {
+        const r = contrastRatio(t[k], t[bg]);
+        if (r < 3) errors.push({ path: `${mode}.${k}`, message: `${t[k]} is ${fmt(r)} against ${bg}; needs 3:1` });
+      }
     }
+    // the accent is also text (links, kickers, the current step): 4.5:1 on the page and on every surface step
+    for (const bg of BACKGROUNDS) {
+      const r = contrastRatio(t.accent, t[bg]);
+      if (r < 4.5) errors.push({ path: `${mode}.accent`, message: `${t.accent} is ${fmt(r)} against ${bg}; needs 4.5:1 as text` });
+    }
+    surfaceOrder(t, mode, errors);
     for (const k of KIND) {
       const against = [['surface', t.surface, 4.5], ['its tint', mixHex(t[k], t.surface, TINT), 4.5], ['page', t.page, 3]];
       for (const [what, bg, need] of against) {

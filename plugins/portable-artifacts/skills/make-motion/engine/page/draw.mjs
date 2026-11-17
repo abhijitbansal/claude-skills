@@ -211,8 +211,8 @@ function applyBlend(ctx, n) {
 
 // props.layer on a node: it and its children are drawn on a canvas of their own (cleared, the same size and transform
 // as the one being drawn on) and that picture is composited once, at the node's opacity and blend. Without it, opacity
-// multiplies into each child and overlapping children show through one another; a cut's smear sample (cuts/index.mjs)
-// must be one picture for its running average to weigh every sample the same. One scratch canvas per nesting depth.
+// multiplies into each child and overlapping children show through one another. (A cut's motion blur no longer uses
+// layers: engine/page/accumulate.mjs sums its samples.) One scratch canvas per nesting depth.
 const layerCanvases = [];
 
 function layerContext(ctx, depth) {

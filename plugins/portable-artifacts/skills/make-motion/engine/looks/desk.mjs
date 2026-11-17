@@ -57,9 +57,13 @@ export const desk = {
   camera: { drift: 12, style: 'desk' },
   // every registered cut may be named (transitions plan, decision 2); the palette is the look's own set, in its order,
   // and cutStyle its defaults per cut (engine/cuts/resolve.mjs)
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur'],
-  cutPalette: ['cut', 'match', 'slide', 'crossfade', 'wipe', 'fade'],
-  cutStyle: {},
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+    'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
+  cutPalette: ['cut', 'match', 'slide', 'crossfade', 'wipe', 'fade', 'page-curl'],
+  // the motion blur on the cuts that move (engine/cuts/smear.mjs)
+  cutStyle: { slide: { smear: true }, cover: { smear: true }, punch: { smear: true } },
+  // a cover's sheet shows its leading edge on identical paper: a hairline and a soft shadow cast on the sheet below
+  coverEdge: { line: { color: 'ink2', width: 2, alpha: 0.35 }, shadow: { color: 'ink', width: 28, alpha: 0.16, steps: 7 } },
   keyline: 8,
   shadow: { dx: 10, dy: 14, blur: 18, alpha: 0.25, color: '#000000' },
   // Styling for the devices this look draws. Colours are palette keys (or #rrggbb), sizes are units.
@@ -120,7 +124,8 @@ export const desk = {
     // `gap` from what they label; marks `line` wide where they are lines, reference lines `ref` and the baseline `axis`
     // wide; marks other than the highlighted one dim to `dim`; reference lines drawn (`refs`); a donut or line plot keeps
     // at least `minPlot` of its box however long its labels (chart-draw.mjs)
-    chart: { titleToWide: 11, titleToTall: 11, titleMax: 180, titleLines: 2, titleGap: 56, labelStep: 2, labelScale: 1.25, sourceStep: 2, gap: 14, line: 5, ref: 2, axis: 3, dim: 0.3, refs: true, minPlot: 0.4 },
+    // (`point`: a scatter point's radius in units, engine/kinds/chart-scatter.mjs)
+    chart: { titleToWide: 11, titleToTall: 11, titleMax: 180, titleLines: 2, titleGap: 56, labelStep: 2, labelScale: 1.25, sourceStep: 2, gap: 14, line: 5, ref: 2, axis: 3, dim: 0.3, refs: true, minPlot: 0.4, point: 10 },
     // media (engine/kinds/media.mjs): the photo in `treatment`, pushing from `push` to 1 over the shot; bleed: the caption
     // on a taped card over columns 1 to `toWide` (`toTall`), `cardPad` in, at the largest of `captionSteps` that holds it
     // in `captionLines` (two: a low, small card that keeps off the subject); cutout: the caption as the hero at the largest
@@ -146,14 +151,29 @@ export const desk = {
     // `textGap` beside it, `partGap` between when and what; the line and ticks (`tick` long) in ink `lineWidth` wide; the
     // title at the largest of `titleSteps` in two lines; `advance` (em a character) estimates fit for the review
     timeline: { whenSteps: [4, 3], whatSteps: [2, 1], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 28, lineX: 12, textGap: 48, partGap: 12, line: 'ink', lineWidth: 3, tick: 18, titleSteps: [4, 3], titleGap: 48, advance: 0.55 },
+    // code (engine/kinds/code.mjs): a printout on a paper card (`card`), `pad` units in, one size in `font` (the label
+    // face's mono) as large as every line fits, between the smallest and the largest of `steps` (step 3: larger reads as
+    // a poster, seen on the sheets), `advance` em a character, `lineHeight` em a row;
+    // token roles in palette keys (`roles`); a highlighted line under the highlighter (`highlight.band`, multiply); a
+    // diff's signs in `removed` and `added`, a removed line struck `strike` units thick; the run prompt in `prompt`; on a
+    // tall frame the title (or a run's command) is the hero over the card, `heroAdvance` (em a character) the review's
+    // estimate of its width
+    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.4, pad: 48, steps: [1, 2, 3], card: true, roles: { plain: 'ink', keyword: 'accent2', string: 'ink2', number: 'accent2', comment: 'ink2', name: 'ink', punct: 'ink2' }, highlight: { band: 'accent', multiply: true }, removed: 'accent2', added: 'ink', strike: 4, prompt: 'ink2', heroAdvance: 0.5 },
+    // feed (engine/kinds/feed.mjs): paper slips down one column of the room, every text one size (the largest of `steps`
+    // from the format's floor that holds each message in `maxLines` and, where it can, the whole thread), `pad` in,
+    // `gap` apart, at most `share` of the room wide; `me` right on the highlighter tint, `them` left on white; names and
+    // the title in the text face at `bold`; notifications as white cards, the app's disc in `discs` (by app) with its
+    // initial in `discText`; typing dots in `dots`; the contact shadow under each slip
+    feed: { steps: [2, 3, 4], maxLines: 4, pad: 24, gap: 20, share: 0.82, radius: 6, bold: 700, me: { fill: 'accent', text: 'ink' }, them: { fill: '#ffffff', text: 'ink' }, card: { fill: '#ffffff', text: 'ink' }, discs: ['accent2', 'ink', 'ink2'], discText: 'paper', dots: 'ink2', title: 'ink2', lineWidth: 0, shadow: true },
     media: { treatment: 'duotone', push: 1.05, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 40, toWide: 6, toTall: 12, besideFrom: 8, gap: 48 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null },
+    cut: { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null, ripple: null, cube: null,
+      'page-curl': 'paper', 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null },
     device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
       label: null, focus: null, route: 'marker', numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,
-      pin: 'paper', link: 'marker', node: 'paper', event: 'paper' },
+      pin: 'paper', link: 'marker', node: 'paper', event: 'paper', change: 'marker', output: 'paper', message: 'paper' },
     emphasis: null,
     land: 'click',
   },

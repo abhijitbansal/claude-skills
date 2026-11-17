@@ -63,9 +63,13 @@ export const pop = {
   wordStagger: 0,
   camera: { drift: 0, style: 'locked' },
   // every registered cut may be named; the palette is pop's own set, in its order, cutStyle its defaults per cut
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur'],
-  cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom'],
-  cutStyle: {},
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+    'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
+  cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom'],
+  // the motion blur on the cuts that move (engine/cuts/smear.mjs)
+  cutStyle: { slide: { smear: true }, cover: { smear: true }, punch: { smear: true } },
+  // a cover's sheet leads with a hard accent keyline: a shadow would not show on the dark paper
+  coverEdge: { line: { color: 'accent', width: 6, alpha: 1 } },
   keyline: 14,
   // the hard offset shadow in the accent (look review 1: the orange-red was the film's only second hue)
   shadow: { dx: 10, dy: 10, blur: 0, alpha: 1, color: '#d7ff3f' },
@@ -120,7 +124,8 @@ export const pop = {
     // labels at step `labelStep`, `gap` from what they label; lines `line` wide, the baseline `axis` wide; the other marks
     // dim to `dim`; no reference lines (`refs`): the values are labelled on the marks; a donut or line plot keeps at least
     // `minPlot` of its box however long its labels (chart-draw.mjs)
-    chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false, minPlot: 0.4 },
+    // (`point`: a scatter point's radius in units, engine/kinds/chart-scatter.mjs)
+    chart: { tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, refs: false, minPlot: 0.4, point: 14 },
     // media (engine/kinds/media.mjs): as desk's, the bleed caption on the look's white plate (its card) in the safe zone
     // screen (engine/kinds/screen.mjs): a white frame with a thick white outline and the look's offset accent shadow; the
     // chrome's dots and pill in greys, its text in the field colour
@@ -138,14 +143,25 @@ export const pop = {
     // desk's); a progress rail `rail` units deep along the room's edge: a `rule` line `ruleWidth` wide, `dot`-radius
     // dots in `dotFill`, the current one lit in `lit`, the highlighted one ringed `ring` times wider
     timeline: { whenSteps: [5, 4], whatSteps: [3, 2, 1], whenLines: 2, whatLines: 3, rail: 48, dot: 12, ring: 1.7, rule: 'rule', ruleWidth: 4, dotFill: 'ink2', lit: 'accent', when: 'accent', what: 'ink', partGap: 24, gap: 24, titleSteps: [3], titleGap: 40, advance: 0.45 },
+    // code (engine/kinds/code.mjs): a dark panel (`fill`) with a thick outline (`line`, `lineWidth` units) and the offset
+    // accent shadow, `pad` units in, one size in `font` (pop has no mono of its own: the stage loads it for a code shot)
+    // at the largest of `steps` that holds every line; roles in white and the two accents; a highlighted line on a
+    // `highlight.band` with its words turned `highlight.text` (dark on the lime); diff signs in `removed` / `added`; on a tall frame
+    // the title (or a run's command) is the hero over the card
+    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.4, pad: 32, steps: [1, 2, 3], card: false, fill: 'paper', line: 'ink', lineWidth: 10, roles: { plain: 'ink', keyword: 'accent', string: 'accent2', number: 'accent2', comment: 'ink2', name: 'ink', punct: 'ink2' }, highlight: { band: 'accent', text: 'paper' }, removed: 'accent2', added: 'accent', strike: 6, prompt: 'accent', heroAdvance: 0.45 },
+    // feed (engine/kinds/feed.mjs): thick-outlined bubbles (`line`, `lineWidth` units), `me` in the accent with dark words,
+    // `them` dark with white words; one text size as desk's; notifications as dark cards; the frame is the look's own,
+    // never a platform's
+    feed: { steps: [2, 3, 4], maxLines: 4, pad: 26, gap: 24, share: 0.82, radius: 28, bold: 900, me: { fill: 'accent', text: 'paper' }, them: { fill: 'paper', text: 'ink' }, card: { fill: 'paper', text: 'ink' }, discs: ['accent', 'accent2', 'ink'], discText: 'paper', dots: 'ink', title: 'ink2', line: 'ink', lineWidth: 6, shadow: false },
     media: { treatment: 'halftone', push: 1.06, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 28, toWide: 7, toTall: 12, besideFrom: 8, gap: 40 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
-    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, zoom: 'whoosh', blur: null },
+    cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, zoom: 'whoosh', blur: null, ripple: null, cube: 'whoosh',
+      'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': 'impact', wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': 'click', pixelize: 'click', 'water-drop': null },
     device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
       label: null, focus: null, route: null, numeral: null, sticker: 'pop', sweep: 'whoosh', duotone: null, halftone: null, zoom: 'whoosh',
-      pin: 'pop', link: 'whoosh', node: 'pop', event: 'pop' },
+      pin: 'pop', link: 'whoosh', node: 'pop', event: 'pop', change: 'whoosh', output: 'click', message: 'pop' },
     emphasis: 'pop',
     land: 'sub',
   },

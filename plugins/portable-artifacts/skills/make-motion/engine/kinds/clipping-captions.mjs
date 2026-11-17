@@ -10,6 +10,7 @@ import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
 import { slugNodes, SLUG } from './slug.mjs';
+import { markRoom } from './close-ups.mjs';
 import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import { CAP_HEIGHT, sizeAt, fontFor, setCase, inkBox, isEditorial, requireDevice, pinned, shownFrom, runInk, asTextCard } from './shared.mjs';
 
@@ -41,7 +42,11 @@ export function pinnedRoom(shot, ctx) {
   const { look, unit } = ctx;
   if (isEditorial(look)) return { above: 0, below: 0 };
   const above = shot.kicker === undefined ? 0 : kickerTag(shot, ctx).h + KICKER_GAP * unit;
-  const below = shot.caption === undefined ? 0 : reachOf(look, unit) + LINE_CAPTION.gap * unit + (CAP_HEIGHT + LINE_CAPTION.descent) * sizeAt(look, LINE_CAPTION.step, unit);
+  // a caption shown from frame 0 (no highlight to arrive with) goes under the marks drawn round the close-ups too
+  // (clipping.mjs pinnedParts), so the picture is sized with that band kept: else it reached the spoken captions
+  const lifted = (shot.on ?? []).some((e) => e.do === 'highlight');
+  const marks = lifted ? 0 : markRoom(shot, look, unit);
+  const below = shot.caption === undefined ? 0 : reachOf(look, unit) + LINE_CAPTION.gap * unit + (CAP_HEIGHT + LINE_CAPTION.descent) * sizeAt(look, LINE_CAPTION.step, unit) + marks;
   return { above, below };
 }
 

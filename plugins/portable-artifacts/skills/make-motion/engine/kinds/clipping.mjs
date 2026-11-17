@@ -21,7 +21,7 @@ import { stackArea, centredTop } from './stack.mjs';
 import { slugBox } from './slug.mjs';
 import { layeredCamera } from '../graph/camera.mjs';
 import {
-  HERO_SCHEMA, REGION_PREFIX, heroId, isWide, arrivesMatched, regionOf, isEditorial, cutsToCloseUp, requireDevice, compositionRect, fieldNode, onDevices, placeDevices, deviceCamera, captionTop, openingLanding, easePeak, NOT_BLANK, assertNoBlanks,
+  HERO_SCHEMA, REGION_PREFIX, heroId, isWide, arrivesMatched, regionOf, isEditorial, cutsToCloseUp, requireDevice, compositionRect, fieldNode, onDevices, placeDevices, deviceCamera, captionTop, openingLanding, easePeak, NOT_BLANK, assertNoBlanks, unionBox,
 } from './shared.mjs';
 import { defaultCamera, pushLayer, withEstablishingView } from './camera.mjs';
 
@@ -365,11 +365,15 @@ function pictureLayout(shot, ctx, room) {
 
 // The kicker and the caption, pinned over the picture. A stack caption captions the close-up of the first highlight and
 // arrives with it, or the picture from the start when there is none; an editorial caption card follows a push (`follow`).
-function pinnedParts(shot, ctx, { plan, boxes }, follow) {
+function pinnedParts(shot, ctx, { plan, boxes, close }, follow) {
+  const marks = close?.marks;
   const area = isEditorial(ctx.look) ? null : stackArea(ctx);
   const kicker = kickerNodes(shot, ctx, { left: area?.left, pictureTop: boxes.image[1] });
   const lift = plan?.events.find((e) => e.item.do === 'highlight');
-  const anchor = lift ? boxes[`${REGION_PREFIX}${lift.region}`] : boxes.image;
+  // shown from frame 0, the caption shares the frame with every close-up the shot cuts to: it goes under all of them
+  // and the marks drawn round them (close-ups.mjs marks)
+  const closes = (plan?.cuts ?? []).map((c) => boxes[`${REGION_PREFIX}${c.region}`]).filter(Boolean);
+  const anchor = lift ? boxes[`${REGION_PREFIX}${lift.region}`] : unionBox([boxes.image, ...closes, ...(marks ?? [])]);
   const caption = captionNodes(shot, ctx, { left: area?.left, maxWidth: area?.w, anchor, at: lift?.at ?? 0, follow });
   return { nodes: [...kicker, ...(caption ? caption.nodes : [])], boxes: caption ? { caption: caption.box } : {} };
 }

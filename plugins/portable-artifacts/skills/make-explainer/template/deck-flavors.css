@@ -63,7 +63,7 @@
 .slide-has-art:not(.slide-cover) .pa-footer { padding: 10px clamp(20px, 3vw, 44px); background: var(--page); }
 
 /* the numeral: decoration only, so "/ ''" keeps it out of the accessible name */
-.slide:not(.slide-has-art)::before { content: counter(slide, decimal-leading-zero); content: counter(slide, decimal-leading-zero) / ""; position: absolute; z-index: -1; pointer-events: none; user-select: none; font-family: var(--font-display); font-weight: var(--head-weight); font-variant-numeric: tabular-nums; line-height: 0.8; }
+.slide:not(.slide-has-art)::before { content: counter(slide, decimal-leading-zero); content: counter(slide, decimal-leading-zero) / ""; position: absolute; z-index: -1; pointer-events: none; user-select: none; font-family: var(--font-display); font-weight: var(--head-weight); font-variant-numeric: var(--num); line-height: 0.8; }
 
 /* a gentle rise for the slide that arrives; none when motion is reduced */
 @media (prefers-reduced-motion: no-preference) {
