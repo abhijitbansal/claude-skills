@@ -12,6 +12,7 @@ import { gridSpan } from '../looks/index.mjs';
 import { colourOf, at2, pathPoints, styleOf } from '../devices/shared.mjs';
 import { fontFor, sizeAt, isWide, isEditorial, setCase, overlaps, cardOf, tagBox } from './shared.mjs';
 import { arrivalTrack, roomOf, EDITORIAL_WIDE_COLUMN } from './arrivals.mjs';
+import { secondarySize, SOURCE_PREFIX } from './secondary.mjs';
 
 const HALF = 2;
 const PIN = 11; // units: a pin's radius
@@ -259,10 +260,17 @@ function listNodes(shot, ctx, data, [x, y, w], times) {
   });
 }
 
-// The source line in the label face at the floor size, its top at `y`.
-function sourceNode(shot, ctx, x, y) {
+// The source line in the label face at the floor size, its top at `y`; a look may set it as its charts set theirs
+// (ledger, gate-ledger-3 F3: in the sans with no "Source: " it read as a caption): in `sourceFace` at `sourceStep` held
+// to the secondary floor (chart-desk.mjs sourceFontFor), after "Source: " (`sourcePrefix`), wrapped to `maxWidth`.
+function sourceSet(shot, ctx, maxWidth = NO_WRAP) {
+  const data = ctx.data;
+  const words = data.sourcePrefix === true ? `${SOURCE_PREFIX}${shot.source}` : shot.source;
+  const size = data.sourceStep === undefined ? floorSize(ctx) : secondarySize(ctx.look, ctx.unit, sizeAt(ctx.look, data.sourceStep, ctx.unit));
+  return text(ctx, data.sourceFace ?? 'label', size, words, maxWidth);
+}
+function sourceNode(shot, ctx, x, y, set) {
   if (shot.source === undefined) return [];
-  const set = text(ctx, 'label', floorSize(ctx), shot.source, NO_WRAP);
   return [node('text', `${shot.id}.source`, { x, y, layout: set.layout, font: set.font, fill: ctx.look.palette.ink2 })];
 }
 
@@ -308,7 +316,11 @@ export function mapLayout(shot, ctx, data, times) {
   const beside = wide && isEditorial(look) && ctx.data.titleAbove !== true;
   const side = wide && isEditorial(look) ? gridSpan(look, canvas, EDITORIAL_WIDE_COLUMN, beside ? ctx.data.titleTo : look.grid.columns) : { x: room.x, w: room.w };
   const title = titleNodes(shot, ctx, side.x, room.y, side.w);
-  const sourceH = shot.source === undefined ? 0 : floorSize(ctx) * HALF + gap;
+  // a source on the title's edge (data.sourceAt 'title', ledger) wraps inside the room from there and keeps the height
+  // it takes; else one line in the room of two
+  const onTitle = ctx.data.sourceAt === 'title';
+  const source = shot.source === undefined ? null : sourceSet(shot, ctx, onTitle ? room.x + room.w - side.x : NO_WRAP);
+  const sourceH = source === null ? 0 : (onTitle ? source.layout.height : floorSize(ctx) * HALF) + gap;
   const listH = wide ? 0 : data.places.length * keyRow(ctx) + gap;
   const left = beside ? gridSpan(look, canvas, ctx.data.titleTo + 1, look.grid.columns).x : room.x;
   const top = beside ? room.y : room.y + title.h + (title.h > 0 ? gap : 0);
@@ -319,8 +331,11 @@ export function mapLayout(shot, ctx, data, times) {
   const below = view.box[1] + view.box[3] + gap;
   const list = wide ? [] : listNodes(shot, ctx, data, [room.x, below, room.w], times);
   const listEnd = wide ? below : below + listH;
+  // the source under the map's left edge, or on the title's (data.sourceAt 'title', ledger: every source is aligned to
+  // its claim; under the centred map it stood right of it)
+  const sourceX = onTitle ? side.x : view.box[0];
   return {
-    nodes: [...card, mapGroup(shot, ctx, data, view, times), ...routeNodes(shot, ctx, data, view, times), ...places.nodes, ...title.nodes, ...list, ...sourceNode(shot, ctx, view.box[0], listEnd)],
+    nodes: [...card, mapGroup(shot, ctx, data, view, times), ...routeNodes(shot, ctx, data, view, times), ...places.nodes, ...title.nodes, ...list, ...sourceNode(shot, ctx, sourceX, listEnd, source)],
     boxes: { map: view.box, ...Object.fromEntries(data.places.map((p, i) => [`place:${p.name}`, pinBox(view.x + p.x * view.s, view.y + p.y * view.s, wide ? PIN * unit : KEY_DISC * floorSize(ctx))])) },
   };
 }

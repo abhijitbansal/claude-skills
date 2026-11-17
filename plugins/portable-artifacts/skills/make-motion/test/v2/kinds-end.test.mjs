@@ -81,7 +81,7 @@ test('end: a look with no data for the kind refuses it, naming the looks that ha
   const desk = registries.looks.get('desk');
   if (!registries.looks.has('test-no-end')) registries.looks.add('test-no-end', { ...desk, name: 'test-no-end', kinds: {} });
   const errors = errorsOf(EXAMPLE(), 'pro', { look: 'test-no-end' });
-  assert.deepEqual(errors, [{ path: 'shots[0].show', message: 'kind "end" is not supported by look "test-no-end"; the looks that support it: desk, pop, cosmos' }]);
+  assert.deepEqual(errors, [{ path: 'shots[0].show', message: 'kind "end" is not supported by look "test-no-end"; the looks that support it: desk, pop, cosmos, ledger' }]);
   assert.throws(() => expandIn(filmOf([EXAMPLE()], 'test-no-end')), /look "test-no-end" has no data for kind "end"/);
 });
 

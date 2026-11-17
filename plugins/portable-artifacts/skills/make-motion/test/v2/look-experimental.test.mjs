@@ -23,25 +23,27 @@ const FILM = (look) => ({ version: 2, mode: 'pro', look, format: '16:9', fps: 30
 const PARKED = 'parked-test';
 if (!registries.looks.has(PARKED)) registries.looks.add(PARKED, Object.freeze({ ...registries.looks.get('desk'), name: PARKED, experimental: true }));
 
-test('cosmos is listed again: in names(), --list looks and the unknown-look hint', () => {
+test('cosmos and ledger are listed: in names(), --list looks and the unknown-look hint', () => {
   assert.equal(registries.looks.get('cosmos').experimental, undefined);
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
-  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos']);
-  assert.match(make(['--list', 'looks']).stdout, /^cosmos {2}/m);
+  assert.equal(registries.looks.get('ledger').experimental, undefined, 'ledger listed after its gate (looks-four Task 5)');
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos', 'ledger']);
+  assert.deepEqual(listEntries('looks').map((e) => e.name), ['desk', 'pop', 'cosmos', 'ledger']);
+  const listed = make(['--list', 'looks']).stdout;
+  assert.match(listed, /^cosmos {2}/m);
+  assert.match(listed, /^ledger {2}/m);
 });
 
 test('a parked look is registered and resolvable, but out of names(), --list looks and unknown-look hints', () => {
   assert.equal(registries.looks.has(PARKED), true);
-  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
-  assert.throws(() => registries.looks.get('parked-tst'), { message: 'unknown look "parked-tst" (have: desk, pop, cosmos)' });
-  // ledger (looks-four Task 3) registers experimental until its gate
+  assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos', 'ledger']);
+  assert.throws(() => registries.looks.get('parked-tst'), { message: 'unknown look "parked-tst" (have: desk, pop, cosmos, ledger)' });
   assert.deepEqual(allLookNames(), ['desk', 'pop', 'cosmos', 'ledger', PARKED], 'every registered look, the parked ones included');
 });
 
 test('--list looks --all shows the parked look, marked experimental; without --all it is not there', () => {
   const entries = listEntries('looks', { all: true });
   assert.deepEqual(entries.map((e) => e.name), ['desk', 'pop', 'cosmos', 'ledger', PARKED]);
-  assert.deepEqual(entries.map((e) => e.experimental ?? false), [false, false, false, true, true]);
+  assert.deepEqual(entries.map((e) => e.experimental ?? false), [false, false, false, false, true]);
   assert.match(formatList('looks', entries), /^parked-test {2}\(experimental\) /m);
   assert.equal(listEntries('looks').some((e) => e.name === PARKED), false);
 });

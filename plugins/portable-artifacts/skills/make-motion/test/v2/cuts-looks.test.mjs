@@ -90,7 +90,8 @@ test('resolveCut reads cutStyle: a look\'s slide with no option takes the look\'
 
 test('--list cuts names, per cut, the looks whose palette holds it', () => {
   const entries = listEntries('cuts');
-  assert.deepEqual(entries.find((e) => e.name === 'cut').palettes, LOOKS);
+  // ledger listed after its gate (looks-four Task 5): its palette is cut, match, fade and wipe
+  assert.deepEqual(entries.find((e) => e.name === 'cut').palettes, [...LOOKS, 'ledger']);
   assert.deepEqual(entries.find((e) => e.name === 'punch').palettes, ['pop']);
-  assert.deepEqual(entries.find((e) => e.name === 'match').palettes, ['desk', 'cosmos']);
+  assert.deepEqual(entries.find((e) => e.name === 'match').palettes, ['desk', 'cosmos', 'ledger']);
 });

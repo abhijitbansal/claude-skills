@@ -11,7 +11,7 @@ import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs'
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, fitDisplay, capBox, runInk, inkExtent } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { secondarySize, secondaryFloor } from './secondary.mjs';
+import { secondarySize, secondaryFloor, SOURCE_PREFIX } from './secondary.mjs';
 import { chartStyle } from './chart-draw.mjs';
 import { chartData } from './chart-marks.mjs';
 import { drawPlot, captionTop } from './chart-plot.mjs';
@@ -20,7 +20,6 @@ import { SLUG } from './slug.mjs';
 
 const FIRST_COLUMN = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
-const SOURCE_PREFIX = 'Source: ';
 const SOURCE_GAP = 3;
 const HALF = 2;
 const BARRED = Object.freeze(['bar', 'column']); // the types drawn as labelled bars on a tall cosmos frame (chart-plot.mjs) // gaps between the plot's lowest label and the source line
@@ -123,7 +122,10 @@ function annotationNodes(shot, ctx, data, { plot, plotArea, size }) {
   const box = [plotArea.x, plotArea.y, plotArea.w, plotArea.h];
   // a bar's note stands where its value would: the chart's gap past the bar's end
   const gap = bar ? data.gap + ANCHOR_INSET : NOTE_GAP;
-  const built = registries.devices.get('label').build({ id: `${shot.id}.annotation`, box, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, text: plot.highlight.text, anchor, size, gap, side: bar ? 'right' : 'above', face: data.annotation.face ?? 'label' });
+  // the leader's style (the label device's `leader`): data.annotation.barLeader for a bar, data.annotation.leader for any
+  // other mark (ledger: none on a bar, where a tick read as a minus sign; joined to a column, never drawn ahead of its note)
+  const leader = bar ? data.annotation.barLeader : data.annotation.leader;
+  const built = registries.devices.get('label').build({ id: `${shot.id}.annotation`, box, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, text: plot.highlight.text, anchor, size, gap, side: bar ? 'right' : 'above', face: data.annotation.face ?? 'label', ...(leader === undefined ? {} : { leader }) });
   return built.nodes;
 }
 

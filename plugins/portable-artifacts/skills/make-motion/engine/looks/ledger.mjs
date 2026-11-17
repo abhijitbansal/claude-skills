@@ -2,7 +2,7 @@
 // and a short categorical set. A coloured tag and a thin rule at top left with the claim as the title; direct labels,
 // never a legend; everything but the series being discussed dims; an annotation with a leader lands on the spoken
 // figure. No texture beyond the grid, no glow, no wobble. Plain data plus one pure function; index.mjs freezes and
-// registers it. Experimental (hidden from every listing) until its gate (looks-four plan, Task 5).
+// registers it. Listed since its gate (looks-four plan, Task 5: ship after fixes on both films).
 const DISPLAY_TIGHT_FROM = 128; // units: display type at or above this size is tracked in
 const DISPLAY_TIGHT = -0.01; // em
 const ROLES = ['display', 'text', 'label'];
@@ -32,7 +32,6 @@ function tracking(sizeUnits, role = 'display') {
 export const ledger = {
   name: 'ledger',
   summary: 'Newsroom data film: off-white paper on a hairline grid, near-black ink, one signal red and direct labels. The data look of mode pro.',
-  experimental: true,
   modes: ['pro'],
   // Archivo at semi-condensed for display and labels (numbers in the label face; the numeral device sets digits in equal
   // cells), Fraunces at its text optical size for annotations, sources and captions
@@ -77,9 +76,9 @@ export const ledger = {
     draw: { ease: 'inOutCubic', dur: 0.9 },
     count: { ease: 'outCubic', dur: 0.8 },
     rise: ENTER,
-    pop: ENTER,
     wipe: { ease: 'outCubic', dur: 0.7 },
     slam: { ease: 'linear', dur: 0 }, // ledger does not slam
+    pop: ENTER,
     settle: { ease: 'inOutCubic', dur: 0.6 },
   },
   wordStagger: 0,
@@ -127,7 +126,9 @@ export const ledger = {
     // empty), the span every other shot's claim takes; under a tag the claim hangs right under its rule (`hang`)
     // `tail`: seconds after the last word before the cut (script/timing.mjs shotPace), so an emphasis on the last word is
     // red on screen at least 1.2 s (gate-ledger-2 ruling 2: the tall lede showed it 0.4 s)
-    statement: { toWide: 11, hang: true, tail: 1.6 },
+    // a hanging claim is fitted to the room under its tag (statement.mjs fitEditorial; gate-ledger-3 F4: fitted to the
+  // desk's centred height share, it left the lower third of the frame empty)
+  statement: { toWide: 11, hang: true, tail: 1.6 },
     // the label in the serif (`labelFace`). Parked (looks-four Task 4): on 9:16 the desk number composition leaves 76%
     // of the height empty (the 35% rule); a tall number composition for ledger is open work
     number: { experimental: true, labelFace: 'text' },
@@ -164,7 +165,10 @@ export const ledger = {
     // gate-ledger-2 ruling 5: the first point label lifted `pointLift` em off the "0" row and `pointNudge` em right of
     // the tick column; the last point claimed in the
     // accent when nothing is highlighted (`claimLast`); bars grown in their final colours (`startFinal`)
-    chart: { settle: 1.2, pointLift: 0.6, pointNudge: 1, claimLast: true, startFinal: true, pointLabels: true, fillFollowsLine: true, rowDrop: 0.75, plotHeight: 0.2, titleToWide: 11, titleFromTall: 1, titleToTall: 12, titleMax: 180, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 1, sourceStep: 1, sourceFace: 'text', gap: 14, line: 5, ref: 1, axis: 2, dim: 0.3, refs: true, refsTypes: ['line', 'area'], direct: true, dimTo: 'dim', minPlot: 0.4, point: 10, annotation: { face: 'label' } },
+  // gate-ledger-3 F5: a bar's note has no leader (`barLeader` none: the short tick read as a minus sign, "-182", and
+  // drew on ahead of the note); a column's note hangs on a vertical leader joined to the column, growing from it with
+  // the note (`leader` joined: drawn from the note's end, it began as a stray dot over the column)
+    chart: { settle: 1.2, pointLift: 0.6, pointNudge: 1, claimLast: true, startFinal: true, pointLabels: true, fillFollowsLine: true, rowDrop: 0.75, plotHeight: 0.2, titleToWide: 11, titleFromTall: 1, titleToTall: 12, titleMax: 180, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 1, sourceStep: 1, sourceFace: 'text', gap: 14, line: 5, ref: 1, axis: 2, dim: 0.3, refs: true, refsTypes: ['line', 'area'], direct: true, dimTo: 'dim', minPlot: 0.4, point: 10, annotation: { face: 'label', leader: 'joined', barLeader: 'none' } },
     screen: { fill: '#ffffff', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56, pushDim: 1 },
     // map: no card. At 16:9 the title across the top at step 4 (144: three times the 48-unit place names) or step 3,
     // over a map the full width (`titleAbove`, `titleStepsWide`); on a tall frame at step 5, 4 or 3 over it
@@ -173,7 +177,12 @@ export const ledger = {
     // A route across the antimeridian is one line from city to city inside the map (`unwrapped`), not two pieces
     // clipped at the edges
     // gate-ledger-2 ruling 4: only the origin in the accent, the destinations' pins in ink (`pinTo`)
-    map: { unwrapped: true, pinTo: 'ink', titleAbove: true, titleStepsWide: [4, 3], card: false, land: '#c9cdd4', borders: 'paper', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'paper' },
+    // gate-ledger-3 F2: when a route would cross the map's edge, the world is turned so the edge falls where no route
+    // runs (`recentre`, scripts/v2/prepare/map.mjs): every route one line the short way (Denver to Kyoto over the
+    // Pacific, not the long way east over Africa); `unwrapped` stays for a route set that leaves no clear seam
+    // gate-ledger-3 F3: the source set as the charts set theirs: the serif at step 1 held to the secondary floor, after
+    // "Source: ", on the title's left edge (`sourceFace`, `sourceStep`, `sourcePrefix`, `sourceAt`)
+    map: { recentre: true, sourceFace: 'text', sourceStep: 1, sourcePrefix: true, sourceAt: 'title', unwrapped: true, pinTo: 'ink', titleAbove: true, titleStepsWide: [4, 3], card: false, land: '#c9cdd4', borders: 'paper', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'paper' },
     // diagram: on a tall frame a column's boxes run across the label room (`fullColumn`, gate-ledger-1 ruling 5)
     diagram: { fullColumn: true, card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 28, gap: 48, margin: 10, platePad: 8, plate: 'paper', arrow: 'ink', arrowWidth: 3, head: 20, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: false, advance: 0.5 },
     // timeline: as desk's, the dates in the display face at step 5 or 4 (three times the 46-unit serif text), the events

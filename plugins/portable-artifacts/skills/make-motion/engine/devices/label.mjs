@@ -16,6 +16,11 @@ const NO_WRAP = 1e6; // px: a label is one line
 const HALF = 2;
 
 const FACES = Object.freeze(['text', 'label', 'display']);
+// `leader`: 'drawn' (the default) draws from the text to the anchor on the look's draw move, landing with the text;
+// 'joined' grows from the anchor out to the text over the text's own entrance, so it is never seen before the text or
+// apart from what it labels (a chart's note on a column, ledger: drawn, it began as a stray dot over the column);
+// 'none' sets the text alone, no leader and no dot (a bar's note at the bar's end, ledger: a tick there read as a minus)
+const LEADERS = Object.freeze(['drawn', 'joined', 'none']);
 
 function textFont(look, size, unit, face = 'text') {
   const { family, weight, width } = look.fonts[face];
@@ -47,7 +52,9 @@ function nearestEdge([x, y, w, h], side) {
 }
 
 function buildLabel(params) {
-  const { id, box, at, look, unit, measure } = checkParams('label', params, ['text', 'anchor', 'size', 'side', 'face', 'gap']);
+  const { id, box, at, look, unit, measure } = checkParams('label', params, ['text', 'anchor', 'size', 'side', 'face', 'gap', 'leader']);
+  const leaderStyle = params.leader ?? 'drawn';
+  if (!LEADERS.includes(leaderStyle)) throw new Error(`label: leader must be one of ${LEADERS.join(', ')}, got ${JSON.stringify(params.leader)}`);
   // `gap`: units between the anchor and the text, in place of GAP (a chart's note keeps to the room its values keep)
   if (params.gap !== undefined && !(Number.isFinite(params.gap) && params.gap >= 0)) throw new Error(`label: gap must be a number of units >= 0, got ${params.gap}`);
   const { anchor, size } = params;
@@ -68,15 +75,23 @@ function buildLabel(params) {
   const x = clamp(px, box[0], box[0] + box[2] - layout.width), y = clamp(py, box[1], box[1] + box[3] - layout.height);
   const textBox = [x, y, layout.width, layout.height];
   const style = styleOf(look, 'label');
-  const step = isHand(look) ? look.moves.draw.step : undefined;
-  const leader = node('path', `${id}.leader`, {
-    d: polyline([nearestEdge(textBox, side), anchor]),
-    stroke: colourOf(look, style.line ?? 'ink'), strokeWidth: (style.width ?? DEFAULT_LINE_WIDTH) * unit, lineCap: 'round',
-  }, { tracks: { draw: landing(at, look.moves.draw, 0, 1, step) }, step });
   const label = node('text', `${id}.text`, { x, y, layout, font, fill: colourOf(look, style.text ?? 'ink'), role: 'label' }, {
     tracks: { opacity: landing(at, look.moves.enter, 0, 1) },
   });
-  return { nodes: [node('group', id, {}, { children: [leader, ...dotNode(id, anchor, style, look, unit, at), label] })], boxes: { label: textBox }, side };
+  const marks = leaderStyle === 'none' ? [] : [leaderNode(id, { anchor, edge: nearestEdge(textBox, side), joined: leaderStyle === 'joined' }, style, look, unit, at),
+    ...dotNode(id, anchor, style, look, unit, at)];
+  return { nodes: [node('group', id, {}, { children: [...marks, label] })], boxes: { label: textBox }, side };
+}
+
+// The leader from the text's nearest edge to the anchor, drawn on the look's draw move landing on `at`; `joined`: from
+// the anchor out to the text, on the text's entrance move, so it starts with the text and grows from what it labels.
+function leaderNode(id, { anchor, edge, joined }, style, look, unit, at) {
+  const step = isHand(look) ? look.moves.draw.step : undefined;
+  const points = joined ? [anchor, edge] : [edge, anchor];
+  return node('path', `${id}.leader`, {
+    d: polyline(points),
+    stroke: colourOf(look, style.line ?? 'ink'), strokeWidth: (style.width ?? DEFAULT_LINE_WIDTH) * unit, lineCap: 'round',
+  }, { tracks: { draw: landing(at, joined ? look.moves.enter : look.moves.draw, 0, 1, step) }, step });
 }
 
 // The dot a leader ends on (style.dot: its diameter in units, ledger), in the leader's colour, landing with it; none

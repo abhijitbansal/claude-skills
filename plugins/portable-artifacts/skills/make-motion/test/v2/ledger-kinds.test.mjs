@@ -15,6 +15,7 @@ import { safeRectFor } from '../../scripts/v2/review.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { barInput, drawnLeaves, contentOf, snapshotOf } from './helpers/bar.mjs';
 import { expandShot } from './helpers/kinds.mjs';
+import { pathPoints } from '../../engine/devices/shared.mjs';
 
 const LOOK = 'ledger';
 const FORMATS = Object.freeze(['16:9', '9:16']);
@@ -73,6 +74,10 @@ for (const { kind, shot } of EXAMPLES.filter((e) => e.kind !== 'free' && !PARKED
 
 const BARS = Object.freeze({ id: 'regions', show: 'chart', type: 'bar', title: 'The North leads', say: 'The North leads with one hundred and eighty two orders.',
   data: [{ label: 'North', value: 182 }, { label: 'South', value: 121 }, { label: 'East', value: 97 }, { label: 'West', value: 59 }], highlight: 'North' });
+const COLUMNS = Object.freeze({ ...BARS, id: 'cols', type: 'column', title: 'The North led' });
+const FPS = 30;
+// every frame of a shot at FPS, the last one included (the stray tick showed for two frames: a 0.5 s step missed it)
+const frameTimes = (duration) => Array.from({ length: Math.floor(duration * FPS) + 1 }, (_, i) => i / FPS);
 
 // The drawn bars of a chart shot at `t`: { k, box } for each mark path (not its overlays), box in canvas pixels.
 function marksOf(nodes, id, t) {
@@ -115,14 +120,34 @@ for (const format of FORMATS) {
     assert.ok(sampled.length > 0);
   });
 
-  test(`ledger chart at ${format}: the annotation's leader ends on the spoken mark`, () => {
+  // gate-ledger-3 (F5): a short horizontal leader between a bar's end and its note read as a minus sign ("182" as
+  // "-182"), and drew on before the note, a stray dash. A bar's note stands where its value would, with no tick.
+  test(`ledger bar chart at ${format}: no tick before the note: no leader or dot between the bar's end and it, on any frame`, () => {
     const { nodes, timing } = expandShot(BARS, LOOK, format);
-    const sampled = flat(sampleGraph(nodes, timing.duration));
-    const leader = sampled.find((n) => n.id === `${BARS.id}.annotation.leader`);
+    for (const t of frameTimes(timing.duration)) {
+      const ticks = flat(sampleGraph(nodes, t)).filter((n) => /\.annotation\.(leader|dot)$/.test(n.id));
+      assert.deepEqual(ticks.map((n) => n.id), [], `at ${t.toFixed(2)} s`);
+    }
+    assert.ok(flat(sampleGraph(nodes, timing.duration)).some((n) => n.id === `${BARS.id}.annotation.text` && n.visible), 'the note is there');
+  });
+
+  // a column's note stands over it on a vertical leader joined to the column (gate-ledger-3 F5: the leader drew from the
+  // note's end first, a stray dot above the column before the note showed)
+  test(`ledger column chart at ${format}: the annotation's leader is vertical, grows from the spoken mark and never shows before its note`, () => {
+    const { nodes, timing } = expandShot(COLUMNS, LOOK, format);
+    const final = flat(sampleGraph(nodes, timing.duration));
+    const leader = final.find((n) => n.id === `${COLUMNS.id}.annotation.leader`);
     assert.ok(leader, 'an annotation with a leader');
-    const end = leader.props.d.match(/-?\d+(?:\.\d+)?/g).map(Number).slice(-2);
-    const [x, y, w, h] = marksOf(nodes, BARS.id, timing.duration).find((m) => m.k === 0).box;
-    assert.ok(end[0] >= x - 0.5 && end[0] <= x + w + 0.5 && end[1] >= y - 0.5 && end[1] <= y + h + 0.5, `the leader ends at ${end} on the North bar ${[x, y, w, h].map((v) => v.toFixed(0))}`);
+    const points = pathPoints(leader.props.d);
+    const [x, y, w, h] = marksOf(nodes, COLUMNS.id, timing.duration).find((m) => m.k === 0).box;
+    const onMark = ([px, py]) => px >= x - 0.5 && px <= x + w + 0.5 && py >= y - 0.5 && py <= y + h + 0.5;
+    assert.ok(points.every(([px]) => Math.abs(px - points[0][0]) < 0.5), `vertical: ${JSON.stringify(points)}`);
+    assert.ok(onMark(points[0]), `it starts (draws from) ${points[0]} on the North column ${[x, y, w, h].map((v) => v.toFixed(0))}`);
+    for (const t of frameTimes(timing.duration)) {
+      const at = flat(sampleGraph(nodes, t));
+      const line = at.find((n) => n.id === leader.id), note = at.find((n) => n.id === `${COLUMNS.id}.annotation.text`);
+      if (line.visible && line.draw > 0) assert.ok(note.opacity > 0, `at ${t.toFixed(2)} s the leader shows (draw ${line.draw.toFixed(2)}) before its note`);
+    }
   });
 }
 

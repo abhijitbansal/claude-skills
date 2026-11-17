@@ -88,7 +88,12 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const top = !wide && sunny ? Math.max(bounds.top, belowSun(look, ctx)) : -Infinity;
   const min = sizeAt(look, DESK.fromStep, unit), max = DESK.max * unit;
   const font = fontFor(look, 'display', max, unit);
+  // a claim that hangs under its tag on a wide frame (kinds.statement.hang, ledger) is fitted where it will stand: its
+  // ink from the slug's clearance down to the bottom margin. Fitted centred, a larger block met the tag and was refused,
+  // so the claim stayed at the desk height share and left the lower third of the frame empty (gate-ledger-3 F4).
+  const hangTop = wide && clear && data.hang === true ? clear[1] + clear[3] : null;
   const place = (layout, at) => {
+    if (hangTop !== null) return { layout, font: at, x: span.x, y: hangTop - blockInk({ layout, font: at, x: span.x, y: 0 }, ctx.measure)[1], span };
     const ink = inkSpan(layout);
     return { layout, font: at, x: span.x, y: Math.max(bounds.at(DESK.centre) - (ink.top + ink.bottom) / HALF, top - ink.top), span };
   };
@@ -101,9 +106,11 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const reserve = emphasisOf(look).reserve?.(look);
   const opts = { text, font, maxWidth: span.w, align, measure: ctx.measure, optical: true, together, accept, ...(reserve === undefined ? {} : { reserve }) };
   // a look may allow more lines and more of the band's height on a tall frame (look.maxLinesTall, kinds.statement
-  // tallHeight, cosmos: a wide face would set the hook small), and ask a wide frame for at most `linesWide` lines
+  // tallHeight, cosmos: a wide face would set the hook small), and ask a wide frame for at most `linesWide` lines; a
+  // hanging claim may take all the room under its tag
   const maxLines = !wide && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;
-  const maxHeight = Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : DESK.height), bounds.bottom - Math.max(bounds.top, top));
+  const maxHeight = hangTop !== null ? bounds.bottom - hangTop
+    : Math.min(bounds.height(!wide && data.tallHeight ? data.tallHeight : DESK.height), bounds.bottom - Math.max(bounds.top, top));
   // a phrase kept whole may cost size: the fit looks down to the kind's floor for a layout that keeps it
   const floor = data.together && wide ? Math.max(tradeFloor, min) : tradeFloor;
   const fit = (lines) => fitDisplay(opts, { min, max, maxHeight, maxLines: lines, tradeFloor: floor }, look, unit);

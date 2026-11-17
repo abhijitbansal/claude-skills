@@ -13,5 +13,8 @@ export const secondaryFloor = (look, unit) => (look.secondary?.min ?? 0) * unit;
 /** A secondary size raised to the floor. */
 export const secondarySize = (look, unit, size) => Math.max(size, secondaryFloor(look, unit));
 
+/** What a source line is set after, as written (chart-desk.mjs; map-draw.mjs where a look asks, look data sourcePrefix). */
+export const SOURCE_PREFIX = 'Source: ';
+
 /** The smallest hero that keeps the hero ratio over secondary text at the floor (0 without a floor). */
 export const heroFloor = (look, unit) => HERO_MARGIN * MIN_HERO_RATIO * secondaryFloor(look, unit);

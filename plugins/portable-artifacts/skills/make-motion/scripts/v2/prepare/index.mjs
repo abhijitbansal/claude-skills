@@ -5,13 +5,15 @@
 import { registries } from '../../../engine/registry.mjs';
 import '../../../engine/kinds/index.mjs';
 import { pathJoin } from '../../../shared/errors.mjs';
+import { resolveLook } from '../../../engine/graph/film.mjs';
 import { prepareMap } from './map.mjs';
 import { prepareCode } from './code.mjs';
 
 /**
  * The preparer of each kind that declares `prepared: true`, by kind name:
- * (shot, { filmDir, index }) -> { data: object | null, problems: { path, message }[] }, `path` relative to the shot
- * (`places[1].at`). It must be deterministic (same shot, same JSON) and never touch the network.
+ * (shot, { filmDir, index, look }) -> { data: object | null, problems: { path, message }[] }, `path` relative to the
+ * shot (`places[1].at`); `look`: the film's resolved look, whose kind data a preparer may read (the map's `recentre`).
+ * It must be deterministic (same shot and look, same JSON) and never touch the network.
  */
 export const PREPARERS = Object.freeze({ map: prepareMap, code: prepareCode });
 
@@ -31,11 +33,13 @@ const fullPath = (index, rel) => String(rel).split('.').reduce((acc, part) => {
 export function prepareFilm(film, { filmDir, preparers = PREPARERS, kinds = registries.kinds } = {}) {
   const prepared = {};
   const problems = [];
+  let look; // resolved once, when a shot needs preparing
   film.shots.forEach((shot, index) => {
     if (!kinds.has(shot.show) || kinds.get(shot.show).prepared !== true) return;
     const preparer = preparers[shot.show];
     if (typeof preparer !== 'function') throw new Error(`kind "${shot.show}" needs prepared data, but scripts/v2/prepare has no preparer for it`);
-    const out = preparer(shot, { filmDir, index });
+    look ??= resolveLook(film);
+    const out = preparer(shot, { filmDir, index, look });
     problems.push(...(out.problems ?? []).map(({ path, message }) => ({ path: fullPath(index, path), message })));
     if (out.data !== null && out.data !== undefined) prepared[shot.id] = out.data;
   });

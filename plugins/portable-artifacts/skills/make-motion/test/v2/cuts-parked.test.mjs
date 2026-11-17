@@ -25,13 +25,13 @@ test('a pop film naming ripple is refused, and the message names the looks that 
   assert.deepEqual(rest, []);
   assert.equal(error.path, 'shots[1].cut');
   assert.match(error.message, /^look "pop" has no cut "ripple"; /);
-  assert.match(error.message, /; the looks that support it: desk, cosmos$/);
+  assert.match(error.message, /; the looks that support it: desk, cosmos, ledger$/);
 });
 
 test('the object form of the cut is refused the same way', () => {
   const [error] = errorsOf('pop', { type: 'ripple' });
   assert.equal(error.path, 'shots[1].cut.type');
-  assert.match(error.message, /the looks that support it: desk, cosmos$/);
+  assert.match(error.message, /the looks that support it: desk, cosmos, ledger$/);
 });
 
 test('a desk film and a cosmos film naming ripple still validate', () => {

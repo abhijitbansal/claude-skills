@@ -32,8 +32,8 @@ const ACCENT_SAMPLE = '#ff6600';
 const lookNames = () => registries.looks.names();
 const closeTo = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`);
 
-test('desk, pop and cosmos are the listed looks, in showreel order (cosmos un-parked after the final gate review)', () => {
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos']);
+test('desk, pop, cosmos and ledger are the listed looks, in showreel order (cosmos un-parked after the final gate review, ledger listed after its gate)', () => {
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
   assert.equal(registries.looks.get('desk').name, 'desk');
   assert.equal(registries.looks.get('pop').name, 'pop');
@@ -61,6 +61,23 @@ test('ink on paper passes 4.5:1 and the accent is used behind ink, not as text o
   assert.ok(contrast('#15130f', registries.looks.get('desk').palette.accent) >= 4.5);
 });
 
+// A derived family (engine/fonts/index.mjs `fixed`: one value of an axis pinned under its own name) is used only when
+// its base family is bundled and every axis it pins reaches the canvas through it (CANVAS-NOTES.md: `Fraunces Text`
+// pins opsz 9, which ctx.font cannot set; ledger sets its annotations and sources in it, looks-four plan). A base family
+// passes. -> the problems, [] when none.
+function derivedProblems(entry, fonts = FONTS) {
+  if (entry.fixed === undefined) return [];
+  const base = fonts.find((f) => f.family === entry.of && f.fixed === undefined) === undefined ? [`its base family ${JSON.stringify(entry.of)} is not bundled`] : [];
+  return [...base, ...Object.keys(entry.fixed).filter((axis) => entry.reach[axis] !== true).map((axis) => `its pinned ${axis} does not reach the canvas`)];
+}
+
+test('the font rule refuses a derived family with an unreachable pinned axis or no bundled base', () => {
+  const text = FONTS.find((f) => f.family === 'Fraunces Text');
+  assert.deepEqual(derivedProblems(text), [], 'Fraunces Text: base bundled, opsz reaches');
+  assert.deepEqual(derivedProblems({ ...text, reach: { ...text.reach, opsz: false } }), ['its pinned opsz does not reach the canvas']);
+  assert.deepEqual(derivedProblems({ ...text, of: 'Frances' }), ['its base family "Frances" is not bundled']);
+});
+
 test('every font a look names is bundled, at a weight and width its family can reach', () => {
   const widthKeywords = new Set(STRETCH_KEYWORDS.map(([, keyword]) => keyword));
   for (const name of lookNames()) {
@@ -74,7 +91,7 @@ test('every font a look names is bundled, at a weight and width its family can r
       const variable = FONTS.find((f) => f.family === font.family);
       if (variable) {
         assert.equal(variable.reach.wght, true, `${name}.${role} weight is reachable`);
-        assert.equal(variable.fixed, undefined, `${name}.${role} uses a base family, not a derived one`);
+        assert.deepEqual(derivedProblems(variable), [], `${name}.${role}: a base family, or a derived one whose pins reach the canvas`);
         if (font.width !== 'normal') assert.equal(variable.reach.wdth, true, `${name}.${role} width is reachable`);
       } else {
         assert.equal(font.width, 'normal', `${name}.${role} is a static face with no width axis`);
@@ -315,7 +332,7 @@ test('mode values are the brief values', () => {
 test('registering twice is harmless: a second evaluation of the index does not throw', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?again'));
   await assert.doesNotReject(() => import('../../engine/modes/index.mjs?again'));
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos']);
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
 });
 
@@ -363,7 +380,7 @@ test('the validator reads each look cuts: every registered cut in either look (d
 
 test('an unknown look still lists the real ones', () => {
   const r = validate({ version: 2, look: 'dsk', shots: shots(undefined) });
-  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos)' }]);
+  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos, ledger)' }]);
 });
 
 test('every look names its composition: desk is editorial, pop is a stack', () => {
