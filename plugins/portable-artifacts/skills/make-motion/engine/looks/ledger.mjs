@@ -129,17 +129,22 @@ export const ledger = {
     // list: as desk's; on a tall frame the items from column 3, so the figures hang inside the narrow tall margin
     list: { fromStep: 3, max: 180, toWide: 11, fromTall: 3, toTall: 12, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2] },
     // quote: the quotation in the serif (`face`) up to step 4 (step 5 on a tall frame, `maxTall`, so it fills the height),
-    // no card, a 4-unit accent rule down its left (`bar`)
-    quote: { face: 'text', bar: { width: 4, color: 'accent' }, toWide: 10, fromTall: 1, toTall: 12, centre: 0.5, pad: 64, max: 144, maxTall: 208, maxLines: 8, attrGap: 0.45, rule: 56, ruleGap: 18, attrSteps: [1, 2], portrait: 0.28, overlap: 0.3, card: false },
+    // no card, a 4-unit accent rule down its left (`bar`); at 16:9 on columns 2 to 12 (`toWide`) with its lines at 1.15
+    // (`leading`), so a twelve-word quotation fits at three times the attribution's 46-unit floor and keeps its
+    // attribution (on 10 columns at the text leading it took four lines the height could not hold, and it was dropped)
+    quote: { face: 'text', leading: 1.15, bar: { width: 4, color: 'accent' }, toWide: 12, fromTall: 1, toTall: 12, centre: 0.5, pad: 64, max: 144, maxTall: 208, maxLines: 8, attrGap: 0.45, rule: 56, ruleGap: 18, attrSteps: [1, 2], portrait: 0.28, overlap: 0.3, card: false },
     // compare: as desk's, the columns at least `fill` of the height they could take (a tall frame is filled)
     compare: { fill: 0.7, gap: 6, centre: 0.5, pad: 48, valueFromStep: 4, valueMax: 208, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 208, titleLines: 4, titleGap: 0.45, pointStep: 2, pointScale: 1.25, picture: 0.4, pictureGap: 32 },
     // chart: as desk's, every mark labelled directly (`direct`), the others dimmed to the `dim` grey at the highlight
     // (`dimTo`), the source in the serif (`sourceFace`), the spoken figure an `annotation` (a figure: the label face) on a
-    // leader that ends on its mark; on a tall frame the claim across the full width (`titleFromTall`, `titleToTall`)
-    chart: { titleToWide: 11, titleFromTall: 1, titleToTall: 12, titleMax: 180, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 1, sourceStep: 1, sourceFace: 'text', gap: 14, line: 5, ref: 1, axis: 2, dim: 0.3, refs: true, refsTypes: ['line', 'area'], direct: true, dimTo: 'dim', minPlot: 0.4, point: 10, annotation: { face: 'label' } },
+    // leader that ends on its mark; on a tall frame the claim across the full width (`titleFromTall`, `titleToTall`);
+    // `plotHeight`: the share of the frame's height the plot aims to keep, the claim set smaller to leave it (a claim
+    // that cannot fit the room left is set at three times the labels, and the plot takes what remains)
+    chart: { plotHeight: 0.2, titleToWide: 11, titleFromTall: 1, titleToTall: 12, titleMax: 180, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 1, sourceStep: 1, sourceFace: 'text', gap: 14, line: 5, ref: 1, axis: 2, dim: 0.3, refs: true, refsTypes: ['line', 'area'], direct: true, dimTo: 'dim', minPlot: 0.4, point: 10, annotation: { face: 'label' } },
     screen: { fill: '#ffffff', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56, pushDim: 1 },
-    // map: the title on columns 1 to 5 at step 4 or 5 (step 4 is 144: three times the 48-unit place names), no card
-    map: { card: false, land: '#e9eaee', borders: 'paper', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'paper' },
+    // map: no card. At 16:9 the title across the top at step 4 (144: three times the 48-unit place names) or step 3,
+    // over a map the full width (`titleAbove`, `titleStepsWide`); on a tall frame at step 5, 4 or 3 over it
+    map: { titleAbove: true, titleStepsWide: [4, 3], card: false, land: '#e9eaee', borders: 'paper', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'paper' },
     diagram: { card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 28, gap: 48, margin: 10, platePad: 8, plate: 'paper', arrow: 'ink', arrowWidth: 3, head: 20, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: false, advance: 0.5 },
     // timeline: as desk's, the dates in the display face at step 5 or 4 (three times the 46-unit serif text), the events
     // in the serif

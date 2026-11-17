@@ -237,7 +237,9 @@ function sourceNode(shot, ctx, x, y) {
 function titleNodes(shot, ctx, x, y, width) {
   if (shot.title === undefined) return { nodes: [], h: 0 };
   if (isEditorial(ctx.look)) {
-    const set = deskTitle(shot, ctx, ctx.data.titleSteps, width);
+    // a look may name the steps a wide frame's title takes (data.titleStepsWide, ledger: one line across the top)
+    const steps = isWide(ctx.canvas) && ctx.data.titleStepsWide !== undefined ? ctx.data.titleStepsWide : ctx.data.titleSteps;
+    const set = deskTitle(shot, ctx, steps, width);
     return { nodes: [node('text', `${shot.id}.title`, { x, y, layout: set.layout, font: set.font, fill: ctx.look.palette.ink, role: 'hero' })], h: set.layout.height };
   }
   const box = tagBox(ctx, `${shot.id}.title`, shot.title, x, y);
@@ -267,11 +269,14 @@ export function mapLayout(shot, ctx, data, times) {
   const room = roomOf(ctx);
   const gap = ctx.data.gap * unit;
   const wide = isWide(canvas);
-  const side = wide && isEditorial(look) ? gridSpan(look, canvas, EDITORIAL_WIDE_COLUMN, ctx.data.titleTo) : { x: room.x, w: room.w };
+  // an editorial wide frame sets the title beside the map on columns 2 to `titleTo`, or across the top over a map the
+  // full width (data.titleAbove, ledger: beside, a four-word title fell to step 3, under three times the place names,
+  // and the map sat small with the lower half empty)
+  const beside = wide && isEditorial(look) && ctx.data.titleAbove !== true;
+  const side = wide && isEditorial(look) ? gridSpan(look, canvas, EDITORIAL_WIDE_COLUMN, beside ? ctx.data.titleTo : look.grid.columns) : { x: room.x, w: room.w };
   const title = titleNodes(shot, ctx, side.x, room.y, side.w);
   const sourceH = shot.source === undefined ? 0 : floorSize(ctx) * HALF + gap;
   const listH = wide ? 0 : data.places.length * keyRow(ctx) + gap;
-  const beside = wide && isEditorial(look);
   const left = beside ? gridSpan(look, canvas, ctx.data.titleTo + 1, look.grid.columns).x : room.x;
   const top = beside ? room.y : room.y + title.h + (title.h > 0 ? gap : 0);
   const area = { x: left, y: top, w: room.x + room.w - left, h: room.y + room.h - top - sourceH - listH };

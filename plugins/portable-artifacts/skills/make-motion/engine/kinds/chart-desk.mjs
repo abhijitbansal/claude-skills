@@ -27,15 +27,26 @@ const BARRED = Object.freeze(['bar', 'column']); // the types drawn as labelled 
 
 // The claim: fitted, flush left on column 2 (on a tall frame from data.titleFromTall, cosmos: column 1, the plot's left
 // edge), its cap line where a statement's slug sits (SLUG.top of the height).
-function titleNode(shot, ctx, data, labelSize) {
+// Where the claim's first line starts: where a statement's slug sits, or the top of the composition band in the platform
+// safe zone (editorial.mjs).
+function titleTop(ctx) {
+  const { look, canvas, unit } = ctx;
+  const bounds = editorialBounds(ctx);
+  return bounds.safe ? bounds.top : Math.max(look.grid.margin * unit, SLUG.top * canvas.h);
+}
+
+// `maxHeight`: the most the claim's lines may take (the frame's height, or less where the plot keeps a share of it)
+function titleNode(shot, ctx, data, labelSize, maxHeight = ctx.canvas.h) {
   const { look, canvas, unit, measure } = ctx;
   const span = editorialSpan(ctx, isWide(canvas) ? FIRST_COLUMN : data.titleFromTall ?? FIRST_COLUMN, isWide(canvas) ? data.titleToWide : data.titleToTall);
   const opts = { text: setCase(look, 'display', shot.title), font: fontFor(look, 'display', data.titleMax * unit, unit), maxWidth: span.w, align: 'left', measure };
   // a look may keep the claim a hair over three times the labels (data.titleMargin, cosmos); desk fits it from three times
-  const fit = fitDisplay(opts, { min: (data.titleMargin ?? 1) * MIN_HERO_RATIO * labelSize, max: data.titleMax * unit, maxHeight: canvas.h, maxLines: data.titleLines }, look, unit);
+  const min = (data.titleMargin ?? 1) * MIN_HERO_RATIO * labelSize;
+  const roomy = fitDisplay(opts, { min, max: data.titleMax * unit, maxHeight, maxLines: data.titleLines }, look, unit);
+  // a claim that cannot fit the room left over the plot is set at its smallest, which leaves the plot the most
+  const fit = roomy.layout.overflow && maxHeight < canvas.h ? fitDisplay(opts, { min, max: Math.ceil(min), maxHeight: canvas.h, maxLines: data.titleLines }, look, unit) : roomy;
   const bounds = editorialBounds(ctx);
-  // where a statement's slug sits, or the top of the composition band in the platform safe zone (editorial.mjs)
-  const top = bounds.safe ? bounds.top : Math.max(look.grid.margin * unit, SLUG.top * canvas.h);
+  const top = titleTop(ctx);
   // in the safe zone, the first line's ink (its ascenders) starts at the band's top: the zone is the review's own edge
   const up = bounds.safe ? runInk(fit.layout.lines[0], fit.font, measure).up : CAP_HEIGHT * fit.font.size;
   const y = top + up - fit.layout.lines[0].y;
@@ -62,6 +73,29 @@ function sourceFontFor(ctx, data, text, width) {
   if (labelWidth(ctx, scaled, text) <= width) return { font: scaled, wrap: 0 };
   const lines = layoutText({ text, font: scaled, maxWidth: width, measure }).lines;
   return { font: scaled, wrap: lines.at(-1).y - lines[0].y, maxWidth: width };
+}
+
+// The source line: smaller than the labels, in ink2, as written after "Source: ", a clear gap under the plot (look review
+// 2: in the labels' style right under them it read as a second row of categories), over the caption band. Off the safe
+// zone it starts on column 2; a line too wide for the room from there takes the plot's full width instead (from `left`),
+// set smaller and wrapped to two lines as in the safe zone (a tall frame's long source ran past the right margin and
+// under the frame's foot). -> { sourced: label | null, sourceFont }
+function sourceLine(shot, ctx, data, style, { left, right, caption }) {
+  const { look, canvas } = ctx;
+  const { font, gap } = style;
+  const bounds = editorialBounds(ctx);
+  const sourceText = shot.source === undefined ? '' : `${SOURCE_PREFIX}${shot.source}`;
+  const ownX = bounds.safe ? left : gridX(look, canvas, FIRST_COLUMN);
+  const asSet = sourceFontFor(ctx, data, sourceText, bounds.safe ? right - left : Infinity);
+  const tooWide = !bounds.safe && sourceText !== '' && labelWidth(ctx, asSet.font, sourceText) > right - ownX;
+  const { font: sourceFont, wrap, maxWidth: sourceWidth } = tooWide ? sourceFontFor(ctx, data, sourceText, right - left) : asSet;
+  // in the safe zone its ink (its descenders) ends at the band's bottom
+  const down = bounds.safe && shot.source !== undefined ? inkExtent(sourceText, sourceFont, ctx.measure).down : WORD_DESCENT * font.size;
+  const sourceBaseline = Math.min(bounds.bottom, caption - gap) - down - wrap;
+  const sourced = shot.source === undefined ? null
+    // off the safe zone too, a line wider than the plot's span says so (the review's fit finding), never runs off the frame
+    : label(ctx, { id: `${shot.id}.source`, text: sourceText, font: sourceFont, x: tooWide ? left : ownX, y: sourceBaseline, fill: style.text, asWritten: true, ...(wrap > 0 ? { maxWidth: sourceWidth, lines: 2 } : bounds.safe ? {} : { maxWidth: right - left }) });
+  return { sourced, sourceFont };
 }
 
 // A text node carrying the lines its kind left out (props.dropped: the review's 'dropped' rule).
@@ -105,24 +139,19 @@ export function expandDeskChart(shot, ctx, data, hero) {
   const wide = isWide(canvas);
   const bounds = editorialBounds(ctx);
   const left = bounds.safe ? editorialSpan(ctx, 1, 1).x : gridX(look, canvas, wide ? FIRST_COLUMN : 1);
-  // the source line: smaller than the labels, in ink2, as written after "Source: ", a clear gap under the plot (look
-  // review 2: in the labels' style right under them it read as a second row of categories)
-  const sourceText = shot.source === undefined ? '' : `${SOURCE_PREFIX}${shot.source}`;
   // equal outer margins: the plot's right edge as far in from the right as its left edge is from the left
   const right = bounds.safe ? editorialRight(ctx) : wide ? canvas.w - left : gridX(look, canvas, RIGHT_EDGE);
-  const { font: sourceFont, wrap, maxWidth: sourceWidth } = sourceFontFor(ctx, data, sourceText, bounds.safe ? right - left : Infinity);
+  const { sourced, sourceFont } = sourceLine(shot, ctx, data, style, { left, right, caption });
+  const floorOf = (src) => Math.min(src === null ? bounds.bottom : src.box[1] - (data.sourceGap ?? SOURCE_GAP) * gap, caption) - gap;
   // three times the labels as set (labelScale); a look may hold it at three times the smallest text instead
   // (data.titleFloor 'smallest', cosmos: labels set large for a phone, the quieter source the smallest)
   const smallest = data.titleFloor === 'smallest' && shot.source !== undefined ? Math.min(font.size, sourceFont.size) : font.size;
-  const title = titleNode(shot, ctx, data, smallest);
-  // over a caption band; in the safe zone its ink (its descenders) ends at the band's bottom
-  const down = bounds.safe && shot.source !== undefined ? inkExtent(sourceText, sourceFont, ctx.measure).down : WORD_DESCENT * font.size;
-  const sourceBaseline = Math.min(bounds.bottom, caption - gap) - down - wrap;
-  const sourced = shot.source === undefined ? null
-    // off the safe zone too, a line wider than the plot's span says so (the review's fit finding), never runs off the frame
-    : label(ctx, { id: `${shot.id}.source`, text: sourceText, font: sourceFont, x: bounds.safe ? left : gridX(look, canvas, FIRST_COLUMN), y: sourceBaseline, fill: style.text, asWritten: true, ...(wrap > 0 ? { maxWidth: sourceWidth, lines: 2 } : bounds.safe ? {} : { maxWidth: right - left }) });
+  // a look may keep a share of the frame's height for the plot (data.plotHeight, ledger): the claim is set in what is
+  // left over it, down to three times the labels (a three-line claim at 16:9 left a line chart 80 units tall, its value
+  // axis labels on top of each other)
+  const titleRoom = data.plotHeight === undefined ? canvas.h : floorOf(sourced) - titleTop(ctx) - data.titleGap * unit - data.plotHeight * canvas.h;
+  const title = titleNode(shot, ctx, data, smallest, titleRoom);
   const area = { x: left, y: title.bottom + data.titleGap * unit, w: right - left, h: 0 };
-  const floorOf = (src) => Math.min(src === null ? bounds.bottom : src.box[1] - (data.sourceGap ?? SOURCE_GAP) * gap, caption) - gap;
   // bars with their labels over them need rows that show a bar; when they cannot have them, the source line (the least
   // important secondary line) goes and the title says so (kinds/secondary.mjs)
   const barred = style.labelsAbove && BARRED.includes(shot.type);

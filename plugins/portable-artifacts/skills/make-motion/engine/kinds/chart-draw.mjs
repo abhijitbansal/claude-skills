@@ -133,6 +133,18 @@ function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, t
 /** Does the shot's scale break from 0: a bar, column or area chart (drawn from its baseline) with a baseline that is not 0. */
 export const isBroken = (shot) => ['bar', 'column', 'area'].includes(shot.type) && (shot.baseline ?? 0) !== 0;
 
+// The references a vertical value axis has room to label: every other one dropped (the top kept) until each tick label,
+// the baseline's among them, is at least `pitch` px from the next (a short plot's labels sat on top of each other).
+function roomyReferences(scale, yOf, pitch) {
+  const crowded = (refs) => {
+    const ys = [scale.baseline, ...refs].map(yOf).sort((a, b) => a - b);
+    return ys.some((y, i) => i > 0 && y - ys[i - 1] < pitch);
+  };
+  let refs = scale.references;
+  while (refs.length > 1 && crowded(refs)) refs = refs.filter((_, i) => (refs.length - 1 - i) % HALF === 0);
+  return refs;
+}
+
 /**
  * The value scale's furniture along a vertical value axis (columns, lines, areas): reference lines across the plot with
  * their ticks in the left gutter, the baseline rule, and the broken-axis mark and its label when the scale breaks.
@@ -141,7 +153,7 @@ export function valueAxis(shot, ctx, style, { plot, scale, yOf, gutterX, refs })
   const { font, gap } = style;
   const nodes = [];
   if (refs) {
-    scale.references.forEach((t, k) => {
+    roomyReferences(scale, yOf, (CAP_HEIGHT + WORD_DESCENT) * font.size + gap).forEach((t, k) => {
       const y = yOf(t);
       nodes.push(rule(`${shot.id}.ref.${k + 1}`, [[plot.x, y], [plot.x + plot.w, y]], style.rule, style.refWidth));
       nodes.push(label(ctx, { id: `${shot.id}.tick.${k + 1}`, text: valueText(t, scale.decimals, shot.unit), font, x: gutterX, y: y + (CAP_HEIGHT * font.size) / HALF, align: 'right', fill: style.text, numeric: true }).node);

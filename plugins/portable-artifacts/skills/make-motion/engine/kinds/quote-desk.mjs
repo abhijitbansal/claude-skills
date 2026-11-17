@@ -89,7 +89,9 @@ function cardLayout(shot, ctx, data, { span, plan, room, keep = true }) {
   const body = sentenceLines(setCase(look, 'display', quotationOf(shot)), data.sentenceLines);
   const text = `${markFont ? '' : OPEN_MARK}${body}${markFont ? '' : CLOSE_MARK}`;
   // breaks by sense, no line of one word: the fit trades size for a layout without one, down to its floor (fitText)
-  const opts = { text, font: fontFor(look, face, data.max * unit, unit), maxWidth: width, align: 'left', measure, optical: true, accept: noLoneLine };
+  // a look may set the quotation's lines closer than its face's (data.leading, ledger: the text serif at display sizes)
+  const set = fontFor(look, face, data.max * unit, unit);
+  const opts = { text, font: data.leading === undefined ? set : { ...set, lineHeight: data.leading }, maxWidth: width, align: 'left', measure, optical: true, accept: noLoneLine };
   const min = Math.max(MIN_HERO_RATIO * sizeAt(look, Math.min(...data.attrSteps), unit), keep ? heroFloor(look, unit) : 0);
   const quote = fitDisplay(opts, { min, max: data.max * unit, maxHeight: Math.max(1, maxHeight), maxLines: data.maxLines, tradeFloor: min }, look, unit);
   const size = quote.font.size;
