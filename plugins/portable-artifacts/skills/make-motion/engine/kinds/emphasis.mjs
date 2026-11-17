@@ -75,7 +75,11 @@ const weightColor = Object.freeze({
   reserve: () => ({ weight: HEAVY }),
 });
 
-export const EMPHASIS = Object.freeze({ highlight, 'recolor-scale': recolorScale, recolor, glow, 'weight-color': weightColor });
+// size and width alone (poster): the stack sets the emphasised line large (kinds/stack.mjs) and a one-line stack widens
+// its emphasised word; the words keep their colour and their entrance
+const scale = Object.freeze({ ...EMPHASIS_FLAGS.scale, wordTracks: asIs, hookTracks: asIs, inkTracks: none });
+
+export const EMPHASIS = Object.freeze({ highlight, 'recolor-scale': recolorScale, recolor, glow, 'weight-color': weightColor, scale });
 
 /** The entry of look.emphasis; throws naming the look, the name and the names the table has (with did-you-mean). */
 export const emphasisOf = (look) => EMPHASIS[emphasisName(look)];

@@ -17,6 +17,10 @@ import { resolveAnchor } from '../script/anchors.mjs';
 import { captionsOn, shotCaptions, kindContext } from '../captions/index.mjs';
 import { sampleGraph } from './sample.mjs';
 import { handLayer } from '../hand/index.mjs';
+import { hasGrounds, shotLook, groundSheet } from '../looks/grounds.mjs';
+import { node } from './node.mjs';
+import { FIELD_ID } from '../kinds/shared.mjs';
+import { stackArea } from '../kinds/stack.mjs';
 import { withLookEmphasis } from '../kinds/emphasis-fallback.mjs';
 import { localMatrix } from '../page/bounds.mjs';
 import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs';
@@ -37,6 +41,9 @@ export function resolveLook(film) {
   const look = lookForFormat(registries.looks.get(film.look ?? mode.defaultLook), film.format ?? mode.defaultFormat);
   return film.accent === undefined ? look : applyAccent(look, film.accent);
 }
+
+/** The look shot `index` of `film` draws with: resolveLook, on the shot's ground for a look that paints one a shot. */
+export const lookOfShot = (film, index) => shotLook(resolveLook(film), index, film.seed ?? DEFAULT_SEED);
 
 // ctx.asset(src) for a shot: the size of one of the srcs the shot declares; any other string is an error.
 function shotAsset(shot, kind, assets) {
@@ -138,10 +145,23 @@ function withCaptions(out, shot, kind, ctx, film, cam) {
   return captions.length === 0 ? out.nodes : [...out.nodes, ...captions];
 }
 
-function expandOne({ film, timeline, index, canvas, measure, assets, look, viralInsets, prepared }) {
+// A grounded look's shot (engine/looks/grounds.mjs, poster): the ground sheet first, and the field told the text area
+// its cut-paper shapes keep clear of, at depth 0 so each shot keeps its own ground through a cut. Any other look: the
+// nodes as they are.
+function groundLayer(nodes, ctx) {
+  if (!hasGrounds(ctx.look)) return nodes;
+  const area = stackArea(ctx);
+  const clear = [area.left, area.top, area.w, area.h];
+  const field = (n) => node('field', n.id, { ...n.props, params: { ...n.props.params, clear } }, { depth: 0 });
+  return [groundSheet(ctx.look, ctx.canvas), ...nodes.map((n) => (n.type === 'field' && n.id === FIELD_ID ? field(n) : n))];
+}
+
+function expandOne({ film, timeline, index, canvas, measure, assets, look: filmLook, viralInsets, prepared }) {
   const shot = film.shots[index];
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
+  // the look this shot draws with: the film's, on the shot's ground for a look that paints one a shot
+  const look = shotLook(filmLook, index, film.seed ?? DEFAULT_SEED);
   const ctx = shotContext({ film, index, timeline, canvas, measure, assets, look, viralInsets, prepared });
   // the cut that opens the shot (the film's root cut and the look's cutStyle included), and the shot as its kind sees it:
   // with that cut written out in full, so a kind reading shot.cut (its camera, its opening) sees the cut the film draws
@@ -156,7 +176,7 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
     start: timing.start,
     duration: timing.duration,
     // a look with `hand` data draws the shot with the drawing hand (engine/hand); any other look: the nodes as they are
-    nodes: handLayer(withCaptions(out, shot, kind, ctx, film, cam), timing, ctx),
+    nodes: handLayer(groundLayer(withCaptions(out, shot, kind, ctx, film, cam), ctx), timing, ctx),
     cam,
     background: out.background ?? DEFAULT_BACKGROUND,
     hero: heroNode && box ? { id: heroNode.id, box, pose: heroNode.props } : null,

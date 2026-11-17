@@ -12,10 +12,11 @@ const REFERENCE_WIDTH = 1080; // units: `platform` sides are measured on a 1080-
 
 /** The room the shot composes in without a page (the review), { x, y, w, h } in px: as roomOf does with captions off,
  *  `viralInsets` the platform safe zone the review passes (scripts/v2/review.mjs kindFindings). */
-export function reviewRoom(look, canvas, viralInsets) {
+export function reviewRoom(look, canvas, viralInsets, mode) {
   const unit = Math.min(canvas.w, canvas.h) / REFERENCE_WIDTH;
   const margin = look.grid.margin * unit;
-  const rect = compositionRect({ canvas, look, viralInsets });
+  // mode: the film's (a mode object), for a look that keeps the platform zone in a platform mode only (poster)
+  const rect = compositionRect({ canvas, look, viralInsets, mode });
   if (rect.safe) return { x: rect.left, y: rect.top, w: rect.w, h: rect.h };
   const left = editorialLeft(look, canvas, unit); // as roomOf: the one left margin of an editorial wide frame
   return { x: left, y: margin, w: canvas.w - HALF * left, h: canvas.h - HALF * margin };

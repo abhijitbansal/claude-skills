@@ -20,10 +20,11 @@ import {
 import { defaultCamera, driftReach } from './camera.mjs';
 import { highlightBands } from './highlighter.mjs';
 import { emphasisOf } from './emphasis.mjs';
+import { emphasisFlags } from './emphasis-flags.mjs';
 import { wordTimes } from './words.mjs';
 import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
-import { composeStack, stackNodes } from './stack.mjs';
+import { composeStack, stackNodes, widerKeyword } from './stack.mjs';
 import { editorialSpan, editorialBounds } from './editorial.mjs';
 import { unmarked, opensSet } from './shared.mjs';
 
@@ -291,12 +292,24 @@ function boxesFor(placed, words) {
   return Object.fromEntries([['text', unionBox(wordBoxes)], ...wordBoxes.map((box, i) => [`word:${i}`, box])]);
 }
 
+// What an emphasis that leads (poster's scale, emphasis-flags.mjs) asks of a stack: the emphasised word indexes, whose
+// rows take the large size, and the keyword one step wider than the display face, which a one-line stack is measured at
+// so its emphasised word can step to it. {} for every other emphasis.
+function stackEmphasis(shot, text, ctx) {
+  const flags = emphasisFlags(ctx.look);
+  if (flags.leads !== true) return {};
+  const words = text.split(/\s+/).filter((w) => w !== '' && w !== '|').map((w) => w.replace(/\|$/, ''));
+  const times = wordTimes(words, ctx.timing, cutReveal(shot, ctx));
+  const lead = new Set(times.flatMap(({ spoken }, i) => (spoken !== null && ctx.timing.words[spoken].emphasis ? [i] : [])));
+  return { lead, ...(flags.widens === true && lead.size > 0 ? { widen: widerKeyword(ctx.look.fonts.display.width) } : {}) };
+}
+
 // A stack (stack.mjs): one text node per line inside the hero group, the kicker as a tag over the first line.
 function expandStacked(shot, ctx) {
   const { look, unit, timing } = ctx;
   // a viral film's first statement (the hook, read from frame 0) may be set a word a line, larger (stack.mjs hookLines)
   const hook = timing.index === 0 && ctx.mode.hookFromFrameZero === true;
-  const placed = composeStack(sourceText(shot, look), shot, ctx, undefined, { hook });
+  const placed = composeStack(sourceText(shot, look), shot, ctx, undefined, { hook, ...stackEmphasis(shot, sourceText(shot, look), ctx) });
   const texts = placed.lines.flatMap((line) => line.layout.lines[0].words.map((w) => w.text));
   const times = wordTimes(texts, timing, cutReveal(shot, ctx)).map(({ at, spoken }) => ({ at, emphasised: spoken !== null && timing.words[spoken].emphasis }));
   const hero = heroId(shot, 'text');

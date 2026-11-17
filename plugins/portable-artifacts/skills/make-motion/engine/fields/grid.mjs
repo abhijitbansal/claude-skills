@@ -30,8 +30,8 @@ export function canvasSide(size) {
   return near ?? size / grow;
 }
 
-// The x of each column start (1 to 12) and the right margin edge on a canvas `w` wide, in canvas pixels.
-function columnEdges(w, margin, gutter) {
+// The x of each column start (1 to 12) and the right margin edge on a canvas `w` wide, in canvas pixels (flat.mjs too).
+export function columnEdges(w, margin, gutter) {
   const column = (w - HALF * margin - (COLUMNS - 1) * gutter) / COLUMNS;
   return [...Array.from({ length: COLUMNS }, (_, i) => margin + i * (column + gutter)), w - margin];
 }

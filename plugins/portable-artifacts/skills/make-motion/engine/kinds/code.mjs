@@ -79,17 +79,17 @@ function plainPrepared(shot) {
 }
 
 // The safe height the bar judges a tall frame against: the platform zone where the look composes in it, else the margins.
-function safeHeight(look, canvas, viralInsets) {
-  if (viralInsets && compositionRect({ canvas, look, viralInsets }).safe) return canvas.h - viralInsets.top - viralInsets.bottom;
+function safeHeight(look, canvas, viralInsets, filmMode) {
+  if (viralInsets && compositionRect({ canvas, look, viralInsets, mode: filmMode }).safe) return canvas.h - viralInsets.top - viralInsets.bottom;
   return canvas.h - 2 * look.grid.margin * (Math.min(canvas.w, canvas.h) / REFERENCE_WIDTH);
 }
 
 // The block as the review can estimate it without a page (the hero's width from look data `heroAdvance`, em a
 // character): { inner (the panel's), need, size, heroH }, the same arithmetic as code-layout.mjs geometryOf.
-function estimate(shot, look, canvas, viralInsets) {
+function estimate(shot, look, canvas, viralInsets, filmMode) {
   const data = kindData(look, KIND);
   const unit = Math.min(canvas.w, canvas.h) / REFERENCE_WIDTH;
-  const room = reviewRoom(look, canvas, viralInsets);
+  const room = reviewRoom(look, canvas, viralInsets, filmMode);
   const hero = heroOf(shot, canvas);
   const maxHero = hero ? Math.floor(Math.min(Math.max(...look.scale) * unit, room.w / (setCase(look, 'display', hero.text).length * data.heroAdvance))) : 0;
   const heroH = hero ? maxHero * look.lineHeight.display + data.pad * unit : 0;
@@ -110,15 +110,16 @@ function longLineFindings(shot, mode, look, canvas, holds) {
   }));
 }
 
-function codeReview(shot, { look, canvas, viralInsets } = {}) {
+// `mode` in the ctx is the film's mode (scripts/v2/review.mjs kindFindings); `shot.mode` is the code shot's own mode
+function codeReview(shot, { look, canvas, viralInsets, mode: filmMode } = {}) {
   if (!look || !canvas || !supportsKind(look, KIND)) return [];
   const mode = shot.mode ?? 'type';
   if (codeProblems(shot, { look }).length > kindSupportProblems(KIND, look).length) return [];
-  const { data, unit, inner, need, fit, heroH, size } = estimate(shot, look, canvas, viralInsets);
+  const { data, unit, inner, need, fit, heroH, size } = estimate(shot, look, canvas, viralInsets, filmMode);
   const long = longLineFindings(shot, mode, look, canvas, fitCode({ chars: Infinity, rows: 0 }, { look, data, unit, inner }).holds.chars);
   const format = isWide(canvas) ? '16:9' : '9:16';
   const rows = fit.holds.rows < need.rows ? [{ path: shownField(mode), at: 0, message: `${need.rows} rows do not fit at ${format} in the ${look.name} look (it holds ${fit.holds.rows}): cut lines` }] : [];
-  const span = (heroH + panelHeight(need.rows, data, size, unit)) / safeHeight(look, canvas, viralInsets);
+  const span = (heroH + panelHeight(need.rows, data, size, unit)) / safeHeight(look, canvas, viralInsets, filmMode);
   const tall = !isWide(canvas) && long.length === 0 && rows.length === 0 && span < TALL_SPAN
     ? [{ path: shownField(mode), at: 0, message: `at 9:16 in the ${look.name} look the code spans ${Math.round(span * PERCENT)}% of the frame's height: shorten the lines so the type can grow, or add the lines that matter` }] : [];
   return [...long, ...rows, ...tall];

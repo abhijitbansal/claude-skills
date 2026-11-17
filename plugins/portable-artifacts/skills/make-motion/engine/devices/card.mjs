@@ -124,12 +124,32 @@ function hairlineCard({ id, box, at, look, unit }, style) {
   return { nodes: [entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, children: parts })] };
 }
 
+const CUT_TURN = 2; // degrees: a cut card's turn when its style names none
+const MISREGISTER = 3; // units: the misregistered copy's offset, down and right
+const COPY_KEYS = Object.freeze(['accent', 'accent2', 'rule', 'paper']); // the copy's colour: the first that is not the card's
+
+// A cut-paper card (`edge: 'cut'`, poster): a flat rectangle in `fill` (default the ink), turned `turn` degrees, no
+// shadow, over one misregistered copy MISREGISTER units down and right in the other flat colour (`copy`, else the first
+// of COPY_KEYS whose colour differs from the card's), which shows past the paper's lower right edge.
+function cutCard({ id, box, at, look, unit }, style) {
+  const [x, y, w, h] = box;
+  const d = polyline([[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]], true);
+  const fill = colourOf(look, style.fill ?? 'ink');
+  const copy = colourOf(look, style.copy ?? COPY_KEYS.find((key) => colourOf(look, key).toLowerCase() !== fill.toLowerCase()) ?? 'paper');
+  const parts = [
+    node('path', `${id}.misregister`, { d, fill: copy, x: MISREGISTER * unit, y: MISREGISTER * unit }),
+    node('path', `${id}.paper`, { d, fill }),
+  ];
+  return { nodes: [entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, rotate: style.turn ?? CUT_TURN, children: parts })] };
+}
+
 function buildCard(params) {
   const { id, box, at, look, unit, seed } = checkParams('card', params);
   const [x, y, w, h] = box;
   const style = styleOf(look, 'card');
   if (style.edge === 'rounded') return roundedCard({ id, box, at, look, unit }, style);
   if (style.edge === 'hairline') return hairlineCard({ id, box, at, look, unit }, style);
+  if (style.edge === 'cut') return cutCard({ id, box, at, look, unit }, style);
   const hand = isHand(look), rng = deviceRng(seed, id, 'card');
   const rotate = hand ? spread(rng, TILT) : 0;
   const d = paperOutline(style.edge, [w, h], unit, hand, rng);

@@ -18,6 +18,10 @@ export const EMPHASIS_FLAGS = Object.freeze({
   glow: Object.freeze({ together: (ctx) => ctx.look.kinds?.statement?.together === true && isWide(ctx.canvas) }),
   // a step to a heavier weight in the accent (ledger): a pointer like the highlight, capped at the same share
   'weight-color': Object.freeze({ together: never, maxShare: EMPHASIS_SHARE }),
+  // size (poster): `leads`: a stack's line holding an emphasised word takes the stack's large size and the others the
+  // small one (kinds/stack.mjs keepRatio); `widens`: a one-line stack's emphasised word steps one width keyword wider on
+  // its beat, its line measured at that width. Never a recolour.
+  scale: Object.freeze({ together: never, leads: true, widens: true, keepsColour: true }),
 });
 
 /** The name of look.emphasis when the table has it; throws naming the look, the name and the names the table has. */

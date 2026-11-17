@@ -14,6 +14,7 @@ import { resolveCut } from '../cuts/resolve.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import { wordTimes } from './words.mjs';
 import { FIELD_BLEED } from '../fields/shared.mjs';
+import { unitOf } from '../units.mjs';
 
 // Cap height as a share of the font size. Canvas reports only the font's ascent box, not the cap height, so the
 // layouts below place cap lines with this ratio (Fraunces and Archivo both sit close to it).
@@ -71,14 +72,31 @@ const servesPlatformMode = (look) => look.modes.some((name) => registries.modes.
  */
 export function compositionRect(ctx) {
   const { canvas, look, viralInsets } = ctx;
-  if (!viralInsets || !servesPlatformMode(look) || !isPortrait916(canvas)) {
+  // a look serving more than one kind of mode may keep the zone in a platform mode only (look.safeZone 'mode', poster:
+  // the film's mode decides); every other look keeps it whenever it serves such a mode
+  const byMode = look.safeZone === 'mode' && ctx.mode;
+  const platform = byMode ? ctx.mode.platformSafeZone === true : servesPlatformMode(look);
+  // outside a platform mode such a look still composes a 9:16 frame in its band, its margins at the sides (poster in pro)
+  const insets = platform ? viralInsets : (byMode && look.band ? marginInsets(look, canvas) : null);
+  if (!insets || !isPortrait916(canvas)) {
     return { left: 0, top: 0, w: canvas.w, h: canvas.h, cx: canvas.w / HALF, cy: canvas.h / HALF, safe: false };
   }
+  return bandRect(look, canvas, insets, ctx.captionRoom);
+}
+
+// The look's grid margin on every side, as insets in pixels.
+function marginInsets(look, canvas) {
+  const m = look.grid.margin * unitOf(canvas);
+  return { top: m, right: m, bottom: m, left: m };
+}
+
+// The composition rectangle inside `insets`, its top and bottom set by the look's band when it has one.
+function bandRect(look, canvas, viralInsets, captionRoom) {
   // a look's band (look.band: shares of the height) sets the top and bottom inside the platform sides (look review 2:
   // the safe zone's own bottom left the lower half of a vertical frame empty)
   const top = look.band ? Math.max(viralInsets.top, look.band.top * canvas.h) : viralInsets.top;
   // ctx.captionRoom: what a captioned shot gives up for its captions (captions/index.mjs kindContext)
-  const bottom = (look.band ? look.band.bottom * canvas.h : canvas.h - viralInsets.bottom) - (ctx.captionRoom ?? 0);
+  const bottom = (look.band ? look.band.bottom * canvas.h : canvas.h - viralInsets.bottom) - (captionRoom ?? 0);
   const w = canvas.w - viralInsets.left - viralInsets.right, h = bottom - top;
   return { left: viralInsets.left, top, w, h, cx: viralInsets.left + w / HALF, cy: top + h / HALF, safe: true };
 }

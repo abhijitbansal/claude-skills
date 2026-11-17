@@ -15,7 +15,7 @@
 // (engine/review/frame.mjs judges landed, settled texts) when the text also rests on another sampled frame, and
 // anything the audit has no rule for.
 import { registries } from '../../engine/registry.mjs';
-import { resolveLook, shotTime } from '../../engine/graph/film.mjs';
+import { shotTime, lookOfShot } from '../../engine/graph/film.mjs';
 import { auditFrame, textStatesIn, textLandings } from '../../engine/review/frame.mjs';
 import { regionMarkIds } from '../../engine/review/regions.mjs';
 import { withLookEmphasis } from '../../engine/kinds/emphasis-fallback.mjs';
@@ -44,9 +44,10 @@ const timeText = (t) => t.toFixed(SECOND_DECIMALS);
  * pop on 9:16), else the canvas less the format's safe insets.
  * @returns {{ left: number, top: number, right: number, bottom: number }} canvas pixels
  */
-export function safeRectFor(canvas, look) {
+export function safeRectFor(canvas, look, mode) {
   const size = [canvas.w, canvas.h];
-  const rect = compositionRect({ canvas, look, viralInsets: safeInsets(size, VIRAL_SAFE_ZONE) });
+  // mode: the film's mode, for a look that keeps the platform zone in a platform mode only (look.safeZone 'mode', poster)
+  const rect = compositionRect({ canvas, look, mode, viralInsets: safeInsets(size, VIRAL_SAFE_ZONE) });
   if (rect.safe) return { left: rect.left, top: rect.top, right: rect.left + rect.w, bottom: rect.top + rect.h };
   const margin = safeInsets(size);
   return { left: margin.left, top: margin.top, right: canvas.w - margin.right, bottom: canvas.h - margin.bottom };
@@ -207,9 +208,9 @@ export function opensShotAt(film, timeline, frame, whole) {
 function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds = []) {
   const shot = shotAtFrame(timeline, frame);
   const [width, height] = canvasSize(film);
-  const look = resolveLook(film), canvas = { w: width, h: height };
+  const look = lookOfShot(film, shot.index), canvas = { w: width, h: height };
   return {
-    look, canvas, safe: safeRectFor(canvas, look), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, shotIndex: shot.index, t: frame / timeline.fps,
+    look, canvas, safe: safeRectFor(canvas, look, registries.modes.get(film.mode ?? DEFAULT_MODE)), mode: film.mode ?? DEFAULT_MODE, shotId: shot.id, shotIndex: shot.index, t: frame / timeline.fps,
     isFirstShot: shot.index === 0, ...restingOf.get(shot.id),
     opensShot: opensShotAt(film, timeline, frame, whole),
     background: backgrounds[shot.index],
@@ -288,15 +289,16 @@ export function kindFinding(shot, index, timing, f) {
 // `pictures` maps a src to the [width, height] the page loaded it at (session.info.pictures); `asset(src)` reads it as
 // { width, height }, or undefined for a src the page did not load (a kind's review says nothing it cannot know).
 function kindFindings(film, timeline, pictures = {}) {
-  const look = resolveLook(film);
   const [w, h] = canvasSize(film);
   const asset = (src) => (Array.isArray(pictures[src]) ? { width: pictures[src][0], height: pictures[src][1] } : undefined);
+  const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
   return film.shots.flatMap((shot, index) => {
     const review = registries.kinds.get(shot.show).review;
     if (typeof review !== 'function') return [];
     const timing = timeline.shots[index];
+    const look = lookOfShot(film, index); // the shot's own look (its ground's palette, for a look that paints one a shot)
     // viralInsets: the platform safe zone the stage composes a viral look in (compositionRect), for a kind that sizes to it
-    return review(shot, { look, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h }, asset, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE) }).map((f) => kindFinding(shot, index, timing, f));
+    return review(shot, { look, mode, timing, at: (ref) => resolveAnchor(ref, timing), canvas: { w, h }, asset, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE) }).map((f) => kindFinding(shot, index, timing, f));
   });
 }
 
