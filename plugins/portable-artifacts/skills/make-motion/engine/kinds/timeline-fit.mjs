@@ -28,7 +28,9 @@ export const floorStep = (canvas) => (isWide(canvas) ? 1 : HALF);
 export function eventRoom(look, data, canvas, area, n, unit) {
   const gap = data.gap * unit;
   if (!isEditorial(look)) return { width: area.w - (isWide(canvas) ? 0 : data.rail * unit), height: area.h - (isWide(canvas) ? data.rail * unit : 0) };
-  if (isWide(canvas)) return { width: (area.w - (n - 1) * gap) / n - data.inset * unit, height: area.h / HALF - data.lineGap * unit };
+  // with the title as the hero (data.underTitle) the date and event share the room's height as placed (both parts and
+  // the two gaps round the line, centred: timeline-desk.mjs), not half each
+  if (isWide(canvas)) return { width: (area.w - (n - 1) * gap) / n - data.inset * unit, height: data.underTitle ? area.h - HALF * data.lineGap * unit : area.h / HALF - data.lineGap * unit };
   return { width: area.w - data.lineX * unit - data.textGap * unit, height: area.h / n - gap };
 }
 
@@ -53,6 +55,13 @@ function holds(sets, env) {
   });
 }
 
+// The title as the hero (data.underTitle, ledger: gate-ledger-2 ruling 3): `when` and `what` one size class, a third of
+// the title's size at most and the format's floor at least, tried by whole units from the largest down.
+function titlePairs(titleSize, floor, unit) {
+  const most = Math.floor(titleSize / HERO_RATIO / unit), least = Math.ceil(floor / unit - EPS);
+  return Array.from({ length: Math.max(1, most - least + 1) }, (_, i) => Math.max(least, most - i) * unit).map((s) => [s, s]);
+}
+
 /**
  * The pair of sizes and the events set at them: the largest `when` of data.whenSteps with a `what` of data.whatSteps at
  * or above the floor and at most a third of it, where every event holds; else the smallest such pair, fits false.
@@ -61,7 +70,7 @@ function holds(sets, env) {
 export function fitEvents(events, env) {
   const { look, data, unit } = env;
   const floor = sizeAt(look, env.floorStep, unit);
-  const pairs = [...data.whenSteps].sort((a, b) => b - a).flatMap((ws) => [...data.whatSteps].sort((a, b) => b - a)
+  const pairs = data.underTitle && env.titleSize ? titlePairs(env.titleSize, floor, unit) : [...data.whenSteps].sort((a, b) => b - a).flatMap((ws) => [...data.whatSteps].sort((a, b) => b - a)
     .map((ts) => [sizeAt(look, ws, unit), sizeAt(look, ts, unit)])
     .filter(([w, t]) => t >= floor - EPS && w >= HERO_RATIO * t - EPS));
   const tries = pairs.map(([w, t]) => ({ ...setAt(events, env, w, t), whenSize: w, whatSize: t }));

@@ -43,7 +43,7 @@ function titleOf(shot, ctx, room) {
       return { font, layout: layoutText({ text: setCase(look, 'display', shot.title), font, maxWidth: room.w, measure: ctx.measure }) };
     });
     const set = sets.find((s) => s.layout.lines.length <= TITLE_LINES) ?? sets.at(-1);
-    return { nodes: [node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: set.layout, font: set.font, fill: look.palette.ink, role: 'hero' })], h: set.layout.height };
+    return { nodes: [node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: set.layout, font: set.font, fill: look.palette.ink, role: 'hero' })], h: set.layout.height, size: set.font.size };
   }
   const style = look.devices.tag ?? {};
   const made = plainTag(ctx, `${shot.id}.title`, shot.title, { left: room.x, top: room.y, maxWidth: room.w, at: 0, fromStep: floorStep(ctx.canvas), toStep: Math.max(...data.titleSteps), fill: style.fill ?? 'ink', text: style.text ?? 'paper', snap: true });
@@ -60,7 +60,7 @@ function expandTimeline(shot, ctx) {
   const top = room.y + title.h + (title.h > 0 ? data.titleGap * unit : 0);
   const area = { x: room.x, y: top, w: room.w, h: room.y + room.h - top };
   const n = shot.events.length;
-  const fit = fitEvents(shot.events, { look, data, unit, measure: ctx.measure, room: eventRoom(look, data, canvas, area, n, unit), floorStep: floorStep(canvas) });
+  const fit = fitEvents(shot.events, { look, data, unit, measure: ctx.measure, room: eventRoom(look, data, canvas, area, n, unit), floorStep: floorStep(canvas), titleSize: title.size });
   const times = eventTimes(shot, timing);
   const laid = isEditorial(look) ? deskTimeline(shot, c, area, fit, times) : popTimeline(shot, c, { room: area, area: popArea(area, data, canvas, unit) }, fit, times);
   const boxes = { events: unionBox(Object.values(laid.boxes)), ...laid.boxes };
@@ -97,7 +97,7 @@ function timelineReview(shot, { look, canvas } = {}) {
   const left = editorialLeft(look, canvas, unit); // the kind's room (arrivals.mjs roomOf)
   const area = { x: left, y: band[0] + titleH, w: canvas.w - HALF * left, h: band[1] - band[0] - titleH };
   const room = eventRoom(look, data, canvas, area, shot.events.length, unit);
-  if (fitEvents(shot.events, { look, data, unit, measure: estimate(data.advance), room, floorStep: floorStep(canvas) }).fits) return [];
+  if (fitEvents(shot.events, { look, data, unit, measure: estimate(data.advance), room, floorStep: floorStep(canvas), titleSize: titleLines === 0 ? undefined : titleSize }).fits) return [];
   const i = shot.events.reduce((best, e, k) => (e.when.length > shot.events[best].when.length ? k : best), 0);
   const format = isWide(canvas) ? '16:9' : '9:16';
   return [{ path: `events[${i}].when`, at: 0, message: `at ${format} in the ${look.name} look ${shot.events.length} events cannot hold their dates at three times the text: cut an event or shorten events[${i}].when` }];

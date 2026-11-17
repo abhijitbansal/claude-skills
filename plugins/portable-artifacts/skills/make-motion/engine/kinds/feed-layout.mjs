@@ -11,6 +11,7 @@ import { layoutText } from '../text/layout.mjs';
 import { colourOf, roundedRect } from '../devices/shared.mjs';
 import { fontFor, sizeAt, setCase, shownFrom, isWide } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
+import { slugBox, slugNodes } from './slug.mjs';
 
 const HALF = 2;
 const DOTS = 0.4; // s the typing dots lead a `them` message
@@ -29,16 +30,23 @@ const isChat = (shot) => (shot.style ?? 'chat') === 'chat';
 const ORPHAN_STEP = 0.94; // a ruled row re-set this much narrower, each try, until its last line holds two words
 const ORPHAN_TRIES = 8;
 
-// `text` laid out at `maxWidth`, or, for ruled rows (data.rows, ledger), at the widest of a few narrower widths whose
-// last line holds at least two words (no orphan: gate-ledger-1 ruling 1); the first try when none does.
+// `text` laid out at `maxWidth`, or, for ruled rows (data.rows, ledger), at the widest of a few narrower widths at which
+// no line holds a lone word (no orphan: gate-ledger-1 ruling 1, every line); the first try when none does.
 function layNoOrphan(lay, text, font, maxWidth) {
   const first = lay(text, font, maxWidth);
   let width = maxWidth;
   for (let i = 0, set = first; i < ORPHAN_TRIES; i++, width *= ORPHAN_STEP, set = lay(text, font, width)) {
-    if (set.lines.length < HALF || set.lines.at(-1).words.length >= HALF) return set;
+    if (set.lines.length < HALF || set.lines.every((l) => l.words.length >= HALF)) return set;
   }
   return first;
 }
+
+// A ruled row's indent in px (data.indent units, ledger: gate-ledger-2 ruling 1): a `me` message starts that far in, so the
+// two speakers read apart without bubbles or invented names; 0 for `them`, for bubbles and in a look without it.
+const indentOf = (item, data, unit) => (data.rows && data.indent && item.from === 'me' ? data.indent * unit : 0);
+// A chat message's side padding in px: a ruled row has no body to pad, so its text runs from the row's edge (the
+// hairline's start); a bubble keeps data.pad.
+const sidePad = (data, unit) => (data.rows ? 0 : data.pad * unit);
 
 // Each item's text laid out at `size`, with its box height: { text, app?, w, h } in px.
 function itemsAt(shot, ctx, data, room, size) {
@@ -52,9 +60,10 @@ function itemsAt(shot, ctx, data, room, size) {
   const lay = data.rows ? (text, f, maxWidth) => layNoOrphan(plain, text, f, maxWidth) : plain;
   return shot.items.map((item) => {
     if (isChat(shot)) {
-      const text = lay(item.text, font, width - HALF * pad);
-      // a ruled row runs the full width; a bubble is as wide as its text
-      return { text, w: data.rows ? width : text.width + HALF * pad, h: text.height + HALF * pad };
+      const inset = indentOf(item, data, unit);
+      const text = lay(item.text, font, width - inset - HALF * sidePad(data, unit));
+      // a ruled row runs the full width (from its indent); a bubble is as wide as its text
+      return { text, w: data.rows ? width - inset : text.width + HALF * pad, h: text.height + HALF * pad };
     }
     const app = lay(item.app, bold, width - HALF * pad - (DISC + DISC_GAP) * size);
     const text = lay(item.text, font, width - HALF * pad);
@@ -70,8 +79,9 @@ function itemsAt(shot, ctx, data, room, size) {
 export function feedFit(shot, ctx, data, room) {
   const { look, unit, canvas } = ctx;
   const least = Math.round(sizeAt(look, floorStep(canvas), unit) / unit);
-  // ruled rows set the title MIN_HERO_RATIO times the messages, at most data.titleMax units: the messages no larger
-  const capped = data.rows ? Math.floor(data.titleMax / MIN_HERO_RATIO) : Infinity;
+  // ruled rows set the title MIN_HERO_RATIO times the messages, at most data.titleMax units: the messages no larger;
+  // a title on the look's slug (data.titleSlug) caps nothing: the messages are the hero
+  const capped = data.rows && !data.titleSlug ? Math.floor(data.titleMax / MIN_HERO_RATIO) : Infinity;
   const most = Math.min(capped, Math.round(sizeAt(look, Math.max(...data.steps), unit) / unit));
   const tries = [];
   for (let units = most; units >= least; units -= 1) {
@@ -93,9 +103,11 @@ function tryAt(shot, ctx, data, room, size) {
   const titleFace = data.titleFace ?? face;
   const titleSize = data.rows ? MIN_HERO_RATIO * size : size;
   const titleFont = data.titleFace ? fontFor(look, titleFace, titleSize, unit) : bold;
-  const title = shot.title === undefined ? null : layoutText({ text: setCase(look, titleFace, shot.title), font: titleFont, maxWidth: room.w, measure });
+  const title = shot.title === undefined || data.titleSlug ? null : layoutText({ text: setCase(look, titleFace, shot.title), font: titleFont, maxWidth: room.w, measure });
   const height = (title ? title.height + data.gap * unit : 0) + items.reduce((h, it) => h + it.h, 0) + (items.length - 1) * data.gap * unit;
-  const holds = items.every((it) => it.text.lines.length <= data.maxLines && (!it.app || it.app.lines.length === 1));
+  // ruled rows also hold only where no line of a message is one word (gate-ledger-1 ruling 1, every line, not the last)
+  const lone = (it) => data.rows && it.text.lines.length > 1 && it.text.lines.some((l) => l.words.length < HALF);
+  const holds = items.every((it) => it.text.lines.length <= data.maxLines && !lone(it) && (!it.app || it.app.lines.length === 1));
   return { size, font: fontFor(look, face, size, unit), bold, titleFont, items, title, holds, fits: holds && height <= room.h };
 }
 
@@ -126,7 +138,10 @@ function itemNodes(id, item, shot, k, { x, y }, ctx, data, fit) {
   const style = chat ? data[shot.items[k].from] : data.card;
   const box = [x, y, item.w, item.h];
   const fill = colourOf(look, style.text);
-  if (chat) return [...plate(id, box, style, ctx, data), node('text', `${id}.text`, { x: x + pad, y: y + pad, layout: item.text, font: fit.font, fill })];
+  if (chat) {
+    const lit = data.lit ? { wordTracks: item.text.lines.flatMap((line) => line.words.map(() => ({ fill: fit.lit[k] }))) } : {};
+    return [...plate(id, box, style, ctx, data), node('text', `${id}.text`, { x: x + sidePad(data, unit), y: y + pad, layout: item.text, font: fit.font, fill }, lit)];
+  }
   const discD = DISC * fit.size, cy = y + pad + item.header / HALF;
   const discFill = colourOf(look, data.discs[appIndex(shot, k) % data.discs.length]);
   const initial = layoutText({ text: setCase(look, 'text', shot.items[k].app.trim()[0].toUpperCase()), font: fit.bold, maxWidth: 1e6, measure: ctx.measure });
@@ -185,15 +200,38 @@ export function dotsWindow(shot, k, times) {
 }
 
 /** The feed's nodes and boxes: { nodes, boxes, times } (times: when each item appears). */
-export function feedLayout(shot, ctx, data, room, times) {
+export function feedLayout(shot, ctx, data, given, times) {
   const { look, unit } = ctx;
-  const fit = feedFit(shot, ctx, data, room);
+  const { room, slug } = slugRoom(shot, ctx, data, given);
+  const fit = { ...feedFit(shot, ctx, data, room), lit: data.lit ? shot.items.map((_, k) => litTrack(look, data.lit, k, times)) : null };
   const gap = data.gap * unit;
   const titleNodes = fit.title ? [node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: fit.title, font: fit.titleFont, fill: colourOf(look, data.title) })] : [];
   const top = room.y + (fit.title ? fit.title.height + gap : 0);
   const bottom = room.y + room.h;
   const laid = isChat(shot) ? chatThread(shot, ctx, data, fit, { room, top, bottom, gap, times }) : cardStack(shot, ctx, data, fit, { room, top, bottom, gap, times });
-  return { nodes: [...titleNodes, ...laid.nodes], boxes: laid.boxes, times };
+  return { nodes: [...slug, ...titleNodes, ...laid.nodes], boxes: laid.boxes, times };
+}
+
+// The room the feed composes in and the slug over it: with data.titleSlug (ledger, gate-ledger-2 ruling 1) the title is
+// set as the look's slug (the tag at the top left, kinds/slug.mjs, the one builder every kind's slug uses) and the
+// messages take the room under it, data.titleGap units down; else the given room and no slug.
+function slugRoom(shot, ctx, data, room) {
+  const staged = { ...shot, kicker: shot.title };
+  const placed = data.titleSlug && shot.title !== undefined ? slugBox(staged, ctx) : null;
+  if (placed === null) return { room, slug: [] };
+  const top = placed.box[1] + placed.box[3] + data.titleGap * ctx.unit;
+  return { room: { ...room, y: top, h: room.y + room.h - top }, slug: slugNodes(staged, ctx) };
+}
+
+// A message's colour track when the spoken one is lit (data.lit, ledger): `spoken` while it is current (from its time
+// to the next message's), `other` before and after, mixed in the look's colour space over its emphasize move; the first
+// message is lit on frame 0. Opaque colours, never an alpha (ban 6).
+function litTrack(look, lit, k, times) {
+  const on = colourOf(look, lit.spoken), off = colourOf(look, lit.other);
+  const { dur, ease } = look.moves.emphasize;
+  const keys = k === 0 ? [{ t: 0, v: on }] : [{ t: 0, v: off }, { t: times[k], v: off }, { t: times[k] + dur, v: on, ease }];
+  if (times[k + 1] !== undefined) keys.push({ t: times[k + 1], v: on }, { t: times[k + 1] + dur, v: off, ease });
+  return track(keys, { space: look.colorSpace });
 }
 
 // Ruled rows (data.rows) share the room's spare height between them, so the thread fills the frame; 0 otherwise.
@@ -209,12 +247,14 @@ function chatThread(shot, ctx, data, fit, { room, top, bottom, gap, times }) {
   const starts = times.map((t, k) => dotsWindow(shot, k, times)?.[0] ?? t); // when each takes its place
   const offsets = fit.items.map((it, k) => Math.max(0, ys[k] + it.h - bottom));
   const hideAt = fit.items.map((_, k) => starts.find((s, j) => j > k && ys[k] < top + offsets[j] - 1e-6));
-  const xOf = (k) => (shot.items[k].from === 'me' && !data.rows ? room.x + room.w - fit.items[k].w : room.x);
+  const xOf = (k) => (shot.items[k].from === 'me' && !data.rows ? room.x + room.w - fit.items[k].w : room.x + indentOf(shot.items[k], data, ctx.unit));
   const children = fit.items.flatMap((it, k) => {
     const id = `${shot.id}.item${k}`;
-    const win = dotsWindow(shot, k, times);
+    // ruled rows have no typing dots (a bubble's device); lit rows (data.lit) are all set from frame 0, the spoken one lit
+    const win = data.rows ? null : dotsWindow(shot, k, times);
     const dots = win ? dotsNodes(`${id}.dots`, { x: room.x, y: ys[k] }, ctx, data, fit, win[0], win[1]) : [];
-    return [...dots, node('group', id, {}, { tracks: { opacity: shownFrom(times[k], hideAt[k]) }, children: itemNodes(id, it, shot, k, { x: xOf(k), y: ys[k] }, ctx, data, fit) })];
+    const shown = shownFrom(data.lit ? 0 : times[k], hideAt[k]);
+    return [...dots, node('group', id, {}, { tracks: { opacity: shown }, children: itemNodes(id, it, shot, k, { x: xOf(k), y: ys[k] }, ctx, data, fit) })];
   });
   const thread = node('group', `${shot.id}.thread`, {}, { tracks: { y: settling(offsets.map((o) => -o), starts, ctx.look) }, children });
   const last = offsets.at(-1);

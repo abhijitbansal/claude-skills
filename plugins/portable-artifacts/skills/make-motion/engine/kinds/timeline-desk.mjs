@@ -30,6 +30,16 @@ function inkTrack(look, times, k, highlighted) {
   return track(keys);
 }
 
+// The colour track of event k when every event is set from frame 0 (data.previews): ink2 until it is spoken, ink until
+// the next is, ink2 after; the first in ink on frame 0. Mixed in the look's colour space over its emphasize move.
+function previewTrack(look, times, k) {
+  const { ink, ink2 } = look.palette;
+  const { dur, ease } = look.moves.emphasize;
+  const keys = k === 0 ? [{ t: 0, v: ink }] : [{ t: 0, v: ink2 }, { t: times[k], v: ink2 }, { t: times[k] + dur, v: ink, ease }];
+  if (times[k + 1] !== undefined) keys.push({ t: times[k + 1], v: ink }, { t: times[k + 1] + dur, v: ink2, ease });
+  return track(keys, { space: look.colorSpace });
+}
+
 // The tick positions and the text corner of each event: across a wide frame, down a tall one. Dated events sit by date
 // between the even layout's first and last places, each far enough from the one before for its words
 // (timeline-dates.mjs); undated ones keep the even columns or slots.
@@ -76,11 +86,12 @@ export function deskTimeline(shot, ctx, area, fit, times) {
     const [x, y] = p.tick;
     return node('path', `${shot.id}.tick${k}`, { d: wide ? polyline([[x, y - tick], [x, y + tick]]) : polyline([[x - tick, y], [x + tick, y]]), stroke: rule, strokeWidth: width, lineCap: 'round' });
   });
+  // data.previews (ledger, gate-ledger-2 ruling 3): every event set from frame 0 in ink2, the one being spoken in ink
   const events = places.map((p, k) => {
-    const fills = inkTrack(look, times, k, shot.highlight === k + 1);
+    const fills = data.previews ? previewTrack(look, times, k) : inkTrack(look, times, k, shot.highlight === k + 1);
     const when = eventText(`${shot.id}.when${k}`, fit.when[k], fit.whenFont, p.when, fills, 'hero');
     const what = eventText(`${shot.id}.what${k}`, fit.what[k], fit.whatFont, p.what, fills, 'body');
-    return node('group', `${shot.id}.event${k}`, {}, { tracks: { opacity: arrivalTrack(times[k]) }, children: [when, what] });
+    return node('group', `${shot.id}.event${k}`, {}, { tracks: { opacity: arrivalTrack(data.previews ? 0 : times[k]) }, children: [when, what] });
   });
   const boxes = Object.fromEntries(places.map((p, k) => {
     const w = Math.max(fit.when[k].width, fit.what[k].width), h = p.what[1] + fit.what[k].height - p.when[1];

@@ -49,9 +49,10 @@ function expandFeed(shot, ctx) {
 function feedField(shot, id) {
   const rest = id.startsWith(`${shot.id}.`) ? id.slice(shot.id.length + 1) : null;
   if (rest === null) return undefined;
-  if (rest === 'title') return 'title';
+  // the title as written, or as the slug's kicker (a look that sets it on its slug, look.kinds.feed.titleSlug)
+  if (rest === 'title' || rest === 'kicker') return 'title';
   if (/^item\d+\.(text|app)$/.test(rest)) return 'items';
-  return /^(thread|item\d+)(\.|$)/.test(rest) ? null : undefined;
+  return /^(thread|slug|item\d+)(\.|$)/.test(rest) ? null : undefined;
 }
 
 const TEXT = { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: TEXT_MAX };

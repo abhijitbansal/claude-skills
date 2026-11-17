@@ -65,10 +65,14 @@ function placeNodes(shot, ctx, data, view, times) {
   const areas = data.highlights.map((h) => boxOf(pathPoints(h.d).map(([x, y]) => [view.x + x * view.s, view.y + y * view.s])));
   const trace = routeTrace(data, view, ctx.data.unwrapped === true);
   const pins = data.places.map((q) => pinBox(view.x + q.x * view.s, view.y + q.y * view.s, PIN * unit));
+  // a look may set the routes' destinations in another colour (ctx.data.pinTo, ledger: gate-ledger-2 ruling 4, only the
+  // origin, a place no route arrives at, in the accent)
+  const arrives = new Set(data.routes.map((r) => r.to));
+  const pinFill = (p) => colourOf(look, ctx.data.pinTo && arrives.has(p.name) ? ctx.data.pinTo : ctx.data.pin);
   const nodes = data.places.flatMap((p, i) => {
     const at = times.places[i] ?? 0;
     const [px, py] = [view.x + p.x * view.s, view.y + p.y * view.s];
-    const pin = node('path', `${shot.id}.place${i}.pin`, { d: disc(px, py, PIN * unit), fill: colourOf(look, ctx.data.pin) }, { tracks: { opacity: arrivalTrack(at) } });
+    const pin = node('path', `${shot.id}.place${i}.pin`, { d: disc(px, py, PIN * unit), fill: pinFill(p) }, { tracks: { opacity: arrivalTrack(at) } });
     const label = (side) => {
       const built = registries.devices.get('label').build({ id: `${shot.id}.place${i}`, box: view.box, at, look, unit, seed, measure, text: p.name, anchor: [px, py], size, ...(side ? { side } : {}), ...(ctx.data.labelFace ? { face: ctx.data.labelFace } : {}) });
       return ctx.data.labelPlate === 'sticker' ? onSticker(built, ctx, at) : { nodes: stepIn(built.nodes, at), box: built.boxes.label };
@@ -179,14 +183,24 @@ function noteDropped(nodes, shot, dropped) {
 }
 
 // A route across the antimeridian drawn the long way inside the map (look data `unwrapped`, ledger: gate-ledger-1 ruling
-// 2, every route starts and ends on a placed city): a shallow arc in map space from one place to the other, bowed
-// north by UNWRAP_BOW of the distance between them, UNWRAP_POINTS points along it.
+// 2, every route starts and ends on a placed city): a shallow arc in map space from one place to the other, bowed by
+// UNWRAP_BOW of the distance between them, UNWRAP_POINTS points along it, north or south, whichever keeps farther from
+// every other place (gate-ledger-2 ruling 4: bowed north, Denver to Kyoto ran under Oslo's name); north on a tie.
 const UNWRAP_BOW = 0.15;
 const UNWRAP_POINTS = 17;
+const BOW_SIDES = Object.freeze([1, -1]); // north, then south (map y grows south)
 function unwrappedPoints(data, r) {
   const at = new Map(data.places.map((p) => [p.name, [p.x, p.y]]));
   const [a, b] = [at.get(r.from), at.get(r.to)];
-  const bow = UNWRAP_BOW * Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const others = data.places.filter((p) => p.name !== r.from && p.name !== r.to).map((p) => [p.x, p.y]);
+  const clearance = (pts) => Math.min(Infinity, ...others.flatMap(([ox, oy]) => pts.map(([x, y]) => Math.hypot(x - ox, y - oy))));
+  const arcs = BOW_SIDES.map((side) => bowedArc(a, b, side * UNWRAP_BOW));
+  return arcs.reduce((best, arc) => (clearance(arc) > clearance(best) ? arc : best));
+}
+
+// A quadratic arc from a to b with its control point `share` of their distance north (negative: south) of the middle.
+function bowedArc(a, b, share) {
+  const bow = share * Math.hypot(b[0] - a[0], b[1] - a[1]);
   const c = [(a[0] + b[0]) / HALF, (a[1] + b[1]) / HALF - bow];
   return Array.from({ length: UNWRAP_POINTS }, (_, k) => {
     const t = k / (UNWRAP_POINTS - 1), u = 1 - t;

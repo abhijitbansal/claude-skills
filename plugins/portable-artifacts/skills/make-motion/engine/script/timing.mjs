@@ -161,7 +161,11 @@ function shotPace(film, shot, pace) {
   const looks = registries.looks;
   const look = looks && typeof film.look === 'string' && looks.has(film.look) ? looks.get(film.look) : null;
   const floor = shot.show === 'end' ? look?.kinds?.end?.wordmark?.tail : undefined;
-  return Number.isFinite(floor) && shot.mark !== undefined && floor > pace.tail ? { ...pace, tail: floor } : pace;
+  if (Number.isFinite(floor) && shot.mark !== undefined && floor > pace.tail) return { ...pace, tail: floor };
+  // a kind's own tail floor in look data (look.kinds.<kind>.tail, ledger: gate-ledger-2 ruling 2, the accent and the
+  // finished values held before the cut)
+  const kindTail = look?.kinds?.[shot.show]?.tail;
+  return Number.isFinite(kindTail) && kindTail > pace.tail ? { ...pace, tail: kindTail } : pace;
 }
 
 const toFrames = (seconds, fps) => Math.ceil(Math.max(MIN_SHOT_SECONDS, seconds) * fps - FRAME_EPSILON);

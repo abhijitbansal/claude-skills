@@ -155,7 +155,9 @@ test('ruling 1: a region mark in ledger is ruled: the circle device draws a rect
   assert.deepEqual(paths.filter(({ n }) => CURVE.test(n.props.d)).map(({ n }) => n.id), []);
 });
 
-test('ruling 1: 9:16 feed draws ruled rows: no bubble card, the title over the body and larger, no orphan word', () => {
+// gate-ledger-2 ruling 1 supersedes "the title over the body and larger": the title is now the look's small tag slug and
+// the messages the hero (ledger-gate3.test.mjs pins that); the rows, the rules and the orphan guard stand
+test('ruling 1: 9:16 feed draws ruled rows: no bubble card, the rows under the title, no orphan word', () => {
   const shot = shotOf('9:16', 'chat');
   const input = inputOf('9:16', shot);
   const parts = drawn(sampleGraph(input.nodes, input.duration));
@@ -163,10 +165,9 @@ test('ruling 1: 9:16 feed draws ruled rows: no bubble card, the title over the b
   assert.deepEqual(fills.map(({ n }) => `${n.id} ${n.props.fill}`), [], 'a filled card behind a message');
   assert.ok(parts.some(({ n }) => n.type === 'path' && /rule/.test(n.id)), 'a hairline rule between rows');
   const texts = parts.filter(({ n }) => n.type === 'text');
-  const title = texts.find(({ n }) => n.id === 'chat.title').n;
-  const body = texts.filter(({ n }) => n.id !== 'chat.title' && n.props.layout.lines.length > 0);
+  const title = texts.find(({ n }) => n.id === 'chat.kicker').n;
+  const body = texts.filter(({ n }) => n.id !== 'chat.kicker' && n.props.layout.lines.length > 0);
   assert.ok(body.length >= shot.items.length, 'every message drawn');
-  assert.ok(body.every(({ n }) => title.props.font.size > n.props.font.size), 'the title is larger than every message');
   assert.ok(body.every(({ n }) => title.y < n.y), 'the title sits above the body');
   const orphans = body.flatMap(({ n }) => n.props.layout.lines.filter((l, i, all) => all.length > 1 && l.words.length < 2).map(() => n.id));
   assert.deepEqual(orphans, [], 'a line of one word');
@@ -267,17 +268,26 @@ test('ruling 5: the 16:9 statement fills the frame: its claim across most of the
   assert.ok(box[3] >= 0.45 * input.canvas.h, `the claim is ${Math.round(box[3])} tall of ${input.canvas.h}`);
 });
 
+// on round 2's list copy, inline (test input only): the lead rewrote the film's list to shorter items after round 2,
+// whose longest line now sets 920 of 1728 units wide (gate-ledger-2 review; ledger-gate3 pins its opening)
+const LIST_ROUND2 = Object.freeze({ id: 'next', show: 'list', title: 'What the numbers ask for', say: 'Stock the North first. Print more of Dawn Ridge. Ship abroad every week.',
+  items: ['Stock the North first', 'Print more of Dawn Ridge', 'Ship abroad every week'] });
+
 test('ruling 5: the 16:9 list fills the frame: its items across most of the width and the height', () => {
-  const { input, box } = filled('16:9', 'next', (n) => /^next\.item\d+$/.test(n.id));
+  const input = barInput('list', LIST_ROUND2, { look: LOOK, format: '16:9' });
+  const parts = drawn(sampleGraph(input.nodes, input.duration)).filter(({ n, a }) => a > EPS && /^next\.item\d+$/.test(n.id));
+  const box = union(parts.map(({ n }) => textBox(n)));
   assert.ok(box[2] >= FILL_WIDE * between(input, '16:9'), `the items are ${Math.round(box[2])} wide of ${Math.round(between(input, '16:9'))}`);
   assert.ok(box[3] >= 0.55 * input.canvas.h, `the items are ${Math.round(box[3])} tall of ${input.canvas.h}`);
 });
 
+// on the diagram kind's own example (the lead took the `flow` shot out of the tall gate film after round 1)
 test('ruling 5: the 9:16 diagram fills the frame across, not a centre column', () => {
-  const shot = shotOf('9:16', 'flow');
+  const shot = registries.kinds.get('diagram').example;
   const input = inputOf('9:16', shot);
   // each node's box (its card's paper, in the card's own space: a width does not move with the group)
-  const papers = drawn(sampleGraph(input.nodes, input.duration)).filter(({ n }) => /^flow\.node\d+\.card\.paper$/.test(n.id));
+  const paper = new RegExp(`^${shot.id}\\.node\\d+\\.card\\.paper$`);
+  const papers = drawn(sampleGraph(input.nodes, input.duration)).filter(({ n }) => paper.test(n.id));
   assert.equal(papers.length, shot.nodes.length, 'a box per node');
   const widths = papers.map(({ n }) => { const xs = pathPoints(n.props.d).map(([x]) => x); return Math.max(...xs) - Math.min(...xs); });
   const least = Math.min(...widths);

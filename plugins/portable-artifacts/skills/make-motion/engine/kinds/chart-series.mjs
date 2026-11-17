@@ -2,7 +2,7 @@
 // first sentence, an area filled under its line as the line draws, the series named at its end (direct labels, spread so
 // they never meet) with its last value, and the x labels that fit under the plot. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
-import { landing, polyline } from '../devices/shared.mjs';
+import { landing, polyline, roundedRect } from '../devices/shared.mjs';
 import { CAP_HEIGHT, WORD_DESCENT } from './shared.mjs';
 import { valueText } from './chart-scale.mjs';
 import { chartData, valueScale, lineMarks } from './chart-marks.mjs';
@@ -33,24 +33,39 @@ const rowDrop = (ctx, font) => (seriesFlags(ctx).rowDrop ?? 0) * font.size;
 
 // Every point's value over it (seriesFlags pointLabels): set flush right to end a half gap left of the point, so it
 // sits over the climb that reaches it, the first flush left a half gap right of it; each shown, as a step, when the
-// line's tip reaches its point (chart-tip.mjs tipTimes).
-function pointLabels(shot, ctx, style, { lines, times, decimals }) {
-  if (seriesFlags(ctx).pointLabels !== true) return [];
+// line's tip reaches its point (chart-tip.mjs tipTimes). gate-ledger-2 ruling 5: the first label is lifted `pointLift`
+// em more, off the value axis's "0" row (they read as "0 6"), and moved `pointNudge` em right, clear of the tick column
+// on the row it lifts into (a full em up set it beside "100"); with nothing highlighted and one series, `claimLast` sets
+// the last point (the claim a growth chart makes) in the accent: its label and a dot on it.
+function pointLabels(shot, ctx, style, { lines, times, decimals, hl }) {
+  const flags = seriesFlags(ctx);
+  if (flags.pointLabels !== true) return [];
   const { font, gap } = style;
   const draw = { ease: ctx.look.moves.draw.ease, dur: times.growEnd };
   const grown = landing(times.growEnd, draw, 0, 1, style.step);
+  const claims = flags.claimLast === true && hl < 0 && lines.length === 1;
   return lines.filter((l) => l.points.length > 0).flatMap((l) => {
     const at = tipTimes(l.points, grown, times.growEnd);
     const shown = l.values.filter(Number.isFinite);
-    return l.points.map(([px, py], k) => {
+    return l.points.flatMap(([px, py], k) => {
       const first = k === 0;
+      const claimed = claims && k === l.points.length - 1;
       const text = valueText(shown[k], decimals, shot.unit);
-      const x = first ? px + gap / HALF : px - gap / HALF - labelWidth(ctx, font, text, true);
+      const x = first ? px + gap / HALF + (flags.pointNudge ?? 0) * font.size : px - gap / HALF - labelWidth(ctx, font, text, true);
+      const y = py - gap - (first ? (flags.pointLift ?? 0) * font.size : 0);
       const tracks = { opacity: landing(at[k], { ease: 'linear', dur: 0 }, 0, 1) };
       const id = lines.length > 1 ? `${shot.id}.s${l.index}.point.${k}` : `${shot.id}.point.${k}`;
-      return label(ctx, { id, text, font, x, y: py - gap, fill: style.text, numeric: true, tracks }).node;
+      const value = label(ctx, { id, text, font, x, y, fill: claimed ? style.accent : style.text, numeric: true, tracks }).node;
+      return claimed ? [value, pointDot(`${id}.dot`, [px, py], style, tracks)] : [value];
     });
   });
+}
+
+// A dot on a point in the accent, POINT_DOT line widths across, shown with its label.
+const POINT_DOT = 2.4;
+function pointDot(id, [px, py], style, tracks) {
+  const r = (POINT_DOT * style.line) / HALF;
+  return node('path', id, { d: roundedRect(px - r, py - r, HALF * r, HALF * r, r), fill: style.accent }, { tracks });
 }
 
 // The x labels that fit under the plot without meeting: all of them, else the first, middle and last, else the first
@@ -159,7 +174,7 @@ export function drawSeries(shot, ctx, style, box, { valueOnHighlight, area, head
       ...valueAxis(shot, ctx, style, { plot, scale, yOf, gutterX: plot.x - gap, refs: style.refs }),
       ...parts.flatMap((p) => p.fills), ...parts.flatMap((p) => p.strokes),
       ...xLabels(shot, ctx, style, { xs, plot }),
-      ...pointLabels(shot, ctx, style, { lines, times, decimals }),
+      ...pointLabels(shot, ctx, style, { lines, times, decimals, hl }),
       ...endLabels(shot, ctx, { ...style, valueOnHighlight }, { lines, plot, times, hl, decimals, squeezed }),
     ],
     boxes, plot, times,

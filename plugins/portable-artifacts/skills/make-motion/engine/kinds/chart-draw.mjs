@@ -53,6 +53,8 @@ export function chartStyle(ctx, data) {
     // `minPlot`: the least share of its box a donut (of the short side) or a line plot (of the width) keeps, however long
     // its labels; under it the labels are flagged as not fitting (the review's fit finding), never cut
     minPlot: data.minPlot ?? 0,
+    // `startFinal` (ledger): columns and bars grow in their final colours, never ink before the dim grey
+    startFinal: data.startFinal === true,
   };
 }
 
@@ -122,11 +124,17 @@ function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, t
   const scale = horizontal ? { scaleX: grow } : { scaleY: grow };
   const dimmed = hl >= 0 && k !== hl;
   const dims = dimmed && !style.dimTo ? dimTracks(look, times.highlightAt, style.dim) : {};
-  const fill = style.marks ? style.marks[k % style.marks.length] : style.mark;
+  const lit = style.hlFill ?? style.accent;
+  // `startFinal` (ledger, gate-ledger-2 ruling 5): with a highlight each mark grows in its final colour (the dim grey, or
+  // the accent), its overlay growing with it, never ink first
+  const final = style.startFinal && hl >= 0;
+  const base = style.marks ? style.marks[k % style.marks.length] : style.mark;
+  const fill = !final ? base : k === hl ? lit : style.dimTo ?? base;
+  const overlay = (at) => (final ? { tracks: scale, step: style.step } : { tracks: arriveAt(look, at) });
   const out = [node('path', `${shot.id}.mark.${k}`, { d, fill, x, y }, { tracks: { ...scale, ...dims }, step: style.step })];
   if (k === hl && style.glow > 0) out.push(markGlow(`${shot.id}.mark.${k}.glow`, look, style, { x, y, across, length, horizontal }, times.highlightAt));
-  if (dimmed && style.dimTo) out.push(node('path', `${shot.id}.mark.${k}.dim`, { d, fill: style.dimTo, x, y }, { tracks: arriveAt(look, times.highlightAt), step: style.step }));
-  if (k === hl) out.push(node('path', `${shot.id}.mark.${k}.accent`, { d, fill: style.hlFill ?? style.accent, x, y }, { tracks: arriveAt(look, times.highlightAt) }));
+  if (dimmed && style.dimTo) out.push(node('path', `${shot.id}.mark.${k}.dim`, { d, fill: style.dimTo, x, y }, final ? overlay() : { tracks: arriveAt(look, times.highlightAt), step: style.step }));
+  if (k === hl) out.push(node('path', `${shot.id}.mark.${k}.accent`, { d, fill: lit, x, y }, overlay(times.highlightAt)));
   return out;
 }
 

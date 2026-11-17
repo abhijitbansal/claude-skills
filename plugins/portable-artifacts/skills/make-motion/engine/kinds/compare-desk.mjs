@@ -202,10 +202,14 @@ function dimScrim(id, card, look, at, { lifts = false } = {}) {
   return paperScrim({ id: `${id}.scrim`, cover: coverOf(card), at: at + dur, dur, ease, from, opacity, look });
 }
 
+// The span the cards take: columns 1 to 12, or on a wide frame from data.fromWide (ledger: column 2, the left margin
+// every other shot of the film keeps, gate-ledger-2 ruling 6).
+const cardSpan = (ctx, data) => editorialSpan(ctx, isWide(ctx.canvas) ? data.fromWide ?? 1 : 1, ctx.look.grid.columns);
+
 // The cards' boxes: side by side on a wide frame, stacked on a tall one, centred.
 function cardBoxes(ctx, data, height, below = 0) {
   const { look, canvas, unit } = ctx;
-  const span = editorialSpan(ctx, 1, look.grid.columns);
+  const span = cardSpan(ctx, data);
   const gap = data.gap * look.grid.gutter * unit, margin = Math.max(look.grid.margin * unit, below);
   if (isWide(canvas)) {
     const w = (span.w - gap) / HALF;
@@ -285,7 +289,7 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
   const { look, canvas, unit, seed } = ctx;
   const wide = isWide(canvas);
   const margin = look.grid.margin * unit, gap = data.gap * look.grid.gutter * unit, pad = data.pad * unit;
-  const span = editorialSpan(ctx, 1, look.grid.columns);
+  const span = cardSpan(ctx, data);
   const cardW = wide ? (span.w - gap) / HALF : span.w;
   // a slug (the shot's kicker) takes the top: the cards start a gutter under it
   const slug = slugBox(shot, ctx);
