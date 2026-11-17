@@ -78,6 +78,23 @@ export function staticView(node) {
   return out;
 }
 
+/**
+ * A bar view's headroom (views.mjs newsroomBar: usermeta.paHeadroom names the value channel) is for the live page,
+ * whose ticks Vega picks; a static render plans its own ticks and a domain that ends on one (planValueAxes), so the
+ * headroom settings are dropped there rather than read as an author's own axis.
+ */
+export function withoutHeadroom(vl) {
+  const channel = vl?.usermeta?.paHeadroom;
+  if (!isObject(vl) || !isObject(vl.encoding?.[channel])) return vl;
+  const { usermeta, ...rest } = vl;
+  const { domainMax, nice, ...scale } = vl.encoding[channel].scale ?? {};
+  const { tickCount, ...axis } = vl.encoding[channel].axis ?? {};
+  const def = { ...vl.encoding[channel], scale, axis };
+  if (Object.keys(scale).length === 0) delete def.scale;
+  if (Object.keys(axis).length === 0) delete def.axis;
+  return { ...rest, encoding: { ...vl.encoding, [channel]: def } };
+}
+
 const merge = (a, b) => {
   const out = { ...a };
   for (const [k, v] of Object.entries(b)) out[k] = isObject(v) && isObject(a?.[k]) ? merge(a[k], v) : v;
@@ -276,7 +293,7 @@ function layOut(vegaSpec, scales, extents, pixels, sizing, family) {
  */
 export async function renderSvg(vegaLite, rows, { colours, font, size = 'wide', idPrefix = '' }) {
   const sizing = STATIC_SIZES[size];
-  const base = alignDateTicks(staticView(vegaLite), rows, sizing.dates);
+  const base = alignDateTicks(staticView(withoutHeadroom(vegaLite)), rows, sizing.dates);
   const unit = !('hconcat' in base || 'vconcat' in base || 'concat' in base || 'repeat' in base || 'facet' in base);
   const own = base.config?.numberFormat ? { numberFormat: base.config.numberFormat } : {};
   const config = { ...merge(vegaConfig(colours, font), staticType(sizing)), ...own };

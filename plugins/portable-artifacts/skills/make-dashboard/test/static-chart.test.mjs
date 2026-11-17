@@ -63,7 +63,8 @@ test('a time x axis asks for ticks by its width and keeps 8 px between labels', 
   const spec = compile({ data: { values }, mark: 'line', encoding: { x: { field: 'm', type: 'temporal' }, y: { field: 'v', type: 'quantitative' } }, config: vegaConfig(coloursOf(theme.light), 'F') }).spec;
   const x = spec.axes.find((a) => a.orient === 'bottom' && !a.grid);
   assert.equal(x.labelSeparation, 8, 'time axis: 8 px between labels');
-  assert.deepEqual(x.tickCount, { signal: 'ceil(width / 90)' }, 'time axis: ticks by width');
+  // three months or more: a fixed month step, the least that keeps one label per 90 px; shorter spans: ticks by width
+  assert.match(x.tickCount.signal, /^span\(domain\('x'\)\) >= 7776000000 \? \{interval: 'month', step: .*width \/ 90.* : ceil\(width \/ 90\)$/, 'time axis: an even month step by width');
 });
 
 // The claimed bar takes the theme accent, the rest a neutral: --text-3 mixed 80% into the surface. That neutral is a

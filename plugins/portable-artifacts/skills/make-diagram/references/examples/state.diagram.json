@@ -4,10 +4,10 @@
   "nodes": [
     { "id": "begin", "label": "Begin", "kind": "start" },
     { "id": "placed", "label": "Placed" },
-    { "id": "paid", "label": "Paid", "tone": "good", "note": "stock reserved" },
+    { "id": "paid", "label": "Paid", "note": "stock reserved" },
     { "id": "ok", "label": "Stock ok?", "kind": "choice" },
     { "id": "shipped", "label": "Shipped" },
-    { "id": "cancelled", "label": "Cancelled", "tone": "bad" },
+    { "id": "cancelled", "label": "Cancelled" },
     { "id": "finish", "label": "Finish", "kind": "end" }
   ],
   "edges": [

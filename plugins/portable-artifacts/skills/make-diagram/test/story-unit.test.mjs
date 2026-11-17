@@ -65,8 +65,8 @@ function load(data, hooks) {
   const els = { nodes: Object.create(null), groups: Object.create(null), edges: Object.create(null), labels: Object.create(null), lifelines: [], frames: [], notes: [] };
   for (const id of Object.keys(data.edges)) els.edges[id] = edge;
   const camera = {
-    reduced: () => false, unfit() {}, fit() {}, glideMs: () => 300,
-    fitCamera: () => ({ cx: 0, cy: 0, s: 1 }), cameraFor: () => ({ cx: 0, cy: 0, s: 1 }), boxOf: () => null, unionBox: (a, b) => a || b,
+    reduced: () => false, unfit() {}, fit() {}, home() {}, glideMs: () => 300,
+    fitCamera: () => ({ cx: 0, cy: 0, s: 1 }), wholeCamera: () => ({ cx: 0, cy: 0, s: 1 }), cameraFor: () => ({ cx: 0, cy: 0, s: 1 }), boxOf: () => null, unionBox: (a, b) => a || b,
     moveTo: (target, options) => { moves.push(options || {}); },
   };
   const story = win.PADiagram.story(stage, svg, data, els, camera, hooks || {});

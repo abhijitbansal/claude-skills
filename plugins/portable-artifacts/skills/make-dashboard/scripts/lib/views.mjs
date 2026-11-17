@@ -11,6 +11,7 @@ export const FORMAT_NAMES = Object.keys(AXIS_FORMAT);
 export const COMPACT_LABEL_EXPR = "replace(replace(datum.label, 'G', 'B'), 'k', 'K')";
 // A tooltip shows the exact value; only the axis and legend are abbreviated.
 const TOOLTIP_FORMAT = { ...AXIS_FORMAT, compact: AXIS_FORMAT.number };
+const WHOLE_FORMAT = { [AXIS_FORMAT.number]: ',.0f', [AXIS_FORMAT.currency]: '$,.0f' }; // a month note's value from 1,000 up
 const axisProps = (name) => (name === 'compact' ? { format: AXIS_FORMAT.compact, labelExpr: COMPACT_LABEL_EXPR } : { format: AXIS_FORMAT[name] });
 // Category labels on vertical bars: Vega would hide every other one when they crowd (at 390 px), so
 // overlap is off and the labels turn 45 degrees once a band is narrower than the widest label.
@@ -45,6 +46,9 @@ const SHARE_FORMAT = '.0%';
 const SHARE_CHARS = 4; // "100%"
 const LONG_VALUE = 7; // characters; a longer plain or currency value label prints compact
 const NOTE_GAP = 10; // px from a claimed month's dot to its note
+const RESTRAINED_MAX = 4; // series: up to this many share the restrained accent-and-neutrals scale (paSeries)
+const HEADROOM = 1.04; // a bar chart's value axis reaches at least this far past its longest bar
+const VALUE_TICKS = 5; // the tick count a bar chart's value scale nices to, and its axis asks for
 const toTime = (v) => (v === null || v === undefined ? NaN : new Date(String(v).length === 10 ? `${v}T00:00:00Z` : v).getTime());
 
 // The month the title names on a time x (claim.mjs), with the note's alignment: inward at the first and last point.
@@ -98,11 +102,23 @@ function seriesSizes(chart, result) {
   return [...counts.values()];
 }
 
+// A title that names series (claim.mjs) on a nominal colour role of at most RESTRAINED_MAX series takes the config's
+// restrained paSeries range: the named series first, in title order (the first in the accent), then the rest in query
+// order. Returns that order (the colour channel's sort), or null: a chart that claims no series, or a wider or
+// non-nominal colour role, keeps the category palette (and make-scene's lift, which follows it in 3D).
+function seriesOrder(chart, result, cls) {
+  if (chart.color === undefined || chart.kind === 'donut' || cls(chart.color) !== 'nominal') return null;
+  const series = [...new Set(result.rows.map((r) => String(r[chart.color] ?? '')))];
+  const claimed = series.length > RESTRAINED_MAX ? [] : namedCategories(chart.title ?? '', series);
+  return claimed.length ? [...claimed, ...series.filter((s) => !claimed.includes(s))] : null;
+}
+
 // Per-chart context the builders share: field defs for every role in use.
 function context(chart, result) {
   const cls = (col) => classOf(result.types[result.columns.indexOf(col)]);
   const format = chart.format ? AXIS_FORMAT[chart.format] : undefined;
   const tipFormat = chart.format ? TOOLTIP_FORMAT[chart.format] : undefined;
+  const restrained = seriesOrder(chart, result, cls);
   // `where` is how the channel shows the number: an axis, a legend, or only the tooltip (theta).
   const def = (role, extra = {}, where = 'axis') => {
     const col = chart[role];
@@ -114,6 +130,7 @@ function context(chart, result) {
       Object.assign(base, unit ? { timeUnit: unit } : {}, { scale: { type: 'utc' } });
     }
     if (type === 'quantitative' && format && where !== 'tooltip') base[where] = axisProps(chart.format);
+    if (role === 'color' && restrained) Object.assign(base, { sort: restrained, scale: { ...base.scale, range: 'paSeries' } });
     return { ...base, ...extra };
   };
   const tooltip = (...defs) => defs.filter(Boolean).map((d) => tooltipRow(d, tipFormat));
@@ -139,7 +156,7 @@ function context(chart, result) {
   const compactLabels = chart.format === 'compact' || (chart.format !== 'percent' && fullChars > LONG_VALUE);
   const shortFormat = chart.format === 'currency' ? 'currency-compact' : 'compact';
   const valueChars = compactLabels ? Math.max(1, ...values.map((v) => [...valueText(v, shortFormat)].length)) : fullChars;
-  return { def, tooltip, format, tipFormat, horizontal, xNominal, queryOrder, widest, shortSeries, seriesCount: series.length, endRoom, claimed, claimedMonth, valueChars, compactLabels,
+  return { def, tooltip, format, tipFormat, horizontal, xNominal, queryOrder, widest, shortSeries, seriesCount: series.length, endRoom, claimed, claimedMonth, valueChars, compactLabels, maxValue: Math.max(0, ...values),
     xRaw: String(chart.x), yRaw: String(chart.y), colorField: legend === undefined ? undefined : fieldRef(legend) };
 }
 
@@ -193,7 +210,11 @@ function lineLike(ctx, mark) {
 function monthNote(ctx, x, y) {
   const { time, align } = ctx.claimedMonth;
   const at = [{ filter: `time(datum[${JSON.stringify(ctx.xRaw)}]) === ${time}` }];
-  const value = `format(datum[${JSON.stringify(ctx.yRaw)}], '${ctx.format ?? AXIS_FORMAT.number}')`;
+  // whole numbers from 1,000 up, as the axis prints its ticks and the value labels and KPI tiles print values (format.mjs)
+  const field = `datum[${JSON.stringify(ctx.yRaw)}]`;
+  const axisFormat = ctx.format ?? AXIS_FORMAT.number;
+  const whole = WHOLE_FORMAT[axisFormat];
+  const value = whole ? `format(${field}, abs(${field}) >= 1000 ? '${whole}' : '${axisFormat}')` : `format(${field}, '${axisFormat}')`;
   const shown = ctx.format === AXIS_FORMAT.compact ? COMPACT_LABEL_EXPR.replaceAll('datum.label', value) : value;
   const note = [...at, { calculate: `utcFormat(datum[${JSON.stringify(ctx.xRaw)}], '%b %Y') + ' · ' + ${shown}`, as: 'paNote' }];
   return [
@@ -342,13 +363,18 @@ function newsroomBar(unit, name, chart, ctx) {
   const color = claim.length ? { color: { field: 'paClaim', type: 'nominal', scale: { domain: ['claim', 'rest'], range: 'paHighlight' }, legend: null } } : {};
   const steps = [...(transform ?? []), ...claim];
   const label = valueLabel(ctx, value, name === 'share', String(chart.y));
+  // The value axis reaches past the longest bar: domainMax takes headroom and the scale and axis nice to one tick
+  // count, so the top gridline sits above the bar instead of under its end.
+  const roomy = name === 'share' || !(ctx.maxValue > 0) ? value
+    : { ...value, scale: { ...value.scale, domainMax: ctx.maxValue * HEADROOM, nice: VALUE_TICKS }, axis: { ...value.axis, tickCount: VALUE_TICKS } };
   // Two layers union their band domains, which take only a min/max/count sort: "-y" (a sum) becomes the max of the
   // value field, the same order for one bar per category.
   const sort = typeof band.sort === 'string' && band.sort.startsWith('-') ? { sort: { field: value.field, op: 'max', order: 'descending' } } : {};
   return {
     ...rest,
+    ...(roomy !== value ? { usermeta: { paHeadroom: valueKey } } : {}), // static-chart.mjs drops the headroom and plans its own ticks
     ...(steps.length ? { transform: steps } : {}),
-    encoding: { [bandKey]: { ...band, ...sort }, [valueKey]: value },
+    encoding: { [bandKey]: { ...band, ...sort }, [valueKey]: roomy },
     layer: [{ ...(params ? { params } : {}), mark, encoding: { ...own, ...color } }, label.layer],
     padding: label.padding,
   };

@@ -88,3 +88,23 @@ for (const [name, spec] of [['grid', SPEC], ['wrapping rows', WIDE]]) {
     }
   });
 }
+
+// The sparkline shares the Query row (at its right), so a tile without one has no empty strip between its value and
+// its Query line; the tiles stay one height.
+const MAX_VALUE_TO_QUERY = 24; // px: the 10 px margin plus the value's line box and the summary's own spacing (the band was 51 to 55)
+for (const width of [1280, 390]) {
+  test(`no KPI tile shows an empty band between its value and its Query line, sparkline or not (${width}px)`, async (t) => {
+    if (!(await haveBrowser())) return t.skip('no browser');
+    const { page, context } = await open(SPEC, width);
+    try {
+      const values = await rect(page, '.kpi .kpi-value');
+      const queries = await rect(page, '.kpi .kpi-sql summary');
+      const gaps = values.map((v, i) => Math.round(queries[i].top - v.bottom));
+      assert.ok(gaps.every((g) => g <= MAX_VALUE_TO_QUERY), `value-to-Query gaps ${gaps}`);
+      const trend = await rect(page, '.kpi .kpi-trend');
+      assert.equal(trend.length, 1, 'the premise: one tile has a sparkline');
+    } finally {
+      await context.close();
+    }
+  });
+}

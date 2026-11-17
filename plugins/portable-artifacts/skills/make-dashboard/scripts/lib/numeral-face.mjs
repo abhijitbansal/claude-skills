@@ -11,8 +11,8 @@ export function numeralFont(fonts) {
   return SLASHED_ZERO.has(family) ? fallback : `"${family}", ${fallback}`;
 }
 
-/** The page CSS for it: --font-num (the runtime draws charts in it) and the footer and card refresh lines set in it. */
+/** The page CSS for it: --font-num (the runtime draws charts in it) and the footer, card refresh lines and view tabs ("100%") set in it. */
 export function numeralCss(fonts) {
   const stack = numeralFont(fonts);
-  return `:root { --font-num: ${stack}; }\n.pa-footer, .card details > summary { font-family: ${stack}; }`;
+  return `:root { --font-num: ${stack}; }\n.pa-footer, .card details > summary, .views [role="tab"] { font-family: ${stack}; }`;
 }

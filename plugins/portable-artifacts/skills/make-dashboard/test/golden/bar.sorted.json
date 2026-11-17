@@ -1,4 +1,7 @@
 {
+  "usermeta": {
+    "paHeadroom": "y"
+  },
   "encoding": {
     "x": {
       "field": "region",
@@ -22,7 +25,14 @@
     "y": {
       "field": "revenue",
       "type": "quantitative",
-      "title": "Revenue"
+      "title": "Revenue",
+      "scale": {
+        "domainMax": 124.80000000000001,
+        "nice": 5
+      },
+      "axis": {
+        "tickCount": 5
+      }
     }
   },
   "layer": [
@@ -62,6 +72,13 @@
       }
     },
     {
+      "encoding": {
+        "text": {
+          "field": "revenue",
+          "type": "quantitative",
+          "format": ",.2~f"
+        }
+      },
       "mark": {
         "type": "text",
         "tooltip": false,
@@ -70,13 +87,6 @@
         "dy": -4,
         "opacity": {
           "expr": "bandwidth('x') >= 27 ? 1 : 0"
-        }
-      },
-      "encoding": {
-        "text": {
-          "field": "revenue",
-          "type": "quantitative",
-          "format": ",.2~f"
         }
       }
     }

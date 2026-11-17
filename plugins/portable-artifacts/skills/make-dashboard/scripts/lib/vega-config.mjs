@@ -8,12 +8,17 @@ export function vegaConfig(colours, font) {
   const hex = /^#[0-9a-f]{6}$/i;
   const mix = (a, b, share) => `#${[1, 3, 5].map((i) => Math.round(Number.parseInt(a.slice(i, i + 2), 16) * share + Number.parseInt(b.slice(i, i + 2), 16) * (1 - share)).toString(16).padStart(2, '0')).join('')}`;
   const neutral = hex.test(ink3 ?? '') && hex.test(surface ?? '') ? mix(ink3, surface, 0.8) : ink3;
+  const months = "(span(domain('x')) / 2629800000)";
+  const step = [1, 2, 3, 4, 6].map((k) => `${months} / ${k} <= width / 90 ? ${k} : `).join('') + '12';
+  const MONTH_TICKS = `span(domain('x')) >= 7776000000 ? {interval: 'month', step: ${step}} : ceil(width / 90)`;
   return {
     background: null,
     font,
     view: { stroke: null },
     // paHighlight: [the claimed bar, the others] (views.mjs names this range for a bar chart whose title names a bar).
-    range: { category: cat, ordinal: seq, ramp: seq, heatmap: seq, paHighlight: [accent ?? cat[0], neutral] },
+    // paSeries: a few series in a restrained scale, the claimed (or first) series in the accent, the rest in ink and
+    // neutral steps (views.mjs sorts the claimed series first); every step keeps 3:1 on the surface (tested).
+    range: { category: cat, ordinal: seq, ramp: seq, heatmap: seq, paHighlight: [accent ?? cat[0], neutral], paSeries: [accent ?? cat[0], ink2, ink3, neutral] },
     axis: {
       labelColor: ink3, titleColor: ink2, labelFont: font, titleFont: font,
       labelFontSize: 11, titleFontSize: 12, titleFontWeight: 'normal', labelPadding: 6,
@@ -22,7 +27,9 @@ export function vegaConfig(colours, font) {
     axisX: { grid: false, labelAngle: 0, labelOverlap: 'greedy' },
     // A time x axis asks for about one tick per 90 px of plot (a month label is about 55 px in the widest body face)
     // and drops a label that would come within 8 px of its neighbour, so labels never run together on a phone.
-    axisXTemporal: { labelSeparation: 8, tickCount: { expr: 'ceil(width / 90)' } },
+    // Over three months or more the ticks step by a fixed number of months (1, 2, 3, 4, 6 or 12: the least that keeps
+    // one label per 90 px), so they fall evenly instead of where greedy overlap removal leaves them.
+    axisXTemporal: { labelSeparation: 8, tickCount: { expr: MONTH_TICKS } },
     // Newsroom axes: the grid carries a value axis, so it draws no domain line and no ticks; a band axis keeps its
     // domain line as the baseline (the zero line under bars) and drops its ticks.
     axisQuantitative: { domain: false, ticks: false },
@@ -33,9 +40,10 @@ export function vegaConfig(colours, font) {
     },
     title: { color: ink2, font },
     bar: { cornerRadiusEnd: 2, stroke: surface, strokeWidth: 1, fill: cat[0] },
-    line: { strokeWidth: 2, strokeCap: 'round', strokeJoin: 'round', stroke: cat[0] },
-    point: { size: 64, filled: true, stroke: surface, strokeWidth: 2, fill: cat[0] },
-    area: { opacity: 0.85, line: { strokeWidth: 2 }, fill: cat[0] },
+    // a single-series line, its points and an area take the theme accent (a coloured series takes its scale)
+    line: { strokeWidth: 2, strokeCap: 'round', strokeJoin: 'round', stroke: accent ?? cat[0] },
+    point: { size: 64, filled: true, stroke: surface, strokeWidth: 2, fill: accent ?? cat[0] },
+    area: { opacity: 0.85, line: { strokeWidth: 2 }, fill: accent ?? cat[0] },
     rect: { stroke: surface, strokeWidth: 2 },
     arc: { stroke: surface, strokeWidth: 2 },
     text: { color: ink2, font, fontSize: 11 },

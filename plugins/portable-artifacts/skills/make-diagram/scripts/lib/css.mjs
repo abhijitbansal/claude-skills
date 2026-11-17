@@ -8,7 +8,10 @@ import { FAMILIES } from './kinds.mjs';
 const TONES = { accent: 'accent', good: 'good', warn: 'warn', bad: 'bad' };
 const EMOJI_FONTS = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 export const CARD_TINT = 10; // % tint shared/contrast.mjs TINT still gates the kind hue on (no card or swatch is tinted now; kept for that gate)
-const TILE_TINT = 18; // the tile is a stronger tint of the same hue
+const TILE_TINT = 28; // the tile is a stronger tint of the same hue: it carries each theme's kind palette
+const GROUP_TINT = 7; // light: --text-3 into the card surface, for a group box
+const LANE_TINT = 45; // a lane bar: its series colour into the surface, so the bar is no louder than the cards
+const PLATE_TINT = 38; // dark: --text-3 into the surface, for an edge label plate (one pill on the page, a group, a nested group)
 
 // Every color-mix() here wraps var(), so an engine without it still accepts the declaration at parse time, fails it at
 // computed-value time and draws the property's initial value (black). An earlier plain declaration cannot save that, so
@@ -20,15 +23,19 @@ const supportsMix = (rs) => `@supports (color: color-mix(in srgb, red, red)){${r
 const rules = [
   // frame
   '.pa-diagram{display:block;font-family:var(--font);font-size:14px;font-variant-numeric:normal;color:var(--text)}',
-  // groups: a lane with a coloured bar (top-level) or a nested box; labels in spaced capitals
+  // groups: a lane with a coloured bar (top-level) or a nested box; labels in spaced capitals. In light the box is a
+  // step below the card surface (not the page: press's surface is darker than its page, so a page tint matched the
+  // cards), and a nested box one step further; dark mixes over the page below (the dark block).
   '.pa-group-box{fill:var(--surface);stroke:var(--line);stroke-width:1}',
-  supportsMix(['.pa-group-box{fill:color-mix(in srgb,var(--text-3) 7%,transparent)}']),
+  supportsMix([`.pa-group-box{fill:color-mix(in srgb,var(--text-3) ${GROUP_TINT}%,var(--surface))}`, `:where(.pa-group:not([data-depth="0"])) > .pa-group-box{fill:color-mix(in srgb,var(--text-3) ${2 * GROUP_TINT}%,var(--surface))}`]),
   '.pa-lane{stroke:none}',
   `.pa-group-label{fill:var(--text-2);font-size:${GROUP_LABEL_SIZE}px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}`,
   // edges: one path.pa-wire per edge; the arrow heads take the wire's stroke (a plain declaration precedes context-stroke)
   '.pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.25;stroke-linejoin:round}',
-  '.pa-edge-dashed .pa-wire{stroke-dasharray:6 4}',
-  '.pa-edge-async .pa-wire{stroke-dasharray:1.5 4;stroke-linecap:round}',
+  // dashed and dotted wires keep their width on screen (a zoomed-out view thinned them to under 1 px, under 3:1)
+  '.pa-edge-dashed .pa-wire,.pa-edge-async .pa-wire{vector-effect:non-scaling-stroke}',
+  '.pa-edge-dashed .pa-wire{stroke-width:1.75;stroke-dasharray:6 4}',
+  '.pa-edge-async .pa-wire{stroke-width:2;stroke-dasharray:1 4.5;stroke-linecap:round}',
   '.pa-hit{fill:none;stroke:transparent;stroke-width:12px;vector-effect:non-scaling-stroke;pointer-events:visibleStroke}', // the viewer's invisible mouse target along a wire; visibleStroke so a hidden edge catches nothing
   '.pa-arrow-fill{fill:var(--text-3);fill:context-stroke;stroke:none}',
   '.pa-arrow-open{fill:none;stroke:var(--text-3);stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}',
@@ -154,7 +161,10 @@ const animation = [
 // Lane bars cycle the categorical colours. Legend swatches are drawn as their nodes are (legend.mjs): a neutral card
 // with the kind hue as a small mark (the tile and icon carry it on a card), a dashed card for external, a bare
 // neutral diamond for a decision or choice, dots for start and end; outlines follow the card rule, dark included.
-const laneRules = Array.from({ length: 8 }, (_, i) => `.pa-group[data-lane="${i}"] .pa-lane{fill:var(--s${i + 1})}`);
+const laneRules = [
+  ...Array.from({ length: 8 }, (_, i) => `.pa-group[data-lane="${i}"] .pa-lane{fill:var(--s${i + 1})}`),
+  supportsMix(Array.from({ length: 8 }, (_, i) => `.pa-group[data-lane="${i}"] .pa-lane{fill:color-mix(in srgb,var(--s${i + 1}) ${LANE_TINT}%,var(--surface))}`)),
+];
 const legendRules = [
   '.pa-legend-text{fill:var(--text-2);font-size:11px}',
   '.pa-swatch{fill:var(--surface);stroke:var(--line);stroke-width:1}',
@@ -163,6 +173,7 @@ const legendRules = [
   ...FAMILIES.map((f) => `.pa-swatch-mark.pa-family-${f}{fill:var(--k-${f})}`),
   '.pa-swatch.pa-family-external{stroke:var(--text-3);stroke-dasharray:3 2}',
   '.pa-swatch-diamond{stroke:var(--text-3)}',
+  '.pa-swatch-stadium{stroke:var(--text-3)}',
   '.pa-swatch-filled-dot{fill:var(--text-2);stroke:none}',
   '.pa-swatch-ringed-dot{fill:var(--surface);stroke:var(--text-2);stroke-width:1.5}',
   '.pa-legend-sample .pa-wire{stroke-width:1.5}',
@@ -179,7 +190,7 @@ const DARK = [
   '.pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}',
   '.pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}',
 ];
-const DARK_MIX = ['.pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}'];
+const DARK_MIX = ['.pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}', `.pa-edge-plate{fill:color-mix(in srgb,var(--text-3) ${PLATE_TINT}%,var(--surface))}`];
 const dark = [
   `@media (prefers-color-scheme: dark){${DARK.map((r) => `:root:not([data-theme="light"]) ${r}`).join('')}${supportsMix(DARK_MIX.map((r) => `:root:not([data-theme="light"]) ${r}`))}}`,
   ...DARK.map((r) => `:root[data-theme="dark"] ${r}`),

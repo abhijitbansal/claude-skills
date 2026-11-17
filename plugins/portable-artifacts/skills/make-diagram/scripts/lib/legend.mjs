@@ -67,6 +67,7 @@ export function drawingBounds(x, width, height) {
 const MARK = 6; // the hue mark inside a card swatch, as the tile sits inside a card
 const DOT_R = 4;
 const RING_R = 5;
+const PILL_H = 8; // flow's start and end are pills (stadium nodes): the swatch is one, SWATCH wide
 const DIAMONDS = new Set(['diamond', 'small-diamond']);
 
 // A kind's swatch drawn the way its nodes are (css.mjs paints it): a bare neutral diamond, a filled or ringed dot,
@@ -81,6 +82,7 @@ function swatchSvg(it, x, cy, type) {
   }
   if (shape === 'filled-dot') return `<circle class="pa-swatch-filled-dot" cx="${num(x + SWATCH / 2)}" cy="${num(cy)}" r="${DOT_R}"/>`;
   if (shape === 'ringed-dot') return `<circle class="pa-swatch-ringed-dot" cx="${num(x + SWATCH / 2)}" cy="${num(cy)}" r="${RING_R}"/>`;
+  if (shape === 'stadium') return `<rect class="pa-swatch pa-swatch-stadium pa-family-${fam}" x="${num(x)}" y="${num(cy - PILL_H / 2)}" width="${SWATCH}" height="${PILL_H}" rx="${PILL_H / 2}"/>`;
   const box = `<rect class="pa-swatch pa-family-${fam}" x="${num(x)}" y="${num(top)}" width="${SWATCH}" height="${SWATCH}" rx="${SWATCH_RADIUS}"/>`;
   if (it.family === 'bare') return box;
   const inset = (SWATCH - MARK) / 2;

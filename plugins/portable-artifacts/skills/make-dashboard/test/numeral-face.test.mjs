@@ -24,6 +24,6 @@ test('the page carries the numeral face as --font-num, and the footer and refres
   const spec = { title: 'T', sources: { sales: { type: 'csv', path: 'data/sales.csv' } }, queries: { q: 'SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1' }, charts: [{ id: 'c', title: 'C', query: 'q', kind: 'bar', x: 'region', y: 'revenue' }] };
   const { html } = buildProject(spec, { theme: 'brief' });
   assert.ok(html.includes(`--font-num: ${loadTheme('brief').fonts.body.fallback}`), 'the token holds the fallback stack');
-  assert.ok(html.includes(`.pa-footer, .card details > summary { font-family: ${loadTheme('brief').fonts.body.fallback}; }`), 'footer and refresh lines');
+  assert.ok(html.includes(`.pa-footer, .card details > summary, .views [role="tab"] { font-family: ${loadTheme('brief').fonts.body.fallback}; }`), 'footer, refresh lines and the view tabs ("100%")');
   assert.match(html, /css\('--font-num'\) \|\| css\('--font'\)/, 'charts are drawn in it');
 });

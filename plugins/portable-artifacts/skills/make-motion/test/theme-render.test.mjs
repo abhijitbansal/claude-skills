@@ -18,7 +18,7 @@ after(() => { for (const d of made) rmSync(d, { recursive: true, force: true });
 const tmp = (p) => { const d = mkdtempSync(path.join(tmpdir(), p)); made.push(d); return d; };
 
 // blueprint: Geist body and Geist Mono, neither of which the unthemed page uses.
-const BLUEPRINT = { page: '#0e1319', text: '#e8edf3', accent: '#6cb2e6' };
+const BLUEPRINT = { page: '#0e1319', text: '#e8edf3', accent: '#45b6ff' };
 // dusk: make-motion's default theme (MOTION_THEME).
 const DUSK = { page: '#17102a', text: '#f7ebe0', accent: '#ff7f61' };
 const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(', ')})`;

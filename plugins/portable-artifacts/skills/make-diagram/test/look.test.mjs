@@ -189,7 +189,8 @@ test('diagramCss: lane, pill and legend rules', () => {
   const css = diagramCss();
   for (let i = 0; i < 8; i++) assert.ok(css.includes(`.pa-group[data-lane="${i}"] .pa-lane{fill:var(--s${i + 1})}`), `lane ${i}`);
   assert.match(css, /\.pa-lane\{stroke:none\}/);
-  assert.match(css, /\.pa-group-box\{fill:var\(--surface\);stroke:var\(--line\);stroke-width:1\}\n@supports \(color: color-mix\(in srgb, red, red\)\)\{\.pa-group-box\{fill:color-mix\(in srgb,var\(--text-3\) 7%,transparent\)\}\}/);
+  // light: a step below the card surface (look-quiet.test.mjs gates it against the card in every theme), nested one more
+  assert.match(css, /\.pa-group-box\{fill:var\(--surface\);stroke:var\(--line\);stroke-width:1\}\n@supports \(color: color-mix\(in srgb, red, red\)\)\{\.pa-group-box\{fill:color-mix\(in srgb,var\(--text-3\) 7%,var\(--surface\)\)\}/);
   assert.match(css, /\.pa-group-label\{fill:var\(--text-2\);font-size:11px;font-weight:600;letter-spacing:\.08em;text-transform:uppercase\}/);
   assert.match(css, /\.pa-edge-plate\{fill:var\(--surface\);stroke:none\}/, 'edge label plates have no stroke');
   assert.match(css, /\.pa-frame-kind\{fill:var\(--text-2\);font-size:11px;font-weight:600\}/, 'the frame tab word is measured with f.group: plain, no tracking');

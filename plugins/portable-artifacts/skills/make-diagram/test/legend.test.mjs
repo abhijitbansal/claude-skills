@@ -97,7 +97,7 @@ test('a graph spec with a dashed edge keys it "secondary", never "optional" (rep
 test('legendSvg: each swatch takes its kind\'s shape; only a card shows the hue, as a mark inside a neutral box', async () => {
   const flow = legendSvg((await layoutDiagram(example('flow'), theme)).legend, fonts(theme), 'flow');
   assert.match(flow, /<path class="pa-swatch pa-swatch-diamond pa-family-decision" d="M[\d.]+ [\d.]+L[\d.]+ [\d.]+L[\d.]+ [\d.]+L[\d.]+ [\d.]+Z"\/><text/, 'a decision is a bare diamond, no hue mark');
-  assert.match(flow, /<rect class="pa-swatch pa-family-bare"[^>]*\/><text[^>]*><tspan[^>]*>1 start</, 'a flow start (a stadium, no hue) is a bare neutral box');
+  assert.match(flow, /<rect class="pa-swatch pa-swatch-stadium pa-family-bare"[^>]*\/><text[^>]*><tspan[^>]*>1 start</, 'a flow start (a stadium, no hue) is a bare neutral pill, the shape of its node');
   const state = legendSvg((await layoutDiagram(example('state'), theme)).legend, fonts(theme), 'state');
   assert.match(state, /<circle class="pa-swatch-filled-dot" cx="[\d.]+" cy="[\d.]+" r="4"\/>/, 'a state start is a filled dot');
   assert.match(state, /<path class="pa-swatch pa-swatch-diamond pa-family-decision"/, 'choice is a diamond');

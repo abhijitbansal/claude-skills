@@ -123,7 +123,9 @@ test('the canvas is a dotted grid in light and a glow with faint lines in dark; 
   assert.equal(await light.page.locator('.pa-legend .pa-swatch').count(), 4);
   assert.equal(await light.page.locator('.pa-legend .pa-legend-sample').count(), 3);
   assert.equal(await light.page.locator('.pa-group[data-lane="0"] .pa-lane').count(), 1);
-  assert.equal((await styleOf(light.page, '.pa-lane', ['fill'])).fill, await varColour(light.page, '--s1'));
+  // the lane bar is toned (its series colour mixed into the surface, look-quiet.test.mjs): drawn, but not the raw colour
+  const lane = (await styleOf(light.page, '.pa-lane', ['fill'])).fill;
+  assert.ok(lane && lane !== 'none' && lane !== await varColour(light.page, '--s1'), `toned lane fill ${lane}`);
   assert.deepEqual([light.problems, dark.problems], [[], []]);
   await light.context.close();
   await dark.context.close();

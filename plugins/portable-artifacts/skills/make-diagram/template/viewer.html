@@ -76,6 +76,21 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 .lg-wire { width: 22px; height: 0; border-top: 1.5px solid var(--text-3); }
 .lg-wire-dashed { border-top-style: dashed; }
 .lg-wire-dotted { border-top-style: dotted; border-top-width: 2px; }
+/* Pan cues: a round button on each stage edge while nodes lie past it (camera.js shows them); a press glides the view that way. */
+/* Each is a tab on its edge (narrow, so it covers little of a node beside it). */
+.pa-cue { position: absolute; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 0; background: var(--surface); border: 1px solid var(--text-3); color: var(--text); cursor: pointer; box-shadow: var(--elev-2); transition: background-color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); }
+.pa-cue[hidden] { display: none; }
+.pa-cue svg { display: block; fill: none; stroke: currentColor; stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.pa-cue[data-pa-cue="left"], .pa-cue[data-pa-cue="right"] { top: 50%; width: 24px; height: 52px; margin-top: -26px; }
+.pa-cue[data-pa-cue="top"], .pa-cue[data-pa-cue="bottom"] { left: 50%; width: 52px; height: 24px; margin-left: -26px; }
+.pa-cue[data-pa-cue="left"] { left: 0; border-left: 0; border-radius: 0 10px 10px 0; }
+.pa-cue[data-pa-cue="right"] { right: 0; border-right: 0; border-radius: 10px 0 0 10px; }
+.pa-cue[data-pa-cue="top"] { top: 0; border-top: 0; border-radius: 0 0 10px 10px; }
+.pa-cue[data-pa-cue="bottom"] { bottom: 0; border-bottom: 0; border-radius: 10px 10px 0 0; }
+@media (hover: hover) and (pointer: fine) { .pa-cue:hover { background: var(--accent-soft); } }
+.pa-cue:active { transform: scale(0.94); }
+.pa-cue:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .pa-cue { transition: none; } .pa-cue:active { transform: none; } }
 .tip { position: absolute; z-index: 2; max-width: 260px; padding: 4px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; color: var(--text); font-size: var(--fs-xs); pointer-events: none; overflow-wrap: anywhere; box-shadow: var(--elev-2); }
 .tip[hidden] { display: none; }
 .panel { flex: none; width: 300px; min-height: 0; overflow: auto; padding: 12px 16px; background: var(--surface); border-left: 1px solid var(--line); font-size: var(--fs-sm); }
@@ -112,16 +127,34 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .scrub { flex: 1 1 160px; min-width: 120px; margin: 0; }
 .cap-count { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: var(--num); white-space: nowrap; }
-/* A phone: the tool row and the legend overlay each collapse to one line that scrolls sideways, so the toolbar and the legend take at most about a quarter of the screen. */
+/* The phone's More button and Legend toggle: off on a desktop, where every control and key shows (the wrappers lay out as if absent). */
+.tool.more, .lg-toggle { display: none; }
+.more-items, .lg-keys { display: contents; }
+.tool.more { align-items: center; justify-content: center; min-width: 32px; padding: 4px 6px; }
+.tool.more svg { display: block; }
+.tool.more[aria-expanded="true"] { background: var(--accent-soft); color: var(--text); }
+/* A phone: one row of the tools a phone needs most (mode, Fit, zoom) and a More button for the rest, which opens as a panel under the bar; the legend overlay is a labelled toggle that opens the whole key under it. Nothing is clipped, and the toolbar and the closed legend take at most a quarter of the screen. */
 @media (max-width: 719px) {
-  .tools { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+  .bar { position: relative; }
+  .tools { flex-wrap: nowrap; max-width: 100%; }
   .tools > * { flex-shrink: 0; }
-  .legend { flex-wrap: nowrap; max-width: calc(100% - 24px); overflow-x: auto; scrollbar-width: none; pointer-events: auto; }
+  .zoom-label { display: none; }
+  .tool.more { display: inline-flex; }
+  .more-items { display: none; }
+  .tools.pa-more-open .more-items { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; position: absolute; z-index: 3; top: calc(100% + 6px); left: 16px; right: 16px; padding: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--elev-2); }
+  .legend { padding: 0; max-width: calc(100% - 24px); pointer-events: auto; }
+  .lg-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 6px 12px; background: none; border: 0; border-radius: 10px; color: var(--text-2); font: inherit; cursor: pointer; }
+  .lg-toggle::after { content: ""; width: 6px; height: 6px; margin-top: -3px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform .16s ease; }
+  .lg-toggle[aria-expanded="true"]::after { margin-top: 3px; transform: rotate(-135deg); }
+  .lg-count { color: var(--text-3); font-variant-numeric: var(--num); }
+  .lg-keys { display: none; }
+  .legend.lg-open .lg-keys { display: flex; flex-wrap: wrap; gap: 6px 14px; position: absolute; top: calc(100% + 6px); right: 0; width: max-content; max-width: calc(100vw - 24px); padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--elev-2); }
 }
+@media (max-width: 719px) and (prefers-reduced-motion: reduce) { .lg-toggle::after { transition: none; } }
 /* Play on a phone, portrait or landscape (narrow, or short): the tool row and the transport scroll sideways instead of wrapping, and the legend overlay steps aside, so the stage keeps about half the screen. */
 @media (max-width: 719px), (max-height: 500px) {
   body.pa-presenting .tools, body.pa-presenting .transport { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
-  body.pa-presenting .tools > *, body.pa-presenting .transport > * { flex-shrink: 0; }
+  body.pa-presenting .tools > *, body.pa-presenting .more-items > *, body.pa-presenting .transport > * { flex-shrink: 0; }
   body.pa-presenting .legend { display: none; }
 }
 /* Short (a landscape phone): the title block and the beat chips go too (the chapter chips, the scrubber and Prev / Next stay), and the caption line keeps two lines. */
@@ -154,6 +187,8 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 <span class="zoom-label" data-zoom-label aria-hidden="true">100%</span>
 <button type="button" class="tool" data-act="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
 </span>
+<button type="button" class="tool more" data-pa-more aria-expanded="false" aria-controls="pa-more-items" aria-label="More controls" title="More controls"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg></button>
+<span class="more-items" id="pa-more-items">
 <button type="button" class="tool" data-act="animate" aria-pressed="false" title="Animate edges (A)">Animate: Off</button>
 <button type="button" class="tool" data-pa-full aria-pressed="false" aria-keyshortcuts="F" title="Full screen (F)">Full screen</button>
 <input type="search" class="find" data-pa-find placeholder="Find a node" aria-label="Find a node" aria-keyshortcuts="/" autocomplete="off" spellcheck="false">
@@ -163,6 +198,7 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 </span>
 <button type="button" class="tool" data-theme-toggle data-mode="auto" aria-label="Theme: Auto. Switch to Light" title="Theme: Auto. Switch to Light"><!--@TOGGLE_ICONS--></button>
 <script><!--@TOGGLE_JS--></script>
+</span>
 </div>
 <div class="chapters" data-pa-chapters role="group" aria-label="Chapters" hidden></div>
 <div class="found" data-pa-found role="group" aria-label="Matching nodes" aria-live="polite" hidden></div>
@@ -172,6 +208,10 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 <main class="stage" id="pa-stage">
 <!--@SVG-->
 <!--@LEGEND-->
+<button type="button" class="pa-cue" data-pa-cue="left" aria-label="Pan left: more of the diagram" title="More to the left" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M14.5 6l-6 6 6 6"/></svg></button>
+<button type="button" class="pa-cue" data-pa-cue="right" aria-label="Pan right: more of the diagram" title="More to the right" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M9.5 6l6 6-6 6"/></svg></button>
+<button type="button" class="pa-cue" data-pa-cue="top" aria-label="Pan up: more of the diagram" title="More above" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M6 14.5l6-6 6 6"/></svg></button>
+<button type="button" class="pa-cue" data-pa-cue="bottom" aria-label="Pan down: more of the diagram" title="More below" hidden><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false"><path d="M6 9.5l6 6 6-6"/></svg></button>
 <div class="tip" data-pa-tip role="tooltip" hidden></div>
 </main>
 <aside class="panel" data-pa-panel aria-label="Details">

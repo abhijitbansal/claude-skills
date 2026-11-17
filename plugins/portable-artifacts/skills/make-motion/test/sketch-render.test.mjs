@@ -479,8 +479,8 @@ test('a sketch scene overrides the CSS tokens and the look on its own layer only
       return { standard: read(standard), sketch: read(sketch), text: getComputedStyle(standard.querySelector('.el.text')).color };
     });
     assert.deepEqual(tokens.sketch, { '--accent': PALETTE.accent, '--text': PALETTE.ink, '--line': PALETTE.ink, '--surface': PALETTE.board, '--page': PALETTE.board });
-    assert.equal(tokens.standard['--accent'], '#6cb2e6', 'the theme stays on the standard scene');
-    assert.equal(tokens.text, 'rgb(108, 178, 230)');
+    assert.equal(tokens.standard['--accent'], '#45b6ff', 'the theme stays on the standard scene');
+    assert.equal(tokens.text, 'rgb(69, 182, 255)');
   });
 });
 

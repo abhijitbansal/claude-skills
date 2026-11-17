@@ -73,6 +73,28 @@
   if (modes.explore) modes.explore.addEventListener('click', function () { ctl.exit(); });
   if (fullButton) fullButton.addEventListener('click', function () { ctl.toggleFullscreen(); });
 
+  // ---- phone chrome ----------------------------------------------------------------
+  // The More button and the Legend toggle (shown only on a phone, viewer.html) each open a panel: `owner` takes
+  // `openClass`, the button says aria-expanded. A press outside the owner closes it. `/` opens More first, so the
+  // viewer's own `/` handler can put the caret in Find.
+  function disclosure(button, owner, openClass) {
+    if (!button || !owner) return function () {};
+    var set = function (open) {
+      owner.classList.toggle(openClass, open);
+      button.setAttribute('aria-expanded', String(open));
+    };
+    button.addEventListener('click', function () { set(button.getAttribute('aria-expanded') !== 'true'); });
+    document.addEventListener('pointerdown', function (e) { if (!owner.contains(e.target)) set(false); });
+    return set;
+  }
+  var setMore = disclosure(one('[data-pa-more]'), one('.tools'), 'pa-more-open');
+  disclosure(one('[data-pa-legend-toggle]'), one('[data-pa-legend]'), 'lg-open');
+  document.addEventListener('keydown', function (e) {
+    var t = e.target;
+    var typing = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
+    if (e.key === '/' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) setMore(true);
+  }, true);
+
   function fromHash() {
     var m = stepRe.exec(location.hash);
     if (m) ctl.goTo(Number(m[1]) - 1);

@@ -224,7 +224,8 @@
 
     // ---- moving between beats -----------------------------------------------------------------
     function targetOf(beat, seen) {
-      if (beat.kind === 'step') return framesEverything(beat) ? camera.fitCamera() : camera.cameraFor(stepFocusBox(beat, seen));
+      // a beat that frames everything shows the whole drawing, even where the opening view sits at the reading floor
+      if (beat.kind === 'step') return framesEverything(beat) ? camera.wholeCamera() : camera.cameraFor(stepFocusBox(beat, seen));
       // a hop also frames its own edge: a sequence message sits below its participants' headers
       return camera.cameraFor(camera.boxOf(beat.edge ? beat.ids.concat(beat.edge) : beat.ids));
     }
@@ -301,7 +302,7 @@
       clearReveal();
       unlight();
       if (hooks.onStep) hooks.onStep();
-      camera.fit();
+      camera.home(); // the readable opening view (Fit, the whole drawing, can be under the reading floor)
     }
     function togglePresent() { if (presenting) exit(); else present(0); }
     // A resize reframes the beat where it stands: the camera glides to the beat's

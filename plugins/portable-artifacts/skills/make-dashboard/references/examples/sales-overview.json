@@ -71,7 +71,7 @@
               { "filter": "utcmonth(datum.month) === 1" },
               { "calculate": "utcFormat(datum.month, '%b %Y') + ' · ' + format(datum.units, ',') + ' units'", "as": "note" }
             ],
-            "mark": { "type": "text", "baseline": "top", "dy": 10, "clip": false },
+            "mark": { "type": "text", "align": "left", "baseline": "top", "dx": -4, "dy": 10, "clip": false },
             "encoding": { "text": { "field": "note", "type": "nominal" } }
           }
         ]

@@ -121,7 +121,7 @@
       "icon": null,
       "emoji": null,
       "typeLine": null,
-      "tone": "good",
+      "tone": "neutral",
       "group": null,
       "layer": 2
     },
@@ -182,7 +182,7 @@
       "icon": null,
       "emoji": null,
       "typeLine": null,
-      "tone": "bad",
+      "tone": "neutral",
       "group": null,
       "layer": 4
     },

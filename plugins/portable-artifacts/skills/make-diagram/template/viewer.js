@@ -189,7 +189,7 @@
       trace.clear();
       clearFind();
       panel.paint();
-      camera.fit();
+      camera.home(); // the readable opening view, not the whole drawing
       emit();
     }
 

@@ -73,7 +73,8 @@ test('snake_case column names become readable axis titles; other names stay as w
 
 test('compact numbers read the same on the axis as on a KPI tile (B, not G; K, not k)', () => {
   const vl = expand1({ kind: 'bar', query: 'cat', x: 'region', y: 'revenue', format: 'compact' }).views[0].vegaLite;
-  assert.deepEqual(vl.encoding.y.axis, { format: '.3~s', labelExpr: "replace(replace(datum.label, 'G', 'B'), 'k', 'K')" });
+  // tickCount: the bar's value axis nices to one tick count with its headroom (restrained-browser.test.mjs)
+  assert.deepEqual(vl.encoding.y.axis, { format: '.3~s', labelExpr: "replace(replace(datum.label, 'G', 'B'), 'k', 'K')", tickCount: 5 });
   const tip = vl.layer[0].encoding.tooltip.find((t) => t.field === 'revenue'); // the bar layer (a value label layer follows)
   assert.equal(tip.format, ',.2~f', 'the tooltip shows the exact value');
 });
@@ -155,6 +156,8 @@ const seriesRows = (n, months = 3) => ({
 });
 const lineOf = (res, extra = {}) => expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'line', query: 'q', x: 'month', y: 'v', color: 'g', ...extra }] }, { q: res }).charts[0].views[0].vegaLite;
 const labelLayer = (vl) => vl.layer.find((l) => (l.mark?.type ?? l.mark) === 'text');
+// A few series name the config's restrained range (vega-config.mjs paSeries); a compile needs it defined.
+const SERIES_CONFIG = { range: { paSeries: ['#000000', '#333333', '#666666', '#999999'] } };
 
 test('a single-series chart has no legend', async () => {
   const { compile } = await import('vega-lite');
@@ -174,7 +177,7 @@ test('a line chart with at most 4 series labels its line ends and has no legend'
   assert.equal(text.encoding.text.field, 'g');
   assert.equal(text.encoding.color, undefined, 'label text is ink (--text-2 through the config), not the series hue');
   assert.equal(vl.layer[0].encoding.color.legend, null);
-  const spec = compile({ ...vl, data: { values: res.rows } }).spec;
+  const spec = compile({ ...vl, data: { values: res.rows }, config: SERIES_CONFIG }).spec;
   assert.equal(spec.legends, undefined, 'no legend');
   // The label layer keeps one row per series: the last month.
   const vega = await import('vega');
@@ -206,7 +209,7 @@ test('a line chart with a nominal x labels the last point in query order', async
   const vl = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'line', query: 'q', x: 'quarter', y: 'v', color: 'g' }] }, { q: res }).charts[0].views[0].vegaLite;
   const { compile } = await import('vega-lite');
   const vega = await import('vega');
-  const spec = compile({ ...vl, data: { values: res.rows } }).spec;
+  const spec = compile({ ...vl, data: { values: res.rows }, config: SERIES_CONFIG }).spec;
   const view = new vega.View(vega.parse(spec), { renderer: 'none' });
   await view.runAsync();
   const items = view.data(spec.marks.find((m) => m.type === 'text').from.data);

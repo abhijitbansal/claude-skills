@@ -94,9 +94,12 @@ function legendMark(it, type) {
   return `<i class="lg-sw lg-sw-${esc(it.family)} lg-shape-${esc(shape)}"></i>`;
 }
 
+// On a phone the keys fold behind a labelled toggle (viewer.html, toolbar.js); on a desktop the toggle is not shown.
+// The overlay stays decorative (the text alternative names every node), so the toggle is a pointer control only.
 function legendHtml(spec) {
   const items = legendItems(spec).map((it) => `<span class="lg">${legendMark(it, spec.type)}${esc(legendWord(it))}</span>`);
-  return `<div class="legend" data-pa-legend aria-hidden="true">${items.join('')}</div>`;
+  const toggle = `<button type="button" class="lg-toggle" data-pa-legend-toggle tabindex="-1" aria-expanded="false" aria-controls="pa-legend-keys">Legend <span class="lg-count">${items.length}</span></button>`;
+  return `<div class="legend" data-pa-legend aria-hidden="true">${toggle}<div class="lg-keys" id="pa-legend-keys">${items.join('')}</div></div>`;
 }
 
 // The overlay swatches match the nodes as the drawn legend does (css.mjs legendRules): a neutral box with the hue as
@@ -108,6 +111,7 @@ const legendCss = () => [
   ...FAMILIES.map((f) => `.lg-sw-${f}{background:var(--k-${f});box-shadow:inset 0 0 0 3px var(--surface)}`),
   '.lg-sw-external{border-style:dashed;border-color:var(--text-3)}',
   '.lg-shape-diamond,.lg-shape-small-diamond{background:var(--surface);box-shadow:none;border-color:var(--text-3);transform:rotate(45deg) scale(.75)}',
+  '.lg-shape-stadium{width:14px;height:8px;border-radius:999px;border-color:var(--text-3)}',
   '.lg-shape-filled-dot{width:9px;height:9px;border-radius:50%;border-color:var(--text-2);background:var(--text-2)}',
   '.lg-shape-ringed-dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--text-2);background:var(--surface)}',
 ].join('\n');
