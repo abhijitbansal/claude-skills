@@ -128,16 +128,60 @@ export function keepRatio(lines, rows, words, ctx, lead) {
 
 
 const HOOK_MAX_WORDS = 4; // a hook this short may be set a word a line
+const HOOK_WRAP_MAX_WORDS = 10; // a wrapping hook (look.stack.hookWrap) tries every set of rows up to this many words
 const SHORT_ALONE = 4; // letters: a word this short never gets a line to itself when a stack grows
 const CEILING_STEPS = 20; // bisection steps for a hook's size ceiling: well under a pixel
 
-// A hook (a viral film's first statement) may be set a word a line when that sets it larger: the larger of the stack's
-// own lines and the word-a-line set, each kept to look.stack.hook of the area's height (no line ending on a weak word).
+// Every way to break `count` words into rows in order (word indexes per row) with no row but the last ending on a weak
+// word (breaks.mjs isWeakEnd).
+function wordRows(plain) {
+  const sets = [];
+  const grow = (from, rows) => {
+    if (from === plain.length) { sets.push(rows); return; }
+    for (let to = from + 1; to <= plain.length; to++) {
+      if (to < plain.length && isWeakEnd(plain[to - 1])) continue;
+      grow(to, [...rows, Array.from({ length: to - from }, (_, k) => from + k)]);
+    }
+  };
+  grow(0, []);
+  return sets;
+}
+
+// The row sets a hook is tried in: with look.stack.hookWrap (poster: the viral hook is the film's biggest type, filled
+// by size and wrapped by words; gate-poster-tall render 1 set a six-word hook in its own two rows, the second under the
+// floor) every set wordRows allows; else the stack's own rows and, for a short hook, a word a line.
+function hookCandidates(words, own, ctx) {
+  const plain = words.map(bare);
+  if (ctx.look.stack?.hookWrap === true && words.length <= HOOK_WRAP_MAX_WORDS) return wordRows(plain);
+  if (words.length > HOOK_MAX_WORDS || plain.slice(0, -1).some(isWeakEnd)) return null;
+  return [own.rows, words.map((_, i) => [i])];
+}
+
+// The better of two hook sets in `area` with the stack's floor `min`: a set whose every line fits at or over the floor,
+// then the larger smallest line (the hook set as large as it goes), then the larger largest line, then the fewer rows
+// (no more wrapping than the size needs). A line wider than the area counts at the size that would fit it (fitLine
+// clamps it to the floor, which would rank a one-row set of the whole hook above every wrap).
+function betterHook(area, min) {
+  const sizes = ({ lines }) => lines.map((l) => l.font.size * Math.min(1, area.w / l.width));
+  const clean = (set) => sizes(set).every((s) => s >= min - EPSILON);
+  return (a, b) => {
+    if (clean(a) !== clean(b)) return clean(b) ? b : a;
+    const [smallA, smallB] = [Math.min(...sizes(a)), Math.min(...sizes(b))];
+    if (Math.abs(smallA - smallB) > EPSILON) return smallB > smallA ? b : a;
+    const [largeA, largeB] = [Math.max(...sizes(a)), Math.max(...sizes(b))];
+    if (Math.abs(largeA - largeB) > EPSILON) return largeB > largeA ? b : a;
+    return b.rows.length < a.rows.length ? b : a;
+  };
+}
+
+// A hook (a viral film's first statement) may be set in other rows when that sets it larger (hookCandidates), each set
+// kept to look.stack.hook of the area's height.
 function hookLines(words, own, fitted, area, ctx) {
   const share = ctx.look.stack?.hook;
   const plain = words.map(bare);
   const forced = words.some((w) => w.endsWith(FORCE_MARK));
-  if (!Number.isFinite(share) || words.length < 2 || words.length > HOOK_MAX_WORDS || forced || plain.slice(0, -1).some(isWeakEnd)) return own;
+  const sets = Number.isFinite(share) && words.length >= 2 && !forced ? hookCandidates(words, own, ctx) : null;
+  if (sets === null) return own;
   const limit = share * area.h;
   // too tall: the largest lines come down first (a ceiling), and only when every line is at the ceiling all shrink
   const within = (lines, rows) => {
@@ -153,10 +197,10 @@ function hookLines(words, own, fitted, area, ctx) {
     }
     return capped(low);
   };
-  const single = words.map((_, i) => [i]);
-  const candidates = [{ rows: own.rows, lines: within(own.lines, own.rows) }, { rows: single, lines: within(fitted(single), single) }];
+  const setOf = (rows) => ({ rows, lines: within(rows === own.rows ? own.lines : fitted(rows), rows) });
+  if (ctx.look.stack?.hookWrap === true) return sets.map(setOf).reduce(betterHook(area, sizeAt(ctx.look, STACK.fromStep, ctx.unit)));
   const smallest = ({ lines }) => Math.min(...lines.map((l) => l.font.size));
-  return candidates.reduce((best, c) => (smallest(c) > smallest(best) + EPSILON ? c : best));
+  return sets.map(setOf).reduce((best, c) => (smallest(c) > smallest(best) + EPSILON ? c : best));
 }
 
 // A stack shorter than look.stack.grow of its area is broken finer: each line of more than one word is split by sense

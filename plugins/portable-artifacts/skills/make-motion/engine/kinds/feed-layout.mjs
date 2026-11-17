@@ -12,6 +12,7 @@ import { colourOf, roundedRect } from '../devices/shared.mjs';
 import { fontFor, sizeAt, setCase, shownFrom, isWide } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { slugBox, slugNodes } from './slug.mjs';
+import { wordForm } from './words.mjs';
 
 const HALF = 2;
 const DOTS = 0.4; // s the typing dots lead a `them` message
@@ -181,15 +182,33 @@ function settling(values, times, look) {
   return track(keys);
 }
 
-/** When each item appears: one per sentence when the counts match, else evenly over the narration (or the shot); the
+/** When each item appears: one per sentence when the counts match, else on the spoken word that begins it (`texts`, the
+ *  items' texts: a message of two sentences arrives on its first; poster gate render 1 held the first of two messages
+ *  3.7 s when the second waited for the end of the narration), else evenly over the narration (or the shot); the
  *  first on frame 0 and every later one when it is spoken (lead ruling 4, round 2: narration timing wins over the old
  *  0.8 s "no lone first message" beat of gate-kinds-b-1), every one landed by `latest`. */
-export function feedTimes(n, timing, latest) {
+export function feedTimes(n, timing, latest, texts = null) {
   const sentences = timing.sentences ?? [];
   const end = Math.min(latest, timing.words?.length ? timing.words.at(-1).end ?? latest : latest);
-  return sentences.length === n
-    ? sentences.map((s, k) => (k === 0 ? 0 : Math.min(s.start, latest)))
-    : Array.from({ length: n }, (_, k) => (n <= 1 ? 0 : (k * end) / (n - 1)));
+  if (sentences.length === n) return sentences.map((s, k) => (k === 0 ? 0 : Math.min(s.start, latest)));
+  const even = Array.from({ length: n }, (_, k) => (n <= 1 ? 0 : (k * end) / (n - 1)));
+  return Array.isArray(texts) && texts.length === n ? spokenTimes(texts, timing, latest) ?? even : even;
+}
+
+// Each text on the first spoken word, after the one before it, that is its own first word; null when a text's first word
+// is not spoken (in order), so the caller keeps its even spacing. The first text is on frame 0.
+function spokenTimes(texts, timing, latest) {
+  const spoken = (timing.words ?? []).map((w) => ({ form: wordForm(w.text), start: w.start }));
+  let from = 0;
+  const times = [];
+  for (const [k, text] of texts.entries()) {
+    const first = wordForm(String(text).split(/\s+/).find(Boolean) ?? '');
+    const at = spoken.findIndex((w, i) => i >= from && w.form === first);
+    if (at < 0) return null;
+    times.push(k === 0 ? 0 : Math.min(Math.max(0, spoken[at].start), latest));
+    from = at + 1;
+  }
+  return times;
 }
 
 /** When a `them` message's dots show, or null: DOTS before it, after the message before it, never on frame 0. */

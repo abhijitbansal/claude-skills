@@ -122,12 +122,39 @@ function wordBoxes(n, line, k, word, metrics) {
   };
 }
 
+const QUARTER = 90; // degrees
+// A local box as it lies after the text's own quarter turn (n.rotate a non-zero multiple of 90, as poster's turned stack
+// sets it), so a turned line's ink along the line is judged along the frame's height and its ink across the line along
+// the frame's width (gate-poster-tall render 1: the stretch below read a glyph's overhang past the advance, along the
+// line, as across it). Any other rotation keeps the box as it is: the stretch onto the bbox is close enough there.
+function turnedLocal(n) {
+  const turn = n.rotate ?? 0;
+  if (turn === 0 || turn % QUARTER !== 0) return (box) => box;
+  const angle = (turn * Math.PI) / (HALF * QUARTER);
+  const cos = Math.round(Math.cos(angle)), sin = Math.round(Math.sin(angle));
+  return ([x, y, w, h]) => {
+    const xs = [x, x + w].flatMap((px) => [y, y + h].map((py) => cos * px - sin * py));
+    const ys = [x, x + w].flatMap((px) => [y, y + h].map((py) => sin * px + cos * py));
+    return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+  };
+}
+
+// Each word's whole and ink boxes in the text's own space, after its own quarter turn (turnedLocal).
+function localWordBoxes(n) {
+  const { layout } = n;
+  const metrics = { ascent: layout.lines[0].y, descent: layout.height - layout.lines.at(-1).y };
+  const turned = turnedLocal(n);
+  return layout.lines.flatMap((line, k) => line.words.map((word) => {
+    const { whole, ink } = wordBoxes(n, line, k, word, metrics);
+    return { word, whole: turned(whole), ink: turned(ink) };
+  }));
+}
+
 // The ink box of a text in canvas pixels, from the words that are not hidden (all of them when none is shown): the local
 // ink box mapped to the canvas by the same stretch that takes the whole ascent box to the snapshot bbox.
 function inkBox(n, hidden) {
-  const { layout, bbox } = n;
-  const metrics = { ascent: layout.lines[0].y, descent: layout.height - layout.lines.at(-1).y };
-  const boxes = layout.lines.flatMap((line, k) => line.words.map((word) => ({ word, ...wordBoxes(n, line, k, word, metrics) })));
+  const { bbox } = n;
+  const boxes = localWordBoxes(n);
   const whole = union(boxes.map((b) => b.whole));
   const kept = boxes.filter((b) => !hidden.has(b.word.index));
   const part = union((kept.length > 0 ? kept : boxes).map((b) => b.ink));
@@ -138,9 +165,8 @@ function inkBox(n, hidden) {
 // The ink of each word of a text on screen, in canvas pixels, as { word, box }: each word's local ink mapped to the
 // canvas as inkBox maps the whole text (a word scaled by its track is boxed at that scale).
 function wordInks(n) {
-  const { layout, bbox } = n;
-  const metrics = { ascent: layout.lines[0].y, descent: layout.height - layout.lines.at(-1).y };
-  const boxes = layout.lines.flatMap((line, k) => line.words.map((word) => ({ word, ...wordBoxes(n, line, k, word, metrics) })));
+  const { bbox } = n;
+  const boxes = localWordBoxes(n);
   const whole = union(boxes.map((b) => b.whole));
   const sx = whole[2] > 0 ? bbox[2] / whole[2] : 1, sy = whole[3] > 0 ? bbox[3] / whole[3] : 1;
   return boxes.map((b) => ({ word: b.word, box: [bbox[0] + (b.ink[0] - whole[0]) * sx, bbox[1] + (b.ink[1] - whole[1]) * sy, b.ink[2] * sx, b.ink[3] * sy] }));

@@ -60,8 +60,10 @@ export const poster = {
   // the stack (pop's family, kinds/stack.mjs): two sizes, the larger ratio times the smaller; a hook a word a line when
   // larger, within `hook` of the height (0.65: the hook, never turned, fills by size); a tall stack grown until it fills
   // `grow` of its area; a statement (not a hook) whose upright stack still fills less than `turn` of a tall area is
-  // turned 90 degrees to run up the frame (kinds/stack-turn.mjs; ban 2's 65 percent)
-  stack: { ratio: 1.35, centre: 0.45, hook: 0.65, grow: 0.65, turn: 0.65 },
+  // turned 90 degrees to run up the frame (kinds/stack-turn.mjs; ban 2's 65 percent). hookWrap: the hook is tried in
+  // every set of rows its words allow and set in the one that sets it largest (stack.mjs hookCandidates), so a long hook
+  // puts its emphasis on a short row of its own (gate-poster-tall render 1: a six-word hook fell under the floor)
+  stack: { ratio: 1.35, centre: 0.45, hook: 0.65, grow: 0.65, turn: 0.65, hookWrap: true },
   // on 9:16 in viral, the composition band as shares of the height inside the platform sides
   band: { top: 0.14, bottom: 0.78 },
   // a viral hook opens at full ink on frame 0 (ban 5); every shot opens composed, its words set from the first frame

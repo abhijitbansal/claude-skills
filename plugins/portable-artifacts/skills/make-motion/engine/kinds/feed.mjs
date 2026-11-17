@@ -30,7 +30,7 @@ function feedProblems(shot, { look } = {}) {
   return [...kindSupportProblems(KIND, look), ...wrong];
 }
 
-const timesOf = (shot, timing) => feedTimes(shot.items.length, timing, latestLanding(timing));
+const timesOf = (shot, timing) => feedTimes(shot.items.length, timing, latestLanding(timing), shot.items.map((item) => item.text));
 
 function expandFeed(shot, ctx) {
   assertNoBlanks(shot, KIND);
