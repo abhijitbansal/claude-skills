@@ -90,8 +90,8 @@ function estimate(shot, look, canvas, viralInsets, filmMode) {
   const data = kindData(look, KIND);
   const unit = Math.min(canvas.w, canvas.h) / REFERENCE_WIDTH;
   const room = reviewRoom(look, canvas, viralInsets, filmMode);
-  const hero = heroOf(shot, canvas);
-  const maxHero = hero ? Math.floor(Math.min(Math.max(...look.scale) * unit, room.w / (setCase(look, 'display', hero.text).length * data.heroAdvance))) : 0;
+  const hero = heroOf(shot, canvas, data);
+  const maxHero = hero ? Math.floor(Math.min(Math.max(...look.scale) * unit, (data.heroMax ?? Infinity) * unit, room.w / (setCase(look, 'display', hero.text).length * data.heroAdvance))) : 0;
   const heroH = hero ? maxHero * look.lineHeight.display + data.pad * unit : 0;
   const inner = innerOf({ ...room, h: room.h - heroH }, data, unit);
   const need = measureOf(shot, plainPrepared(shot), hero);

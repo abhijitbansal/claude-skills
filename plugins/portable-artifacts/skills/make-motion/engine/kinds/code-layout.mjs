@@ -32,11 +32,23 @@ const shownUntil = (id, until, children) => node('group', id, {}, { tracks: { op
 export const highlightedLines = (highlight = []) => [...new Set(highlight.flatMap((h) => (Array.isArray(h)
   ? Array.from({ length: h[1] - h[0] + 1 }, (_, k) => h[0] - 1 + k) : [h - 1])))].sort((a, b) => a - b);
 
-/** On a tall frame, what the hero says and which field it shows: the title, else a run's command; null on a wide frame. */
-export function heroOf(shot, canvas) {
-  if (isWide(canvas)) return null;
+/** On a tall frame, what the hero says and which field it shows: the title, else a run's command; null on a wide frame
+ *  unless the look's code data (`data`) sets `heroWide` (poster, gate-poster-1 ruling 1: the title the hero at 16:9 too). */
+export function heroOf(shot, canvas, data) {
+  // on a wide frame only a short shot (at most data.heroWideRows rows) takes the hero: under it a long one no longer fits
+  // (the kind's ten-line example held 7 rows) and keeps its title row
+  if (isWide(canvas) && (data?.heroWide !== true || shownRows(shot) > (data.heroWideRows ?? Infinity))) return null;
   if (shot.title !== undefined) return { text: shot.title, field: 'title' };
   return (shot.mode ?? 'type') === 'run' && shot.command !== undefined ? { text: shot.command, field: 'command' } : null;
+}
+
+// The rows a shot's panel shows, from its text alone (no prepared data): code, the longer side of a diff, or a run's
+// command and output.
+function shownRows(shot) {
+  const count = (text) => (text === undefined ? 0 : String(text).split('\n').length);
+  const mode = shot.mode ?? 'type';
+  if (mode === 'diff') return Math.max(count(shot.before), count(shot.after));
+  return mode === 'run' ? 1 + count(shot.output) : count(shot.code);
 }
 
 /** What a shot shows in its panel, to size it: { chars, rows }. `hero` (heroOf) takes the title, or the command, out. */
@@ -86,10 +98,11 @@ function heroSet(hero, ctx, size) {
 /** The geometry shared by every mode: { size, font, advance, inner, panel, rowH, top(k), titleRow, hero }. */
 export function geometryOf(shot, ctx, data, room) {
   const { unit, measure, canvas } = ctx;
-  const heroed = heroOf(shot, canvas);
+  const heroed = heroOf(shot, canvas, data);
   const need = measureOf(shot, ctx.prepared, heroed);
   const gap = data.pad * unit;
-  const maxHero = heroed ? heroSize(heroed.text, ctx, room.w) : 0;
+  // data.heroMax (units, poster): the hero no larger, so the code under it has the height to fill the width
+  const maxHero = heroed ? Math.min(heroSize(heroed.text, ctx, room.w), (data.heroMax ?? Infinity) * unit) : 0;
   const probe = heroed ? heroSet(heroed, ctx, maxHero) : null;
   const cardRoom = probe ? { ...room, y: room.y + probe.h + gap, h: room.h - probe.h - gap } : room;
   const fit = fitCode(need, { look: ctx.look, data, unit, inner: innerOf(cardRoom, data, unit) });
@@ -134,7 +147,9 @@ function typeMode(shot, ctx, data, geo) {
   const lines = ctx.prepared.code;
   const first = geo.titleRow ? 1 : 0;
   const counts = lines.map((tokens) => runsOf(tokens).length);
-  const whole = lines.length > 1 ? 1 : 0; // lines shown whole on frame 0
+  // lines shown whole on frame 0: the first (of several), or every line in a look whose code opens set (data.setOnOpen,
+  // poster: gate-poster-1 ruling 1; only the highlight arrives after)
+  const whole = data.setOnOpen === true ? lines.length : lines.length > 1 ? 1 : 0;
   const typed = counts.slice(whole).reduce((a, b) => a + b, 0) - (whole === 0 ? Math.min(1, counts[0] ?? 0) : 0);
   const times = typeTimes(Math.max(0, typed), ctx.timing);
   let k = 0;

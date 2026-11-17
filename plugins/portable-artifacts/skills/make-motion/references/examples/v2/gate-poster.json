@@ -3,9 +3,14 @@
   "mode": "pro",
   "look": "poster",
   "format": "16:9",
-  "voice": { "name": "af_heart" },
+  "voice": {
+    "name": "af_heart"
+  },
   "sound": "on",
-  "music": { "bed": "drift", "bpm": 96 },
+  "music": {
+    "bed": "drift",
+    "bpm": 96
+  },
   "seed": 31,
   "shots": [
     {
@@ -19,15 +24,36 @@
       "show": "diagram",
       "title": "One command",
       "nodes": [
-        { "id": "script", "label": "Script" },
-        { "id": "voice", "label": "Voice" },
-        { "id": "review", "label": "Review" },
-        { "id": "render", "label": "Render" }
+        {
+          "id": "script",
+          "label": "Script"
+        },
+        {
+          "id": "voice",
+          "label": "Voice"
+        },
+        {
+          "id": "review",
+          "label": "Review"
+        },
+        {
+          "id": "render",
+          "label": "Render"
+        }
       ],
       "edges": [
-        { "from": "script", "to": "voice" },
-        { "from": "voice", "to": "review" },
-        { "from": "review", "to": "render" }
+        {
+          "from": "script",
+          "to": "voice"
+        },
+        {
+          "from": "voice",
+          "to": "review"
+        },
+        {
+          "from": "review",
+          "to": "render"
+        }
       ],
       "say": "The script is voiced, then reviewed, then rendered."
     },
@@ -36,7 +62,9 @@
       "show": "code",
       "lang": "json",
       "title": "One shot",
-      "highlight": [3],
+      "highlight": [
+        3
+      ],
       "code": "{\n  \"id\": \"hook\",\n  \"show\": \"statement\",\n  \"say\": \"Numbers need sources.\"\n}",
       "say": "A shot is a few lines of JSON. What it says sets its timing."
     },
@@ -45,23 +73,47 @@
       "show": "compare",
       "mode": "before-after",
       "say": "Before, you placed every keyframe. Now, you write what is said.",
-      "left": { "title": "Keyframes", "points": ["Durations", "Positions", "Easing"] },
-      "right": { "title": "A script", "points": ["Words set the timing"] }
+      "left": {
+        "title": "Keyframes",
+        "points": [
+          "Durations",
+          "Positions",
+          "Easing"
+        ]
+      },
+      "right": {
+        "title": "A script",
+        "points": [
+          "Words set the timing"
+        ]
+      }
     },
     {
       "id": "tests",
       "show": "chart",
       "type": "column",
-      "title": "Every stage added tests",
+      "title": "Tests after each stage",
       "say": "Each stage added tests. Shots took it past sixteen hundred.",
       "data": [
-        { "label": "Picture", "value": 844 },
-        { "label": "Voice", "value": 1240 },
-        { "label": "Sound", "value": 1507 },
-        { "label": "Shots", "value": 1636 }
+        {
+          "label": "Picture",
+          "value": 844
+        },
+        {
+          "label": "Voice",
+          "value": 1240
+        },
+        {
+          "label": "Sound",
+          "value": 1507
+        },
+        {
+          "label": "Shots",
+          "value": 1636
+        }
       ],
       "highlight": "Shots",
-      "source": "make-motion test suite"
+      "source": "make-motion test suite, running total"
     },
     {
       "id": "bar",
@@ -72,7 +124,7 @@
     {
       "id": "close",
       "show": "end",
-      "say": "Write the script. The engine does the rest.",
+      "say": "Your first film is one file away.",
       "ask": "Write your first film",
       "mark": "make-motion"
     }

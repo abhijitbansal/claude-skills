@@ -55,15 +55,19 @@ export function chartStyle(ctx, data) {
     minPlot: data.minPlot ?? 0,
     // `startFinal` (ledger): columns and bars grow in their final colours, never ink before the dim grey
     startFinal: data.startFinal === true,
+    growFrom: data.growFrom ?? 0,
+    tight: data.tight === true,
+    together: data.together === true,
   };
 }
 
 /** The decimals a set of values is shown with: the most any of them needs, at most three (from the number, not its string). */
 export const valueDecimals = (values) => Math.max(0, ...values.filter(Number.isFinite).map((v) => shownDecimals(v)));
 
-/** When mark k of n grows, all done by `growEnd`: { start, end, dur }. */
-export function growWindow(k, n, growEnd) {
-  const stagger = n > 1 ? Math.min(MAX_STAGGER, (growEnd * STAGGER_SHARE) / (n - 1)) : 0;
+/** When mark k of n grows, all done by `growEnd`: { start, end, dur }. `together` (look data, poster): every mark grows
+ *  over the same window, so no frame shows the bars out of the data's order (gate-poster-1 ruling 2). */
+export function growWindow(k, n, growEnd, together = false) {
+  const stagger = n > 1 && !together ? Math.min(MAX_STAGGER, (growEnd * STAGGER_SHARE) / (n - 1)) : 0;
   const dur = growEnd - (n - 1) * stagger;
   return { start: k * stagger, end: k * stagger + dur, dur };
 }
@@ -118,8 +122,10 @@ function markGlow(id, look, style, { x, y, across, length, horizontal }, at) {
 // ink or the look's mark colours in turn, and, for the highlighted one, its accent copy (and its light) arriving then.
 function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, times, hl }) {
   const { look } = ctx;
-  const win = growWindow(k, n, times.growEnd);
-  const grow = landing(win.end, { ease: look.moves.enter.ease, dur: win.dur }, 0, 1, style.step);
+  const win = growWindow(k, n, times.growEnd, style.together);
+  // `growFrom` (poster, gate-poster-1 ruling 2): a mark grows from this share of its length, so the shot opens on every
+  // bar's base; 0 (from nothing) in every other look
+  const grow = landing(win.end, { ease: look.moves.enter.ease, dur: win.dur }, style.growFrom, 1, style.step);
   const d = style.round > 0 ? roundPath(across, length, horizontal, style.round) : markPath(across, length, horizontal);
   const scale = horizontal ? { scaleX: grow } : { scaleY: grow };
   const dimmed = hl >= 0 && k !== hl;
@@ -136,6 +142,17 @@ function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, t
   if (dimmed && style.dimTo) out.push(node('path', `${shot.id}.mark.${k}.dim`, { d, fill: style.dimTo, x, y }, final ? overlay() : { tracks: arriveAt(look, times.highlightAt), step: style.step }));
   if (k === hl) out.push(node('path', `${shot.id}.mark.${k}.accent`, { d, fill: lit, x, y }, overlay(times.highlightAt)));
   return out;
+}
+
+// `tight` (poster, gate-poster-1 ruling 2: the bars fill the plot): with no reference lines drawn, the scale's top is
+// the largest value rather than the nice tick over it, so the tallest mark reaches the plot's top. Only when every value
+// is at or over the baseline; else the scale as it is.
+function fitScale(scale, data, style) {
+  if (!style.tight || style.refs) return scale;
+  const values = (data.items ?? []).map((i) => i.value).filter(Number.isFinite);
+  if (values.length === 0 || values.some((v) => v < scale.lo)) return scale;
+  const hi = Math.max(...values);
+  return hi > scale.lo ? { ...scale, hi } : scale;
 }
 
 /** Does the shot's scale break from 0: a bar, column or area chart (drawn from its baseline) with a baseline that is not 0. */
@@ -202,7 +219,7 @@ function linePitch(layouts) {
 
 /** Columns in `area`: { nodes, boxes, plot, highlight } (highlight: { index, text } of the highlighted value, or null). */
 export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
-  const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing, ctx.look);
+  const data = chartData(shot), scale = fitScale(valueScale(shot, data), data, style), times = chartTimes(shot, ctx.timing, ctx.look);
   const { gap } = style;
   const hl = highlightIndex(shot, data), decimals = valueDecimals(data.items.map((i) => i.value));
   const gutter = axisGutter(shot, ctx, style, scale, style.refs);
@@ -230,7 +247,7 @@ export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom
     const y = up ? m.tip - gap - WORD_DESCENT * font.size : m.tip + gap + CAP_HEIGHT * font.size;
     const highlighted = m.index === hl;
     if (!highlighted || valueOnHighlight) {
-      const grown = growWindow(m.index, marks.length, times.growEnd).end;
+      const grown = growWindow(m.index, marks.length, times.growEnd, style.together).end;
       const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, grown);
       const v = label(ctx, { id: `${shot.id}.value.${m.index}`, text: valueText(m.value, decimals, shot.unit), font, x: m.x, y, align: 'center', fill: highlighted ? style.strong : style.text, numeric: true, maxWidth: band, tracks });
       values.push(v.node);
@@ -267,7 +284,7 @@ function liftBar(m, size, gap, fill) {
 
 /** Bars in `area`, labels in a left column (or over each bar), values at the bar ends: { nodes, boxes, plot, highlight }. */
 export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 0 }) {
-  const data = chartData(shot), scale = valueScale(shot, data), times = chartTimes(shot, ctx.timing, ctx.look);
+  const data = chartData(shot), scale = fitScale(valueScale(shot, data), data, style), times = chartTimes(shot, ctx.timing, ctx.look);
   const { font, gap } = style;
   const ink = (CAP_HEIGHT + WORD_DESCENT) * font.size;
   const hl = highlightIndex(shot, data), decimals = valueDecimals(data.items.map((i) => i.value));
@@ -304,7 +321,7 @@ export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 
     const mid = m.y + (CAP_HEIGHT * font.size) / HALF;
     const highlighted = m.index === hl;
     if (!highlighted || valueOnHighlight) {
-      const grown = growWindow(m.index, marks.length, times.growEnd).end;
+      const grown = growWindow(m.index, marks.length, times.growEnd, style.together).end;
       const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, grown);
       const text = valueText(m.value, decimals, shot.unit);
       // with the label over the bar, the value on the label's row right after the label, one rule for every bar (gate

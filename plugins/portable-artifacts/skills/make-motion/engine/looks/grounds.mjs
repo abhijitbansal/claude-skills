@@ -35,13 +35,20 @@ const memo = new WeakMap(); // look -> Map(ground key -> shot look)
 /** Does the look paint a ground a shot (look.grounds)? */
 export const hasGrounds = (look) => Array.isArray(look?.grounds) && look.grounds.length > 1;
 
-/** The ground key of each of the first `count` shots: seeded, never the same as the shot before. */
-export function groundKeys(look, count, seed) {
+/**
+ * The ground key of each of the first `count` shots: seeded, never the same as the shot before. `shows` (optional): each
+ * shot's kind; a kind whose look data names `grounds` (poster's chart: the grounds its red accent reads on, gate-poster-1
+ * ruling 2) stands only on those, unless the shot before took the only one left. One draw a shot either way.
+ */
+export function groundKeys(look, count, seed, shows = []) {
   if (!hasGrounds(look)) throw new Error(`look "${look?.name}" has no grounds`);
   const rng = mulberry32(seed >>> 0);
   const keys = [];
   for (let i = 0; i < count; i++) {
-    const choices = i === 0 ? look.grounds : look.grounds.filter((k) => k !== keys[i - 1]);
+    const free = i === 0 ? look.grounds : look.grounds.filter((k) => k !== keys[i - 1]);
+    const wanted = look.kinds?.[shows[i]]?.grounds;
+    const narrowed = Array.isArray(wanted) ? free.filter((k) => wanted.includes(k)) : free;
+    const choices = narrowed.length > 0 ? narrowed : free;
     keys.push(choices[Math.floor(rng() * choices.length)]);
   }
   return keys;
@@ -95,8 +102,9 @@ export function lookOnGround(look, key) {
   return byKey.get(key);
 }
 
-/** The look shot `index` of a film with `seed` draws with (lookOnGround on its ground); the look itself without grounds. */
-export const shotLook = (look, index, seed) => (hasGrounds(look) ? lookOnGround(look, groundKeys(look, index + 1, seed)[index]) : look);
+/** The look shot `index` of a film with `seed` draws with (lookOnGround on its ground); the look itself without grounds.
+ *  `shows`: the film's shot kinds in order (groundKeys). */
+export const shotLook = (look, index, seed, shows = []) => (hasGrounds(look) ? lookOnGround(look, groundKeys(look, index + 1, seed, shows)[index]) : look);
 
 /**
  * The ground sheet: one opaque full-frame path in the ground's colour, drawn first and kept still under the camera. Depth

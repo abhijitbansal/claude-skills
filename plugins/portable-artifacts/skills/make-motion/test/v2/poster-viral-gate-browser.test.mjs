@@ -45,3 +45,20 @@ test('poster viral 9:16: the hook is set at or over the floor, its emphasised ro
   const lead = texts.findIndex((s) => s.includes('SCRIPT'));
   sizes.forEach((s, k) => k !== lead && assert.ok(sizes[lead] > s));
 });
+
+// gate-poster-1 ruling 4: the hook fills the band. Before it (render 1 of this film, sheet pixels) the block was about
+// 345 units tall, 28 percent of the band; at least 70 percent (860 units) is about two and a half times that
+const BAND = (0.78 - 0.14) * 1920;
+const FILL = 0.7;
+test('poster viral 9:16: the hook block fills at least 70 percent of the band with real glyphs, SCRIPT. on a row of its own', async (t) => {
+  const session = await sessionOrNull(film(), { specDir: HERE });
+  if (!session) { t.skip('no browser'); return; }
+  t.after(() => session.close());
+  const tree = await session.page.evaluate(() => window.__snapshot(0));
+  const rows = all(tree).filter((n) => n.type === 'text' && n.props?.stack === 'hook.text');
+  const top = Math.min(...rows.map((n) => n.bbox[1])), bottom = Math.max(...rows.map((n) => n.bbox[1] + n.bbox[3]));
+  const texts = rows.map((n) => n.layout.lines[0].words.map((w) => w.text).join(' '));
+  t.diagnostic(`hook block ${Math.round(bottom - top)} of ${Math.round(BAND)}: ${texts.map((s, k) => `${s} (${rows[k].layout.size.toFixed(1)})`).join(' / ')}`);
+  assert.ok(texts.includes('SCRIPT.'), texts.join(' / '));
+  assert.ok(bottom - top >= FILL * BAND, `block ${Math.round(bottom - top)}`);
+});

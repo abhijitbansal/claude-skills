@@ -78,7 +78,8 @@ for (const kind of WALKED) {
       const built = filmFor(shots, 'poster', format, { mode: 'pro' }, { prepared });
       const floor = look.scale[DISPLAY_FROM - 1] * (format === '16:9' ? 1 : 1);
       const grounds = new Set(shots.map((_, i) => lookOfShot(film, i).ground));
-      assert.equal(grounds.size, 4, `the films cover every ground (${[...grounds]})`);
+      // every ground the kind may stand on: all four, or the kind's own `grounds` (the chart: gate-poster-1 ruling 2)
+      assert.equal(grounds.size, (look.kinds[kind]?.grounds ?? look.grounds).length, `the films cover every ground the kind stands on (${[...grounds]})`);
       const bad = shots.flatMap((_, i) => SAMPLES.flatMap((t) => {
         const sampled = snapshotOf(built.sampleShot(i, t));
         return all(sampled).filter((n) => n.type === 'text' && n.opacity > 0 && n.props.font.size < floor).flatMap((text) => {

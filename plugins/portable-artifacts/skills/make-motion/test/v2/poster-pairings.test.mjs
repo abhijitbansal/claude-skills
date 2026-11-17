@@ -66,7 +66,9 @@ for (const kind of KINDS) {
       const prepared = ['code', 'map'].includes(kind) ? prepareFilm(film, { filmDir: '.' }).prepared : {};
       const built = filmFor(shots, 'poster', format, { mode }, { prepared });
       const grounds = new Set(shots.map((_, i) => lookOfShot(film, i).ground));
-      assert.equal(grounds.size, 4, `the film covers every ground (${[...grounds]})`);
+      // every ground the kind may stand on: all four, or the kind's own `grounds` (the chart: gate-poster-1 ruling 2)
+      const poster = registries.looks.get('poster');
+      assert.equal(grounds.size, (poster.kinds[kind]?.grounds ?? poster.grounds).length, `the film covers every ground the kind stands on (${[...grounds]})`);
       const bad = shots.flatMap((_, i) => SAMPLES.flatMap((t) => { const s = snapshotOf(built.sampleShot(i, t)); return [...bannedPairs(s), ...weakMarks(s)].map((b) => `${lookOfShot(film, i).ground} ${t}s ${b}`); }));
       assert.deepEqual([...new Set(bad)], []);
     });

@@ -34,15 +34,20 @@ test('poster: a six-word viral hook wraps by words, the emphasis on a row of its
   assert.ok(lines.length >= 3, `rows: ${rows.join(' / ')}`);
   assert.ok(lines.every((n) => (n.rotate ?? 0) === 0), 'upright (the lead ruling: the hook never turns)');
   const lead = rows.findIndex((r) => r.includes('SCRIPT'));
-  assert.equal(rows[lead], 'THE SCRIPT.', `the emphasised row holds only what its sense needs: ${rows.join(' / ')}`);
+  // gate-poster-1 ruling 4 (look.stack.hookLead): the starred word takes a row of its own (was "THE SCRIPT.", which
+  // capped the emphasised row at about 178 units)
+  assert.equal(rows[lead], 'SCRIPT.', `the emphasised word on a row of its own: ${rows.join(' / ')}`);
   const sizes = lines.map((n) => n.props.font.size);
   sizes.forEach((s, k) => k !== lead && assert.ok(sizes[lead] > s, `sizes ${sizes.map((v) => v.toFixed(1))}: the emphasised row is the largest`));
 });
 
-test('poster: the wrapped hook keeps its words in order and ends no row on a weak word', () => {
+test('poster: the wrapped hook keeps its words in order and ends no row on a weak word but before the starred word', () => {
   const rows = hookLines(HOOK).map(rowText);
   assert.equal(rows.join(' '), 'WRITE THE SCRIPT. GET THE FILM.');
-  for (const row of rows.slice(0, -1)) assert.notEqual(row.split(' ').at(-1), 'THE', `row "${row}" ends on an article`);
+  // ruling 4 (hookLead): the one weak row end allowed is the one just before the starred word
+  rows.slice(0, -1).forEach((row, k) => {
+    if (row.split(' ').at(-1) === 'THE') assert.equal(rows[k + 1], 'SCRIPT.', `row "${row}" ends on an article`);
+  });
 });
 
 test('pop (no stack.hookWrap): a six-word viral hook keeps its own two rows', () => {

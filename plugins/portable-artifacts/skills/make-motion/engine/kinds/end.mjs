@@ -262,7 +262,9 @@ function expandPop(shot, ctx, data, times) {
   const askNodes = [];
   if (askProbe !== null) {
     const last = placed.lines.at(-1);
-    const tag = askTag(last.baseline + last.ink.down + data.askGap * unit, times.ask);
+    // data.askHold (s, poster: gate-poster-1 ruling 3): the ask lands at least this long before the cut, entrance included
+    const askAt = data.askHold === undefined ? times.ask : Math.max(0, Math.min(times.ask, ctx.timing.duration - data.askHold));
+    const tag = askTag(last.baseline + last.ink.down + data.askGap * unit, askAt);
     askNodes.push(...tag.nodes);
     boxes.ask = tag.box;
   }

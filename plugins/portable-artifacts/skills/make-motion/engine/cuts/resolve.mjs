@@ -126,7 +126,20 @@ export function filmLook(film, { modes = registries.modes, looks = registries.lo
  */
 export function resolveShotCut(film, index, { look = filmLook(film), shotDuration, cuts = registries.cuts } = {}) {
   if (index === 0) return null;
-  return resolveCut(film.shots[index].cut, { look, rootCut: film.cut, shotDuration, cuts });
+  const own = film.shots[index].cut;
+  const value = own === undefined && film.cut === undefined ? pickedCut(look, index) : own;
+  return resolveCut(value, { look, rootCut: film.cut, shotDuration, cuts });
+}
+
+// The cut the look picks for shot `index` when neither the shot nor the film names one: look.cutPick = { cut, every,
+// directions? } (poster, gate-poster-1 ruling 6: its cut-paper wipe, the next ground's sheet sliding over the last)
+// opens every `every`-th shot, its direction taken in turn; undefined (the hard cut) for the others and in a look
+// without it.
+function pickedCut(look, index) {
+  const pick = look?.cutPick;
+  if (!pick || index % pick.every !== 0) return undefined;
+  const turn = index / pick.every - 1;
+  return pick.directions ? { type: pick.cut, direction: pick.directions[turn % pick.directions.length] } : pick.cut;
 }
 
 /**

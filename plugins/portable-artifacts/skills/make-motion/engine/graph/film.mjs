@@ -43,7 +43,10 @@ export function resolveLook(film) {
 }
 
 /** The look shot `index` of `film` draws with: resolveLook, on the shot's ground for a look that paints one a shot. */
-export const lookOfShot = (film, index) => shotLook(resolveLook(film), index, film.seed ?? DEFAULT_SEED);
+export const lookOfShot = (film, index) => shotLook(resolveLook(film), index, film.seed ?? DEFAULT_SEED, showsOf(film));
+
+// each shot's kind, in order (a look's kind may name the grounds it stands on: grounds.mjs groundKeys)
+const showsOf = (film) => film.shots.map((s) => s?.show);
 
 // ctx.asset(src) for a shot: the size of one of the srcs the shot declares; any other string is an error.
 function shotAsset(shot, kind, assets) {
@@ -161,7 +164,7 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look: filmL
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
   // the look this shot draws with: the film's, on the shot's ground for a look that paints one a shot
-  const look = shotLook(filmLook, index, film.seed ?? DEFAULT_SEED);
+  const look = shotLook(filmLook, index, film.seed ?? DEFAULT_SEED, showsOf(film));
   const ctx = shotContext({ film, index, timeline, canvas, measure, assets, look, viralInsets, prepared });
   // the cut that opens the shot (the film's root cut and the look's cutStyle included), and the shot as its kind sees it:
   // with that cut written out in full, so a kind reading shot.cut (its camera, its opening) sees the cut the film draws

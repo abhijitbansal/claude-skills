@@ -134,12 +134,12 @@ const CEILING_STEPS = 20; // bisection steps for a hook's size ceiling: well und
 
 // Every way to break `count` words into rows in order (word indexes per row) with no row but the last ending on a weak
 // word (breaks.mjs isWeakEnd).
-function wordRows(plain) {
+function wordRows(plain, before = new Set()) {
   const sets = [];
   const grow = (from, rows) => {
     if (from === plain.length) { sets.push(rows); return; }
     for (let to = from + 1; to <= plain.length; to++) {
-      if (to < plain.length && isWeakEnd(plain[to - 1])) continue;
+      if (to < plain.length && isWeakEnd(plain[to - 1]) && !before.has(to)) continue;
       grow(to, [...rows, Array.from({ length: to - from }, (_, k) => from + k)]);
     }
   };
@@ -150,9 +150,14 @@ function wordRows(plain) {
 // The row sets a hook is tried in: with look.stack.hookWrap (poster: the viral hook is the film's biggest type, filled
 // by size and wrapped by words; gate-poster-tall render 1 set a six-word hook in its own two rows, the second under the
 // floor) every set wordRows allows; else the stack's own rows and, for a short hook, a word a line.
-function hookCandidates(words, own, ctx) {
+function hookCandidates(words, own, ctx, lead) {
   const plain = words.map(bare);
-  if (ctx.look.stack?.hookWrap === true && words.length <= HOOK_WRAP_MAX_WORDS) return wordRows(plain);
+  // look.stack.hookLead (poster, gate-poster-1 ruling 4): a row may end on a weak word just before an emphasised word,
+  // so the starred word takes a row of its own at the large size ("WRITE THE / SCRIPT.")
+  const before = ctx.look.stack?.hookLead === true && lead instanceof Set ? lead : new Set();
+  // the lead's ruling: only where the next row is the emphasised word alone
+  const alone = (rows, k) => !isWeakEnd(plain[rows[k].at(-1)]) || rows[k + 1].every((i) => before.has(i));
+  if (ctx.look.stack?.hookWrap === true && words.length <= HOOK_WRAP_MAX_WORDS) return wordRows(plain, before).filter((rows) => rows.slice(0, -1).every((_, k) => alone(rows, k)));
   if (words.length > HOOK_MAX_WORDS || plain.slice(0, -1).some(isWeakEnd)) return null;
   return [own.rows, words.map((_, i) => [i])];
 }
@@ -176,11 +181,11 @@ function betterHook(area, min) {
 
 // A hook (a viral film's first statement) may be set in other rows when that sets it larger (hookCandidates), each set
 // kept to look.stack.hook of the area's height.
-function hookLines(words, own, fitted, area, ctx) {
+function hookLines(words, own, fitted, area, ctx, lead) {
   const share = ctx.look.stack?.hook;
   const plain = words.map(bare);
   const forced = words.some((w) => w.endsWith(FORCE_MARK));
-  const sets = Number.isFinite(share) && words.length >= 2 && !forced ? hookCandidates(words, own, ctx) : null;
+  const sets = Number.isFinite(share) && words.length >= 2 && !forced ? hookCandidates(words, own, ctx, lead) : null;
   if (sets === null) return own;
   const limit = share * area.h;
   // too tall: the largest lines come down first (a ceiling), and only when every line is at the ceiling all shrink
@@ -266,7 +271,7 @@ export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = fa
   const fitted = (rows) => keepRatio(rows.map((row) => fitLine(row.map((i) => bare(words[i])), area.w, limits, ctx)), rows, words, ctx, lead);
   let rows = stackLines(words);
   let lines = fitted(rows);
-  if (hook) ({ rows, lines } = hookLines(words, { rows, lines }, fitted, area, ctx));
+  if (hook) ({ rows, lines } = hookLines(words, { rows, lines }, fitted, area, ctx, lead));
   else ({ rows, lines } = grownLines(words, { rows, lines }, fitted, area, ctx));
   if (widen !== undefined && rows.length === 1) lines = [fitLine(rows[0].map((i) => bare(words[i])), area.w, limits, ctx, { width: widen })];
   const tag = kickerHeight(shot, ctx);
@@ -347,7 +352,8 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bar
   });
   const group = node('group', hero, {}, { children });
   const kicker = placed.kicker === null ? [] : registries.devices.get('tag').build({
-    id: `${shot.id}.kicker`, text: shot.kicker, box: [placed.kicker.left, placed.kicker.top, 1, 1], at: look.moves.enter.dur, look, unit, seed, measure,
+    // set on the shot's first frame in a look whose shots open set (poster: gate-poster-1 ruling 7, chips not faded in)
+    id: `${shot.id}.kicker`, text: shot.kicker, box: [placed.kicker.left, placed.kicker.top, 1, 1], at: opensSet(look) ? 0 : look.moves.enter.dur, look, unit, seed, measure,
   }).nodes;
   return { group, kicker, boxes: Object.fromEntries([['text', unionBox(boxes)], ...boxes.map((box, i) => [`word:${i}`, box])]) };
 }

@@ -16,6 +16,7 @@ import { chartTimes } from './chart-time.mjs';
 import { chartData } from './chart-marks.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { HERO_MARGIN } from './secondary.mjs';
+import { expandHeroChart } from './chart-hero.mjs';
 
 const HALF = 2;
 const DEFAULT_PUNCH = Object.freeze({ scale: 1.08, dur: 0.12 }); // for a look whose devices name no punch
@@ -79,6 +80,9 @@ function flagOverflow(nodes, id) {
  * it (headroom), or in a donut's hole, so it never pushes the plot down.
  */
 export function expandPopChart(shot, ctx, data, hero) {
+  // a look that sets its chart as a poster (look.kinds.chart.heroTop: the value the hero, the plot the free height); a
+  // scatter, race or donut keeps the composition below
+  if (data.heroTop === true && ['column', 'bar'].includes(shot.type)) return expandHeroChart(shot, ctx, data, hero, highlightedText(shot));
   const { look, unit } = ctx;
   const style = chartStyle(ctx, data);
   const { font, gap } = style;

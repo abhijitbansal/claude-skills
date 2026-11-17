@@ -11,7 +11,9 @@ const ROLES = ['display', 'text', 'label'];
 // uses 72). In viral at 9:16 the platform safe zone (safeZone 'mode') with the band below
 const GRID = Object.freeze({ columns: 12, margin: 72, gutter: 16 });
 const GRID_TALL = Object.freeze({ columns: 12, margin: 72, gutter: 16 });
-const HAIRLINES = 0.25; // the column hairlines in the ground's second colour at this alpha
+// the column hairlines' alpha: 0, the grounds are flat (gate-poster-1 film finding 7, the lead's ruling 7: the hairlines
+// read as a stripe texture; the plan's "the grid shows" gives way to the brief's flat grounds)
+const HAIRLINES = 0;
 const ENTER = Object.freeze({ ease: 'outExpo', dur: 0.16, scale: 0.8 });
 const BAR = 16; // units: a cut bar's thickness (arrow, underline, bracket, ring)
 
@@ -63,7 +65,11 @@ export const poster = {
   // turned 90 degrees to run up the frame (kinds/stack-turn.mjs; ban 2's 65 percent). hookWrap: the hook is tried in
   // every set of rows its words allow and set in the one that sets it largest (stack.mjs hookCandidates), so a long hook
   // puts its emphasis on a short row of its own (gate-poster-tall render 1: a six-word hook fell under the floor)
-  stack: { ratio: 1.35, centre: 0.45, hook: 0.65, grow: 0.65, turn: 0.65, hookWrap: true },
+  // gate-poster-1 ruling 4 (the hook stops the scroll): `hookLead`, a row may end on a weak word just before the starred
+  // word, so that word takes a row of its own at the large size (upright, "THE SCRIPT." capped the emphasised row at
+  // about 178 units: p5 concern 1); `hook` 0.95: the five rows may take the band's height (at 0.65 the ceiling brought
+  // the starred row down to the others' size); the hook then fills about 77 percent of the band (real glyphs)
+  stack: { ratio: 1.35, centre: 0.45, hook: 0.95, grow: 0.65, turn: 0.65, hookWrap: true, hookLead: true },
   // on 9:16 in viral, the composition band as shares of the height inside the platform sides
   band: { top: 0.14, bottom: 0.78 },
   // a viral hook opens at full ink on frame 0 (ban 5); every shot opens composed, its words set from the first frame
@@ -92,6 +98,9 @@ export const poster = {
   cutPalette: ['cut', 'cover', 'iris', 'wipe', 'punch', 'slide'],
   // a cover is a hard sheet of the next ground (the bar that wipes is the cut paper): no smear
   cutStyle: { cover: { smear: false } },
+  // gate-poster-1 ruling 6: where a film names no cut, every third shot opens on the cover (engine/cuts/resolve.mjs
+  // pickedCut): the next shot's ground sheet slides over the last, a cut-paper wipe in the look's own grounds
+  cutPick: { cut: 'cover', every: 3, directions: ['up', 'left'] },
   keyline: 8,
   // nothing casts a shadow: paper is flat
   shadow: { dx: 0, dy: 0, blur: 0, alpha: 0, color: '#141414' },
@@ -125,7 +134,8 @@ export const poster = {
     // set three sizes (the two-size rule)
     // the ask's tag in the accent with the accent's own ink (on the ink ground the accent tag set the ground's ink on
     // red; the plate is red on the blue ground, a banned pair)
-    end: { askSteps: [1, 2], askGap: 40, askFill: 'accent', askText: 'accentText' },
+    // askHold: the ask is on screen at least 1.6 s before the cut (gate-poster-1 ruling 3: at least 1.5 s)
+    end: { askHold: 1.6, askSteps: [1, 2], askGap: 40, askFill: 'accent', askText: 'accentText' },
     // clipping: the picture without a card: on the cut card the line caption under a pushed picture landed on the card's
     // ink and read ink on ink (the frame review's contrast rule at 16:9)
     clipping: { card: false, turn: 0 },
@@ -144,7 +154,15 @@ export const poster = {
     compare: { pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32, stackTall: true, sideGap: 64, dim: 1, valueTall: 0.3 },
     // the claim as the tag, bars as flat cut paper, the numeral the only accent, the other marks the opaque `dim`; the
     // finished chart held 1.2 s before the cut and every point of a line labelled (the ledger gate's rulings)
-    chart: { settle: 1.2, pointLabels: true, pointFace: 'text', tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, dimTo: 'dim', refs: false, minPlot: 0.4, point: 14 },
+    // gate-poster-1 ruling 2, for a column or bar chart: `heroTop` (kinds/chart-hero.mjs) sets the highlighted value as
+    // the hero (numeralShare of the height, the whole width at 9:16, `heroColumn` of it beside the plot at 16:9), the
+    // claim in display capitals at the labels' size under it (`titleStep` only without a highlight), and the plot in all
+    // the height left; `tight`: the tallest bar reaches the plot's top; `together`: the bars grow over one window, so no
+    // frame shows them out of the data's order; `grounds`: a chart stands
+    // only where the red accent reads (paper, ink: grounds.mjs groundKeys); the claimed bar grows in the accent and the
+    // others in the ground's ink from the first frame (`startFinal`, `dimTo: 'ink'`: never a grey under 3:1), each from
+    // `growFrom` of its height, so the shot opens on every bar's base; the source wraps to two lines (`sourceLines`)
+    chart: { heroTop: true, grounds: ['paper', 'ink'], heroColumn: 0.46, heroGap: 64, titleStep: 3, numeralShareTall: 0.2, sourceLines: 2, growFrom: 0.06, tight: true, together: true, startFinal: true, settle: 1.2, pointLabels: true, pointFace: 'text', tagSteps: [2, 3], tagGap: 32, numeralMax: 360, numeralShare: 0.3, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, dimTo: 'ink', refs: false, minPlot: 0.4, point: 14 },
     // at 9:16 the route to the region panel draws once the panel is in (linkAfter), and a panel crop of 80 percent of the
     // picture's width or more takes all of it (wholeWidth): words were cut at its edge
     screen: { linkAfter: true, wholeWidth: 0.8, fill: 'ink', line: 'ink', lineWidth: 10, dots: 'rule', pill: 'cardPlate', text: 'inkText', urlText: 'cardPlateText', wideShare: 0.8, gap: 44 },
@@ -154,7 +172,10 @@ export const poster = {
     diagram: { card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 18, gap: 56, margin: 12, platePad: 10, plate: 'paper', arrow: 'ink', arrowWidth: 12, head: 34, text: 'paper', edgeText: 'ink', titleSteps: [3], titleGap: 40, dim: 1, current: false, advance: 0.48 },
     timeline: { whenSteps: [5, 4], whatSteps: [3, 2], whenLines: 2, whatLines: 3, rail: 48, dot: 12, ring: 1.7, rule: 'ink', ruleWidth: 4, dotFill: 'ink', lit: 'ink', when: 'ink', what: 'ink', partGap: 24, gap: 24, titleSteps: [3], titleGap: 40, advance: 0.45 },
     // lineHeight 1.3 (pop's 1.4): at 16:9 the 72-unit margins leave room for 10 rows at 1.4, and the example has 11
-    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.3, pad: 32, steps: [2, 3], card: false, fill: 'ink', line: 'ink', lineWidth: 10, roles: { plain: 'inkText', keyword: 'inkText', string: 'inkText', number: 'inkText', comment: 'inkText', name: 'inkText', punct: 'inkText' }, highlight: { band: 'cardPlate', text: 'cardPlateText' }, removed: 'inkText', added: 'inkText', strike: 6, prompt: 'inkText', heroAdvance: 0.45 },
+    // gate-poster-1 ruling 1: the title is the hero in display capitals at 16:9 too (`heroWide`, for code of at most
+    // `heroWideRows` rows), the code takes the full width under it at up to a third of the hero, and every line is set on
+    // frame 0 (`setOnOpen`)
+    code: { heroWide: true, heroWideRows: 6, heroMax: 300, setOnOpen: true, font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.3, pad: 32, steps: [2, 3], card: false, fill: 'ink', line: 'ink', lineWidth: 10, roles: { plain: 'inkText', keyword: 'inkText', string: 'inkText', number: 'inkText', comment: 'inkText', name: 'inkText', punct: 'inkText' }, highlight: { band: 'cardPlate', text: 'cardPlateText' }, removed: 'inkText', added: 'inkText', strike: 6, prompt: 'inkText', heroAdvance: 0.45 },
     feed: { steps: [2, 3, 4], maxLines: 4, pad: 26, gap: 24, share: 0.82, radius: 0, bold: 900, me: { fill: 'ink', text: 'inkText' }, them: { fill: 'accent', text: 'accentText' }, card: { fill: 'ink', text: 'inkText' }, discs: ['ink'], discText: 'inkText', dots: 'ink', title: 'ink', line: 'ink', lineWidth: 6, shadow: false },
     // fitTall: at 9:16 the picture is a cut-out filling the band over its caption in the ground's ink (a bleed's caption
     // card in ink was lost on the ink ground and left the band's lower part to a dark picture)
