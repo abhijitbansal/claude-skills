@@ -5,7 +5,8 @@
 // rectangle. The caller puts its content on top.
 // `edge: 'rounded'` (cosmos) is a rounded rectangle of the style's `radius` (units), set square: no tilt, no tape, no
 // jitter. Over its paper lies a faint lighter sheen (`<id>.sheen`, a soft-edged group of rings inset so its edge stays
-// on the card: a soft inner gradient) and a 1-unit lighter edge stroke (`<id>.edge`). Pure and DOM-free.
+// on the card: a soft inner gradient) and a 1-unit lighter edge stroke (`<id>.edge`). `edge: 'hairline'` (ledger) is
+// the paper and a hairline edge (`line`, `width`), square, with no shadow. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import {
   checkParams, isHand, styleOf, colourOf, deviceRng, spread, entrance, polyline, roundedRect, softRoundedRect, styledBy,
@@ -108,11 +109,27 @@ function roundedCard({ id, box, at, look, unit }, style) {
   return { nodes: [entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, children: parts })] };
 }
 
+const HAIRLINE_EDGE = 1; // units: a hairline card's edge, when its style names no width
+
+// A hairline card (`edge: 'hairline'`, ledger's plain card): the paper, square and exact, and a hairline edge in `line`
+// (a palette key or #rrggbb), `width` units; no shadow, no tape, no tilt.
+function hairlineCard({ id, box, at, look, unit }, style) {
+  const [x, y, w, h] = box;
+  const d = polyline([[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]], true);
+  const fill = style.fill === undefined ? lighten(look.palette.paper, LIGHTER) : colourOf(look, style.fill);
+  const parts = [
+    node('path', `${id}.paper`, { d, fill }),
+    node('path', `${id}.edge`, { d, stroke: colourOf(look, style.line ?? 'rule'), strokeWidth: (style.width ?? HAIRLINE_EDGE) * unit }),
+  ];
+  return { nodes: [entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, children: parts })] };
+}
+
 function buildCard(params) {
   const { id, box, at, look, unit, seed } = checkParams('card', params);
   const [x, y, w, h] = box;
   const style = styleOf(look, 'card');
   if (style.edge === 'rounded') return roundedCard({ id, box, at, look, unit }, style);
+  if (style.edge === 'hairline') return hairlineCard({ id, box, at, look, unit }, style);
   const hand = isHand(look), rng = deviceRng(seed, id, 'card');
   const rotate = hand ? spread(rng, TILT) : 0;
   const d = paperOutline(style.edge, [w, h], unit, hand, rng);

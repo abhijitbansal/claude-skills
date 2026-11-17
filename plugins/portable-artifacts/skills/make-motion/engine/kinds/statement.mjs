@@ -97,7 +97,9 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   const whole = (layout) => !(data.together && wide) || !layout.lines.some((line) => together[line.words.at(-1).index]);
   const clears = (layout) => !clear || !overlaps(clear, blockInk(place(layout, { ...font, size: layout.size }), ctx.measure));
   const accept = clear || (data.together && wide) ? (layout) => clears(layout) && whole(layout) : undefined;
-  const opts = { text, font, maxWidth: span.w, align, measure: ctx.measure, optical: true, together, accept };
+  // an emphasis that changes a word's weight measures every word at the weight it reaches (emphasis.mjs reserve)
+  const reserve = emphasisOf(look).reserve?.(look);
+  const opts = { text, font, maxWidth: span.w, align, measure: ctx.measure, optical: true, together, accept, ...(reserve === undefined ? {} : { reserve }) };
   // a look may allow more lines and more of the band's height on a tall frame (look.maxLinesTall, kinds.statement
   // tallHeight, cosmos: a wide face would set the hook small), and ask a wide frame for at most `linesWide` lines
   const maxLines = !wide && look.maxLinesTall ? look.maxLinesTall.display : look.maxLines.display;

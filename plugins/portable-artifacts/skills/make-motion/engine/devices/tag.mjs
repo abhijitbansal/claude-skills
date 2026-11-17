@@ -1,8 +1,10 @@
 // The `tag` device: a small coloured label in caps. One group (the object entrance) holding the plate and a text
 // node set in the look's label font at scale step 1. The tag measures its own text, so `build` needs `measure`, and
 // it returns its measured box in `boxes.tag` ([x, y, w, h] in canvas pixels, top left at the given box's top left)
-// so a caller can place things beside it; the given box's own size is not used. A look whose tag style says
-// `shape: 'pill'` (cosmos) gets a pill plate: a rounded rectangle whose radius is half its height. Pure and DOM-free.
+// so a caller can place things beside it; the given box's own size is not used (but by a ruled tag). A look whose tag style says
+// `shape: 'pill'` (cosmos) gets a pill plate: a rounded rectangle whose radius is half its height. A style with a `rule`
+// (ledger) is ruled: a thin rule runs right from the plate's mid height to the given box's right edge, which is then
+// read. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { checkParams, isHand, styleOf, colourOf, deviceRng, spread, entrance, polyline, roundedRect, styledBy } from './shared.mjs';
@@ -43,8 +45,19 @@ function buildTag(params) {
     x: -w / HALF + PAD_X * unit, y: -h / HALF + PAD_Y * unit, layout, font, fill: colourOf(look, style.text ?? DEFAULT_TEXT), role: 'tag',
   });
   const [x, y] = box;
-  const group = entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, children: [plate, label] });
+  const rule = ruleNode(id, style.rule, { look, unit, w, reach: x + box[2] - (x + w / HALF) });
+  const group = entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, children: [plate, label, ...rule] });
   return { nodes: [group], boxes: { tag: [x, y, w, h] } };
+}
+
+// A ruled tag's rule (style.rule: { color, width units }, ledger): from the plate's right edge on its mid height to the
+// given box's right edge (`reach`, group-local: the group sits on the plate's centre). None without the style, or when
+// the box ends at the plate.
+function ruleNode(id, rule, { look, unit, w, reach }) {
+  if (rule === undefined || reach <= w / HALF) return [];
+  return [node('path', `${id}.rule`, {
+    d: polyline([[w / HALF, 0], [reach, 0]]), stroke: colourOf(look, rule.color), strokeWidth: rule.width * unit, lineCap: 'butt',
+  })];
 }
 
 export const tag = Object.freeze({

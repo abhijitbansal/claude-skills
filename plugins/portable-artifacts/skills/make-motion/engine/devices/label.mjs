@@ -2,10 +2,11 @@
 // a map labels a place or a diagram an edge. The text is set in the look's text face (or the `face` given) at the one size the caller gives
 // (`size`, px), on the side of the anchor with room inside `box` (the area the label may use; `side` keeps a given
 // side), and never leaves `box`. The leader draws on with the look's draw move and the text fades in, both landing on
-// `at`. Returns { nodes: [group], boxes: { label: the text's box }, side }. Pure and DOM-free.
+// `at`. A style with a `dot` (ledger) ends the leader on a dot of that diameter. Returns { nodes: [group], boxes: {
+// label: the text's box }, side }. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { checkParams, isHand, styleOf, colourOf, landing, polyline, styledBy } from './shared.mjs';
+import { checkParams, isHand, styleOf, colourOf, landing, polyline, styledBy, at2 } from './shared.mjs';
 import { setCase } from '../kinds/shared.mjs';
 
 const SIDES = Object.freeze(['right', 'left', 'above', 'below']);
@@ -46,7 +47,9 @@ function nearestEdge([x, y, w, h], side) {
 }
 
 function buildLabel(params) {
-  const { id, box, at, look, unit, measure } = checkParams('label', params, ['text', 'anchor', 'size', 'side', 'face']);
+  const { id, box, at, look, unit, measure } = checkParams('label', params, ['text', 'anchor', 'size', 'side', 'face', 'gap']);
+  // `gap`: units between the anchor and the text, in place of GAP (a chart's note keeps to the room its values keep)
+  if (params.gap !== undefined && !(Number.isFinite(params.gap) && params.gap >= 0)) throw new Error(`label: gap must be a number of units >= 0, got ${params.gap}`);
   const { anchor, size } = params;
   // `face`: the look's font role to set the text in (default 'text'); a 'label' face takes the look's label case
   const face = params.face ?? 'text';
@@ -59,7 +62,7 @@ function buildLabel(params) {
   if (measure === undefined) throw new Error('label: needs params.measure to size its text');
   const font = textFont(look, size, unit, face);
   const layout = layoutText({ text, font, maxWidth: NO_WRAP, measure });
-  const gap = GAP * unit;
+  const gap = (params.gap ?? GAP) * unit;
   const side = params.side ?? SIDES.reduce((best, s) => (overflowOf(s, anchor, layout.width, layout.height, gap, box) < overflowOf(best, anchor, layout.width, layout.height, gap, box) ? s : best));
   const [px, py] = placed(side, anchor, layout.width, layout.height, gap);
   const x = clamp(px, box[0], box[0] + box[2] - layout.width), y = clamp(py, box[1], box[1] + box[3] - layout.height);
@@ -73,7 +76,25 @@ function buildLabel(params) {
   const label = node('text', `${id}.text`, { x, y, layout, font, fill: colourOf(look, style.text ?? 'ink'), role: 'label' }, {
     tracks: { opacity: landing(at, look.moves.enter, 0, 1) },
   });
-  return { nodes: [node('group', id, {}, { children: [leader, label] })], boxes: { label: textBox }, side };
+  return { nodes: [node('group', id, {}, { children: [leader, ...dotNode(id, anchor, style, look, unit, at), label] })], boxes: { label: textBox }, side };
+}
+
+// The dot a leader ends on (style.dot: its diameter in units, ledger), in the leader's colour, landing with it; none
+// without the style.
+function dotNode(id, [ax, ay], style, look, unit, at) {
+  if (style.dot === undefined) return [];
+  const r = (style.dot * unit) / HALF;
+  return [node('path', `${id}.dot`, { d: circlePath(ax, ay, r), fill: colourOf(look, style.line ?? 'ink') }, { tracks: { opacity: landing(at, look.moves.enter, 0, 1) } })];
+}
+
+// A closed circle of radius r about (cx, cy) in four cubic quarter arcs (devices write only M, L, Q, C and Z).
+const QUARTER = 0.5523; // control-point distance of a quarter circle, as a share of the radius
+function circlePath(cx, cy, r) {
+  const k = QUARTER * r;
+  return `M${at2([cx + r, cy])}C${at2([cx + r, cy + k])} ${at2([cx + k, cy + r])} ${at2([cx, cy + r])}`
+    + `C${at2([cx - k, cy + r])} ${at2([cx - r, cy + k])} ${at2([cx - r, cy])}`
+    + `C${at2([cx - r, cy - k])} ${at2([cx - k, cy - r])} ${at2([cx, cy - r])}`
+    + `C${at2([cx + k, cy - r])} ${at2([cx + r, cy - k])} ${at2([cx + r, cy])}Z`;
 }
 
 export const label = Object.freeze({

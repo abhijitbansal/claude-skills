@@ -72,7 +72,7 @@ export function drawnLeaves(sampled, parent = [1, 0, 0, 1, 0, 0], alpha = 1, sca
 }
 
 // Content: drawn leaves that are not ground (a path covering most of the canvas).
-const contentOf = (leaves, canvas) => leaves.filter((l) => !(l.node.type === 'path' && l.box[2] * l.box[3] >= GROUND_SHARE * canvas.w * canvas.h));
+export const contentOf = (leaves, canvas) => leaves.filter((l) => !(l.node.type === 'path' && l.box[2] * l.box[3] >= GROUND_SHARE * canvas.w * canvas.h));
 
 const allNodes = (nodes) => nodes.flatMap((n) => [n, ...allNodes(n.children)]);
 
@@ -128,7 +128,7 @@ export function tallViolations({ nodes, duration, canvas, safe }) {
 // ---- 3. no exemption from the 3x hero rule ----
 
 // The sampled tree as a snapshot (window.__snapshot's shape): every node with a canvas bbox, texts with their layout.
-function snapshotOf(sampled, parent = [1, 0, 0, 1, 0, 0]) {
+export function snapshotOf(sampled, parent = [1, 0, 0, 1, 0, 0]) {
   return sampled.map((n) => {
     const m = multiply(parent, localMatrix(n));
     const children = snapshotOf(n.children, m);

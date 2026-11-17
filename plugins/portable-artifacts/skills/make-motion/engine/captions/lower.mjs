@@ -8,13 +8,15 @@
 // sized to that width. One card per shot, sized to its largest group, on screen while a group is; the groups swap inside
 // it as each one's last word ends. An emphasised word is
 // marked with the look's emphasis: a highlighter band drawn on as it is spoken (a highlight look), else its fill turns
-// accent. Pure and DOM-free.
+// accent. A look that selects the plain variant (look.captionVariant 'plain', ledger) gets a white strip with a top
+// hairline instead of the taped card, the text face in sentence case, and the word being heard in ink at 600 (PLAIN).
+// Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { sizeAt, fontFor, setCase, isWide, runInk, shownFrom, asTextCard, compositionRect, requireDevice } from '../kinds/shared.mjs';
-import { captionGroups, groupTimes, fitGroup, heardStart, columnRight, visibleDuring, spokenLayout, clearZone, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
+import { captionGroups, groupTimes, fitGroup, heardStart, heardEnd, columnRight, visibleDuring, spokenLayout, clearZone, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
 
 const LOWER = Object.freeze({
   step: 2, // label caps at scale step 2, as a slug's kicker
@@ -30,8 +32,14 @@ const LOWER = Object.freeze({
 });
 const PROBE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'; // the average advance of a capital, for how many fit on a line
 const HALF = 2;
+// The plain strip (look.captionVariant 'plain', ledger): the text face in sentence case on a white strip with a top
+// hairline in the rule colour; the word being spoken in ink at SPOKEN_WEIGHT (every word measured at it, so nothing
+// moves), the rest in ink2.
+const PLAIN = Object.freeze({ strip: '#ffffff', line: 'rule', lineWidth: 1, rest: 'ink2', spoken: 'ink', weight: 600 });
+const isPlain = (look) => look.captionVariant === 'plain';
+const faceOf = (look) => (isPlain(look) ? 'text' : 'label');
 
-const labelFont = (ctx) => fontFor(ctx.look, 'label', sizeAt(ctx.look, LOWER.step, ctx.unit), ctx.unit);
+const labelFont = (ctx) => fontFor(ctx.look, faceOf(ctx.look), sizeAt(ctx.look, LOWER.step, ctx.unit), ctx.unit);
 const pitchOf = (font) => font.lineHeight * font.size;
 
 /**
@@ -63,9 +71,11 @@ function groupingFor(width, font, ctx) {
 
 // One group laid out in caps at `size` px: { layout, font, ink: { up, down, left }, block } with block its ink's height.
 function setAt(group, size, maxWidth, ctx) {
-  const font = fontFor(ctx.look, 'label', size, ctx.unit);
-  const text = setCase(ctx.look, 'label', group.words.map((w) => w.text).join(' '));
-  const layout = spokenLayout(layoutText({ text, font, maxWidth, measure: ctx.measure }), group, text, ctx.captionId);
+  const face = faceOf(ctx.look);
+  const font = fontFor(ctx.look, face, size, ctx.unit);
+  const text = setCase(ctx.look, face, group.words.map((w) => w.text).join(' '));
+  const reserve = isPlain(ctx.look) ? { reserve: { weight: PLAIN.weight } } : {};
+  const layout = spokenLayout(layoutText({ text, font, maxWidth, measure: ctx.measure, ...reserve }), group, text, ctx.captionId);
   const inks = layout.lines.map((line) => runInk(line, font, ctx.measure));
   const ink = { up: inks[0].up, down: inks.at(-1).down, left: Math.min(...inks.map((i) => i.left)), right: Math.max(...inks.map((i) => i.right)) };
   return { layout, font, ink, block: ink.up + layout.lines.at(-1).y - layout.lines[0].y + ink.down };
@@ -99,6 +109,31 @@ function emphasisOf(set, group, origin, ctx, { id, until }) {
   return { bands, wordTracks: [] };
 }
 
+// The plain strip's word tracks: every word in ink2, the one being heard in ink (the accent when emphasised) at
+// PLAIN.weight from its heard start to its heard end.
+function plainWordTracks(set, group, look) {
+  const rest = look.palette[PLAIN.rest], base = look.fonts.text.weight;
+  return set.layout.lines.flatMap((l) => l.words).sort((a, b) => a.index - b.index).map((w) => {
+    const word = group.words[w.index];
+    const [from, to] = [heardStart(word), Math.max(heardStart(word), heardEnd(word))];
+    const on = word.emphasis ? look.palette.accent : look.palette[PLAIN.spoken];
+    return {
+      fill: track([{ t: 0, v: rest }, { t: from, v: rest }, { t: from, v: on }, { t: to, v: on }, { t: to, v: rest }]),
+      weight: track([{ t: 0, v: base }, { t: from, v: base }, { t: from, v: PLAIN.weight }, { t: to, v: PLAIN.weight }, { t: to, v: base }]),
+    };
+  });
+}
+
+// The plain strip around the largest group: a white strip (`.strip`, the text card) and its top hairline, square and
+// pinned to the frame, shown by `opacity`.
+function stripGroup(ctx, [x, y, w, h], opacity, children) {
+  const { look, unit, captionId } = ctx;
+  const d = `M${-w / HALF} ${-h / HALF}L${w / HALF} ${-h / HALF}L${w / HALF} ${h / HALF}L${-w / HALF} ${h / HALF}Z`;
+  const strip = node('path', `${captionId}.strip`, { d, fill: PLAIN.strip, textCard: true });
+  const line = node('path', `${captionId}.hairline`, { d: `M${-w / HALF} ${-h / HALF}L${w / HALF} ${-h / HALF}`, stroke: look.palette[PLAIN.line], strokeWidth: PLAIN.lineWidth * unit });
+  return node('group', captionId, { x: x + w / HALF, y: y + h / HALF, fixed: true }, { tracks: { opacity }, children: [strip, line, ...children] });
+}
+
 // The card around the largest group, as built by the card device (square, its entrance replaced by `opacity`).
 function cardGroup(ctx, box, opacity, children) {
   const { look, unit, seed, captionId } = ctx;
@@ -109,7 +144,7 @@ function cardGroup(ctx, box, opacity, children) {
 /** The shot's caption nodes: one taped card holding each group in turn. */
 function compose(words, ctx) {
   const { look, unit, timing, fps, captionId, hero, filmStart } = ctx;
-  requireDevice(look, 'card', 'caption style lower');
+  if (!isPlain(look)) requireDevice(look, 'card', 'caption style lower');
   const z = zone(ctx);
   const pad = LOWER.pad * unit;
   const groups = captionGroups(words, groupingFor(z[2], labelFont(ctx), ctx));
@@ -122,13 +157,13 @@ function compose(words, ctx) {
     const id = `${captionId}.${k}`;
     // flush left on the card's padding, the block centred in the card's height (card-local: its centre is 0, 0)
     const origin = { x: -w / HALF + pad - set.ink.left, y: -set.block / HALF + set.ink.up - set.layout.lines[0].y };
-    const { bands, wordTracks } = emphasisOf(set, groups[k], origin, ctx, { id, until: times[k].until });
+    const { bands, wordTracks } = isPlain(look) ? { bands: [], wordTracks: plainWordTracks(set, groups[k], look) } : emphasisOf(set, groups[k], origin, ctx, { id, until: times[k].until });
     const emphasis = set.layout.lines.flatMap((l) => l.words).filter((wd) => groups[k].words[wd.index]?.emphasis).map((wd) => wd.index);
     const caption = { zone: z, end: filmStart + times[k].end, hero, emphasis, marks: ctx.markIds ?? [] };
     const text = node('text', `${id}.text`, { ...origin, layout: set.layout, font: set.font, fill: look.palette.ink, role: 'caption', furniture: true, caption }, { wordTracks });
     return node('group', id, {}, { tracks: { opacity: shownFrom(times[k].at, times[k].until) }, children: [...bands, text] });
   });
-  return [cardGroup(ctx, box, visibleDuring(times), children)];
+  return [(isPlain(look) ? stripGroup : cardGroup)(ctx, box, visibleDuring(times), children)];
 }
 
 export const lower = {

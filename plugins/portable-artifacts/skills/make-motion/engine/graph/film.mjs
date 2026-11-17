@@ -10,7 +10,7 @@ import '../kinds/index.mjs';
 import '../cuts/index.mjs';
 import { resolveShotCut, explicitCut } from '../cuts/resolve.mjs';
 import { smearPlan, smearsAlong } from '../cuts/smear.mjs';
-import { applyAccent, gridX } from '../looks/index.mjs';
+import { applyAccent, gridX, lookForFormat } from '../looks/index.mjs';
 import { unitOf } from '../units.mjs';
 import { srcsOfShot } from '../assets.mjs';
 import { resolveAnchor } from '../script/anchors.mjs';
@@ -29,10 +29,11 @@ const TIME_DECIMALS = 1e9; // shot-local time is rounded to 1e-9 s, so float noi
  *  sample: the drawn frame (frameAt) and the audited one (the page's __snapshotShot) read a shot at the same time. */
 export const shotTime = (t, start) => Math.round((t - start) * TIME_DECIMALS) / TIME_DECIMALS + 0; // + 0 turns -0 into 0
 
-/** The film's look: its `look`, else its mode's default, with the film's `accent` applied. */
+/** The film's look: its `look`, else its mode's default, with the film's `accent` applied and its format's grid
+ *  (lookForFormat: the same object for a look with one grid). */
 export function resolveLook(film) {
   const mode = registries.modes.get(film.mode ?? DEFAULT_MODE);
-  const look = registries.looks.get(film.look ?? mode.defaultLook);
+  const look = lookForFormat(registries.looks.get(film.look ?? mode.defaultLook), film.format ?? mode.defaultFormat);
   return film.accent === undefined ? look : applyAccent(look, film.accent);
 }
 

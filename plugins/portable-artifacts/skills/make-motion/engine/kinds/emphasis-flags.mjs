@@ -16,6 +16,8 @@ export const EMPHASIS_FLAGS = Object.freeze({
   recolor: Object.freeze({ together: never }),
   // a glow look may keep its emphasised phrases whole on a wide frame (look.kinds.statement.together, cosmos)
   glow: Object.freeze({ together: (ctx) => ctx.look.kinds?.statement?.together === true && isWide(ctx.canvas) }),
+  // a step to a heavier weight in the accent (ledger): a pointer like the highlight, capped at the same share
+  'weight-color': Object.freeze({ together: never, maxShare: EMPHASIS_SHARE }),
 });
 
 /** The name of look.emphasis when the table has it; throws naming the look, the name and the names the table has. */

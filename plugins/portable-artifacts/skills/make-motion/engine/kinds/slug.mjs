@@ -2,14 +2,16 @@
 // the way a picture desk slugs a print: the shot's number among the film's numbered shots as a display-serif numeral,
 // the kicker under it in label caps. The card's right margin equals the text block's left margin (the text
 // starts on column 2, so the card ends on the right edge of column 11) and its top sits at 14% of the height, turned +3 degrees, the same in every shot; it enters with the look's enter move at the shot start. A
-// shot without a kicker has no slug. Built from the `card` device plus two text nodes inside its group. Pure, DOM-free.
+// shot without a kicker has no slug. Built from the `card` device plus two text nodes inside its group. A look whose
+// slug is its tag (look.slug.style 'tag', ledger) sets the kicker on its tag device at the top left instead, the tag's
+// rule running to the right margin. Pure, DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
 import { pathPoints } from '../devices/shared.mjs';
 import { sizeAt, fontFor, setCase, isEditorial, inkExtent, asTextCard } from './shared.mjs';
-import { editorialBounds, editorialRight } from './editorial.mjs';
+import { editorialBounds, editorialRight, editorialSpan } from './editorial.mjs';
 
 export const SLUG = Object.freeze({ top: 0.14, turn: 3, pad: 30, gap: 18, numeralStep: 3, kickerStep: 2, digits: 2, maxColumns: 3 });
 const TEXT_COLUMN = 2; // the column a text block starts on: the slug's right margin is as wide as the text's left one
@@ -22,6 +24,22 @@ const turnOf = (look) => look.slug?.turn ?? SLUG.turn;
 
 /** Does this shot carry a slug? An editorial look that styles a card, and a kicker. */
 export const hasSlug = (shot, look) => shot.kicker !== undefined && isEditorial(look) && Object.hasOwn(look.devices ?? {}, 'card');
+
+// A look whose slug is its tag (look.slug.style 'tag', ledger): the kicker on the look's tag at the top left, on the text
+// column, the tag's rule running to the right margin; no card, no number, square.
+const isTagSlug = (look) => look.slug?.style === 'tag';
+
+// The tag slug's box: from the text column (or the band's left in the safe zone) at the top of the composition to the
+// right margin, as tall as the tag; and the tag device built in it.
+function tagSlug(shot, ctx) {
+  const { look, canvas, unit, measure } = ctx;
+  const bounds = editorialBounds(ctx);
+  const x = bounds.safe ? editorialSpan(ctx, 1, 1).x : gridX(look, canvas, TEXT_COLUMN);
+  const right = editorialRight(ctx);
+  const probe = registries.devices.get('tag').build({ id: `${shot.id}.slug`, box: [x, bounds.top, right - x, 1], at: look.moves.enter.dur, look, unit, seed: ctx.seed, measure, text: shot.kicker });
+  const box = [x, bounds.top, right - x, probe.boxes.tag[3]];
+  return { box, group: probe.nodes[0] };
+}
 
 // The kicker on one line, or, when that is wider than SLUG.maxColumns grid columns, wrapped to that width: at spaces, and
 // after a hyphen inside a word that is still too wide ("PORTABLE-" over "ARTIFACTS"). A slug stays a slug, not a banner.
@@ -78,6 +96,10 @@ function inkedBox(card, cx, cy, turn) {
  *  paper and tape cover (`inked`, axis-aligned), or null. */
 export function slugBox(shot, ctx) {
   if (!hasSlug(shot, ctx.look)) return null;
+  if (isTagSlug(ctx.look)) {
+    const { box } = tagSlug(shot, ctx);
+    return { box, turned: box, inked: box };
+  }
   const { w, h } = slugParts(shot, ctx);
   // on a tall frame in the platform safe zone: the top right of the composition band (editorial.mjs)
   const bounds = editorialBounds(ctx);
@@ -95,6 +117,12 @@ export function slugNodes(shot, ctx) {
   const placed = slugBox(shot, ctx);
   if (placed === null) return [];
   const { look } = ctx;
+  if (isTagSlug(look)) {
+    // the tag's text is the shot's kicker (frame furniture, as a slug's is), pinned to the frame
+    const { group } = tagSlug(shot, ctx);
+    const children = group.children.map((n) => (n.type === 'text' ? node('text', `${shot.id}.kicker`, { ...n.props, role: 'kicker', furniture: true }, { tracks: n.tracks }) : n));
+    return [node('group', group.id, { ...group.props, fixed: true }, { tracks: group.tracks, children })];
+  }
   const parts = slugParts(shot, ctx);
   const id = `${shot.id}.slug`;
   const card = slugCard(shot, ctx, placed.box);

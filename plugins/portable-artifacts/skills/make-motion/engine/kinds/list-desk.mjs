@@ -218,7 +218,9 @@ export function expandDeskList(shot, ctx, given, times, hero) {
   // a look with a dot rail marks every item with its dot, so no figures
   const numbered = isNumbered(shot) && !dots;
   const staged = shot.title === undefined ? shot : { ...shot, kicker: shot.title };
-  const grid = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
+  // a look with a narrow tall margin starts the items further in on a tall frame (data.fromTall, ledger), so the figures
+  // hanging before them keep inside the safe area
+  const grid = editorialSpan(ctx, isWide(canvas) ? FIRST_COLUMN : data.fromTall ?? FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
   const span = dots ? { x: grid.x + dots.column * unit, w: grid.w - dots.column * unit } : grid;
   // a look may drop the slug for lists (look.kinds.list.slug false, cosmos: the badge floated, unexplained)
   const slugged = data.slug !== false;

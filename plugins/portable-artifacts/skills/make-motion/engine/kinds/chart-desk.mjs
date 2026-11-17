@@ -3,8 +3,10 @@
 // the chart directly on the paper under it, across columns 2 to 12 (1 to 12 on tall frames), ink marks and one accent,
 // labels in the label face; the source line bottom left in the label face's small caps, beside the caption band on a
 // wide frame and over it on a tall one. Pure and DOM-free.
+import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { gridX } from '../looks/index.mjs';
+import { pathPoints } from '../devices/shared.mjs';
 import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, isWide, setCase, fitDisplay, capBox, runInk, inkExtent } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
@@ -20,6 +22,7 @@ const FIRST_COLUMN = 2;
 const RIGHT_EDGE = 13; // gridX's column for the right edge of column 12
 const SOURCE_PREFIX = 'Source: ';
 const SOURCE_GAP = 3;
+const HALF = 2;
 const BARRED = Object.freeze(['bar', 'column']); // the types drawn as labelled bars on a tall cosmos frame (chart-plot.mjs) // gaps between the plot's lowest label and the source line
 
 // The claim: fitted, flush left on column 2 (on a tall frame from data.titleFromTall, cosmos: column 1, the plot's left
@@ -50,10 +53,12 @@ function titleNode(shot, ctx, data, labelSize) {
 // wide there wraps (`wrap`: its lines' extra height, which the line is raised by).
 function sourceFontFor(ctx, data, text, width) {
   const { look, unit, measure } = ctx;
-  const font = fontFor(look, 'label', secondarySize(look, unit, sizeAt(look, data.sourceStep, unit)), unit);
+  // the label face, or the face a look names (data.sourceFace, ledger: the serif)
+  const face = data.sourceFace ?? 'label';
+  const font = fontFor(look, face, secondarySize(look, unit, sizeAt(look, data.sourceStep, unit)), unit);
   const wide = text === '' ? 0 : labelWidth(ctx, font, text);
   if (wide <= width) return { font, wrap: 0 };
-  const scaled = fontFor(look, 'label', Math.max(secondaryFloor(look, unit), (font.size * width) / wide), unit);
+  const scaled = fontFor(look, face, Math.max(secondaryFloor(look, unit), (font.size * width) / wide), unit);
   if (labelWidth(ctx, scaled, text) <= width) return { font: scaled, wrap: 0 };
   const lines = layoutText({ text, font: scaled, maxWidth: width, measure }).lines;
   return { font: scaled, wrap: lines.at(-1).y - lines[0].y, maxWidth: width };
@@ -61,6 +66,32 @@ function sourceFontFor(ctx, data, text, width) {
 
 // A text node carrying the lines its kind left out (props.dropped: the review's 'dropped' rule).
 const withDropped = (n, what) => node(n.type, n.id, { ...n.props, dropped: what }, { tracks: n.tracks, wordTracks: n.wordTracks });
+
+// The annotation (data.annotation: { face }, ledger): the highlighted value in `face` beside its mark, on the label
+// device's leader, which ends (on its dot) just inside the mark's far end: a bar's right end (the note where the value
+// would stand, in the room the values keep), a column's top (the note over it, kept inside the plot), any other mark's
+// centre. Lands with the highlight. None without the data or a highlight.
+const ANCHOR_INSET = 4; // units inside the mark's far end where the leader ends
+const NOTE_GAP = 28; // units between a column's top and the note over it (the label device's own gap)
+function annotationNodes(shot, ctx, data, { plot, plotArea, size }) {
+  if (data.annotation === undefined || !plot.highlight) return [];
+  const mark = plot.nodes.find((n) => n.id === `${shot.id}.mark.${plot.highlight.index}`);
+  if (mark === undefined) return [];
+  const points = pathPoints(mark.props.d).map(([px, py]) => [px + (mark.props.x ?? 0), py + (mark.props.y ?? 0)]);
+  const [x0, x1] = [Math.min(...points.map((p) => p[0])), Math.max(...points.map((p) => p[0]))];
+  const [y0, y1] = [Math.min(...points.map((p) => p[1])), Math.max(...points.map((p) => p[1]))];
+  // a bar's note reads on from its end, in the room the values keep; any other mark's sits above it
+  const bar = shot.type === 'bar';
+  const inset = ANCHOR_INSET * ctx.unit;
+  const anchor = bar ? [x1 - inset, (y0 + y1) / HALF]
+    : shot.type === 'column' ? [(x0 + x1) / HALF, y0 + inset] : [(x0 + x1) / HALF, (y0 + y1) / HALF];
+  const at = plot.times?.highlightAt ?? 0;
+  const box = [plotArea.x, plotArea.y, plotArea.w, plotArea.h];
+  // a bar's note stands where its value would: the chart's gap past the bar's end
+  const gap = bar ? data.gap + ANCHOR_INSET : NOTE_GAP;
+  const built = registries.devices.get('label').build({ id: `${shot.id}.annotation`, box, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, text: plot.highlight.text, anchor, size, gap, side: bar ? 'right' : 'above', face: data.annotation.face ?? 'label' });
+  return built.nodes;
+}
 
 /** The desk chart: { nodes, boxes } with the chart group carrying the hero id. */
 export function expandDeskChart(shot, ctx, data, hero) {
@@ -96,8 +127,9 @@ export function expandDeskChart(shot, ctx, data, hero) {
   const drops = barred && sourced !== null && floorOf(sourced) - area.y < rowNeed();
   const source = drops ? null : sourced;
   const plotArea = { ...area, h: Math.max(1, floorOf(source) - area.y) };
-  const plot = drawPlot(shot, ctx, style, plotArea, { valueOnHighlight: true });
-  const group = node('group', hero, {}, { children: plot.nodes });
+  // a look with an annotation (data.annotation, ledger) sets the spoken figure as a note on a leader instead of a value
+  const plot = drawPlot(shot, ctx, style, plotArea, { valueOnHighlight: data.annotation === undefined });
+  const group = node('group', hero, {}, { children: [...plot.nodes, ...annotationNodes(shot, ctx, data, { plot, plotArea, size: font.size })] });
   return {
     nodes: [drops ? withDropped(title.node, ['source']) : title.node, group, ...(source === null ? [] : [source.node])],
     boxes: { chart: [plotArea.x, plotArea.y, plotArea.w, plotArea.h], title: title.box, ...plot.boxes },

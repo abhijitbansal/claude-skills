@@ -9,7 +9,7 @@
 // a viral hook's ghost word (`word.tracks` the ghost lighting to its colour); inkTracks(look, word, at) -> tracks: a
 // hook that opens at full ink (look.hookInk); span?(layout, times, timing): the device params the text node carries
 // (the most lines one emphasised run spans); reserve?(look) -> { weight?, width? }: the weight and width a text's
-// advances are measured at (none of the four styles here sets one).
+// advances are measured at (weight-color sets one; the four styles before it do not).
 import { track } from '../time/track.mjs';
 import { glowFill } from '../devices/glow.mjs';
 import { pulseScale } from './shared.mjs';
@@ -53,7 +53,29 @@ const glow = Object.freeze({
   inkTracks: (look, word, at) => (word.emphasised ? glowFill(look, at) : {}),
 });
 
-export const EMPHASIS = Object.freeze({ highlight, 'recolor-scale': recolorScale, recolor, glow });
+// an emphasised word steps from the display weight to HEAVY and turns the accent over the emphasize move as it is spoken
+// (ledger); every word of the text is measured at HEAVY (reserve), so a word drawn lighter is centred in its room and
+// nothing moves when the weight changes
+const HEAVY = 800;
+function weightTracks(look, at) {
+  const end = at + look.moves.emphasize.dur;
+  const { ease } = look.moves.emphasize;
+  const { ink, accent } = look.palette;
+  const from = look.fonts.display.weight;
+  return {
+    weight: track([{ t: 0, v: from }, { t: at, v: from }, { t: end, v: HEAVY, ease }]),
+    fill: track([{ t: 0, v: ink }, { t: at, v: ink }, { t: end, v: accent, ease }], { space: look.colorSpace }),
+  };
+}
+const weightColor = Object.freeze({
+  ...EMPHASIS_FLAGS['weight-color'],
+  wordTracks: (look, word, at) => (word.emphasised ? { ...word.tracks, ...weightTracks(look, at) } : word.tracks),
+  hookTracks: asIs,
+  inkTracks: (look, word, at) => (word.emphasised ? weightTracks(look, at) : {}),
+  reserve: () => ({ weight: HEAVY }),
+});
+
+export const EMPHASIS = Object.freeze({ highlight, 'recolor-scale': recolorScale, recolor, glow, 'weight-color': weightColor });
 
 /** The entry of look.emphasis; throws naming the look, the name and the names the table has (with did-you-mean). */
 export const emphasisOf = (look) => EMPHASIS[emphasisName(look)];

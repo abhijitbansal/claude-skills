@@ -34,13 +34,14 @@ test('a parked look is registered and resolvable, but out of names(), --list loo
   assert.equal(registries.looks.has(PARKED), true);
   assert.deepEqual(registries.looks.names(), ['desk', 'pop', 'cosmos']);
   assert.throws(() => registries.looks.get('parked-tst'), { message: 'unknown look "parked-tst" (have: desk, pop, cosmos)' });
-  assert.deepEqual(allLookNames(), ['desk', 'pop', 'cosmos', PARKED], 'every registered look, the parked one included');
+  // ledger (looks-four Task 3) registers experimental until its gate
+  assert.deepEqual(allLookNames(), ['desk', 'pop', 'cosmos', 'ledger', PARKED], 'every registered look, the parked ones included');
 });
 
 test('--list looks --all shows the parked look, marked experimental; without --all it is not there', () => {
   const entries = listEntries('looks', { all: true });
-  assert.deepEqual(entries.map((e) => e.name), ['desk', 'pop', 'cosmos', PARKED]);
-  assert.deepEqual(entries.map((e) => e.experimental ?? false), [false, false, false, true]);
+  assert.deepEqual(entries.map((e) => e.name), ['desk', 'pop', 'cosmos', 'ledger', PARKED]);
+  assert.deepEqual(entries.map((e) => e.experimental ?? false), [false, false, false, true, true]);
   assert.match(formatList('looks', entries), /^parked-test {2}\(experimental\) /m);
   assert.equal(listEntries('looks').some((e) => e.name === PARKED), false);
 });

@@ -13,6 +13,7 @@ import { aloneFromFrame } from '../cuts/index.mjs';
 import { resolveCut } from '../cuts/resolve.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import { wordTimes } from './words.mjs';
+import { FIELD_BLEED } from '../fields/shared.mjs';
 
 // Cap height as a share of the font size. Canvas reports only the font's ascent box, not the cap height, so the
 // layouts below place cap lines with this ratio (Fraunces and Archivo both sit close to it).
@@ -28,7 +29,8 @@ export const FIELD_ID = 'field';
 export const RESERVED_IDS = Object.freeze([FIELD_ID]);
 /** The prefix of a target that names one of a clipping's regions. */
 export const REGION_PREFIX = 'region:';
-export const FIELD_BLEED = 0.06; // the field covers the canvas plus this share of it on every side
+// the field covers the canvas plus this share of it on every side (one constant with the fields that draw on the grid)
+export { FIELD_BLEED };
 const ARROW_REACH = 160; // units: an `on` arrow starts this far below and left of its target
 const ROUTE_GAP = 12; // units: an `on` route's arc starts this far under its target...
 const ROUTE_BOW = 24; // ...and dips this far more at its middle

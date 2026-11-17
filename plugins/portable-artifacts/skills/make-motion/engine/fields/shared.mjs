@@ -5,6 +5,9 @@ import { isHexColour } from './color.mjs';
 import { unitOf, REFERENCE_SIDE } from '../units.mjs';
 
 export const TAU = Math.PI * 2;
+// the field covers the canvas plus this share of it on every side (kinds/shared.mjs fieldNode bleeds it): a field that
+// draws on the canvas's grid (grid.mjs) finds the canvas inside its own size from it
+export const FIELD_BLEED = 0.06;
 export const PALETTE_KEYS = Object.freeze(['paper', 'ink', 'ink2', 'accent', 'accent2', 'rule']);
 const LAYER_STRIDE = 0x9e3779b9; // golden-ratio odd constant: spreads layer seeds far apart
 

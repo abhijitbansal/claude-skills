@@ -1,4 +1,4 @@
-// Looks for the v2 engine. Importing this file registers `desk`, `pop` and `cosmos` in registries.looks
+// Looks for the v2 engine. Importing this file registers `desk`, `pop`, `cosmos` and `ledger` (experimental) in registries.looks
 // (once: a second evaluation of this file leaves the registry as it is). Looks are frozen plain data plus pure functions;
 // the grid helpers and applyAccent live here. Pure and DOM-free. The fields a look names (`paper`, `halftone`, `cosmos`)
 // are registered by engine/fields/index.mjs, which whoever draws the look imports.
@@ -17,6 +17,7 @@ import '../moves/index.mjs';
 import { desk } from './desk.mjs';
 import { pop } from './pop.mjs';
 import { cosmos } from './cosmos.mjs';
+import { ledger } from './ledger.mjs';
 
 /**
  * A move in a look's motion grammar. `dur` is seconds; `dist` is a travel in units; `step` (fps) makes a hand
@@ -40,6 +41,9 @@ import { cosmos } from './cosmos.mjs';
  * @property {{ paper: string, ink: string, ink2: string, accent: string, accent2: string, rule: string }} palette  #rrggbb
  * @property {[number, number, number, number, number]} scale  type sizes, small to large; scale[4] / scale[1] >= 3, scale[0] >= 28
  * @property {{ columns: 12, margin: number, gutter: number }} grid
+ * @property {{ columns: 12, margin: number, gutter: number }} [gridTall]  the grid of a frame that is not wide (9:16,
+ *   1:1, 4:5), when it differs (ledger); a film resolves its format's grid once (lookForFormat), so every reader of
+ *   look.grid sees one grid per film
  * @property {(sizeUnits: number, role?: TrackingRole) => number} tracking  letter spacing in em; role defaults to 'display'
  * @property {{ display: boolean, label: boolean }} caps  set in capitals
  * @property {{ display: number, text: number }} lineHeight  multiples of the font size
@@ -48,9 +52,10 @@ import { cosmos } from './cosmos.mjs';
  * @property {{ field: string, params: object }} field  a name in registries.fields and its params
  * @property {'editorial' | 'centred' | 'stack'} composition  how shots lay out: flush left on grid columns, centred, or
  *   a stack of short lines each set at its own size to fill the width, flush left
- * @property {'highlight' | 'recolor-scale' | 'recolor' | 'glow'} emphasis  a highlighter band, a recolour with a pulse, a
- *   recolour alone, or a glow: a name in the emphasis table (engine/kinds/emphasis.mjs EMPHASIS), which the kinds read
- *   instead of comparing the name; a new emphasis system is a new entry there
+ * @property {'highlight' | 'recolor-scale' | 'recolor' | 'glow' | 'weight-color'} emphasis  a highlighter band, a
+ *   recolour with a pulse, a recolour alone, a glow, or a step to a heavier weight in the accent: a name in the emphasis
+ *   table (engine/kinds/emphasis.mjs EMPHASIS), which the kinds read instead of comparing the name; a new emphasis
+ *   system is a new entry there
  * @property {{ enter: Move, exit: Move, emphasize: Move, draw: Move, count: Move } & Record<string, Move | null>} moves  the
  *   five the first kinds use, and an entry for every move in registries.moves (engine/moves: rise, wipe, slam, pop, draw,
  *   count, settle), a Move or null where the look does not use it (checked by validateLook as the look registers)
@@ -80,6 +85,7 @@ import { cosmos } from './cosmos.mjs';
  *   (checked by validateLook as the look registers); which names a synth knows is scripts/v2/sound's to check
  * @property {string} captions  the caption style, a name in registries.captions (engine/captions): how the spoken words
  *   of a narrated shot that does not show its own words are drawn (checked by validateLook as the look registers)
+ * @property {'plain'} [captionVariant]  a variant of the caption style the look selects (lower: 'plain', ledger's strip)
  * @property {Record<string, object>} [kinds]  composition data per shot kind, for the kinds that read it (end, list, quote, compare, chart):
  *   a look without an entry for such a kind does not support it, and a film asking for it is invalid (kindSupportProblems)
  */
@@ -130,6 +136,21 @@ export function applyAccent(look, accent) {
     palette: Object.freeze({ ...look.palette, accent }),
     shadow: Object.isFrozen(shadow) ? shadow : Object.freeze(shadow),
   });
+}
+
+const FORMAT_RE = /^(\d+):(\d+)$/;
+const DEFAULT_FORMAT = '16:9';
+
+/**
+ * The look as a film in `format` ('16:9', '9:16', '1:1', '4:5') sees it: a look with a `gridTall` takes it as its grid
+ * on a frame that is not wide; any other look (or a wide frame) is returned as it is, the same object.
+ */
+export function lookForFormat(look, format = DEFAULT_FORMAT) {
+  if (look.gridTall === undefined) return look;
+  const match = FORMAT_RE.exec(format);
+  if (match === null) throw new Error(`lookForFormat: format must be "w:h", for example "9:16", got ${JSON.stringify(format)}`);
+  const wide = Number(match[1]) > Number(match[2]);
+  return wide ? look : Object.freeze({ ...look, grid: look.gridTall });
 }
 
 const isCueOrNull = (value) => value === null || (typeof value === 'string' && value !== '');
@@ -377,6 +398,6 @@ if (!looks.names.hidesExperimental) {
 /** Every registered look's name, the experimental ones included (--list looks --all). */
 export const allLookNames = () => registries.looks.names.all();
 
-for (const definition of [desk, pop, cosmos]) {
+for (const definition of [desk, pop, cosmos, ledger]) {
   if (!registries.looks.has(definition.name)) registries.looks.add(definition.name, deepFreeze(definition));
 }
