@@ -73,9 +73,10 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 @supports (color: color-mix(in srgb, red, red)) { @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .legend { box-shadow: 0 0 16px color-mix(in srgb, var(--glow) 16%, transparent); } } }
 .lg { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .lg-sw { width: 12px; height: 12px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); }
-.lg-wire { width: 22px; height: 0; border-top: 1.5px solid var(--text-3); }
-.lg-wire-dashed { border-top-style: dashed; }
-.lg-wire-dotted { border-top-style: dotted; border-top-width: 2px; }
+/* A call (solid) is the heaviest key, as its wire is; dashed and dotted are thinner (css.mjs .pa-wire). */
+.lg-wire { width: 22px; height: 0; border-top: 2px solid var(--text-3); }
+.lg-wire-dashed { border-top-style: dashed; border-top-width: 1px; }
+.lg-wire-dotted { border-top-style: dotted; border-top-width: 1px; }
 /* Pan cues: a round button on each stage edge while nodes lie past it (camera.js shows them); a press glides the view that way. */
 /* Each is a tab on its edge (narrow, so it covers little of a node beside it). */
 .pa-cue { position: absolute; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 0; background: var(--surface); border: 1px solid var(--text-3); color: var(--text); cursor: pointer; box-shadow: var(--elev-2); transition: background-color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); }

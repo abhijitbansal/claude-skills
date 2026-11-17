@@ -151,7 +151,7 @@ test('diagramCss: a card is the surface with a hairline; the family hue colours 
   assert.match(css, /\.pa-arrow-open\{fill:none;stroke:var\(--text-3\);stroke:context-stroke;/);
   assert.ok(!/\.pa-edge[^{]* path\{/.test(css), 'no rule strokes a bare path inside an edge group');
   assert.ok(!/\.pa-arrow-fill\{fill:var\([^)]*\);stroke/.test(css) && !/\.pa-edge\.pa-[a-z]+ \.pa-arrow/.test(css), 'no dead marker rules: markers are not descendants of the edge');
-  assert.match(css, /\.pa-wire\{fill:none;stroke:var\(--text-3\);stroke-width:1\.25;stroke-linejoin:round\}/);
+  assert.match(css, /\.pa-wire\{fill:none;stroke:var\(--text-3\);stroke-width:1\.5;stroke-linejoin:round;vector-effect:non-scaling-stroke\}/);
   assert.match(css, /\.pa-edge\.pa-active \.pa-wire\{stroke:var\(--accent\);stroke-width:3\}/);
   assert.match(css, /\.pa-emoji\{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;font-size:18px\}/);
   assert.match(css, /\.pa-note\{fill:var\(--text-2\);font-family:var\(--mono\);font-size:11px;font-weight:400\}/);
@@ -204,7 +204,7 @@ test('diagramCss: lane, pill and legend rules', () => {
   assert.match(css, /\.pa-swatch-diamond\{stroke:var\(--text-3\)\}/);
   assert.match(css, /\.pa-swatch-filled-dot\{fill:var\(--text-2\);stroke:none\}/);
   assert.match(css, /\.pa-swatch-ringed-dot\{fill:var\(--surface\);stroke:var\(--text-2\);stroke-width:1\.5\}/);
-  assert.match(css, /\.pa-legend-sample \.pa-wire\{stroke-width:1\.5\}/);
+  assert.ok(!/\.pa-legend-sample \.pa-wire\{[^}]*stroke-width/.test(css), 'legend samples draw at their wire widths, so a dashed or dotted key is never heavier than the call key');
 });
 
 test('diagramCss: flow animation rules only reach real edges, never the legend samples', () => {

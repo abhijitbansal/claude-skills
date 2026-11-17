@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import { themeCss } from '../../shared/theme.mjs';
 import { esc } from './svg.mjs';
 import { runtimeSource } from './runtime.mjs';
-import { legendItems } from './legend.mjs';
+import { legendItems, TONE_WORD } from './legend.mjs';
 import { FAMILIES, KINDS } from './kinds.mjs';
 import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
@@ -90,6 +90,7 @@ const legendWord = (it) => (it.kind === 'kind' ? `${it.count} ${it.name}` : it.l
 
 function legendMark(it, type) {
   if (it.kind === 'style') return `<i class="lg-wire lg-wire-${WIRE_LOOK[it.style]}"></i>`;
+  if (it.kind === 'tone') return `<i class="lg-sw lg-tone lg-tone-${esc(it.name)}"></i>`;
   const shape = KINDS[type].kinds[it.name]?.shape ?? 'rounded-rect';
   return `<i class="lg-sw lg-sw-${esc(it.family)} lg-shape-${esc(shape)}"></i>`;
 }
@@ -114,6 +115,8 @@ const legendCss = () => [
   '.lg-shape-stadium{width:14px;height:8px;border-radius:999px;border-color:var(--text-3)}',
   '.lg-shape-filled-dot{width:9px;height:9px;border-radius:50%;border-color:var(--text-2);background:var(--text-2)}',
   '.lg-shape-ringed-dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--text-2);background:var(--surface)}',
+  // a toned node's key: a neutral card with the tone's border (css.mjs toneRules)
+  ...Object.keys(TONE_WORD).map((t) => `.lg-tone-${t}{background:var(--surface);border-width:2px;border-color:var(--${t})}`),
 ].join('\n');
 
 // ---- build record ----------------------------------------------------------------------------

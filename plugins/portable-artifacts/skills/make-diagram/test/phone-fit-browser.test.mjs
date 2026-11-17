@@ -1,9 +1,12 @@
 // How each example opens on a laptop (1280x800) and a phone (390x800), at the size and motion setting the
-// screenshots use. Node labels never draw under the reading floor (legibility.mjs MIN_LABEL_PX), and the page never
-// overflows its viewport. A diagram that fits whole at the floor opens fitted, every node a margin inside the stage
-// and no pan cue. One that does not opens at the floor on its first group (or, when that does not fit, its first
+// screenshots use. The page never overflows its viewport and the Fit and zoom buttons are on screen.
+// Wider than the phone breakpoint (viewer.html, 720 px) every diagram opens fitted whole: the whole-drawing fit
+// (data-fit-scale), every node whole in the stage with the fit's margin, no pan cue, whatever the text size (check.mjs
+// still warns when that draws labels under 8 px). On a phone node labels never draw under the reading floor
+// (legibility.mjs MIN_LABEL_PX): a diagram that fits whole at the floor opens fitted, every node a margin inside the
+// stage and no pan cue; one that does not opens at the floor on its first group (or, when that does not fit, its first
 // node): no node is cut by the stage edge, a pan cue shows on each side where nodes lie out of view, and the cues
-// reach them. The Fit and zoom buttons are on screen either way.
+// reach them.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -68,39 +71,55 @@ function assertOpening(f) {
   return 'floored';
 }
 
+// Desktop: the whole drawing at its fit scale. The fit keeps FIT_MARGIN diagram units around the drawing, so a node
+// sits at least that many units (times the scale) inside the stage.
+function assertDesktop(f) {
+  const s = f.stage;
+  assert.ok(f.page.w <= f.vw && f.page.h <= f.vh, `the page fits its viewport (${f.page.w}x${f.page.h})`);
+  assert.ok(f.zoom.length === 2 && f.zoom.every((z) => z.shown && z.left >= 0 && z.right <= f.vw && z.bottom <= f.vh), 'Fit and zoom-in on screen');
+  assert.ok(Math.abs(f.scale - f.fit) < 0.002, `opens at the whole-drawing fit (${f.scale.toFixed(3)} vs ${f.fit.toFixed(3)})`);
+  const m = FIT_MARGIN_UNITS * f.scale - 1;
+  const out = f.nodes.filter((n) => n.left < s.left + m || n.right > s.right - m || n.top < s.top + m || n.bottom > s.bottom - m || n.bottom > f.vh).map(fmt);
+  assert.deepEqual(out, [], `fitted whole: every node in the stage with the fit's margin (${m.toFixed(1)} px) and above the fold`);
+  assert.deepEqual(Object.keys(f.cues).filter((k) => f.cues[k]), [], 'fitted whole: no pan cue');
+}
+
+const FIT_MARGIN_UNITS = 16; // camera.js FIT_MARGIN
 const CASES = [
   ...[...EXAMPLES, 'cloud-architecture'].flatMap((name) => [1280, 390].map((width) => ({ name, width }))),
-  ...THEMES.map((theme) => ({ name: 'story', width: 1280, theme })),
+  ...THEMES.flatMap((theme) => ['story', 'cloud-architecture'].map((name) => ({ name, width: 1280, theme }))),
 ];
 
 for (const { name, width, theme } of CASES) {
-  test(`${name}${theme ? ` (${theme})` : ''} at ${width}x800 opens readable: fitted with a margin, or at the floor with no node cut and a cue on each side with more`, async (t) => {
+  const desktop = width >= 720;
+  const how = desktop ? 'fitted whole with a margin and no cue' : 'readable: fitted with a margin, or at the floor with no node cut and a cue on each side with more';
+  test(`${name}${theme ? ` (${theme})` : ''} at ${width}x800 opens ${how}`, async (t) => {
     if (await skipUnlessBrowser(t)) return;
     const { page, context } = await openPage(buildPage(example(name), { name: `open-${name}-${theme ?? 'base'}-${width}`, theme }).url, { width, height: 800, reducedMotion: 'reduce' });
     try {
       const f = await facts(page);
-      const how = assertOpening(f);
-      if (how === 'floored' && f.group && width >= 720) {
-        const g = f.group;
-        assert.ok(g.left >= f.stage.left && g.right <= f.stage.right && g.top >= f.stage.top && g.bottom <= f.stage.bottom, `the first group (${g.id}) opens whole in view`);
-      }
+      if (desktop) assertDesktop(f);
+      else assertOpening(f);
     } finally {
       await context.close();
     }
   });
 }
 
-test('cloud-architecture at 1280x800: the Google Cloud group is one cue press away', async (t) => {
+test('cloud-architecture at 390x800: a cue press brings a node from that side into view', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const { page, context } = await openPage(buildPage(example('cloud-architecture'), { name: 'open-cloud-cue' }).url, { width: 1280, height: 800, reducedMotion: 'reduce' });
+  const { page, context } = await openPage(buildPage(example('cloud-architecture'), { name: 'open-cloud-cue' }).url, { width: 390, height: 800, reducedMotion: 'reduce' });
   try {
     const before = await facts(page);
     const side = Object.keys(before.cues).find((k) => before.cues[k]);
     assert.ok(side, 'a cue shows');
+    const hidden = before.nodes.filter((n) => SIDES[side](n, before.stage)).map((n) => n.id);
     await page.click(`[data-pa-cue="${side}"]`);
     await settle(page);
-    const gcp = await page.evaluate(() => { const b = document.querySelector('.pa-group[data-id="gcp"] > .pa-group-box').getBoundingClientRect(); const s = document.getElementById('pa-stage').getBoundingClientRect(); return b.top >= s.top && b.bottom <= s.bottom && b.left >= s.left && b.right <= s.right; });
-    assert.ok(gcp, 'after one press the Google Cloud group is whole in view');
+    const f = await facts(page);
+    const s = f.stage;
+    const shown = f.nodes.filter((n) => hidden.includes(n.id) && n.left >= s.left && n.right <= s.right && n.top >= s.top && n.bottom <= s.bottom);
+    assert.ok(shown.length > 0, `after one press a node that lay ${side} of the view is whole in view`);
     assert.equal(await page.evaluate(() => document.querySelector('.pa-node.pa-selected, .pa-edge.pa-selected')), null, 'a cue press selects nothing');
   } finally {
     await context.close();
@@ -121,9 +140,9 @@ test('at 390x800 leaving Play returns to the readable opening view, not the whol
   }
 });
 
-test('the Fit button shows the whole drawing, readable or not, with no cue', async (t) => {
+test('on a phone the Fit button shows the whole drawing, readable or not, with no cue', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const { page, context } = await openPage(buildPage(example('cloud-architecture'), { name: 'open-cloud-fit' }).url, { width: 1280, height: 800, reducedMotion: 'reduce' });
+  const { page, context } = await openPage(buildPage(example('cloud-architecture'), { name: 'open-cloud-fit' }).url, { width: 390, height: 800, reducedMotion: 'reduce' });
   try {
     await page.click('[data-act="fit"]');
     await settle(page);

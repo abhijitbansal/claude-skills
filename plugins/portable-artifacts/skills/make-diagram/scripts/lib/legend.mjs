@@ -1,5 +1,5 @@
 // The legend at the top right of every diagram: one swatch and count per node
-// kind used, then one wire sample per edge style (message kind) used. The
+// kind used, one toned swatch per node tone used, then one wire sample per edge style (message kind) used. The
 // layouts reserve LEGEND_BAND above the drawing for the row and widen the canvas
 // when the row is wider than the drawing; the renderer draws geometry.legend.
 import { measure, lineHeight } from '../../shared/text.mjs';
@@ -20,23 +20,31 @@ const MESSAGE_STYLE = { sync: 'solid', async: 'async', reply: 'dashed', self: 's
 // Dashed is only a line style to authors (replies, "no" branches, transitions), so the key says "secondary".
 export const STYLE_WORD = { solid: 'call', dashed: 'secondary', async: 'event' };
 const MESSAGE_WORD = { sync: 'call', async: 'event', reply: 'reply', self: 'self' };
+// A node tone (schema `tone`) keyed by what it marks: an outcome (good, bad), a caution, or emphasis.
+export const TONE_WORD = { good: 'success', bad: 'failure', warn: 'warning', accent: 'highlight' };
 
 const round = (v) => Math.round(v * 10) / 10;
 const textOf = (it) => (it.kind === 'kind' ? `${it.count} ${it.name}` : it.label);
 
-/** [{ kind: 'kind', name, family, count }, …, { kind: 'style', name, style, label }], each in order of first use. */
+/**
+ * [{ kind: 'kind', name, family, count }, …, { kind: 'tone', name, label }, …, { kind: 'style', name, style, label }],
+ * each in order of first use (a neutral tone is not keyed).
+ */
 export function legendItems(spec) {
   const sequence = spec.type === 'sequence';
   const counts = new Map();
+  const tones = new Set();
   for (const n of sequence ? spec.participants : spec.nodes) {
     const k = n.kind ?? KINDS[spec.type].default;
     counts.set(k, (counts.get(k) ?? 0) + 1);
+    if (TONE_WORD[n.tone]) tones.add(n.tone);
   }
   const styles = new Map();
   if (sequence) for (const m of spec.messages ?? []) { const k = m.kind ?? 'sync'; if (!styles.has(k)) styles.set(k, MESSAGE_STYLE[k]); }
   else for (const e of spec.edges ?? []) { const s = e.style ?? 'solid'; if (!styles.has(s)) styles.set(s, s); }
   return [
     ...[...counts].map(([name, count]) => ({ kind: 'kind', name, family: family(spec.type, name), count })),
+    ...[...tones].map((name) => ({ kind: 'tone', name, label: TONE_WORD[name] })),
     ...[...styles].map(([name, style]) => ({ kind: 'style', name, style, label: (sequence ? MESSAGE_WORD : STYLE_WORD)[name] })),
   ];
 }
@@ -46,7 +54,7 @@ export function legendLayout(spec, theme) {
   const font = fonts(theme).legend;
   let dx = 0;
   const items = legendItems(spec).map((it) => {
-    const width = round((it.kind === 'kind' ? SWATCH : SAMPLE) + INNER_GAP + measure(textOf(it), font));
+    const width = round((it.kind === 'style' ? SAMPLE : SWATCH) + INNER_GAP + measure(textOf(it), font));
     const out = { ...it, dx: round(dx), width };
     dx += width + ITEM_GAP;
     return out;
@@ -95,10 +103,14 @@ export function legendSvg(legend, f, type) {
   const cy = legend.y + legend.height / 2;
   const parts = legend.items.map((it) => {
     const x = legend.x + it.dx;
-    const mark = it.kind === 'kind'
-      ? swatchSvg(it, x, cy, type)
-      : `<g class="pa-legend-sample pa-edge-${esc(it.style)}"><path class="pa-wire" d="M${num(x)} ${num(cy)}L${num(x + SAMPLE)} ${num(cy)}"/></g>`;
-    const text = textLines('pa-legend-text', [textOf(it)], { x: x + (it.kind === 'kind' ? SWATCH : SAMPLE) + INNER_GAP, top: cy - lh / 2, lh, size: f.legend.size, anchor: 'start' });
+    const marks = {
+      kind: () => swatchSvg(it, x, cy, type),
+      // a neutral card with the tone's border, as a toned node is drawn (css.mjs toneRules)
+      tone: () => `<rect class="pa-swatch pa-tone-${esc(it.name)}" x="${num(x)}" y="${num(cy - SWATCH / 2)}" width="${SWATCH}" height="${SWATCH}" rx="${SWATCH_RADIUS}"/>`,
+      style: () => `<g class="pa-legend-sample pa-edge-${esc(it.style)}"><path class="pa-wire" d="M${num(x)} ${num(cy)}L${num(x + SAMPLE)} ${num(cy)}"/></g>`,
+    };
+    const mark = marks[it.kind]();
+    const text = textLines('pa-legend-text', [textOf(it)], { x: x + (it.kind === 'style' ? SAMPLE : SWATCH) + INNER_GAP, top: cy - lh / 2, lh, size: f.legend.size, anchor: 'start' });
     return mark + text;
   });
   return `<g class="pa-legend" aria-hidden="true">${parts.join('')}</g>`;

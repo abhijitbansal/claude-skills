@@ -456,7 +456,8 @@ test('diagramCss holds the viewer state rules: dim, hidden, highlight', () => {
 test('every non-dynamic class the renderers emit has a rule', async () => {
   const css = diagramCss();
   const dynamic = /^pa-(kind-|tone-|shape-|edge-(solid|dashed|async)$|msg-|frame-(loop|alt|opt|par)$|type-|animate$)/;
-  const hooks = new Set(['pa-edge', 'pa-edge-label', 'pa-group', 'pa-frame', 'pa-seq-note']); // structure for the viewer, nothing to style
+  // structure for the viewer, nothing to style; a legend sample only carries its pa-edge-<style> class to its wire
+  const hooks = new Set(['pa-edge', 'pa-edge-label', 'pa-group', 'pa-frame', 'pa-seq-note', 'pa-legend-sample']);
   for (const name of NAMES) {
     const { svg } = await draw(example(name));
     for (const cls of new Set([...svg.matchAll(/class="([^"]*)"/g)].flatMap((m) => m[1].split(' ')))) {

@@ -20,9 +20,11 @@
   var MAX_ZOOM = 4;
   var MAX_FIT_SCALE = 1.25; // a small diagram is not blown up past this to fill a big stage
   var FIT_MARGIN = 16;
-  // The opening view never draws a 14 px node label below the 8 px reading floor (legibility.mjs LABEL_PX and
-  // MIN_LABEL_PX), on any stage. A diagram too big for that opens at the floor (camera-floor.js places it) and pans;
-  // the Fit button still shows the whole drawing.
+  // On a phone (a viewport inside viewer.html's 719 px breakpoint) the opening view never draws a 14 px node label
+  // below the 8 px reading floor (legibility.mjs LABEL_PX and MIN_LABEL_PX): a diagram too big for that opens at the
+  // floor (axisFloor places it) and pans; the Fit button still shows the whole drawing. Wider viewports open fitted
+  // whole, whatever the text size (scripts/check.mjs warns when that draws labels under the floor).
+  var PHONE_QUERY = '(max-width: 719px)';
   var READ_SCALE = 8 / 14;
   var FLOOR_GAP = 16; // px: at the floor a node in view sits at least this far inside the stage
   var OUT_PX = 4; // px: a node out of view sits at least this far past the edge (its outline and lift included)
@@ -75,6 +77,8 @@
     var boxes = PADiagram.dict(data.boxes);
     var reduceQuery = global.matchMedia ? global.matchMedia('(prefers-reduced-motion: reduce)') : null;
     var reduced = function () { return !!(reduceQuery && reduceQuery.matches); };
+    var phoneQuery = global.matchMedia ? global.matchMedia(PHONE_QUERY) : null;
+    var phone = function () { return !!(phoneQuery && phoneQuery.matches); };
     var overlay = stage.querySelector('[data-pa-legend]');
     var d = data.drawing;
     // What the fit shows: the drawing when the page covers the drawn legend with its own, else the canvas.
@@ -117,7 +121,7 @@
       return { s: below, dx: 0, dy: Math.max(0, sz.top - (sz.h / 2 - halfH)) };
     }
     // ---- the reading floor ------------------------------------------------------------------
-    // A fit below READ_SCALE opens at READ_SCALE instead. On each axis: when everything drawn fits the stage at that
+    // On a phone a fit below READ_SCALE opens at READ_SCALE instead. On each axis: when everything drawn fits the stage at that
     // scale (FLOOR_GAP to spare on both sides) it is centred; else the view centres on the anchor (the first group
     // when it fits the stage, else the first node), stays within what is drawn, and then moves the least it must so
     // that no node is cut by the stage edge (each is whole in view, FLOOR_GAP in, or wholly out, behind a pan cue).
@@ -143,7 +147,7 @@
       return c;
     }
     function readable(sz) {
-      if (fitPlace(sz).s >= READ_SCALE) return null;
+      if (!phone() || fitPlace(sz).s >= READ_SCALE) return null;
       var s = READ_SCALE;
       var band = sz.h - sz.top;
       var fitsStage = function (b) { return b.w * s <= sz.w - 2 * FLOOR_GAP && b.h * s <= band - 2 * FLOOR_GAP; };
@@ -158,7 +162,7 @@
       var p = fitPlace(size());
       return { cx: fitBox.x + fitBox.w / 2 + p.dx / p.s, cy: fitBox.y + fitBox.h / 2 - p.dy / p.s, s: p.s };
     }
-    // The opening view: the whole drawing, or the floor view when that would draw labels under the floor.
+    // The opening view: the whole drawing, or on a phone the floor view when that would draw labels under the floor.
     function fitCamera() { return readable(size()) || wholeCamera(); }
     // Pan and zoom keep the centre on the canvas, widened to take in the fit
     // centre, so the first move after a fit never snaps the view.

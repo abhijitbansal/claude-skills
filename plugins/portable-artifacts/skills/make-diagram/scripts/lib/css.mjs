@@ -31,11 +31,11 @@ const rules = [
   '.pa-lane{stroke:none}',
   `.pa-group-label{fill:var(--text-2);font-size:${GROUP_LABEL_SIZE}px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}`,
   // edges: one path.pa-wire per edge; the arrow heads take the wire's stroke (a plain declaration precedes context-stroke)
-  '.pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.25;stroke-linejoin:round}',
-  // dashed and dotted wires keep their width on screen (a zoomed-out view thinned them to under 1 px, under 3:1)
-  '.pa-edge-dashed .pa-wire,.pa-edge-async .pa-wire{vector-effect:non-scaling-stroke}',
-  '.pa-edge-dashed .pa-wire{stroke-width:1.75;stroke-dasharray:6 4}',
-  '.pa-edge-async .pa-wire{stroke-width:2;stroke-dasharray:1 4.5;stroke-linecap:round}',
+  // Every wire keeps its width on screen (a zoomed-out view thinned them to under 1 px, under 3:1). A call (solid) is
+  // the heaviest; a return, reply or event (dashed, dotted) is thinner, told apart by its pattern, never heavier.
+  '.pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.5;stroke-linejoin:round;vector-effect:non-scaling-stroke}',
+  '.pa-edge-dashed .pa-wire{stroke-width:1.25;stroke-dasharray:6 4}',
+  '.pa-edge-async .pa-wire{stroke-width:1.25;stroke-dasharray:1 4.5;stroke-linecap:round}',
   '.pa-hit{fill:none;stroke:transparent;stroke-width:12px;vector-effect:non-scaling-stroke;pointer-events:visibleStroke}', // the viewer's invisible mouse target along a wire; visibleStroke so a hidden edge catches nothing
   '.pa-arrow-fill{fill:var(--text-3);fill:context-stroke;stroke:none}',
   '.pa-arrow-open{fill:none;stroke:var(--text-3);stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}',
@@ -114,10 +114,12 @@ const markRules = [
 // A tone colours the border (2 px), the filled dot and the icon, over the family
 // hue (these rules come later, so they win at equal specificity). The kind label
 // keeps its family hue: that is the colour checkTheme gates against the card tint.
+// Its legend key (legend.mjs) is a neutral card swatch with the same border.
 const toneRules = Object.entries(TONES).flatMap(([tone, variable]) => [
   `.pa-tone-${tone} .pa-shape{stroke:var(--${variable});stroke-width:2}`,
   `.pa-tone-${tone} .pa-shape-filled-dot{fill:var(--${variable})}`,
   `.pa-tone-${tone} .pa-icon{color:var(--${variable})}`,
+  `.pa-swatch.pa-tone-${tone}{stroke:var(--${variable});stroke-width:2}`,
 ]);
 
 // Viewer state, set by the runtime: dim what a trace or a beat leaves out, hide
@@ -176,7 +178,6 @@ const legendRules = [
   '.pa-swatch-stadium{stroke:var(--text-3)}',
   '.pa-swatch-filled-dot{fill:var(--text-2);stroke:none}',
   '.pa-swatch-ringed-dot{fill:var(--surface);stroke:var(--text-2);stroke-width:1.5}',
-  '.pa-legend-sample .pa-wire{stroke-width:1.5}',
 ];
 
 // Dark mode: the glow. The active edge and the dot glow in the theme's --glow

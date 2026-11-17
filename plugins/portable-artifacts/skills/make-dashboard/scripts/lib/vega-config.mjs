@@ -8,6 +8,40 @@ export function vegaConfig(colours, font) {
   const hex = /^#[0-9a-f]{6}$/i;
   const mix = (a, b, share) => `#${[1, 3, 5].map((i) => Math.round(Number.parseInt(a.slice(i, i + 2), 16) * share + Number.parseInt(b.slice(i, i + 2), 16) * (1 - share)).toString(16).padStart(2, '0')).join('')}`;
   const neutral = hex.test(ink3 ?? '') && hex.test(surface ?? '') ? mix(ink3, surface, 0.8) : ink3;
+  // The restrained series neutrals: three steps of --text-3 mixed into the surface, every one between the accent and
+  // the surface in lightness (OKLab L), so the claimed series is the strongest mark (the darkest in light mode, the
+  // brightest in dark). The room runs from the accent to the lightest (light) or darkest (dark) mix that keeps
+  // SERIES_FLOOR contrast on the surface; the steps fill its outer share, faintest first (it sits beside the accent).
+  // Without hex colours, or with no room, the scale falls back to ink, --text-3 and the neutral.
+  const SERIES_FLOOR = 3.1;
+  const SERIES_NEAR = 0.6; // the strongest neutral sits this share of the room away from the accent
+  const lin = (c) => { const s = c / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; };
+  const rgb = (h) => [1, 3, 5].map((i) => lin(Number.parseInt(h.slice(i, i + 2), 16)));
+  const okL = (h) => {
+    const [r, g, b] = rgb(h);
+    return 0.2104542553 * Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b) + 0.793617785 * Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b) - 0.0040720468 * Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  };
+  const lum = (h) => { const [r, g, b] = rgb(h); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const ratio = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+  // The share of --text-3 (0 = the surface, 1 = --text-3) where `f` first reaches `goal`, f rising with the share.
+  const shareFor = (f, goal) => {
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 24; i++) { const k = (lo + hi) / 2; if (f(mix(ink3, surface, k)) >= goal) hi = k; else lo = k; }
+    return hi;
+  };
+  const seriesNeutrals = () => {
+    const a = accent ?? cat[0];
+    if (![a, ink3, surface].every((c) => hex.test(c ?? ''))) return [ink2, ink3, neutral];
+    const toSurface = okL(surface) >= okL(ink3) ? 1 : -1; // +1: light mode, the surface is lighter than the ink
+    const faintest = mix(ink3, surface, shareFor((c) => ratio(c, surface), SERIES_FLOOR));
+    const room = (okL(faintest) - okL(a)) * toSurface;
+    if (!(room > 0)) return [ink2, ink3, neutral];
+    const near = okL(a) + toSurface * SERIES_NEAR * room;
+    return [0, 0.5, 1].map((t) => {
+      const goal = okL(faintest) + (near - okL(faintest)) * t; // faintest first
+      return t === 0 ? faintest : mix(ink3, surface, shareFor((c) => -toSurface * okL(c), -toSurface * goal));
+    });
+  };
   const months = "(span(domain('x')) / 2629800000)";
   const step = [1, 2, 3, 4, 6].map((k) => `${months} / ${k} <= width / 90 ? ${k} : `).join('') + '12';
   const MONTH_TICKS = `span(domain('x')) >= 7776000000 ? {interval: 'month', step: ${step}} : ceil(width / 90)`;
@@ -16,9 +50,9 @@ export function vegaConfig(colours, font) {
     font,
     view: { stroke: null },
     // paHighlight: [the claimed bar, the others] (views.mjs names this range for a bar chart whose title names a bar).
-    // paSeries: a few series in a restrained scale, the claimed (or first) series in the accent, the rest in ink and
-    // neutral steps (views.mjs sorts the claimed series first); every step keeps 3:1 on the surface (tested).
-    range: { category: cat, ordinal: seq, ramp: seq, heatmap: seq, paHighlight: [accent ?? cat[0], neutral], paSeries: [accent ?? cat[0], ink2, ink3, neutral] },
+    // paSeries: a few series in a restrained scale, the claimed (or first) series in the accent, the rest in neutral
+    // steps (seriesNeutrals; views.mjs sorts the claimed series first); every step keeps 3:1 on the surface (tested).
+    range: { category: cat, ordinal: seq, ramp: seq, heatmap: seq, paHighlight: [accent ?? cat[0], neutral], paSeries: [accent ?? cat[0], ...seriesNeutrals()] },
     axis: {
       labelColor: ink3, titleColor: ink2, labelFont: font, titleFont: font,
       labelFontSize: 11, titleFontSize: 12, titleFontWeight: 'normal', labelPadding: 6,

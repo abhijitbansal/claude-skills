@@ -1,5 +1,5 @@
 // How dark a wire really draws, from a screenshot of the page as it opens: thin dashes and dots are anti-aliased
-// into the page colour, so the token's contrast overstates them. For each dashed and dotted wire it samples the
+// into the page colour, so the token's contrast overstates them. For each solid, dashed and dotted wire it samples the
 // path every screen px (2 px in from its ends, where arrow heads sit), takes the darkest pixel within 1 px of each
 // sample, and reports the contrast against the page colour of the best pixel in each run of WINDOW samples (a
 // dash period or more), as the median over the wire's runs. Nothing is decoded in node: the PNG is drawn on a
@@ -19,7 +19,7 @@ const samplesInPage = (page) => page.evaluate((WINDOW) => {
   const pageHex = hex(getComputedStyle(probe).color);
   probe.remove();
   const stage = document.getElementById('pa-stage').getBoundingClientRect();
-  const wires = [...document.querySelectorAll('.pa-edge-dashed .pa-wire, .pa-edge-async .pa-wire')].filter((p) => !p.closest('.pa-legend')).map((p) => {
+  const wires = [...document.querySelectorAll('.pa-edge-solid .pa-wire, .pa-edge-dashed .pa-wire, .pa-edge-async .pa-wire')].filter((p) => !p.closest('.pa-legend')).map((p) => {
     const m = p.getScreenCTM();
     const len = p.getTotalLength();
     const scale = Math.hypot(m.a, m.b);
@@ -30,7 +30,7 @@ const samplesInPage = (page) => page.evaluate((WINDOW) => {
       const y = m.b * q.x + m.d * q.y + m.f;
       if (x > stage.left + 2 && x < stage.right - 2 && y > stage.top + 2 && y < stage.bottom - 2) pts.push([Math.round(x), Math.round(y)]);
     }
-    return { edge: p.closest('.pa-edge')?.dataset.id ?? '?', style: p.closest('.pa-edge-async') ? 'dotted' : 'dashed', pts };
+    return { edge: p.closest('.pa-edge')?.dataset.id ?? '?', style: p.closest('.pa-edge-async') ? 'dotted' : p.closest('.pa-edge-dashed') ? 'dashed' : 'solid', pts };
   }).filter((w) => w.pts.length >= WINDOW);
   return { pageHex, wires };
 }, WINDOW);
@@ -57,9 +57,85 @@ const darkest = (blank, png, points) => blank.evaluate(async ({ src, pts }) => {
   });
 }, { src: `data:image/png;base64,${png.toString('base64')}`, pts: points });
 
+// Ink at each point: the summed darkness against the page colour (1 - luminance / page luminance, at least 0) of the
+// 3x3 pixels around it, so a wire's width, tone and pattern all count and its subpixel offset does not.
+const inkAt = (blank, png, points, pageHex) => blank.evaluate(async ({ src, pts, pageHex }) => {
+  const img = new Image();
+  img.src = src;
+  await img.decode();
+  const c = document.createElement('canvas');
+  c.width = img.width;
+  c.height = img.height;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const d = g.getImageData(0, 0, c.width, c.height).data;
+  const lum = (r, gg, b) => 0.2126 * r + 0.7152 * gg + 0.0722 * b;
+  const p = [1, 3, 5].map((i) => Number.parseInt(pageHex.slice(i, i + 2), 16));
+  const page = lum(p[0], p[1], p[2]);
+  return pts.map(([x, y]) => {
+    let ink = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const i = ((y + dy) * c.width + (x + dx)) * 4;
+      ink += Math.max(0, 1 - lum(d[i], d[i + 1], d[i + 2]) / page);
+    }
+    return ink;
+  });
+}, { src: `data:image/png;base64,${png.toString('base64')}`, pts: points, pageHex });
+
 const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
 
-/** [{ edge, style, contrast }] for every dashed and dotted wire on `page`, plus the page colour. */
+/**
+ * How much ink each wire puts down per px of its length, from a screenshot: [{ edge, style, ink }], ink the median over
+ * runs of WINDOW samples of the run's mean ink (inkAt), so a label plate or a crossing wire does not move it. Light pages.
+ */
+export async function wireInk(page, context) {
+  const { pageHex, wires } = await samplesInPage(page);
+  const png = await page.screenshot();
+  const blank = await context.newPage();
+  try {
+    const out = [];
+    for (const w of wires) {
+      const ink = await inkAt(blank, png, w.pts, pageHex);
+      const runs = [];
+      for (let i = 0; i + WINDOW <= ink.length; i += WINDOW) runs.push(ink.slice(i, i + WINDOW).reduce((a, b) => a + b, 0) / WINDOW);
+      out.push({ edge: w.edge, style: w.style, ink: Number(median(runs).toFixed(3)) });
+    }
+    return out;
+  } finally {
+    await blank.close();
+  }
+}
+
+/**
+ * How heavy each wire draws as styled: [{ edge, style, width, contrast }] for every wire on `page` (style solid, dashed
+ * or dotted; width in screen px, the stroke width times the scale unless the stroke does not scale; contrast of the
+ * stroke colour on the page), plus the legend's samples: the drawn legend's (`drawn`, width in diagram units) and the
+ * overlay's (`overlay`, its border width in px), each { style, width }.
+ */
+export const wireWeights = (page) => page.evaluate(() => {
+  const lum = (c) => {
+    const m = c.match(/\d+(\.\d+)?/g).slice(0, 3).map((v) => { const s = Number(v) / 255; return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4; });
+    return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2];
+  };
+  const probe = document.createElement('i');
+  probe.style.color = 'var(--page)';
+  document.body.append(probe);
+  const pageLum = lum(getComputedStyle(probe).color);
+  probe.remove();
+  const ratio = (c) => { const a = lum(c); return (Math.max(a, pageLum) + 0.05) / (Math.min(a, pageLum) + 0.05); };
+  const styleOf = (el) => (el.closest('.pa-edge-async') ? 'dotted' : el.closest('.pa-edge-dashed') ? 'dashed' : 'solid');
+  const wires = [...document.querySelectorAll('.pa-edge .pa-wire')].filter((p) => !p.closest('.pa-legend')).map((p) => {
+    const cs = getComputedStyle(p);
+    const m = p.getScreenCTM();
+    const scale = cs.vectorEffect === 'non-scaling-stroke' ? 1 : Math.hypot(m.a, m.b);
+    return { edge: p.closest('.pa-edge').dataset.id, style: styleOf(p), width: Number((parseFloat(cs.strokeWidth) * scale).toFixed(3)), contrast: Number(ratio(cs.stroke).toFixed(2)) };
+  });
+  const drawn = [...document.querySelectorAll('.pa-legend .pa-legend-sample .pa-wire')].map((p) => ({ style: styleOf(p), width: parseFloat(getComputedStyle(p).strokeWidth) }));
+  const overlay = [...document.querySelectorAll('.lg-wire')].map((w) => ({ style: w.classList.contains('lg-wire-dotted') ? 'dotted' : w.classList.contains('lg-wire-dashed') ? 'dashed' : 'solid', width: parseFloat(getComputedStyle(w).borderTopWidth) }));
+  return { wires, drawn, overlay };
+});
+
+/** [{ edge, style, contrast }] for every solid, dashed and dotted wire on `page`, plus the page colour. */
 export async function wireContrast(page, context) {
   const { pageHex, wires } = await samplesInPage(page);
   const png = await page.screenshot();

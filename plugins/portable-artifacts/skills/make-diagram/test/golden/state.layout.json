@@ -8,9 +8,9 @@
     "height": 180
   },
   "legend": {
-    "x": 757.2,
+    "x": 613.5,
     "y": 24,
-    "width": 420.8,
+    "width": 564.5,
     "height": 20,
     "items": [
       {
@@ -46,11 +46,25 @@
         "width": 44.2
       },
       {
+        "kind": "tone",
+        "name": "good",
+        "label": "success",
+        "dx": 272.1,
+        "width": 60.3
+      },
+      {
+        "kind": "tone",
+        "name": "bad",
+        "label": "failure",
+        "dx": 348.4,
+        "width": 51.4
+      },
+      {
         "kind": "style",
         "name": "solid",
         "style": "solid",
         "label": "call",
-        "dx": 272.1,
+        "dx": 415.8,
         "width": 48.7
       },
       {
@@ -58,7 +72,7 @@
         "name": "dashed",
         "style": "dashed",
         "label": "secondary",
-        "dx": 336.8,
+        "dx": 480.5,
         "width": 84
       }
     ]
@@ -121,7 +135,7 @@
       "icon": null,
       "emoji": null,
       "typeLine": null,
-      "tone": "neutral",
+      "tone": "good",
       "group": null,
       "layer": 2
     },
@@ -182,7 +196,7 @@
       "icon": null,
       "emoji": null,
       "typeLine": null,
-      "tone": "neutral",
+      "tone": "bad",
       "group": null,
       "layer": 4
     },

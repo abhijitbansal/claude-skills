@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { diagramCss } from '../scripts/lib/render.mjs';
 import { FAMILIES } from '../scripts/lib/kinds.mjs';
+import { legendItems } from '../scripts/lib/legend.mjs';
 import { buildPage, example } from './helpers/browser.mjs';
 import { loadTheme, listThemes } from '../shared/theme.mjs';
 import { contrastRatio, mixHex } from '../shared/contrast.mjs';
@@ -83,9 +84,34 @@ test("flow's start and end are keyed as pills, the shape of their nodes, with a 
 
 test('no shipped example colours a node with a status tone the legend does not key', () => {
   const dir = fileURLToPath(new URL('../references/examples/', import.meta.url));
-  const toned = fs.readdirSync(dir).filter((f) => f.endsWith('.diagram.json')).flatMap((f) => {
+  const unkeyed = fs.readdirSync(dir).filter((f) => f.endsWith('.diagram.json')).flatMap((f) => {
     const spec = JSON.parse(fs.readFileSync(dir + f, 'utf8'));
-    return [...(spec.nodes ?? []), ...(spec.participants ?? [])].filter((n) => n.tone && n.tone !== 'neutral').map((n) => `${f} ${n.id} (${n.tone})`);
+    const keyed = new Set(legendItems(spec).filter((it) => it.kind === 'tone').map((it) => it.name));
+    return [...(spec.nodes ?? []), ...(spec.participants ?? [])].filter((n) => n.tone && n.tone !== 'neutral' && !keyed.has(n.tone)).map((n) => `${f} ${n.id} (${n.tone})`);
   });
-  assert.deepEqual(toned, []);
+  assert.deepEqual(unkeyed, []);
+});
+
+test('the state diagram marks its outcomes: Paid in the success colour, Cancelled in the failure colour, both keyed in each legend', () => {
+  const spec = example('state');
+  const tone = Object.fromEntries(spec.nodes.map((n) => [n.id, n.tone]));
+  assert.equal(tone.paid, 'good', 'Paid is a success outcome');
+  assert.equal(tone.cancelled, 'bad', 'Cancelled is a failure outcome');
+  const { html } = buildPage(spec, { name: 'quiet-state-tones' });
+  assert.match(html, /class="pa-node[^"]*pa-tone-good[^"]*" data-id="paid"|data-id="paid"[^>]*class="pa-node[^"]*pa-tone-good/, 'the Paid card takes the success tone');
+  assert.match(html, /class="pa-node[^"]*pa-tone-bad[^"]*" data-id="cancelled"|data-id="cancelled"[^>]*class="pa-node[^"]*pa-tone-bad/, 'the Cancelled card takes the failure tone');
+  assert.match(css, /\.pa-tone-good \.pa-shape\{stroke:var\(--good\)/, 'a success card has a success-coloured border');
+  assert.match(css, /\.pa-swatch\.pa-tone-good\{stroke:var\(--good\)/, 'the drawn legend swatch has the same border');
+  assert.match(html, /<rect class="pa-swatch pa-tone-good"[^>]*\/><text[^>]*>(<tspan[^>]*>)?success</, 'the drawn legend keys it: "success"');
+  assert.match(html, /<rect class="pa-swatch pa-tone-bad"[^>]*\/><text[^>]*>(<tspan[^>]*>)?failure</, 'and "failure"');
+  assert.match(html, /<i class="lg-sw lg-tone lg-tone-good"><\/i>success/, 'the overlay legend keys "success"');
+  assert.match(html, /<i class="lg-sw lg-tone lg-tone-bad"><\/i>failure/, 'and "failure"');
+  const legendCss = html.match(/<style id="pa-legend-css">([\s\S]*?)<\/style>/)[1];
+  assert.match(legendCss, /\.lg-tone-good\{[^}]*border-color:var\(--good\)/, 'the overlay swatch has the success border');
+  assert.match(legendCss, /\.lg-tone-bad\{[^}]*border-color:var\(--bad\)/, 'and the failure border');
+});
+
+test('an outcome colour is a visible cue: --good and --bad keep 3:1 on the card surface in every theme and mode', () => {
+  const faint = modes().flatMap(({ name, mode, c }) => ['good', 'bad'].filter((t) => contrastRatio(c[t], c.surface) < MIN_ICON).map((t) => `${name} ${mode} ${t} ${contrastRatio(c[t], c.surface).toFixed(2)}:1`));
+  assert.deepEqual(faint, []);
 });

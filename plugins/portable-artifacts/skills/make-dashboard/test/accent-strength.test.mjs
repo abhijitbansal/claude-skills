@@ -39,6 +39,20 @@ test('the claimed mark stands off the neutral in every theme: dark needs chroma 
   assert.deepEqual(weak, []);
 });
 
+// Grouped and stacked charts: the claimed series is the strongest mark. Every neutral step sits between the accent and
+// the card surface in lightness (lighter than the accent in light mode, darker in dark), at least MIN_SERIES_STEP OKLab
+// L away from it, so no neutral is as dark (light mode) or as bright (dark mode) as the accent.
+const MIN_SERIES_STEP = 0.06;
+const lightness = (h) => oklab(h)[0];
+test('the claimed series stands out from every neutral: each neutral sits on the surface side of the accent, clearly apart', () => {
+  const close = cases().flatMap(({ name, mode, series: [accent, ...rest] }) => {
+    const toSurface = mode === 'light' ? 1 : -1;
+    return rest.filter((n) => (lightness(n) - lightness(accent)) * toSurface < MIN_SERIES_STEP)
+      .map((n) => `${name} ${mode}: neutral ${n} L${lightness(n).toFixed(3)} vs accent ${accent} L${lightness(accent).toFixed(3)}`);
+  });
+  assert.deepEqual(close, []);
+});
+
 test('every step of the restrained series scale keeps 3:1 on the card surface', () => {
   const faint = cases().flatMap(({ name, mode, tokens, series }) => series.filter((c) => contrastRatio(c, tokens.surface) < MIN_MARK).map((c) => `${name} ${mode}: ${c} ${contrastRatio(c, tokens.surface).toFixed(2)}:1`));
   assert.deepEqual(faint, []);
