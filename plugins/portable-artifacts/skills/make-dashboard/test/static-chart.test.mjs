@@ -39,6 +39,71 @@ test('vegaConfig maps colours to axes, marks and ranges', () => {
   assert.equal(cfg.background, null);
 });
 
+// Newsroom axes: the value axis has no domain line and no ticks (the grid carries it); the band and time axes keep
+// their domain line as the baseline. Checked on the compiled Vega spec, so a config key Vega-Lite ignores fails here.
+test('the value axis has no domain line or ticks; the category axis keeps its baseline', async () => {
+  const { compile } = await import('vega-lite');
+  const view = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'q', x: 'region', y: 'amount' }] },
+    { q: { columns: ['region', 'amount'], types: ['VARCHAR', 'DOUBLE'], rows, rowCount: rows.length } }).charts[0].views[0].vegaLite;
+  const spec = compile({ ...view, data: { values: rows }, config: vegaConfig(coloursOf(theme.light), 'F') }).spec;
+  const axes = spec.axes.filter((a) => !a.grid);
+  const y = axes.find((a) => a.orient === 'left');
+  const x = axes.find((a) => a.orient === 'bottom');
+  assert.equal(y.domain, false, 'value axis: no domain line');
+  assert.equal(y.ticks, false, 'value axis: no ticks');
+  assert.notEqual(x.domain, false, 'band axis keeps its baseline');
+  assert.equal(x.ticks, false, 'band axis: no ticks');
+});
+
+// A time x axis asks for ticks by the room it has (about one per 90 px) and drops any label that would come within
+// 8 px of its neighbour, so month labels never run together at phone width. Checked on the compiled Vega axis.
+test('a time x axis asks for ticks by its width and keeps 8 px between labels', async () => {
+  const { compile } = await import('vega-lite');
+  const values = Array.from({ length: 12 }, (_, i) => ({ m: `2025-${String(i + 1).padStart(2, '0')}-01`, v: i }));
+  const spec = compile({ data: { values }, mark: 'line', encoding: { x: { field: 'm', type: 'temporal' }, y: { field: 'v', type: 'quantitative' } }, config: vegaConfig(coloursOf(theme.light), 'F') }).spec;
+  const x = spec.axes.find((a) => a.orient === 'bottom' && !a.grid);
+  assert.equal(x.labelSeparation, 8, 'time axis: 8 px between labels');
+  assert.deepEqual(x.tickCount, { signal: 'ceil(width / 90)' }, 'time axis: ticks by width');
+});
+
+// The claimed bar takes the theme accent, the rest a neutral: --text-3 mixed 80% into the surface. That neutral is a
+// graphical object, so it keeps 3:1 against every surface step, in every theme and mode (WCAG 1.4.11).
+test('the highlight range is the accent, then a neutral that keeps 3:1 on every surface, every theme and mode', async () => {
+  const { contrastRatio } = await import('../shared/contrast.mjs');
+  const names = fs.readdirSync(path.join(ROOT, 'shared/themes')).map((f) => f.replace(/\.json$/, ''));
+  const low = [];
+  for (const name of names) {
+    const t = loadTheme(name);
+    for (const mode of ['light', 'dark']) {
+      const colours = coloursOf(t[mode]);
+      const [accent, neutral] = vegaConfig(colours, 'F').range.paHighlight;
+      assert.equal(accent, t[mode].accent, `${name} ${mode}: the accent first`);
+      assert.match(neutral, /^#[0-9a-f]{6}$/, `${name} ${mode}: a hex neutral`);
+      for (const k of ['surface', 'surface2', 'surface3']) {
+        const r = contrastRatio(neutral, t[mode][k]);
+        if (r < 3) low.push(`${name} ${mode} ${neutral} on ${k} ${r.toFixed(2)}:1`);
+      }
+    }
+  }
+  assert.deepEqual(low, []);
+});
+
+test('the claimed bar is drawn in the accent and the others in the neutral, in the static render', async () => {
+  const vl = expandCharts({ charts: [{ id: 'c', title: 'North leads', kind: 'bar', query: 'q', x: 'region', y: 'amount' }] },
+    { q: { columns: ['region', 'amount'], types: ['VARCHAR', 'DOUBLE'], rows, rowCount: rows.length } }).charts[0].views[0].vegaLite;
+  const svgs = await renderThemedSvgs(vl, rows, theme);
+  const [accent, neutral] = vegaConfig(coloursOf(theme.light), 'F').range.paHighlight;
+  const fills = [...svgs.light.wide.matchAll(/<path[^>]*fill="(#[0-9a-f]{6})"[^>]*>/gi)].map((m) => m[1].toLowerCase());
+  assert.equal(fills.filter((f) => f === accent.toLowerCase()).length, 1, 'one accent bar');
+  assert.equal(fills.filter((f) => f === neutral.toLowerCase()).length, 2, 'two neutral bars');
+});
+
+test('bars have a 2 px end radius and a 1 px separating stroke', () => {
+  const cfg = vegaConfig(coloursOf(theme.light), 'F');
+  assert.equal(cfg.bar.cornerRadiusEnd, 2);
+  assert.equal(cfg.bar.strokeWidth, 1);
+});
+
 // The page's copy is the function's own source (Function.prototype.toString), so it cannot drift from the Node copy
 // or silently break: a helper outside the function would throw here, in the page's sandbox.
 test('the page gets vegaConfig as window.PAVegaConfig, the same function the static render uses', () => {
@@ -93,15 +158,16 @@ test('inline chart errors name the field and the fix', () => {
 
 test('staticView drops params, hover-only layers and interaction opacity, and nothing else', () => {
   const line = inlineChart({ kind: 'line', x: 'd', y: 'v', color: 'g' }, ['2025-01-01', '2025-02-01'].flatMap((d) => ['a', 'b'].map((g) => ({ d, v: 1, g })))).vegaLite;
-  assert.equal(line.layer.length, 3);
+  assert.equal(line.layer.length, 5, 'line, hover rule, hover dots, end dots, end labels');
   const flat = staticView(line);
-  assert.equal(flat.layer.length, 1, 'rule and dots layers are hover-only');
+  assert.equal(flat.layer.length, 3, 'rule and dots layers are hover-only; the end dots and labels stay');
+  assert.equal(flat.layer[2].mark.type, 'text');
   assert.ok(!JSON.stringify(flat).includes('pa_'), 'no interaction params or conditions left');
   assert.deepEqual(flat.layer[0].mark, { type: 'line', point: true }, 'two points per series: the line draws its points too');
   assert.deepEqual(flat.encoding.x, line.encoding.x);
   const bar = staticView(inlineChart({ kind: 'bar', x: 'region', y: 'amount' }, rows).vegaLite);
   assert.ok(!JSON.stringify(bar).includes('pa_'));
-  assert.equal(bar.mark.type ?? bar.mark, 'bar');
+  assert.equal(bar.layer[0].mark.type ?? bar.layer[0].mark, 'bar', 'the bars, then their value labels');
 });
 
 test('the light and dark SVGs hold marks, axis titles and their own palette', async () => {
@@ -245,8 +311,10 @@ test('a dashboard spec that does not validate is reported with its own paths', a
 // ---- tick labels --------------------------------------------------------------------------
 
 // Every axis label in an SVG, with whether it is drawn (opacity) and where it sits.
+// Only the axes' label groups: a bar's own value label is a mark, not an axis label.
 function labels(svg) {
-  return [...svg.matchAll(/<text text-anchor="(\w+)" transform="translate\(([-\d.]+),([-\d.]+)\)[^"]*"[^>]*font-size="(\d+)px"[^>]*opacity="([\d.]+)">([^<]*)<\/text>/g)]
+  const axisText = [...svg.matchAll(/<g class="mark-text role-axis-label"[^>]*>([\s\S]*?)<\/g>/g)].map((m) => m[1]).join('');
+  return [...axisText.matchAll(/<text text-anchor="(\w+)" transform="translate\(([-\d.]+),([-\d.]+)\)[^"]*"[^>]*font-size="(\d+)px"[^>]*opacity="([\d.]+)">([^<]*)<\/text>/g)]
     .map((m) => ({ anchor: m[1], x: Number(m[2]), y: Number(m[3]), size: Number(m[4]), shown: Number(m[5]) > 0, text: m[6] }));
 }
 // A value-axis label reads as a number ("$1,200", "1.2k", "−5", "45%"); category and date labels do not.
@@ -561,7 +629,9 @@ test('on a phone, currency and number axes shorten like plain ones so three tick
     const narrow = labels(svgs.light.narrow).filter(isValueLabel);
     assert.ok(narrow.length >= 3, `${format}: ${narrow.map((l) => l.text)}`);
     assert.ok(narrow.every((l) => l.shown && l.text.startsWith(prefix)), `${format}: ${narrow.map((l) => l.text)}`);
-    assert.ok(Math.max(...narrow.map((l) => valueOf(l.text))) <= 1500000, `${format}: domain ends at ${narrow.at(-1).text}`);
+    // Within one tick step of the data (the bars' value labels take some of a phone's room, so the step may be 1M).
+    const ends = narrow.map((l) => valueOf(l.text));
+    assert.ok(Math.max(...ends) - 1234567 < ends[1] - ends[0], `${format}: domain ends at ${narrow.at(-1).text}`);
     assert.ok(narrow.some((l) => /M$/.test(l.text)), `${format}: millions are shortened (${narrow.map((l) => l.text)})`);
   }
   const wide = labels((await renderThemedSvgs(inlineChart({ kind: 'bar', x: 'team', y: 'v', format: 'currency' }, rows).vegaLite, rows, theme)).light.wide);

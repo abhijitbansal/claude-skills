@@ -3,12 +3,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { layoutDiagram } from '../scripts/lib/layout.mjs';
 import { renderSvg, diagramCss } from '../scripts/lib/render.mjs';
 import { nodeSize, textRoom, fonts, tileOf, trackedWidth, groupMinSize, TILE_SIZE, TILE_GAP, TILE_PAD_Y, TYPE_TRACK, GROUP_TRACK, GROUP_LABEL_INSET } from '../scripts/lib/sizes.mjs';
 import { KINDS, FAMILIES, family } from '../scripts/lib/kinds.mjs';
-import { loadTheme } from '../shared/theme.mjs';
+import { loadTheme, listThemes } from '../shared/theme.mjs';
+import { contrastRatio } from '../shared/contrast.mjs';
 
 const theme = loadTheme('blueprint');
 const here = (rel) => fileURLToPath(new URL(rel, import.meta.url));
@@ -86,7 +88,7 @@ test('the SVG card: family class, rect.pa-tile, the icon or the emoji inside it,
   assert.match(gateway, />GATEWAY<\/tspan>/);
   assert.match(gateway, /<text class="pa-note"[^>]*><tspan[^>]*>auth, rate limits<\/tspan>/);
   assert.ok(yOf(gateway, 'pa-type') < yOf(gateway, 'pa-label') && yOf(gateway, 'pa-label') < yOf(gateway, 'pa-note'), 'type, label, note from top to bottom');
-  assert.match(nodeOf(svg, 'warehouse'), /pa-kind-external pa-family-external pa-tone-warn/);
+  assert.match(nodeOf(svg, 'warehouse'), /pa-kind-external pa-family-external/); // untoned now (ruling: no stray coloured border)
   assert.match(nodeOf(svg, 'shopper'), /pa-kind-user pa-family-person/);
   assert.match(nodeOf(svg, 'db'), /pa-kind-database pa-family-data/);
   assert.match(nodeOf(svg, 'bus'), /pa-kind-queue pa-family-queue/);
@@ -124,19 +126,20 @@ test('an edge carries its from-node family and one path.pa-wire; an edge leaving
   assert.equal(attr(tagsOf(seq, /<g class="pa-edge [^>]*data-id="m5"[^>]*>/g)[0], 'data-family'), 'external', 'psp replies');
 });
 
-test('diagramCss: family rules tint the card and colour the tile, icon, type line and outgoing wires; tones come after and win; heads follow the wire', () => {
+test('diagramCss: a card is the surface with a hairline; the family hue colours the tile, icon and type line only; tones come after and win; heads follow the wire', () => {
   const css = diagramCss();
   for (const f of FAMILIES) {
-    const plain = `.pa-family-${f} .pa-shape{fill:var(--surface);stroke:var(--k-${f})}`;
-    const tint = `@supports (color: color-mix(in srgb, red, red)){`;
+    const plain = `.pa-family-${f} .pa-shape{fill:var(--surface);stroke:var(--line)}`;
     assert.ok(css.includes(plain), f);
+    assert.ok(!css.includes(`.pa-family-${f} .pa-shape{fill:color-mix(`), `${f}: the card fill is the surface, not a tint of the hue`);
     assert.ok(css.includes(`.pa-family-${f} .pa-tile{fill:var(--surface)}`), `${f} plain tile`);
-    assert.ok(css.indexOf(`.pa-family-${f} .pa-shape{fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface))}`) > css.indexOf(tint), `${f} tint is inside @supports`);
     assert.ok(css.indexOf(`.pa-family-${f} .pa-tile{fill:color-mix(in srgb,var(--k-${f}) `) > css.indexOf(plain), `${f} tile tint after the plain rules`);
     assert.ok(css.includes(`.pa-family-${f} .pa-icon{color:var(--k-${f})}`), `${f} icon`);
     assert.ok(css.includes(`.pa-family-${f} .pa-type{fill:var(--k-${f})}`), `${f} type line`);
-    assert.ok(css.includes(`.pa-edge[data-family="${f}"] .pa-wire{stroke:var(--k-${f})}`), `${f} wire`);
+    assert.ok(!css.includes(`.pa-family-${f} .pa-decor{stroke:var(--k-${f})}`), `${f}: decor lines follow the hairline, not the hue`);
   }
+  // The default wire is one quiet colour: no family hue reaches a wire (hue and accent come only with hover, trace and story).
+  assert.ok(!/\.pa-edge\[data-family="[a-z]+"\] \.pa-wire\{stroke:var\(--k-/.test(css), 'the default wire colour is not a family hue');
   assert.ok(css.includes('.pa-family-bare .pa-shape{fill:var(--surface);stroke:var(--line)}'));
   const after = (a, b) => assert.ok(css.indexOf(a) > css.lastIndexOf(b), `${a} comes after ${b}`);
   after('.pa-tone-warn .pa-shape{', '.pa-family-decision .pa-shape{');
@@ -188,15 +191,18 @@ test('diagramCss: lane, pill and legend rules', () => {
   assert.match(css, /\.pa-lane\{stroke:none\}/);
   assert.match(css, /\.pa-group-box\{fill:var\(--surface\);stroke:var\(--line\);stroke-width:1\}\n@supports \(color: color-mix\(in srgb, red, red\)\)\{\.pa-group-box\{fill:color-mix\(in srgb,var\(--text-3\) 7%,transparent\)\}\}/);
   assert.match(css, /\.pa-group-label\{fill:var\(--text-2\);font-size:11px;font-weight:600;letter-spacing:\.08em;text-transform:uppercase\}/);
-  assert.match(css, /\.pa-edge-plate\{fill:var\(--surface\);stroke:var\(--line\);stroke-width:1\}/);
+  assert.match(css, /\.pa-edge-plate\{fill:var\(--surface\);stroke:none\}/, 'edge label plates have no stroke');
   assert.match(css, /\.pa-frame-kind\{fill:var\(--text-2\);font-size:11px;font-weight:600\}/, 'the frame tab word is measured with f.group: plain, no tracking');
   assert.match(css, /\.pa-legend-text\{fill:var\(--text-2\);font-size:11px\}/);
-  assert.match(css, /\.pa-swatch\{stroke-width:1\}/);
-  for (const f of FAMILIES) {
-    assert.ok(css.includes(`.pa-swatch.pa-family-${f}{fill:var(--surface);stroke:var(--k-${f})}`), f);
-    assert.ok(css.includes(`.pa-swatch.pa-family-${f}{fill:color-mix(in srgb,var(--k-${f}) 10%,var(--surface))}`), `${f} tint`);
-  }
-  assert.match(css, /\.pa-swatch\.pa-family-bare\{fill:var\(--surface\);stroke:var\(--line\)\}/);
+  // Swatches are neutral like the cards (surface, hairline; --text-3 in dark, a diamond and external in --text-3 always);
+  // the hue is only the small mark inside a card swatch, as the tile and icon carry it on a card.
+  assert.match(css, /\.pa-swatch\{fill:var\(--surface\);stroke:var\(--line\);stroke-width:1\}/);
+  assert.ok(!/\.pa-swatch(\.[a-z-]+)*\{[^}]*(stroke|fill):var\(--k-/.test(css) && !/\.pa-swatch(\.[a-z-]+)*\{[^}]*color-mix/.test(css), 'no swatch box takes a hue or a tint');
+  for (const f of FAMILIES) assert.ok(css.includes(`.pa-swatch-mark.pa-family-${f}{fill:var(--k-${f})}`), `${f} mark`);
+  assert.match(css, /\.pa-swatch\.pa-family-external\{stroke:var\(--text-3\);stroke-dasharray:3 2\}/, 'external swatch dashed, like its card');
+  assert.match(css, /\.pa-swatch-diamond\{stroke:var\(--text-3\)\}/);
+  assert.match(css, /\.pa-swatch-filled-dot\{fill:var\(--text-2\);stroke:none\}/);
+  assert.match(css, /\.pa-swatch-ringed-dot\{fill:var\(--surface\);stroke:var\(--text-2\);stroke-width:1\.5\}/);
   assert.match(css, /\.pa-legend-sample \.pa-wire\{stroke-width:1\.5\}/);
 });
 
@@ -210,12 +216,71 @@ test('diagramCss: flow animation rules only reach real edges, never the legend s
 
 test('diagramCss: the dark block glows the active edge and the dot in both selector forms; light stays thick and matte', () => {
   const css = diagramCss();
-  const media = css.match(/@media \(prefers-color-scheme: dark\)\{([^]*?)\}\n/)[1];
-  for (const form of [media, css.slice(css.indexOf(':root[data-theme="dark"]'))]) {
+  // the glow block (the card outline rules have their own, earlier dark blocks)
+  const media = [...css.matchAll(/@media \(prefers-color-scheme: dark\)\{([^]*?)\}\n/g)].map((m) => m[1]).find((b) => b.includes('pa-active'));
+  for (const form of [media, css.slice(css.indexOf('\n:root[data-theme="dark"]'))]) {
     assert.match(form, /\.pa-edge\.pa-active \.pa-wire\{stroke-width:2\.5;filter:drop-shadow\(0 0 6px var\(--glow\)\)\}/);
     assert.match(form, /\.pa-dot\{fill:var\(--glow\);filter:drop-shadow\(0 0 6px var\(--glow\)\)\}/);
   }
   assert.match(media, /^:root:not\(\[data-theme="light"\]\) \.pa-edge/);
-  assert.ok(!/drop-shadow/.test(css.slice(0, css.indexOf('@media (prefers-color-scheme: dark)'))), 'no glow outside the dark block');
-  assert.ok(css.indexOf('@media (prefers-reduced-motion') < css.indexOf('@media (prefers-color-scheme: dark)'), 'the motion guard comes first');
+  assert.ok(!/drop-shadow\([^)]*--glow/.test(css.slice(0, css.lastIndexOf('@media (prefers-color-scheme: dark)'))), 'no glow outside the dark block');
+  assert.ok(css.indexOf('@media (prefers-reduced-motion') < css.lastIndexOf('@media (prefers-color-scheme: dark)'), 'the motion guard comes before the glow block');
+});
+
+// Cards lift off the page with the theme's elevation colour (--shadow), as a CSS drop-shadow (box-shadow does not reach
+// SVG shapes). The plain rgba rule holds where color-mix() is missing; print drops it.
+test('diagramCss: a family card lifts with a --shadow drop-shadow, a plain fallback first, none in print; bare shapes stay flat', () => {
+  const css = diagramCss();
+  const plain = css.indexOf('.pa-node:not(.pa-family-bare) .pa-shape{filter:drop-shadow(0 1px 2px rgba(0,0,0,.08))}');
+  const mixed = css.indexOf('.pa-node:not(.pa-family-bare) .pa-shape{filter:drop-shadow(0 1px 2px color-mix(in srgb,var(--shadow) 14%,transparent))}');
+  assert.ok(plain >= 0, 'plain fallback');
+  assert.ok(mixed > plain, 'the color-mix lift comes after the fallback');
+  assert.ok(mixed > css.lastIndexOf('@supports (color: color-mix', mixed), 'inside @supports');
+  assert.match(css, /@media print\{\.pa-shape\{filter:none\}\}/);
+});
+
+// One neutral rule for every node outline: no kind hue on any edge. A card is the surface with a hairline (--text-3 in
+// dark, where the hairline is too faint). A shape that is not a card (a decision or choice diamond) and the dashed
+// external card take --text-3 in every mode: a hairline left a diamond and the external dash invisible on a light
+// page. These sit before the tone and state rules, which still win.
+test('diagramCss: no node outline takes a kind hue; diamonds and external cards are --text-3 in every mode; tones and states still win', () => {
+  const css = diagramCss();
+  const diamonds = '.pa-node .pa-shape-diamond,.pa-node .pa-shape-small-diamond{stroke:var(--text-3)}';
+  const external = '.pa-kind-external .pa-shape{stroke:var(--text-3)}';
+  const darkPinned = ':where(:root[data-theme="dark"]) .pa-node .pa-shape{stroke:var(--text-3)}';
+  for (const rule of [diamonds, external, darkPinned]) assert.ok(css.includes(rule), `missing: ${rule}`);
+  assert.ok(!/\.pa-(node|family-[a-z]+|kind-[a-z]+)[^{]* \.pa-shape[^{]*\{[^}]*stroke:var\(--k-/.test(css), 'no node outline is a kind hue');
+  assert.match(css, /\.pa-kind-external \.pa-shape\{stroke-dasharray:5 4\}/, 'external is dashed');
+  for (const later of ['.pa-tone-warn .pa-shape{', '.pa-hl .pa-shape,', '.pa-selected .pa-shape{']) {
+    assert.ok(css.indexOf(later) > css.indexOf(diamonds) && css.indexOf(later) > css.indexOf(external), `${later} comes after the outline rules, so it wins`);
+  }
+});
+
+// The shipped examples draw every external node one way (the dashed neutral card) and carry no stray coloured border:
+// a tone marks a state (good, warn, bad), never an external node or a plain "accent" highlight.
+test('no shipped example tones an external node or uses the accent tone', () => {
+  const dir = fileURLToPath(new URL('../references/examples/', import.meta.url));
+  const stray = fs.readdirSync(dir).filter((f) => f.endsWith('.diagram.json')).flatMap((f) => {
+    const spec = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    return [...(spec.nodes ?? []), ...(spec.participants ?? [])]
+      .filter((n) => n.tone !== undefined && (n.kind === 'external' || n.tone === 'accent'))
+      .map((n) => `${f}: ${n.id} (${n.kind ?? 'default'}, tone ${n.tone})`);
+  });
+  assert.deepEqual(stray, []);
+});
+
+test('every theme: the kind hue reads as small text on the plain card surface (4.5:1), both modes', () => {
+  const HUE_KEYS = { person: 'kindPerson', service: 'kindService', data: 'kindData', queue: 'kindQueue', external: 'kindExternal', decision: 'kindDecision' };
+  assert.deepEqual(Object.keys(HUE_KEYS), [...FAMILIES]);
+  const problems = [];
+  for (const name of listThemes()) {
+    const t = loadTheme(name);
+    for (const mode of ['light', 'dark']) {
+      for (const [f, key] of Object.entries(HUE_KEYS)) {
+        const r = contrastRatio(t[mode][key], t[mode].surface);
+        if (r < 4.5) problems.push(`${name} ${mode} ${f}: ${r.toFixed(2)}`);
+      }
+    }
+  }
+  assert.deepEqual(problems, []);
 });

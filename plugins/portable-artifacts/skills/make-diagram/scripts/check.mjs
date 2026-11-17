@@ -62,12 +62,17 @@ const coveredByLegend = (tol) => {
   return bad;
 };
 
-// Runs in the page. How large the page drew the diagram at first paint: screen px per diagram unit (the fit scale),
-// and the diagram type (a sequence has no direction to change).
+// Runs in the page. The scale that fits the whole drawing on this stage: screen px per diagram unit. The camera
+// publishes it as data-fit-scale, because a desktop page that cannot fit it at the reading floor opens at the floor
+// instead (camera.js READ_SCALE); else how large the page drew the diagram at first paint. And the diagram type
+// (a sequence has no direction to change).
 const renderedFit = () => {
+  const stage = document.getElementById('pa-stage');
   const svg = document.querySelector('#pa-stage svg');
   const box = svg ? svg.viewBox.baseVal : null;
   const type = JSON.parse(document.getElementById('pa-data').textContent).type;
+  const whole = Number(stage?.getAttribute('data-fit-scale'));
+  if (Number.isFinite(whole) && whole > 0) return { scale: whole, type };
   return box && box.width > 0 ? { scale: svg.getBoundingClientRect().width / box.width, type } : null;
 };
 

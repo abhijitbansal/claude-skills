@@ -112,6 +112,12 @@ h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--fo
 .transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .scrub { flex: 1 1 160px; min-width: 120px; margin: 0; }
 .cap-count { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: var(--num); white-space: nowrap; }
+/* A phone: the tool row and the legend overlay each collapse to one line that scrolls sideways, so the toolbar and the legend take at most about a quarter of the screen. */
+@media (max-width: 719px) {
+  .tools { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+  .tools > * { flex-shrink: 0; }
+  .legend { flex-wrap: nowrap; max-width: calc(100% - 24px); overflow-x: auto; scrollbar-width: none; pointer-events: auto; }
+}
 /* Play on a phone, portrait or landscape (narrow, or short): the tool row and the transport scroll sideways instead of wrapping, and the legend overlay steps aside, so the stage keeps about half the screen. */
 @media (max-width: 719px), (max-height: 500px) {
   body.pa-presenting .tools, body.pa-presenting .transport { flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scrollbar-width: thin; }

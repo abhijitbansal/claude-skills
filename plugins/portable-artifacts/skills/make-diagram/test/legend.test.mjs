@@ -91,12 +91,28 @@ test('a graph spec with a dashed edge keys it "secondary", never "optional" (rep
   assert.deepEqual(legendItems(spec).filter((i) => i.kind === 'style').map((i) => i.label), ['secondary']);
 });
 
+// A swatch is drawn the way its nodes are: a neutral card with the kind's hue as a small mark (the tile and icon
+// carry the hue on a card), a dashed card for external, a bare neutral diamond for a decision or choice, dots for
+// start and end. The 12 px box keeps every layout and its measured widths as they were.
+test('legendSvg: each swatch takes its kind\'s shape; only a card shows the hue, as a mark inside a neutral box', async () => {
+  const flow = legendSvg((await layoutDiagram(example('flow'), theme)).legend, fonts(theme), 'flow');
+  assert.match(flow, /<path class="pa-swatch pa-swatch-diamond pa-family-decision" d="M[\d.]+ [\d.]+L[\d.]+ [\d.]+L[\d.]+ [\d.]+L[\d.]+ [\d.]+Z"\/><text/, 'a decision is a bare diamond, no hue mark');
+  assert.match(flow, /<rect class="pa-swatch pa-family-bare"[^>]*\/><text[^>]*><tspan[^>]*>1 start</, 'a flow start (a stadium, no hue) is a bare neutral box');
+  const state = legendSvg((await layoutDiagram(example('state'), theme)).legend, fonts(theme), 'state');
+  assert.match(state, /<circle class="pa-swatch-filled-dot" cx="[\d.]+" cy="[\d.]+" r="4"\/>/, 'a state start is a filled dot');
+  assert.match(state, /<path class="pa-swatch pa-swatch-diamond pa-family-decision"/, 'choice is a diamond');
+  assert.match(state, /<rect class="pa-swatch pa-family-decision"[^>]*\/><rect class="pa-swatch-mark pa-family-decision"/, 'a state card is a card with its mark');
+  assert.match(state, /<circle class="pa-swatch-ringed-dot"/, 'end is a ringed dot');
+  const story = legendSvg((await layoutDiagram(example('story'), theme)).legend, fonts(theme), 'architecture');
+  assert.match(story, /<rect class="pa-swatch pa-family-external"[^>]*\/><rect class="pa-swatch-mark pa-family-external"/);
+});
+
 test('legendSvg: a swatch per kind in its family, a wire sample per style, drawn last', async () => {
   const g = await layoutDiagram(example('architecture'), theme);
   const svg = legendSvg(g.legend, fonts(theme));
   assert.match(svg, /^<g class="pa-legend" aria-hidden="true">/);
   assert.equal((svg.match(/<rect class="pa-swatch pa-family-/g) ?? []).length, 4);
-  assert.match(svg, /<rect class="pa-swatch pa-family-data" x="[\d.]+" y="[\d.]+" width="12" height="12" rx="3"\/><text class="pa-legend-text" text-anchor="start"><tspan x="[\d.]+" y="[\d.]+">1 database<\/tspan><\/text>/);
+  assert.match(svg, /<rect class="pa-swatch pa-family-data" x="[\d.]+" y="[\d.]+" width="12" height="12" rx="3"\/><rect class="pa-swatch-mark pa-family-data" x="[\d.]+" y="[\d.]+" width="6" height="6" rx="1.5"\/><text class="pa-legend-text" text-anchor="start"><tspan x="[\d.]+" y="[\d.]+">1 database<\/tspan><\/text>/);
   assert.match(svg, /<g class="pa-legend-sample pa-edge-dashed"><path class="pa-wire" d="M[\d.]+ [\d.]+L[\d.]+ [\d.]+"\/><\/g><text class="pa-legend-text" text-anchor="start"><tspan x="[\d.]+" y="[\d.]+">secondary<\/tspan><\/text>/);
   const page = renderSvg(g, example('architecture'), { theme });
   assert.ok(page.endsWith(`${svg}</svg>`), 'the legend is the last thing drawn');

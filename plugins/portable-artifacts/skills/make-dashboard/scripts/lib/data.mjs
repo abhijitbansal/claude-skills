@@ -235,6 +235,10 @@ export function checkFields(spec, results) {
     if (columns && !columns.includes(k.field)) {
       errors.push({ path: `${pathJoin('kpis', i)}.field`, message: fieldError(k.field, k.query, columns) });
     }
+    const trendColumns = k.trend && results[k.trend.query]?.columns;
+    if (trendColumns && !trendColumns.includes(k.trend.field)) {
+      errors.push({ path: `${pathJoin('kpis', i)}.trend.field`, message: fieldError(k.trend.field, k.trend.query, trendColumns) });
+    }
   });
   (spec.charts ?? []).forEach((chart, i) => {
     if (!chart.vegaLite) return;

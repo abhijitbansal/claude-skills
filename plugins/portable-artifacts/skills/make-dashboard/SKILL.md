@@ -98,11 +98,12 @@ Queries have a 30 s limit (`--timeout <seconds>` on build).
   sqlite/postgres/mysql need a one-time `node <skill-dir>/scripts/setup.mjs dashboard.json` (online; builds stay offline).
 - `queries`: one SELECT each, names `[a-z][a-z0-9_]*`. Alias every aggregate (`AS revenue`); chart fields are those aliases.
 - `kpis[].format`: `number | currency | percent | compact` (percent expects a fraction).
+  Optional `kpis[].trend`: `{ "query": "by_month", "field": "revenue" }` names a declared query (never SQL) and draws a small line of that column under the tile's value, in query order.
 - `charts[].width`: `full` (default) or `half`. Each chart has exactly one of `kind` or `vegaLite`.
 - `kind`: `bar | stacked-bar | grouped-bar | line | area | scatter | bubble | heatmap | histogram | boxplot | donut`.
   Name columns by role (`x`, `y`, `color`, `size`, `value`); the build makes the chart, tooltips, alternate views, a sortable Table view and PNG/SVG/CSV export.
   Raw `vegaLite` (any Vega-Lite spec **without `data`**) still works for anything the kinds don't cover.
-- Chart titles state the finding ("North drives half of revenue"), not the field names.
+- Chart titles state the finding ("North drives half of revenue"), not the field names: the title is set large, as the chart's claim.
 - `views` picks alternate views (e.g. `["sorted", "table"]`); `pair: true` puts the primary view and a second (switchable) view side by side. Order follows the query, so write `ORDER BY`.
 - `theme`: `paper` (default), `blueprint`, `editorial`, `ink`, `dusk`, `press`, `poster`, `mono`, `brief`. Never set colours, `config`, `width` or `autosize` in `vegaLite`.
 - Theme by purpose: `paper` (the default here) is clean and neutral, `blueprint` is technical, `dusk` is warm and soft, `press` is print editorial for dense reads, `poster` is loud and condensed for launches and demos, `mono` is a terminal console, `brief` is calm and executive, `ink` and `editorial` are the older looks. A theme the user names wins; otherwise keep `paper` unless the page is for a launch or pitch (`poster`), a dense read (`press`) or a sign-off (`brief`).

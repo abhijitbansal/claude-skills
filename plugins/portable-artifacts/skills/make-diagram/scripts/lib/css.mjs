@@ -7,7 +7,7 @@ import { FAMILIES } from './kinds.mjs';
 
 const TONES = { accent: 'accent', good: 'good', warn: 'warn', bad: 'bad' };
 const EMOJI_FONTS = '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
-export const CARD_TINT = 10; // % of the kind hue in a card's fill; shared/contrast.mjs TINT gates the hue as text on it
+export const CARD_TINT = 10; // % tint shared/contrast.mjs TINT still gates the kind hue on (no card or swatch is tinted now; kept for that gate)
 const TILE_TINT = 18; // the tile is a stronger tint of the same hue
 
 // Every color-mix() here wraps var(), so an engine without it still accepts the declaration at parse time, fails it at
@@ -32,7 +32,7 @@ const rules = [
   '.pa-hit{fill:none;stroke:transparent;stroke-width:12px;vector-effect:non-scaling-stroke;pointer-events:visibleStroke}', // the viewer's invisible mouse target along a wire; visibleStroke so a hidden edge catches nothing
   '.pa-arrow-fill{fill:var(--text-3);fill:context-stroke;stroke:none}',
   '.pa-arrow-open{fill:none;stroke:var(--text-3);stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}',
-  '.pa-edge-plate{fill:var(--surface);stroke:var(--line);stroke-width:1}', // a pill: surface fill (the export and make-explainer draw on the surface), hairline border
+  '.pa-edge-plate{fill:var(--surface);stroke:none}', // a plate: surface fill (the export and make-explainer draw on the surface), no border
   `.pa-edge-text{fill:var(--text-2);font-size:${EDGE_LABEL_SIZE}px;font-weight:400}`,
   // nodes: a card tinted by its kind family (familyRules below); the shape still encodes the kind
   '.pa-node{outline:none}',
@@ -59,23 +59,41 @@ const rules = [
   `.pa-seq-note-text{fill:var(--text-2);font-family:var(--mono);font-size:${NOTE_SIZE}px;font-weight:400}`,
 ];
 
-// One hue per family: the card's fill is a tint of it; the border, the tile,
-// the icon, the type line and the wires leaving the node take it. A bare shape
-// (dots, pills) keeps the neutral card.
+// One hue per family, carried by the tile (a tint of it), the icon and the type
+// line. The card itself is the surface with a hairline, lifted off the page, so
+// no card outshouts another; wires stay one quiet colour until hover, trace or
+// a story beat lights them. A bare shape (dots, pills) keeps the flat neutral card.
 const familyRules = FAMILIES.flatMap((f) => {
   const hue = `var(--k-${f})`;
   return [
-    `.pa-family-${f} .pa-shape{fill:var(--surface);stroke:${hue}}`,
-    `.pa-family-${f} .pa-decor{stroke:${hue}}`,
+    `.pa-family-${f} .pa-shape{fill:var(--surface);stroke:var(--line)}`,
     `.pa-family-${f} .pa-tile{fill:var(--surface)}`,
     `.pa-family-${f} .pa-icon{color:${hue}}`,
     `.pa-family-${f} .pa-type{fill:${hue}}`,
-    `.pa-edge[data-family="${f}"] .pa-wire{stroke:${hue}}`,
   ];
-}).concat(['.pa-family-bare .pa-shape{fill:var(--surface);stroke:var(--line)}', supportsMix(FAMILIES.flatMap((f) => [
-  `.pa-family-${f} .pa-shape{fill:color-mix(in srgb,var(--k-${f}) ${CARD_TINT}%,var(--surface))}`,
-  `.pa-family-${f} .pa-tile{fill:color-mix(in srgb,var(--k-${f}) ${TILE_TINT}%,var(--surface))}`,
-]))]);
+}).concat(['.pa-family-bare .pa-shape{fill:var(--surface);stroke:var(--line)}', supportsMix(FAMILIES.map((f) => (
+  `.pa-family-${f} .pa-tile{fill:color-mix(in srgb,var(--k-${f}) ${TILE_TINT}%,var(--surface))}`
+)))]);
+
+// Outlines: one neutral rule, never a kind hue. Dark mode: the hairline is too faint for a card edge, so cards take
+// --text-3 (the :where() keeps the specificity at a family rule's, so tone and state rules, which come later, still
+// win). A decision or choice diamond is a shape, not a card, and the external card is told apart by its dash: on a
+// light page a hairline hid both, so they take --text-3 in every mode and every diagram type.
+const outlineRules = [
+  '@media (prefers-color-scheme: dark){:where(:root:not([data-theme="light"])) .pa-node .pa-shape{stroke:var(--text-3)}}',
+  ':where(:root[data-theme="dark"]) .pa-node .pa-shape{stroke:var(--text-3)}',
+  '.pa-node .pa-shape-diamond,.pa-node .pa-shape-small-diamond{stroke:var(--text-3)}',
+  '.pa-kind-external .pa-shape{stroke:var(--text-3)}',
+];
+
+// Card lift: box-shadow does not reach SVG shapes, so a drop-shadow mixed from the theme's elevation colour
+// (--shadow, as --elev-1 is); a plain rgba rule first for an engine without color-mix(). Print stays flat.
+const LIFT = '0 1px 2px';
+const liftRules = [
+  `.pa-node:not(.pa-family-bare) .pa-shape{filter:drop-shadow(${LIFT} rgba(0,0,0,.08))}`,
+  supportsMix([`.pa-node:not(.pa-family-bare) .pa-shape{filter:drop-shadow(${LIFT} color-mix(in srgb,var(--shadow) 14%,transparent))}`]),
+  '@media print{.pa-shape{filter:none}}',
+];
 
 // Dots and the small diamond are drawn as marks, not cards: after the family
 // rules (same specificity), so a bare family cannot wash them out.
@@ -133,14 +151,20 @@ const animation = [
   '}',
 ];
 
-// Lane bars cycle the categorical colours; the legend's swatches share the card tints.
+// Lane bars cycle the categorical colours. Legend swatches are drawn as their nodes are (legend.mjs): a neutral card
+// with the kind hue as a small mark (the tile and icon carry it on a card), a dashed card for external, a bare
+// neutral diamond for a decision or choice, dots for start and end; outlines follow the card rule, dark included.
 const laneRules = Array.from({ length: 8 }, (_, i) => `.pa-group[data-lane="${i}"] .pa-lane{fill:var(--s${i + 1})}`);
 const legendRules = [
   '.pa-legend-text{fill:var(--text-2);font-size:11px}',
-  '.pa-swatch{stroke-width:1}',
-  ...FAMILIES.map((f) => `.pa-swatch.pa-family-${f}{fill:var(--surface);stroke:var(--k-${f})}`),
-  '.pa-swatch.pa-family-bare{fill:var(--surface);stroke:var(--line)}',
-  supportsMix(FAMILIES.map((f) => `.pa-swatch.pa-family-${f}{fill:color-mix(in srgb,var(--k-${f}) ${CARD_TINT}%,var(--surface))}`)),
+  '.pa-swatch{fill:var(--surface);stroke:var(--line);stroke-width:1}',
+  '@media (prefers-color-scheme: dark){:where(:root:not([data-theme="light"])) .pa-swatch{stroke:var(--text-3)}}',
+  ':where(:root[data-theme="dark"]) .pa-swatch{stroke:var(--text-3)}',
+  ...FAMILIES.map((f) => `.pa-swatch-mark.pa-family-${f}{fill:var(--k-${f})}`),
+  '.pa-swatch.pa-family-external{stroke:var(--text-3);stroke-dasharray:3 2}',
+  '.pa-swatch-diamond{stroke:var(--text-3)}',
+  '.pa-swatch-filled-dot{fill:var(--text-2);stroke:none}',
+  '.pa-swatch-ringed-dot{fill:var(--surface);stroke:var(--text-2);stroke-width:1.5}',
   '.pa-legend-sample .pa-wire{stroke-width:1.5}',
 ];
 
@@ -164,5 +188,5 @@ const dark = [
 
 /** The stylesheet for rendered diagrams. */
 export function diagramCss() {
-  return [...rules, ...familyRules, ...markRules, ...toneRules, ...laneRules, ...legendRules, ...state, ...animation, ...dark].join('\n');
+  return [...rules, ...familyRules, ...outlineRules, ...liftRules, ...markRules, ...toneRules, ...laneRules, ...legendRules, ...state, ...animation, ...dark].join('\n');
 }

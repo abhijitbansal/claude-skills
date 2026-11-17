@@ -140,7 +140,7 @@
       "icon": "lucide:cloud",
       "emoji": null,
       "typeLine": "EXTERNAL",
-      "tone": "warn",
+      "tone": "neutral",
       "group": null,
       "layer": 3
     }

@@ -60,6 +60,17 @@ function legendColours(svg) {
   }));
 }
 
+// A line with few series is labelled at its line ends instead of a legend (make-dashboard views.mjs): the end-dot
+// group comes right before the label group, and both draw one item per series in the same order, so the nth dot's
+// fill is the colour of the nth label's series.
+function endLabelColours(svg) {
+  const m = /<g class="mark-symbol role-mark[^"]*"[^>]*>((?:<path[^>]*\/>)+)<\/g><g class="mark-text role-mark[^"]*"[^>]*>((?:<text[^>]*>[^<]*<\/text>)+)<\/g>/.exec(svg);
+  if (!m) return new Map();
+  const fills = [...m[1].matchAll(/fill="([^"]+)"/g)].map((x) => x[1]);
+  const names = [...m[2].matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((x) => x[1]);
+  return new Map(names.map((name, i) => [name, fills[i]]));
+}
+
 dtest('colours follow the 2D chart: a colour role ascending by name, a donut in row order, and the fallback SVG agrees', async (t) => {
   const dir = byValueDashboard(t);
   const rowOrder = { donut: ['Gizmo', 'Gadget', 'Widget'] }; // BY_PRODUCT, biggest first
@@ -68,7 +79,8 @@ dtest('colours follow the 2D chart: a colour role ascending by name, a donut in 
     assertGraph(g);
     const names = g.groups.map((x) => x.name);
     assert.deepEqual(names, rowOrder[id] ?? [...names].sort(), `${id}: legend order`);
-    const svg = legendColours(g.fallback.svg);
+    const svg = new Map([...legendColours(g.fallback.svg), ...endLabelColours(g.fallback.svg)]);
+    if (id === 'line') assert.equal(legendColours(g.fallback.svg).size, 0, 'line: three series are labelled at the line ends, with no legend');
     // (a bubble drawing's size legend adds entries of its own, so match by group name)
     for (const { name, colour } of g.groups) assert.equal(THEME.light[colour], svg.get(name), `${id}: ${name} is the same colour in 3D (${colour}) and in the 2D drawing`);
   }

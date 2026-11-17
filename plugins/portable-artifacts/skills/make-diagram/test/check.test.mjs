@@ -112,7 +112,9 @@ test('a legend overlay sitting on a node fails and names the node', async (t) =>
 
 test('a camera that ignores the legend overlay (fits the whole padded canvas) fails at 390 px, where it covers the first node', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const bad = doctored('flow', (html) => swap(swap(html, 'var fitBox = overlay &&', 'var fitBox = false && overlay &&'), IGNORE_OVERLAY[0], IGNORE_OVERLAY[1]));
+  // The phone's one-line legend is undone too: the guard needs the overlay as tall as it wraps to reach the first node.
+  const PHONE_LEGEND = '  .legend { flex-wrap: nowrap; max-width: calc(100% - 24px); overflow-x: auto; scrollbar-width: none; pointer-events: auto; }\n';
+  const bad = doctored('flow', (html) => swap(swap(swap(html, 'var fitBox = overlay &&', 'var fitBox = false && overlay &&'), IGNORE_OVERLAY[0], IGNORE_OVERLAY[1]), PHONE_LEGEND, ''));
   const r = run([bad]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^390px: node "begin" is \d+% under the legend overlay$/m);

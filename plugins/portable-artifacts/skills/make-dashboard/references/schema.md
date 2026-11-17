@@ -10,7 +10,8 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
   "theme": "paper",
   "sources": { "sales": { "type": "parquet", "path": "data/sales.parquet" } },
   "queries": { "rev_by_region": "SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1" },
-  "kpis":   [ { "id": "k1", "title": "Total", "query": "total", "field": "revenue", "format": "currency" } ],
+  "kpis":   [ { "id": "k1", "title": "Total", "query": "total", "field": "revenue", "format": "currency",
+                "trend": { "query": "rev_by_month", "field": "revenue" } } ],
   "charts": [ { "id": "c1", "title": "North drives half of revenue", "query": "rev_by_region", "width": "half",
                 "kind": "bar", "x": "region", "y": "revenue", "format": "currency" } ]
 }
@@ -27,7 +28,7 @@ Authoritative schema: `SCHEMA` in `scripts/lib/spec.mjs`. Unknown properties are
 | `maxRows` | integer 1–100000, default 5000; applied to every query. Longer results are cut and the card says "truncated at N rows; raise `maxRows` in the spec or aggregate in SQL" |
 | `sources.<name>` | `name` matches `^[a-z][a-z0-9_]*$` and is not `main`, `temp` or `system` (DuckDB catalogs). `type`: `csv`, `parquet`, `json`, `duckdb`, `sqlite` (take `path`) or `postgres`, `mysql` (take `env`, never `path`). `path` is relative to the **spec file**, not the cwd, and must resolve (symlinks followed) to a regular file inside the spec's folder. Only `--allow-outside` on validate/build lifts the folder rule; it is deliberately not a spec field |
 | `queries.<name>` | one SQL `SELECT` (CTEs and UNIONs fine). Each source name is a table/view in the query. No other statement types |
-| `kpis[]` | `id`, `title`, `query`, `field` required. Shows the `field` of the query's one row (more than one row is a warning at validate and build; zero rows shows a dash); the tile's *Query* disclosure shows its SQL. `format`: `number`, `currency` (USD), `percent` (value is a fraction: 0.25 → 25%), `compact` |
+| `kpis[]` | `id`, `title`, `query`, `field` required. Shows the `field` of the query's one row (more than one row is a warning at validate and build; zero rows shows a dash); the tile's *Query* disclosure shows its SQL. `format`: `number`, `currency` (USD), `percent` (value is a fraction: 0.25 → 25%), `compact`. Optional `trend`: `{ "query": "<a declared query>", "field": "<one of its columns>" }`, both required; the tile draws a small line of that column over the query's rows in query order (order the query, e.g. `ORDER BY month`), at build time. It names a query, never SQL text; an unknown query fails with `kpis[n].trend.query: unknown query "<x>"; declared: …`. Fewer than two numeric values draw no line |
 | `charts[]` | `id`, `title`, `query` required, plus **exactly one of `kind` or `vegaLite`**. A dashboard needs at least one chart or KPI. `width`: `full` (default) or `half` (two columns from 900px). See "Chart fields" below |
 
 `id` values are unique across charts and KPIs and match `^[A-Za-z][A-Za-z0-9_-]*$`.

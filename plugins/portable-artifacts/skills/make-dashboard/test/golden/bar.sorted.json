@@ -1,21 +1,14 @@
 {
-  "params": [
-    {
-      "name": "pa_hover",
-      "select": {
-        "type": "point",
-        "on": "pointerover",
-        "clear": "pointerout"
-      }
-    }
-  ],
-  "mark": "bar",
   "encoding": {
     "x": {
       "field": "region",
       "type": "nominal",
       "title": "Region",
-      "sort": "-y",
+      "sort": {
+        "field": "revenue",
+        "op": "max",
+        "order": "descending"
+      },
       "axis": {
         "labelOverlap": false,
         "labelAngle": {
@@ -30,26 +23,68 @@
       "field": "revenue",
       "type": "quantitative",
       "title": "Revenue"
-    },
-    "tooltip": [
-      {
-        "field": "region",
-        "type": "nominal",
-        "title": "Region"
-      },
-      {
-        "field": "revenue",
-        "type": "quantitative",
-        "title": "Revenue"
-      }
-    ],
-    "opacity": {
-      "condition": {
-        "param": "pa_hover",
-        "empty": true,
-        "value": 1
-      },
-      "value": 0.55
     }
+  },
+  "layer": [
+    {
+      "params": [
+        {
+          "name": "pa_hover",
+          "select": {
+            "type": "point",
+            "on": "pointerover",
+            "clear": "pointerout"
+          }
+        }
+      ],
+      "mark": "bar",
+      "encoding": {
+        "tooltip": [
+          {
+            "field": "region",
+            "type": "nominal",
+            "title": "Region"
+          },
+          {
+            "field": "revenue",
+            "type": "quantitative",
+            "title": "Revenue"
+          }
+        ],
+        "opacity": {
+          "condition": {
+            "param": "pa_hover",
+            "empty": true,
+            "value": 1
+          },
+          "value": 0.55
+        }
+      }
+    },
+    {
+      "mark": {
+        "type": "text",
+        "tooltip": false,
+        "align": "center",
+        "baseline": "bottom",
+        "dy": -4,
+        "opacity": {
+          "expr": "bandwidth('x') >= 27 ? 1 : 0"
+        }
+      },
+      "encoding": {
+        "text": {
+          "field": "revenue",
+          "type": "quantitative",
+          "format": ",.2~f"
+        }
+      }
+    }
+  ],
+  "padding": {
+    "top": 19,
+    "bottom": 5,
+    "left": 5,
+    "right": 5
   }
 }

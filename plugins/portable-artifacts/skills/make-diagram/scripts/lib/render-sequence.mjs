@@ -66,7 +66,7 @@ export function renderSequence(g, spec, theme, prefix) {
     ...g.notes.map((n) => noteSvg(n, f)),
     ...messages,
     ...plates,
-    legendSvg(g.legend, f),
+    legendSvg(g.legend, f, spec.type),
   ].join('');
   return { width: g.width, height: g.height, body, counts: `${g.participants.length} participants and ${g.messages.length} messages` };
 }

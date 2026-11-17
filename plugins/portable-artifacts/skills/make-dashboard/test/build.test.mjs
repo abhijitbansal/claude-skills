@@ -414,6 +414,49 @@ test('a KPI query that returns more than one row builds with a warning, not a si
   assert.equal(j.warnings[0].path, 'kpis[0].query');
 });
 
+// ---- Task 4: KPI numerals, caps labels, opt-in trend sparkline -------------------------
+
+const kpiQueries = { rev: 'SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 2 DESC', total: 'SELECT SUM(amount) AS revenue FROM sales' };
+const tileOf = (html, id) => {
+  const m = html.match(new RegExp(`<div class="kpi[^"]*" id="kpi-${id}">([\\s\\S]*?)<details class="kpi-sql">`));
+  assert.ok(m, `tile ${id} present`);
+  return m[1];
+};
+
+test('a KPI numeral carries pa-num and its label the shared caps style', () => {
+  const p = project({ queries: kpiQueries, kpis: [{ id: 'k1', title: 'Revenue', query: 'total', field: 'revenue' }] });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const tile = tileOf(readPage(path.join(p.dir, 'dist')), 'k1');
+  assert.match(tile, /<div class="kpi-value pa-num"/);
+  assert.match(tile, /<div class="kpi-label pa-caps">Revenue<\/div>/);
+  assert.doesNotMatch(tile, /<svg/, 'no trend, no sparkline');
+});
+
+test('a KPI with trend renders an svg sparkline with no script, from its declared query, in query order', () => {
+  const p = project({ queries: kpiQueries, kpis: [{ id: 'k1', title: 'Revenue', query: 'total', field: 'revenue', trend: { query: 'rev', field: 'revenue' } }] });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.doesNotMatch(r.stdout, /kpis\[0\]\.query: warning/, 'the trend query is a series, not a KPI row');
+  const tile = tileOf(readPage(path.join(p.dir, 'dist')), 'k1');
+  const svg = tile.match(/<svg[\s\S]*?<\/svg>/)?.[0];
+  assert.ok(svg, 'a sparkline svg');
+  assert.match(svg, /class="kpi-trend"/);
+  assert.doesNotMatch(svg, /<script|on[a-z]+=|href/i);
+  // rev is ordered by revenue DESC, so the line falls from left to right: the first y is the smallest (top).
+  const ys = [...svg.match(/ d="([^"]+)"/)[1].matchAll(/[ML][\d.]+,([\d.]+)/g)].map((m) => Number(m[1]));
+  assert.equal(ys.length, 4);
+  assert.ok(ys[0] < ys.at(-1), `falls: ${ys}`);
+});
+
+// The larger claim title can push the controls to a second row: the view tabs and Export wrap together, never apart.
+test('a card head keeps its view tabs and Export menu in one group after the title', () => {
+  const p = project({ charts: [{ id: 'c1', title: 'Revenue', query: 'rev', kind: 'bar', x: 'region', y: 'revenue' }] });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(readPage(path.join(p.dir, 'dist')), /<div class="card-head"><h2>Revenue<\/h2><div class="card-tools"><div class="views" role="tablist"[^]*?<\/div><details class="export">[^]*?<\/details><\/div><\/div>/);
+});
+
 // ---- PA-34: tabs name the panel they switch -----------------------------------
 
 test('view tabs control a tabpanel; a paired card wires only its second pane', () => {

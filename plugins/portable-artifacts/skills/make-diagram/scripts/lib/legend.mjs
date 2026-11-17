@@ -64,14 +64,37 @@ export function drawingBounds(x, width, height) {
   return { x: round(x), y: LEGEND_BAND, width: round(width), height: round(height - LEGEND_BAND) };
 }
 
-/** geometry.legend as SVG: swatches in their family, wire samples in their style, the text beside each. */
-export function legendSvg(legend, f) {
+const MARK = 6; // the hue mark inside a card swatch, as the tile sits inside a card
+const DOT_R = 4;
+const RING_R = 5;
+const DIAMONDS = new Set(['diamond', 'small-diamond']);
+
+// A kind's swatch drawn the way its nodes are (css.mjs paints it): a bare neutral diamond, a filled or ringed dot,
+// else a neutral card with the hue mark inside (external gets its dash from the family rule).
+function swatchSvg(it, x, cy, type) {
+  const fam = esc(it.family);
+  const top = cy - SWATCH / 2;
+  const shape = KINDS[type]?.kinds[it.name]?.shape;
+  if (DIAMONDS.has(shape)) {
+    const cx = x + SWATCH / 2;
+    return `<path class="pa-swatch pa-swatch-diamond pa-family-${fam}" d="M${num(cx)} ${num(top)}L${num(x + SWATCH)} ${num(cy)}L${num(cx)} ${num(top + SWATCH)}L${num(x)} ${num(cy)}Z"/>`;
+  }
+  if (shape === 'filled-dot') return `<circle class="pa-swatch-filled-dot" cx="${num(x + SWATCH / 2)}" cy="${num(cy)}" r="${DOT_R}"/>`;
+  if (shape === 'ringed-dot') return `<circle class="pa-swatch-ringed-dot" cx="${num(x + SWATCH / 2)}" cy="${num(cy)}" r="${RING_R}"/>`;
+  const box = `<rect class="pa-swatch pa-family-${fam}" x="${num(x)}" y="${num(top)}" width="${SWATCH}" height="${SWATCH}" rx="${SWATCH_RADIUS}"/>`;
+  if (it.family === 'bare') return box;
+  const inset = (SWATCH - MARK) / 2;
+  return `${box}<rect class="pa-swatch-mark pa-family-${fam}" x="${num(x + inset)}" y="${num(top + inset)}" width="${MARK}" height="${MARK}" rx="${SWATCH_RADIUS / 2}"/>`;
+}
+
+/** geometry.legend as SVG for a diagram of `type`: swatches drawn as their nodes are, wire samples in their style, the text beside each. */
+export function legendSvg(legend, f, type) {
   const lh = lineHeight(f.legend);
   const cy = legend.y + legend.height / 2;
   const parts = legend.items.map((it) => {
     const x = legend.x + it.dx;
     const mark = it.kind === 'kind'
-      ? `<rect class="pa-swatch pa-family-${esc(it.family)}" x="${num(x)}" y="${num(cy - SWATCH / 2)}" width="${SWATCH}" height="${SWATCH}" rx="${SWATCH_RADIUS}"/>`
+      ? swatchSvg(it, x, cy, type)
       : `<g class="pa-legend-sample pa-edge-${esc(it.style)}"><path class="pa-wire" d="M${num(x)} ${num(cy)}L${num(x + SAMPLE)} ${num(cy)}"/></g>`;
     const text = textLines('pa-legend-text', [textOf(it)], { x: x + (it.kind === 'kind' ? SWATCH : SAMPLE) + INNER_GAP, top: cy - lh / 2, lh, size: f.legend.size, anchor: 'start' });
     return mark + text;

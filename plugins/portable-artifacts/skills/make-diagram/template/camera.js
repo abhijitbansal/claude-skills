@@ -20,6 +20,11 @@
   var MAX_ZOOM = 4;
   var MAX_FIT_SCALE = 1.25; // a small diagram is not blown up past this to fill a big stage
   var FIT_MARGIN = 16;
+  // On a desktop-wide stage the fit never draws a 14 px node label below the 8 px reading floor
+  // (legibility.mjs LABEL_PX and MIN_LABEL_PX): a diagram too big for that starts at its top left and pans.
+  // A phone-wide stage fits everything (the zoom buttons make it readable).
+  var READ_SCALE = 8 / 14;
+  var DESKTOP_STAGE = 720; // px: the viewer's own desktop breakpoint (the panel sits beside the stage from here)
   var FOCUS_PAD = 48;
   var MAX_FOCUS_SCALE = 1.6; // px per diagram unit when a beat zooms in on a few nodes
   var MAX_FOCUS_ZOOM = 2; // and never past this multiple of the fit, unless the fit is tiny: a beat may always reach 100%
@@ -84,9 +89,26 @@
       var halfH = (fitBox.h / 2 + FIT_MARGIN) * below;
       return { s: below, dx: 0, dy: Math.max(0, sz.top - (sz.h / 2 - halfH)) };
     }
-    function fitScale(sz) { return fitPlace(sz).s; }
+    // The reading floor: a desktop stage whose fit is below READ_SCALE draws at READ_SCALE instead; on each axis the
+    // drawing still overflows, its top or left edge sits FIT_MARGIN in (below the legend overlay), else it is centred.
+    function readable(sz) {
+      var p = fitPlace(sz);
+      if (sz.w < DESKTOP_STAGE || p.s >= READ_SCALE) return null;
+      var s = READ_SCALE;
+      var overX = (fitBox.w + 2 * FIT_MARGIN) * s > sz.w;
+      var overY = (fitBox.h + 2 * FIT_MARGIN) * s > sz.h - sz.top;
+      return {
+        s: s,
+        cx: overX ? fitBox.x - FIT_MARGIN / s + sz.w / (2 * s) : fitBox.x + fitBox.w / 2,
+        cy: overY ? fitBox.y - (FIT_MARGIN + sz.top) / s + sz.h / (2 * s) : fitBox.y + fitBox.h / 2,
+      };
+    }
+    function fitScale(sz) { var r = readable(sz); return r ? r.s : fitPlace(sz).s; }
     function fitCamera() {
-      var p = fitPlace(size());
+      var sz = size();
+      var r = readable(sz);
+      if (r) return r;
+      var p = fitPlace(sz);
       return { cx: fitBox.x + fitBox.w / 2 + p.dx / p.s, cy: fitBox.y + fitBox.h / 2 - p.dy / p.s, s: p.s };
     }
     // Pan and zoom keep the centre on the canvas, widened to take in the fit
@@ -102,6 +124,7 @@
       var h = sz.h / cam.s;
       svg.setAttribute('viewBox', [cam.cx - w / 2, cam.cy - h / 2, w, h].map(round).join(' '));
       stage.setAttribute('data-zoom', (cam.s / fitScale(sz)).toFixed(3));
+      stage.setAttribute('data-fit-scale', fitPlace(sz).s.toFixed(4)); // the whole-drawing fit, read by scripts/check.mjs
       if (hooks.onApply) hooks.onApply();
     }
     function cancelTween() {

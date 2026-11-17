@@ -13,7 +13,7 @@
     { "id": "web", "label": "Web app", "kind": "client" },
     { "id": "api", "label": "Checkout API", "kind": "service", "group": "vpc", "icon": "brand:nodedotjs" },
     { "id": "db", "label": "Orders DB", "kind": "database", "group": "vpc", "icon": "brand:postgresql", "note": "primary + replica" },
-    { "id": "pay", "label": "Payments", "kind": "external", "tone": "warn" }
+    { "id": "pay", "label": "Payments", "kind": "external" }
   ],
   "edges": [
     { "from": "web", "to": "api", "label": "POST /checkout" },

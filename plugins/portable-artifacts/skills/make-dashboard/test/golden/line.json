@@ -22,16 +22,6 @@
             ]
           },
           "bind": "scales"
-        },
-        {
-          "name": "pa_legend",
-          "select": {
-            "type": "point",
-            "fields": [
-              "region"
-            ]
-          },
-          "bind": "legend"
         }
       ],
       "mark": {
@@ -47,15 +37,8 @@
         "color": {
           "field": "region",
           "type": "nominal",
-          "title": "Region"
-        },
-        "opacity": {
-          "condition": {
-            "param": "pa_legend",
-            "empty": true,
-            "value": 1
-          },
-          "value": 0.2
+          "title": "Region",
+          "legend": null
         }
       }
     },
@@ -103,7 +86,8 @@
         "color": {
           "field": "region",
           "type": "nominal",
-          "title": "Region"
+          "title": "Region",
+          "legend": null
         },
         "tooltip": [
           {
@@ -132,6 +116,112 @@
           "value": 0
         }
       }
+    },
+    {
+      "transform": [
+        {
+          "filter": {
+            "field": "revenue",
+            "valid": true
+          }
+        },
+        {
+          "window": [
+            {
+              "op": "row_number",
+              "as": "paEndRank"
+            }
+          ],
+          "sort": [
+            {
+              "field": "month",
+              "order": "descending"
+            }
+          ],
+          "groupby": [
+            "region"
+          ]
+        },
+        {
+          "filter": "datum.paEndRank === 1"
+        }
+      ],
+      "mark": {
+        "type": "point",
+        "filled": true,
+        "size": 36,
+        "opacity": 1,
+        "tooltip": false,
+        "clip": false
+      },
+      "encoding": {
+        "y": {
+          "field": "revenue",
+          "type": "quantitative",
+          "title": "Revenue"
+        },
+        "color": {
+          "field": "region",
+          "type": "nominal",
+          "title": "Region",
+          "legend": null
+        }
+      }
+    },
+    {
+      "transform": [
+        {
+          "filter": {
+            "field": "revenue",
+            "valid": true
+          }
+        },
+        {
+          "window": [
+            {
+              "op": "row_number",
+              "as": "paEndRank"
+            }
+          ],
+          "sort": [
+            {
+              "field": "month",
+              "order": "descending"
+            }
+          ],
+          "groupby": [
+            "region"
+          ]
+        },
+        {
+          "filter": "datum.paEndRank === 1"
+        }
+      ],
+      "mark": {
+        "type": "text",
+        "align": "left",
+        "baseline": "middle",
+        "dx": 7,
+        "tooltip": false,
+        "clip": false
+      },
+      "encoding": {
+        "y": {
+          "field": "revenue",
+          "type": "quantitative",
+          "title": "Revenue"
+        },
+        "text": {
+          "field": "region",
+          "type": "nominal"
+        }
+      }
     }
-  ]
+  ],
+  "padding": {
+    "top": 5,
+    "bottom": 5,
+    "left": 5,
+    "right": 42
+  }
 }

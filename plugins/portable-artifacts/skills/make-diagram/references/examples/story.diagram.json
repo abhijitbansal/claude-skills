@@ -14,7 +14,7 @@
     { "id": "orders", "label": "Orders service", "group": "core", "emoji": "📦", "detail": "Owns the order lifecycle. Writes every state change to the orders table and emits an event per transition." },
     { "id": "db", "label": "Orders DB", "kind": "database", "group": "core", "icon": "brand:postgresql" },
     { "id": "bus", "label": "Event bus", "kind": "queue", "group": "core", "emoji": "🚌" },
-    { "id": "warehouse", "label": "Warehouse", "kind": "external", "emoji": "🏭", "tone": "warn" }
+    { "id": "warehouse", "label": "Warehouse", "kind": "external", "emoji": "🏭" }
   ],
   "edges": [
     { "from": "shopper", "to": "app", "label": "taps Buy" },
