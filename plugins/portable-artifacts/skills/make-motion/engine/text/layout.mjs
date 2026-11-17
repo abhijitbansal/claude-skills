@@ -110,18 +110,39 @@ function buildLine(row, ctx, y) {
 
 const emptyLayout = (font) => ({ size: font.size, width: 0, height: 0, lines: [], overflow: false });
 
+// ---- weight and width that change on screen ----
+
+/** The font a word is drawn in: the node's font with the word's sampled weight and width over it (the font itself when
+ *  the word has neither). */
+export function drawnFont(font, word) {
+  if (word.weight === undefined && word.width === undefined) return font;
+  return { ...font, ...(word.weight === undefined ? {} : { weight: word.weight }), ...(word.width === undefined ? {} : { width: word.width }) };
+}
+
+/** The font words are measured in: `font` at the reserved weight and width (font itself without a reserve). */
+export const reservedFont = (font, reserve) => (reserve === undefined ? font : { ...font, ...reserve });
+
+/** How far right of its room's left edge a word drawn in `drawn` starts so it is centred in the room it was measured
+ *  for in `measuredAt` (both tracked as layout tracks them): half the difference of the two advances. */
+export function reservedInset(measure, measuredAt, drawn, text) {
+  return (advanceOf(measure, measuredAt, text).width - advanceOf(measure, drawn, text).width) / 2;
+}
+
 /**
  * Lay text out in a box of `maxWidth`.
- * @param {{ text: string, font: object, maxWidth: number, align?: 'left'|'center'|'right', measure: Function, optical?: boolean, together?: boolean[], accept?: Function }} opts
+ * @param {{ text: string, font: object, maxWidth: number, align?: 'left'|'center'|'right', measure: Function, optical?: boolean, together?: boolean[], accept?: Function, reserve?: { weight?: number, width?: string } }} opts
  *   together (read by fitText only): together[i] asks to keep word i with word i + 1; fitText looks for a slightly
  *   smaller size whose layout keeps every such pair (see unclean). accept (read by fitText only): (layout) => boolean,
- *   the caller's own test, ranked right after cleanliness (rankOf)
- * @returns {{ size: number, width: number, height: number, lines: object[], overflow: boolean }}
+ *   the caller's own test, ranked right after cleanliness (rankOf). reserve: every word (and the space) is measured at
+ *   this weight and width, and the layout carries it so the draw layer centres a word drawn lighter or narrower in its
+ *   room (reservedInset): nothing re-flows when a word's weight or width track changes
+ * @returns {{ size: number, width: number, height: number, lines: object[], overflow: boolean, reserve?: object }}
  */
-export function layoutText({ text, font, maxWidth, align = 'left', measure, optical = false }) {
-  assertOptions({ font, maxWidth, align, measure });
+export function layoutText({ text, font: given, maxWidth, align = 'left', measure, optical = false, reserve }) {
+  assertOptions({ font: given, maxWidth, align, measure });
+  const font = reservedFont(given, reserve);
   const tokens = tokenize(text);
-  if (tokens.length === 0) return emptyLayout(font);
+  if (tokens.length === 0) return emptyLayout(given);
   const metrics = tokens.map((t) => advanceOf(measure, font, t.text));
   const widths = metrics.map((m) => m.width);
   // A font may set its own word space in em (a condensed caps face whose measured space runs words together).
@@ -139,6 +160,7 @@ export function layoutText({ text, font, maxWidth, align = 'left', measure, opti
     height: (lines.length - 1) * pitch + ascent + descent,
     lines,
     overflow: false,
+    ...(reserve === undefined ? {} : { reserve }),
   };
 }
 

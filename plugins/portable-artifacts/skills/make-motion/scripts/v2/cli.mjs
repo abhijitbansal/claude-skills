@@ -5,7 +5,7 @@ import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 import { MAX_WORKERS, autoWorkers } from './workers.mjs';
 
 export const LIST_NAMES = Object.freeze(['kinds', 'looks', 'modes', 'devices', 'moves', 'cuts', 'fields', 'voices']);
-export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all', '--model', '--effort', '--agent', '--no-provenance', '--phonemes', '--poster', '--poster-out', '--batch', '--subtitles', '--workers']);
+export const FLAGS = Object.freeze(['--out', '--json', '--sheets-only', '--outline', '--list', '--exact', '--no-render', '--all', '--model', '--effort', '--agent', '--no-provenance', '--phonemes', '--poster', '--poster-out', '--batch', '--subtitles', '--workers', '--preview', '--open']);
 const USAGE = `node scripts/make.mjs <film.json>; accepted flags: ${FLAGS.join(', ')}; exit codes: 0 ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted`;
 const OPTIONS = Object.freeze({
   out: { type: 'string' },
@@ -26,6 +26,8 @@ const OPTIONS = Object.freeze({
   batch: { type: 'string' },
   subtitles: { type: 'string' },
   workers: { type: 'string' },
+  preview: { type: 'boolean' },
+  open: { type: 'boolean' },
 });
 const SUBTITLE_FORMATS = Object.freeze(['srt', 'vtt']);
 const POSTER_EXTENSIONS = Object.freeze(['.jpg', '.jpeg', '.png']);
@@ -35,6 +37,7 @@ const MODE_CONFLICTS = Object.freeze({
   poster: ['out', 'batch', 'no-render', 'sheets-only', 'outline', 'phonemes', 'subtitles'],
   batch: ['poster', 'outline', 'phonemes', 'subtitles'],
   subtitles: ['outline', 'phonemes', 'poster', 'batch'],
+  preview: ['out', 'no-render', 'sheets-only', 'outline', 'phonemes', 'poster', 'poster-out', 'batch', 'subtitles', 'workers', 'exact'],
 });
 const BATCH_KEYS_RE = /\{(index|[a-zA-Z][a-zA-Z0-9]*)\}/;
 const PROVENANCE_FLAGS = Object.freeze(['model', 'effort', 'agent']);
@@ -124,7 +127,8 @@ function modeFlags(values) {
   if (values.subtitles !== undefined && !SUBTITLE_FORMATS.includes(values.subtitles)) {
     throw new UsageError(`--subtitles takes one of: ${SUBTITLE_FORMATS.join(', ')}; got ${JSON.stringify(values.subtitles)}`);
   }
-  return { phonemes: values.phonemes === true, ...posterFlags(values), batch: values.batch ?? null, subtitles: values.subtitles ?? null, workers: workersFlag(values.workers) };
+  if (values.open === true && values.preview !== true) throw new UsageError('--open needs --preview: it opens the preview page in your browser');
+  return { phonemes: values.phonemes === true, preview: values.preview === true, open: values.open === true, ...posterFlags(values), batch: values.batch ?? null, subtitles: values.subtitles ?? null, workers: workersFlag(values.workers) };
 }
 
 /**

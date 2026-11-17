@@ -26,12 +26,14 @@ const errorsOf = (shot, extra = {}, dir = '.') => validateFilm({ version: 2, sho
 
 // ---- validation ----
 
-test('a clip is refused with the one message that says clips are not supported yet', (t) => {
+test('a clip validates (its file is probed later, by the clips stage: clips.test.mjs); an unknown extension names stills and clips', (t) => {
   const dir = mkdtempSync(path.join(tmpdir(), 'mm-v2-media-'));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   writeFileSync(path.join(dir, 'clip.mp4'), 'not a picture');
-  assert.deepEqual(errorsOf({ id: 'm', show: 'media', src: 'clip.mp4', hold: 2 }, {}, dir), [
-    { path: 'shots[0].src', message: 'a clip is not supported yet; give a still (png, jpg, jpeg, webp, gif)' },
+  writeFileSync(path.join(dir, 'clip.avi'), 'not a picture');
+  assert.deepEqual(errorsOf({ id: 'm', show: 'media', src: 'clip.mp4', hold: 2 }, {}, dir), []);
+  assert.deepEqual(errorsOf({ id: 'm', show: 'media', src: 'clip.avi', hold: 2 }, {}, dir), [
+    { path: 'shots[0].src', message: 'must be a still (png, jpg, jpeg, webp, gif) or a clip (mp4, mov, m4v, webm, mkv), got "clip.avi"' },
   ]);
 });
 
@@ -129,7 +131,7 @@ test('media shows its words only with a caption, sends no events, and targets th
   assert.deepEqual(media.targets({}), ['picture']);
   assert.deepEqual(media.srcFields, ['src']);
   assert.equal(media.numbered, false);
-  assert.deepEqual(media.steeringFields, ['fit', 'treatment', 'focus']);
+  assert.deepEqual(media.steeringFields, ['fit', 'treatment', 'focus', 'in', 'out', 'muted']); // a clip's fields steer, never draw
 });
 
 test('the caption is never wider than its room and the credit stays inside the safe area', () => {

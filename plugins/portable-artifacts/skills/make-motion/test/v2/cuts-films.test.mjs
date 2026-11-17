@@ -20,9 +20,24 @@ test('both cut films validate', () => {
   for (const { name, film } of FILMS) assert.deepEqual(validateFilm(film, { specDir: DIR }).errors, [], name);
 });
 
-test('between them the two cut films name every registered cut', () => {
+// `ripple` is parked in pop (gate-cuts-3: it drew no rings) and cuts-desk.json does not name it, so no film shows it
+// `erase` is the drawing hand's cut, in no shipped look's cuts: references/examples/v2/hand-spike.json shows it (looks-four
+// Task 2)
+const SHOWN_BY_NO_FILM = ['ripple', 'erase'];
+
+test('between them the two cut films name every registered cut but the ones no film shows', () => {
   const named = new Set(FILMS.flatMap(({ film }) => cutsOf(film).map((cut) => cut.name)));
-  assert.deepEqual(registries.cuts.names().filter((name) => !named.has(name)), []);
+  assert.deepEqual(registries.cuts.names().filter((name) => !named.has(name) && !SHOWN_BY_NO_FILM.includes(name)), []);
+  assert.deepEqual(SHOWN_BY_NO_FILM.filter((name) => named.has(name)), [], 'a cut a film now shows leaves the list');
+});
+
+test('a cut parked in pop is not named by the pop film, and pop still shows a crossfade where ripple was', () => {
+  const pop = FILMS.find(({ name }) => name === 'cuts-pop.json').film;
+  assert.equal(registries.looks.get('pop').cuts.includes('ripple'), false);
+  assert.equal(pop.shots.some((shot) => (shot.cut?.type ?? shot.cut) === 'ripple'), false);
+  const box = pop.shots.findIndex((shot) => shot.id === 'box');
+  assert.equal(pop.shots[box + 1].id, 'rings');
+  assert.equal(resolveShotCut(pop, box + 1).name, 'crossfade');
 });
 
 test('every direction of slide and wipe appears, and so do a duration override and a root cut each film uses', () => {

@@ -15,7 +15,8 @@ import { kindContext } from '../../engine/captions/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { safeRectFor } from '../../scripts/v2/review.mjs';
 import { measure, canvasOf, viralOf } from './helpers/kinds.mjs';
-import { frozenEntries, FILMS } from './helpers/frozen.mjs';
+import { frozenEntries, FILMS, frozenEntries2, FILMS_2 } from './helpers/frozen.mjs';
+import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '../..');
@@ -31,6 +32,28 @@ const current = frozenEntries(engine, films);
 for (const [entry, digest] of Object.entries(fixture.entries)) {
   test(`frozen: ${entry} expands as approved`, () => {
     assert.equal(current[entry], digest, `${entry} changed: an approved frame moved (see fixtures/kinds-frozen.json)`);
+  });
+}
+
+// ---- the second fixture (looks-four Task 1): every kind in desk and pop, cosmos's kinds, and the cosmos gate films.
+// Generated once from HEAD 6fe364c9 (a `git archive` copy under .scratch/l1/head) by .scratch/l1/freeze2.mjs before
+// any engine file changed; regenerated only in a commit that says which visual change it records.
+
+const fixture2 = JSON.parse(readFileSync(path.join(HERE, 'fixtures/kinds-frozen-2.json'), 'utf8'));
+const FILM_DIR = path.join(SKILL, 'references/examples/v2');
+const films2 = Object.fromEntries(FILMS_2.map((name) => [name, JSON.parse(readFileSync(path.join(FILM_DIR, `${name}.json`), 'utf8'))]));
+const current2 = frozenEntries2({ ...engine, prepareFilm, filmDir: FILM_DIR }, films2);
+
+test('the second frozen fixture names every entry it is checked against', () => {
+  // desk and pop: 16 kinds x 2 formats each; cosmos: 9 kinds x 2; gate-cosmos 7 shots + frames, gate-cosmos-viral 6 + frames
+  assert.equal(Object.keys(fixture2.entries).length, 97, '64 desk and pop examples, 18 cosmos examples, 13 film shots and 2 frame runs');
+  const missing = Object.keys(fixture2.entries).filter((entry) => current2[entry] === undefined);
+  assert.deepEqual(missing, [], 'every frozen entry is still produced by the working tree');
+});
+
+for (const [entry, digest] of Object.entries(fixture2.entries)) {
+  test(`frozen 2: ${entry} expands as approved`, () => {
+    assert.equal(current2[entry], digest, `${entry} changed: an approved frame moved (see fixtures/kinds-frozen-2.json)`);
   });
 }
 

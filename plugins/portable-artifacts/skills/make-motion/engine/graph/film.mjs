@@ -16,6 +16,7 @@ import { srcsOfShot } from '../assets.mjs';
 import { resolveAnchor } from '../script/anchors.mjs';
 import { captionsOn, shotCaptions, kindContext } from '../captions/index.mjs';
 import { sampleGraph } from './sample.mjs';
+import { handLayer } from '../hand/index.mjs';
 import { localMatrix } from '../page/bounds.mjs';
 import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs';
 
@@ -42,7 +43,8 @@ function shotAsset(shot, kind, assets) {
     if (!declared.has(src)) throw new Error(`shot "${shot.id}": "${src}" is not one of its srcs (it declares ${declared.size === 0 ? 'none' : [...declared].map((s) => `"${s}"`).join(', ')})`);
     const image = assets.get(src);
     if (!image) throw new Error(`shot "${shot.id}": no loaded picture for "${src}"`);
-    return { width: image.width, height: image.height };
+    // a clip's decoded frames ({ from, fps, count }: engine/kinds/media-clip.mjs) and a picture's transparency ride along
+    return { width: image.width, height: image.height, ...(image.clip ? { clip: image.clip } : {}), ...(image.alpha === true ? { alpha: true } : {}) };
   };
 }
 
@@ -151,7 +153,8 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
   return {
     start: timing.start,
     duration: timing.duration,
-    nodes: withCaptions(out, shot, kind, ctx, film, cam),
+    // a look with `hand` data draws the shot with the drawing hand (engine/hand); any other look: the nodes as they are
+    nodes: handLayer(withCaptions(out, shot, kind, ctx, film, cam), timing, ctx),
     cam,
     background: out.background ?? DEFAULT_BACKGROUND,
     hero: heroNode && box ? { id: heroNode.id, box, pose: heroNode.props } : null,

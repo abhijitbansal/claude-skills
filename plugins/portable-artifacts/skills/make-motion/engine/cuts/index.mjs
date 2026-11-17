@@ -18,6 +18,7 @@ import { coverParts } from './cover.mjs';
 import { ENTRY_EDGE, entryVector } from './edges.mjs';
 import { LAYER_CUTS } from './layers.mjs';
 import { SHADER_CUTS } from './shaders/index.mjs';
+import { erase } from './erase.mjs';
 
 const HALF = 2;
 const SLIDE = Object.freeze({ dur: 0.4, ease: 'inOutCubic' });
@@ -296,7 +297,8 @@ export const CUTS = Object.freeze({
   }),
 });
 
-for (const [name, cut] of Object.entries({ ...CUTS, ...LAYER_CUTS, ...SHADER_CUTS })) {
+// erase (erase.mjs): the drawing hand's board wipe, registered last so the earlier cuts keep their order
+for (const [name, cut] of Object.entries({ ...CUTS, ...LAYER_CUTS, ...SHADER_CUTS, erase })) {
   if (!registries.cuts.has(name)) registries.cuts.add(name, cut);
 }
 

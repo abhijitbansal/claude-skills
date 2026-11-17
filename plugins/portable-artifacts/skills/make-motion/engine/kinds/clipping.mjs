@@ -83,7 +83,8 @@ function pictureParts(shot, ctx, { w, h, hero, crop }) {
   const pad = CARD_PAD * unit;
   const cardBox = [-w / HALF - pad, -h / HALF - pad, w + HALF * pad, h + HALF * pad];
   const card = hasCard(look) ? devices.get('card').build({ ...base, id: `${hero}.card`, box: cardBox }).nodes : [];
-  const cutout = devices.get('cutout').build({ ...base, id: `${hero}.cutout`, box: [-w / HALF, -h / HALF, w, h], image }).nodes;
+  // a picture with transparency: the keyline and shadow follow its edge (ctx.asset(src).alpha, from the file's header)
+  const cutout = devices.get('cutout').build({ ...base, id: `${hero}.cutout`, box: [-w / HALF, -h / HALF, w, h], image, alpha: ctx.asset(shot.src).alpha === true }).nodes;
   // the card's soft glow edge (look.kinds.clipping.glow, units of blur): the card's shape with an accent canvas shadow
   // (draw.mjs path glow, a smooth falloff), screened so it only brightens; the card covers its fill
   const reach = (look.kinds?.clipping?.glow ?? 0) * unit;

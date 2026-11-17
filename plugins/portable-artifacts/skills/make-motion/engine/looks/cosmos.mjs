@@ -199,7 +199,7 @@ export const cosmos = {
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: null, slide: 'whoosh', punch: 'sub', match: null, cover: null, crossfade: null, fade: null, wipe: null, iris: 'whoosh', zoom: null, blur: null, ripple: 'whoosh', cube: null,
-      'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null },
+      'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: {
       highlight: 'chime', circle: 'chime', underline: 'chime', arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: null, item: 'pop', turn: 'whoosh',
       // the second-wave devices: silent in the parked look

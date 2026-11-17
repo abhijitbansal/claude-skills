@@ -62,9 +62,9 @@
     {
       "id": "rings",
       "show": "statement",
-      "cut": "ripple",
-      "kicker": "Ripple",
-      "say": "A ripple spreads rings out from the *centre*."
+      "cut": "crossfade",
+      "kicker": "Crossfade",
+      "say": "A crossfade melts the old shot into the *next*."
     },
     {
       "id": "dots",

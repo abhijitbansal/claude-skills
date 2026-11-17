@@ -14,6 +14,7 @@ import { treatmentFor } from '../devices/treatments.mjs';
 import { fontFor, sizeAt, isWide, isEditorial, compositionRect, captionTop, setCase, easePeak, cardOf, cardGroup } from './shared.mjs';
 import { driftReach } from './camera.mjs';
 import { arrivalTrack, revealTimes, editorialLeft, EDITORIAL_WIDE_COLUMN } from './arrivals.mjs';
+import { clipFrameTrack } from './media-clip.mjs';
 
 const HALF = 2;
 const STEP_EPSILON = 1e-6;
@@ -101,17 +102,26 @@ function pushTrack(ctx, data) {
   return track([{ t: 0, v: data.push }, { t: ctx.timing.duration, v: 1, ease }]);
 }
 
+// A still in the look's treatment; a clip as filmed, its decoded frame count in props.video (media-clip.mjs).
 const imageProps = (shot, ctx, w, h, clip) => {
+  const video = ctx.asset(shot.src).clip;
+  if (video) return { src: shot.src, w, h, clip, video: { count: video.count } };
   const treatment = treatmentFor(ctx.look, shot.treatment ?? ctx.data.treatment, ctx.unit);
   return { src: shot.src, w, h, clip, ...(treatment ? { treatment } : {}) };
+};
+
+// A clip's picture plays its frames: a `frame` track from the shot's in, one decoded frame per film frame.
+const frameTracks = (shot, ctx) => {
+  const video = ctx.asset(shot.src).clip;
+  return video ? { frame: clipFrameTrack(video, shot, ctx.timing.duration) } : {};
 };
 
 // The picture group about its box's centre: the image itself (bleed) or the look's cutout (keyline and shadow).
 function pictureGroup(shot, ctx, [x, y, w, h], clip, asCutout) {
   const hero = `${shot.id}.picture`;
-  const image = node('image', `${hero}.image`, { ...imageProps(shot, ctx, w, h, clip), x: -w / HALF, y: -h / HALF });
+  const image = node('image', `${hero}.image`, { ...imageProps(shot, ctx, w, h, clip), x: -w / HALF, y: -h / HALF }, { tracks: frameTracks(shot, ctx) });
   const children = asCutout
-    ? registries.devices.get('cutout').build({ id: `${hero}.cutout`, box: [-w / HALF, -h / HALF, w, h], at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, image }).nodes
+    ? registries.devices.get('cutout').build({ id: `${hero}.cutout`, box: [-w / HALF, -h / HALF, w, h], at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, image, alpha: ctx.asset(shot.src).alpha === true }).nodes
     : [image];
   return node('group', hero, { x: x + w / HALF, y: y + h / HALF }, { tracks: { scale: pushTrack(ctx, ctx.data) }, children });
 }

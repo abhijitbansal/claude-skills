@@ -3,6 +3,7 @@
 // the MP4. Read the JSON with --json (one object on stdout on every path, progress on stderr).
 //
 //   node scripts/make.mjs <film.json> [--out <file.mp4>] [--json] [--no-render | --sheets-only] [--exact] [--outline]
+//   node scripts/make.mjs <film.json> --preview [--open]   (a loopback page with a scrubber, served until Ctrl-C)
 //   node scripts/make.mjs --list kinds|looks|modes|devices|moves|cuts|fields|voices [--all] [--json]   (--all: experimental looks and parked kinds too)
 //
 // Exit 0: the film is valid and has no mechanical finding. Exit 1: it is invalid, or a mechanical finding exists (the
@@ -17,6 +18,7 @@ import { listEntries, formatList, COMMON_SHOT_FIELDS } from './v2/list.mjs';
 import { runMake } from './v2/run.mjs';
 import { readingLines } from './v2/voice/reading.mjs';
 import { runBatch } from './v2/batch.mjs';
+import { runPreview } from './v2/viewer-run.mjs';
 import { describeError, errorReport, formatText, outlineLines } from './v2/report.mjs';
 
 const EXIT_MACHINE = 2;
@@ -103,8 +105,24 @@ async function executeBatch(options, controller) {
   process.exitCode = exitCode;
 }
 
+// --preview: the URL line (or { ok, preview: { url } } under --json) once the page is up, then served until SIGINT or
+// SIGTERM, which ends it cleanly (exit 0). A film that does not validate at the start is exit 1 with its lines.
+async function executePreview(options, controller) {
+  const result = await runPreview(options, { signal: controller.signal, log, say });
+  if (result.findings) {
+    if (options.json) say(JSON.stringify({ ok: false, findings: result.findings }));
+    else for (const line of result.findings) log(`make: ${line}`);
+  }
+  if (result.error) {
+    if (options.json) say(JSON.stringify(errorReport(describeError(new Error(result.error)))));
+    else log(`make: ${result.error}`);
+  }
+  process.exitCode = result.exitCode;
+}
+
 async function execute(options, controller, guarded) {
   if (options.batch) return executeBatch(options, controller);
+  if (options.preview) return executePreview(options, controller);
   let result = await runMake(options, { signal: controller.signal, log });
   if (guarded.fatal) result = crashed(result, guarded.fatal);
   printResult(options, result);

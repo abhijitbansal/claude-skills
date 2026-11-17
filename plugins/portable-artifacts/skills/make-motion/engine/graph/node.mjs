@@ -3,13 +3,18 @@
 // degrees. Pure and DOM-free.
 
 export const NODE_TYPES = Object.freeze(['group', 'text', 'path', 'image', 'field']);
-export const TRACK_NAMES = Object.freeze(['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotate', 'opacity', 'draw', 'reveal', 'blur']);
+// `frame` (no default, so a node without it samples as before) is the decoded frame a clip's image node shows
+// (engine/kinds/media-clip.mjs); it rises every film frame, so a playing clip is never taken for a held frame.
+export const TRACK_NAMES = Object.freeze(['x', 'y', 'scale', 'scaleX', 'scaleY', 'rotate', 'opacity', 'draw', 'reveal', 'blur', 'frame']);
 // `ghost` is never drawn: above 0 it marks a word not yet spoken in a mode that reads from frame 0 (kinds/shared.mjs
 // ghostTracks), so the contrast rule leaves it alone (engine/review/contrast.mjs).
 // `glow` (0 to 1) lights a word's glyph glow, the text's props.glow ({ color, alpha, radius }), to that share of its alpha.
-export const WORD_TRACK_NAMES = Object.freeze(['opacity', 'x', 'y', 'scale', 'fill', 'ghost', 'glow']);
+// `weight` (a CSS weight) and `width` (a stretch keyword) set the whole word's weight and width; layout reserves room
+// for them (text/layout.mjs reserve), so a change never re-flows the line (graph/sample.mjs rounds and checks them).
+export const WORD_TRACK_NAMES = Object.freeze(['opacity', 'x', 'y', 'scale', 'fill', 'ghost', 'glow', 'weight', 'width']);
 
 const COLOUR_WORD_TRACKS = Object.freeze(['fill']);
+const KEYWORD_WORD_TRACKS = Object.freeze(['width']); // stepped keyword strings
 const created = new WeakSet();
 
 const list = (names) => names.join(', ');
@@ -30,12 +35,12 @@ function freezeCopy(v) {
   return Object.freeze(Object.fromEntries(Object.entries(v).map(([k, val]) => [k, freezeCopy(val)])));
 }
 
-function checkTrackMap(map, allowed, where, colourNames = []) {
+function checkTrackMap(map, allowed, where, colourNames = [], keywordNames = []) {
   if (!isPlainObject(map)) throw new Error(`${where} must be an object of tracks`);
   for (const [name, tr] of Object.entries(map)) {
     if (!allowed.includes(name)) throw new Error(`${where}: unknown track '${name}'; accepted: ${list(allowed)}`);
     if (!isTrack(tr)) throw new Error(`${where}.${name} must be a track (see track())`);
-    const wantKind = colourNames.includes(name) ? ['colour', 'string'] : ['number'];
+    const wantKind = colourNames.includes(name) ? ['colour', 'string'] : keywordNames.includes(name) ? ['string'] : ['number'];
     if (!wantKind.includes(tr.kind)) throw new Error(`${where}.${name} must be a ${wantKind.join(' or ')} track, got ${tr.kind}`);
   }
 }
@@ -50,7 +55,7 @@ function checkStaticProps(props) {
 function checkWordTracks(words, type) {
   if (!Array.isArray(words)) throw new Error('wordTracks must be an array, one entry per word index');
   if (words.length > 0 && type !== 'text') throw new Error(`wordTracks only apply to a text node, not '${type}'`);
-  words.forEach((entry, i) => checkTrackMap(entry, WORD_TRACK_NAMES, `wordTracks[${i}]`, COLOUR_WORD_TRACKS));
+  words.forEach((entry, i) => checkTrackMap(entry, WORD_TRACK_NAMES, `wordTracks[${i}]`, COLOUR_WORD_TRACKS, KEYWORD_WORD_TRACKS));
 }
 
 function checkChildren(children) {

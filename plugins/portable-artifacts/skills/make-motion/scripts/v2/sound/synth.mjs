@@ -26,6 +26,8 @@ const SUB = Object.freeze({ seconds: 0.35, from: 90, to: 40, attack: 0.004, deca
 const PAPER = Object.freeze({ seconds: 0.12, hz: 2500, q: 0.7, attack: 0.002, tau: 0.035 });
 // White noise through a narrow band rising from `from` to `to` Hz, in over `attack` and out over `release`: a squeak.
 const MARKER = Object.freeze({ seconds: 0.18, from: 1800, to: 4200, q: 8, attack: 0.015, release: 0.04 });
+// the board eraser (the erase cut): a soft broad band of noise sweeping down, the felt across the board
+const ERASER = Object.freeze({ seconds: 0.45, from: 1600, to: 700, q: 1.2, attack: 0.03, release: 0.12 });
 // Pink noise through a band climbing 200 Hz to 6 kHz (as the version 1 riser), turning into a tone gliding to 2 kHz in
 // its last moments (weight u^toneShape), under a rising envelope 0.05 x 20^u; its last sample is its peak.
 const RISER = Object.freeze({ seconds: 1.6, lo: 200, hi: 6000, toneLo: 200, toneHi: 2000, q: 2, curve: 1.5, toneShape: 8, floor: 0.05, rise: 20 });
@@ -151,7 +153,16 @@ export function riserTo(seconds, { seed } = {}) {
 // The index of a riser's peak in its samples (riserTo): just before its release.
 const riserPeakIndex = (xs) => xs.length - 1 - frames(RISER_RELEASE_SECONDS);
 
-const NEW_VOICES = Object.freeze({ sub, paper, marker });
+function eraser(noise) {
+  const length = frames(ERASER.seconds);
+  const filtered = bandPass(() => noise() * 2 - 1, length, (u) => sweep(ERASER.from, ERASER.to, u), ERASER.q);
+  return levelled(filtered.map((x, i) => {
+    const t = i * DT;
+    return x * Math.min(1, t / ERASER.attack, (ERASER.seconds - t) / ERASER.release);
+  }));
+}
+
+const NEW_VOICES = Object.freeze({ sub, paper, marker, erase: eraser });
 
 /** Every cue name a synth here can voice: the version 1 cues, then the new ones. */
 export const KNOWN_CUES = Object.freeze([...Object.keys(CUE_LAYERS), ...Object.keys(NEW_VOICES)]);

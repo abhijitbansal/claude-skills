@@ -21,10 +21,11 @@ const LANDSCAPE = { w: 1920, h: 1080 };
 const PORTRAIT = { w: 1080, h: 1920 };
 const UHD = { w: 3840, h: 2160 };
 const KNOWN_CUTS = ['cut', 'match', 'slide', 'punch', 'cover', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
-  'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'];
-// the ten shader cuts ported from gl-transitions, each with no cue unless a look names one
+  'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop', 'erase'];
+// the ten shader cuts ported from gl-transitions, each with no cue unless a look names one; and the drawing hand's erase
+// (looks-four Task 2), silent in every look but the hand look
 const PORTED_CUES = (named = {}) => ({
-  'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, ...named,
+  'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null, ...named,
 });
 const FONT_ROLES = ['display', 'text', 'label'];
 const ACCENT_SAMPLE = '#ff6600';

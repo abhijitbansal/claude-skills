@@ -3,6 +3,7 @@
 // stable string of a sampled tree so the renderer can skip a frame that equals the previous one.
 import { sample } from '../time/track.mjs';
 import { isNode, TRACK_NAMES } from './node.mjs';
+import { STRETCH_KEYWORDS } from '../fonts/index.mjs';
 
 const DEFAULTS = Object.freeze({ x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, draw: 1, reveal: 1, blur: 0 });
 const WORD_DEFAULTS = Object.freeze({ opacity: 1, x: 0, y: 0, scale: 1 });
@@ -18,10 +19,25 @@ function resolve(names, tracks, statics, defaults, t, step) {
   return out;
 }
 
+// A word's weight and width tracks (looks-four Task 1), each for the whole word: a weight is a whole CSS weight from
+// WEIGHT_RANGE (an eased track may overshoot, so it is rounded and clamped), a width one of the stretch keywords canvas
+// reaches (STRETCH_KEYWORDS; a width track's keyword values step).
+const WEIGHT_RANGE = Object.freeze([100, 900]);
+const WIDTHS = Object.freeze(STRETCH_KEYWORDS.map(([, keyword]) => keyword));
+
+function typeValues(values) {
+  const out = { ...values };
+  if (out.weight !== undefined) out.weight = Math.min(WEIGHT_RANGE[1], Math.max(WEIGHT_RANGE[0], Math.round(out.weight)));
+  if (out.width !== undefined && !WIDTHS.includes(out.width)) {
+    throw new Error(`a word's width must be one of ${WIDTHS.join(', ')}, got ${JSON.stringify(out.width)}`);
+  }
+  return out;
+}
+
 function sampleWords(n, t) {
-  const names = [...Object.keys(WORD_DEFAULTS), 'fill', 'ghost', 'glow'];
+  const names = [...Object.keys(WORD_DEFAULTS), 'fill', 'ghost', 'glow', 'weight', 'width'];
   const statics = { fill: n.props.fill };
-  return Object.freeze(n.wordTracks.map((entry) => Object.freeze(resolve(names, entry, statics, WORD_DEFAULTS, t, n.step))));
+  return Object.freeze(n.wordTracks.map((entry) => Object.freeze(typeValues(resolve(names, entry, statics, WORD_DEFAULTS, t, n.step)))));
 }
 
 function sampleNode(n, t) {

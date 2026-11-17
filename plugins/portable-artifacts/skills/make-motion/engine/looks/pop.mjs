@@ -62,8 +62,10 @@ export const pop = {
   },
   wordStagger: 0,
   camera: { drift: 0, style: 'locked' },
-  // every registered cut may be named; the palette is pop's own set, in its order, cutStyle its defaults per cut
-  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
+  // every registered cut but `ripple` may be named; the palette is pop's own set, in its order, cutStyle its defaults per cut.
+  // `ripple` is parked here: after two revision rounds it still drew no rings on 9:16 and read as a dip to black and a
+  // fade (look review gate-cuts-3), so a pop film naming it is refused and desk and cosmos keep it
+  cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom'],
   // the motion blur on the cuts that move (engine/cuts/smear.mjs)
@@ -166,7 +168,7 @@ export const pop = {
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'click', slide: 'whoosh', punch: 'impact', match: null, cover: 'whoosh', crossfade: null, fade: null, wipe: 'whoosh', iris: null, zoom: 'whoosh', blur: null, ripple: null, cube: 'whoosh',
-      'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': 'impact', wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': 'click', pixelize: 'click', 'water-drop': null },
+      'page-curl': null, 'directional-warp': null, 'cross-warp': null, 'cross-zoom': 'impact', wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': 'click', pixelize: 'click', 'water-drop': null, erase: null },
     device: { highlight: 'pop', circle: null, underline: null, arrow: null, bracket: null, cutout: null, card: null, tag: null, punch: 'impact', item: 'pop', turn: 'whoosh',
       label: null, focus: null, route: null, numeral: null, sticker: 'pop', sweep: 'whoosh', duotone: null, halftone: null, zoom: 'whoosh',
       pin: 'pop', link: 'whoosh', node: 'pop', event: 'pop', change: 'whoosh', output: 'click', message: 'pop' },

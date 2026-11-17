@@ -1,0 +1,43 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "voice": { "name": "af_heart" },
+  "look": "desk",
+  "format": "16:9",
+  "seed": 7,
+  "shots": [
+    {
+      "id": "idea",
+      "show": "statement",
+      "kicker": "Footage",
+      "say": "A film can show *real footage* now."
+    },
+    {
+      "id": "reel",
+      "show": "media",
+      "cut": "cut",
+      "src": "media-clip.mp4",
+      "in": 0.5,
+      "caption": "The test pattern, playing",
+      "say": "This clip plays frame by frame, with its own tone under the voice."
+    },
+    {
+      "id": "object",
+      "show": "media",
+      "cut": "cut",
+      "src": "media-clip.mp4",
+      "fit": "cutout",
+      "in": 2,
+      "out": 3.5,
+      "muted": true,
+      "caption": "Trimmed and muted",
+      "say": "Here the same clip is trimmed, muted, and set down as an object."
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "cut": "cut",
+      "say": "Same film, same frames, every time."
+    }
+  ]
+}

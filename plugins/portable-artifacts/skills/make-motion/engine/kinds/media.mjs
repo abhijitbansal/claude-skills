@@ -1,8 +1,8 @@
 // The `media` kind: one still photo, full bleed (`fit: bleed`, the default) or as a cut-out object (`fit: cutout`),
 // treated in the look's duotone or halftone (`treatment`, default look.kinds.media.treatment; engine/devices/treatments.mjs),
 // cropped around `focus`, with a caption that arrives with the narration and a small credit. The picture always moves on
-// its own track (a slow push), so a shot with no caption is not a still in a look whose camera is locked. A clip is
-// refused: the engine has no video frames yet. How each look composes it is look data (look.kinds.media); the layout is
+// its own track (a slow push), so a shot with no caption is not a still in a look whose camera is locked. A clip plays
+// its decoded frames (media-clip.mjs; scripts/v2/clips.mjs decodes them) and takes no treatment. How each look composes it is look data (look.kinds.media); the layout is
 // media-layout.mjs. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
@@ -11,21 +11,28 @@ import { fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBl
 import { defaultCamera } from './camera.mjs';
 import { bleedLayout, cutoutLayout, isBleed } from './media-layout.mjs';
 import { unmarked } from './shared.mjs';
+import { CLIP_EXTENSIONS, isClipSrc } from './media-clip.mjs';
 
 const KIND = 'media';
 const CAPTION_MAX = 60;
 const CREDIT_MAX = 40;
 const STILLS = Object.freeze(['png', 'jpg', 'jpeg', 'webp', 'gif']);
-const CLIPS = Object.freeze(['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi']);
-const CLIP_MESSAGE = `a clip is not supported yet; give a still (${STILLS.join(', ')})`;
+const CLIP_FIELDS = Object.freeze(['in', 'out', 'muted']);
 const extensionOf = (src) => (/\.([a-z0-9]+)$/i.exec(src)?.[1] ?? '').toLowerCase();
 
 function srcProblems(shot) {
-  if (typeof shot.src !== 'string') return [];
-  const ext = extensionOf(shot.src);
-  if (CLIPS.includes(ext)) return [{ path: 'src', message: CLIP_MESSAGE }];
-  if (!STILLS.includes(ext)) return [{ path: 'src', message: `must be a still (${STILLS.join(', ')}), got ${JSON.stringify(shot.src)}` }];
+  if (typeof shot.src !== 'string' || isClipSrc(shot.src)) return [];
+  if (!STILLS.includes(extensionOf(shot.src))) return [{ path: 'src', message: `must be a still (${STILLS.join(', ')}) or a clip (${CLIP_EXTENSIONS.join(', ')}), got ${JSON.stringify(shot.src)}` }];
   return [];
+}
+
+// A clip's own fields: in, out and muted only on a clip, out after in, and no treatment (a clip is shown as filmed).
+function clipProblems(shot) {
+  if (!isClipSrc(shot.src)) return CLIP_FIELDS.filter((f) => shot[f] !== undefined).map((f) => ({ path: f, message: `only a clip takes ${CLIP_FIELDS.join(', ')}; this src is a still` }));
+  const problems = [];
+  if (shot.in !== undefined && shot.out !== undefined && shot.out <= shot.in) problems.push({ path: 'out', message: `must be after in (${shot.in} s)` });
+  if (shot.treatment !== undefined) problems.push({ path: 'treatment', message: 'a clip is shown as filmed: it takes no treatment' });
+  return problems;
 }
 
 const focusProblems = (shot) => (shot.focus ?? []).flatMap((v, i) => (v >= 0 && v <= 1 ? [] : [{ path: `focus.${i}`, message: 'must be from 0 to 1' }]));
@@ -37,7 +44,7 @@ function treatmentProblems(shot, look) {
 }
 
 function mediaProblems(shot, { look } = {}) {
-  return [...kindSupportProblems(KIND, look), ...srcProblems(shot), ...focusProblems(shot), ...treatmentProblems(shot, look)];
+  return [...kindSupportProblems(KIND, look), ...srcProblems(shot), ...focusProblems(shot), ...(isClipSrc(shot.src) ? [] : treatmentProblems(shot, look)), ...clipProblems(shot)];
 }
 
 function expandMedia(shot, ctx) {
@@ -64,7 +71,7 @@ function mediaField(shot, id) {
 }
 
 registries.kinds.add(KIND, {
-  summary: 'One still photo, full bleed or as a cut-out, in the look\'s duotone or halftone, with a caption that arrives with the narration and a small credit. Stills only: a clip is not supported yet.',
+  summary: 'One still photo or video clip, full bleed or as a cut-out, a still in the look\'s duotone or halftone, with a caption that arrives with the narration and a small credit. A clip (mp4, mov, m4v, webm, mkv) plays from `in` to `out` with its sound under the voice unless `muted`.',
   example: { id: 'catch', show: KIND, src: 'assets/screenshot.png', say: 'Every morning the boats bring in the catch.', caption: 'The morning catch' },
   schema: {
     required: ['src'],
@@ -75,11 +82,15 @@ registries.kinds.add(KIND, {
       focus: { type: 'array', items: { type: 'number' }, minItems: 2, maxItems: 2 },
       caption: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: CAPTION_MAX },
       credit: { type: 'string', minLength: 1, pattern: NOT_BLANK, maxLength: CREDIT_MAX },
+      // a clip's: the second of the clip the shot starts on, the second it stops at (then holds), and its sound left out
+      in: { type: 'number', minimum: 0 },
+      out: { type: 'number', exclusiveMinimum: 0 },
+      muted: { type: 'boolean' },
     },
   },
   srcFields: ['src'],
   // fields that change how the others are drawn and are never drawn themselves (the look bar, test/v2/helpers/bar.mjs)
-  steeringFields: ['fit', 'treatment', 'focus'],
+  steeringFields: ['fit', 'treatment', 'focus', 'in', 'out', 'muted'],
   heroTarget: 'picture',
   targets: (shot) => ['picture', ...(shot.caption === undefined ? [] : ['caption'])],
   ids: (shot) => [`${shot.id}.picture`],

@@ -176,7 +176,7 @@ export const desk = {
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {
     cut: { cut: 'paper', slide: 'paper', punch: null, match: null, cover: 'paper', crossfade: null, fade: null, wipe: 'paper', iris: null, zoom: null, blur: null, ripple: null, cube: null,
-      'page-curl': 'paper', 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null },
+      'page-curl': 'paper', 'directional-warp': null, 'cross-warp': null, 'cross-zoom': null, wind: null, 'window-slices': null, 'polka-dots': null, 'glitch-memories': null, pixelize: null, 'water-drop': null, erase: null },
     device: { highlight: 'marker', circle: 'marker', underline: 'marker', arrow: null, bracket: null, cutout: null, card: 'paper', tag: null, punch: null, item: 'paper', turn: 'paper',
       label: null, focus: null, route: 'marker', numeral: null, sticker: null, sweep: null, duotone: null, halftone: null, zoom: null,
       pin: 'paper', link: 'marker', node: 'paper', event: 'paper', change: 'marker', output: 'paper', message: 'paper' },

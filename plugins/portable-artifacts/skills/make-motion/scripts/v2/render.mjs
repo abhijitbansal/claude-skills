@@ -14,6 +14,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { findFfmpeg } from '../lib/ffmpeg.mjs';
+// for scripts/v2 modules that run ffmpeg themselves (clips.mjs) without importing a version 1 module directly
+export { findFfmpeg, findFfprobe } from '../lib/ffmpeg.mjs';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/modes/index.mjs'; // registers the modes whose loudness a voiced film is mastered to
 import { loadFilm } from './pipeline.mjs';
@@ -190,6 +192,20 @@ const audioOf = (level, sound) => ({ ...level, cues: sound?.cues?.count ?? 0, mu
  *   the render (voice/master.mjs judgeLevel): the AAC encode of the master is judged before any frame is captured, and
  *   the finished file again after the mux (the same stream, copied).
  */
+/**
+ * The film's sound mastered and encoded as the render would make it (the same master and AAC encode, not judged), written
+ * into `work` for the preview to play: its path, or null for a film with neither a voice nor sound.
+ */
+export async function masterSoundFile({ film, timeline, voice, sound, work, signal }) {
+  const loudness = loudnessFor(film, voice, sound);
+  if (loudness === null) return null;
+  const steps = await voiceSteps();
+  const run = steps.ffmpegRunner(await findFfmpeg(), signal);
+  const master = (headroomDb) => steps.masterTrack({ run, voice, timeline, loudness, workDir: work, cues: sound?.cues ?? undefined, music: sound?.music ?? undefined, tracks: sound?.tracks ?? [], headroomDb });
+  const encoded = await steps.encodeToTarget({ run, master, out: path.join(work, 'preview.m4a'), duration: timeline.duration, loudness, noVoice: !steps.hasNarration(voice) });
+  return encoded.file;
+}
+
 export async function renderFilm({ specPath, out, exact = false, onProgress, session, signal, voice, sound, stamp = [], workers = 1, openPage }) {
   const ffmpeg = await findFfmpeg();
   const own = session === undefined;

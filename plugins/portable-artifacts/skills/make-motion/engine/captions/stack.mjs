@@ -8,6 +8,7 @@ import { node } from '../graph/node.mjs';
 import { track, sample } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { sizeAt, fontFor, setCase, compositionRect, runInk, shownFrom, pulseScale, easePeak } from '../kinds/shared.mjs';
+import { emphasisFlags } from '../kinds/emphasis-flags.mjs';
 import { captionGroups, groupTimes, fitGroup, heardStart, spokenLayout, clearZone, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
 
 const STACK = Object.freeze({
@@ -28,7 +29,7 @@ function areaOf(ctx) {
 }
 
 const displayFont = (ctx) => fontFor(ctx.look, 'display', sizeAt(ctx.look, STACK.step, ctx.unit), ctx.unit);
-const scales = (look) => look.emphasis === 'recolor-scale' && look.moves.emphasize.scale !== undefined;
+const scales = (look) => emphasisFlags(look).scales === true && look.moves.emphasize.scale !== undefined;
 // The largest scale an emphasised word reaches (the spring's overshoot included), or 1 in a look that does not scale.
 const peakOf = (look) => (scales(look) ? 1 + (look.moves.emphasize.scale - 1) * easePeak(look.moves.emphasize.ease) : 1);
 

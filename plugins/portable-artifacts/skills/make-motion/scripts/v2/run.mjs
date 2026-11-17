@@ -17,7 +17,8 @@ import { registries } from '../../engine/registry.mjs';
 import { PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
-import { openSession, pageErrorMessage, machineMessage } from './session.mjs';
+import { openSession, pageErrorMessage, machineMessage, canvasSize } from './session.mjs';
+import { clipUses, prepareClips, clipAudioTracks } from './clips.mjs';
 import { writeSheets } from './sheets.mjs';
 import { renderFilm } from './render.mjs';
 import { sessionFindings } from './review.mjs';
@@ -242,8 +243,9 @@ async function soundSteps() {
 
 // Whether `film` (defaults filled) has sound to make: not "sound": "off", and music, its own cue list, "sound": "on",
 // or a mode whose cues play by default.
-const wantsSound = (film) => film.sound !== 'off'
-  && (film.music !== undefined || Array.isArray(film.cues) || film.sound === 'on' || registries.modes.get(film.mode).cues === true || film.audio?.length > 0);
+const wantsSound = (film, clips = []) => film.sound !== 'off'
+  && (film.music !== undefined || Array.isArray(film.cues) || film.sound === 'on' || registries.modes.get(film.mode).cues === true || film.audio?.length > 0
+    || clips.some((clip) => clip.audio && film.shots.some((shot) => shot.src === clip.src && shot.muted !== true))); // a clip's own sound
 
 // A film error thrown by the cue plan (sound/cues.mjs): its message starts with the path of the cue at fault.
 const CUE_PATH_RE = /^(cues\[\d+\](?:\.[a-z]+)?): ([\s\S]+)$/;
@@ -359,7 +361,7 @@ async function audioTracks(steps, film, timeline, specDir, signal) {
  * The result's `timeline` is the one to draw: the given one, or its cuts moved onto the music's beats (music.snap); the
  * cues are planned on it.
  */
-async function makeSound(loaded, timeline, state, io, work) {
+async function makeSound(loaded, timeline, state, io, work, clips = []) {
   const { film, specDir } = loaded;
   try {
     return await stage(state, io.log, 'sound', async () => {
@@ -370,7 +372,9 @@ async function makeSound(loaded, timeline, state, io, work) {
       const cues = steps.planCues(film, drawn);
       io.signal?.throwIfAborted();
       // Nothing planned is nothing to put in the film: no audio, as the render reports it (review Minor 10).
-      const tracks = await audioTracks(steps, film, drawn, specDir, io.signal);
+      // the extra audio files, then each clip's own sound at its shot (clips.mjs; cut only when a render will mix it)
+      const clipTracks = clips.length === 0 || work === null ? [] : await clipAudioTracks({ clips, film, timeline: drawn, work, signal: io.signal });
+      const tracks = [...await audioTracks(steps, film, drawn, specDir, io.signal), ...clipTracks];
       const extra = tracks.length > 0 ? { tracks: tracks.length } : {}; // the extra audio files, only when the film has some
       if (cues.length > 0 || music !== null || tracks.length > 0) state.audio = { lufs: null, truePeakDb: null, note: NOT_RENDERED_NOTE, cues: cues.length, music: music?.summary ?? null, ...extra };
       return { timeline: drawn, sound: work === null ? null : await soundFiles(steps, { film, timeline: drawn, cues, music, tracks, work }) };
@@ -397,6 +401,42 @@ async function makePoster(options, loaded, state, io) {
     state.findings = [...state.findings, ...sessionFindings(session)];
     await session.close();
   }
+}
+
+// ---- the preview ---------------------------------------------------------------------------------------------------------
+
+// The voice of a previewed film, or { made: null, notice } when it cannot be made on this machine (the optional voice
+// package missing, a model refused): the preview is then silent and says so. A film error is null with no notice.
+async function previewVoice(film, specDir, options, state, io) {
+  try {
+    return { made: film.voice.name === undefined ? await recordVoice(film, specDir, state, io) : await makeVoice(film, options, state, io), notice: null };
+  } catch (err) {
+    if (io.signal?.aborted) throw err;
+    return { made: null, notice: `the preview is silent: ${machineError(err).message}` };
+  }
+}
+
+/**
+ * The stages a preview runs before it serves the page (scripts/v2/viewer-run.mjs): validate, voice, timeline and sound
+ * as a render does, the cue and bed WAVs written into `work` (the caller's folder, which it removes). -> { loaded, made,
+ * sound, notice, findings }: `loaded` null when the film is at fault (`findings` then say why).
+ */
+export async function previewStages(options, { work, signal, log = () => {}, synthesise = synthesiseFilm } = {}) {
+  const state = newState();
+  const io = { signal, log, synthesise };
+  const loaded = await validate(options, state, log);
+  const failed = () => ({ loaded: null, made: null, sound: null, notice: null, findings: state.findings });
+  if (!loaded) return failed();
+  const { film, specDir } = loaded;
+  const voice = film.voice === undefined ? { made: null, notice: null } : await previewVoice(film, specDir, options, state, io);
+  if (film.voice !== undefined && voice.made === null && voice.notice === null) return failed();
+  const timeline = await timelineFor(film, voice.made, state, log);
+  if (!timeline) return failed();
+  const clips = clipUses(film).length === 0 ? [] : await clipStage(loaded, timeline, state, io, clipCacheDir(options));
+  if (clips === null) return failed();
+  const planned = wantsSound(film, clips) ? await makeSound(loaded, timeline, state, io, work, clips) : { sound: null };
+  if (planned === null) return failed();
+  return { loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared, clips }, made: voice.made, sound: planned.sound, notice: voice.notice, findings: state.findings };
 }
 
 // ---- the outline ---------------------------------------------------------------------------------------------------------
@@ -452,22 +492,47 @@ async function execute(options, state, io) {
     Object.assign(state, { outline: outlineOf(film, drawn.timeline), outlineNote: outlineNote(film, options, drawn.snapped) });
     return;
   }
+  // A film's video clips are probed, and their frames taken from (or decoded into) the cache beside the video (clips.mjs).
+  const clips = clipUses(film).length === 0 ? [] : await clipStage(loaded, timeline, state, io, clipCacheDir(options));
+  if (clips === null) return;
   if (typeof options.poster === 'number') {
-    await makePoster(options, { film, timeline, specDir, prepared: loaded.prepared }, state, io);
+    await makePoster(options, { film, timeline, specDir, prepared: loaded.prepared, clips }, state, io);
     return;
   }
+  await soundReviewRender({ options, loaded, timeline, made, clips, state, io });
+}
+
+// The clip frame cache: <out dir>/.clips, beside the voice cache (<out dir>/.voice).
+const clipCacheDir = (options) => path.join(path.dirname(outputPaths(options).out), '.clips');
+
+// The sound stage, the subtitles, then the page's stages (review, render).
+async function soundReviewRender({ options, loaded, timeline, made, clips, state, io }) {
+  const { film, specDir } = loaded;
+  const sounded = wantsSound(film, clips);
   // The cue and bed WAVs live in a work folder of this run only, removed on every way out of it.
-  const work = wantsSound(film) && !options.noRender ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
+  const work = sounded && !options.noRender ? mkdtempSync(path.join(tmpdir(), 'mm-sound-')) : null;
   try {
-    const planned = wantsSound(film) ? await makeSound(loaded, timeline, state, io, work) : { sound: null };
+    const planned = sounded ? await makeSound(loaded, timeline, state, io, work, clips) : { sound: null };
     if (planned === null) return;
     // --subtitles: the caption file from the timeline the film is drawn with (after music.snap), before the browser starts
     if (options.subtitles) state.subtitles = writeSubtitles({ timeline: planned.timeline ?? timeline, format: options.subtitles, videoOut: outputPaths(options).out });
     if (!options.noRender) await findFfmpeg(); // fail before the browser starts, naming how to fix it
     io.signal?.throwIfAborted();
-    await reviewAndRender({ options, loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared }, made, sound: planned.sound, state, io });
+    await reviewAndRender({ options, loaded: { film, timeline: planned.timeline ?? timeline, specDir, prepared: loaded.prepared, clips }, made, sound: planned.sound, state, io });
   } finally {
     if (work !== null) rmSync(work, { recursive: true, force: true });
+  }
+}
+
+// The film's clips decoded (clips.mjs prepareClips), or null when one is the film's to fix (its errors become findings).
+async function clipStage({ film, specDir }, timeline, state, io, cacheDir) {
+  const [w, h] = canvasSize(film);
+  try {
+    return await stage(state, io.log, 'clips', () => prepareClips({ film, specDir, timeline, cacheDir, canvas: { w, h }, signal: io.signal }));
+  } catch (err) {
+    if (!(err instanceof SpecError) || io.signal?.aborted) throw err;
+    state.findings = err.errors.map(validationFinding);
+    return null;
   }
 }
 

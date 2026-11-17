@@ -7,6 +7,8 @@ import { launchBrowser, guardNetwork } from '../lib/browser.mjs';
 /** The one browser of a run that opens several sessions (a batch: openSession(loaded, { browser })); the caller closes it. */
 export const launchRunBrowser = (options = { ownSignals: true }) => launchBrowser(options);
 import { canvasSize } from '../../template/formats.mjs';
+
+export { canvasSize }; // a film's canvas for scripts/v2 modules that need it outside a session (clips.mjs)
 import { startV2Server } from './server.mjs';
 
 // Playwright 1.64 (recorded by .scratch/gate/probe-errors.mjs) reports an Error the page threw as
@@ -39,7 +41,7 @@ export const machineMessage = (err) => String(err?.message ?? err).split('\n')[0
  * @returns {Promise<{ page: import('playwright').Page, info: { frameCount: number, fps: number, size: [number, number], post: 'webgl2' | '2d' },
  *   film: object, timeline: object, errors: string[], blocked: string[], close(): Promise<void> }>}
  */
-export async function openSession({ film, timeline, specDir, prepared }, { initScript, browser: shared } = {}) {
+export async function openSession({ film, timeline, specDir, prepared, clips = [] }, { initScript, browser: shared } = {}) {
   let browser = null;
   let context = null;
   let server = null;
@@ -59,7 +61,8 @@ export async function openSession({ film, timeline, specDir, prepared }, { initS
   const errors = [];
   const blocked = [];
   try {
-    server = await startV2Server({ film, timeline, specDir, prepared, onError: (err) => errors.push(err.message) });
+    // clips: the film's decoded video clips (scripts/v2/clips.mjs prepareClips), served by index
+    server = await startV2Server({ film, timeline, specDir, prepared, clips, onError: (err) => errors.push(err.message) });
     browser = shared ?? await launchBrowser({ ownSignals: true });
     const [width, height] = canvasSize(film);
     context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });

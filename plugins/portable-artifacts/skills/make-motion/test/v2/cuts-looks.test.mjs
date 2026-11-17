@@ -14,8 +14,17 @@ const LOOKS = ['desk', 'pop', 'cosmos'];
 const desk = () => registries.looks.get('desk');
 const withCuts = (fields) => ({ ...desk(), name: 'cuts-test', ...fields });
 
-test('every shipped look allows every registered cut', () => {
-  for (const name of LOOKS) assert.deepEqual([...registries.looks.get(name).cuts].sort(), registries.cuts.names().sort(), name);
+// a cut parked in a look is left out of its `cuts` (test/v2/cuts-parked.test.mjs): pop parks ripple
+const PARKED = { desk: [], pop: ['ripple'], cosmos: [] };
+// a cut only a hand look takes (looks-four Task 2: erase wipes the drawing hand's board; desk, pop and cosmos name it
+// with a null sound and leave it out of their cuts)
+const HAND_ONLY = ['erase'];
+
+test('every shipped look allows every registered cut but the ones parked in it and the hand look\'s erase', () => {
+  for (const name of LOOKS) {
+    const allowed = registries.cuts.names().filter((cut) => !PARKED[name].includes(cut) && !HAND_ONLY.includes(cut));
+    assert.deepEqual([...registries.looks.get(name).cuts].sort(), allowed.sort(), name);
+  }
 });
 
 test('every shipped look has a palette: a subset of its cuts, never empty, holding the hard cut', () => {

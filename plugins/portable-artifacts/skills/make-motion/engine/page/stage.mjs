@@ -18,6 +18,7 @@ import { facesFor, loadFaces } from './fonts-shared.mjs';
 import { createPost, grainPhase } from './post.mjs';
 import { createCutPictures } from './cut-pictures.mjs';
 import { createAccumulator } from './accumulate.mjs';
+import { createClipFrames } from './clip-frames.mjs';
 import { resolveShotCut } from '../cuts/resolve.mjs';
 import { shaderUniforms, standInOf } from '../cuts/shaders/index.mjs';
 
@@ -173,7 +174,7 @@ function installApi({ fps, draw, post, source, measure, frameState, keys, setGra
 }
 
 async function init() {
-  const { film, timeline, assets: srcs, prepared = {} } = await fetchJson('/film.json');
+  const { film, timeline, assets: srcs, alpha = [], clips = [], prepared = {} } = await fetchJson('/film.json');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
   const [w, h] = canvasSize(film);
   const canvas = { w, h };
@@ -188,8 +189,15 @@ async function init() {
   // The designed kinds take their type from the look, so the look's fonts load with any the film names itself.
   await loadFaces(facesFor({ film, fonts: look.fonts, stamp: { family: STAMP_FAMILY } }));
   const assets = await loadAssets(srcs);
+  const clipFrames = createClipFrames(clips); // a video clip's frames, loaded before each draw that shows them
+  for (const [src, entry] of clipFrames.entries) assets.set(src, entry);
+  const { frames } = clipFrames;
   const measure = createMeasure(document.createElement('canvas').getContext('2d'));
-  const built = buildFilm({ film, timeline, measure, assets, canvas, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE), prepared });
+  // what a kind's ctx.asset(src) says: the size, a clip's frames, and whether the picture has transparency (the server
+  // read it from the file's header: scripts/v2/asset-info.mjs); the page never inspects pixels for it
+  const transparent = new Set(alpha);
+  const layoutAssets = new Map([...assets].map(([src, a]) => [src, { width: a.width, height: a.height, ...(a.clip ? { clip: a.clip } : {}), ...(transparent.has(src) ? { alpha: true } : {}) }]));
+  const built = buildFilm({ film, timeline, measure, assets: layoutAssets, canvas, viralInsets: safeInsets([w, h], VIRAL_SAFE_ZONE), prepared });
   const { fps, frameCount } = timeline;
   let grain = look.post.grain; // what the post pass is using now (a test may change it)
 
@@ -202,7 +210,7 @@ async function init() {
     resetContext(c); // a seek that threw halfway must not leave its clip, alpha or save stack to the next one
     c.fillStyle = background;
     c.fillRect(0, 0, w, h);
-    drawFrame(c, sampled, { assets, canvas, time: t });
+    drawFrame(c, sampled, { assets, canvas, time: t, frames });
   };
   const cutPictures = createCutPictures({ w, h, drawShot });
   const accumulator = createAccumulator({ w, h });
@@ -210,9 +218,9 @@ async function init() {
   const drawSmeared = (state, t) => {
     const { layers, gapPx, vector, over } = state.smear;
     drawShot(ctx, { background: state.background, sampled: state.sampled, t });
-    const mean = accumulator.mean((layer, k) => drawFrame(layer, layers[k], { assets, canvas, time: t }), layers.length, { vector, gapPx });
+    const mean = accumulator.mean((layer, k) => drawFrame(layer, layers[k], { assets, canvas, time: t, frames }), layers.length, { vector, gapPx });
     ctx.drawImage(mean, 0, 0);
-    drawFrame(ctx, over, { assets, canvas, time: t });
+    drawFrame(ctx, over, { assets, canvas, time: t, frames });
   };
   const withoutCaptions = captionFilter(film);
   // Draws frame i into the source. Returns the shader cut the post pass is to run over it, or null: inside a shader cut's
@@ -248,6 +256,15 @@ async function init() {
     return snapshotOf(built.sampleShot(index, Math.max(0, shotTime(i / fps, timeline.shots[index].start))));
   };
   installApi({ fps, draw, post, source, measure, frameState, keys, snapshotOf, snapshotShot, cutPictures, setGrain: (value) => { grain = value; } });
+  if (clips.length > 0) {
+    // a film with clips: __seek loads the clip frames frame i shows, then draws (it returns a promise; page.evaluate
+    // and every caller await it). A film without clips keeps the synchronous __seek.
+    const drawNow = window.__seek;
+    window.__seek = async (i, options) => {
+      await clipFrames.prepare(frameState(i));
+      drawNow(i, options);
+    };
+  }
   const notice = post.unavailable ? { postNotice: { ...post.unavailable, dropped: post.dropped } } : {};
   // the size each picture loaded at, by src: what a kind's review needs to know of a picture (scripts/v2/review.mjs)
   const pictures = Object.fromEntries([...assets].map(([src, bitmap]) => [src, [bitmap.width, bitmap.height]]));

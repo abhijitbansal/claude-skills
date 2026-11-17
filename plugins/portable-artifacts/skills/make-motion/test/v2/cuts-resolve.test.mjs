@@ -23,6 +23,7 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm } from '../../engine/graph/film.mjs';
 import { measure, canvasOf, viralOf } from './helpers/kinds.mjs';
 import { nodeCutKeys, filmCutKeys, cutWindows, BASELINE_FILM } from './helpers/cut-baseline.mjs';
+import { handLook } from './helpers/hand-look.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SKILL = path.resolve(HERE, '../..');
@@ -202,10 +203,11 @@ test('--list cuts: each cut with its family, directions, default length, whether
   assert.match(text, /^cut {2}.+\n {2}node, no direction; no window; no smear; in the palette of desk, pop, cosmos\n {2}example: "cut"$/m);
 });
 
-test('--list cuts: every registered cut has an example that validates in desk', () => {
+test('--list cuts: every registered cut has an example that validates in desk (erase in the hand look, its only look)', () => {
   for (const name of registries.cuts.names()) {
     const { example } = listEntries('cuts').find((e) => e.name === name);
-    const film = { version: 2, look: 'desk', shots: [statement('a', { hero: 'h' }), statement('b', { hero: 'h', cut: example })] };
+    const look = name === 'erase' ? handLook() : 'desk';
+    const film = { version: 2, look, shots: [statement('a', { hero: 'h' }), statement('b', { hero: 'h', cut: example })] };
     assert.deepEqual(errorsOf(film), [], `${name}: ${JSON.stringify(example)}`);
   }
 });

@@ -40,11 +40,12 @@ export const exampleFor = (example, look) => ({
 const assetsMap = () => new Map(Object.entries(PICTURES).map(([src, [width, height]]) => [src, { width, height }]));
 
 // Shot `index` of `film` expanded exactly as buildFilm does (kindContext included); only what the frame is made of.
-function expandShot(engine, film, index) {
+// `prepared` (by shot id) is passed only when given, so the first fixture's calls are unchanged.
+function expandShot(engine, film, index, prepared) {
   const { registries, buildTimeline, shotContext, kindContext, measure, canvasOf, viralOf } = engine;
   const timeline = buildTimeline(film, { fps: film.fps });
   const canvas = canvasOf(film.format);
-  const ctx = shotContext({ film, index, timeline, canvas, measure, assets: assetsMap(), viralInsets: viralOf(canvas) });
+  const ctx = shotContext({ film, index, timeline, canvas, measure, assets: assetsMap(), viralInsets: viralOf(canvas), ...(prepared ? { prepared } : {}) });
   const kind = registries.kinds.get(film.shots[index].show);
   const out = kind.expand(film.shots[index], kindContext(film, kind, ctx));
   return { nodes: out.nodes, camera: out.camera ?? null, background: out.background ?? null, hero: out.hero ?? null };
@@ -80,6 +81,54 @@ export function frozenEntries(engine, films) {
     }
   }
   for (const name of FILMS) {
+    const film = { fps: FPS, ...films[name] };
+    film.shots.forEach((shot, index) => {
+      entries[`film ${name} shot ${shot.id}`] = sha(stableJson(expandShot(engine, film, index)));
+    });
+    entries[`film ${name} frames`] = sha(stableJson(filmFrames(engine, film)));
+  }
+  return entries;
+}
+
+// ---- the second fixture (fixtures/kinds-frozen-2.json, looks-four Task 1): cosmos and every kind ----
+
+export const LOOKS_2 = Object.freeze(['desk', 'pop', 'cosmos']);
+export const FILMS_2 = Object.freeze(['gate-cosmos', 'gate-cosmos-viral']);
+// the mode a look's one-shot film is made in, per format: cosmos serves both, pro wide and viral tall (its gate films)
+const MODES_2 = Object.freeze({ desk: { '16:9': 'pro', '9:16': 'pro' }, pop: { '16:9': 'viral', '9:16': 'viral' }, cosmos: { '16:9': 'pro', '9:16': 'viral' } });
+
+// The kinds a look's examples are frozen for: every registered kind in desk and pop; in cosmos the kinds that read no
+// look data and the ones it has kinds.<kind> data for.
+export function kindsFor2(registries, look) {
+  const names = registries.kinds.names();
+  if (look !== 'cosmos') return names;
+  const data = registries.looks.get('cosmos').kinds ?? {};
+  return names.filter((name) => registries.kinds.get(name).lookData !== true || (data[name] !== null && typeof data[name] === 'object'));
+}
+
+// The prepared data of a one-shot film whose kind declares `prepared: true` (map, code), else undefined.
+function preparedFor(engine, film) {
+  const kind = engine.registries.kinds.get(film.shots[0].show);
+  return kind.prepared === true ? engine.prepareFilm(film, { filmDir: engine.filmDir }).prepared : undefined;
+}
+
+/**
+ * { [entry]: sha256 } for the second fixture: every kind's example in each of LOOKS_2 (kindsFor2) at both formats, and
+ * every shot and the sampled frames of FILMS_2. `engine` is as frozenEntries takes it plus `prepareFilm`
+ * (scripts/v2/prepare) and `filmDir`.
+ */
+export function frozenEntries2(engine, films) {
+  const entries = {};
+  for (const look of LOOKS_2) {
+    for (const name of kindsFor2(engine.registries, look)) {
+      const example = engine.registries.kinds.get(name).example;
+      for (const format of FORMATS) {
+        const film = { ...filmOfShot(exampleFor(example, look), look, format), mode: MODES_2[look][format] };
+        entries[`example ${name} ${look} ${format}`] = sha(stableJson(expandShot(engine, film, 0, preparedFor(engine, film))));
+      }
+    }
+  }
+  for (const name of FILMS_2) {
     const film = { fps: FPS, ...films[name] };
     film.shots.forEach((shot, index) => {
       entries[`film ${name} shot ${shot.id}`] = sha(stableJson(expandShot(engine, film, index)));

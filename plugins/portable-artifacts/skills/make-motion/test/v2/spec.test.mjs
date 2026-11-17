@@ -981,7 +981,7 @@ test('cues is a list of { at, cue }: at a number or an anchor, cue a name the sy
   assert.equal(check(film({ cues: [] })).ok, true);
   const unknown = errorsAt(film({ cues: [{ at: 1, cue: 'poop' }] }));
   assert.equal(unknown[0][0], 'cues[0].cue');
-  assert.match(unknown[0][1], /^must be one of "pop", "click", .*"marker"; did you mean "pop"\?/);
+  assert.match(unknown[0][1], /^must be one of "pop", "click", .*"marker", "erase"; did you mean "pop"\?/);
   assert.deepEqual(errorsAt(film({ cues: [{ cue: 'pop' }] })).map(([p]) => p), ['cues[0].at']);
   assert.match(errorsAt(film({ cues: [{ at: 1, cue: 'pop', cuee: 'x' }] }))[0].join(': '), /^cues\[0\]\.cuee: unknown property/);
   assert.match(errorsAt(film({ cues: [{ at: { s: 1 }, cue: 'pop' }] }))[0].join(': '), /^cues\[0\]\.at: must be number,string/);

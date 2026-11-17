@@ -1,13 +1,15 @@
 // Canvas 2D drawing of a sampled (and camera-applied) scene graph. drawFrame(ctx, sampled, env) paints the nodes in
 // order, each child after its parent inside the parent's transform. Nothing here reads a clock or a random source:
 // the same sampled tree draws the same pixels.
-import { applyFont, WORD_IDENTITY } from './text-style.mjs';
+import { applyFont, createMeasure, WORD_IDENTITY } from './text-style.mjs';
+import { drawnFont, reservedFont, reservedInset } from '../text/layout.mjs';
 import { measurePath, path2D } from './geometry.mjs';
 import { roughShape } from './rough.mjs';
 import { contentBox, localMatrix } from './bounds.mjs';
 import { registries } from '../registry.mjs';
 import { GLOW_EDGE } from '../devices/glow.mjs';
 import { createTreatCache } from './treat.mjs';
+import { frameIndexOf } from '../kinds/media-clip.mjs';
 import '../fields/index.mjs';
 
 const DEFAULT_TEXT_FILL = '#ffffff';
@@ -55,7 +57,18 @@ function stackGlow(ctx, glow, share, paint) {
   ctx.restore();
 }
 
-function drawWord(ctx, line, word, tracks, baseFill, glow) {
+// A word with its own weight or width (its tracks), or in a text laid out at a reserved weight and width: set in the
+// font it is drawn in, and how far right of its room's left edge it starts so it is centred in the room layout measured
+// for it (text/layout.mjs reservedInset). Called inside drawWord's save, so the next word starts from the text's font.
+function wordInset(ctx, word, tracks, font, reserve) {
+  const drawn = drawnFont(font, tracks);
+  if (drawn === font && reserve === undefined) return 0;
+  const inset = reservedInset(createMeasure(ctx), reservedFont(font, reserve), drawn, word.text);
+  applyFont(ctx, drawn, { tracked: true });
+  return inset;
+}
+
+function drawWord(ctx, line, word, tracks, baseFill, glow, type) {
   const opacity = unit01(tracks.opacity);
   if (opacity <= 0) return;
   ctx.save();
@@ -63,9 +76,10 @@ function drawWord(ctx, line, word, tracks, baseFill, glow) {
   ctx.translate(line.x + word.x + word.width / HALF + tracks.x, line.y + tracks.y);
   ctx.scale(tracks.scale, tracks.scale);
   ctx.fillStyle = tracks.fill ?? baseFill;
+  const left = -word.width / HALF + wordInset(ctx, word, tracks, type.font, type.reserve);
   const share = unit01(tracks.glow ?? 0);
-  if (glow && share > 0) drawGlow(ctx, word.text, -word.width / HALF, glow, share);
-  ctx.fillText(word.text, -word.width / HALF, 0);
+  if (glow && share > 0) drawGlow(ctx, word.text, left, glow, share);
+  ctx.fillText(word.text, left, 0);
   ctx.restore();
 }
 
@@ -75,9 +89,10 @@ function drawText(ctx, n) {
   applyFont(ctx, font, { tracked: true });
   ctx.textBaseline = 'alphabetic';
   ctx.textAlign = 'left';
+  const type = { font, reserve: layout.reserve };
   for (const line of layout.lines) {
     // words has an entry only for each wordTracks entry; a word beyond them is untouched (opacity 1, no offset)
-    for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index] }, fill, glow);
+    for (const word of line.words) drawWord(ctx, line, word, { ...WORD_IDENTITY, ...n.words?.[word.index] }, fill, glow, type);
   }
 }
 
@@ -141,14 +156,45 @@ function drawPath(ctx, n) {
 // ---- images ----
 
 // props.clip = [sx, sy, sw, sh] in the picture's own pixels draws only that part of it, stretched to w x h.
-function drawImage(ctx, n, assets) {
+// props.video ({ count }) makes the picture a video clip's decoded frame: the one the node's `frame` value names
+// (engine/kinds/media-clip.mjs frameIndexOf), which the stage loaded before the draw (env.frames).
+function drawImage(ctx, n, assets, frames) {
   const { src, w, h, clip } = n.props;
-  const image = assets.get(src);
+  const image = n.props.video ? frames(src, frameIndexOf(n.frame ?? 0, n.props.video.count)) : assets.get(src);
   if (!image) throw new Error(`image node "${n.id}": no loaded picture for src "${src}"`);
+  if (n.props.silhouette) return drawSilhouette(ctx, image, n.props);
   if (clip === undefined) return ctx.drawImage(image, 0, 0, w ?? image.width, h ?? image.height);
   const ok = Array.isArray(clip) && clip.length === 4 && clip.every(Number.isFinite) && clip[2] > 0 && clip[3] > 0;
   if (!ok) throw new Error(`image node "${n.id}": clip must be [sx, sy, sw, sh] in image pixels with sw, sh > 0, got ${JSON.stringify(clip)}`);
   return ctx.drawImage(image, ...clip, 0, 0, w ?? clip[2], h ?? clip[3]);
+}
+
+// props.silhouette ({ color, spread }) on an image: the picture's own shape in flat `color` (its alpha kept, its colours
+// dropped), dilated by `spread` px (copies at RING_STEPS points round circles of spread and half of it, then filled
+// through source-in): a cut-out's keyline and shadow that follow the edge of a picture with transparency
+// (engine/devices/cutout.mjs). One scratch canvas, reused.
+const RING_STEPS = 16;
+const RING_RADII = Object.freeze([1, 0.5]);
+const silhouetteScratch = { canvas: null };
+
+function drawSilhouette(ctx, image, { w, h, clip, silhouette }) {
+  const width = w ?? clip?.[2] ?? image.width, height = h ?? clip?.[3] ?? image.height;
+  const spread = silhouette.spread ?? 0;
+  const cw = Math.ceil(width + HALF * spread), ch = Math.ceil(height + HALF * spread);
+  if (!silhouetteScratch.canvas || silhouetteScratch.canvas.width < cw || silhouetteScratch.canvas.height < ch) silhouetteScratch.canvas = new OffscreenCanvas(cw, ch);
+  const c = silhouetteScratch.canvas.getContext('2d');
+  resetContext(c);
+  const place = (dx, dy) => (clip ? c.drawImage(image, ...clip, spread + dx, spread + dy, width, height) : c.drawImage(image, spread + dx, spread + dy, width, height));
+  if (spread > 0) {
+    for (const r of RING_RADII) {
+      for (let k = 0; k < RING_STEPS; k++) place(spread * r * Math.cos((2 * Math.PI * k) / RING_STEPS), spread * r * Math.sin((2 * Math.PI * k) / RING_STEPS));
+    }
+  }
+  place(0, 0);
+  c.globalCompositeOperation = 'source-in';
+  c.fillStyle = silhouette.color;
+  c.fillRect(0, 0, cw, ch);
+  ctx.drawImage(silhouetteScratch.canvas, 0, 0, cw, ch, -spread, -spread, cw, ch);
 }
 
 // props.treatment ({ type: 'duotone' | 'halftone', dark, light, cell? }, engine/devices/treatments.mjs) on an image: the
@@ -183,7 +229,7 @@ function drawField(ctx, n, time = 0) {
 function drawBody(ctx, n, env) {
   if (n.type === 'text') return drawText(ctx, n);
   if (n.type === 'path') return drawPath(ctx, n);
-  if (n.type === 'image') return n.props.treatment ? drawTreated(ctx, n, env.assets) : drawImage(ctx, n, env.assets);
+  if (n.type === 'image') return n.props.treatment && !n.props.silhouette ? drawTreated(ctx, n, env.assets) : drawImage(ctx, n, env.assets, env.frames);
   if (n.type === 'field') return drawField(ctx, n, env.time);
   return undefined; // a group draws only its children
 }
@@ -274,17 +320,21 @@ export function resetContext(ctx) {
   ctx.canvas.width = ctx.canvas.width; // assigning the width resets the whole 2D state, on every browser
 }
 
+// Without a frame source a clip cannot be drawn: an error that names it, never a blank picture.
+const noFrames = (src, n) => { throw new Error(`clip "${src}": frame ${n} was not loaded before the draw`); };
+
 /**
- * Paint `sampled` onto ctx. The caller has already painted the background.
+ * Paint `sampled` onto ctx. The caller has already painted the background. env.frames(src, n) gives a clip's decoded
+ * frame n (the stage loads them before it draws).
  * @param {CanvasRenderingContext2D} ctx
  * @param {object[]} sampled sampleGraph output after applyCamera
  * @param {{ assets?: Map<string, ImageBitmap | HTMLImageElement>, canvas: { w: number, h: number }, time?: number }} env
  *   `time` is the film time in seconds, handed to a field's paint (a field may move with it).
  */
-export function drawFrame(ctx, sampled, { assets = new Map(), canvas, time = 0 } = {}) {
+export function drawFrame(ctx, sampled, { assets = new Map(), canvas, time = 0, frames = noFrames } = {}) {
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.globalAlpha = 1;
   ctx.filter = 'none';
-  const env = { assets, canvas, time };
+  const env = { assets, canvas, time, frames };
   for (const n of sampled) drawNode(ctx, n, env);
 }

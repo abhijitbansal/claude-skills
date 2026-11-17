@@ -45,7 +45,7 @@ const lastNonZero = (xs) => xs.findLastIndex((x) => x !== 0);
 
 test('KNOWN_CUES is the frozen list of the version 1 cues and the new ones', () => {
   assert.ok(Object.isFrozen(KNOWN_CUES));
-  assert.deepEqual([...KNOWN_CUES], ['pop', 'click', 'whoosh', 'chime', 'impact', 'riser', 'swoosh', 'drop', 'ding', 'sub', 'paper', 'marker']);
+  assert.deepEqual([...KNOWN_CUES], ['pop', 'click', 'whoosh', 'chime', 'impact', 'riser', 'swoosh', 'drop', 'ding', 'sub', 'paper', 'marker', 'erase']);
 });
 
 test('every known cue gives finite mono samples with a peak above 0.05 and at most 0.9', () => {

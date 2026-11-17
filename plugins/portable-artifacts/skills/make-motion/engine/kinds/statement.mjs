@@ -8,18 +8,18 @@
 // lights as it is spoken. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
-import { track } from '../time/track.mjs';
 import { layoutText, unclean } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { landing } from '../devices/shared.mjs';
-import { glowFill, glowStyle } from '../devices/glow.mjs';
+import { glowStyle } from '../devices/glow.mjs';
 import { sunNodes, sunAnchor, hasSun, besideSun, belowSun } from '../devices/sun.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, cutReveal, wordsOf, fitDisplay, inkSpan, setCase, capBox, isEditorial, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, ghostWords, plainSay, overlaps, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 import { defaultCamera, driftReach } from './camera.mjs';
-import { highlightBands, highlightLines } from './highlighter.mjs';
+import { highlightBands } from './highlighter.mjs';
+import { emphasisOf } from './emphasis.mjs';
 import { wordTimes } from './words.mjs';
 import { slugBox, slugNodes, SLUG } from './slug.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
@@ -38,8 +38,6 @@ const FIRST_COLUMN = 2;
 const SLUG_CLEAR = 2; // gutters between a statement's ink and the slug card, its tape included (look gate fix pass F4)
 const CENTRED_TO = 11;
 const KICKER = Object.freeze({ step: 1, gap: 28, ruleGap: 12, rule: 2 }); // a centred look's kicker above the text
-const EMPHASIS_SHARE = 0.5; // emphasis on this share of a statement's words or more is a creative finding (highlight looks)
-const FILL_EASE = 'outCubic';
 const HALF = 2;
 
 function sourceText(shot, look) {
@@ -63,9 +61,9 @@ const kickerRoom = (look, unit) => (KICKER.gap + look.scale[KICKER.step - 1] * C
 // together[i]: on-screen word i and the next are both emphasised, so a highlight look's fit keeps them on one line when
 // a slightly smaller size allows (fitText): a highlight that breaks across lines paints more than it points.
 function highlightTogether(text, ctx) {
-  // a glow look may keep its emphasised phrases whole on a wide frame (look.kinds.statement.together, cosmos)
-  const keeps = ctx.look.emphasis === 'glow' && ctx.look.kinds?.statement?.together === true && isWide(ctx.canvas);
-  if (ctx.look.emphasis !== 'highlight' && !keeps) return [];
+  // a glow look may keep its emphasised phrases whole on a wide frame (look.kinds.statement.together, cosmos): the
+  // emphasis style says (emphasis.mjs together)
+  if (!emphasisOf(ctx.look).together(ctx)) return [];
   const times = wordTimes(wordsOf(text), ctx.timing);
   const emphasised = times.map(({ spoken }) => spoken !== null && ctx.timing.words[spoken].emphasis);
   return emphasised.map((on, i) => on && emphasised[i + 1] === true);
@@ -238,28 +236,25 @@ function hookTracks(look, at, to, peak) {
 // as well for recolor-scale). In a mode that reads from frame 0 there is no entrance at all (see ghostWords).
 function wordTracksFor(words, times, ctx, matched) {
   const { look, unit, timing } = ctx;
+  const style = emphasisOf(look);
   const peaks = pulsePeaks(words, look);
-  const recolour = look.emphasis === 'recolor-scale';
-  const starts = recolour ? enterStarts(words, look) : new Map();
+  const scales = style.scales === true;
+  const starts = scales ? enterStarts(words, look) : new Map();
   const hook = ghostWords(ctx);
   return words.map((w, i) => {
     const { at, spoken } = times[i];
     const emphasised = spoken !== null && timing.words[spoken].emphasis;
+    const word = { emphasised, matched, start: starts.get(w.word.index), peak: peaks.get(w.word.index) };
     // a look whose hook opens at full ink (look.hookInk, cosmos): every word in ink from frame 0, the emphasis by the glow
-    if (hook && look.hookInk) return look.emphasis === 'glow' && emphasised ? glowFill(look, at) : {};
+    if (hook && look.hookInk) return style.inkTracks(look, word, at);
     if (hook) {
-      const lit = hookTracks(look, at, emphasised ? look.palette.accent : look.palette.ink, recolour ? peaks.get(w.word.index) : undefined);
-      return look.emphasis === 'glow' && emphasised ? { ...lit, glow: glowFill(look, at).glow } : lit;
+      const lit = hookTracks(look, at, emphasised ? look.palette.accent : look.palette.ink, scales ? word.peak : undefined);
+      return style.hookTracks(look, { ...word, tracks: lit }, at);
     }
-    const tracks = matched ? {} : enterTracks(look, unit, at);
-    if (recolour && !matched && look.moves.enter.scale !== undefined) tracks.scale = landing(at, look.moves.enter, starts.get(w.word.index), 1);
-    if (look.emphasis === 'glow' && emphasised) return { ...tracks, ...glowFill(look, at) };
-    if (!recolour || !emphasised) return tracks;
-    return {
-      ...tracks,
-      scale: pulseScale(look, { enterAt: matched ? undefined : at, enterFrom: starts.get(w.word.index), pulse: at, peak: peaks.get(w.word.index) }),
-      fill: track([{ t: at, v: look.palette.ink }, { t: at + look.moves.emphasize.dur, v: look.palette.accent, ease: FILL_EASE }]),
-    };
+    const entered = matched ? {} : enterTracks(look, unit, at);
+    const lands = scales && !matched && look.moves.enter.scale !== undefined;
+    const tracks = lands ? { ...entered, scale: landing(at, look.moves.enter, word.start, 1) } : entered;
+    return style.wordTracks(look, { ...word, tracks }, at, ctx);
   });
 }
 
@@ -312,7 +307,7 @@ function expandStatement(shot, ctx) {
   const times = wordTimes(words.map((w) => w.word.text), timing, cutReveal(shot, ctx));
   const matched = arrivesMatched(shot, ctx);
   const hero = heroId(shot, 'text');
-  const span = look.emphasis === 'highlight' ? highlightLines(placed.layout, times, timing) : undefined;
+  const span = emphasisOf(look).span?.(placed.layout, times, timing);
   const text = node('text', hero, {
     x: placed.x, y: placed.y, layout: placed.layout, font: placed.font, fill: look.palette.ink, role: 'hero', ...(span === undefined ? {} : { highlightLines: span }),
     ...glowStyle(look, placed.font, unit),
@@ -344,11 +339,12 @@ function statementSun(shot, ctx, times) {
   return sunNodes(`${shot.id}.sun`, look, { ...sunAnchor(look, ctx), strength: data.strength, at: lit.at });
 }
 
-// Emphasis is a pointer, not a paint job: in a highlight look a statement whose emphasised words are EMPHASIS_SHARE of
+// Emphasis is a pointer, not a paint job: in a highlight look a statement whose emphasised words are the style's maxShare of
 // its spoken words or more gets a creative finding at its say. (A run that breaks across lines is the other half of the
 // rule; it needs the layout, so the text node carries it as props.highlightLines and the frame review reports it.)
 function emphasisFindings(shot, { look }) {
-  if (look.emphasis !== 'highlight' || typeof shot.say !== 'string') return [];
+  const share = emphasisOf(look).maxShare; // the highlighter's cap (emphasis.mjs); the other styles have none
+  if (share === undefined || typeof shot.say !== 'string') return [];
   let tokens;
   try {
     tokens = parseSay(shot.say).tokens;
@@ -357,7 +353,7 @@ function emphasisFindings(shot, { look }) {
     throw err;
   }
   const marked = tokens.filter((t) => t.emphasis).length;
-  if (marked < EMPHASIS_SHARE * tokens.length) return [];
+  if (marked < share * tokens.length) return [];
   return [{ path: 'say', at: 0, message: `emphasis covers ${marked} of ${tokens.length} words; mark fewer` }];
 }
 

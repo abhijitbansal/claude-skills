@@ -266,9 +266,9 @@ test('cutout keeps the image src and size and puts a keyline and a shadow behind
   assert.equal(byPart(build('cutout', pop).nodes, 'shadow').props.fill, pop.palette.accent, 'the accent: one hue (look revision 1)');
 });
 
-test('a cutout of an image with transparency is refused until the draw layer can dilate alpha', () => {
-  assert.throws(() => build('cutout', desk, { alpha: true }), /cutout: images with transparency are not supported yet/);
-  assert.doesNotThrow(() => build('cutout', desk, { alpha: false }));
+test('a cutout of an image with transparency follows its edge: the keyline and shadow are its silhouette (cutout-alpha.test.mjs)', () => {
+  assert.equal(byPart(build('cutout', desk, { alpha: true }).nodes, 'keyline').type, 'image');
+  assert.equal(byPart(build('cutout', desk, { alpha: false }).nodes, 'keyline').type, 'path');
 });
 
 test('card: desk is paper with tape or a torn edge, pop is a white sheet with square corners, both cast a shadow', () => {

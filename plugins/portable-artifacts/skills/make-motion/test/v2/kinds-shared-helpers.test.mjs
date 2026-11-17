@@ -52,8 +52,9 @@ const KIND_FILES = Object.freeze({
 // value limit and the shown-as-zero rule number, compare and chart share (review B I4); arrivals.mjs: the reveal timing
 // the second-wave kinds share (media, screen); close-ups.mjs, region-mark.mjs, clipping-rules.mjs: the region arithmetic
 // and the cut to a close-up, clipping's first and now screen's too (plan 2026-11-16-pa2-shot-kinds-b Task 4: reused,
-// not copied)
-const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'slug.mjs', 'words.mjs', 'editorial.mjs', 'secondary.mjs', 'camera.mjs', 'highlighter.mjs', 'plain-tag.mjs', 'values.mjs', 'arrivals.mjs', 'close-ups.mjs', 'region-mark.mjs', 'clipping-rules.mjs']);
+// not copied); emphasis.mjs and emphasis-flags.mjs: the emphasis styles as a table, read by statement and the caption
+// styles (looks-four Task 1)
+const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'slug.mjs', 'words.mjs', 'editorial.mjs', 'secondary.mjs', 'camera.mjs', 'highlighter.mjs', 'plain-tag.mjs', 'values.mjs', 'arrivals.mjs', 'close-ups.mjs', 'region-mark.mjs', 'clipping-rules.mjs', 'emphasis.mjs', 'emphasis-flags.mjs']);
 
 test('no kind imports another kind\'s file: what several kinds use lives in the shared modules (shared, stack, slug, words, editorial, secondary, camera, highlighter, plain-tag, values, arrivals, close-ups, region-mark, clipping-rules)', async () => {
   const { readdirSync } = await import('node:fs');

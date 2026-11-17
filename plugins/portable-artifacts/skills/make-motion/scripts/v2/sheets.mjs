@@ -29,7 +29,7 @@ async function composeInPage({ width, height, placements, colours }) {
   ctx.imageSmoothingQuality = 'high';
   const stage = document.getElementById('stage');
   for (const p of placements) {
-    window.__seek(p.frame);
+    await window.__seek(p.frame); // a film with clips loads the frame's clip pictures first (engine/page/clip-frames.mjs)
     ctx.drawImage(stage, p.x, p.y, p.w, p.h);
     const size = Math.max(colours.stampMin, Math.round(p.w / colours.stampShare));
     const font = `${size}px "${window.__stampFamily}"`;

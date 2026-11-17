@@ -10,6 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/kinds/index.mjs';
 import { srcsOfShot } from '../../engine/assets.mjs';
+import { assetInfo } from './asset-info.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ENGINE_DIR = realpathSync(path.join(SKILL_ROOT, 'engine'));
@@ -39,6 +40,7 @@ const CSP = "default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline
 // "/" or "/seg/seg": each segment starts with a letter or digit and holds only letters, digits, ".", "_" and "-".
 const SAFE_PATH = /^\/(?:[A-Za-z0-9][A-Za-z0-9._-]*(?:\/[A-Za-z0-9][A-Za-z0-9._-]*)*)?$/;
 const ASSET_ROUTE = /^\/asset\/(0|[1-9]\d*)$/; // a canonical index: not 00, 1.0 or 1e1
+const CLIP_ROUTE = /^\/clip\/(0|[1-9]\d*)\/(0|[1-9]\d*)$/; // /clip/<clip index>/<frame index>, both canonical
 export const MAX_IMAGES = 64; // distinct images a film may use
 const MISSING_CODES = new Set(['ENOENT', 'ENOTDIR']);
 
@@ -92,11 +94,57 @@ function serveAsset(ctx, req, res, asset) {
   return file && ASSET_EXTENSIONS.has(path.extname(file).toLowerCase()) ? sendFile(ctx, req, res, file) : reply(res, 404, 'not found');
 }
 
+// Frame n of the film's k-th clip (scripts/v2/clips.mjs decoded it, once, into a folder of this run): a PNG named by
+// its index alone, served only while it still resolves to a file inside that folder.
+function serveClipFrame(ctx, req, res, k, n) {
+  const clip = ctx.clips[k];
+  if (!clip || n >= clip.count) return reply(res, 404, 'not found');
+  const file = fileInside(clip.root, path.join(clip.root, clipFrameName(n)));
+  return file ? sendFile(ctx, req, res, file) : reply(res, 404, 'not found');
+}
+
+/** The file name of a decoded clip frame n (0-based), as ffmpeg's image2 muxer writes it with CLIP_FRAME_PATTERN. */
+export const clipFrameName = (n) => `f${String(n + 1).padStart(6, '0')}.png`;
+export const CLIP_FRAME_PATTERN = 'f%06d.png';
+
+const RANGE_RE = /^bytes=(\d*)-(\d*)$/;
+
+/**
+ * Sends `file` (a path the caller owns, never one built from the request) as `type`, honouring one byte range
+ * (`Range: bytes=a-b`, `a-` or `-n`) with 206, and refusing a range it cannot satisfy with 416. Several ranges are
+ * answered with the whole file (200), which a client must accept.
+ */
+export function sendRanged(req, res, file, type) {
+  const size = statSync(file).size;
+  const match = RANGE_RE.exec(req.headers.range ?? '');
+  let [start, end] = [0, size - 1];
+  if (match && (match[1] !== '' || match[2] !== '')) {
+    [start, end] = match[1] === '' ? [Math.max(0, size - Number(match[2])), size - 1] : [Number(match[1]), match[2] === '' ? size - 1 : Math.min(Number(match[2]), size - 1)];
+    if (start > end || start >= size) {
+      res.writeHead(416, { 'content-range': `bytes */${size}`, 'cache-control': 'no-store' });
+      return res.end();
+    }
+  }
+  const partial = match !== null && (match[1] !== '' || match[2] !== '');
+  res.writeHead(partial ? 206 : 200, {
+    'content-type': type, 'content-length': end - start + 1, 'accept-ranges': 'bytes', 'cache-control': 'no-store',
+    ...(partial ? { 'content-range': `bytes ${start}-${end}/${size}` } : {}),
+  });
+  if (req.method === 'HEAD') return res.end();
+  const stream = createReadStream(file, { start, end });
+  stream.on('error', () => res.destroy());
+  res.on('close', () => stream.destroy());
+  return stream.pipe(res);
+}
+
 function route(ctx, req, res) {
   const pathname = req.url.split('?')[0];
   if (!SAFE_PATH.test(pathname)) return reply(res, 400, 'bad path');
   if (pathname === '/') return sendFile(ctx, req, res, PAGE_FILE);
   if (Object.hasOwn(FIXED_FILES, pathname)) return sendFile(ctx, req, res, FIXED_FILES[pathname]);
+  if (Object.hasOwn(ctx.routes, pathname)) return ctx.routes[pathname](req, res); // a caller's fixed route (the preview's)
+  const clip = CLIP_ROUTE.exec(pathname);
+  if (clip) return serveClipFrame(ctx, req, res, Number(clip[1]), Number(clip[2]));
   if (pathname === '/film.json') {
     res.writeHead(200, { 'content-type': MIME['.json'], 'cache-control': 'no-store' });
     return res.end(ctx.filmJson);
@@ -161,10 +209,29 @@ function distinctSrcs(film) {
   return seen;
 }
 
-// { srcs, files }: the src strings /film.json lists, and for each (same index, so /asset/<n>) its { root, file }.
-function assetList(film, specDir) {
-  const seen = distinctSrcs(film);
-  return { srcs: [...seen.keys()], files: [...seen].map(([src, shotId]) => resolveSrc(specDir, shotId, src)) };
+// { srcs, files }: the src strings /film.json lists, and for each (same index, so /asset/<n>) its { root, file }. A
+// clip's src is left out: its frames are served from `clips` (the caller decoded them: scripts/v2/clips.mjs).
+function assetList(film, specDir, clipSrcs) {
+  const seen = [...distinctSrcs(film)].filter(([src]) => !clipSrcs.has(src));
+  return { srcs: seen.map(([src]) => src), files: seen.map(([src, shotId]) => resolveSrc(specDir, shotId, src)) };
+}
+
+// The film's clips as the server keeps them ({ root: the real frames folder, count }) and as /film.json lists them
+// ({ src, count, width, height, from, fps }), same order, so /clip/<k>/<n> is frame n of the k-th.
+function clipList(clips) {
+  return {
+    served: clips.map((c) => ({ root: realpathSync(c.dir), count: c.count })),
+    listed: clips.map((c) => ({ src: c.src, count: c.count, width: c.width, height: c.height, from: c.from, fps: c.fps })),
+  };
+}
+
+// What /film.json says and what the routes serve, for one version of the film.
+function filmState({ film, timeline, specDir, prepared = {}, clips = [] }) {
+  const { served, listed } = clipList(clips);
+  const { srcs, files } = assetList(film, specDir, new Set(listed.map((c) => c.src)));
+  // the pictures with transparency, read from their headers (asset-info.mjs): ctx.asset(src).alpha in the page
+  const alpha = srcs.filter((src, n) => assetInfo(files[n].file).alpha);
+  return { assets: files, clips: served, filmJson: JSON.stringify({ film, timeline, assets: srcs, alpha, clips: listed, prepared }) };
 }
 
 // stderr is the last place to report to: if writing there fails there is nowhere left to say so.
@@ -183,11 +250,14 @@ function writeStderr(text) {
  *   starts (a request that threw, a server error); each is also written to stderr, and none reaches a client.
  * @returns {Promise<{ url: string, close(): Promise<void>, server: import('node:http').Server }>} server is for tests
  */
-export async function startV2Server({ film, timeline, specDir, prepared = {}, onError }) {
-  if (!film || !Array.isArray(film.shots)) throw new TypeError('startV2Server: film must have a shots array');
-  if (!timeline || !Array.isArray(timeline.shots)) throw new TypeError('startV2Server: timeline must have a shots array (see buildTimeline)');
-  if (typeof specDir !== 'string') throw new TypeError('startV2Server: specDir must be a path');
-  const { srcs, files } = assetList(film, specDir);
+export async function startV2Server({ film, timeline, specDir, prepared = {}, clips = [], routes = {}, onError }) {
+  const checkFilm = (next) => {
+    if (!next.film || !Array.isArray(next.film.shots)) throw new TypeError('startV2Server: film must have a shots array');
+    if (!next.timeline || !Array.isArray(next.timeline.shots)) throw new TypeError('startV2Server: timeline must have a shots array (see buildTimeline)');
+    if (typeof next.specDir !== 'string') throw new TypeError('startV2Server: specDir must be a path');
+    return filmState(next);
+  };
+  const state = checkFilm({ film, timeline, specDir, prepared, clips });
   // A callback that throws must not take the server down with it: say so on stderr and carry on.
   const report = (err) => {
     writeStderr(`v2 server: ${err?.stack ?? err}\n`);
@@ -198,7 +268,8 @@ export async function startV2Server({ film, timeline, specDir, prepared = {}, on
       writeStderr(`v2 server: onError threw: ${callbackErr?.stack ?? callbackErr}\n`);
     }
   };
-  const ctx = { assets: files, filmJson: JSON.stringify({ film, timeline, assets: srcs, prepared }), allowedHosts: new Set(), report };
+  // routes: the caller's fixed routes, by exact path (a plain object of path -> (req, res)); never a path pattern
+  const ctx = { ...state, routes: Object.freeze({ ...routes }), allowedHosts: new Set(), report };
   const server = http.createServer((req, res) => handle(ctx, req, res));
   await new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -213,6 +284,8 @@ export async function startV2Server({ film, timeline, specDir, prepared = {}, on
   return {
     url: `http://127.0.0.1:${port}/`,
     server,
+    // a new version of the film (the preview's live reload): /film.json, the assets and the clips all change together
+    update: (next) => Object.assign(ctx, checkFilm(next)),
     close: () => new Promise((resolve, reject) => {
       server.close((err) => (err && err.code !== 'ERR_SERVER_NOT_RUNNING' ? reject(err) : resolve()));
       server.closeAllConnections();

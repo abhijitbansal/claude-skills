@@ -48,8 +48,9 @@ import { cosmos } from './cosmos.mjs';
  * @property {{ field: string, params: object }} field  a name in registries.fields and its params
  * @property {'editorial' | 'centred' | 'stack'} composition  how shots lay out: flush left on grid columns, centred, or
  *   a stack of short lines each set at its own size to fill the width, flush left
- * @property {'highlight' | 'recolor-scale' | 'recolor'} emphasis  a highlighter band, a recolour with a pulse, or a
- *   recolour alone
+ * @property {'highlight' | 'recolor-scale' | 'recolor' | 'glow'} emphasis  a highlighter band, a recolour with a pulse, a
+ *   recolour alone, or a glow: a name in the emphasis table (engine/kinds/emphasis.mjs EMPHASIS), which the kinds read
+ *   instead of comparing the name; a new emphasis system is a new entry there
  * @property {{ enter: Move, exit: Move, emphasize: Move, draw: Move, count: Move } & Record<string, Move | null>} moves  the
  *   five the first kinds use, and an entry for every move in registries.moves (engine/moves: rise, wipe, slam, pop, draw,
  *   count, settle), a Move or null where the look does not use it (checked by validateLook as the look registers)
