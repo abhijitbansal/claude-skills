@@ -28,16 +28,20 @@ Picking the labeled bar gets you standard tab-switching (tap only); picking
 the page style gets you swipe, but loses the persistent labeled bar. There is
 no built-in flag that gives both.
 
-**Part 2 — the custom-pager race.** A hand-rolled pager doesn't inherit
+**Part 2 — the custom-pager race (a suspected mechanism, not a reproduced
+failure; see Evidence).** A hand-rolled pager may not inherit
 `TabView`'s built-in handling of *simultaneous* programmatic state changes.
 When code sets the selected-tab index and pushes a navigation path in the
 same render pass (typical of deep-link / NFC / App Intent handlers, which
 want to say "go to Browse tab, at this item" in one shot), that mutation
-races the pager's own render/layout pass. The pager can read stale layout
-state and settle on the wrong page, or end up in a transient state where its
-own scroll gesture is disabled.
+can race the pager's own render/layout pass. The pager could then read stale
+layout state and settle on the wrong page, or end up in a transient state where
+its own scroll gesture is disabled.
 
 ## Fix
+
+The tab enum in the snippets below is named `AppTab`, not `Tab`: SwiftUI has its
+own `Tab` type (iOS 18+), and an app enum named `Tab` shadows it.
 
 Ship in two phases, and architect the swap point so phase 2 is a one-line
 revert if the custom pager misbehaves.
@@ -48,9 +52,9 @@ only, no swipe. This is the safe fallback and the thing you revert to.
 ```swift
 // WRONG — trying to force both labeled bar + swipe out of one TabView
 TabView(selection: $selectedTab) {
-    ScanView().tag(Tab.scan)
-    BrowseView().tag(Tab.browse)
-    SearchView().tag(Tab.search)
+    ScanView().tag(AppTab.scan)
+    BrowseView().tag(AppTab.browse)
+    SearchView().tag(AppTab.search)
 }
 .tabViewStyle(.page)          // gives swipe, DROPS the labeled bar
 ```
@@ -58,11 +62,11 @@ TabView(selection: $selectedTab) {
 ```swift
 // CORRECT — phase A: native TabView, labeled bar, tap-only
 TabView(selection: $selectedTab) {
-    ScanView().tag(Tab.scan)
+    ScanView().tag(AppTab.scan)
         .tabItem { Label("Scan", systemImage: "viewfinder") }
-    BrowseView().tag(Tab.browse)
+    BrowseView().tag(AppTab.browse)
         .tabItem { Label("Browse", systemImage: "square.grid.2x2") }
-    SearchView().tag(Tab.search)
+    SearchView().tag(AppTab.search)
         .tabItem { Label("Search", systemImage: "magnifyingglass") }
 }
 ```
@@ -74,7 +78,7 @@ behind a single switch so it is revertible in one line:
 // Swappable in one line: flip `usesCustomPager` back to false
 // to fall back to native TabView if the pager misbehaves.
 if usesCustomPager {
-    SwipeablePager(selection: $selectedTab, tabs: Tab.allCases) { tab in
+    SwipeablePager(selection: $selectedTab, tabs: AppTab.allCases) { tab in
         content(for: tab)
     }
 } else {

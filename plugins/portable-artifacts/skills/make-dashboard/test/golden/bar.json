@@ -14,24 +14,33 @@
     "x": {
       "field": "region",
       "type": "nominal",
-      "title": "region",
-      "sort": null
+      "title": "Region",
+      "sort": null,
+      "axis": {
+        "labelOverlap": false,
+        "labelAngle": {
+          "expr": "bandwidth('x') < 41 ? -45 : 0"
+        },
+        "labelAlign": {
+          "expr": "bandwidth('x') < 41 ? 'right' : 'center'"
+        }
+      }
     },
     "y": {
       "field": "revenue",
       "type": "quantitative",
-      "title": "revenue"
+      "title": "Revenue"
     },
     "tooltip": [
       {
         "field": "region",
         "type": "nominal",
-        "title": "region"
+        "title": "Region"
       },
       {
         "field": "revenue",
         "type": "quantitative",
-        "title": "revenue"
+        "title": "Revenue"
       }
     ],
     "opacity": {

@@ -50,5 +50,9 @@ workflow in the standard is the site deploy).
 2. Commit `Package.resolved` if the app has SPM deps.
 3. ASC → app → Xcode Cloud → create the two workflows above.
 4. Run skill `xcode-cloud-validate` before the first cloud build.
-5. First release: `/release testflight`, accept the tag push, watch the cloud
-   archive start.
+5. First release, one path (never both for one build number): create the
+   release tag by hand (`release.sh` only tags after an upload), push it without
+   uploading locally and let the cloud archive start, **or** upload
+   locally with `/release testflight` and keep the tag local (`tag-only`). Pushing
+   the tag after a local upload starts a hosted build that fails
+   `ITMS-90189` (see above).

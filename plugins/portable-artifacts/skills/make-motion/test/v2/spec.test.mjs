@@ -210,7 +210,7 @@ test('an id must be lowercase letters, digits and hyphens starting with a letter
 });
 test('a shot with no id says it is required', () => {
   const r = check(film({}, [{ show: 'statement', say: 'Hi.' }]));
-  assert.deepEqual(r.errors, [{ path: 'shots[0].id', message: 'required' }]);
+  assert.deepEqual(r.errors, [{ path: 'shots[0].id', message: 'required (string)' }]); // 1.3.0: required names the type
 });
 test('a shot with no show lists the kinds', () => {
   const r = check(film({}, [{ id: 'a', say: 'Hi.' }]));
@@ -252,7 +252,7 @@ test("a kind's own field is checked by the kind's schema", () => {
 });
 test("a kind's required fields are required", () => {
   const r = check(film({}, [{ id: 'p', show: 'picture', hold: 2 }]));
-  assert.deepEqual(r.errors, [{ path: 'shots[0].src', message: 'required' }]);
+  assert.deepEqual(r.errors, [{ path: 'shots[0].src', message: 'required (string)' }]); // 1.3.0: required names the type
 });
 test('a kind schema cannot redefine a shot field', () => {
   const regs = stubRegistries();

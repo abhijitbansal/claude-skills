@@ -26,12 +26,14 @@ const PNG_HEIGHT_OFFSET = 20;
 // cluster is anchored on its first member, and the fixed 0.1 first look is never displaced), then the last frame is
 // forced in. `fps` caps every time at the scene's last frame, duration - 1/fps. `landings`: scene-local seconds at which
 // something other than a keyframe lands (the end of a written text in a hand-drawn scene), sampled a lag after, as a keyframe is.
-export function sheetTimes(scene, fps = DEFAULT_FPS, landings = []) {
+// `marks`: scene-local seconds sampled as given, not a lag after (the points of a drawing in progress, see drawingMoments).
+export function sheetTimes(scene, fps = DEFAULT_FPS, landings = [], marks = []) {
   const last = Math.max(0, scene.duration - 1 / fps);
   const keyframes = [
     ...flattenElements(scene.elements).flatMap(({ el }) => (el.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG)), // a group's keyframes move its children
     ...(scene.camera?.keyframes ?? []).map((kf) => kf.t + KEYFRAME_LAG), // so do the camera's
     ...landings.map((t) => t + KEYFRAME_LAG),
+    ...marks,
   ];
   const raw = [FIRST_LOOK, ...keyframes, scene.duration * CONTACT_POINT, last]
     .map((t) => Math.min(Math.max(0, t), last))
@@ -44,18 +46,34 @@ export function sheetTimes(scene, fps = DEFAULT_FPS, landings = []) {
   return kept;
 }
 
-// The times to capture: all of sheetTimes when they fit in `max`, otherwise the first look, the 85 % point and the
-// last frame plus keyframe landings picked evenly by index across the rest. `total` is the uncapped count.
-export function sheetMoments(scene, fps = DEFAULT_FPS, max = MAX_FRAMES) {
-  const all = sheetTimes(scene, fps);
+const DRAWING_MARKS = [0.25, 0.5, 0.75]; // fractions of the drawing time a contact sheet shows a drawn scene at
+
+// What a contact sheet needs to show a hand-drawn scene mid-draw, from its stroke plan (planScene's result, null for a scene
+// that is not drawn): `landings`, the second each drawn element is finished, and `marks`, 25, 50 and 75 % of the way from the
+// first stroke to the last. {} when there is nothing drawn. Pass it as the last argument of sheetMoments.
+export function drawingMoments(plan) {
+  const spans = plan ? [...plan.elements.values()].filter(({ t0, t1 }) => Number.isFinite(t0) && Number.isFinite(t1)) : [];
+  if (!spans.length) return {};
+  const start = Math.min(...spans.map(({ t0 }) => t0));
+  const end = Math.max(plan.drawEnd, ...spans.map(({ t1 }) => t1));
+  return { landings: spans.map(({ t1 }) => t1), marks: DRAWING_MARKS.map((fraction) => start + fraction * (end - start)) };
+}
+
+// The times to capture: all of sheetTimes when they fit in `max`, otherwise the first look, the 85 % point, the last frame
+// and the drawing `marks` plus keyframe landings picked evenly by index across the rest. `total` is the uncapped count.
+// `drawing`: { landings, marks } of a drawn scene (drawingMoments).
+export function sheetMoments(scene, fps = DEFAULT_FPS, max = MAX_FRAMES, { landings = [], marks = [] } = {}) {
+  const all = sheetTimes(scene, fps, landings, marks);
   if (all.length <= max) return { times: all, total: all.length };
   const target = scene.duration * CONTACT_POINT;
   let mid = 1;
   for (let i = 1; i < all.length - 1; i++) if (Math.abs(all[i] - target) < Math.abs(all[mid] - target)) mid = i;
-  const rest = all.filter((_, i) => i !== 0 && i !== mid && i !== all.length - 1);
-  const slots = max - 3;
+  const nearest = (t) => all.reduce((best, v, i) => (Math.abs(v - t) < Math.abs(all[best] - t) ? i : best), 0);
+  const kept = new Set([0, mid, all.length - 1, ...marks.map(nearest)]);
+  const rest = all.filter((_, i) => !kept.has(i));
+  const slots = Math.max(0, max - kept.size);
   const picked = new Set(Array.from({ length: slots }, (_, j) => Math.floor(((j + 0.5) * rest.length) / slots)).map((i) => rest[i]));
-  return { times: all.filter((t, i) => i === 0 || i === mid || i === all.length - 1 || picked.has(t)), total: all.length };
+  return { times: all.filter((t, i) => kept.has(i) || picked.has(t)), total: all.length };
 }
 
 // Positions of every tile in the sheet. `tiles` are {w, h, width?}: natural pixel size and an optional display width.

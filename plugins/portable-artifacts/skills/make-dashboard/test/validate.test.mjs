@@ -192,6 +192,12 @@ test('Vega-Lite network / page-option vectors are rejected at any depth', async 
     'url encoding channel': [(vl) => { vl.encoding.url = { value: 'https://evil.test/i.png' }; }, 'charts[0].vegaLite.encoding.url'],
     'usermeta embedOptions': [(vl) => { vl.usermeta = { embedOptions: { actions: true } }; }, 'charts[0].vegaLite.usermeta'],
     'layer data': [(vl) => { delete vl.mark; vl.layer = [bar(), { mark: 'rule', data: { url: 'x' } }]; delete vl.encoding; }, 'charts[0].vegaLite.layer[1].data'],
+    'href encoding channel': [(vl) => { vl.encoding.href = { field: 'region' }; }, 'charts[0].vegaLite.encoding.href'],
+    'href mark property': [(vl) => { vl.mark = { type: 'bar', href: 'https://evil.test/' }; }, 'charts[0].vegaLite.mark.href'],
+    'href in a layer': [(vl) => { delete vl.mark; vl.layer = [{ ...bar(), encoding: { ...bar().encoding, href: { value: 'https://evil.test/' } } }]; delete vl.encoding; }, 'charts[0].vegaLite.layer[0].encoding.href'],
+    'top-level config': [(vl) => { vl.config = { mark: { color: 'red' } }; }, 'charts[0].vegaLite.config'],
+    'top-level width': [(vl) => { vl.width = 300; }, 'charts[0].vegaLite.width'],
+    'top-level autosize': [(vl) => { vl.autosize = 'fit'; }, 'charts[0].vegaLite.autosize'],
   };
   for (const [name, [mutate, expected]] of Object.entries(cases)) {
     const s = base();
@@ -241,6 +247,75 @@ function outsideProject() {
   return { root, dir: path.join(root, 'proj') };
 }
 
+// ---- PA-27: valid means buildable --------------------------------------------
+
+const kindSpec = (query, chart) => ({
+  title: 'T', sources: { sales: { type: 'csv', path: 'data/sales.csv' } },
+  queries: { q: query }, charts: [{ id: 'c1', title: 'C', query: 'q', ...chart }],
+});
+const NINE_SLICES = "SELECT 'slice ' || x AS slice, 1 AS n FROM range(9) t(x)";
+const NINE_COLOURS = "SELECT 'a' AS x, 'c' || c AS c, 1 AS n FROM range(9) t(c)";
+const DIRTY_CAST = 'SELECT region, CAST(product AS INTEGER) AS n FROM sales';
+
+test('validate (full stage) reports the donut slice cap that build would hit', async () => {
+  const s = kindSpec(NINE_SLICES, { kind: 'donut', x: 'slice', y: 'n' });
+  const r = await validateSpec(s, { dir: FIXTURES, stage: 'full' });
+  assert.deepEqual(r.errors, [{ path: 'charts[0].kind', message: 'donut needs <= 6 slices (slice has 9); use kind "bar"' }]);
+  assert.deepEqual((await validateSpec(s, { dir: FIXTURES })).errors, [], 'the default bind stage does not run the queries');
+});
+
+test('validate (full stage) reports the colour cap', async () => {
+  const r = await validateSpec(kindSpec(NINE_COLOURS, { kind: 'stacked-bar', x: 'x', y: 'n', color: 'c' }), { dir: FIXTURES, stage: 'full' });
+  assert.equal(r.errors.length, 1);
+  assert.equal(r.errors[0].path, 'charts[0].color');
+  assert.match(r.errors[0].message, /^c has 9 values; stacked-bar colour allows at most 8/);
+});
+
+test('validate (full stage) reports a value conversion error that LIMIT 0 binding misses', async () => {
+  const s = kindSpec(DIRTY_CAST, { kind: 'bar', x: 'region', y: 'n' });
+  assert.deepEqual((await validateSpec(s, { dir: FIXTURES })).errors, [], 'binds fine');
+  const r = await validateSpec(s, { dir: FIXTURES, stage: 'full' });
+  assert.equal(r.errors[0].path, 'queries.q');
+  assert.match(r.errors[0].message, /Conversion Error|Could not convert/);
+});
+
+test('CLI: validate runs the full stage by default; --bind-only skips the query run', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dash-'));
+  fs.cpSync(path.join(FIXTURES, 'data'), path.join(dir, 'data'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'd.json'), JSON.stringify(kindSpec(NINE_SLICES, { kind: 'donut', x: 'slice', y: 'n' })));
+  const full = cli([path.join(dir, 'd.json')]);
+  assert.equal(full.status, 1, full.stdout + full.stderr);
+  assert.match(full.stdout, /^charts\[0\]\.kind: donut needs <= 6 slices/m);
+  const bound = cli([path.join(dir, 'd.json'), '--bind-only']);
+  assert.equal(bound.status, 0, bound.stdout + bound.stderr);
+});
+
+test('a dashboard with no charts and no KPIs is an error (a title-only page); a draft in inspect is fine', async () => {
+  const s = { title: 'T', sources: { sales: { type: 'csv', path: 'data/sales.csv' } }, queries: { q: 'SELECT 1 AS n' } };
+  assert.deepEqual((await validateSpec(s, { dir: FIXTURES })).errors, [{ path: 'charts', message: 'add at least one chart or KPI; with neither the build makes a page with only a title' }]);
+  assert.deepEqual((await validateSpec({ ...s, charts: [], kpis: [] }, { dir: FIXTURES })).errors.map((e) => e.path), ['charts']);
+  assert.deepEqual((await validateSpec(s, { dir: FIXTURES, stage: 'static' })).errors, []);
+  assert.deepEqual((await validateSpec({ ...s, kpis: [{ id: 'k', title: 'K', query: 'q', field: 'n' }] }, { dir: FIXTURES })).errors, []);
+});
+
+test('validate (full stage) warns about a KPI query with more than one row; it is still valid', async () => {
+  const s = { ...base(), kpis: [{ id: 'k1', title: 'K', query: 'rev_by_region', field: 'revenue' }] };
+  const r = await validateSpec(s, { dir: FIXTURES, stage: 'full' });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.errors, []);
+  assert.equal(r.warnings[0].path, 'kpis[0].query');
+  assert.match(r.warnings[0].message, /^"rev_by_region" returns 4 rows; the tile shows only the first/);
+});
+
+test('static stage (inspect --spec) skips binding, field and role checks but keeps the schema and guard', async () => {
+  const s = kindSpec('SELECT nosuch FROM sales', { kind: 'bar', x: 'nosuch', y: 'n' });
+  assert.deepEqual((await validateSpec(s, { dir: FIXTURES, stage: 'static' })).errors, []);
+  s.queries.q = 'SELECT * FROM duckdb_settings()';
+  assert.match((await validateSpec(s, { dir: FIXTURES, stage: 'static' })).errors[0].message, /not allowed/);
+  s.sources.sales.type = 'csv2';
+  assert.equal((await validateSpec(s, { dir: FIXTURES, stage: 'static' })).errors[0].path, 'sources.sales.type');
+});
+
 test('sources must resolve inside the spec folder unless allowOutside', async () => {
   const { root, dir } = outsideProject();
   const s = base();
@@ -248,7 +323,7 @@ test('sources must resolve inside the spec folder unless allowOutside', async ()
   let r = await validateSpec(s, { dir });
   assert.deepEqual(r.errors, [{
     path: 'sources.sales.path',
-    message: `resolves outside the spec folder (${path.join(root, 'outside.csv')}); move the data under ${dir} or pass --allow-outside`,
+    message: `resolves outside the spec folder (${path.join(root, 'outside.csv')}); copy or move the data under ${dir} and point the path there (--allow-outside is the owner's flag to add, not a fix to apply)`,
   }]);
   r = await validateSpec(s, { dir, allowOutside: true });
   assert.deepEqual(r.errors, []);
@@ -259,6 +334,14 @@ test('sources must resolve inside the spec folder unless allowOutside', async ()
   s2.sources.sales.path = 'data/link.csv';
   r = await validateSpec(s2, { dir });
   assert.match(r.errors[0].message, /^resolves outside the spec folder/);
+});
+
+test('a file whose name starts with two dots is inside the spec folder', async () => {
+  const { dir } = outsideProject();
+  fs.copyFileSync(path.join(FIXTURES, 'data/sales.csv'), path.join(dir, '..sales.csv'));
+  const s = base();
+  s.sources.sales.path = '..sales.csv';
+  assert.deepEqual((await validateSpec(s, { dir })).errors, []);
 });
 
 test('sources must be regular files (directory, FIFO)', async () => {

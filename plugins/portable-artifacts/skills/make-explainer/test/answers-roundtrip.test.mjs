@@ -24,6 +24,7 @@ const PLAN = {
     { type: 'decision', id: 'speed', question: 'Which tradeoff?', options: [{ label: 'Fast & cheap' }, { label: 'Slow' }], recommended: 'Fast & cheap', why: 'It ships sooner.', default: 'Slow' },
     { type: 'approval', id: 'budget', title: 'Budget', item: 'Approve the budget', why: 'It is small.' },
     { type: 'question', id: 'owner', title: 'Owner', text: 'Who owns the rollout?' },
+    { type: 'text', text: 'The plan, in one line.' },
     { type: 'verdict', text: 'Ship it?' },
   ],
 };

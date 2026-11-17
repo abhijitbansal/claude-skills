@@ -92,7 +92,7 @@ test('the description is one line and contains "hand-drawn"', () => {
   assert.ok(value.length > 40, 'the text is on the same line');
   assert.ok(!/^\s/.test(frontmatter[at + 1]), 'the next line is another key, not a continuation');
   assert.match(value, /hand-drawn/);
-  assert.match(value, /short animated explainer video/, 'the old trigger meaning stays');
+  assert.match(value, /animated explainer video/, 'the old trigger meaning stays (PA-50 dropped "short")');
 });
 
 test('SKILL.md names every starter file and points at references/sketch.md', () => {

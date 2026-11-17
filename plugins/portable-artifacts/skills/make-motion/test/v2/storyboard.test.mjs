@@ -95,7 +95,9 @@ test('a 30 s film writes a plan make-explainer\'s own validator accepts, and pri
   if (EXPLAINER_SKIP) return t.skip(EXPLAINER_SKIP);
   const check = spawnSync(process.execPath, [VALIDATE, out, '--json'], { encoding: 'utf8' });
   assert.equal(check.status, 0, check.stdout + check.stderr);
-  assert.deepEqual(JSON.parse(check.stdout).warnings, [], 'no warning either');
+  // The generatedBy provenance warning (make-explainer 1.3.0) is the agent's to answer (build --model/--effort/--agent);
+  // the storyboard's own content must raise no other warning (as main's version 1 storyboard test does).
+  assert.deepEqual((JSON.parse(check.stdout).warnings ?? []).filter((w) => w.path !== 'generatedBy'), [], 'no warning either');
   return undefined;
 });
 

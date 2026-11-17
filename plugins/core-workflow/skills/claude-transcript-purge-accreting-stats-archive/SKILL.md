@@ -33,6 +33,10 @@ it).
 Accrete a committed per-day archive (e.g. `data/stats-archive.json`) merged
 on every parse run, not a full re-derivation from live transcripts:
 
+0. **Stopgap first: raise `cleanupPeriodDays`** in `~/.claude/settings.json` so
+   transcripts live longer while you build the archive. Note that the max-merge
+   in step 1 freezes any inflated count: once a wrong high value is archived it
+   never comes back down, so check the first merged run before committing it.
 1. **Per-field max merge per day.** A completed past day's true counts never
    legitimately shrink — a recount over full data reproduces the same value,
    so a lower value can only mean purge loss mid-window. `merged[k] =

@@ -58,7 +58,7 @@ test('errors in an embedded spec are re-pathed under sections[i].diagram', async
 
 test('a diagram missing a required field is reported at the field', async () => {
   const errors = await errorsOf(doc([section({ type: 'flow', nodes: [{ id: 'a', label: 'A' }] })]), folder());
-  assert.deepEqual(errors, [{ path: 'sections[0].diagram.title', message: 'required' }]);
+  assert.deepEqual(errors, [{ path: 'sections[0].diagram.title', message: 'required (string)' }]);
 });
 
 test('errors in a diagram file are re-pathed the same way and name the file', async () => {
@@ -295,4 +295,40 @@ test('page.mjs holds no diagram-specific wiring; the section registry carries th
   assert.equal(typeof SECTIONS.diagram.page, 'function');
   // (the cards icon loader names the make-diagram skill; that is not diagram-section wiring)
   assert.ok(!/diagram/i.test(fs.readFileSync(path.join(SKILL, 'scripts/lib/page.mjs'), 'utf8').replaceAll('make-diagram', '')));
+});
+
+// ---- a diagram too wide for the column at its floor scale warns (G-08) --------------------------------
+
+import { floorWidthPx, exceedsColumn, wideDiagramWarnings, COLUMN_PX } from '../scripts/lib/diagram-fit.mjs';
+
+test('the floor-scale width is (width + 32) * 0.75; a diagram wider than the 832 px column warns, one that fits does not', () => {
+  assert.equal(floorWidthPx(1236), 951);
+  assert.equal(COLUMN_PX, 832);
+  assert.equal(exceedsColumn(1076), false, '(1076 + 32) * 0.75 = 831');
+  assert.equal(exceedsColumn(1078), true);
+  assert.deepEqual(wideDiagramWarnings(400, 'sections[0].diagram'), []);
+  const [w] = wideDiagramWarnings(1236, 'sections[0].diagram');
+  assert.equal(w.path, 'sections[0].diagram');
+  assert.equal(w.warning, true);
+  assert.match(w.message, /needs 951 px.*more than the 832 px column/);
+  assert.match(w.message, /direction "down"/);
+});
+
+test('validate warns about a wide embedded diagram at its path and never errors; a narrow one is silent', async () => {
+  const row = (n) => ({
+    title: 'Search path',
+    type: 'flow',
+    direction: 'right',
+    nodes: Array.from({ length: n }, (_, i) => ({ id: `n${i}`, label: `Stage number ${i + 1}` })),
+    edges: Array.from({ length: n - 1 }, (_, i) => ({ from: `n${i}`, to: `n${i + 1}` })),
+  });
+  const wide = await validateSpec(doc([section(row(9))]), { dir: folder() });
+  assert.equal(wide.ok, true, JSON.stringify(wide.errors));
+  const found = wide.warnings.filter((w) => /more than the 832 px column/.test(w.message));
+  assert.deepEqual(found.map((w) => w.path), ['sections[0].diagram']);
+  assert.ok(!('warning' in found[0]), 'the marker is internal; the printed warning carries only path and message');
+  const narrow = await validateSpec(doc([section(row(3))]), { dir: folder() });
+  assert.deepEqual(narrow.warnings.filter((w) => /832 px/.test(w.message)), []);
+  const down = await validateSpec(doc([section({ ...row(9), direction: 'down' })]), { dir: folder() });
+  assert.deepEqual(down.warnings.filter((w) => /832 px/.test(w.message)), [], 'a top-down chain fits the column');
 });

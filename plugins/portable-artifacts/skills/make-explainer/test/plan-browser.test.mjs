@@ -31,7 +31,8 @@ const decision = (id, options, extra = {}) => ({
 });
 const spec = (sections, extra = {}) => ({
   title: 'Plan test', key: 'plan-test',
-  sections: [...sections, { type: 'verdict', text: 'Ship it?' }], ...extra,
+  // The plan itself (a text section) comes before the verdict: a plan with only questions does not validate.
+  sections: [...sections, { type: 'text', text: 'What gets built.' }, { type: 'verdict', text: 'Ship it?' }], ...extra,
 });
 const BASE = [
   decision('storage', ['Browser storage', 'A save server', HOSTILE]),

@@ -3,7 +3,7 @@
     "x": {
       "field": "month",
       "type": "temporal",
-      "title": "month",
+      "title": "Month",
       "timeUnit": "utcyearmonth",
       "scale": {
         "type": "utc"
@@ -34,17 +34,20 @@
           "bind": "legend"
         }
       ],
-      "mark": "line",
+      "mark": {
+        "type": "line",
+        "point": true
+      },
       "encoding": {
         "y": {
           "field": "revenue",
           "type": "quantitative",
-          "title": "revenue"
+          "title": "Revenue"
         },
         "color": {
           "field": "region",
           "type": "nominal",
-          "title": "region"
+          "title": "Region"
         },
         "opacity": {
           "condition": {
@@ -95,29 +98,29 @@
         "y": {
           "field": "revenue",
           "type": "quantitative",
-          "title": "revenue"
+          "title": "Revenue"
         },
         "color": {
           "field": "region",
           "type": "nominal",
-          "title": "region"
+          "title": "Region"
         },
         "tooltip": [
           {
             "field": "month",
             "type": "temporal",
-            "title": "month",
+            "title": "Month",
             "timeUnit": "utcyearmonth"
           },
           {
             "field": "revenue",
             "type": "quantitative",
-            "title": "revenue"
+            "title": "Revenue"
           },
           {
             "field": "region",
             "type": "nominal",
-            "title": "region"
+            "title": "Region"
           }
         ],
         "opacity": {

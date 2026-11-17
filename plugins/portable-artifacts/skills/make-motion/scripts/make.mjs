@@ -51,8 +51,14 @@ function usageParts(err) {
   return { message, hint: rest.length > 0 ? `usage: ${rest.join(USAGE_MARK)}` : '' };
 }
 
-// A problem with the command line: one line on stderr, or the report with its error under --json.
+// A problem with the command line: one line on stderr, or the report with its error under --json. --help is not a problem:
+// the usage line on stdout and exit 0, as every entry script does (shared/cli.mjs exitUsage).
 function printUsageError(err, json) {
+  if (err.help === true) {
+    say(json ? JSON.stringify({ ok: true, usage: err.message }) : `usage: ${err.message}`);
+    process.exitCode = 0;
+    return;
+  }
   if (json) say(JSON.stringify(errorReport(usageParts(err))));
   else log(err.message.split('\n')[0]);
   process.exitCode = EXIT_MACHINE;

@@ -9,5 +9,6 @@ const PREFIX = quoteArg(SKILL_DIR);
 
 export const doctorCommand = (...args) => ['node', quoteArg(DOCTOR), ...args].join(' ');
 // What `doctor --fix <id>` runs for the optional voice ('kokoro') or cutout ('cutout') stack: npm ci into its own locked folder.
+// The hint and the doctor share optionalInstallArgv, so they never differ.
 export const optionalInstall = (id) => render([optionalInstallArgv({ platform: process.platform, skillDir: SKILL_DIR }, id)], process.platform);
 export const npxInstallChromium = () => `npx --no --prefix ${PREFIX} playwright install chromium`;

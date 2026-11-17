@@ -61,8 +61,15 @@
     animate: function () { ctl.toggleAnimate(); },
   };
   Object.keys(act).forEach(function (name) { if (buttons[name]) buttons[name].addEventListener('click', act[name]); });
-  // The tabs: Play story enters the player on its first beat (the transport's Play starts it); Explore leaves it.
-  if (modes.play) modes.play.addEventListener('click', function () { if (!ctl.state().presenting) ctl.present(0); });
+  // The tabs: Play story enters the player on its first beat and starts it (motion allowed), then hands
+  // focus to the transport's Play control, so Space pauses or plays (a focused tab would take Space for
+  // itself); Explore leaves it.
+  if (modes.play) modes.play.addEventListener('click', function () {
+    if (ctl.state().presenting) return;
+    ctl.playStory();
+    var playButton = one('[data-pa-play]');
+    if (playButton && !playButton.disabled) playButton.focus();
+  });
   if (modes.explore) modes.explore.addEventListener('click', function () { ctl.exit(); });
   if (fullButton) fullButton.addEventListener('click', function () { ctl.toggleFullscreen(); });
 

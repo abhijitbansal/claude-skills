@@ -3,13 +3,14 @@
 //   node scripts/icons.mjs search <word>                 matching refs, best first, one per line
 //   node scripts/icons.mjs list [lucide|brand|cloud]     every ref (all catalogs when omitted)
 //   node scripts/icons.mjs import <aws|gcp> <folder>     add the icons in an unpacked vendor download
-// Exit 0 on success (a search with no match prints nothing), 2 on bad usage or an import that cannot run.
+// Exit 0 on success, 2 on bad usage or an import that cannot run. A search with no match prints nothing on stdout,
+// one line on stderr (use the kind's default icon; only AWS and GCP packs can be imported) and still exits 0.
 // import reads the folder only (no network, no prompt) and keeps the icons in
 // $MAKE_DIAGRAM_ICON_DIR, else ~/.cache/portable-artifacts/make-diagram.
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
-import { searchIcons, listIcons, iconDir, bundledCloudNames, IconError } from './lib/icons.mjs';
+import { searchIcons, listIcons, iconDir, bundledCloudNames, noMatchMessage, IconError } from './lib/icons.mjs';
 import { importIcons, providerNames, ImportError } from './lib/icon-import.mjs';
 
 const USAGE = 'icons.mjs search <word> | icons.mjs list [lucide|brand|cloud] | icons.mjs import <aws|gcp> <folder>';
@@ -73,8 +74,10 @@ export function run(argv) {
 
 if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
-    const lines = run(process.argv.slice(2));
+    const argv = process.argv.slice(2);
+    const lines = run(argv);
     if (lines.length) process.stdout.write(`${lines.join('\n')}\n`);
+    else if (argv.includes('search')) process.stderr.write(`${noMatchMessage(argv[argv.indexOf('search') + 1])}\n`);
   } catch (e) {
     if (!(e instanceof UsageError || e instanceof IconError)) throw e;
     exitUsage(e);

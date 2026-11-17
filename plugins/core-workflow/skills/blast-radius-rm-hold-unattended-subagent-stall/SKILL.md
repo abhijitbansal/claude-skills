@@ -25,12 +25,18 @@ commands, so agents reached for `rm` as routine tidy-up.
 ## Fix
 
 1. **Never put `rm` in agent-written scripts or loops.** Make deletion
-   unnecessary:
+   unnecessary: write scratch output under the session scratchpad directory
+   (the system prompt names it), by literal absolute path, with a fresh
+   subdirectory per run:
    ```bash
-   OUT="$(mktemp -d "${TMPDIR:-/tmp}/scenarios.XXXXXX")"   # fresh dir per run
-   # (or use the session scratch dir)
-   run_scenario "$OUT/case-1"    # nothing to clean up afterwards
+   run_scenario /abs/path/to/scratchpad/scenarios/case-1   # nothing to clean up afterwards
    ```
+   Do not build the path with `$VAR` or `mktemp -d "$TMPDIR/..."`: the hold
+   cannot resolve a computed path, and a literal path needs no cleanup.
+   Subagents never `rm` at all, including their own scratch and build
+   directories, and never use `sed -i` backups (they leave files to delete).
+   Leftovers are the owner's to sweep. The attended orchestrator may use the
+   one plain `rm` form AGENTS.md allows; a dispatched subagent may not.
 2. Write harnesses to a file with the Write tool and run the file, rather
    than long inline `zsh -c '...'` one-liners: files are reviewable and
    re-runnable. This is NOT a way around the hook. If a delete is genuinely
@@ -43,9 +49,10 @@ commands, so agents reached for `rm` as routine tidy-up.
 5. Dispatch prompts for reviewers and verifiers (paste this):
    ```text
    COMMAND LIMITS: report-only. Do not run rm, mv, network or install
-   commands. Use a fresh mktemp -d "${TMPDIR:-/tmp}/<name>.XXXXXX" for scratch output. Tool-call budget:
-   25. If any command is held or blocked by a hook, STOP and report it as
-   blocked; do not retry or work around it.
+   commands. Write scratch output under /abs/path/to/scratchpad/<name>/ (a
+   literal path, no variables); never delete anything, including your own
+   scratch. Tool-call budget: 25. If any command is held or blocked by a
+   hook, STOP and report it as blocked; do not retry or work around it.
    ```
 
 ## Evidence

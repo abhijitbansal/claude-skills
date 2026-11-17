@@ -95,14 +95,25 @@ func start(owner: AnyObject) async throws {
     engine.start()
 }
 
-// RIGHT — claim first, release on failure.
+// RIGHT — claim first, release on failure, re-check after the await.
 func start(owner: AnyObject) async throws {
-    currentOwner = ObjectIdentifier(owner)
+    let me = ObjectIdentifier(owner)
+    currentOwner = me
     do { try await requestAuthorization() }
-    catch { currentOwner = nil; throw error }
+    catch { if currentOwner == me { currentOwner = nil }; throw error }
+    // stop() may have run during the await and cleared the claim. Without this
+    // check the engine starts with no owner and nobody can stop it.
+    guard currentOwner == me else { return }
     engine.start()
 }
 ```
+
+The guard after the `await` is part of the rule, not a nicety: claiming first
+fixes the lookup in `stop()`, but `start()` still resumes and starts the engine
+unconditionally. The suspension-window test below fails without it (run against
+a stand-in with a gated authorize: leaked session `true` without the guard,
+`false` with it). The generation-token form above is synchronous, so it has no
+suspension point; apply the same re-check if you make it `async`.
 
 **2. Every teardown path compares identity — not just the obvious one.**
 `stop()`, `deinit`, `onDisappear`, a backgrounding notification, a timeout

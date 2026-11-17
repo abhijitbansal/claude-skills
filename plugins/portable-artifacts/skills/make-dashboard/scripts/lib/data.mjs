@@ -217,6 +217,17 @@ function fieldError(field, query, columns) {
   return `${JSON.stringify(field)} is not a column of query ${JSON.stringify(query)} (columns: ${columns.join(', ')})${hint ? `; did you mean ${JSON.stringify(hint)}?` : ''}`;
 }
 
+// A KPI tile shows the first row's value; more rows are hidden, so say so (a warning: a refresh that
+// returns two rows must not fail a scheduled build). Zero rows is a data state (the tile shows a dash).
+export function kpiRowWarnings(spec, results) {
+  return (spec.kpis ?? []).flatMap((k, i) => {
+    const n = results[k.query]?.rowCount ?? 0;
+    return n > 1
+      ? [{ path: `${pathJoin('kpis', i)}.query`, message: `${JSON.stringify(k.query)} returns ${n} rows; the tile shows only the first, so aggregate the query to one row (SUM, COUNT, ... without GROUP BY) or add LIMIT 1 after ORDER BY` }]
+      : [];
+  });
+}
+
 export function checkFields(spec, results) {
   const errors = [];
   (spec.kpis ?? []).forEach((k, i) => {

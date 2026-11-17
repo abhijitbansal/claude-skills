@@ -356,7 +356,7 @@
         <div class="top"><span class="nm">structured-output-adaptive-thinking-token-bloat</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">json_schema-constrained Claude API calls waste ~5x tokens on adaptive thinking that doesn't improve output quality — omit the thinking parameter for schema-constrained calls</div>
         <div class="pl">in <a href="features/prompt-craft.html">prompt-craft</a></div></div></div></div><div class="cat-group">
-      <h3>Commands <span class="badge">17</span></h3>
+      <h3>Commands <span class="badge">18</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Command" data-search="contribute-skill contribute a change or new skill back to claude-skills (creates branch + pr) core-workflow command">
         <div class="top"><span class="nm">contribute-skill</span><span class="ty t-command">Command</span></div>
         <div class="dc">Contribute a change or new skill back to claude-skills (creates branch + PR)</div>
@@ -369,6 +369,9 @@
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="explain-branch generate a self-contained html visual explainer for the current branch, diffed against a base branch; writes to .scratch and delivers it core-workflow command">
         <div class="top"><span class="nm">explain-branch</span><span class="ty t-command">Command</span></div>
         <div class="dc">Generate a self-contained HTML visual explainer for the current branch, diffed against a base branch (default main); writes to .scratch/branch-explainer/ and delivers it</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="cleanup-branches inventory merged, stale and worktree-held branches, print one table with merge proof, and hand over one delete line per branch; never deletes on its own core-workflow command">
+        <div class="top"><span class="nm">cleanup-branches</span><span class="ty t-command">Command</span></div>
+        <div class="dc">Inventory merged, stale and worktree-held branches, print one table with merge proof, and hand over one delete line per branch; never deletes on its own</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="fix apply ui fix to ios app (reads .claude/app.yml), then build + screenshot to prove it worked ios-dev command">
         <div class="top"><span class="nm">fix</span><span class="ty t-command">Command</span></div>
         <div class="dc">Apply UI fix to iOS app (reads .claude/app.yml), then build + screenshot to prove it worked</div>
@@ -425,10 +428,13 @@
         <div class="top"><span class="nm">web-researcher</span><span class="ty t-agent">Agent</span></div>
         <div class="dc">Focused research subagent: web research and library-documentation lookups via Context7 and WebFetch</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div></div></div><div class="cat-group">
-      <h3>Hooks <span class="badge">7</span></h3>
+      <h3>Hooks <span class="badge">8</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Hook" data-search="shellcheck-on-edit posttooluse hook: lint .sh files with shellcheck after edit/write, non-blocking informational output core-workflow hook">
         <div class="top"><span class="nm">shellcheck-on-edit</span><span class="ty t-hook">Hook</span></div>
         <div class="dc">PostToolUse hook: lint .sh files with shellcheck after Edit/Write, non-blocking informational output</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Hook" data-search="skill-hint posttooluse and posttoolusefailure hook: points the model at a lesson skill when that skill's literal error text shows up in a bash result; three exact-string rows core-workflow hook">
+        <div class="top"><span class="nm">skill-hint</span><span class="ty t-hook">Hook</span></div>
+        <div class="dc">PostToolUse and PostToolUseFailure hook: points the model at a lesson skill when that skill's literal error text shows up in a Bash result (three exact-string rows)</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Hook" data-search="block_secrets pretooluse hook: blocks read/edit/write of secret-looking files when prompt_craft_block_secrets=1 prompt-craft hook">
         <div class="top"><span class="nm">block_secrets</span><span class="ty t-hook">Hook</span></div>
         <div class="dc">PreToolUse hook: blocks Read/Edit/Write of secret-looking files when PROMPT_CRAFT_BLOCK_SECRETS=1</div>
@@ -474,7 +480,7 @@
       <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a></div>
   </div>
   <div class="foot-meta"><span class="lic">MIT licensed</span>
-    <span>8 plugins · 92 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
+    <span>8 plugins · 92 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
     <span>Tested on macOS &amp; Ubuntu</span></div>
 </div></footer>
 <script src="../site/assets/site.js"></script>

@@ -1,6 +1,6 @@
 ---
 name: commit
-description: Stage the current changes, lint shell scripts with shellcheck, and create a single git commit with a conventional message generated from the diff. Use when the user says "commit", "save this", "snapshot this state", or "checkpoint" without specifying a commit message. Skip if the user asked you to push, open a PR, or do anything beyond a local commit — those need confirmation per the global git safety protocol.
+description: Stage the current changes, lint shell scripts with shellcheck, and create a single git commit with a conventional message generated from the diff. Use when the user says "commit", "save this", "snapshot this state", or "checkpoint" without specifying a commit message. Skip if the user asked you to push, open a PR, or do anything beyond a local commit; those follow the repo's own authorization rules, not this skill.
 ---
 
 # Commit current work
@@ -11,7 +11,7 @@ A small, opinionated commit flow tuned for this repo's iterative workflow. The g
 
 Run these in parallel where possible:
 1. `git status` (no `-uall`) to see untracked + modified files.
-2. `git diff` (staged + unstaged) to see what would actually be committed.
+2. `git diff HEAD` (staged + unstaged against the last commit) to see what would actually be committed. Plain `git diff` shows only unstaged changes. Untracked files appear in neither: `git status` lists them.
 3. `git log --oneline -10` to match this repo's commit message style.
 
 Then sequentially:
@@ -19,10 +19,11 @@ Then sequentially:
 4. **Lint any changed `.sh` files** with `shellcheck`. If shellcheck reports errors (not info/style), surface them and **ask the user whether to commit anyway** — don't auto-block, but don't silently ship known issues either.
 5. **Stage** the relevant changes by file name. Never `git add -A` or `git add .` — that risks committing `.env`, build artifacts, or other untracked files you did not mean to commit.
 6. **Generate a commit message:**
-   - Title (≤72 chars): imperative mood, lowercase, no trailing period. Match the style of recent commits in this repo.
+   - Title (≤72 chars): `<type>: <description>` with a conventional type (`feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`, `ci`), imperative mood, lowercase, no trailing period. Match the style of recent commits in this repo.
    - Body (optional): one or two sentences focused on the *why*, not the *what*. Skip the body for trivial changes.
-   - Add whatever attribution trailer the repo/harness requires.
-7. **Commit via heredoc** (always — preserves formatting):
+   - Add the attribution trailer the repo requires. The repo's `AGENTS.md` or `CLAUDE.md` trailer rule wins over a harness or tool reminder: when they disagree, follow the repo.
+   - If the repo records release notes in commit trailers (a `Release-Note:` line), add one to a `feat` and to a user-visible `fix`.
+7. **Commit via heredoc** (the default — preserves formatting). In a guarded session that refuses heredocs, write the message to a file with your file-writing tool and run `git commit -F <absolute path to the file>` instead:
    ```
    git commit -m "$(cat <<'EOF'
    <title>

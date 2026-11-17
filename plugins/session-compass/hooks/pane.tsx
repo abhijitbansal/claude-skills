@@ -26,6 +26,18 @@ const KIND_LABEL: Record<Artifact['kind'], string> = {
   commit: 'Commits', push: 'Pushes', pr: 'Pull requests',
 }
 
+// Quote for a POSIX shell only when needed, so a plain path stays readable.
+const SHELL_SAFE = /^[A-Za-z0-9_./:@%+=,-]+$/
+const shellQuote = (s: string): string =>
+  SHELL_SAFE.test(s) ? s : `'${s.replace(/'/g, `'\\''`)}'`
+
+// `claude --resume` is only a harmless default from another directory, so the
+// copied command starts in the session's own worktree.
+export function resumeCommand(worktree: string, id: string): string {
+  const resume = `claude --resume ${shellQuote(id)}`
+  return worktree === '' ? resume : `cd ${shellQuote(worktree)} && ${resume}`
+}
+
 function label(a: Artifact): string {
   switch (a.kind) {
     case 'artifact': return `${a.title}  ${a.url}`
@@ -66,7 +78,7 @@ export function paneView({ Box, Text, Button }: Els, d: PaneData, act: PaneActio
         {rows.map(o => {
           const head = `${o.repo} · ${basename(o.worktree)}/${o.branch} · ${o.goal ?? o.firstPrompt ?? '(no goal)'} · ${o.step ?? '-'}`
           return (
-            <Button key={`s-${o.id}`} plain onPress={() => act.onCopy(`claude --resume ${o.id}`)}>
+            <Button key={`s-${o.id}`} plain onPress={() => act.onCopy(resumeCommand(o.worktree, o.id))}>
               {truncate(head, Math.max(20, d.columns - age(o).length - 4))}
               <Text dimColor>{age(o)}</Text>
             </Button>

@@ -1,9 +1,28 @@
 ---
 name: swiftdata-rollback-attribute-restore
-description: "A multi-object SwiftData save fails partway, the code calls context.rollback() expecting the batch to be undone, and the objects keep their new values anyway — because rollback() discards pending INSERTS and DELETES but does not revert attribute mutations on already-fetched @Model objects. Symptom: a failed batch edit leaves the UI showing values that were never persisted, and a later unrelated save flushes them. Use whenever writing a save path that mutates attributes on more than one fetched model before a single save(), or when an existing rollback-based error path is being reviewed or copied from an insert-shaped precedent."
+description: A multi-object SwiftData save fails partway and the error path leaves the in-memory @Model objects, and the UI bound to them, showing new values that were never persisted, so a later unrelated save can flush them. After a failed save the context stays dirty. A two-context test on the iOS 27.2 SDK did not reproduce rollback() leaving attributes behind, so treat that as one app's observation and capture values before mutating and restore explicitly on failure. Use when writing a save path that mutates attributes on more than one fetched model before a single save(), or when reviewing a rollback-based error path copied from an insert-shaped precedent.
 ---
 
-# `ModelContext.rollback()` Does Not Restore Mutated Attributes
+# `rollback()` and failed saves: attribute residue on fetched models
+
+## Status of this claim (re-tested 2026-11-15)
+
+Apple documents `rollback()` as restoring the context to its last committed
+state, which contradicts the thesis below taken as a blanket rule. A two-context
+test on macOS (iOS 27.2 SDK, on-disk store, objects fetched in the context and
+mutated, then `rollback()`) found attributes **restored in every case tried**:
+fresh context with autosave off and on, `mainContext`, and a failed save through
+a `ModelConfiguration(allowsSave: false)` container. So the "never restores"
+mechanism is **not reproduced**. Whether the original bug was `mainContext`
+autosave flushing the mutations before `rollback()` ran could not be tested
+headlessly: autosave never fired in a command-line test run, even after spinning
+the run loop. Treat the explanation below as what one app observed, not as a
+confirmed framework behaviour.
+
+What the test did confirm: after a failed `save()` with **no** `rollback()`, the
+context stays dirty (`hasChanges == true`) and the objects keep the new values
+(`[101, 102]` from `[1, 2]`). That is the residue the failed-save contract below
+guards against. Capture-and-restore stays as cheap defensive advice either way.
 
 ## Symptom
 
@@ -18,7 +37,7 @@ failure to the user. But:
 - worse, a later unrelated `save()` on the same context can flush those
   lingering mutations, persisting a batch the user was told had failed.
 
-## Root cause
+## Root cause (as observed in one app; see Status above)
 
 `rollback()` resets the context's **pending changes graph** — inserted objects
 are discarded, deleted objects are restored. It is *not* an undo log for
@@ -61,6 +80,34 @@ func applyBatch(_ edits: [Edit]) throws {
 
 The snapshot is a plain value type holding only the attributes this batch
 touches. Don't snapshot the whole model; restore only what you mutated.
+
+## The failed-save contract (observed in one app, not yet reproduced)
+
+The failure that matters is wider than one rollback corner: a failed save that
+the caller treats as "handled". These rules came out of one app's tech-debt
+waves, found by whole-repo review rather than by user reports. The residue
+rule's second half (a later good save rewriting the leftovers) has **not** been
+reproduced in a test; the first half is (see Status).
+
+- **Consume residue.** A failed save leaves the context dirty. Fetch before and
+  after every save you care about, and either restore or discard the leftovers,
+  or the next unrelated `save()` on that context persists them. In the observed
+  case a failed "Delete All Data" deleted everything on the next unrelated save.
+- **Side effects wait for the commit.** Sidecar files, reminders, diagnostics and
+  index writes run only after `save()` returns, never before it. A side effect
+  that ran before a failed save has nothing to undo it.
+- **Report the commit, not the setter.** A mutator returns the outcome of the
+  save, not of the property assignment, so callers cannot treat success as given.
+- **No success feedback on failure.** Haptic, notice and copy fire from the
+  outcome, never unconditionally after the call.
+- **Make create-retry idempotent.** A retry after a partially applied create must
+  not duplicate; key the create on a stable id and look it up first.
+
+To confirm the residue half, write the failing test: make the first `save()` of
+a delete-all throw (a seam whose save closure the test controls), then make an
+unrelated edit and `save()` on the same context, and assert the rows the user was
+told were not deleted are still there. Ship the claim only when that test fails
+on the naive store and passes on the contract.
 
 ## Testing it — the part that usually gets skipped
 
@@ -113,6 +160,14 @@ Two process facts worth carrying over:
   rollback path that never worked passes any test that inspects only the store.
 - Coverage landed as a dedicated rollback test suite using the read-only-container
   technique above; "no production seam" was needed.
+
+The failed-save rules were learned in the same app after the fact, each written
+into its `AGENTS.md` by a separate commit: the rollback rule (`db83143`,
+2026-07-22), side effects after the commit (`25cf5ee`, 2026-10-02) and failed-save
+residue (`1348bf3`, 2026-10-05). The residue commit's trigger, `89642e2`, came from
+a code review rather than a user report: its body says a failed save's changes
+were rewritten on the next good save, so a failed Delete All Data deleted
+everything on the next unrelated save. Until now the plugin carried only the first.
 
 The same wave also wrote the rule into that app's own `AGENTS.md`. That is the
 right split, not a duplication: the repo rule is local enforcement on a specific

@@ -4,7 +4,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { buildPage, example } from './helpers/browser.mjs';
-import { openPage, closeBrowser, skipUnlessBrowser, settle, viewBox, boxOf, holds, stageCentre } from './helpers/page.mjs';
+import { openPage, closeBrowser, skipUnlessBrowser, settle, viewBox, boxOf, holds, stageCentre, enterPlay } from './helpers/page.mjs';
 
 after(closeBrowser);
 
@@ -52,7 +52,7 @@ test('the Play story tab enters the player on beat 1: count, caption line, chapt
 test('a hop beat lights its edge and both ends, dims the rest, and the camera holds both ends with 48 px around', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   assert.deepEqual(await activeEdges(page), ['edge-0']);
   assert.deepEqual(await dimmedNodes(page), ['bus', 'db', 'gateway', 'orders', 'warehouse']);
@@ -80,7 +80,7 @@ test('a hop beat lights its edge and both ends, dims the rest, and the camera ho
 test('a focus beat on a group lights the group, its members and the edges between them', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.keyboard.press('End');
   await settle(page);
   assert.equal(await count(page), `${N} / ${N}`);
@@ -99,7 +99,7 @@ test('a focus beat on a group lights the group, its members and the edges betwee
 test('keys: arrows and PageDown step, Home and End jump, P enters Play and is idle inside it, E and Escape leave', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await count(page), '1 / 9');
   await page.keyboard.press('ArrowRight');
   assert.equal(await count(page), '2 / 9');
@@ -116,11 +116,11 @@ test('keys: arrows and PageDown step, Home and End jump, P enters Play and is id
   await page.keyboard.press('ArrowLeft');
   assert.equal(await count(page), '1 / 9', 'clamped at the first beat');
   await page.keyboard.press('ArrowRight');
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await count(page), '2 / 9', 'P inside Play does nothing');
   await page.keyboard.press('e');
   assert.equal(await page.isVisible('[data-pa-caption]'), false, 'E leaves to Explore');
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await count(page), '1 / 9', 'P starts over at beat 1');
   await page.keyboard.press('Escape');
   assert.equal(await page.isVisible('[data-pa-caption]'), false, 'Escape leaves too');
@@ -132,7 +132,7 @@ test('keys: arrows and PageDown step, Home and End jump, P enters Play and is id
 test('chapter chips and the chapter buttons jump between stories; beat chips jump to a beat', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.click('[data-pa-chapter="1"]');
   assert.equal(await count(page), '7 / 9');
   assert.ok((await line(page)).startsWith('07 / 09 · FULFIL IT · '));
@@ -161,7 +161,7 @@ test('chapter chips and the chapter buttons jump between stories; beat chips jum
 test('the scrubber jumps to a beat and follows the beat', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.locator('[data-pa-scrub]').evaluate((el) => { el.value = '4'; el.dispatchEvent(new Event('input', { bubbles: true })); });
   assert.equal(await count(page), '5 / 9');
   await page.keyboard.press('ArrowRight');
@@ -174,7 +174,7 @@ test('the scrubber jumps to a beat and follows the beat', async (t) => {
 test('the older steps form plays as one Walkthrough chapter: reveal as before, no dimming, "Beat n / N"', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('architecture').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.deepEqual(await page.locator('[data-pa-chapter]').allTextContents(), ['Walkthrough']);
   assert.equal(await line(page), '01 / 03 · WALKTHROUGH · The browser calls the API — TLS ends at the load balancer.');
   assert.equal(await page.textContent('.cap-count'), 'Beat 1 / 3');
@@ -191,7 +191,7 @@ for (const width of [1280, 390]) {
   test(`the story example plays at ${width} px with no console problems and no overflow`, async (t) => {
     if (await skipUnlessBrowser(t)) return;
     const { page, problems, context } = await openPage(built('story').url, { width, height: width === 390 ? 780 : 800 });
-    await page.keyboard.press('p');
+    await enterPlay(page);
     await page.keyboard.press('ArrowRight');
     await settle(page);
     const fit = await page.evaluate(() => ({ w: document.documentElement.scrollWidth <= window.innerWidth, h: document.documentElement.scrollHeight <= window.innerHeight }));
@@ -213,7 +213,7 @@ test('hostile text in story and beat titles and captions renders as text in the 
     stories: [{ id: 's', title: evil, beats: [{ title: evil, caption: evil, from: 'a', to: 'b' }] }],
   };
   const { page, problems, context } = await openPage(buildPage(spec, { name: 'evil-story' }).url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await page.locator('b').count(), 0);
   assert.equal(await line(page), `01 / 01 · ${evil.toUpperCase()} · ${evil} — ${evil}`);
   assert.equal(await page.textContent('[data-pa-beat="0"]'), `01 ${evil}`);
@@ -226,7 +226,7 @@ test('a one-beat story: prev and next clamp, the scrubber has max 0, the chapter
   if (await skipUnlessBrowser(t)) return;
   const spec = { title: 'One beat', type: 'flow', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b', label: 'go' }], stories: [{ id: 's', title: 'S', beats: [{ title: 'Only', edge: 'edge-0' }] }] };
   const { page, problems, context } = await openPage(buildPage(spec, { name: 'one-beat' }).url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await count(page), '1 / 1');
   assert.equal(await page.getAttribute('[data-pa-scrub]', 'max'), '0');
   for (const key of ['ArrowRight', 'ArrowLeft', 'End', 'Home']) {
@@ -246,7 +246,7 @@ test('a one-beat story: prev and next clamp, the scrubber has max 0, the chapter
 test('exports carry no story state: no pa-active, no pa-dim, no pa-hl', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.keyboard.press('ArrowRight');
   const [d] = await Promise.all([page.waitForEvent('download'), page.click('[data-export="svg"]')]);
   const text = fs.readFileSync(await d.path(), 'utf8');
@@ -271,7 +271,7 @@ const waitDotMoved = (page, from) => page.waitForFunction(([x, y]) => { const d 
 test('Space plays and pauses, the Play button mirrors it, speed cycles 1×, 1.5×, 2×, 0.5×, loop toggles', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await playing(page), false);
   assert.equal(await page.getAttribute('[data-pa-play]', 'aria-pressed'), null, 'a button whose label says Play or Pause carries no aria-pressed');
   assert.equal(await page.getAttribute('[data-pa-play]', 'aria-label'), 'Play');
@@ -309,7 +309,7 @@ test('Space plays and pauses, the Play button mirrors it, speed cycles 1×, 1.5�
 test('play advances beats at 2× and stops on the last beat; with loop on it starts over', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.click('[data-pa-speed]');
   await page.click('[data-pa-speed]');
   assert.equal(await page.textContent('[data-pa-speed]'), '2×');
@@ -335,7 +335,7 @@ test('play advances beats at 2× and stops on the last beat; with loop on it sta
 test('the dot travels along the hop edge from its start, and backwards for a reverse hop', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: glide 900 ms, dot 1800 ms
   assert.equal(await page.textContent('[data-pa-speed]'), '0.5×');
   const shopper = await centreOf(page, 'shopper');
@@ -365,7 +365,7 @@ test('the dot travels along the hop edge from its start, and backwards for a rev
 test('the dot appears on the start of the new edge, never where the previous beat left it (real DOM)', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×
   for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight'); // beat 6: app -> shopper, reversed along edge-0
   assert.equal(await count(page), '6 / 9');
@@ -392,7 +392,7 @@ test('the dot appears on the start of the new edge, never where the previous bea
 test('press and drag on the canvas pause playback; the beat stays', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   const c = await stageCentre(page);
   await page.keyboard.press('Space');
   assert.equal(await playing(page), true);
@@ -421,7 +421,7 @@ test('press and drag on the canvas pause playback; the beat stays', async (t) =>
 test('the wheel zooms and playback keeps running', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   const c = await stageCentre(page);
   await page.keyboard.press('Space');
   assert.equal(await playing(page), true);
@@ -442,7 +442,7 @@ test('the wheel zooms and playback keeps running', async (t) => {
 test('Space on a focused transport control is play/pause, not the control; Enter still activates it; a toolbar button keeps Space', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.focus('[data-pa-next]');
   await page.keyboard.press('Space');
   assert.equal(await playing(page), true, 'Space on Next plays');
@@ -478,7 +478,7 @@ test('Space on a focused transport control is play/pause, not the control; Enter
 test('arrow keys on the scrubber move the beat and pause; the scrubber announces the beat', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await page.getAttribute('[data-pa-scrub]', 'aria-valuetext'), 'Beat 1 of 9');
   await page.keyboard.press('Space');
   assert.equal(await playing(page), true);
@@ -499,7 +499,7 @@ test('arrow keys on the scrubber move the beat and pause; the scrubber announces
 test('a hop beat dims the groups it does not touch and keeps the group around a lit end', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   const dimmedGroups = await page.evaluate(() => [...document.querySelectorAll('.pa-group.pa-dim')].map((g) => g.dataset.id).sort());
   assert.deepEqual(dimmedGroups, ['core'], 'shopper -> app: "edge" holds app, "core" holds neither end');
@@ -528,7 +528,7 @@ test('autoplay starts the story playing with loop on; a #step-N link wins; reduc
 
   const reduced = await openPage(url, { reducedMotion: 'reduce' });
   assert.equal(await reduced.page.isVisible('[data-pa-caption]'), false, 'autoplay is ignored');
-  await reduced.page.keyboard.press('p');
+  await enterPlay(reduced.page);
   assert.ok(holds(await viewBox(reduced.page), await boxOf(reduced.page, ['shopper', 'app'])), 'the camera jumped at once');
   await reduced.page.keyboard.press('Space');
   await waitCount(reduced.page, '2 / 9');
@@ -542,7 +542,7 @@ test('a one-beat story plays to its end at once and loops when asked', async (t)
   if (await skipUnlessBrowser(t)) return;
   const spec = { title: 'One beat', type: 'flow', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b' }], stories: [{ id: 's', title: 'S', beats: [{ title: 'Only', edge: 'edge-0' }] }] };
   const { page, problems, context } = await openPage(buildPage(spec, { name: 'one-beat-play' }).url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.click('[data-pa-speed]');
   await page.click('[data-pa-speed]'); // 2×: glide 225, dot 450, hold 900
   await page.evaluate(() => document.activeElement.blur()); // a focused button would take Space itself
@@ -574,7 +574,7 @@ test('a sequence hop low in the diagram frames its message, not just the partici
     stories: [{ id: 's', title: 'S', beats: [{ title: 'Late', edge: 'm13' }] }],
   };
   const { page, problems, context } = await openPage(buildPage(spec, { name: 'sequence-story' }).url, { width: 1280, height: 600 });
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   assert.deepEqual(await activeEdges(page), ['m13']);
   assert.ok(holds(await viewBox(page), await boxOf(page, ['m13'])), 'the camera holds the lit message');
@@ -587,7 +587,7 @@ test('a sequence hop low in the diagram frames its message, not just the partici
 test('a resize while the dot travels keeps the beat playing: the dot stays on and the count does not move', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: glide 900 ms, dot 1800 ms
   await page.evaluate(() => document.activeElement.blur());
   await page.keyboard.press('Space');
@@ -612,7 +612,7 @@ test('the #step-N hash is written once per beat, not on every camera frame', asy
       history.replaceState = function () { window.__replaced += 1; return original.apply(history, arguments); };
     },
   });
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await settle(page);
   assert.equal(await page.evaluate(() => window.__replaced), 1, 'entering Play writes #step-1 once');
   await page.keyboard.press('ArrowRight');
@@ -629,7 +629,7 @@ test('the #step-N hash is written once per beat, not on every camera frame', asy
 test('End with focus on Next hands focus to Play, so Home still works from the keyboard', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.focus('[data-pa-next]');
   await page.keyboard.press('End');
   assert.equal(await count(page), '9 / 9');
@@ -677,7 +677,7 @@ for (const [label, spec, sizes] of [['a 4 x 3 story with long titles and caption
       if (await skipUnlessBrowser(t)) return;
       const { url } = buildPage(spec, { name: `phone-${width}x${height}-${spec.title.replace(/\W+/g, '-')}` });
       const { page, problems, context } = await openPage(url, { width, height });
-      await page.keyboard.press('p');
+      await enterPlay(page);
       await settle(page);
       const r = await playRects(page);
       assert.ok(r.stage.height >= r.viewport * 0.5, `the stage is ${r.stage.height} px of ${r.viewport}`);
@@ -694,7 +694,7 @@ test('Play: stepping to a later chapter scrolls its chip into view in the chapte
   if (await skipUnlessBrowser(t)) return;
   const { url } = buildPage(longStory(), { name: 'phone-chapters' });
   const { page, problems, context } = await openPage(url, { width: 390, height: 780 });
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.keyboard.press('End');
   await settle(page);
   const seen = await page.evaluate(() => {
@@ -726,7 +726,7 @@ test('a ring fills inside Next while the story plays; gone after pause, and neve
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url, { init: SPY_RING });
   assert.equal(await page.locator('.pa-ring').count(), 0, 'no ring in Explore');
-  await page.keyboard.press('p');
+  await enterPlay(page);
   assert.equal(await page.locator('.pa-ring').count(), 0, 'none in a paused Play');
   await page.keyboard.press('Space');
   await waitRing(page, '[data-pa-next]');
@@ -752,7 +752,7 @@ test('a ring fills inside Next while the story plays; gone after pause, and neve
 test('the ring survives a speed change and a loop toggle mid-hold; on the last beat it lives in Play only with loop on', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url, { init: SPY_RING });
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.keyboard.press('Space');
   await waitRing(page, '[data-pa-next]');
   const before = (await ringAnims(page)).length;
@@ -790,7 +790,7 @@ test('the ring survives a speed change and a loop toggle mid-hold; on the last b
 test('under reduced motion the ring is a static half fill: no animation', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url, { reducedMotion: 'reduce', init: SPY_RING });
-  await page.keyboard.press('p');
+  await enterPlay(page);
   await page.keyboard.press('Space');
   await waitRing(page, '[data-pa-next]');
   assert.equal(await page.getAttribute('[data-pa-next] .pa-ring-arc', 'stroke-dashoffset'), '50');
@@ -810,7 +810,7 @@ test('the transport does not shift when the ring comes and goes: Next chapter an
   const { page, problems, context } = await openPage(built('story').url, { init: SPY_RING });
   const edges = () => page.evaluate(() => ['[data-pa-next]', '[data-pa-next-chapter]', '[data-pa-scrub]', '[data-pa-speed]', '[data-pa-exit]']
     .map((s) => { const r = document.querySelector(s).getBoundingClientRect(); return [s, r.left, r.right]; }));
-  await page.keyboard.press('p');
+  await enterPlay(page);
   const paused = await edges();
   await page.keyboard.press('Space');
   await waitRing(page, '[data-pa-next]');
@@ -828,7 +828,7 @@ test('leaving Play mid-hold (Escape, or Exit) takes the ring away and cancels it
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url, { init: SPY_RING });
   for (const leave of ['Escape', 'Exit']) {
-    await page.keyboard.press('p');
+    await enterPlay(page);
     await page.keyboard.press('Space');
     await waitRing(page, '[data-pa-next]');
     if (leave === 'Escape') await page.keyboard.press('Escape'); else await page.click('[data-pa-exit]');
@@ -836,6 +836,47 @@ test('leaving Play mid-hold (Escape, or Exit) takes the ring away and cancels it
     assert.equal((await ringAnims(page)).at(-1).state, 'idle', `${leave}: the animation was cancelled`);
     assert.equal(await page.isVisible('[data-pa-caption]'), false, `${leave}: out of Play`);
   }
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+// ---- entering Play starts the story (PA-23, G-68) ------------------------------------------------
+
+test('the Play story tab starts the story: it moves past beat 1 unaided and focus sits on the transport Play control, so Space pauses', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.click('[data-pa-mode="play"]');
+  assert.equal(await playing(page), true, 'the tab plays; it does not stop on beat 1');
+  assert.equal(await page.evaluate(() => document.activeElement?.hasAttribute('data-pa-play') ?? false), true, 'focus is on the transport Play control, not the tab');
+  await waitCount(page, '2 / 9');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), false, 'Space pauses: it did not re-activate the tab');
+  await page.keyboard.press('Space');
+  assert.equal(await playing(page), true, 'and plays again');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('P enters Play and starts it as well', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.keyboard.press('p');
+  assert.equal(await playing(page), true);
+  await waitCount(page, '2 / 9');
+  assert.deepEqual(problems, []);
+  await context.close();
+});
+
+test('with reduced motion the Play story tab and P open beat 1 and wait for Space, as autoplay does', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url, { reducedMotion: 'reduce' });
+  await page.click('[data-pa-mode="play"]');
+  assert.equal(await count(page), '1 / 9');
+  assert.equal(await playing(page), false);
+  await page.keyboard.press('e');
+  await page.keyboard.press('p');
+  assert.equal(await count(page), '1 / 9');
+  assert.equal(await playing(page), false);
   assert.deepEqual(problems, []);
   await context.close();
 });

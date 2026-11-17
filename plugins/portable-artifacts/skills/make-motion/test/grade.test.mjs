@@ -1,6 +1,7 @@
 // Task 20: colour grade presets, plus exposure, contrast and saturation, on image and video elements. A grade is one
 // SVG <filter> (template/grade.mjs) in a single <svg><defs> on the stage; the element's picture takes `filter: url(#grade-<n>)`.
 import { test } from 'node:test';
+import { readSchema } from './helpers/schema-docs.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -425,7 +426,7 @@ test('graded-photo.json renders byte-identical twice', async (t) => {
 });
 
 test('the docs name the field: schema.md has the grade row and SKILL.md the image and video bullets', () => {
-  const schema = readFileSync(path.join(root, 'references/schema.md'), 'utf8');
+  const schema = readSchema(root);
   const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
   assert.match(schema, /`grade`/);
   for (const text of [schema, skill]) {

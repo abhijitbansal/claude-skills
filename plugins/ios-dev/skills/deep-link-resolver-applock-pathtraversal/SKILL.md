@@ -54,8 +54,8 @@ against `knownDocumentIDs`) and the `resolvePayloadPath` traversal guard
 below, matching the invariants section exactly.
 
 If a payload must carry a path (keep it **relative** — never an absolute file
-URL), validate before touching the filesystem: **reject any `..` before any
-normalization**, then require the resolved path to be a canonical descendant
+URL), validate before touching the filesystem: **reject any `..` path component
+before any normalization**, then require the resolved path to be a canonical descendant
 of the root — symlinks resolved on **both sides**, with a trailing `/` on the
 root so `…/Docs` can't match `…/DocsEvil`.
 
@@ -84,13 +84,18 @@ Single wiring point — every entry surface funnels here:
 2. **Locked ⇒ `.ignore`, dropped not deferred.** A queued link fires after
    unlock and navigates without a fresh user gesture; a stale one can present
    above the overlay. The user re-taps if they still care.
-3. **Reject `..` before any normalization**, then canonical-descendant check
-   with symlinks resolved on both sides and a trailing-slash root.
+3. **Reject a `..` path component before any normalization** (split on `/`;
+   a file name that merely contains two dots, such as `report..v2.pdf`, is
+   valid), then canonical-descendant check with symlinks resolved on both sides
+   and a trailing-slash root. Fold `/private/var` and `/var` the same way
+   before any string comparison of file paths.
 4. **Whitelist known ids** — never construct a path or fetch directly from
    URL text.
 5. **Relative-path / opaque-id payloads only** — absolute file URLs in a link
    are both fragile (container moves) and an attack surface.
-6. The resolver is pure and `nonisolated` ⇒ unit-test the whole matrix
+6. A cold-launch link can reach the resolver before the id whitelist has loaded
+   and be dropped as unknown — see the cold-launch note in the reference.
+7. The resolver is pure and `nonisolated` ⇒ unit-test the whole matrix
    (locked × scheme × traversal payloads) with no UI harness.
 
 ## Evidence

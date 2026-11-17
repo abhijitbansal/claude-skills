@@ -390,6 +390,7 @@ const PLAN = {
   title: 'Simple English plan', key: 'plan-simple-test', preset: 'plan',
   sections: [
     { type: 'tldr', title: 'Normal plan verdict', text: 'Normal plan lead.', simple: { text: 'Simple plan lead.' } },
+    { type: 'text', text: 'What gets built.', simple: { text: 'What we build.' } },
     {
       type: 'decision', id: 'store', title: 'Where answers live', question: 'Where do answers live?',
       options: [{ label: 'In the browser' }, { label: 'On a server' }], recommended: 'In the browser', why: 'It needs no server.',

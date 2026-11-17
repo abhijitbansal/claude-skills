@@ -37,6 +37,45 @@ teardown() { rm -rf "${TMP}"; }
   grep -q 'MARKETING_VERSION: "1.2.0"' project.yml
 }
 
+@test "--print shows the next version and build without touching project.yml" {
+  cd "${TMP}/app"
+  run bash "${BUMP}" --print minor
+  [ "$status" -eq 0 ]
+  [ "$output" = "version=1.3.0 build=35" ]
+  grep -q 'MARKETING_VERSION: "1.2.0"' project.yml
+  grep -q 'CURRENT_PROJECT_VERSION: "34"' project.yml
+}
+
+@test "--print with no kind exits 2" {
+  cd "${TMP}/app"
+  run bash "${BUMP}" --print
+  [ "$status" -eq 2 ]
+}
+
+@test "--print is honoured after the kind and leaves project.yml unchanged" {
+  cd "${TMP}/app"
+  run bash "${BUMP}" patch --print
+  [ "$status" -eq 0 ]
+  [ "$output" = "version=1.2.1 build=35" ]
+  grep -q 'MARKETING_VERSION: "1.2.0"' project.yml
+  grep -q 'CURRENT_PROJECT_VERSION: "34"' project.yml
+}
+
+@test "an extra argument exits 2 and leaves project.yml unchanged" {
+  cd "${TMP}/app"
+  run bash "${BUMP}" patch --bogus
+  [ "$status" -eq 2 ]
+  [[ "$output" == *"usage"* ]]
+  grep -q 'MARKETING_VERSION: "1.2.0"' project.yml
+}
+
+@test "two kinds exit 2 and leave project.yml unchanged" {
+  cd "${TMP}/app"
+  run bash "${BUMP}" patch minor
+  [ "$status" -eq 2 ]
+  grep -q 'MARKETING_VERSION: "1.2.0"' project.yml
+}
+
 @test "missing project.yml fails mentioning project.yml" {
   cd "${TMP}"
   run bash "${BUMP}" patch

@@ -1,7 +1,8 @@
-// The dashboard lift orders and colours what it draws as make-dashboard's own 2D chart does (Vega-Lite's defaults,
-// read from the compiled chart): colour groups, donut segments and heatmap categories ascending, nominal x in
-// query order (temporal x sorted), a stack with the last colour at the bottom. The scene's fallback SVG is that
-// 2D chart, so it must agree with the 3D legend. A query ordered by value (ORDER BY 3 DESC) is the case that differs.
+// The dashboard lift orders and colours what it draws as make-dashboard's own 2D chart does (read from the compiled
+// chart): a colour role's groups ascending (Vega-Lite's default), but a donut's segments and a heatmap's nominal
+// axes in query (row) order (sort: null), as are nominal x on bars and lines; temporal axes sort. A stack has the last
+// colour at the bottom. The scene's fallback SVG is that 2D chart, so it must agree with the 3D legend. A query
+// ordered by value (ORDER BY 3 DESC) is the case where row order and name order differ.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -59,13 +60,14 @@ function legendColours(svg) {
   }));
 }
 
-dtest('colours follow the 2D chart: groups ascending by name, and the fallback SVG agrees, whatever the query order', async (t) => {
+dtest('colours follow the 2D chart: a colour role ascending by name, a donut in row order, and the fallback SVG agrees', async (t) => {
   const dir = byValueDashboard(t);
+  const rowOrder = { donut: ['Gizmo', 'Gadget', 'Widget'] }; // BY_PRODUCT, biggest first
   for (const id of ['stacked', 'grouped', 'line', 'scatter', 'bubble', 'donut']) {
     const g = await lift(dir, id);
     assertGraph(g);
     const names = g.groups.map((x) => x.name);
-    assert.deepEqual(names, [...names].sort(), `${id}: legend order is ascending`);
+    assert.deepEqual(names, rowOrder[id] ?? [...names].sort(), `${id}: legend order`);
     const svg = legendColours(g.fallback.svg);
     // (a bubble drawing's size legend adds entries of its own, so match by group name)
     for (const { name, colour } of g.groups) assert.equal(THEME.light[colour], svg.get(name), `${id}: ${name} is the same colour in 3D (${colour}) and in the 2D drawing`);
@@ -83,21 +85,22 @@ dtest('a stacked bar stacks as the 2D chart does: the last colour at the bottom,
   assert.deepEqual(bottomUp, [2, 1, 0], 'Widget lowest, Gadget on top');
 });
 
-dtest('a heatmap lists its x and y categories ascending, as the 2D chart does', async (t) => {
+dtest('a heatmap lists its x and y categories in row order, as the 2D chart does (sort: null)', async (t) => {
   const g = await lift(byValueDashboard(t), 'heat');
   const along = (axis, texts) => texts.map((text) => g.labels.find((l) => l.text === text).at[axis]);
   const increasing = (xs) => xs.every((v, i) => i === 0 || v > xs[i - 1]);
-  assert.ok(increasing(along(0, ['East', 'North', 'South', 'West'])), 'x ascending along x');
-  assert.ok(increasing(along(2, ['Gadget', 'Gizmo', 'Widget'])), 'y ascending along z');
+  assert.ok(increasing(along(0, ['East', 'South', 'West', 'North'])), 'x in first-appearance order along x');
+  assert.ok(increasing(along(2, ['Gizmo', 'Gadget', 'Widget'])), 'y in first-appearance order along z');
   const keys = Object.keys(g.focus);
   assert.ok(keys.includes('east') && keys.includes('widget'));
 });
 
-dtest('a donut runs ascending by name from 12 o\'clock, as the 2D chart does', async (t) => {
+dtest('a donut runs in row order from 12 o\'clock, as the 2D chart does', async (t) => {
   const g = await lift(byValueDashboard(t), 'donut');
   const start = (tube) => Math.atan2(tube.points[0][2], tube.points[0][0]);
-  const tubes = [...g.tubes].sort((a, b) => g.items[a.item].label.localeCompare(g.items[b.item].label));
+  const inRowOrder = ['Gizmo', 'Gadget', 'Widget'];
+  const tubes = [...g.tubes].sort((a, b) => inRowOrder.indexOf(g.items[a.item].label) - inRowOrder.indexOf(g.items[b.item].label));
   const wrapped = tubes.map((tube) => (start(tube) + Math.PI / 2 + 2 * Math.PI) % (2 * Math.PI));
-  assert.ok(wrapped.every((a, i) => i === 0 || a > wrapped[i - 1]), `the segments follow in name order: ${wrapped.map((a) => a.toFixed(2)).join(', ')}`);
-  assert.ok(wrapped[0] < 0.1, 'Gadget starts at the top');
+  assert.ok(wrapped.every((a, i) => i === 0 || a > wrapped[i - 1]), `the segments follow in row order: ${wrapped.map((a) => a.toFixed(2)).join(', ')}`);
+  assert.ok(wrapped[0] < 0.1, 'the biggest row (Gizmo) starts at the top');
 });

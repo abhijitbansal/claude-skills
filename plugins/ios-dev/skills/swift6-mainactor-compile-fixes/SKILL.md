@@ -1,6 +1,6 @@
 ---
 name: swift6-mainactor-compile-fixes
-description: "Compile-time Swift 6 MainActor-isolation failures under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor. Two diagnostics: (1) \"main actor-isolated X cannot be called from outside of the actor\" on pure-compute types (exporters, geometry builders, parsers, value-model structs) implicitly @MainActor but run off-main in Task.detached / @concurrent contexts; (2) \"main actor-isolated conformance of X to Decodable cannot be used in nonisolated context\" (or Equatable/Hashable/Encodable variants) when a zero-state struct/enum — a DTO, response model, or filter-criteria type — is JSON-decoded, encoded, or compared from a background/nonisolated path: a nonisolated helper, a @ModelActor, Task.detached, or an off-main JSONDecoder call. Honest fix: mark the type nonisolated at its declaration, cascade through flagged callees, pass resolved values instead of actor-isolated objects. Forbids @unchecked Sendable / nonisolated(unsafe) / @preconcurrency band-aids. Trigger on Swift 6 default-MainActor migration or either error."
+description: Compile-time Swift 6 MainActor-isolation failures under SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor. Covers "main actor-isolated X cannot be called from outside of the actor" on pure-compute types (exporters, geometry builders, parsers, value structs) run in Task.detached or @concurrent; "main actor-isolated conformance of X to Decodable cannot be used in nonisolated context" (or Equatable, Hashable, Encodable) for DTOs and response models used off-main; and a WidgetKit TimelineProvider conformance error. Fix by marking the type nonisolated at its declaration and cascading through flagged callees; never @unchecked Sendable, nonisolated(unsafe) or @preconcurrency band-aids. Use on a Swift 6 default-MainActor migration or any of these errors.
 ---
 
 # Swift 6 MainActor Compile Fixes
@@ -31,7 +31,7 @@ races.
 ## The honest fix (general case)
 
 Mark the pure-compute types `nonisolated` at the *type* declaration
-(Swift 6.1+/Xcode 26 supports type-level `nonisolated`), which matches how they
+(type-level `nonisolated` is available from Swift 6.1, which shipped in Xcode 16.3), which matches how they
 already execute at runtime. Process:
 
 1. Mark the directly-flagged type `nonisolated struct/enum X`.

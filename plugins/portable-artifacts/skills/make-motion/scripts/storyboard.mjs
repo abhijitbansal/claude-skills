@@ -27,6 +27,7 @@ function parseArgs(argv) {
   try {
     parsed = parseCli(argv, OPTIONS, USAGE);
   } catch (e) {
+    if (e.help === true) throw e; // --help: the usage line, exit 0
     throw new UsageError(`${e.message} (accepted options: ${ACCEPTED})`);
   }
   const { values, positionals } = parsed;
@@ -130,6 +131,11 @@ export function main(argv, { explainerDir = path.join(SKILL_DIR, '..', 'make-exp
     return 0;
   } catch (e) {
     if (!(e instanceof UsageError)) throw e;
+    // --help is a usage line on stdout, not an error (main's 1.3.0 behaviour, through this command's own writers)
+    if (e.help === true) {
+      out(`usage: ${e.message}\n`); // the line shared/cli.mjs exitUsage prints for a help request
+      return 0;
+    }
     err(`${String(e.message).split('\n')[0]}\n`);
     return 2;
   }

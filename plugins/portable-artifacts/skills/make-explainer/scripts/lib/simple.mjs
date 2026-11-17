@@ -185,6 +185,38 @@ export function lintSimple(section, path) {
   ]);
 }
 
+// ---- number parity --------------------------------------------------------
+
+// A number as a reader sees it: digits with their separators ("410", "1,204", "1.5").
+const NUMBER = /\d+(?:[.,]\d+)*/g;
+const numbersIn = (text) => [...new Set(readable(text).match(NUMBER) ?? [])];
+
+// [{ path, normal, simple }] for every string of `simple` that has a string at the same place in `normal`.
+function twinPairs(normal, simple, at) {
+  if (typeof simple === 'string') return typeof normal === 'string' ? [{ path: at, normal, simple }] : [];
+  if (Array.isArray(simple)) return simple.flatMap((s, i) => twinPairs(Array.isArray(normal) ? normal[i] : undefined, s, pathJoin(at, i)));
+  if (!isObject(simple) || !isObject(normal)) return [];
+  return Object.entries(simple).flatMap(([key, value]) => twinPairs(normal[key], value, pathJoin(at, key)));
+}
+
+/**
+ * Warnings for a number in a field's simple twin that the normal text does not have ("410 ms" against "400 ms").
+ * Only a field whose two versions both hold digits is compared, and only in that direction: a plainer wording that
+ * drops a number, or spells it out, is left to the writing rules. `path` is the section's own path ("sections[3]").
+ */
+export function numberParityWarnings(section, path) {
+  if (!isObject(section?.simple)) return [];
+  const { simple, ...normal } = section;
+  return twinPairs(normal, simple, pathJoin(path, 'simple')).flatMap((pair) => {
+    const had = numbersIn(pair.normal);
+    if (had.length === 0) return [];
+    return numbersIn(pair.simple).filter((n) => !had.includes(n)).map((n) => ({
+      path: pair.path,
+      message: `the simple text says ${q(n)}, which the normal text does not (it has ${had.map(q).join(', ')}); keep the same numbers in both versions`,
+    }));
+  });
+}
+
 /** All simple-text warnings for a parsed spec -> [{ path, message }]. Never blocks a build. */
 export function simpleWarnings(spec) {
   const out = [];
@@ -192,6 +224,7 @@ export function simpleWarnings(spec) {
   spec.sections.forEach((section, i) => {
     const at = pathJoin('sections', i);
     out.push(...lintSimple(section, at));
+    out.push(...numberParityWarnings(section, at));
     if (pageHasSimple && isEligible(section) && !hasSimpleText(section)) {
       out.push({ path: at, message: `this page has simple text elsewhere; add a "simple" version to this ${section.type} section too` });
     }

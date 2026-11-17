@@ -33,12 +33,23 @@ is in the authoring docs, so each task rediscovers it in review.
 
 ## Fix: checklist for mod briefs and reviews
 
+0. Run the dev loop before a review round, so the reviewer is not the first
+   thing to catch a bad manifest or a type error: `claude plugin validate
+   <plugin dir>`, `claude plugin test <plugin dir>` (runs the mod's own tests)
+   and `tsc -p <plugin dir>` (a plain type check, no `--strict`). Both `claude
+   plugin` subcommands are listed in `claude plugin --help`.
 1. Every record write is a transform of the CURRENT value, run on one
    serial promise chain. Wrap each link in `.catch`, but RETURN the promise
    so tool answers can deny on failure.
 2. Decide whether a call captures anything BEFORE awaiting the chain.
-3. In `session.start`, call `next(e)` first; read `cwd` before it. Never
-   await store work ahead of `next(e)`.
+3. In `session.start`, await only what the first turn needs (register the
+   tool and command, open the record), keep it short because it delays the
+   session, then `return next(e)`. Read `cwd` from `e` before awaiting
+   anything. Reach `next(e)` on every path, including the `.catch` handler.
+   session-compass's `session.start` hook does exactly this: it awaits the
+   store work first and returns `next(e)` last. An earlier version of this
+   item said to call `next(e)` first; that contradicted the host docs'
+   example and compass, so do not follow it.
 4. Keep every function that touches `$` in `register.tsx`. Imported files
    get plain values, never `$` or `$.store`.
 5. On every write, merge ids from `store.keys()` that are missing from a

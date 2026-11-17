@@ -26,6 +26,25 @@ export function compareT(a, b) {
   return a < b ? -1 : 1;
 }
 
+/**
+ * The t values a tour beat names that are not also a group or a label (those keep their own view): [{ key, indexes }],
+ * key lowercased as the focus map keys are, indexes the rows at that t. Only named values get a view, so a scene
+ * with a thousand weeks and no week beat pays nothing. validateSpec accepts any t value as a focus (rows.mjs focusKeys).
+ */
+export function namedTimes(rows, spec = {}) {
+  const asked = new Set((spec.tour ?? []).flatMap((beat) => beat.focus.map((f) => f.toLowerCase())));
+  if (asked.size === 0) return [];
+  const taken = new Set(rows.flatMap((r) => [r.group.toLowerCase(), ...(typeof r.label === 'string' && r.label !== '' ? [r.label.toLowerCase()] : [])]));
+  const found = new Map();
+  rows.forEach((r, index) => {
+    if (r.t === undefined) return;
+    const key = String(r.t).toLowerCase();
+    if (!asked.has(key) || taken.has(key)) return;
+    found.set(key, [...(found.get(key) ?? []), index]);
+  });
+  return [...found].map(([key, indexes]) => ({ key, indexes }));
+}
+
 /** Group name -> index, in order of first appearance. */
 export function groupIndex(rows) {
   const index = new Map();

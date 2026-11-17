@@ -1,11 +1,11 @@
 ---
 name: app-preview
-description: Build an iOS app on the booted simulator, launch it (optionally deep-linking via ${APP_URL_SCHEME}://scan or ${APP_URL_SCHEME}://doc), take screenshots, and deliver them to the user's iPhone via a hybrid channel — iMessage text ping (push notification) plus iCloud Drive copy (the actual image, viewable from Files app). Claude's chat response cannot embed images on the Remote Control mobile surface, so this out-of-band delivery is the load-bearing step. Use this skill aggressively whenever the user is working remotely and wants to see what the app currently looks like — including "show me the home screen", "take a screenshot", "build and send a pic", "did that fix work", "what does X look like now", "preview the app", "give me a quick look at Y", or any request to verify a UI change visually. Also use proactively after fixing a UI bug or completing a SwiftUI change, even if the user doesn't say "screenshot" — closing the loop with a visual is the whole point of this skill. **Text-driven mode:** when the user describes a UI concern in words ("the home-row spacing looks off", "the new doc sheet doesn't show the title"), map the description to the affected screens and capture all of them in one run via `scripts/bundle.sh`. After delivering the screenshots, hand off to `superpowers:brainstorming` to align on the fix, then to `superpowers:test-driven-development` to implement it (or `superpowers:executing-plans` if a plan already exists). All output is organized by git branch — `$(basename "${APP_PREVIEW_ROOT}")/<branch>/...` on iCloud and `/tmp/${APP_NAME_LC}-snaps/<branch>/...` locally — so the user can flip between branches and see exactly which screenshots belong to which line of work.
+description: "Build an iOS app on the booted simulator, launch it (optionally deep-linking), take screenshots and send them to the user's phone, because chat cannot embed images on a remote session. Use whenever the user is working remotely and wants to see the app: \"show me the home screen\", \"take a screenshot\", \"build and send a pic\", \"did that fix work\", \"preview the app\", or any request to verify a UI change visually, and proactively after fixing a UI bug or a SwiftUI change. Also maps a UI concern described in words (\"the home-row spacing looks off\") to screens and captures them all with scripts/bundle.sh, organized by git branch."
 ---
 
-> **Requires `.claude/app.yml`** with `app.name`, `app.bundle_id`, `app.url_scheme`, optionally `app.preview_root`. All five scripts source `skills/_lib/load_app_config.sh` and refuse if config is missing. Screen vocabulary, deep-link routes, and the iMessage delivery quirks are app-shaped — adjust the examples below for your app's `handleDeepLink` surface.
+> **Requires `.claude/app.yml`** with `app.name`, `app.bundle_id`, `app.url_scheme`, optionally `app.preview_root`. Every script here sources `skills/_lib/load_app_config.sh` and refuses if config is missing. Screen vocabulary, deep-link routes, and the iMessage delivery quirks are app-shaped — adjust the examples below for your app's `handleDeepLink` surface.
 
-# ${APP_NAME} preview — remote-control visual feedback
+# App preview — remote-control visual feedback
 
 ## Why this skill exists
 
@@ -15,16 +15,19 @@ The user is often away from the machine. They ask you to fix something visual ("
 2. Install + launch on the booted simulator
 3. (Optionally) deep-link to a specific screen
 4. Take a PNG screenshot
-5. **Deliver to the user's iPhone via the hybrid channel** (`scripts/deliver.sh`):
-   - iMessage text ping → push notification on the phone, so the user knows it's ready
-   - iCloud Drive copy into `$(basename "${APP_PREVIEW_ROOT}")/<branch>/` → the actual image, viewable full-size in Files
+5. **Deliver to the user's phone**, trying these in order:
+   1. The host's own file-send tool, when it has one (in Claude Code, `SendUserFile`). Preferred: one step, the image arrives as a file.
+   2. The `imessage` plugin's reply tool with the PNG attached. Unverified here: it may go through the same Messages path that "Why the fallback is hybrid" below records as rejected.
+   3. `scripts/deliver.sh`, the hybrid fallback:
+      - iMessage text ping → push notification on the phone, so the user knows it's ready
+      - iCloud Drive copy into `$(basename "${APP_PREVIEW_ROOT}")/<branch>/` → the actual image, viewable full-size in Files
 6. Read the PNG with the Read tool (lets you describe what's on screen; also renders inline if the user is on the desktop VS Code extension)
 
-Step 5 is non-negotiable when the user is remote. The Claude assistant response cannot embed images on the Remote Control mobile UI — this is a [verified Anthropic limitation](https://github.com/anthropics/anthropic-sdk-python/issues/1329): tool-returned images go into Claude's context but are hidden from the user inside a collapsed tool-use accordion. The image has to be pushed out-of-band.
+Step 5 is non-negotiable when the user is remote, by one of those three routes. On a desktop session the user is looking at the screen: skip it. The Claude assistant response cannot embed images on the Remote Control mobile UI — this is a [verified Anthropic limitation](https://github.com/anthropics/anthropic-sdk-python/issues/1329): tool-returned images go into Claude's context but are hidden from the user inside a collapsed tool-use accordion. The image has to be pushed out-of-band.
 
-### Why hybrid? (the iMessage attachment quirk)
+### Why the fallback is hybrid (the iMessage attachment quirk)
 
-The obvious approach was: send the PNG as an iMessage attachment to self. It silently fails. Diagnostic findings:
+`scripts/deliver.sh` exists because the obvious script-level approach, sending the PNG as an iMessage attachment to self from AppleScript, silently fails. Diagnostic findings:
 
 - **AppleScript text to self via iMessage** → ✅ delivered
 - **AppleScript file attachment to self via iMessage** → ❌ Apple's server returns "Not Delivered" even though the same destination receives manual sends fine
@@ -44,19 +47,21 @@ Slashes in branch names are flattened to `--` for iOS Files compatibility — `u
 
 The branch slug is computed once per script invocation by `scripts/branch-dir.sh`. All three scripts (`snap.sh`, `deliver.sh`, `bundle.sh`) source it — there is no separate config to keep in sync. Flip to a different branch, take another snapshot, and the new shots land in a new folder; the old branch's folder stays put until you delete it.
 
-## The four scripts
+## The scripts
 
-All live in `scripts/` next to this file and are already executable. Prefer them over hand-rolling `xcrun simctl` commands so the build/install/launch/deliver sequence stays consistent across sessions.
+Four scripts you run, and two helpers they source (`branch-dir.sh` makes the branch folder name, `sim-resolve.sh` turns `--sim` into one simulator UDID). All live in `scripts/` next to this file and are already executable. Prefer them over hand-rolling `xcrun simctl` commands so the build/install/launch/deliver sequence stays consistent across sessions.
+
+Every script that touches the simulator resolves one concrete UDID first and passes it to `simctl`, because `xcrun simctl ... booted` silently picks one device when several are booted. `--sim <name|UDID>` names the target on `launch.sh`, `snap.sh` and `bundle.sh`; without it the only booted simulator is used, and several booted with no `--sim` is a refusal, not a guess.
 
 ### `scripts/launch.sh` — build → install → launch
 
 ```bash
 scripts/launch.sh                       # full build, install, launch
 scripts/launch.sh --no-build            # skip build script, reinstall last build (fast)
-scripts/launch.sh --sim "iPhone 16 Pro" # force a specific simulator
+scripts/launch.sh --sim "iPhone 17"     # target one simulator by name or UDID
 ```
 
-Boots `iPhone 17 Pro` if no simulator is currently booted, runs `${APP_BUILD_SCRIPT}`, installs the freshest `${APP_NAME}.app` from DerivedData, terminates any prior instance, then launches. Use `--no-build` when the user just changed app state (signed in, navigated somewhere) and wants another snapshot — saves the 10–30s xcodebuild round-trip.
+With no `--sim` and nothing booted it boots the first iPhone of the newest iOS runtime. It then runs `${APP_BUILD_SCRIPT}`, installs the freshest `${APP_NAME}.app` from DerivedData onto that UDID, terminates any prior instance, then launches. Use `--no-build` when the user just changed app state (signed in, navigated somewhere) and wants another snapshot — saves the 10–30s xcodebuild round-trip.
 
 ### `scripts/snap.sh` — screenshot → print path
 
@@ -64,11 +69,14 @@ Boots `iPhone 17 Pro` if no simulator is currently booted, runs `${APP_BUILD_SCR
 scripts/snap.sh                # → /tmp/${APP_NAME_LC}-snaps/<branch>/${APP_NAME_LC}-snap-<ts>.png
 scripts/snap.sh home-empty     # → /tmp/${APP_NAME_LC}-snaps/<branch>/${APP_NAME_LC}-snap-<ts>-home-empty.png
 scripts/snap.sh --dir /tmp/x   # override the dir (no branch subfolder appended)
+scripts/snap.sh --sim "iPhone 17"  # screenshot that simulator (name or UDID)
 ```
 
 Prints the absolute PNG path on the last line of stdout. The default output dir is the per-branch subfolder; pass `--dir` only for ad-hoc one-offs that shouldn't be grouped with branch work.
 
-### `scripts/deliver.sh` — iMessage ping + iCloud Drive copy
+### `scripts/deliver.sh` — iMessage ping + iCloud Drive copy (the fallback)
+
+Use it when the host has no file-send tool and the `imessage` plugin's attachment route does not work (step 5 above).
 
 ```bash
 scripts/deliver.sh /tmp/${APP_NAME_LC}-snaps/<branch>/${APP_NAME_LC}-snap-<ts>.png
@@ -105,7 +113,7 @@ Flags:
 | `--description "<text>"` | **Required.** Verbatim user request, written into `MANIFEST.md`. |
 | `--screen <id>` | **Required, repeatable.** One per screen to capture. |
 | `--no-build` | Forwarded to `launch.sh`. |
-| `--sim "<name>"` | Forwarded to `launch.sh`. |
+| `--sim "<name\|UDID>"` | Forwarded to `launch.sh`; every `simctl` call in the run then targets that device. |
 | `--no-deliver` | Skip `deliver.sh` entirely (local-only run). |
 
 Between screens the script does `terminate` + `launch` + `openurl` rather than just `openurl`, so a previous screen's sheet/modal doesn't stack underneath the next capture. The first delivered screenshot carries the iMessage ping; subsequent ones suppress the ping (no notification spam) but still mirror to iCloud. The `MANIFEST.md` is also mirrored at the end, so the user has the per-run index on the phone.
@@ -132,7 +140,14 @@ These two patterns were the full navigable surface for the scanner app at the ti
 2. **Ask the user to navigate.** If they're remote and you can't tap, tell them what to tap; they can do it on their phone or in Xcode, then ask you to snap again. This skill is collaborative, not autonomous.
 3. **Add a deep-link route** to `handleDeepLink` if the screen will be visited repeatedly during this debugging session — but that's a real code edit, separate from running this skill.
 
-`xcrun simctl` does **not** provide tap, swipe, or text input. Do not try to script taps via AppleScript against the Simulator window — coordinates depend on the Simulator window position, device chrome, and Retina scale, and silent mis-clicks are a worse failure mode than admitting the limitation. If interactive navigation becomes a recurring need, install `idb` (`brew install facebook/fb/idb-companion && pipx install fb-idb`) and revisit this skill.
+`xcrun simctl` does **not** provide tap, swipe, or text input. Do not try to script taps via AppleScript against the Simulator window — coordinates depend on the Simulator window position, device chrome, and Retina scale, and silent mis-clicks are a worse failure mode than admitting the limitation. If interactive navigation becomes a recurring need, use `idb` as described in the next section.
+
+## What the simulator can and cannot show
+
+- **A deep link may prompt.** On some iOS 26 simulators `xcrun simctl openurl` shows an "Open in App?" confirmation instead of opening silently (observed in one app; check on the simulator you have). A script cannot tap it. Ways round it: ask the user to tap Open once, answer it from an XCUITest, or tap it with `idb`.
+- **Optional taps with `idb`.** Install it once: `brew install facebook/fb/idb-companion && pipx install fb-idb`. It is an extra install, not part of this plugin. Send one tap per Bash call, then take a fresh screenshot in a separate later call and read the next coordinates off that picture: tap delivery lags, and coordinates from an older screenshot miss.
+- **Launch hooks from the environment.** Arguments after the bundle id have been dropped by `simctl launch` in practice, but an environment variable prefixed `SIMCTL_CHILD_` reaches the app's `ProcessInfo`: `SIMCTL_CHILD_DEMO_SCREEN=settings xcrun simctl launch "<UDID>" "<bundle id>"`. For a DEBUG build this is a way to open a demo screen. `xcrun simctl spawn "<UDID>" defaults write "<bundle id>" <key> <value>` can skip onboarding the same way.
+- **Device only.** The real camera shutter crashes the simulator, so capture and scan flows cannot be previewed here. Put them on the manual checklist.
 
 ## Text-driven mode (the bridge from words to screenshots)
 
@@ -176,7 +191,7 @@ Typical session, after the user reports a UI bug and you've made a code change:
 1. scripts/launch.sh                                            # rebuild + relaunch with the fix
 2. xcrun simctl openurl booted ${APP_URL_SCHEME}://scan         # (optional) deep-link if applicable
 3. scripts/snap.sh after-fix                                    # capture → /tmp/${APP_NAME_LC}-snaps/<branch>/...-after-fix.png
-4. scripts/deliver.sh <path>                                    # iMessage ping + iCloud copy (REQUIRED for remote)
+4. send <path> to the phone: host file-send first, else scripts/deliver.sh <path>   # iMessage ping + iCloud copy (REQUIRED for remote)
 5. Read(<path>)                                                 # for desktop inline + narration
 6. "Sent — Files → iCloud Drive → $(basename "${APP_PREVIEW_ROOT}") → <branch> → <filename>. The title sits one row above the toolbar now."
 ```
@@ -197,9 +212,9 @@ End-to-end example. User says: *"the home-row spacing looks off on the doc scree
      --screen doc:Receipts/2026-receipt.pdf
 
    Output:
-     /tmp/${APP_NAME_LC}-snaps/agent--ABH-6-.../${APP_NAME_LC}-snap-<ts>-home.png
-     /tmp/${APP_NAME_LC}-snaps/agent--ABH-6-.../${APP_NAME_LC}-snap-<ts>-doc.png
-     /tmp/${APP_NAME_LC}-snaps/agent--ABH-6-.../MANIFEST.md (request + screens + timestamp)
+     /tmp/${APP_NAME_LC}-snaps/<branch>/${APP_NAME_LC}-snap-<ts>-home.png
+     /tmp/${APP_NAME_LC}-snaps/<branch>/${APP_NAME_LC}-snap-<ts>-doc.png
+     /tmp/${APP_NAME_LC}-snaps/<branch>/MANIFEST.md (request + screens + timestamp)
 
    Each screenshot is delivered to iCloud → $(basename "${APP_PREVIEW_ROOT}")/<branch>/, the first
    one pings via iMessage, the MANIFEST is mirrored at the end.
@@ -238,11 +253,11 @@ scripts/launch.sh --no-build
 ## Gotchas
 
 - **Build script regenerates `${APP_NAME}.xcodeproj`** (if using XcodeGen and `project.yml`) whenever sources or project config changed. That's fine — but it means the first build after pulling new code can take longer than subsequent ones.
-- **Build failures**: surface the `xcodebuild` error verbatim to the user, then stop. Don't try to "fix and retry" inside this skill — the build error might be the very thing the user wants to know about. Hand off to the project's existing iOS skills (e.g., `swiftui-expert-skill`, `xcode-build-fixer`) if remediation is needed.
-- **Simulator not booted on first run**: `launch.sh` boots `iPhone 17 Pro` by default to match the build script's default destination. If the user wants a different simulator, pass `--sim "<name>"` to both.
-- **Multiple sims booted**: `xcrun simctl ... booted` errors out when more than one device is booted. Shut extras down: `xcrun simctl shutdown <UDID>`.
+- **Build failures**: surface the `xcodebuild` error verbatim to the user, then stop. Don't try to "fix and retry" inside this skill — the build error might be the very thing the user wants to know about. Hand off to `/ios-dev:fix` (or the project's own iOS build skills) if remediation is needed.
+- **Simulator not booted on first run**: with no `--sim`, `launch.sh` boots the first iPhone of the newest iOS runtime. If the user wants a different simulator, pass `--sim "<name|UDID>"` to the scripts.
+- **Multiple sims booted**: `xcrun simctl ... booted` does not error: it silently picks one of them. The scripts therefore refuse when more than one is booted and no `--sim` is given. Pass `--sim <name|UDID>`, or shut the extras down with `xcrun simctl shutdown <UDID>`. Two simulators can share a name: prefer the UDID.
 - **iMessage destination not configured**: deliver.sh skips the ping with a warning and proceeds with iCloud Drive only. To enable pings, set `IMESSAGE_TO` (primary mechanism; e.g. `export IMESSAGE_TO='you@example.com'` in your shell profile). Fallback: a `.imessage-to` file in the skill directory (next to `scripts/`) — but that lives inside the plugin cache and is wiped on update. **First-time setup also requires** the user to manually send themselves one message in Messages.app first — without that bootstrap, AppleScript-generated text sends don't deliver either.
-- **Do not try to attach the image to iMessage** — AppleScript file attachments to self-destinations are silently rejected by Apple's iMessage server. The hybrid pattern (text ping + iCloud Drive image) is the workaround. See "Why hybrid?" above.
+- **Do not script an iMessage attachment with AppleScript** — file attachments to self-destinations are silently rejected by Apple's iMessage server. When no host file-send tool exists, the hybrid pattern (text ping + iCloud Drive image) is the workaround. See "Why the fallback is hybrid" above.
 - **iCloud sync latency**: usually a few seconds for a 200KB PNG. If the user reports "I don't see it on my phone," ask them to pull-to-refresh in Files → iCloud Drive → `$(basename "${APP_PREVIEW_ROOT}")` → `<branch>`. If still not there after ~30s, check that iCloud Drive is on for both devices.
 - **Preview folder grows unbounded**: each preview adds another PNG. Nothing prunes them. With branch subfolders the cleanup target is more obvious — delete the folder for a merged branch and you reclaim everything that was about that line of work.
 - **MANIFEST.md is append-only**: each `bundle.sh` run appends a section, so a branch folder accumulates history. If the manifest gets too long, the user can edit or truncate it manually — nothing in the skill depends on its exact contents.
@@ -253,5 +268,5 @@ scripts/launch.sh --no-build
 
 - It does not handle device builds. Remote-control via simulator screenshots only.
 - It does not run UI tests. For automated assertions, use XCUITest in the app's test target.
-- It does not interact with the UI beyond launch + deep links. For tap/swipe automation you'd need `idb` (`brew install facebook/fb/idb-companion`) — out of scope for this skill.
+- It does not interact with the UI beyond launch + deep links. Tap automation is the optional `idb` recipe in "What the simulator can and cannot show"; swipes and text input are out of scope.
 - It does not implement fixes. After delivering screenshots, hand off to `superpowers:brainstorming` for alignment, then `superpowers:test-driven-development` (or `superpowers:executing-plans` with an existing plan) to write the code.

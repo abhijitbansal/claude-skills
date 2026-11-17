@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { readSchema } from './helpers/schema-docs.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, existsSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
@@ -6,8 +7,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseWorkers, parseFailAt, captureInOrder } from '../scripts/lib/workers.mjs';
-import { encodeArgs, draftSize } from '../scripts/lib/ffmpeg.mjs';
+import { parseWorkers, parseFailAt, parseKeepFrames, captureInOrder } from '../scripts/lib/workers.mjs';
+import { encodeArgs, draftSize, findFfmpeg } from '../scripts/lib/ffmpeg.mjs';
+import { assertSameRender } from './helpers/framemd5.mjs';
 import { UsageError } from '../scripts/lib/spec.mjs';
 import { requireRender, renderHash, assertRendersIdentically, makeTestVideo, BROWSER_ONLY } from './helpers/render.mjs';
 
@@ -21,7 +23,7 @@ const NEED_ALL = { need: ['browser', 'ffmpeg', 'ffprobe'] };
 const cli = (args, env = {}) => spawnSync(process.execPath, [RENDER, EXAMPLE, ...args], { encoding: 'utf8', env: { ...process.env, ...env } });
 
 test('parseWorkers: 1-16 or auto; anything else is a usage error that lists the accepted values', () => {
-  assert.equal(parseWorkers(undefined), 1);
+  assert.equal(parseWorkers(undefined, 4), 3, 'no flag is auto (test/workers-default.test.mjs)');
   assert.equal(parseWorkers('1'), 1);
   assert.equal(parseWorkers('16'), 16);
   assert.equal(parseWorkers('auto', 10), 8, 'auto caps at 8');
@@ -36,6 +38,13 @@ test('parseFailAt: a strict non-negative integer, anything else is ignored', () 
   assert.equal(parseFailAt('5'), 5);
   assert.equal(parseFailAt('0'), 0);
   for (const bad of [undefined, '', 'abc', '5x', ' 5', '5 ', '-1', '5.0', '0x5', '1e1', '+5', 'null']) assert.equal(parseFailAt(bad), null, JSON.stringify(bad));
+});
+
+test('parseKeepFrames: an absolute folder under the test runner, anything else is ignored', () => {
+  const runner = { NODE_TEST_CONTEXT: 'child-v8' };
+  assert.equal(parseKeepFrames({ ...runner, PA_KEEP_FRAMES: '/tmp/frames' }), '/tmp/frames');
+  for (const bad of [undefined, '', 'frames', './frames', '1']) assert.equal(parseKeepFrames({ ...runner, PA_KEEP_FRAMES: bad }), null, JSON.stringify(bad));
+  assert.equal(parseKeepFrames({ PA_KEEP_FRAMES: '/tmp/frames' }), null, 'a user render with a stale PA_KEEP_FRAMES writes no PNGs');
 });
 
 // Fake pages: a page seeks (a frame index) and screenshots it. Later pages are faster, so frames are ready out of order.
@@ -117,7 +126,7 @@ test('captureInOrder: an onFrame error (the encoder) stops the run and is rethro
 });
 
 test('schema.md documents what --workers costs: the disk bound, memory per page, the 0-based worker index', () => {
-  const doc = readFileSync(path.join(root, 'references/schema.md'), 'utf8');
+  const doc = readSchema(root);
   assert.match(doc, /at most 2 × workers PNG files exist at once/);
   assert.match(doc, /memory grows with `--workers`/);
   assert.match(doc, /k counts from 0/);
@@ -181,6 +190,17 @@ test('render: --workers 1 and --workers 4 give the same MP4 (q3-revenue at 320x1
   assert.deepEqual(progress(r.stdout), progress(one.stdout), 'the same progress lines');
 });
 
+// W2P-M11: no flag is auto. renderHash pins --workers 1 for the parallel test run, so this one spawns render itself, and
+// removes NODE_TEST_CONTEXT (undefined drops a variable from the child's env) because under the runner auto is one page.
+test('render: no --workers flag (auto) gives the same MP4 as --workers 1', async (t) => {
+  if (!await requireRender(t)) return;
+  const one = await renderHash(EXAMPLE, [...SMALL, '--workers', '1']);
+  const out = path.join(mkdtempSync(path.join(tmpdir(), 'wk-')), 'v.mp4');
+  const r = cli(['--out', out, ...SMALL], { SOURCE_DATE_EPOCH: '1793318400', NODE_TEST_CONTEXT: undefined });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(createHash('sha256').update(readFileSync(out)).digest('hex'), one.sha256);
+});
+
 test('render: --workers 1 and --workers 4 give the same MP4 for a spec with a sliding image and a scaling title', async (t) => {
   if (!await requireRender(t)) return;
   const one = await renderHash(SWIPE, [...SMALL, '--workers', '1']);
@@ -213,6 +233,31 @@ test('render: a text that faded in before a page\'s first frame is drawn the sam
   const one = await renderHash(spec, ['--fps', '10', '--workers', '1']);
   const four = await renderHash(spec, ['--fps', '10', '--workers', '4']);
   assert.equal(four.sha256, one.sha256);
+});
+
+// Grain and vignette across a push transition: the shape of the one byte-identical flake (PA-42). If a page's grain image
+// depended on which frames it drew first, 1 and 4 workers would differ here.
+test('render: grain and vignette over a fade and a push give the same MP4 at 1 and 4 workers', async (t) => {
+  if (!await requireRender(t)) return;
+  const dir = mkdtempSync(path.join(tmpdir(), 'wk-'));
+  const spec = path.join(dir, 'm.json');
+  writeFileSync(spec, JSON.stringify({ size: [320, 180], fps: 30, texture: { grain: 0.05, vignette: true }, scenes: [
+    { id: 'a', duration: 1.2, background: '#10243a', elements: [{ id: 'g1', type: 'text', text: 'First scene', x: 160, y: 60, fontSize: 24, keyframes: [{ t: 0.2, opacity: 0 }, { t: 0.6, opacity: 1 }] }] },
+    { id: 'b', duration: 1.2, background: '#3a1f33', transition: { type: 'push', direction: 'down', duration: 0.6 }, elements: [{ id: 'g2', type: 'text', text: 'Second scene', x: 160, y: 120, fontSize: 24 }] }] }));
+  const one = await renderHash(spec, ['--fps', '10', '--workers', '1'], { keepFrames: true });
+  const four = await renderHash(spec, ['--fps', '10', '--workers', '4'], { keepFrames: true });
+  assertSameRender(one, four, { ffmpeg: await findFfmpeg(), label: 'grain and vignette over a push at 1 and 4 workers' });
+  // PA_KEEP_FRAMES wrote what the encoder got: one PNG per frame (2.4 s at 10 fps), in frame order whatever page drew it.
+  assert.deepEqual(readdirSync(four.frames).sort((a, b) => parseInt(a, 10) - parseInt(b, 10)), Array.from({ length: 24 }, (_, i) => `${i}.png`));
+  assert.equal(readFileSync(path.join(four.frames, '0.png')).subarray(1, 4).toString(), 'PNG');
+});
+
+// The default is auto (PA-40): a render with no --workers is the same MP4 as --workers 1.
+test('render: no --workers flag (auto) gives the same MP4 as --workers 1', async (t) => {
+  if (!await requireRender(t)) return;
+  const one = await renderHash(EXAMPLE, [...SMALL, '--workers', '1']);
+  const auto = await renderHash(EXAMPLE, SMALL);
+  assert.equal(auto.sha256, one.sha256);
 });
 
 // Its own clip (a length no other test uses, so its own frame cache folder: video.test.mjs deletes and rebuilds the

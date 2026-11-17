@@ -5,8 +5,10 @@
 //
 //   var panel = PADiagram.panel({ panel, tip, found }, data, els, trace, { isOff, onPick, onBeat, onClose });
 //
-// panel   aside[data-pa-panel] with data-pa-panel-title, data-pa-panel-close,
-//         data-pa-empty (holding data-pa-tally) and data-pa-panel-body inside it.
+// panel   aside[data-pa-panel] with data-pa-panel-title, data-pa-panel-close and
+//         data-pa-panel-body inside it, and optionally data-pa-empty (holding
+//         data-pa-tally) for a host whose panel stays visible when nothing is
+//         selected. make-diagram's own page hides the panel then, so it has none.
 // tip     [data-pa-tip], positioned inside the stage.
 // found   the row the Find matches go in (buttons that pick a node).
 // isOff() true hides the panel and the tooltip (the story is on).
@@ -121,7 +123,12 @@
       if (!r.directed) bodyEl.appendChild(el('p', 'panel-note', 'ignores arrow direction'));
       var ol = el('ol');
       ol.setAttribute('data-pa-hops', '');
-      r.hops.forEach(function (h) { ol.appendChild(el('li', null, labelOf(h.from) + ' → ' + labelOf(h.to) + edgeText(h.edge))); });
+      // Steps in the order walked; '←' where an undirected route went against the edge's arrow (an edge that leaves
+      // the step's start along its arrow, as a two-way edge does from either end, is not against it).
+      r.hops.forEach(function (h) {
+        var against = !r.directed && (directed[h.from] || []).indexOf(h.edge) < 0;
+        ol.appendChild(el('li', null, labelOf(h.from) + (against ? ' ← ' : ' → ') + labelOf(h.to) + edgeText(h.edge)));
+      });
       bodyEl.appendChild(ol);
     }
 
@@ -136,19 +143,19 @@
     // A click's detail is 0 when a key (Enter, Space) pressed the button: then focus should go back to the node.
     if (closeEl) closeEl.addEventListener('click', function (e) { e.stopPropagation(); if (hooks.onClose) hooks.onClose(e.detail === 0); });
 
-    // Repaint from the trace: a route, a selected edge or node, or the empty
-    // state. Focus inside the panel moves to the close button, or to the title
-    // when Close hides with nothing left to close, so a repaint never drops
-    // focus to the page.
+    // Repaint from the trace: a route, a selected edge or node; with none of
+    // them the panel hides. Focus inside the panel moves to the close button on
+    // a repaint; viewer.js moves it out before the panel hides.
     function paint() {
       if (!panelEl) return;
-      panelEl.hidden = off();
-      if (off() && tip) tip.hidden = true; // the hover tooltip never rides over the Play stage
-      if (!bodyEl || !titleEl) return;
-      var hadFocus = panelEl.contains(doc.activeElement);
       var r = trace.routed();
       var id = trace.selected();
       var something = !!(r || id);
+      // Hidden until something is selected (and always in Play): an empty panel at first paint only takes the stage's room.
+      panelEl.hidden = off() || !something;
+      if (off() && tip) tip.hidden = true; // the hover tooltip never rides over the Play stage
+      if (!bodyEl || !titleEl) return;
+      var hadFocus = panelEl.contains(doc.activeElement);
       empty(bodyEl);
       bodyEl.hidden = !something;
       if (emptyEl) emptyEl.hidden = something;
@@ -158,7 +165,6 @@
       else if (id) paintNode(id);
       else titleEl.textContent = 'Map';
       if (hadFocus && something && closeEl) closeEl.focus();
-      else if (hadFocus && !something && !off() && titleEl) titleEl.focus();
     }
 
     // ---- the tooltip ----------------------------------------------------------------------------

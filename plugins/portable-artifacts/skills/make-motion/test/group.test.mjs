@@ -70,9 +70,9 @@ test('a group of children validates; ANIMATABLE.group is the pose; the limits ar
 });
 
 test('child ids are global: a duplicate inside a group is reported at its nested path', () => {
-  assert.deepEqual(errs(spec([text('a'), group('g', [text('a')])])), ['scenes[0].elements[1].children[0].id: duplicate id "a" (first used at scenes[0].elements[0].id)']);
-  assert.deepEqual(errs(spec([group('g', [text('a')]), group('h', [text('a')])])), ['scenes[0].elements[1].children[0].id: duplicate id "a" (first used at scenes[0].elements[0].children[0].id)']);
-  assert.deepEqual(errs(spec([group('g', [text('a')]), text('g')])), ['scenes[0].elements[1].id: duplicate id "g" (first used at scenes[0].elements[0].id)']);
+  assert.deepEqual(errs(spec([text('a'), group('g', [text('a')])])), ['scenes[0].elements[1].children[0].id: duplicate id "a" (first used at scenes[0].elements[0].id); scene ids and element ids share one namespace; rename one']);
+  assert.deepEqual(errs(spec([group('g', [text('a')]), group('h', [text('a')])])), ['scenes[0].elements[1].children[0].id: duplicate id "a" (first used at scenes[0].elements[0].children[0].id); scene ids and element ids share one namespace; rename one']);
+  assert.deepEqual(errs(spec([group('g', [text('a')]), text('g')])), ['scenes[0].elements[1].id: duplicate id "g" (first used at scenes[0].elements[0].id); scene ids and element ids share one namespace; rename one']);
 });
 
 test('depth 4 is rejected naming the limit; depth 3 is allowed', () => {

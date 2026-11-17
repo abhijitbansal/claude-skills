@@ -1,7 +1,7 @@
 // Cutouts: a person lifted out of a photo or a clip with MODNet (Apache-2.0) on onnxruntime-node (MIT), run locally on the CPU.
 // onnxruntime-node is installed on demand (`doctor --fix cutout`: a locked install of optional/cutout with install scripts skipped), never by the skill's
 // own `npm ci`, and loaded from that folder (optional.mjs); the weights download once, on first use,
-// into <skill>/.cache/models/modnet/ and are checked against MODEL_SHA256 before every use. The image is decoded, shrunk,
+// into <models folder>/modnet/ (a per-user folder, see model-cache.mjs) and are checked against MODEL_SHA256 before every use. The image is decoded, shrunk,
 // enlarged and re-encoded on a Playwright page canvas (no sharp); only the matte comes from the model.
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -10,6 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from './spec.mjs';
 import { doctorCommand, optionalInstall } from './doctor-hint.mjs';
+import { modelsDir } from './model-cache.mjs';
 import { importOptional } from './optional.mjs';
 import { VIDEO_EXTENSIONS } from '../../template/media.mjs';
 import { fileInput } from './ffmpeg.mjs';
@@ -24,14 +25,15 @@ export const MODEL_URL = 'https://huggingface.co/Xenova/modnet/resolve/fa2fa5460
 export const MODEL_SHA256 = '07c308cf0fc7e6e8b2065a12ed7fc07e1de8febb7dc7839d7b7f15dd66584df9';
 export const MODEL_BYTES = 25888640; // 24.7 MiB, "25 MB" in the docs
 export const MODEL_FILE = 'modnet_photographic_portrait_matting.onnx';
-export const MODEL_DIR = path.join(SKILL_ROOT, '.cache', 'models', 'modnet');
+export const MODEL_DIR = path.join(modelsDir(SKILL_ROOT), 'modnet'); // a per-user folder that survives a plugin update (model-cache.mjs)
 export const CUTOUT_CACHE = path.join(SKILL_ROOT, '.cache', 'cutout'); // gitignored; the alpha frames of a clip, keyed by its hash
 
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
 const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
 const REF_SIZE = 512; // MODNet's reference size for the short side
 const MULTIPLE = 32; // the network wants sides that are a multiple of this
-const MAX_SIDE = 8192; // px; a bigger picture is refused rather than held in a canvas
+export const MAX_SIDE = 8192; // px; a bigger picture is refused rather than held in a canvas
+export const MAX_PICTURE_BYTES = 64 * 1024 * 1024; // a picture file over this is refused before it is base64'd into the page
 const MAX_FPS = 60;
 const DEFAULT_FPS_CAP = 30;
 export const MAX_FRAMES = 900; // one run: 30 s at 30 fps
@@ -201,8 +203,53 @@ function toTensor(ort, rgba, w, h) {
   return new ort.Tensor('float32', data, [1, 3, h, w]);
 }
 
+const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const JPEG_NO_SIZE = new Set([0xc4, 0xc8, 0xcc]); // markers in the SOFn range that carry no frame size
+const WEBP_RIFF = 12; // where the first WebP chunk name sits
+
+// The [width, height] a PNG, JPEG or WebP names in its header, read without decoding it; null when the header is cut off, not
+// one of those or says nothing about size. Never throws.
+export function pictureSize(bytes) {
+  try {
+    if (bytes.length >= 24 && bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return [bytes.readUInt32BE(16), bytes.readUInt32BE(20)];
+    if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xd8) return jpegSize(bytes);
+    if (bytes.length >= 30 && bytes.toString('ascii', 0, 4) === 'RIFF' && bytes.toString('ascii', 8, 12) === 'WEBP') return webpSize(bytes);
+  } catch { /* a header that is cut short: left to the page */ }
+  return null;
+}
+
+function jpegSize(bytes) {
+  let at = 2;
+  while (at + 4 <= bytes.length) {
+    if (bytes[at] !== 0xff) return null;
+    const marker = bytes[at + 1];
+    if (marker >= 0xc0 && marker <= 0xcf && !JPEG_NO_SIZE.has(marker)) return at + 9 <= bytes.length ? [bytes.readUInt16BE(at + 7), bytes.readUInt16BE(at + 5)] : null;
+    at += 2 + bytes.readUInt16BE(at + 2);
+  }
+  return null;
+}
+
+function webpSize(bytes) {
+  const chunk = bytes.toString('ascii', WEBP_RIFF, WEBP_RIFF + 4);
+  if (chunk === 'VP8 ') return [bytes.readUInt16LE(26) & 0x3fff, bytes.readUInt16LE(28) & 0x3fff];
+  if (chunk === 'VP8L') {
+    const bits = bytes.readUInt32LE(21);
+    return [(bits & 0x3fff) + 1, ((bits >> 14) & 0x3fff) + 1];
+  }
+  if (chunk === 'VP8X') return [bytes.readUIntLE(24, 3) + 1, bytes.readUIntLE(27, 3) + 1];
+  return null;
+}
+
+/** Throws the "too big" error for a picture over the byte cap or MAX_SIDE on a side (by its header), before a page decodes it. */
+export function assertPictureLimits(bytes) {
+  if (bytes.length > MAX_PICTURE_BYTES) throw new Error(`the picture file is ${Math.round(bytes.length / (1024 * 1024))} MB; cutouts take at most ${MAX_PICTURE_BYTES / (1024 * 1024)} MB. Shrink it first`);
+  const size = pictureSize(bytes);
+  if (size && Math.max(...size) > MAX_SIDE) throw new Error(`the picture is ${size[0]}x${size[1]}; cutouts take at most ${MAX_SIDE} px on a side. Shrink it first`);
+}
+
 /** PNG bytes of `bytes` (a picture of type `mime`) with the person kept and everything else transparent. */
 export async function cutoutPicture({ session, ort, page, bytes, mime }) {
+  assertPictureLimits(bytes); // from the header, in Node: the page decodes only what passed
   const [w, h] = await page.evaluate(({ b64, type }) => window.cut.load(b64, type), { b64: bytes.toString('base64'), type: mime });
   if (Math.max(w, h) > MAX_SIDE) throw new Error(`the picture is ${w}x${h}; cutouts take at most ${MAX_SIDE} px on a side. Shrink it first`);
   const [mw, mh] = modelSize(w, h);

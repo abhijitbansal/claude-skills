@@ -13,10 +13,10 @@ Run the project's `./build.sh` rather than constructing `xcodebuild` invocations
 
 | User intent | Command |
 |---|---|
-| Default / "build" / "build for sim" | `./build.sh` (iPhone 15 Pro Max) |
-| Specific simulator | `./build.sh -s "iPhone 16 Pro"` |
-| Real device (connected iPhone) | `./build.sh -d` |
-| Inspect what would happen without building | `./build.sh -d --debug` |
+| Default / "build" / "build for sim" | `./build.sh` (simulator build, installed on the booted simulator; refuses and asks for `-s` when more than one is booted) |
+| Specific simulator | `./build.sh -s "<name or UDID>"` (names change between Xcode releases: list them with `xcrun simctl list devices available`) |
+| Real device (connected iPhone) | `./build.sh -d` (installs and launches with `devicectl`; add `--debug` for the Debug configuration) |
+| Build without installing or launching | `./build.sh --no-launch` |
 
 ## Fallback: the bundled wrapper
 
@@ -27,14 +27,25 @@ and does less:
   no other flags, so there is no `-s <simulator>` and no `--debug`.
 - If the app's own `./${APP_BUILD_SCRIPT}` is executable it just `exec`s it
   (`device` becomes `-d`); otherwise it runs bare `xcodebuild`.
-- The bare path hard-codes `name=iPhone 16` for `sim`, and `generic/platform=iOS`
+- The bare path builds `sim` for `generic/platform=iOS Simulator` (no device name to
+  go stale), and `generic/platform=iOS`
   with `DEVELOPMENT_TEAM="${APP_TEAM_ID}"` and `-allowProvisioningUpdates` for
   `device`.
 - The bare path does no xcodegen regeneration, no provisioning-profile team
   detection, and no install — a `device` run builds but never installs on the
   phone.
 
-Prefer the app's `./build.sh` (table above) whenever it exists.
+The bundled wrapper changes to the repo root (the directory with
+`.claude/app.yml`) before it runs either path, so starting it from a
+subdirectory does not change what builds.
+
+Prefer the app's `./build.sh` (table above) whenever it exists. `ios-scaffold`
+generates one (`templates/build.sh`: `-s`, `-d`, `--debug`, `--no-launch`) for
+repos that lack it, and `validate_app_config.sh` warns when it is missing.
+
+To put a build on a tester's phone, the tester's device UDID must be in the
+provisioning profile first (add it in the developer portal, regenerate the
+profile), then `./build.sh -d`.
 
 ## Hard rules — do NOT regress these
 

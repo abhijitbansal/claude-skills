@@ -31,7 +31,8 @@ const SIZE_TOKEN = /^(?:[+-]?\.?\d|(?:xx?x?-)?(?:small|large)\b|medium\b|smaller
 export function shorthandFamily(value) {
   const t = topLevelTokens(value);
   if (t.length === 1) return t[0];
-  const i = t.findIndex((x) => SIZE_TOKEN.test(x) && !/^\d{3}$/.test(x));
+  // A weight may come from a theme variable (var(--display-weight)); it is not the size.
+  const i = t.findIndex((x) => SIZE_TOKEN.test(x) && !/^\d{3}$/.test(x) && !/^var\(--[\w-]*weight\)$/.test(x));
   // No recognisable size: fail loudly (the unparsed value is not an allowed family) rather than drop the family.
   const family = i < 0 ? '' : t.slice(i + 1).join(' ');
   return family || `<unparsed font shorthand: ${value.trim()}>`;
@@ -81,6 +82,8 @@ test('lint catches what it should (guardrail proof)', () => {
   assert.deepEqual(lintFonts('a{font-family:var(--display); font: 12px var(--sans)}', 'make-motion'), []);
   // the passing shapes
   assert.deepEqual(lintFonts('a{font: 600 var(--fs-lg)/var(--lh-head) var(--font-display); font: 12px/1.5 var(--mono); font: inherit}', 'make-explainer'), []);
+  assert.deepEqual(lintFonts('a{font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--font-display)}', 'make-diagram'), []);
+  assert.deepEqual(lintFonts("a{font: var(--display-weight) var(--fs-md) 'Comic Sans MS'}", 'make-diagram'), ["'Comic Sans MS'"]);
   assert.deepEqual(lintFonts("a{font-family:'Geist Mono', monospace}", 'make-diagram'), []);
   // the dusk / press / poster families are bundled for the explainer family
   for (const f of ['Funnel Display', 'Host Grotesk', 'Commit Mono', 'Young Serif', 'Schibsted Grotesk', 'JetBrains Mono', 'Big Shoulders Display', 'Familjen Grotesk', 'Martian Mono']) {

@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { BLANK_BOARD_STDERR } from './helpers/blank-board.mjs';
-import * as checkModule from '../scripts/check.mjs';
+import * as checkModule from '../scripts/lib/check-main.mjs';
 import { loadSpec } from '../scripts/lib/spec.mjs';
 import { specHasVideo } from '../scripts/lib/video.mjs';
 import { planScene } from '../template/sketch/plan.mjs';
@@ -376,6 +376,15 @@ test('a first scene whose only element enters later (opacity 0 at t = 0) warns, 
   assert.match(r.stderr, /^warning: scenes\[0\]: scene "intro" shows nothing at 0\.00s/);
 });
 
+test('a first scene whose title is up by frame 2 (opacity 0 at t = 0, 1 one frame later) does not warn; a half-second fade-in still does', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const quick = check([scenesFile([{ id: 'intro', duration: 2, elements: [word('quick', { keyframes: [{ t: 0, opacity: 0 }, { t: 0.034, opacity: 1 }] })] }])]);
+  assert.equal(quick.status, 0, quick.stdout + quick.stderr);
+  assert.equal(quick.stderr, '', 'an entrance that starts within the first two frames is not a blank thumbnail');
+  const slow = check([scenesFile([{ id: 'intro', duration: 2, elements: [word('slow', { keyframes: [{ t: 0, opacity: 0 }, { t: 0.5, opacity: 1 }] })] }])]);
+  assert.match(slow.stderr, /^warning: scenes\[0\]: scene "intro" shows nothing at 0\.00s/, 'the control: a fade-in over 0.5 s is still a blank opening');
+});
+
 test('a crossfade pair whose texts sit in different places is green', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const r = check([scenesFile([
@@ -678,7 +687,7 @@ test('sketch: a silent board that sits finished for more than 3 s is a dead stre
   const found = verdict(file);
   assert.equal(found.ok, false);
   assert.equal(found.errors.length, 1, JSON.stringify(found.errors));
-  assert.match(found.errors[0].message, /^nothing changes from 5\.00s to 11\.00s \(6\.0s\); add motion, or set "hold": true on /);
+  assert.match(found.errors[0].message, /^nothing changes from 5\.00s to 11\.00s \(6\.0s\); add motion, such as a slow camera push-in, or set "hold": true on /);
 });
 
 test('sketch: a blank first frame warns, names what makes it blank and suggests --poster', async (t) => {

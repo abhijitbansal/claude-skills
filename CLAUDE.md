@@ -4,6 +4,8 @@ Instructions for Claude when working in this repository, **and** the canonical
 source of the behavioral guidelines that `setup/setup.sh` merges into the
 `CLAUDE.md` of any machine or repo it runs against.
 
+@AGENTS.md
+
 ## Working in this repo
 
 - Plugins live under `plugins/`; the machine bootstrap is `setup/setup.sh`,

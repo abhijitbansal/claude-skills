@@ -38,7 +38,9 @@ URL), validate before touching the filesystem:
 ```swift
 nonisolated func resolvePayloadPath(_ relative: String, under root: URL) -> URL? {
     guard !relative.isEmpty, !relative.hasPrefix("/"),
-          !relative.contains("..")                // reject BEFORE normalization
+          // reject a ".." PATH COMPONENT before normalization; a name that merely
+          // contains two dots ("report..v2.pdf") is a legitimate file name
+          !relative.split(separator: "/", omittingEmptySubsequences: false).contains("..")
     else { return nil }
     let candidate = root.appendingPathComponent(relative)
     // Canonical-descendant check: resolve symlinks on BOTH sides,
@@ -51,3 +53,28 @@ nonisolated func resolvePayloadPath(_ relative: String, under root: URL) -> URL?
     return candidate
 }
 ```
+
+Run on macOS (Swift 6): `report..v2.pdf` and `sub/file.pdf` resolve; `a/../b`,
+`..`, `../x`, `a/b/..` and `/etc/passwd` are rejected. Unit tests to ship with it:
+`report..v2.pdf` resolves, `a/../b` is rejected.
+
+## Comparing paths: fold `/private` first
+
+A temp or container directory can be spelled `/var/…` or `/private/var/…` (the
+first is a symlink to the second on iOS and macOS). Two paths for the same file
+then compare unequal as strings. The `resolvingSymlinksInPath()` calls above
+fold both spellings to one; do the same before **any** string compare, prefix
+check or set lookup of file paths (an export check, a "is this in the library"
+test, a queue de-duplication). On macOS, `/var/folders/…` and `/private/var/folders/…`
+differ as raw paths and are equal after `resolvingSymlinksInPath()`.
+
+## Cold launch: a link can arrive before the id set is loaded
+
+`resolve` takes `knownDocumentIDs`. If a link opens the app cold, `onOpenURL`
+can run before the store has loaded, the set is empty, the id is not whitelisted
+and the link is silently dropped, so the user lands on the home screen with
+nothing opened. The link is not malicious; it just arrived early. Either hold the
+URL until the store reports loaded and then resolve it once (this is a pending
+*load*, not a deferred-while-locked link: a locked app still drops it), or
+accept the drop and say so. Test both: cold link with an empty id set, and the
+same link after load.

@@ -146,10 +146,11 @@ build renames the command.
 ## Dashboard
 
 `wind dash` serves a live dashboard at `http://127.0.0.1:8787` — one card per
-session with state, reset countdown, and the last 30 lines of each pane, in
-**full color**, plus resume-all / send-message / kill actions. Click a card to
-**expand it into a full-height modal**: a large colorized scrollback (up to
-1000 lines, fetched from the token-gated `/api/pane`) and a roomy send box for
+session with state, reset countdown, and the last 30 lines of each pane (plain
+text), plus resume-all / send-message / kill actions. Click a card to
+**expand it into a full-height modal**: a large scrollback (up to 1000 lines,
+fetched from the token-gated `/api/pane`) in allowlisted colours — truecolor
+and out-of-palette 256-colour codes are dropped — and a roomy send box for
 prompts and answers — easier to read and type on a small screen. Escape or the
 close button dismisses it. The modal's **⧉ attach** button copies
 `tmux attach -t <session>` to your clipboard — paste it into any terminal to
@@ -196,7 +197,7 @@ read on upgrade and cleared at both locations).
   "capture_lines": 120,
   "caffeinate": true,
   "ntfy_url": "",
-  "limit_patterns": [],              // appended to the RESOLVED agent's patterns
+  "limit_patterns": [],              // tried BEFORE the RESOLVED agent's built-in patterns
   "repos": [
     {
       "name": "api",
@@ -236,7 +237,7 @@ New keys vs earlier versions: `agent` (top-level + per-repo) and inline
 | `caffeinate` | on macOS, keep the machine awake while `wind watch` runs (`caffeinate -dims`) |
 | `ntfy_url` | optional; POST a notification here when the limit hits and when sessions resume (works with [ntfy.sh](https://ntfy.sh) topics) |
 | `scan_roots` | directories the `wind init` wizard scanned, persisted so `wind add` and the dashboard's **Add repo** can offer more repos later without re-running `init` |
-| `limit_patterns` | extra regexes tried *before* the **resolved agent's** built-ins (see below); appended to the resolved set, not a fixed Claude append |
+| `limit_patterns` | extra regexes tried *before* the **resolved agent's** built-ins (see below); they join the resolved set, never a fixed Claude list |
 | `repos[].agent` | optional per-repo override of the top-level `agent` |
 | `repos[].claude_args` | optional per-repo permission override; present → wins over the global preset (explicit `""` honored as "no args") |
 | `repos[].prompt_file` | optional file whose contents are sent as the first prompt by `wind up` (convention `~/.wind/prompts/<repo>.md`; author with `wind prompt`) |
@@ -245,18 +246,30 @@ New keys vs earlier versions: `agent` (top-level + per-repo) and inline
 ## How limit detection works
 
 The watcher captures the tail of each pane and scans it against a list of
-regexes. Built-in patterns cover the formats Claude Code currently emits:
+regexes. Built-in patterns cover these wordings:
 
 - `Claude AI usage limit reached|<unix-epoch>` (headless/print mode)
 - `5-hour limit reached ∙ resets 3am` (interactive UI)
-- `…usage limit… resets at 8pm` / `…try again at 6:15pm`
+- `You've hit your session limit · resets 3:45pm`. This wording is copied from
+  a Claude Code transcript, not a captured tmux pane. The `usage` and `weekly`
+  variants are inferred from it and unconfirmed.
+- `You've hit your usage limit… resets at 8pm` / `usage limit reached… try again at 6:15pm`
+
+The tests use these strings as written, not real captured panes. Compare them
+with a real limit pane before relying on them.
+
+The bare words "usage limit" are not enough to match: prose that only
+mentions a limit does not pause a session. Dated resets (for example
+`resets Nov 20, 3pm`) are not recognised yet; add a `limit_patterns` entry
+if your build prints one.
 
 Clock times like `3am` are interpreted as the next occurrence in local time.
 The message format changes between Claude Code versions, so the parser is
 config-driven: add regexes to `limit_patterns` with a named group
 `(?P<epoch>…)` or `(?P<time>…)` and they take precedence over the built-ins.
-If a pattern matches but no time can be parsed, the watcher falls back to
-retrying after 1 hour rather than stalling forever.
+The 1-hour fallback applies only to a pattern that matches but yields no
+usable time: a custom pattern without a time group, or an out-of-range epoch.
+The built-in time-group patterns never reach it.
 
 When a limit is seen, the watcher records one account-level reset clock
 (the latest reset time seen across sessions), waits until
@@ -265,8 +278,8 @@ paused session.
 
 Only repos whose resolved agent is **watched** (`claude`) are scanned and
 auto-resumed. `copilot` repos are skipped entirely — never matched against
-limit patterns, never auto-resumed — and `limit_patterns` you add are appended
-to the *resolved* agent's set, so they don't leak Claude's regexes onto an
+limit patterns, never auto-resumed — and `limit_patterns` you add are tried
+before the *resolved* agent's set, so they don't leak Claude's regexes onto an
 unwatched agent.
 
 ## Testing without burning usage

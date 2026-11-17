@@ -1,4 +1,5 @@
 // kpi-counter: a card with a label, a number that counts up once the card is in, and an optional change line.
+import { formatCounter } from '../counter-format.mjs';
 import { unit, contentWidth, textWidth, fitText, squeeze, slot, textPart, rectPart, enter, blockGroup, stack, MIN_TEXT, centrePlace } from './layout.mjs';
 
 // Caps that keep the widest number (sign, 12 digits, point, 4 decimals, prefix and suffix) on one line at MIN_TEXT on a
@@ -17,6 +18,7 @@ const params = {
     prefix: short,
     suffix: short,
     decimals: { type: 'integer', minimum: 0, maximum: 4, default: 0 },
+    group: { type: 'boolean', default: false },
     delta: { type: 'string', minLength: 1, maxLength: 80 },
   },
 };
@@ -24,7 +26,7 @@ const params = {
 const COUNT_SECONDS = 2; // the count runs this long once the number is in, unless the scene is short
 const RISING = /^[+↑▲]/; // a delta that starts like this is good news, painted `good`; anything else is `text2`
 
-const shown = (n, { prefix = '', suffix = '', decimals = 0 }) => `${prefix}${n.toFixed(decimals)}${suffix}`;
+const shown = formatCounter; // the widest value is sized as the page prints it, commas included
 
 function expand(el, { size, sceneDuration, insets }) {
   const u = unit(size);
@@ -56,6 +58,7 @@ function expand(el, { size, sceneDuration, insets }) {
   const number = { id: id('value'), type: 'counter', x: 0, y: Math.round(valueY), from, to: p.to, decimals, fontSize: valueSize, fontWeight: 700, color: 'text' };
   if (p.prefix !== undefined) number.prefix = p.prefix;
   if (p.suffix !== undefined) number.suffix = p.suffix;
+  if (p.group === true) number.group = true; // only when asked: a block without it keeps its bytes
   const [start, landed] = span(2);
   number.keyframes = [
     { t: start, opacity: 0, value: from },
@@ -80,6 +83,7 @@ export default Object.freeze({
     prefix: 'text before the number, such as $ (up to 6 characters)',
     suffix: 'text after the number, such as % or M (up to 6 characters)',
     decimals: 'digits after the point, 0 to 4',
+    group: 'true prints 48,200 for 48200; default false',
     delta: `a change line under the number; one that starts with + or ↑ is painted good, any other in text2`,
   },
   example: { label: 'Monthly active users', to: 48200, delta: '+12% on last month' },

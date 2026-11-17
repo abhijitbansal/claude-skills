@@ -20,6 +20,7 @@ export const SKILLS = {
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/render.mjs'), spec, '--contact-sheet', '--out', path.join(work, 'out')],
     artifacts: ['out'],
     // Visual check on the spec once the contact sheet built; prints {"ok":true,"skipped":true} without a browser.
+    // checkCmd(skill, spec, work): motion's check reads the spec, the other three read the page the build wrote.
     checkCmd: (skill, spec) => [path.join(skill, 'scripts/check.mjs'), spec, '--json'],
   },
   diagram: {
@@ -28,16 +29,19 @@ export const SKILLS = {
     // Build into <work>/out; success = out/diagram.html exists.
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/diagram.html')],
     artifacts: ['out/diagram.html'],
+    checkCmd: (skill, spec, work) => [path.join(skill, 'scripts/check.mjs'), path.join(work, 'out/diagram.html'), '--json'],
   },
   explainer: {
     dir: 'make-explainer',
     spec: 'explainer.json',
     // Sibling skills are copied next to it: make-explainer resolves them as ../<name> and loads them lazily.
-    // make-motion is left out: motion sections need ffmpeg and Chromium, and no prompt asks for one.
+    // make-motion is left out on purpose: motion sections need ffmpeg and Chromium, and no prompt asks for one.
+    // scene is left out too: a scene section needs the page's WebGL and no prompt asks for one.
     siblings: ['make-diagram', 'make-dashboard'],
     // Build into <work>/out; success = out/explainer.html exists.
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/explainer.html')],
     artifacts: ['out/explainer.html'],
+    checkCmd: (skill, spec, work) => [path.join(skill, 'scripts/check.mjs'), path.join(work, 'out/explainer.html'), '--json'],
   },
   scene: {
     dir: 'make-scene',
@@ -47,13 +51,24 @@ export const SKILLS = {
     // Build into <work>/out; success = out/scene.html exists.
     outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/build.mjs'), spec, '--out', path.join(work, 'out/scene.html')],
     artifacts: ['out/scene.html'],
+    checkCmd: (skill, spec, work) => [path.join(skill, 'scripts/check.mjs'), path.join(work, 'out/scene.html'), '--json'],
   },
 };
+
+// Skills a local model (a host marked `local` in hosts.json) is not run on without --allow-local-models: gemma4
+// through Ollama often ended its turn before it wrote the spec on these two (see results/INDEX.md), and each such
+// run waits out the whole timeout.
+export const LOCAL_MODEL_GATED_SKILLS = Object.freeze(['motion', 'explainer']);
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const FIXTURE_COMMITS = 4;
 
 // A prompt with `"repo": true` gets a small git repository at <work>/repo: `main`, then the branch
 // feat/search with three commits (one adds a test file). Git runs with argument arrays and a scrubbed
 // environment, so the developer's own git config (signing, hooks, templates) cannot change the result.
-export function createFixtureRepo(dir) {
+// The commits are dated one day apart ending at `now` (default: the clock), so they always sit inside a
+// "last N weeks" window such as make-scene's rows.mjs default of 12.
+export function createFixtureRepo(dir, { now = Date.now() } = {}) {
   const env = {
     ...process.env,
     GIT_CONFIG_GLOBAL: os.devNull, GIT_CONFIG_SYSTEM: os.devNull,
@@ -72,7 +87,7 @@ export function createFixtureRepo(dir) {
   };
   let day = 1;
   const commit = (message) => {
-    const when = `2026-10-${String(day++).padStart(2, '0')}T12:00:00Z`;
+    const when = new Date(now - (FIXTURE_COMMITS - day++) * DAY_MS).toISOString().replace(/\.\d{3}Z$/, 'Z');
     git('add', '-A');
     env.GIT_AUTHOR_DATE = when;
     env.GIT_COMMITTER_DATE = when;
@@ -178,7 +193,10 @@ export function readSpecModel(specPath) {
   }
 }
 
-export function run(argv, { cwd, env, timeoutMs = 0, logFile } = {}) {
+// `abortIf: { afterMs, done }`: at afterMs, if done() is still false the host's whole process group is killed and
+// the result says `aborted: true` (run-eval uses it to stop a local model that has written no spec and run no
+// validate by then, instead of waiting out the full timeout).
+export function run(argv, { cwd, env, timeoutMs = 0, logFile, abortIf } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
     // detached = own process group, so a timeout also kills grandchildren
@@ -197,11 +215,14 @@ export function run(argv, { cwd, env, timeoutMs = 0, logFile } = {}) {
     const killGroup = () => {
       try { process.kill(-child.pid, 'SIGKILL'); } catch { child.kill('SIGKILL'); }
     };
+    let aborted = false;
     const timer = timeoutMs > 0 ? setTimeout(() => { timedOut = true; killGroup(); }, timeoutMs) : null;
+    const abortTimer = abortIf ? setTimeout(() => { if (!abortIf.done()) { aborted = true; killGroup(); } }, abortIf.afterMs) : null;
     const finish = (code) => {
       if (timer) clearTimeout(timer);
+      if (abortTimer) clearTimeout(abortTimer);
       if (logFile) fs.writeFileSync(logFile, out);
-      resolve({ code, out, timedOut, seconds: (Date.now() - started) / 1000 });
+      resolve({ code, out, timedOut, aborted, seconds: (Date.now() - started) / 1000 });
     };
     child.on('error', (e) => { out += `\n[spawn error] ${e.message}`; finish(127); });
     child.on('close', (code) => {
@@ -233,6 +254,73 @@ export function countValidateRuns(logPath) {
   return fs.readFileSync(logPath, 'utf8').split('\n').filter((l) => l.trim()).length;
 }
 
+// One record per validate call the host made, from $EVAL_LOG ({ ts, ok, errors } per line; a writer may add
+// `messages`, strings or { path, message }). A line that is not JSON is skipped; a JSON line with odd fields
+// becomes a record of nulls. The log is written by the host's own commands, so every field is untrusted:
+// messages are capped in number and length.
+const MAX_LOG_MESSAGES = 20;
+const MAX_LOG_MESSAGE_CHARS = 300;
+export function readValidateLog(logPath) {
+  if (!fs.existsSync(logPath)) return [];
+  const records = [];
+  for (const line of fs.readFileSync(logPath, 'utf8').split('\n')) {
+    if (!line.trim()) continue;
+    let parsed;
+    try { parsed = JSON.parse(line); } catch { continue; }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+    records.push({
+      ts: typeof parsed.ts === 'string' ? parsed.ts : null,
+      ok: typeof parsed.ok === 'boolean' ? parsed.ok : null,
+      errors: Number.isInteger(parsed.errors) ? parsed.errors : null,
+      messages: logMessages(parsed.messages),
+    });
+  }
+  return records;
+}
+
+function logMessages(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, MAX_LOG_MESSAGES).map((m) => {
+    if (typeof m === 'string') return m;
+    if (m && typeof m.message === 'string') return m.path ? `${m.path}: ${m.message}` : m.message;
+    return '';
+  }).filter(Boolean).map((m) => m.replace(/\s+/g, ' ').slice(0, MAX_LOG_MESSAGE_CHARS));
+}
+
+// An expectation names a spec feature the prompt asked for: `key` (an object anywhere in the spec has that own key),
+// `key=value` (…and its value is that string, number or boolean, whole), `key^=prefix` (a string value starting so).
+export function parseExpect(token) {
+  const m = typeof token === 'string' ? /^([^=^]+)(?:(\^?=)(.+))?$/.exec(token) : null;
+  if (!m) throw new Error(`expect: "${String(token)}" is not key, key=value or key^=prefix`);
+  if (m[2] === undefined) return { key: m[1], op: 'has' };
+  return { key: m[1], op: m[2] === '=' ? 'eq' : 'prefix', value: m[3] };
+}
+
+function matches(node, { key, op, value }) {
+  if (!Object.hasOwn(node, key)) return false;
+  if (op === 'has') return true;
+  const v = node[key];
+  if (!['string', 'number', 'boolean'].includes(typeof v)) return false;
+  return op === 'eq' ? String(v) === value : typeof v === 'string' && v.startsWith(value);
+}
+
+function anywhere(node, expectation) {
+  if (Array.isArray(node)) return node.some((child) => anywhere(child, expectation));
+  if (!node || typeof node !== 'object') return false;
+  return matches(node, expectation) || Object.values(node).some((child) => anywhere(child, expectation));
+}
+
+// A token may list alternatives with `|` (`transition=push|type=push`): the spec may say a thing in more than one
+// way (a transition is a bare name or an object with a `type`), and any one counts.
+export const parseAlternatives = (token) => String(token).split('|').map(parseExpect);
+
+// Did the spec use what the prompt asked for? -> { ok, missing: [tokens not found] }. Valid-and-builds says
+// nothing about that: an item prompt passes today with its feature ignored.
+export function featureUsed(spec, expect = []) {
+  const missing = expect.filter((token) => !parseAlternatives(token).some((alt) => anywhere(spec, alt)));
+  return { ok: missing.length === 0, missing };
+}
+
 // Leaf-level JSON paths that differ between two values (for edit prompts:
 // a targeted edit should change only a few paths).
 export function diffPaths(a, b, base = '') {
@@ -250,20 +338,36 @@ export function diffPaths(a, b, base = '') {
 
 // Score one finished host run in `work`. The harness re-runs validate and the
 // output step itself, so a host that couldn't run commands is still scored.
-export async function scoreRun({ work, skillCfg, skillDir, seedSpec, outputTimeoutMs = 300000 }) {
+// `expect`: spec features the prompt asked for (see featureUsed); `maxChanged`: for an edit prompt, the most leaf
+// paths a targeted edit should change (editOk says whether it stayed inside).
+export async function scoreRun({ work, skillCfg, skillDir, seedSpec, expect = [], maxChanged, outputTimeoutMs = 300000 }) {
   const specPath = path.join(work, skillCfg.spec);
+  const logPath = path.join(work, '.eval-log.jsonl');
+  const attempts = readValidateLog(logPath);
   const score = {
     specExists: fs.existsSync(specPath),
-    validateRuns: countValidateRuns(path.join(work, '.eval-log.jsonl')),
+    validateRuns: countValidateRuns(logPath),
+    validateAttempts: attempts, // one { ts, ok, errors, messages } per validate call the host made
+    firstTryValid: attempts.length === 0 ? null : attempts[0].ok, // null: never validated (not the same as first-call-valid)
     finalValid: false,
     errors: [],
     outputOk: false,
-    checkOk: null, // the skill's check on the spec: true/false, null when it has none, skipped, or the output step failed
+    checkOk: null, // the skill's check: true/false, null when it has none, skipped, or the output step failed
+    featureOk: null, // the spec used what the prompt asked for: true/false, null when the prompt names nothing or there is no spec
+    missingFeatures: [],
     changedPaths: null,
+    editOk: null, // an edit prompt with a path limit: the edit stayed inside it (true) or looks like a rewrite (false); never changes `valid`
     model: '-', // generatedBy.model the agent self-reported in its saved spec; '-' if none
   };
   if (!score.specExists) return score;
   score.model = readSpecModel(specPath);
+  if (expect.length > 0) {
+    let spec = null;
+    try { spec = JSON.parse(fs.readFileSync(specPath, 'utf8')); } catch { /* not JSON: every feature is missing */ }
+    const used = featureUsed(spec, expect);
+    score.featureOk = used.ok;
+    score.missingFeatures = used.missing;
+  }
   const env = { EVAL_LOG: '' };
   const v = await run(['node', path.join(skillDir, 'scripts/validate.mjs'), specPath, '--json'], { cwd: work, env });
   try {
@@ -279,6 +383,11 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, outputTimeo
     if (score.changedPaths?.length === 0) {
       score.finalValid = false;
       score.errors = [{ path: '(edit)', message: 'spec unchanged from the seed: the requested edit was not made' }];
+    } else if (Number.isInteger(maxChanged) && score.changedPaths) {
+      // Reported, never scored as invalid: diffPaths is index-based, so one node inserted mid-array shifts every later
+      // leaf, and summaries from before this field must stay comparable.
+      score.editOk = score.changedPaths.length <= maxChanged;
+      score.editLimit = maxChanged;
     }
   }
   if (!score.finalValid) return score;
@@ -291,7 +400,7 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, outputTimeo
     return fs.statSync(p).isDirectory() ? fs.readdirSync(p, { recursive: true }).some((f) => String(f).endsWith('.png')) : true;
   });
   if (score.outputOk && skillCfg.checkCmd) {
-    const c = await run(['node', ...skillCfg.checkCmd(skillDir, specPath)], {
+    const c = await run(['node', ...skillCfg.checkCmd(skillDir, specPath, work)], {
       cwd: work, env, timeoutMs: outputTimeoutMs, logFile: path.join(work, 'check.log'),
     });
     score.checkOk = readCheckResult(c);
@@ -318,23 +427,27 @@ export function summarize(rows, { host, skill, model, agent }) {
   const n = rows.length;
   const pct = (k) => `${rows.filter((r) => r[k]).length}/${n}`;
   const checkedRows = rows.filter((r) => r.checkOk === true || r.checkOk === false); // a skipped or unrun check is not a miss
+  const featureRows = rows.filter((r) => r.featureOk === true || r.featureOk === false); // a prompt that names no feature is not a miss
   const lines = [
     `# Eval — ${skill} on ${host}${model ? ` (${model})` : ''}${agent ? ` as agent ${agent}` : ''}`,
     '',
-    `Spec written ${pct('specExists')} · valid ${pct('finalValid')} · output ok ${pct('outputOk')}${checkedRows.length ? ` · check ok ${checkedRows.filter((r) => r.checkOk).length}/${checkedRows.length}` : ''}`,
+    `Spec written ${pct('specExists')} · valid ${pct('finalValid')} · output ok ${pct('outputOk')}${checkedRows.length ? ` · check ok ${checkedRows.filter((r) => r.checkOk).length}/${checkedRows.length}` : ''}${featureRows.length ? ` · feature used ${featureRows.filter((r) => r.featureOk).length}/${featureRows.length}` : ''}`,
     '',
-    '| id | spec | valid | validate runs | output | seconds | model reported | notes | check |',
-    '|---|---|---|---|---|---|---|---|---|',
+    '| id | spec | valid | validate runs | output | seconds | model reported | notes | check | feature | first try |',
+    '|---|---|---|---|---|---|---|---|---|---|---|',
   ];
+  const tri = (x) => (x === true ? '✓' : x === false ? '✗' : '-');
   for (const r of rows) {
     const notes = [
       r.timedOut ? 'timed out' : '',
+      r.aborted ? 'aborted: no spec and no validate by the deadline' : '',
       r.errors?.length ? `${r.errors.length} errors: ${r.errors[0].path}: ${r.errors[0].message}` : '',
       r.changedPaths ? `changed: ${r.changedPaths.join(', ')}` : '',
+      r.editOk === false ? `edit too broad: ${r.changedPaths.length} paths changed, limit ${r.editLimit}` : '',
+      r.missingFeatures?.length ? `missing feature: ${r.missingFeatures.join(', ')}` : '',
     ].filter(Boolean).join('; ').replaceAll('|', '\\|');
     const b = (x) => (x ? '✓' : '✗');
-    const check = r.checkOk === true ? '✓' : r.checkOk === false ? '✗' : '-';
-    lines.push(`| ${r.id} | ${b(r.specExists)} | ${b(r.finalValid)} | ${r.validateRuns} | ${b(r.outputOk)} | ${r.seconds.toFixed(0)} | ${String(r.model ?? '-').replaceAll('|', '\\|')} | ${notes} | ${check} |`);
+    lines.push(`| ${r.id} | ${b(r.specExists)} | ${b(r.finalValid)} | ${r.validateRuns} | ${b(r.outputOk)} | ${r.seconds.toFixed(0)} | ${String(r.model ?? '-').replaceAll('|', '\\|')} | ${notes} | ${tri(r.checkOk)} | ${tri(r.featureOk)} | ${tri(r.firstTryValid)} |`);
   }
   return `${lines.join('\n')}\n`;
 }

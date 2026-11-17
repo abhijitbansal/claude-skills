@@ -17,7 +17,7 @@ import { BLOCKS, BLOCK_NAMES } from '../template/blocks/index.mjs';
 import { MAX_CUES } from '../template/audio.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
 import { launchBrowser } from '../scripts/lib/browser.mjs';
-import { waitReady } from '../scripts/check.mjs';
+import { waitReady } from '../scripts/lib/check-main.mjs';
 import { requireRender, renderHash, assertRendersIdentically, BROWSER_ONLY } from './helpers/render.mjs';
 import { writeWav } from './helpers/wav.mjs';
 

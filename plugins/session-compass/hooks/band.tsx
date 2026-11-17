@@ -1,7 +1,10 @@
 import type { EngineInterface, RenderElement } from 'claude-code'
 import type { SessionRecord } from '../types'
 import { cellWidth, sliceCells } from './cells'
-import { basename, truncate } from './record'
+import { basename } from './record'
+
+// main's tests import cellWidth from here; the one implementation is cells.ts (the branch's, which also keeps emoji whole).
+export { cellWidth }
 
 // Pure view builders: no `$` here (the host does not follow it out of register.tsx).
 export type Tally = { passed: number; failed: number; warnings?: number }
@@ -103,6 +106,8 @@ export function tally(runs: readonly unknown[] | undefined): Tally | undefined {
   let isAny = false
   let warnings = 0
   for (const run of runs) {
+    // A run restored from history (test-board marks it stale) is not this session's: it neither counts nor warns.
+    if (run !== null && typeof run === 'object' && (run as Record<string, unknown>).stale === true) continue
     isAny = true
     if (run === null || typeof run !== 'object') { warnings += 1; continue }
     const r = run as Record<string, unknown>
@@ -132,12 +137,15 @@ export function formatBand(rec: SessionRecord, tests: Tally | undefined, bodyCol
   const count = rec.artifacts.length
   const artifacts = `${count} artifact${count === 1 ? '' : 's'}`
   const testText = tests ? `tests ${tests.passed} ✓ ${tests.failed} ✗` : undefined
+  const isFailing = (tests?.failed ?? 0) > 0
   const warnings = tests?.warnings ?? 0
-  // Reserve the warning first: dropping optional segments must not erase a failed/unknown run.
-  const warning = warnings > 0 ? `tests: ${warnings} warning${warnings === 1 ? '' : 's'}` : ''
-  const prefix = warning === '' ? '' : `${warning} · `
-  // The warning alone fills the line: the goal is dropped, so the full text is still worth opening.
-  if (cellWidth(prefix) >= columns) return { text: truncate(warning, columns), isDim, second: '', isCut: true }
+  // Reserve failed tests and warnings first: dropping optional segments must not erase a failed/unknown run.
+  const warning = warnings > 0 ? `tests: ${warnings} warning${warnings === 1 ? '' : 's'}` : undefined
+  const reserved = [isFailing ? testText : undefined, warning].filter((s): s is string => s !== undefined).join(' · ')
+  const prefix = reserved === '' ? '' : `${reserved} · `
+  // The reserved part alone fills the line: the goal is dropped, so the full text is still worth opening.
+  if (cellWidth(prefix) >= columns) return { text: fitCells(reserved, columns), isDim, second: '', isCut: true }
+  const where = (wt: string): string => (rec.branch === '' ? `${rec.repo} · ${wt}` : `${rec.repo} · ${wt} (${rec.branch})`)
   const attempts = [
     { wt: lastTwo(rec.worktree), hasArtifacts: true, hasTests: true },
     { wt: lastTwo(rec.worktree), hasArtifacts: false, hasTests: true },
@@ -145,11 +153,11 @@ export function formatBand(rec: SessionRecord, tests: Tally | undefined, bodyCol
     { wt: basename(rec.worktree), hasArtifacts: false, hasTests: false },
   ]
   const texts = attempts.map(a => prefix + [
-    `${rec.repo} · ${a.wt} (${rec.branch})`,
+    where(a.wt),
     goal,
     now,
     a.hasArtifacts ? artifacts : undefined,
-    a.hasTests ? testText : undefined,
+    a.hasTests && !isFailing ? testText : undefined,
   ].filter((s): s is string => s !== undefined).join(' · '))
   // One line while any form fits: optional segments drop first, as before.
   const oneLine = texts.find(t => cellWidth(t) <= columns)
@@ -161,6 +169,14 @@ export function formatBand(rec: SessionRecord, tests: Tally | undefined, bodyCol
   }
   const cut = wrapTwo(texts[texts.length - 1] ?? '', columns, hintReserve(columns))
   return { text: cut.first, isDim, second: cut.second ?? '', isCut: true }
+}
+
+// Cuts to at most `max` terminal cells, ending in `…` when anything was cut.
+function fitCells(text: string, max: number): string {
+  const flat = text.replace(/\s+/g, ' ').trim()
+  if (cellWidth(flat) <= max) return flat
+  if (max <= 0) return ''
+  return `${sliceCells(flat, max - 1).head}…`
 }
 
 // The compass band stacked above whatever the next band drew: two rows at most, or the full text.

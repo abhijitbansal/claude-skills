@@ -4,7 +4,7 @@ import type { Artifact, SessionRecord } from '../types'
 import { bandView, formatBand, fullLines, goalKey, hintLabel, tally } from './band'
 import { capture } from './capture'
 import { PANE_ID, paneView, type Tab } from './pane'
-import { GIT_TIMEOUT_MS, INDEX, PREFIX, isRecord, recordKey } from './io'
+import { GIT_TIMEOUT_MS, INDEX, PREFIX, isPartialRecord, isRecord, recordKey } from './io'
 import {
   LIMITS, addArtifact, applyStatus, basename, capArtifacts, mergeStored, newRecord, orderIndex, sortByActive, touch, withFirstPrompt,
   type StatusInput, type Where,
@@ -20,12 +20,15 @@ const hidden = atom({ plugin: 'session-compass', key: 'hidden' } as const, null 
 const BAND_USAGE = 'more (open or fold the full text), hide, show'
 
 export const STATUS_TOOL_ID = 'mcp__session-compass__compass_status'
+export const STATUS_TOOL_DESCRIPTION =
+  'Record what this session is building (goal), where it stands (step), and what comes next. ' +
+  'Call it when the goal is first clear and whenever the phase changes ' +
+  '(spec, plan, implement, review, PR, done), not every turn. ' +
+  'A field left out keeps its value; an empty string clears it. ' +
+  'For the main session only: a subagent call is refused.'
 const STATUS_TOOL = {
   name: 'compass_status',
-  description:
-    'Record what this session is building (goal), where it stands (step), and what comes next. ' +
-    'Call it when the goal is first clear and whenever the phase changes ' +
-    '(spec, plan, implement, review, PR, done), not every turn.',
+  description: STATUS_TOOL_DESCRIPTION,
   inputSchema: {
     type: 'object',
     properties: {
@@ -43,11 +46,15 @@ const REMINDER = {
   scope: 'session',
 } as const
 const CAPTURED = new Set(['Artifact', 'SendUserFile', 'Write', 'Bash'])
-const GIT_MOVE = /\bgit\s+(checkout|switch|worktree|commit|push)\b/
+const GIT_MOVE = /\bgit\s+(?:-C\s+\S+\s+)?(checkout|switch|worktree|commit|push)\b|\bgh\s+pr\s+checkout\b/
+// Tools that move the session into or out of a worktree.
+const MOVE_TOOLS = new Set(['EnterWorktree', 'ExitWorktree'])
 
-export async function loadRecord($: EngineInterface, id: string): Promise<SessionRecord | undefined> {
+// `isPartial` accepts a record that lacks fields session.start can fill again (this session's own).
+export async function loadRecord($: EngineInterface, id: string, isPartial = false): Promise<SessionRecord | undefined> {
   const raw = await $.store.get(recordKey(id))
-  return isRecord(raw) ? raw : undefined
+  const isUsable = isPartial ? isPartialRecord(raw) : isRecord(raw)
+  return isUsable ? (raw as SessionRecord) : undefined
 }
 
 // The index is last-write-wins across concurrent sessions, so it can lose an id
@@ -163,10 +170,40 @@ function onlyStrings(input: Record<string, unknown>): StatusInput {
   return { goal: pick(input.goal), step: pick(input.step), next: pick(input.next) }
 }
 
+// Loads the stored record for `id` (a resume lands on one that may hold a goal
+// and artifacts) or starts a fresh one, puts it in the atom and saves it.
+// Callers queue it so saves never interleave.
+async function openRecord($: EngineInterface, state: Chain, id: string, startCwd?: string): Promise<SessionRecord> {
+  const now = await $.clock.now()
+  // A new load starts verified; a read that fails twice flips the flag until the store answers.
+  state.isStoreUnverified = false
+  let stored: SessionRecord | undefined
+  try {
+    stored = await loadRecord($, id, true).catch(() => loadRecord($, id, true))
+  } catch (err) {
+    state.isStoreUnverified = true
+    $.ui.log(`session-compass: store read failed, starting fresh: ${String(err).slice(0, 120)}`)
+  }
+  const where = await locate($, stored, startCwd)
+  const started = stored ? { ...stored, ...where, lastActive: now } : newRecord(id, where, now)
+  await update($, record, () => started)
+  if (!state.isStoreUnverified) await saveRecord($, state, started)
+  return started
+}
+
+// The record for the session id the host names now. After a /clear or a resume
+// the process goes on under a new id with no session.start, so the first write
+// under that id opens its record here.
+async function ensureRecord($: EngineInterface, state: Chain): Promise<SessionRecord> {
+  const id = await $.session.id()
+  const cur = await read($, record)
+  return cur !== null && cur.id === id ? cur : openRecord($, state, id)
+}
+
 // Folds new artifacts (and a fresh branch, after a git move) into the record
 // with CAS updates, then saves what was written. Callers queue it so saves never interleave.
 async function applyCapture($: EngineInterface, state: Chain, found: Artifact[], isGitMove: boolean): Promise<void> {
-  if ((await read($, record)) === null) return
+  await ensureRecord($, state)
   let written = await update($, record, cur => (cur === null ? cur : found.reduce(addArtifact, cur)))
   if (written === null) return
   if (isGitMove) {
@@ -176,10 +213,11 @@ async function applyCapture($: EngineInterface, state: Chain, found: Artifact[],
   if (written !== null) await saveRecord($, state, written)
 }
 
-export type Chain = { chain: Promise<void>; isTurnRunning: boolean; isStoreUnverified: boolean }
+export type Chain = { chain: Promise<void>; isStoreUnverified: boolean }
 
 async function touchRecord($: EngineInterface, state: Chain, change: (r: SessionRecord, now: number) => SessionRecord) {
   await queue(state, 'touch', async () => {
+    await ensureRecord($, state)
     const now = await $.clock.now()
     const written = await update($, record, cur => (cur === null ? cur : change(cur, now)))
     if (written !== null) await saveRecord($, state, written)
@@ -211,7 +249,7 @@ function logPane($: EngineInterface, what: string, err: unknown): void {
 
 export const register: Register = on => {
   // One promise chain per load: capture passes run one at a time.
-  const state: Chain = { chain: Promise.resolve(), isTurnRunning: false, isStoreUnverified: false }
+  const state: Chain = { chain: Promise.resolve(), isStoreUnverified: false }
 
   on('session.start', async ($, e, next) => {
     await $.tool.register(STATUS_TOOL)
@@ -224,22 +262,7 @@ export const register: Register = on => {
     await update($, expanded, () => false)
     await update($, hidden, () => null)
     const id = await $.session.id()
-    const now = await $.clock.now()
-    // A new load starts verified; a read that fails twice flips the flag until the store answers.
-    state.isStoreUnverified = false
-    await queue(state, 'start', async () => {
-      let stored: SessionRecord | undefined
-      try {
-        stored = await loadRecord($, id).catch(() => loadRecord($, id))
-      } catch (err) {
-        state.isStoreUnverified = true
-        $.ui.log(`session-compass: store read failed, starting fresh: ${String(err).slice(0, 120)}`)
-      }
-      const where = await locate($, stored, e.cwd)
-      const started = stored ? { ...stored, ...where, lastActive: now } : newRecord(id, where, now)
-      await update($, record, () => started)
-      if (!state.isStoreUnverified) await saveRecord($, state, started)
-    }, $).catch(() => undefined)
+    await queue(state, 'start', async () => { await openRecord($, state, id, e.cwd) }, $).catch(() => undefined)
     return next(e)
   }).catch(($, e, next) => {
     try {
@@ -250,9 +273,18 @@ export const register: Register = on => {
     return next(e)
   })
 
-  on('turn.start', async ($, e, next) => {
-    state.isTurnRunning = true
-    return next(e)
+  // A /clear or resume ends this id while the process goes on under another, and
+  // no session.start follows. Every write already saved the old record, so the
+  // atom is emptied here (no git, no store: the exit bound is short) and the
+  // next write opens the record for the new id (ensureRecord).
+  on('session.end', async ($, e, next) => {
+    const ended = await next(e)
+    if (e.reason === 'clear' || e.reason === 'resume') {
+      await queue(state, 'end', async () => {
+        await update($, record, cur => (cur !== null && cur.id === e.sessionId ? null : cur))
+      }, $).catch(() => undefined)
+    }
+    return ended
   }).catch(($, e, next) => next(e))
 
   on('prompt.submit', async ($, e, next) => {
@@ -268,10 +300,7 @@ export const register: Register = on => {
 
   on('turn.complete', async ($, e, next) => {
     // A subagent's turn (agentId set) is not the main loop's.
-    if (e.agentId === undefined) {
-      state.isTurnRunning = false
-      await touchRecord($, state, touch)
-    }
+    if (e.agentId === undefined) await touchRecord($, state, touch)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -347,6 +376,7 @@ export const register: Register = on => {
     const input = onlyStrings(e as unknown as Record<string, unknown>)
     const outcome: { deny?: string } = {}
     const done = await queue(state, 'status', async () => {
+      await ensureRecord($, state)
       const now = await $.clock.now()
       let error: string | undefined
       let before: string | undefined
@@ -378,7 +408,8 @@ export const register: Register = on => {
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
     const tool = String(e.tool)
-    if (!CAPTURED.has(tool) || ran.deny !== undefined) return ran
+    const isMoveTool = MOVE_TOOLS.has(tool)
+    if ((!CAPTURED.has(tool) && !isMoveTool) || ran.deny !== undefined) return ran
     const input = e as unknown as Record<string, unknown>
     let found: Artifact[] = []
     try {
@@ -387,8 +418,10 @@ export const register: Register = on => {
       $.ui.log(`session-compass: capture failed: ${String(err).slice(0, 120)}`)
     }
     // A subagent's git move happens in its own worktree: it must not relocate this session.
+    // locate() runs git with no cwd, which the host resolves to the session's current directory.
     const command = typeof input.command === 'string' ? input.command : ''
-    const isGitMove = tool === 'Bash' && input.agentId === undefined && GIT_MOVE.test(command)
+    const isMove = (tool === 'Bash' && GIT_MOVE.test(command)) || (isMoveTool && ran.isError !== true)
+    const isGitMove = input.agentId === undefined && isMove
     // Decided before waiting: a call that captures nothing never queues behind the chain.
     if (found.length === 0 && !isGitMove) return ran
     await queue(state, 'capture', () => applyCapture($, state, found, isGitMove), $).catch(() => undefined)

@@ -96,17 +96,26 @@ function expand(el, ctx) {
     for (let m = j + 1; m < n; m++) {
       const s = slotOf(j, m);
       if (s === slotOf(j, m - 1)) continue;
-      moves.push({ t: at(m * stagger + ENTER_SECONDS), slot: s < 0 ? slotOf(j, m - 1) : s, out: s < 0 });
+      moves.push({ begin: at(m * stagger), t: at(m * stagger + ENTER_SECONDS), slot: s < 0 ? slotOf(j, m - 1) : s, out: s < 0 });
       if (s < 0) break;
     }
     for (const part of card) {
       const x = Math.round(part.x);
       const y = Math.round(cy + part.y);
+      // Each move is its own tween: a keyframe that holds the card where it is until the arrival that pushes it begins, then the
+      // move over that arrival's enter window. Without the hold the card (and a fading one's opacity) drifted across the whole gap
+      // since its last keyframe. The hold never comes before the keyframe it follows (a short stagger overlaps the windows).
       const keyframes = [
         { t: at(start), opacity: 0, x: x + Math.round(64 * u), y },
         { t: at(start + ENTER_SECONDS), opacity: 1, x, y, ease: 'enter' },
-        ...moves.map((mv) => ({ t: mv.t, y: Math.round(slotY(mv.slot) + part.y), ...(mv.out ? { opacity: 0 } : {}), ease: 'move' })),
       ];
+      let heldAt = Math.round(slotY(startSlot) + part.y);
+      for (const mv of moves) {
+        const last = keyframes[keyframes.length - 1];
+        keyframes.push({ t: Math.max(last.t, mv.begin), y: heldAt, ...(mv.out ? { opacity: 1 } : {}) });
+        heldAt = Math.round(slotY(mv.slot) + part.y);
+        keyframes.push({ t: mv.t, y: heldAt, ...(mv.out ? { opacity: 0 } : {}), ease: 'move' });
+      }
       parts.push({ ...part, x, y, keyframes });
     }
   });

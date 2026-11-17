@@ -97,7 +97,7 @@ test('staticView drops params, hover-only layers and interaction opacity, and no
   const flat = staticView(line);
   assert.equal(flat.layer.length, 1, 'rule and dots layers are hover-only');
   assert.ok(!JSON.stringify(flat).includes('pa_'), 'no interaction params or conditions left');
-  assert.equal(flat.layer[0].mark, 'line');
+  assert.deepEqual(flat.layer[0].mark, { type: 'line', point: true }, 'two points per series: the line draws its points too');
   assert.deepEqual(flat.encoding.x, line.encoding.x);
   const bar = staticView(inlineChart({ kind: 'bar', x: 'region', y: 'amount' }, rows).vegaLite);
   assert.ok(!JSON.stringify(bar).includes('pa_'));
@@ -111,8 +111,8 @@ test('the light and dark SVGs hold marks, axis titles and their own palette', as
   for (const svg of [light, dark, all.light.narrow, all.dark.narrow]) {
     assert.match(svg, /^<svg [^>]*aria-hidden="true"/);
     assert.equal((svg.match(/<path[^>]*class="[^"]*"/g) ?? []).length > 0, true);
-    assert.match(svg, />region</);
-    assert.match(svg, />amount</);
+    assert.match(svg, />Region</, 'axis titles read as words');
+    assert.match(svg, />Amount</);
     assert.match(svg, />\$\d/, 'currency format reaches the axis labels');
     assert.ok(!/aria-label|role=/.test(svg), 'aria attributes are dropped; the figure is one labelled image');
     assert.ok(!/fill="white"/.test(svg), 'no hard-coded white background');
@@ -130,6 +130,38 @@ test('the light and dark SVGs hold marks, axis titles and their own palette', as
   const widthOf = (svg) => Number(/<svg [^>]*\swidth="(\d+)"/.exec(svg)[1]);
   assert.equal(widthOf(light), 600);
   assert.equal(widthOf(all.light.narrow), 320, 'the narrow variant is drawn for a phone');
+});
+
+test('a compact KPI tile and a compact axis print the same text for the same value', () => {
+  const axisLabel = (v) => axisFormat(v, 'compact').replace('G', 'B').replace('k', 'K'); // what COMPACT_LABEL_EXPR does on the page
+  // negatives differ in the sign glyph only (d3 prints U+2212)
+  for (const v of [999, 1234, 1500, 2.5e6, 1.23e9, 4.56e12]) assert.equal(formatValue(v, 'compact'), axisLabel(v), String(v));
+});
+
+test('a compact axis prints B for billions in the rendered chart', async () => {
+  const big = [{ region: 'North', amount: 1.2e9 }, { region: 'South', amount: 2.4e9 }];
+  const { vegaLite } = inlineChart({ kind: 'bar', x: 'region', y: 'amount', format: 'compact' }, big);
+  const { light } = await renderThemedSvgs(vegaLite, big, theme);
+  assert.match(light.wide, />\d(\.\d+)?B</);
+  assert.doesNotMatch(light.wide, />[\d.]+G</);
+});
+
+test('a bar chart never drops a category label on a phone: crowded labels turn instead', async () => {
+  // vertical bars (8 labels of at most 12 characters): greedy overlap used to hide every other label at 390 px
+  const names = ['Full scan', 'Index, cold', 'Index, warm', 'Index, hot', 'Cache only', 'Bloom probe', 'Hash join', 'Merge join'];
+  const paths = names.map((path, i) => ({ path, p50_ms: 800 / (i + 1) }));
+  const { vegaLite } = inlineChart({ kind: 'bar', x: 'path', y: 'p50_ms' }, paths);
+  const all = await renderThemedSvgs(vegaLite, paths, theme);
+  // Vega hides an overlapping label with opacity="0"; the text stays in the SVG
+  const shown = (svg) => [...svg.matchAll(/<text [^>]*opacity="1"[^>]*>([^<]+)<\/text>/g)].map((m) => m[1]);
+  for (const [size, svg] of [['narrow', all.light.narrow], ['wide', all.light.wide]]) {
+    const visible = shown(svg);
+    for (const name of names) assert.ok(visible.includes(name), `${size}: "${name}" is visible (visible: ${visible.join(' | ')})`);
+  }
+  assert.match(all.light.narrow, /<text [^>]*rotate\(-45\)[^>]*>Index, cold</, 'narrow labels turn to fit');
+  const few = names.slice(0, 3).map((path, i) => ({ path, p50_ms: i + 1 }));
+  const roomy = await renderThemedSvgs(inlineChart({ kind: 'bar', x: 'path', y: 'p50_ms' }, few).vegaLite, few, theme);
+  assert.doesNotMatch(roomy.light.wide, /rotate\(-45\)[^>]*>Index, cold</, 'labels with room stay level');
 });
 
 test('data text is escaped in the SVG', async () => {
@@ -220,8 +252,8 @@ function labels(svg) {
 // A value-axis label reads as a number ("$1,200", "1.2k", "−5", "45%"); category and date labels do not.
 const isValueLabel = (l) => /^[−-]?\$?[\d,]+(\.\d+)?[a-zA-Zµ%]?$/.test(l.text) && l.size === 12;
 const valueOf = (text) => {
-  const m = /^([−-]?)\$?([\d,.]+)([kMGTµm%]?)$/.exec(text);
-  const scale = { '': 1, k: 1e3, M: 1e6, G: 1e9, T: 1e12, '%': 0.01, m: 1e-3, 'µ': 1e-6 }[m[3]];
+  const m = /^([−-]?)\$?([\d,.]+)([kKMGBTµm%]?)$/.exec(text);
+  const scale = { '': 1, k: 1e3, K: 1e3, M: 1e6, G: 1e9, B: 1e9, T: 1e12, '%': 0.01, m: 1e-3, 'µ': 1e-6 }[m[3]];
   return Number(m[1] === '' ? 1 : -1) * Number(m[2].replaceAll(',', '')) * scale;
 };
 // Boxes by the real advances of the theme's body font (the page's own text metrics); two drawn labels must not touch.

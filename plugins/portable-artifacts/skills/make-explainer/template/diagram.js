@@ -21,6 +21,7 @@
     var dialog = figure.querySelector('[data-dg-dialog]');
     var body = dialog.querySelector('[data-dg-body]');
     var presentButton = figure.querySelector('[data-dg-present]');
+    var cue = figure.querySelector('[data-dg-cue]');
     var closeButton = dialog.querySelector('[data-dg-close]');
     var playButton = dialog.querySelector('[data-pa-play]');
     var fullButton = dialog.querySelector('[data-pa-full]');
@@ -91,9 +92,11 @@
     tabStops(false);
 
     // A diagram wider than the column keeps its text size and scrolls inside its slot: then the slot is a
-    // labelled, focusable region (so the arrow keys scroll it, in a deck too).
+    // labelled, focusable region (so the arrow keys scroll it, in a deck too), and a visible line says so (the
+    // scroll bar alone is easy to miss, and a phone shows none).
     function syncRegion() {
       var scrolls = slot.scrollWidth > slot.clientWidth + 1;
+      if (cue) cue.hidden = !scrolls;
       if (scrolls) {
         slot.setAttribute('role', 'region');
         slot.setAttribute('aria-label', slot.getAttribute('data-dg-label') + ' (scrolls sideways)');

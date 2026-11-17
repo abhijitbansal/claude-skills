@@ -64,6 +64,16 @@ test('unknown column gets did-you-mean; wrong type explains the need', () => {
   ]);
 });
 
+test('a numeric x on line or area gets a CAST hint', () => {
+  for (const kind of ['line', 'area']) {
+    const [e] = errs(chart({ kind, x: 'revenue', y: 'revenue' }));
+    assert.equal(e.path, 'charts[0].x');
+    assert.equal(e.message, `"revenue" is numeric (DOUBLE); x of kind "${kind}" needs a text column or a date or timestamp column; cast it in SQL: CAST(revenue AS VARCHAR) AS revenue keeps the query order as categories, or build a date (make_date(year, month, 1)) for a time axis`);
+  }
+  const [bar] = errs(chart({ kind: 'bar', x: 'revenue', y: 'revenue' }));
+  assert.doesNotMatch(bar.message, /CAST/, 'only line and area get the hint');
+});
+
 test('views must be ones the kind offers', () => {
   assert.deepEqual(errs(chart({ kind: 'bar', x: 'region', y: 'revenue', views: ['shar', 'table'] })), [
     { path: 'charts[0].views[0]', message: 'kind "bar" has no view "shar"; did you mean "share"? (views: sorted, share, table)' },

@@ -6,7 +6,10 @@ import { ALL, nodeVersion, nodeModules, ffmpeg, browser, kokoro, cutout, builder
 
 export const CACHE_LIMIT_BYTES = 2 * 1024 ** 3;
 const GB = 1024 ** 3;
-const cacheDir = (ctx) => path.join(ctx.skillDir, '.cache', 'video'); // the frame cache of video elements (scripts/lib/video.mjs)
+// The frame caches: the decoded frames of video elements (scripts/lib/video.mjs) and the alpha frames of a cutout clip, up to
+// 900 RGBA PNGs each (scripts/lib/cutout.mjs). Never .cache/models: the downloaded models are not a cache to throw away.
+const cacheDirs = (ctx) => ['video', 'cutout'].map((name) => path.join(ctx.skillDir, '.cache', name));
+const cacheBytes = (ctx) => cacheDirs(ctx).reduce((sum, dir) => sum + folderBytes(dir), 0);
 
 // Bytes under `dir`, 0 when it does not exist.
 function folderBytes(dir) {
@@ -21,18 +24,19 @@ function folderBytes(dir) {
   return total;
 }
 
-// Optional: the decoded frames of video elements are kept for the next render. Past CACHE_LIMIT_BYTES doctor lists it;
-// `--fix cache` deletes the folder (any time, not only past the limit), and the next render decodes what it needs again.
+// Optional: the decoded frames of video elements and the cutout mattes are kept for the next render. Past CACHE_LIMIT_BYTES
+// (both together) doctor lists them; `--fix cache` deletes both folders (any time, not only past the limit), and the next render
+// decodes or cuts out what it needs again.
 export function videoCache() {
   return {
     id: 'cache',
-    why: (ctx) => `video frame cache is ${(folderBytes(cacheDir(ctx)) / GB).toFixed(1)} GB; --fix cache clears it`,
+    why: (ctx) => `frame caches are ${(cacheBytes(ctx) / GB).toFixed(1)} GB (decoded video frames and cutout mattes); --fix cache clears them`,
     required: false,
     size: '—',
-    check: (ctx) => folderBytes(cacheDir(ctx)) < CACHE_LIMIT_BYTES,
-    // This process's own Node deletes it, so the step is the same on every platform.
+    check: (ctx) => cacheBytes(ctx) < CACHE_LIMIT_BYTES,
+    // This process's own Node deletes them, so the step is the same on every platform.
     fix: (ctx) => {
-      const step = [ctx.execPath ?? process.execPath, '-e', 'require("node:fs").rmSync(process.argv[1], { recursive: true, force: true })', cacheDir(ctx)];
+      const step = [ctx.execPath ?? process.execPath, '-e', 'for (const dir of process.argv.slice(1)) require("node:fs").rmSync(dir, { recursive: true, force: true })', ...cacheDirs(ctx)];
       const line = render([step], ctx.platform);
       return { auto: [step], manual: { darwin: line, linux: line, win32: line } };
     },

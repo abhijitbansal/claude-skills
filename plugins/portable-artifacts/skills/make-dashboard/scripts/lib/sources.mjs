@@ -74,8 +74,10 @@ export function checkSource(src, dir, { allowOutside = false, folderLabel = 'spe
   if (!allowOutside) {
     const root = fs.realpathSync(dir);
     const rel = path.relative(root, real);
-    if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) {
-      return { error: `resolves outside the ${folderLabel} (${real}); move the data under ${root} or pass --allow-outside` };
+    // '..' + sep, not a bare '..' prefix: a file named '..sales.csv' is inside
+    const outside = rel === '' || rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+    if (outside) {
+      return { error: `resolves outside the ${folderLabel} (${real}); copy or move the data under ${root} and point the path there (--allow-outside is the owner's flag to add, not a fix to apply)` };
     }
   }
   if (!fs.statSync(real).isFile()) return { error: `not a regular file: ${real}` };

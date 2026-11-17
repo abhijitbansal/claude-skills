@@ -39,8 +39,10 @@ woff2, then:
 
 **3. Complete favicon set at the site root.**
 Minimum: `favicon.ico` + `apple-touch-icon.png` (180×180). Generate all icon
-sizes + the og card from ONE master image with an idempotent script
-(a private floor-plan scanner app's `scripts/build-og-card.sh` pattern) so a rebrand is one re-run.
+sizes + the og card from ONE master image with an idempotent script so a
+rebrand is one re-run. The kit ships the card generator:
+`site-pages-deploy-kit/scripts/og-card.py` (1200×630, skips an existing file
+unless `--force`).
 
 **4. Progressive enhancement.**
 Content visible with JS disabled — scrapers don't run your JS. (a private document-scanner app:
@@ -54,6 +56,35 @@ bash "${CLAUDE_PLUGIN_ROOT}/skills/site-pages-deploy-kit/scripts/verify-site.sh"
 
 Smoke-test a real unfurl after deploying: paste the URL into Teams/iMessage —
 first impressions cache, so verify BEFORE sharing widely.
+
+## Markup is right but Teams shows a bare link
+
+Teams has two separate pipelines, and a correct page can still look bare in
+one of them. Work out which one you are seeing before changing any markup:
+
+- **Paste from the Edge address bar** produces a titled link from the clipboard
+  with no fetch at all. A plain-text paste does the same. Neither reads your
+  og tags.
+- **The crawler** fetches static HTML (it does not run JS), reads `twitter:card`
+  first, and keeps an aggressive, sticky negative cache for a URL that once
+  failed. Fixing the page does not clear that cache.
+
+Diagnostic, in order:
+
+1. Paste `https://<site>/?v=2` copied from Edge into a fresh chat. A new query
+   string sidesteps the negative cache; if the card appears, the markup was
+   fine and the old URL was cached.
+2. Diff the live head against a page that unfurls correctly (same host if you
+   have one): `curl -s <url> | sed -n '/<head>/,/<\/head>/p'` for both and
+   compare the meta tags, `<link>` tags and any `ld+json`.
+3. Check the image itself: `curl -sI <og:image url>` must return 200 with
+   `content-type: image/png` (or jpeg), and the declared
+   `og:image:width/height` must equal the file's real pixels.
+4. Change one lever at a time and re-test with a fresh `?v=N` each time.
+
+Sources disagree on what Teams gates on (one project found a static raster
+og:image was the only trigger, another found page-level gates undocumented),
+so treat the diff as a way to find your own difference, not as a rule.
 
 ## Related skills
 

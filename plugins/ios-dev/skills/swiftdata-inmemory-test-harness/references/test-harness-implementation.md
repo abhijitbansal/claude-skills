@@ -11,9 +11,19 @@ delete), and every store-touching suite nested under one shared
 enum SharedTestStore {
     static let container: ModelContainer = {
         do {
+            // The app's own centralized schema (`swiftdata-cloudkit-model-rules`,
+            // rule 4), never a second hand-listed model set that can drift.
+            // `cloudKitDatabase: .none` is required: the default `.automatic`
+            // would try to bind CloudKit in a CloudKit-entitled test host (that
+            // skill's rule 1: pass it explicitly on every store).
+            let configuration = ModelConfiguration(
+                schema: AppModelSchema.schema,
+                isStoredInMemoryOnly: true,
+                cloudKitDatabase: .none
+            )
             return try ModelContainer(
-                for: Rack.self, Bin.self, Item.self, ItemPhoto.self, // … full schema
-                configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+                for: AppModelSchema.schema,
+                configurations: configuration
             )
         } catch {
             fatalError("in-memory container: \(error)")
@@ -34,7 +44,8 @@ func makeInMemoryStore() throws -> (store: InventoryStore, context: ModelContext
     try ctx.delete(model: Item.self)
 }
 
-// CORRECT: object-by-object, honors cascade/nullify, order-independent.
+// CORRECT: object-by-object, honors cascade/nullify; order still matters —
+// delete children before parents (see the list below).
 @MainActor private func wipeAllModels(in ctx: ModelContext) throws {
     func deleteEach<T: PersistentModel>(_ type: T.Type) throws {
         for object in try ctx.fetch(FetchDescriptor<T>()) { ctx.delete(object) }

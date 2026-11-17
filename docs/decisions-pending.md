@@ -3,6 +3,62 @@
 Owner calls an agent parked instead of asking. Each lists the options and the
 default the code ships with; change the code if you pick another.
 
+**Resolved 2026-11-15 (plan item G-73, decision D12):** the owner chose the
+shipped defaults for the four entries from PR #35 to the design-refresh branch
+below: test-board close (A), diagram legend overlay (A), the dashed legend word
+"secondary" (A) and the two `@fontsource` deps kept (A). The entries stay as a
+record of what shipped and the other options. The fontsource recommendation (B)
+was not taken, so no lockfile change was made.
+
+## Open: machine setup (plan item CAT-99, 2026-11-15)
+
+`setup/setup.sh` was fixed where the fix is mechanical: the self-marketplace
+check matches the name line exactly, and a `--dry-run` writes no backup. These
+four calls are the owner's. Until you pick, setup does what it did before.
+
+### Which CLAUDE.md the `dotfiles` and `guidelines` steps write
+
+The steps use `~/CLAUDE.md`. Claude Code reads `~/.claude/CLAUDE.md` for every
+project, and the owner's live file is that one.
+
+- **A (default, shipped):** keep `~/CLAUDE.md`. No behaviour change.
+- **B:** write `~/.claude/CLAUDE.md` and leave `~/CLAUDE.md` alone. Matches where
+  Claude Code looks; an existing file there gets the additive guideline merge
+  only, never a copy over it.
+
+### Which plugins a fresh machine enables
+
+`claude-setup.toml` lists the plugins the seed installs. A 2026-11 comparison
+found 19 plugin specs enabled on the owner's machine that the file does not
+list (measured by the mining pass, not re-run here), and the self-marketplace
+step installs all eight of this repo's plugins.
+
+- **A (default, shipped):** the toml as it is; the self-marketplace step still
+  installs all eight.
+- **B:** refresh the toml from a scrubbed `capture.sh` run, then trim it to the
+  set you want enabled.
+- **C:** install only what the toml names and make the self-marketplace step
+  respect it.
+
+### Folder or GitHub source for this repo's own marketplace
+
+`step_local_plugins` adds the checkout (`claude plugin marketplace add
+<checkout path>`), so installed plugins track the working tree.
+
+- **A (default, shipped):** a folder source. Right for the owner's dev machine.
+- **B:** the GitHub source (`abhijitbansal/claude-skills`) unless a dev flag is
+  passed. Right for a machine that only consumes the plugins.
+
+### Site wording that invites strangers to run the machine seed
+
+`site/index.html` and the README present `setup.sh` next to the plugin
+installs, though `templates/` and `claude-setup.toml` are the owner's seed data.
+
+- **A (default, shipped):** leave the wording; the README already says public
+  users can ignore `templates/` and the toml.
+- **B:** reword the site line so the seed reads as the owner's machine setup,
+  and keep the plugin install as the public path.
+
 ## test-board ✕ and session-compass's `tests` segment (PR #35, 2026-10-11)
 
 Pressing `✕` hides the test-board band but leaves `test-board.latest`

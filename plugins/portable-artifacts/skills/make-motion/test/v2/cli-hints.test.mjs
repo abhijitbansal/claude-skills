@@ -83,6 +83,19 @@ test('an unknown flag that is not in the map still gets the plain accepted list 
   for (const sentence of Object.values(EXPECTED)) assert.ok(!run.stderr.includes(sentence));
 });
 
+// Merge regression: main (1.3.0) made every entry script answer --help (eval/test/docs-facts.test.mjs); make.mjs exited 2.
+test('--help prints the usage line on stdout and exits 0, in text and under --json', () => {
+  const text = make(['--help']);
+  assert.equal(text.status, 0, text.stderr);
+  assert.match(text.stdout, /^usage: node scripts\/make\.mjs <film\.json>; accepted flags: --out,/);
+  assert.equal(text.stderr, '');
+  const json = make(['--help', '--json']);
+  assert.equal(json.status, 0, json.stderr);
+  const parsed = JSON.parse(json.stdout);
+  assert.equal(parsed.ok, true);
+  assert.match(parsed.usage, /accepted flags: --out,/);
+});
+
 test('parseMakeArgs throws a UsageError that carries the sentence as its hint', () => {
   assert.throws(() => parseMakeArgs([FILM, '--fps', '60']), (err) => err instanceof UsageError && err.hint.startsWith(EXPECTED['--fps']));
 });

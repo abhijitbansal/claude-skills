@@ -38,7 +38,7 @@ Give the viewer time to read before anything else moves:
 - **Hold at least 1 s, plus 0.25 s for every word beyond three.** A six-word line needs about 1.75 s fully on screen.
 - **Hold the closing frame at least 2 s**: the last thing the viewer sees should stay put.
 
-`check.mjs` reports a dead stretch (nothing visible changing for more than 3 s, except in the last 3 s) and a text that leaves the screen sooner than its reading time. An element meant to sit still takes `"hold": true`. Count the closing hold yourself from the keyframe times.
+`check.mjs` reports a dead stretch (nothing visible changing for more than 3 s, except in the last 3 s) and a text that leaves the screen sooner than its reading time. Fix a dead stretch with motion first, most cheaply a slow camera push-in over the scene (`zoom` 1 to 1.05–1.15); an element that is meant to sit still takes `"hold": true`. Count the closing hold yourself from the keyframe times.
 
 ## Layout and emphasis
 
@@ -54,7 +54,7 @@ A film picks a style per scene. Standard scenes take the rules on this page. Han
 - **Choose standard for what the pencil cannot draw**: charts, photos, video, Lottie, code, counters, camera moves and anything that needs exact numbers on screen. A drawn scene refuses all of them.
 - **Mix when the film needs both**: a standard title and closing ask around a drawn middle. Use `push` or `crossfade` between a standard scene and a drawn one (`fade` or `push` into a standard scene when the texts of both would overlap), and `erase` (the hand wipes the board) only between two drawn scenes.
 - **Do not hold a finished board for long.** A silent board that sits still for more than 3 s is a dead stretch, as on any other scene; end the scene about 2 s after the last stroke, so the board can be read.
-- **No fixed length.** Work the length out from the content; "stay under 15 s" is guidance for the standard scenes of a film only.
+- **No fixed length.** Work the length out from the content. The default is about 10 s, and "stay under 15 s" is guidance for the standard scenes of a film only: a PR recap or a feature tour may run longer when its content needs it (say so), and a drawn scene lasts as long as its drawing.
 
 ## Scene changes
 

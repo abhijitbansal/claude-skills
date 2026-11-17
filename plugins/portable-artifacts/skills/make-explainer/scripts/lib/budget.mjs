@@ -175,10 +175,11 @@ function sectionWarnings(section, i) {
     out.push(warn(pathJoin(at, 'points'), `tldr has ${section.points.length} points; keep it to ${SOFT_CAPS.tldrPoints} → keep the strongest, move the rest into a section`));
   }
   const wordCount = strings.filter((s) => s.counted).reduce((sum, s) => sum + words(s.text), 0);
+  const caps = [];
   if (SECTION_CAP_TYPES.has(section.type) && wordCount > SOFT_CAPS.textSectionWords) {
-    out.push(warn(at, `${section.type} section is ${wordCount} words; keep it to ${SOFT_CAPS.textSectionWords} → split it into sections, or turn it into cards or steps`));
+    caps.push(warn(at, `${section.type} section is ${wordCount} words; keep it to ${SOFT_CAPS.textSectionWords} → split it into sections, or turn it into cards or steps`));
   }
-  return { out, wordCount };
+  return { out: [...out, ...caps], caps, wordCount };
 }
 
 // Titles at any depth, same reach as titleWarnings: [{ path, text }].
@@ -221,19 +222,32 @@ export function emojiDensityWarnings(spec) {
   return out;
 }
 
-/** Soft-cap warnings for a parsed spec -> [{ path, message }]. Never an error. */
-export function warnBudget(spec) {
+/**
+ * Every soft-cap warning for a parsed spec, and the caps among them: the section-length and page-length warnings,
+ * the two that --strict turns into failures. { warnings, caps }, each [{ path, message }]; caps are also in warnings.
+ */
+function analyse(spec) {
   const out = [];
+  const caps = [];
   let page = 0;
   (spec.sections ?? []).forEach((section, i) => {
     const r = sectionWarnings(withoutSimple(section), i);
     out.push(...r.out);
+    caps.push(...r.caps);
     page += r.wordCount;
   });
   const pageCap = spec.preset === 'plan' ? SOFT_CAPS.planPageWords : SOFT_CAPS.pageWords;
   if (page > pageCap) {
-    out.push(warn('', `page has ${page.toLocaleString('en-US')} words of prose; aim for ${pageCap} → cut, or convert sections to kpis, cards or steps`));
+    const pageWarning = warn('', `page has ${page.toLocaleString('en-US')} words of prose; aim for ${pageCap} → cut, or convert sections to kpis, cards or steps`);
+    out.push(pageWarning);
+    caps.push(pageWarning);
   }
   out.push(...emojiDensityWarnings(spec));
-  return out;
+  return { warnings: out, caps };
 }
+
+/** Soft-cap warnings for a parsed spec -> [{ path, message }]. Never an error. */
+export const warnBudget = (spec) => analyse(spec).warnings;
+
+/** Only the section-length and page-length caps (what --strict fails on) -> [{ path, message }]. */
+export const capWarnings = (spec) => analyse(spec).caps;

@@ -35,12 +35,12 @@ const writeSpec = (obj) => {
 };
 const readOut = (r) => fs.readFileSync(r.stdout.match(/^wrote (.+)$/m)[1], 'utf8');
 
-test('--out file.html writes that file and prints wrote + open lines', () => {
+test('--out file.html writes that file and prints the wrote line, then the file:// URL alone on its own line', () => {
   const dir = tmp();
   const out = path.join(dir, 'nested', 'a.html');
   const r = run([example('flow'), '--out', out]);
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout, `wrote ${out}\nopen: ${pathToFileURL(out).href}\n`);
+  assert.equal(r.stdout, `wrote ${out}\n${pathToFileURL(out).href}\n`);
   assert.ok(fs.readFileSync(out, 'utf8').startsWith('<!doctype html>'));
 });
 
@@ -60,13 +60,37 @@ test('without --out the page goes to $PA_OUTPUT_DIR/<slug>.html, never the real 
   assert.ok(!fs.existsSync(path.join(r.dir, 'home')), 'the fake home stays empty');
 });
 
-test('without --out or PA_OUTPUT_DIR the default is <home>/.agent/diagrams (home is a temp dir here)', () => {
+// A spec copied under the OS temp dir sits outside any git repo, so the default is the home folder (a temp dir here).
+const outsideRepo = (name = 'flow') => {
+  const file = path.join(tmp(), 'spec.diagram.json');
+  fs.copyFileSync(example(name), file);
+  return file;
+};
+
+test('without --out or PA_OUTPUT_DIR, a spec outside any repo goes to <home>/.agent/diagrams (home is a temp dir here)', () => {
   const dir = tmp();
   const env = { ...process.env, HOME: dir, USERPROFILE: dir };
   delete env.PA_OUTPUT_DIR;
-  const r = spawnSync(process.execPath, [BUILD, example('flow')], { encoding: 'utf8', env });
+  const r = spawnSync(process.execPath, [BUILD, outsideRepo()], { encoding: 'utf8', env });
   assert.equal(r.status, 0, r.stderr);
   assert.ok(fs.existsSync(path.join(dir, '.agent', 'diagrams', 'password-reset.html')));
+});
+
+test('without --out or PA_OUTPUT_DIR, a spec inside a git repo goes to <git root>/.scratch/<slug>.html (PA-07)', () => {
+  const home = tmp();
+  const repo = tmp();
+  fs.mkdirSync(path.join(repo, '.git'));
+  fs.mkdirSync(path.join(repo, 'docs'));
+  const spec = path.join(repo, 'docs', 'spec.diagram.json');
+  fs.copyFileSync(example('flow'), spec);
+  const env = { ...process.env, HOME: home, USERPROFILE: home };
+  delete env.PA_OUTPUT_DIR;
+  const r = spawnSync(process.execPath, [BUILD, spec], { encoding: 'utf8', env });
+  assert.equal(r.status, 0, r.stderr);
+  const target = path.join(repo, '.scratch', 'password-reset.html');
+  assert.ok(fs.existsSync(target), r.stdout);
+  assert.equal(r.stdout.match(/^wrote (.+)$/m)[1], target);
+  assert.ok(!fs.existsSync(path.join(home, '.agent')), 'the home folder stays untouched');
 });
 
 test('--json prints { ok, out } on one line', () => {
@@ -183,9 +207,13 @@ for (const name of NAMES) {
 test('page parts: toolbar, SVG, text alternative, data block and runtime', () => {
   const html = readOut(run([example('architecture')]));
   assert.ok(html.includes('role="group" aria-label="Diagram controls"') && !html.includes('role="toolbar"'), 'a plain group: no roving-tabindex promise');
-  for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-chapters', 'data-pa-line', 'data-pa-scrub', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle data-mode="auto"', 'data-pa-caption', 'id="pa-stage"', /data-pa-panel[\s>]/, 'data-pa-panel-title', 'data-pa-panel-close', 'data-pa-panel-body', 'data-pa-tip', 'data-pa-find', 'data-pa-found', 'data-pa-empty', 'data-pa-tally']) {
+  for (const hook of ['data-act="fit"', 'data-act="zoom-in"', 'data-act="zoom-out"', 'data-pa-mode="play"', 'data-pa-mode="explore"', 'data-pa-chapters', 'data-pa-line', 'data-pa-scrub', 'data-act="animate"', 'data-export="svg"', 'data-export="png"', 'data-theme-toggle data-mode="auto"', 'data-pa-caption', 'id="pa-stage"', /data-pa-panel[\s>]/, 'data-pa-panel-title', 'data-pa-panel-close', 'data-pa-panel-body', 'data-pa-tip', 'data-pa-find', 'data-pa-found']) {
     assert.ok(typeof hook === 'string' ? html.includes(hook) : hook.test(html), String(hook));
   }
+  // W2P-M03: the panel is hidden until something is selected, so an empty state inside it (count chips and the
+  // hint) could never be seen. It is gone; the hint rides on the Explore button's title instead.
+  assert.doesNotMatch(html, /<[a-z]+ [^>]*data-pa-(empty|tally)/, 'no empty state inside the hidden panel (the runtime still looks the holders up, so test the markup, not the string)');
+  assert.match(html, /data-pa-mode="explore"[^>]*title="[^"]*Click a node or edge[^"]*Shift-click a second node[^"]*"/);
   assert.match(html, /<svg [^>]*role="graphics-document"/);
   assert.equal(html.match(/role="graphics-document"/g).length, 1);
   assert.ok(!/role="img"/.test(html.replace(/<section class="sr-only"[\s\S]*?<\/section>/, '')), 'no nested img roles');
@@ -264,4 +292,140 @@ test('a script-closing sequence in a title cannot end the data block', () => {
   const html = readOut(run([file]));
   assert.equal(html.match(/<script/g).length, html.match(/<\/script>/g).length);
   assert.ok(!html.includes('alert(1)</script>'));
+});
+
+// ---- PA-26: a built page can be rebuilt, and exported without a browser -----------------------------------------------
+
+const metaOf = (html, name) => (new RegExp(`<meta name="${name}" content="([^"]*)">`).exec(html) ?? [])[1];
+
+test('the page records its spec file name, theme and flags in a pa-build meta, so a rebuild command can be derived', () => {
+  const file = writeSpec({ title: 'T', type: 'flow', nodes: [{ id: 'a', label: 'A' }], edges: [] });
+  const dir = tmp();
+  const r = run([file, '--out', path.join(dir, 'page.html'), '--theme', 'ink']);
+  assert.equal(r.status, 0, r.stderr);
+  const meta = metaOf(fs.readFileSync(path.join(dir, 'page.html'), 'utf8'), 'pa-build');
+  assert.equal(meta, 'spec=spec.diagram.json; theme=ink; out=page.html; flags=--theme ink');
+  const plain = run([file]);
+  assert.equal(metaOf(readOut(plain), 'pa-build'), 'spec=spec.diagram.json; theme=blueprint; out=t.html; flags=none');
+});
+
+test('the build meta carries file names only, never a folder', () => {
+  const file = writeSpec({ title: 'T', type: 'flow', nodes: [{ id: 'a', label: 'A' }], edges: [] });
+  const html = readOut(run([file]));
+  assert.ok(!metaOf(html, 'pa-build').includes('/'), metaOf(html, 'pa-build'));
+});
+
+test('--format svg writes one standalone .svg: theme variables, fonts, the diagram CSS, a surface background and no script', () => {
+  const dir = tmp();
+  const out = path.join(dir, 'flow.svg');
+  const r = run([example('flow'), '--format', 'svg', '--out', out]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, `wrote ${out}\n${pathToFileURL(out).href}\n`);
+  const svg = fs.readFileSync(out, 'utf8');
+  assert.match(svg, /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" class="pa-diagram pa-type-flow" viewBox="0 0 686 1106"[^>]* width="686" height="1106">/);
+  assert.match(svg, /<style>[^]*@font-face\{font-family:"Geist"/);
+  assert.match(svg, /\.pa-diagram\{--page:#[0-9a-f]+;/i);
+  assert.match(svg, /<rect width="100%" height="100%" fill="#[0-9a-f]+"\/>/i);
+  assert.ok(!/<script|data-pa-legend|href="http/i.test(svg));
+  assert.ok(svg.includes('Password reset'));
+  assert.ok(Buffer.byteLength(svg) < MAX, 'within the page limit');
+});
+
+test('--format svg carries the light palette of ONE theme (the documented limit): the dark values are not in it', () => {
+  const dir = tmp();
+  const out = path.join(dir, 'ink.svg');
+  assert.equal(run([example('flow'), '--format', 'svg', '--theme', 'ink', '--out', out]).status, 0);
+  const svg = fs.readFileSync(out, 'utf8');
+  const ink = JSON.parse(fs.readFileSync(new URL('../shared/themes/ink.json', import.meta.url), 'utf8'));
+  assert.ok(svg.includes(`--page:${ink.light.page}`));
+  assert.ok(!svg.includes(`--page:${ink.dark.page}`));
+  assert.ok(!/prefers-color-scheme/.test(svg));
+});
+
+test('--format svg without --out writes <slug>.svg in the default folder; --out dir gets <slug>.svg', () => {
+  const r = run([example('state'), '--format', 'svg']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(r.dir, 'default', 'order-lifecycle.svg')));
+  const dir = tmp();
+  assert.equal(run([example('state'), '--format', 'svg', '--out', dir]).status, 0);
+  assert.ok(fs.existsSync(path.join(dir, 'order-lifecycle.svg')));
+});
+
+test('--format svg --json prints { ok, out } and an unknown format is a usage error listing the accepted ones', () => {
+  const dir = tmp();
+  const out = path.join(dir, 'j.svg');
+  const r = run([example('flow'), '--format', 'svg', '--out', out, '--json']);
+  assert.deepEqual(JSON.parse(r.stdout), { ok: true, out });
+  const bad = run([example('flow'), '--format', 'png']);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /--format must be one of: html, svg/);
+});
+
+test('--format svg: a spec file name with runs of hyphens cannot put "--" inside the XML comment', () => {
+  const dir = tmp();
+  const file = path.join(dir, 'a---b-.diagram.json');
+  fs.copyFileSync(example('flow'), file);
+  const out = path.join(dir, 'h.svg');
+  const r = run([file, '--format', 'svg', '--out', out]);
+  assert.equal(r.status, 0, r.stderr);
+  const svg = fs.readFileSync(out, 'utf8');
+  const comments = [...svg.matchAll(/<!--([^]*?)-->/g)].map((m) => m[1]);
+  assert.ok(comments.length > 0, 'the build note is there');
+  for (const body of comments) assert.ok(!body.includes('--'), `a comment body may not contain "--": ${body}`);
+});
+
+test('--format svg still refuses an invalid spec (exit 1) and writes nothing', () => {
+  const file = writeSpec({ title: 'T', type: 'flow', nodes: [{ id: 'a', label: 'A' }], edges: [{ from: 'a', to: 'zz' }] });
+  const r = run([file, '--format', 'svg']);
+  assert.equal(r.status, 1);
+  assert.ok(!fs.existsSync(path.join(r.dir, 'default')));
+});
+
+// ---- warnings reach the builder too (PA-24) -----------------------------------------------------------------------------
+
+test('build prints a spec warning on stderr and still writes the page (exit 0)', () => {
+  const file = writeSpec({ title: 'T', type: 'architecture', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }], edges: [{ from: 'a', to: 'b' }] });
+  const r = run([file]);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /^nodes\[2\]: warning: node "c" has no edges/m);
+  assert.match(r.stdout, /^wrote /m);
+});
+
+test('build --json carries warnings next to ok and out', () => {
+  const dir = tmp();
+  const file = writeSpec({ title: 'T', type: 'architecture', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }, { id: 'c', label: 'C' }], edges: [{ from: 'a', to: 'b' }] });
+  const out = path.join(dir, 'w.html');
+  const body = JSON.parse(run([file, '--json', '--out', out]).stdout);
+  assert.equal(body.ok, true);
+  assert.equal(body.out, out);
+  assert.equal(body.warnings.length, 1);
+  assert.equal(body.warnings[0].path, 'nodes[2]');
+});
+
+// ---- PA-59: only the font weights the theme has ------------------------------------------------------------------------
+
+const THEME_NAMES = fs.readdirSync(new URL('../shared/themes', import.meta.url)).map((f) => f.replace(/\.json$/, ''));
+const weightsOf = (name) => {
+  const html = readOut(run([example('flow'), '--theme', name]));
+  return { display: Number(/--display-weight:(\d+)/.exec(html)?.[1]), strong: Number(/--strong-weight:(\d+)/.exec(html)?.[1]) };
+};
+
+test('the viewer template asks for no literal font weight: every weight comes from a theme-derived token', () => {
+  const html = fs.readFileSync(new URL('../template/viewer.html', import.meta.url), 'utf8');
+  const literal = [...html.matchAll(/font(?:-weight)?:\s*(\d{3})\b/g)].map((m) => m[0]);
+  assert.deepEqual(literal, [], 'a literal weight is requested whether or not the theme has it');
+});
+
+for (const name of THEME_NAMES) {
+  test(`theme ${name}: the display and strong weights the page asks for exist in the theme's font map`, () => {
+    const theme = JSON.parse(fs.readFileSync(new URL(`../shared/themes/${name}.json`, import.meta.url), 'utf8'));
+    const { display, strong } = weightsOf(name);
+    assert.ok(Object.keys(theme.fonts.display.weights).map(Number).includes(display), `${name}: display weight ${display}`);
+    assert.ok(Object.keys(theme.fonts.body.weights).map(Number).includes(strong), `${name}: strong weight ${strong}`);
+  });
+}
+
+test('press draws its Young Serif display at 400, the only weight it ships (no synthesised bold)', () => {
+  assert.equal(weightsOf('press').display, 400);
+  assert.equal(weightsOf('blueprint').display, 600);
 });

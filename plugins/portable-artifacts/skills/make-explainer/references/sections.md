@@ -8,7 +8,7 @@ On a page, a `tldr` that comes first (and is not the only section) is drawn insi
 
 In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not.
 
-`tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`, `callout`, `details` and `table` also take an optional `simple` object: the same prose fields in plainer words, shown by the page's Simple English toggle (see "Simple English" in schema.md). The toggle itself never touches `code`, `files`, `kpis`, diagrams, charts, images, scenes, motion or any plan section. Inside the ten types, the author keeps numbers, names and commands exact in `simple` (a table's `simple.rows` can replace any cell); nothing checks that.
+`tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`, `callout`, `details` and `table` also take an optional `simple` object: the same prose fields in plainer words, shown by the page's Simple English toggle (see "Simple English" in schema.md). The toggle itself never touches `code`, `files`, `kpis`, diagrams, charts, images, scenes, motion or any plan section. Inside the ten types, the author keeps numbers, names and commands exact in `simple` (a table's `simple.rows` can replace any cell). Validate warns when a field and its simple twin both hold digits and the twin has a number the normal text does not (`410 ms` against `400 ms`); names and commands are not checked.
 
 ## Text and numbers
 
@@ -22,6 +22,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 | `callout` | `tone`* (`info` `warn` `good` `bad`), `title`*, `text`* | A boxed note with an icon and a label. |
 | `details` | `summary`*, `text`* | A collapsed block for detail most readers skip. |
 | `code` | `code`*, `language`, `caption` | At most 120 lines. Has a copy button. |
+| `diff` | `diff`* (a unified diff, at most 200 lines; 12 in a deck), `file` (a label above it), `caption` | One marked row per line: added, deleted, context, hunk header, file header. The `+` and `-` stay in the text (and a bar and a tint back them up), so Copy gives the diff as written. There is no syntax highlighting. The body is data: the prose lint and the word caps skip it, a `TODO:` still fails. |
 | `image` | `src`*, `alt`*, `caption` | A local file, inlined. An SVG with script, event handlers or external references is refused. |
 
 ## Changes, plans and risks
@@ -36,14 +37,19 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 
 ## Checklist
 
-`checklist`: `key`*, `groups[]`* (at least 1): `title`*, `items[]`* (at least 1): `text`*, `tag` (`regression` `device` `manual` `visual`), `note`; `intro`; `onFail`.
+`checklist`: `key`*, `groups[]`* (at least 1): `title`*, `intro`, `items[]`* (at least 1): `text`*, `tag` (`regression` `device` `manual` `visual`), `tags[]` (at most 4 free labels of 24 characters), `note`, `steps[]` (at most 12 short sentences), `expect`; `intro`; `onFail`.
 
 - Ticks are saved in the reader's browser under `key` (unique in the file; lowercase letters, digits, `.`, `-`, `_`). Blocked storage is tolerated and the page says progress will not be saved.
 - A tick follows its item when items are reordered. Changing an item's `text` or its group's `title` resets that item.
 - Two equal items in groups with the same title are an error: reword one.
 - `intro` (markdown-lite) is shown open at the top as "What's in this branch": list every feature and every review-cycle fix the branch delivers, and what automated tests already cover. With `preset: "checklist"`, leaving it out is a validate warning.
 - `onFail` (markdown-lite) replaces the default "If something fails" advice.
-- Tag a bug fixed during review `regression`, a hardware-only step `device`.
+- Tag a bug fixed during review `regression`, a hardware-only step `device`. `tags` are free labels (an area, a priority, a feature name) shown as neutral chips beside the known tag; they carry no meaning of their own and are escaped like any text.
+- `steps` is a numbered list under the item (what to do, in order) and `expect` a "You should see" line (what proves it passed). Both sit outside the tick box's label, so a tester can select a command without ticking. Adding or editing them does not reset a tick: only `text` and the group `title` do.
+- A group `intro` (markdown-lite) sits between the group heading and its items, for a "read this first" note on one group. A checklist of 80 or more items with tags, steps and expected results is within the limits.
+- `build --md` also writes the markdown twin next to the page: the same title, groups, items, tags, steps and expected results as `- [ ]` task lists, so a repo that keeps its test list as `.md` has one source.
+- The scaffold's `key` is `<repo>-<branch>` as a slug (the branch alone when the facts name no repository), shortened with a hash past 80 characters, so two repositories on one branch name never share ticks.
+- Ticks live in `localStorage`. A page opened as a `file://` URL may not keep them across a reload in every browser (Chromium on a loaded machine sometimes does not), so a checklist meant to be ticked over several visits should be served over http or published, and `check.mjs` proves the saving over a loopback server (pages only; a deck is skipped, its other slides are inert): it ticks an item, reloads, expects the tick, resets and expects the saved ticks gone, and fails when the entry `pa-checklist:<key>` is missing or not emptied. A passing probe says the page's key and reset logic work; it does not prove `file://` persistence.
 
 ## Plan mode
 
@@ -60,6 +66,7 @@ Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md
 - Answers save in the reader's browser under the plan's `key` as they go; a plan edited since the answers were saved shows a notice and no saved answers; the first new answer replaces the old entry. Blocked storage is tolerated and stated.
 - In a deck the controls do not run: a slide shows the question, the options with the recommendation, and a note that answers are collected in the page version.
 - Limits on a plan page: 2-5 options per decision, 1-5 review items.
+- A plan needs the plan itself: at least one `steps`, `cards`, `table`, `files` or `text` section anywhere is an error to leave out, and one that comes only after the first question is a warning ("a plan asks before it explains").
 
 ## Diagram
 
@@ -67,6 +74,7 @@ Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md
 
 - The page theme wins: a `theme` inside the diagram is ignored, with a warning.
 - Hover traces edges. A Present button opens make-diagram's whole viewer in an overlay: Play story (the transport, chapter and beat chips, the travelling dot), Explore (a side panel for a node or edge, Find, shift-click routes) and full screen. In a deck the keys belong to the overlay while it is open; Esc closes the panel, then leaves full screen, then closes the overlay.
+- A diagram wider than the 52 rem column at its smallest readable size (0.75 scale) scrolls sideways inside its frame, and a visible "Scrolls sideways" line says so. Validate warns when that will happen and suggests `direction: "down"`, fewer nodes in a row or two diagrams.
 - Needs the `make-diagram` skill next to this one.
 
 ## Scene

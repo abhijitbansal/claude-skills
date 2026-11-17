@@ -20,7 +20,7 @@
 body { margin: 0; background: var(--page); color: var(--text); font: var(--fs-sm)/1.5 var(--font); /* dense UI: 1.5, not --lh-body (R13) */ -webkit-text-size-adjust: 100%; }
 main { max-width: 1200px; margin: 0 auto; padding: 24px 16px 0; }
 .page-head { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
-h1 { margin: 0; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); overflow-wrap: anywhere; }
+h1 { margin: 0; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); font-synthesis: none; /* press and mono ship a 400 display face only: no faux bold */ letter-spacing: var(--track-display); overflow-wrap: anywhere; }
 .desc { margin: 6px 0 0; color: var(--text-2); }
 .refreshed { margin: 0; color: var(--text-3); font-size: var(--fs-xs); }
 .pa-footer { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; max-width: 1168px; width: calc(100% - 32px); margin: 32px auto 48px; padding-top: 12px; border-top: 1px solid var(--line); }
@@ -48,6 +48,7 @@ button { font: inherit; color: inherit; }
 .kpis:has(.kpi-wide) > .kpi-wide { flex: 2 1 18rem; }
 .kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); margin-top: 4px; font-size: min(var(--fs-lg), var(--kpi-fit)); line-height: var(--lh-head); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .kpi-long .kpi-value { white-space: normal; overflow-wrap: anywhere; }
+.kpi-sql { font-size: var(--fs-xs); }
 .grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
 @media (min-width: 900px) {
   .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -84,6 +85,7 @@ pre.sql { margin: 8px 0 0; padding: 10px 12px; background: var(--page); border-r
 table { border-collapse: collapse; font-size: var(--fs-xs); font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 4px 12px 4px 0; white-space: nowrap; border-bottom: 1px solid var(--line); }
 th { color: var(--text-2); font-weight: 600; position: sticky; top: 0; background: var(--surface); }
+th.num, td.num { text-align: right; padding: 4px 0 4px 12px; font-variant-numeric: tabular-nums; }
 </style>
 <style><!--@TOGGLE_CSS--></style>
 </head>

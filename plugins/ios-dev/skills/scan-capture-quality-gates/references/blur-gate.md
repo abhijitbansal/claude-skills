@@ -27,3 +27,10 @@ nonisolated extension BlurGate {
     }
 }
 ```
+
+`vImageConvolve_Planar8` writes unsigned 8-bit output, so every negative Laplacian
+response clips to 0: the variance above is of the positive half-wave only, not of
+the true signed Laplacian. The gate's threshold (50 in `SKILL.md`) was tuned
+against this clipped response and is not calibrated for any other; if you switch
+to a signed or float convolution (for example `vImageConvolve_PlanarF`), the
+numbers change and the threshold must be re-tuned.

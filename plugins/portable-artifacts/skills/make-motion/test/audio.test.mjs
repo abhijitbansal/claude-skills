@@ -51,7 +51,7 @@ test('unknown track property gets did-you-mean', () => {
 
 test('src is required and must be relative', () => {
   const dir = fixture();
-  assert.deepEqual(errs(base([{ at: 1 }]), dir), ['audio[0].src: required']);
+  assert.deepEqual(errs(base([{ at: 1 }]), dir), ['audio[0].src: required (string)']);
   assert.deepEqual(errs(base([{ src: '/etc/passwd' }]), dir), ['audio[0].src: must be a path relative to the spec file']);
 });
 

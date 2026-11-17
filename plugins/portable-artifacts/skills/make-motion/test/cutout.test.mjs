@@ -10,6 +10,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { UsageError } from '../scripts/lib/spec.mjs';
+import { modelsDir } from '../scripts/lib/model-cache.mjs';
 import {
   MODEL_URL, MODEL_SHA256, MODEL_BYTES, MODEL_FILE, MODEL_DIR, INSTALL_HINT, USAGE,
   MAX_FRAMES, parseCutoutArgs, extractArgs, modelSize, ensureModel, loadOnnx, fileKind,
@@ -46,7 +47,7 @@ test('the model constants: a commit-pinned https URL, a sha256, the byte size an
   assert.match(MODEL_SHA256, /^[0-9a-f]{64}$/);
   assert.equal(MODEL_FILE, 'modnet_photographic_portrait_matting.onnx');
   assert.ok(Number.isInteger(MODEL_BYTES) && MODEL_BYTES > 1e6);
-  assert.equal(path.relative(root, MODEL_DIR), path.join('.cache', 'models', 'modnet'));
+  assert.equal(MODEL_DIR, path.join(modelsDir(root), 'modnet'), 'a per-user folder that outlives a plugin update (test/cache-dir.test.mjs)');
 });
 
 test('when the weights are in the cache their bytes match MODEL_SHA256 and MODEL_BYTES', (t) => {

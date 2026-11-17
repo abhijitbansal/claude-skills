@@ -52,6 +52,30 @@ have reached (a framework-internal assertion, not app code):
 - Cable-free, no lag: on-device Settings → Privacy & Security → Analytics &
   Improvements → Analytics Data → find `<AppName>-*.ips` → AirDrop it off.
 
+**CLI crash retrieval (no GUI).** Preflight first: the device is unlocked,
+trusted and plugged in. A `lockdownd` error `-21` means retry once after
+unlocking (seen twice, then success, in one app's crash pull).
+
+- `xcrun devicectl device copy from --device <UDID> --domain-type systemCrashLogs
+  --source . --destination ./crashes` — the subcommand and flags exist (checked
+  against `devicectl device copy from --help`). **Unverified:** whether it returns
+  third-party app `.ips` files; confirm with one device run before relying on it.
+- `idevicecrashreport -e -k -f <AppName> ./crashes` — from libimobiledevice
+  (`brew install libimobiledevice`, optional). Pulls `.ips` files over USB; `-k`
+  keeps them on the device. One app's pull of five reports gave one identical
+  faulting stack. Reported by that session, not re-run here.
+- Reading an `.ips`: recent files are a one-line JSON header (`bug_type`,
+  `app_name`, `os_version`) followed by the JSON report (`exception`, `threads`,
+  `usedImages`; frames map to a binary through `usedImages`). A `bug_type` of
+  `248` on an `Applaunch` file is a KPerf sample, not a crash. A `SIGABRT` with
+  `objc_exception_throw` on the stack is an Objective-C exception, which a Swift
+  `catch` cannot see: install `NSSetUncaughtExceptionHandler` to log it.
+- App data (a diagnostic log the app writes): `xcrun devicectl device copy from
+  --device <UDID> --domain-type appDataContainer --domain-identifier <bundle-id>
+  --source Documents/diag.log --destination ./diag.log`. Only works for a
+  dev-signed build; a TestFlight build's container is locked. Reported working in
+  one app, not re-run here.
+
 **OS-level log capture, once a crash log alone isn't enough:**
 
 - CoreData/CloudKit diagnosis — always put `--` before the debug flags:
@@ -75,9 +99,10 @@ have reached (a framework-internal assertion, not app code):
   environment variable set instead, or use Console.app (GUI, but reliably
   shows unified-logging output devicectl and idevicesyslog both miss).
   devicectl forwards environment variables to the launched process in two
-  ways, either of which sets `OS_ACTIVITY_DT_MODE`. Unverified: expect
-  `os_log` output mirrored to stderr, so it appears on the `--console`
-  stream; confirm on a device before relying on it.
+  ways, either of which sets `OS_ACTIVITY_DT_MODE`. Status: **reported working
+  in a past session (see Evidence), not re-verified here**; `os_log` output
+  should appear mirrored on the `--console` stream, so confirm on a device
+  before relying on it.
 
   ```
   # caller-environment form: set in the calling environment with a
@@ -108,7 +133,9 @@ have reached (a framework-internal assertion, not app code):
   `localizedDescription` and a one-level `NSUnderlyingErrorKey` unwrap both
   dead-ended.
 - Session 0018: "devicectl console does NOT carry os_log (idevicesyslog
-  neither) — `OS_ACTIVITY_DT_MODE` env-var launch does."
+  neither) — `OS_ACTIVITY_DT_MODE` env-var launch does." The first half is the
+  session's observation; the env-var launch is the session's report and has not
+  been re-run by this skill (same status as in the Fix section).
 
 ## Related skills
 

@@ -331,6 +331,19 @@ struct WhatsNewDataTests {
         let wn = try #require(WhatsNew.bundled)
         #expect(wn.currentVersion == wn.entries.first?.version)
     }
+    @Test func currentVersionMatchesTheAppVersion() throws {
+        // The decider never reads the bundle version; this is what ties the two
+        // together. Fails when the app version is bumped without WhatsNew.json.
+        // `Bundle.main` is the app only in an APP-HOSTED test target. In an
+        // unhosted logic-test bundle it is the xctest runner: the version is then
+        // nil or the runner's, so the test fails for that reason, not because of
+        // WhatsNew.json.
+        let wn = try #require(WhatsNew.bundled)
+        let appVersion = try #require(
+            Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
+            "run this test in an app-hosted test target")
+        #expect(wn.currentVersion == appVersion)
+    }
     @Test func entriesAreStrictlyNewestFirst() throws {
         let wn = try #require(WhatsNew.bundled)
         let v = wn.entries.map(\.version)

@@ -121,9 +121,15 @@ def _enabled_plugin_dirs(home, settings) -> list:
     cache = Path(home) / ".claude" / "plugins" / "cache"
     out = []
     ep = settings.get("enabledPlugins")
-    keys = ep if isinstance(ep, (dict, list)) else []
+    if isinstance(ep, dict):
+        # {"plugin@market": false} means disabled: never scan or recommend it.
+        keys = [k for k, enabled in ep.items() if enabled is not False and enabled is not None]
+    elif isinstance(ep, list):
+        keys = ep
+    else:
+        keys = []
     for key in keys:
-        if "@" not in key:
+        if not isinstance(key, str) or "@" not in key:
             continue
         plugin, _, marketplace = key.partition("@")
         plugin_dir = cache / marketplace / plugin

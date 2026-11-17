@@ -16,10 +16,21 @@ async function captureFrame(page, _k, sec) {
 const AUTO_CAP = 8;
 const WORKERS_HELP = `--workers must be an integer from 1 to ${MAX_WORKERS} or "auto"`;
 
-/** `--workers` text -> a count: undefined is 1, "auto" is max(1, min(8, cpus - 1)), else an integer 1-16. */
+const TEST_RUNNER_CPUS = 2; // auto leaves one core free, so two cores is one page
+
+/**
+ * The core count `auto` works from. `node --test` runs files in parallel and sets NODE_TEST_CONTEXT in every test
+ * process and in what it spawns, so a test that renders without naming --workers would open up to 8 pages of its own
+ * (W2P-M11): there, auto is one page. An explicit --workers is never capped; a test of the real auto count removes
+ * NODE_TEST_CONTEXT from the env it spawns with.
+ */
+export function autoCpus(env = process.env) {
+  return env.NODE_TEST_CONTEXT ? TEST_RUNNER_CPUS : os.availableParallelism();
+}
+
+/** `--workers` text -> a count: undefined and "auto" are max(1, min(8, cpus - 1)), else an integer 1-16. */
 export function parseWorkers(text, cpus = os.availableParallelism()) {
-  if (text === undefined) return 1;
-  if (text === 'auto') return Math.max(1, Math.min(AUTO_CAP, cpus - 1));
+  if (text === undefined || text === 'auto') return Math.max(1, Math.min(AUTO_CAP, cpus - 1));
   const n = /^\d+$/.test(text) ? Number(text) : NaN;
   if (!(n >= 1 && n <= MAX_WORKERS)) throw new UsageError(`${WORKERS_HELP} (got ${JSON.stringify(text)})`);
   return n;
@@ -29,6 +40,16 @@ export function parseWorkers(text, cpus = os.availableParallelism()) {
 // value is a plain non-negative integer; anything else is ignored, never coerced.
 export function parseFailAt(text) {
   return typeof text === 'string' && /^\d+$/.test(text) ? Number(text) : null;
+}
+
+// Test-only diagnostics (PA-42): PA_KEEP_FRAMES=<absolute dir> makes render write every captured PNG there as <frame>.png,
+// before the encode, so a byte-identical test that fails can name the frames that differed in the browser's own output
+// (an MP4's decoded frames cannot: x264's lookahead carries one changed frame into the frames around it). Inert unless the
+// value is an absolute path and the render runs under `node --test` (NODE_TEST_CONTEXT, as autoCpus), so a stale export in
+// a user's shell never makes a real render write every frame to disk.
+export function parseKeepFrames(env = process.env) {
+  const text = env.PA_KEEP_FRAMES;
+  return env.NODE_TEST_CONTEXT && typeof text === 'string' && path.isAbsolute(text) ? text : null;
 }
 
 function deferred() {

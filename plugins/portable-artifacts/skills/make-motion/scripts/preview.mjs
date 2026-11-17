@@ -1,39 +1,10 @@
 #!/usr/bin/env node
-// node scripts/preview.mjs <motion.json> [--open]
-import { spawn } from 'node:child_process';
+// node scripts/preview.mjs <motion.json> [--open]   exit 0 stopped, 1 spec errors, 2 usage/IO or dependencies missing; --help exits 0
+// A thin entry: it checks for node_modules with Node built-ins only, then loads the preview (lib/preview-cli.mjs), which
+// imports ajv. Without node_modules the one line names the doctor command and the exit is 2 (shared/preflight.mjs).
 import path from 'node:path';
-import { parseArgs } from 'node:util';
-import { loadSpec, validateSpec, UsageError } from './lib/spec.mjs';
-import { printResult } from '../shared/errors.mjs';
-import { startServer } from './lib/server.mjs';
+import { fileURLToPath } from 'node:url';
+import { preflight } from '../shared/preflight.mjs';
 
-const USAGE = 'usage: node scripts/preview.mjs <motion.json> [--open]';
-try {
-  let parsed;
-  try {
-    parsed = parseArgs({ allowPositionals: true, options: { open: { type: 'boolean', default: false } } });
-  } catch (e) {
-    throw new UsageError(`${e.message}\n${USAGE}`);
-  }
-  const [file, ...extra] = parsed.positionals;
-  if (!file || extra.length) throw new UsageError(USAGE);
-  const { spec, dir } = loadSpec(file);
-  const result = validateSpec(spec, { dir });
-  if (!result.ok) {
-    printResult(result, { label: file });
-    process.exit(1);
-  }
-  const server = await startServer({ specPath: path.resolve(file), mode: 'preview' });
-  process.stdout.write(`Preview: ${server.url}\nEdit ${file} and the page reloads. Ctrl+C to stop.\n`);
-  if (parsed.values.open) {
-    const opener = { darwin: 'open', win32: 'start' }[process.platform] ?? 'xdg-open';
-    spawn(opener, [server.url], { stdio: 'ignore', detached: true, shell: process.platform === 'win32' }).unref();
-  }
-  const stop = () => server.close().then(() => process.exit(0));
-  process.on('SIGINT', stop);
-  process.on('SIGTERM', stop);
-} catch (e) {
-  if (!(e instanceof UsageError)) throw e;
-  process.stderr.write(`${e.message}\n`);
-  process.exit(2);
-}
+const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+if (preflight(SKILL_ROOT)) await (await import('./lib/preview-cli.mjs')).main(process.argv.slice(2));

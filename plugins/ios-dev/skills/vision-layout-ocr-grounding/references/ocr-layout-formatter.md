@@ -12,8 +12,6 @@ nonisolated enum VisionLayoutFormatter {
     static let rowToleranceFactor: CGFloat = 0.6  // × median line height
     static let minRowTolerance: CGFloat = 0.006   // floor, normalized Y
     static let columnGapFraction: CGFloat = 0.04  // X-gap => column break
-    static let minColumnRowsPerSide = 3           // gutter rows before real columns
-    static let fullWidthFraction: CGFloat = 0.55  // full-width row = heading
 
     static func formatPages(observationsPerPage pages: [[LineItem]]) -> String {
         pages.map(formatPage).filter { !$0.isEmpty }.joined(separator: "\n\n")
@@ -57,11 +55,18 @@ nonisolated enum VisionLayoutFormatter {
 }
 ```
 
-The full implementation adds two refinements beyond the row/column split
-above: a shared vertical gutter with >= `minColumnRowsPerSide` rows on EACH
-side is a real column block — emit each column top-to-bottom instead of
-tab-joining across; and a single segment spanning >= `fullWidthFraction` of
-the page width is a heading/footer that terminates the column block above it.
+This is the **base split** only, and it is all that is coded here. It runs on
+macOS under default MainActor isolation: a row with `Patient ID:`, `110331` and
+`Patient Name:` on one baseline formats as `Patient ID: 110331<TAB>Patient Name:`.
+It does **not** implement multi-column page layout (a two-column page comes out
+as tab-joined rows, not two blocks).
+
+Two refinements exist in the originating app and are not reproduced here. If you
+need multi-column pages, you have to write them: a shared vertical gutter with
+>= 3 rows on EACH side is a real column block — emit each column top-to-bottom
+instead of tab-joining across; and a single segment spanning >= 55% of the page
+width is a heading/footer that terminates the column block above it. Add them
+with a `LineItem`-array test that a two-column fixture yields two blocks.
 
 `LineItem` exists because tests can't construct `VNRecognizedTextObservation`;
 test the row/column geometry directly on `LineItem` arrays.

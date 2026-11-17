@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import Ajv from 'ajv';
 import { compile } from 'vega-lite';
-import { formatAjvErrors, didYouMean, pathJoin } from '../../shared/errors.mjs';
+import { formatAjvErrors, didYouMean, pathJoin, makeResult } from '../../shared/errors.mjs';
 import {
   openDb, openLockedDb, checkSelect, describeQuery, errMessage, DEFAULT_TIMEOUT_MS,
 } from './sql.mjs';
@@ -14,7 +14,8 @@ import {
 import { UsageError } from '../../shared/cli.mjs';
 import { listThemes } from '../../shared/theme.mjs';
 import { KIND_NAMES, roleErrors } from './kinds.mjs';
-import { checkFields } from './data.mjs';
+import { checkFields, kpiRowWarnings, runQueries, QueryError } from './data.mjs';
+import { expandCharts } from './views.mjs';
 import { GENERATED_BY_SCHEMA } from '../../shared/provenance.mjs';
 
 const NAME = '^[a-z][a-z0-9_]*$';
@@ -198,7 +199,18 @@ const FORBIDDEN_KEYS = {
   url: 'not allowed — external URLs are never fetched',
   usermeta: 'not allowed — page options are fixed',
   data: 'not allowed — vegaLite may not define or load data (use a SQL query)',
+  href: 'not allowed — a chart may not link or navigate anywhere',
 };
+
+// Top-level keys the build owns (theme config, responsive width and autosize);
+// a value here would be overwritten silently, so it is an error instead.
+const BUILD_OWNED_KEYS = ['config', 'width', 'autosize'];
+
+function buildOwnedKeys(vl, p, errors) {
+  for (const key of BUILD_OWNED_KEYS) {
+    if (vl[key] !== undefined) errors.push({ path: pathJoin(p, key), message: 'remove — the build sets this from the theme and page layout' });
+  }
+}
 
 // Model-written specs must never make the page fetch anything or change the
 // embed options, wherever the key hides (lookup.from.data, image url, ...).
@@ -241,6 +253,7 @@ function vegaLiteErrors(spec) {
     const p = `${pathJoin('charts', i)}.vegaLite`;
     const found = [];
     forbiddenKeys(chart.vegaLite, p, found);
+    buildOwnedKeys(chart.vegaLite, p, found);
     inspectMarks(chart.vegaLite, p, found);
     errors.push(...found);
     if (found.length) return;
@@ -278,19 +291,55 @@ async function bindQueries(spec, dir, { allowOutside, timeoutMs }) {
   return { errors, described };
 }
 
-export async function validateSpec(spec, { dir, allowOutside = false, timeoutMs = DEFAULT_TIMEOUT_MS }) {
+// Run every query in full and expand every chart, as build does, so the value
+// checks (slice and colour caps, negative values, conversion errors) that
+// LIMIT 0 binding cannot see are reported by validate too.
+async function valueChecks(spec, dir, { allowOutside, timeoutMs }) {
+  let results;
+  try {
+    results = await runQueries(spec, dir, { allowOutside, timeoutMs });
+  } catch (e) {
+    if (e instanceof QueryError) return { errors: e.errors, warnings: [] };
+    throw e;
+  }
+  const warnings = kpiRowWarnings(spec, results);
+  const fields = checkFields(spec, results);
+  return { errors: fields.length ? fields : expandCharts(spec, results).errors, warnings };
+}
+
+export const STAGES = ['static', 'bind', 'full'];
+const EMPTY_DASHBOARD = { path: 'charts', message: 'add at least one chart or KPI; with neither the build makes a page with only a title' };
+
+// Layered validation. `stage` says how far it goes:
+//   static  schema, references, source shape and paths, SQL guard, Vega-Lite keys
+//           (no query is bound: inspect --spec uses it to explore a draft)
+//   bind    + every query bound with LIMIT 0, field and role checks (the default;
+//           build runs the full queries itself right after)
+//   full    + every query run and every chart expanded (validate.mjs), so
+//           "valid" means buildable
+// The schema and source-shape checks always come first: spec text never reaches SQL unchecked.
+export async function validateSpec(spec, { dir, allowOutside = false, timeoutMs = DEFAULT_TIMEOUT_MS, stage = 'bind' }) {
+  if (!STAGES.includes(stage)) throw new Error(`unknown validation stage ${JSON.stringify(stage)}`);
   if (!validateSchema(spec)) {
     return { ok: false, errors: formatAjvErrors(validateSchema.errors ?? []) };
   }
   const refs = crossRefs(spec, dir, { allowOutside });
   const sql = await sqlErrors(spec);
   const errors = [...refs, ...sql, ...vegaLiteErrors(spec)];
-  if (!refs.length && !sql.length) {
+  const warnings = [];
+  // A draft explored with inspect --spec may have neither yet; anything that builds needs one.
+  if (stage !== 'static' && !(spec.charts ?? []).length && !(spec.kpis ?? []).length) errors.push(EMPTY_DASHBOARD);
+  if (stage !== 'static' && !refs.length && !sql.length) {
     const bound = await bindQueries(spec, dir, { allowOutside, timeoutMs });
     errors.push(...bound.errors);
     if (!bound.errors.length && !errors.length) {
       errors.push(...checkFields(spec, bound.described), ...roleErrors(spec, bound.described));
     }
+    if (stage === 'full' && !errors.length) {
+      const checked = await valueChecks(spec, dir, { allowOutside, timeoutMs });
+      errors.push(...checked.errors);
+      warnings.push(...checked.warnings);
+    }
   }
-  return { ok: errors.length === 0, errors };
+  return makeResult(errors, warnings);
 }

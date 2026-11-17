@@ -50,8 +50,41 @@
     return s || 'chart';
   }
 
+  // Columns whose every non-NULL value is a number (an all-NULL column is not numeric).
+  function numericColumns(columns, rows) {
+    var out = new Set();
+    columns.forEach(function (c) {
+      var seen = false;
+      var numeric = rows.every(function (r) {
+        var v = r[c];
+        if (v === null || v === undefined) return true;
+        seen = true;
+        return typeof v === 'number';
+      });
+      if (numeric && seen) out.add(c);
+    });
+    return out;
+  }
+
+  var YEAR = /year/i;
+  var cellFormats = {};
+  function cellFormat(grouping) {
+    var key = grouping ? 'g' : 'n';
+    if (!cellFormats[key] && typeof Intl !== 'undefined') cellFormats[key] = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2, useGrouping: grouping });
+    return cellFormats[key];
+  }
+
+  // A table cell's text: numbers in a numeric column get grouped digits and at most two decimals
+  // (a column named like a year is not grouped); everything else prints as written.
+  function cellText(v, column, numeric) {
+    if (v === null || v === undefined) return '';
+    if (!numeric || typeof v !== 'number') return String(v);
+    var fmt = cellFormat(!YEAR.test(column));
+    return fmt ? fmt.format(v) : String(v);
+  }
+
   root.PA = {
     readStore: readStore, writeStore: writeStore, sortRows: sortRows, TABLE_LIMIT: TABLE_LIMIT,
-    csvCell: csvCell, toCsv: toCsv, fileStem: fileStem
+    csvCell: csvCell, toCsv: toCsv, fileStem: fileStem, numericColumns: numericColumns, cellText: cellText
   };
 })(typeof window !== 'undefined' ? window : globalThis);

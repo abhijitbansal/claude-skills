@@ -1,5 +1,6 @@
 // Task 22: bundled world and US atlases (a chart's `data: { "name": "world-110m" }`) and the two map blocks built on them.
 import { test } from 'node:test';
+import { readSchema } from './helpers/schema-docs.mjs';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -189,7 +190,7 @@ test('map-highlight: highlight takes 1 to 20 distinct atlas names; the error lis
   assert.deepEqual(blockErrs('map-highlight', { highlight: [] }), ['highlight: must NOT have fewer than 1 items']);
   assert.deepEqual(blockErrs('map-highlight', { highlight: WORLD_NAMES.slice(0, 21) }), ['highlight: must NOT have more than 20 items']);
   assert.deepEqual(blockErrs('map-highlight', { highlight: ['France', 'France'] }), ['highlight: must NOT have duplicate items (items ## 0 and 1 are identical)']);
-  assert.deepEqual(blockErrs('map-highlight', {}), ['highlight: required']);
+  assert.deepEqual(blockErrs('map-highlight', {}), ['highlight: required (array)']);
   const [bad] = blockErrs('map-highlight', { highlight: ['Frnace'] });
   assert.match(bad, /^highlight\[0\]: must be one of "Afghanistan", .*"Wyoming"; did you mean "France"\?$/);
   const [usa] = blockErrs('map-highlight', { highlight: ['USA'] });
@@ -216,15 +217,16 @@ test('flow-map: 1 to 12 flows, each end a { lon, lat } in range, a label up to 4
   assert.deepEqual(blockErrs('flow-map', { flows: [flow] }), []);
   assert.deepEqual(blockErrs('flow-map', { flows: [] }), ['flows: must NOT have fewer than 1 items']);
   assert.deepEqual(blockErrs('flow-map', { flows: Array.from({ length: 13 }, () => flow) }), ['flows: must NOT have more than 12 items']);
-  assert.deepEqual(blockErrs('flow-map', {}), ['flows: required']);
-  assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: -74 }, to: { lon: 0, lat: 0 } }] }), ['flows[0].from.lat: required']);
+  assert.deepEqual(blockErrs('flow-map', {}), ['flows: required (array of object)']);
+  assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: -74 }, to: { lon: 0, lat: 0 } }] }), ['flows[0].from.lat: required (number)']);
   assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: 200, lat: 0 }, to: { lon: 0, lat: 0 } }] }), ['flows[0].from.lon: must be <= 180']);
   assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: 0, lat: 90 }, to: { lon: 0, lat: 0 } }] }), ['flows[0].from.lat: must be <= 83']);
   assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: 0, lat: -86 }, to: { lon: 0, lat: 0 } }] }), ['flows[0].from.lat: must be >= -85']);
   assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: 0, lat: 0 }, to: { lon: 1, lat: 1 }, label: 'x'.repeat(41) }] }), ['flows[0].label: must NOT have more than 40 characters']);
   assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: 0, lat: 0 }, to: { lon: 1, lat: 1 }, colour: 'red' }] }), ['flows[0].colour: unknown property; allowed: from, to, label']);
   assert.deepEqual(blockErrs('flow-map', { flows: [{ from: [-74, 40.7], to: { lon: 1, lat: 1 } }] }), ['flows[0].from: must be object'], 'the older [lon, lat] form is not accepted: an object names which is which');
-  assert.deepEqual(blockErrs('flow-map', { flows: [flow], map: 'us' }), []);
+  assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: -122.4, lat: 37.8 }, to: { lon: -74, lat: 40.7 } }], map: 'us' }), []);
+  assert.equal(blockErrs('flow-map', { flows: [flow], map: 'us' }).length, 1, 'London is off the US map (the rule is tested in test/flow-map-validate.test.mjs)');
   assert.deepEqual(blockErrs('flow-map', { flows: [{ from: { lon: 0, lat: 0 }, to: { lon: 1, lat: 1 }, label: '</script><b>' }] }), []);
 });
 
@@ -423,7 +425,7 @@ test('map-highlight draws the named countries in the accent colour and every oth
 // ---- docs, licences, audit ---------------------------------------------------------------------------------------------------------------
 
 test('docs: schema.md names the atlases and both blocks, SKILL.md and both READMEs list them, the licences table names both packages', () => {
-  const schema = readFileSync(path.join(root, 'references/schema.md'), 'utf8');
+  const schema = readSchema(root);
   const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
   const readme = readFileSync(path.join(root, 'README.md'), 'utf8');
   const pa = readFileSync(path.join(root, '../../README.md'), 'utf8');
@@ -434,7 +436,11 @@ test('docs: schema.md names the atlases and both blocks, SKILL.md and both READM
     assert.ok(readme.includes(name), `README.md: ${name}`);
   }
   assert.ok(pa.includes('map highlight, flow map'), '<pa>/README.md lists the two blocks by name, as it lists the others');
-  assert.match(pa, /thirty-eight blocks/);
+  // The count as the README says it in words, derived so that adding a block does not break this test for an unrelated reason.
+  const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+  const TENS = ['', '', 'twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+  const word = (n) => (n < 20 ? ONES[n] : `${TENS[Math.floor(n / 10)]}${n % 10 ? `-${ONES[n % 10]}` : ''}`);
+  assert.match(pa, new RegExp(`${word(BLOCK_NAMES.length)} blocks`), `<pa>/README.md says "${word(BLOCK_NAMES.length)} blocks" (${BLOCK_NAMES.length} registered)`);
   assert.match(pa, /\| \[world-atlas\]\(https:\/\/github\.com\/topojson\/world-atlas\) 2\.0\.2 .*\| ISC \|/);
   assert.match(pa, /\| \[us-atlas\]\(https:\/\/github\.com\/topojson\/us-atlas\) 3\.0\.1 .*\| ISC \|/);
   const pkg = readJson(path.join(root, 'package.json'));

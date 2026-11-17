@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { resolveDir, splitCommand, suiteKey, suiteLabel } from '../hooks/suite'
+import { expandHome, resolveDir, splitCommand, suiteKey, suiteLabel } from '../hooks/suite'
 
 describe('splitCommand', () => {
   test('strips a leading cd and keeps its dir', () => {
@@ -41,6 +41,21 @@ describe('splitCommand', () => {
     const piped = splitCommand('xcodebuild test -scheme Cubby 2>&1 | tail -30').normalized
     expect(piped).toBe(splitCommand('xcodebuild   test -scheme Cubby').normalized)
   })
+  test('tee and output redirects do not split a suite', () => {
+    const bare = splitCommand('pytest -q').normalized
+    for (const c of [
+      'pytest -q | tee out.log',
+      'pytest -q 2>&1 | tee -a out.log',
+      'pytest -q |& tee out.log',
+      'pytest -q > out.log 2>&1',
+      'pytest -q &> out.log',
+      'pytest -q >> out.log',
+      'pytest -q 2> err.log',
+    ]) expect(splitCommand(c).normalized).toBe(bare)
+  })
+  test('a > inside a quoted argument is kept', () => {
+    expect(splitCommand('pytest -k "a > b"').normalized).toBe('pytest -k "a > b"')
+  })
   test('keeps flags, so -only-testing is its own suite', () => {
     expect(splitCommand('xcodebuild test -only-testing:CubbyTests/ScanTests').normalized)
       .toBe('xcodebuild test -only-testing:CubbyTests/ScanTests')
@@ -50,6 +65,18 @@ describe('splitCommand', () => {
 describe('resolveDir', () => {
   test('absolute dir wins', () => expect(resolveDir('/a/b', '/x')).toBe('/x'))
   test('relative dir joins and folds ..', () => expect(resolveDir('/a/b', '../c/./d')).toBe('/a/c/d'))
+})
+
+describe('expandHome', () => {
+  test('a leading ~ becomes the home directory', () => {
+    expect(expandHome('~/projects/app', '/Users/me')).toBe('/Users/me/projects/app')
+    expect(expandHome('~', '/Users/me')).toBe('/Users/me')
+  })
+  test('other paths, ~user, and an unknown home are left alone', () => {
+    expect(expandHome('/a/b', '/Users/me')).toBe('/a/b')
+    expect(expandHome('~bob/x', '/Users/me')).toBe('~bob/x')
+    expect(expandHome('~/x', undefined)).toBe('~/x')
+  })
 })
 
 describe('suite identity', () => {

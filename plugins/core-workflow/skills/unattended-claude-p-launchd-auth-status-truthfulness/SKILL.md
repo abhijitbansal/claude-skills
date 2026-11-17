@@ -31,8 +31,23 @@ description: "An unattended launchd job that runs claude -p fails or lies: 'Fail
 
 Unattended `claude -p`:
 
-- Preflight auth before the run; on failure write a durable marker file and
-  exit non-zero.
+- Preflight auth before the run. Run `claude auth status --text` as the first
+  step of the job script, in the same environment the job runs in (the plist
+  environment, not your shell), and treat anything other than a signed-in report
+  as failure: write a durable marker file naming the failure and exit non-zero
+  before `claude -p` starts. `claude auth status --help` does not document the
+  exit code for a signed-out session, so check once on your machine whether it
+  is non-zero, and match on the output if it is not.
+- Prefer a long-lived credential over the interactive login for a job nobody
+  watches: `claude setup-token` creates a long-lived token (needs a Claude
+  subscription) that the job passes as `CLAUDE_CODE_OAUTH_TOKEN`, or use an API
+  key. The token is a secret: keep it out of the plist in a repo, out of logs and
+  out of the README.
+- A scrubbed environment can fail the login with `Not logged in` even when your
+  shell is signed in: a job that clears the environment (or a plist that sets
+  only `PATH`) drops variables such as `USER`, and the headless run then cannot
+  find its login. Run the preflight above under the plist environment, and pass
+  `USER` (and `HOME`) through explicitly when you scrub.
 - Use a non-terminal fallback channel (file, iMessage, gh issue) when
   PushNotification is skipped.
 - Build status messages from each step's real exit code; exit non-zero on
@@ -45,7 +60,9 @@ Deploy hygiene:
 - Make doctor probe under the plist's environment (or warn when shell-only
   vars differ); put required env vars in the plist.
 - Use the stable Homebrew symlink path in a plist, not the versioned Cellar
-  path.
+  path. (Reported, not reproduced: the Full Disk Access grant is said to
+  survive an upgrade when the plist names the symlink. Verify on your own
+  machine after the next upgrade before relying on it.)
 
 ## Evidence
 

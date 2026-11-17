@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sheetTimes, sheetMoments, sheetLayout, PHONE_WIDTH, MAX_FRAMES } from '../scripts/lib/sheet.mjs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { sheetTimes, sheetMoments, sheetLayout, drawingMoments, PHONE_WIDTH, MAX_FRAMES } from '../scripts/lib/sheet.mjs';
+import { loadSpec, withDefaults } from '../scripts/lib/spec.mjs';
+import { sketchPlans } from '../scripts/lib/sketch-plans.mjs';
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const near = (actual, expected) => {
   assert.equal(actual.length, expected.length, JSON.stringify(actual));
@@ -91,4 +97,51 @@ test('sheetLayout: a frame narrower than 480 px is not upscaled', () => {
   const lay = sheetLayout([{ w: 320, h: 180 }, { w: 320, h: 180 }]);
   assert.deepEqual(lay.boxes.map((b) => b.w), [320, 320]);
   assert.equal(lay.cols, 2);
+});
+
+// ---- a drawing in progress (PA-41, G-69) ---------------------------------------------------------------------------------
+
+test('sheetTimes: marks are exact moments, clamped to the last frame and merged within 0.05 s of an earlier one', () => {
+  near(sheetTimes({ duration: 4, elements: [] }, 30, [], [1, 2]), [0.1, 1, 2, 3.4, 4 - 1 / 30]);
+  near(sheetTimes({ duration: 4, elements: [] }, 30, [], [1, 1.03, 9]), [0.1, 1, 3.4, 4 - 1 / 30]);
+});
+
+test('drawingMoments: no plan gives nothing; a plan gives each element\'s end and 25, 50 and 75 % of the drawing time', () => {
+  assert.deepEqual(drawingMoments(null), {});
+  const plan = { drawEnd: 5, elements: new Map([['a', { t0: 1, t1: 2 }], ['b', { t0: 2, t1: 5 }]]) };
+  const { landings, marks } = drawingMoments(plan);
+  assert.deepEqual(landings, [2, 5]);
+  near(marks, [2, 3, 4]); // the drawing runs from the first stroke (1 s) to the last (5 s)
+  assert.deepEqual(drawingMoments({ drawEnd: 0, elements: new Map() }), {});
+});
+
+test('sheetMoments: a drawn scene shows 25, 50 and 75 % of its drawing between the blank board and the finished one', () => {
+  const scene = { duration: 8, elements: [] };
+  const plan = { drawEnd: 5, elements: new Map([['a', { t0: 1, t1: 5 }]]) };
+  const { times } = sheetMoments(scene, 30, 11, drawingMoments(plan));
+  for (const mark of [2, 3, 4]) assert.ok(times.some((t) => Math.abs(t - mark) < 1e-6), `a tile at ${mark}s in ${JSON.stringify(times)}`);
+  assert.equal(times[0], 0.1, 'the blank board stays first');
+  assert.ok(Math.abs(times.at(-1) - (8 - 1 / 30)) < 1e-9, 'the finished board stays last');
+});
+
+test('sheetMoments: past the cap the marks are kept before the evenly picked landings', () => {
+  const elements = new Map(Array.from({ length: 30 }, (_, i) => [`e${i}`, { t0: i * 0.3, t1: i * 0.3 + 0.25 }]));
+  const plan = { drawEnd: 9, elements };
+  const drawing = drawingMoments(plan);
+  const { times, total } = sheetMoments({ duration: 10, elements: [] }, 30, 11, drawing);
+  assert.ok(total > 11);
+  assert.equal(times.length, 11);
+  for (const mark of drawing.marks) assert.ok(times.some((t) => Math.abs(t - mark) < 0.05), `mark ${mark} survives the cap in ${JSON.stringify(times)}`);
+});
+
+test('a real drawn scene (the sketch-board fixture): the sheet has tiles while the hand is still drawing', async () => {
+  const { spec } = loadSpec(path.join(root, 'test/fixtures/sketch-board.json'));
+  const full = withDefaults(spec);
+  const [plan] = await sketchPlans(full);
+  assert.ok(plan, 'the fixture is a drawn scene');
+  const { times } = sheetMoments(full.scenes[0], full.fps, 11, drawingMoments(plan));
+  const mid = times.filter((t) => t > 0.5 && t < plan.drawEnd - 0.5);
+  assert.ok(mid.length >= 3, `tiles between the blank board and the finished one: ${JSON.stringify(times)} (drawing ends ${plan.drawEnd})`);
+  const without = sheetMoments(full.scenes[0], full.fps).times;
+  assert.ok(without.filter((t) => t > 0.5 && t < plan.drawEnd - 0.5).length < mid.length, 'the control: without the plan there are fewer');
 });

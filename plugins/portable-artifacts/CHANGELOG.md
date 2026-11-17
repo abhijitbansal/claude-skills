@@ -29,6 +29,104 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 - **The unused `@fontsource/inter` and `@fontsource/jetbrains-mono` are removed** from make-motion.
 - **New standing tests: exact pins, locked installs, hashed downloads.** `bin/test/dependency-pins.test.mjs` fails on a
   dependency range, an install without a lockfile or an unpinned or unhashed download.
+- **What changes from 1.3.0 for these installs.** 1.3.0 said the voiceover install is about 465 MB and that it shares
+  `onnxruntime-node` with the cutout; in its own folder it is about 440 MB (`du` of `optional/voice/node_modules` on
+  macOS) and shares nothing. 1.3.0's pinned `ffmpeg-static` install hint is gone with `ffmpeg-static`. The install hint a
+  script prints is still exactly the doctor's `--fix` step, and the 1.3.0 per-user model folder (`$CLAUDE_PLUGIN_DATA`,
+  else the OS cache folder) is kept: it now holds the SHA-256-checked model files. `voice.mjs --dir` and the static
+  `--list-voices` from 1.3.0 are kept; the first download prints one line per file instead of a percentage.
+
+## [1.3.0] - 2026-11-15
+
+Pages now land where you can find them, every script answers `--help`, and a check that passes can leave screenshots to
+look at. make-explainer checklists gain steps, expected results and tags, and a diff section. make-dashboard validates
+every query and chart before a build. make-diagram, make-explainer and make-scene warn without failing and write their
+page to `.scratch/`. The doctor says "stale" for an install that predates a security pin and shows measured install sizes.
+
+### Behaviour changes to know about
+
+- **Default output path.** make-diagram, make-explainer and make-scene build to `$PA_OUTPUT_DIR` if it is set, else
+  `<git root>/.scratch/<slug>.html` when the spec sits in a git repository, else `~/.agent/diagrams/<slug>.html`. Before,
+  the page went to `~/.agent/diagrams/`. `--out file.html` or `--out dir` still overrides all of these. The build prints a
+  note when `.scratch/` is not gitignored. make-dashboard still writes `dist/index.html` next to the spec and ignores
+  `PA_OUTPUT_DIR`; make-motion still writes `out/`.
+- **Builds end with a bare `file://` line.** make-dashboard, make-diagram, make-explainer and make-scene print the page's
+  URL alone on its own line, so a terminal makes it clickable. A script that parsed the old last line must read it again.
+- **Required-field errors name the expected type.** The Ajv `required` message now reads `required (string)` or lists the
+  enum, and a field with a `description` repeats it. A script or test that matched the old text must follow.
+- **make-dashboard charts.** Nominal axes and donut colours keep the SQL row order. Axis and tooltip titles are humanised (`p50_ms` reads `P50 ms`; other names stay as written). A compact KPI and its
+  axis use the same three significant digits. Vertical bars with crowded labels turn the labels 45 degrees instead of
+  dropping some. A raw `vegaLite` block is refused when it sets `href` or the build-owned `config`, `width` or `autosize`.
+  The SQL guard matches table and CTE names without regard to case. A KPI query that returns more than one row is a
+  warning, and a dashboard with no KPIs and no charts is an error.
+- **make-dashboard `validate` does more.** It now runs every query and compiles every chart, so a donut or colour cap or a
+  bad cast shows before `build`. `validate.mjs --bind-only` keeps the old, cheaper `LIMIT 0` check.
+- **make-motion validation is stricter.** An odd canvas size is an error, and a scene id must match
+  `^[A-Za-z0-9][A-Za-z0-9_.-]*$` (every bundled example does). `render.mjs` with no `--workers` now uses `auto`
+  (at most 8 pages, one fewer than the cores) where it used 1; pass `--workers 1` for the old single-page render.
+  `references/schema.md` is now an index over `references/schema/*.md`, and `SKILL.md` points at new `storyboard.md`,
+  `voiceover.md` and `block-tables.md` instead of holding them.
+- **make-explainer lint and scaffold.** `scaffold.mjs --out` refuses an existing file unless you pass `--force`. Prose
+  lint warns on raw headings, numbered lists, markdown tables and label-style titles. A plan with no steps, cards, table,
+  files or text section is an error. A preset scaffold writes `generatedBy`, and validate warns when it is missing.
+  `--strict` (validate and build) turns the length caps into errors.
+- **Local model hosts in the eval need `--allow-local-models`**, and a stalled run aborts.
+- **A built make-diagram note clips at 180 px** with a warning, and the Explore panel opens only when something is
+  selected.
+
+### Added
+
+- **Every entry script answers `--help`** (usage on stdout, exit 0), and an unknown flag exits 2 with the flags it does
+  accept and a did-you-mean. A copy without `node_modules` prints one line naming
+  `doctor.mjs --fix node_modules` and exits 2, instead of a stack trace.
+- **`check.mjs --shots <dir>`** on every skill writes one PNG per width (390 and 1280) and colour scheme to open and look
+  at; make-scene also writes one frame per tour beat. `shared/shot.mjs <file-or-dir> --widths 390,1280 --out <dir>` does
+  the same for any page. A check that cannot find a browser says `skipped`, exits 0 and carries `"skipped": true` in
+  `--json`: a skipped check is not a pass.
+- **make-explainer checklists.** An item takes `steps[]`, `expect` ("You should see") and `tags[]`; a group takes an
+  `intro`. The scaffold's tick key is `<repo>-<branch>`, so two repositories on one branch name never share ticks.
+  `build --md` writes a markdown task-list twin of the checklist. `check.mjs` proves ticks are saved over a loopback server.
+- **make-explainer `diff` section** (a unified diff of up to 200 lines, 12 in a deck) and a "Scrolls sideways" cue on a
+  diagram wider than the page column, with a validate warning. Poster slides keep headings at one height.
+- **make-diagram.** Validate and build report warnings (orphan nodes, one-way decisions, case-only label clashes, idle
+  participants, clipped notes) without failing. A legibility estimate warns below an 8 px floor and tries ELK wrapping for
+  long chains. `build.mjs --format svg --out diagram.svg` writes one standalone SVG in the theme's light palette. The Play
+  tab and `P` start the story. `doctor.mjs` reports missing cloud icons.
+- **make-dashboard.** `scripts/query.mjs <spec> --chart <id>` prints the rows one chart will show, a KPI tile shows its SQL,
+  and `scripts/check.mjs` opens the page at 1280 and 390 px in light and dark. Tabs carry `aria-controls`, and Escape closes
+  the export menu.
+- **make-motion.** `voice.mjs --list-voices` prints the voices without loading the model, and `--dir <folder>` voices every
+  `.txt` in it. A `counter` or `kpi-counter` takes `group: true`. Contact sheets add the drawing landings and 25, 50 and 75
+  per cent marks. A render that differs from its twin dumps per-frame `framemd5` files to `test/.out/framemd5` and names the
+  first differing frame. `references/examples/release-recap.json` is a new starter.
+- **make-scene.** `build.mjs --fragment` writes an embeddable `<slug>.fragment.html`. Escape closes the tour, Left and
+  Right step beats, and the Tour button plays it. The dashboard lift follows make-dashboard's row-order colours and axes.
+  Validate and build report capped warnings, and an over-cap error names the worlds that fit.
+- **Eval.** Prompts cover every make-motion block, the explainer feature set, the missing dashboard chart kinds and cloud
+  diagrams; `eval/results/INDEX.md` lists every summary with its version, host and coverage. No model was run for this
+  release, so no new pass rate is claimed.
+
+### Changed
+
+- **Doctor wording and sizes.** An install older than a pin in `package.json` `overrides` is reported as
+  `stale (older than the pinned <package> override)` rather than `missing`; it is still required and still exits 1. The
+  consent prompt shows a size per skill measured in a dev checkout (make-explainer about 3 MB, make-diagram 11,
+  make-dashboard 150, make-motion 58, make-scene 3) and the voiceover install says about 465 MB plus a 90 MB model, not 250. An unknown `--fix`
+  id lists the accepted ids, and older plugin-cache copies are listed with sizes and a command for you to run; the doctor
+  never removes anything. The fix keeps dev packages when `node_modules/playwright` is already there.
+- **Install hints and `--fix` print the same command**, including for `ffmpeg-static`, which no longer prunes kokoro or
+  cutout. The kokoro voice model is cached in a folder that survives a plugin update (`$CLAUDE_PLUGIN_DATA`, else the OS
+  cache folder).
+- **Docs match code.** `README.md` and `USAGE.md` counts, doctor targets, install sizes, licences (three.js and Feather
+  join the table) and flags are checked by `eval/test/docs-facts.test.mjs`, and a fuzz test feeds `constructor`,
+  `__proto__` and `toString` keys to all five validators (it found no bug).
+
+### Not verified
+
+- The browser halves of the new checks (`--shots` PNGs, the saving probe, the 390 px table warning, tour keys, the
+  Play tab and Explore panel changes) are written and unit-tested, but their browser tests were not part of the commits
+  that landed them; a serial browser run is the gate.
+- Rendered output for specs that use none of the new features was not hash-compared against 1.2.0.
 
 ## [1.2.0] - 2026-11-06
 

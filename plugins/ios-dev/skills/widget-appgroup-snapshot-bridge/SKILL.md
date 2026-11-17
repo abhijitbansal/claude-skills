@@ -43,15 +43,34 @@ Invariants the implementation must hold:
   relative to the App Group container — absolute paths break after
   reinstall/restore because the container path changes per install.
 - **Invariant A (writer): never clobber a good snapshot with a
-  transient-empty one.** On an iCloud-sync launch the local store is briefly
-  empty — if `documents` is empty but a snapshot with entries already exists
-  on disk, skip the write and let the post-settle backfill publish real state.
+  transient-empty one — but do clear on a true empty.** On an iCloud-sync
+  launch the local store is briefly empty — while `storeSettled` is false, an
+  empty `documents` with an existing snapshot that has entries skips the write
+  and lets the post-settle backfill publish real state. Once the store has
+  settled, empty is real (the user deleted everything): write the empty
+  snapshot, or the widget shows deleted titles forever. The backfill passes
+  `storeSettled: true`; it must not reuse the skip.
 - **Invariant B (writer + reader share one flag): the App-Lock redaction
   decision has exactly one source of truth.** The writer mirrors App-Lock
-  state into the shared UserDefaults suite; the reader re-checks that SAME
-  flag on every load regardless of what's on disk, so a stale pre-redaction
-  snapshot can never render. Neither side invents its own redaction signal —
-  that's what causes double-redaction bugs.
+  state into the shared UserDefaults suite **first and unconditionally** —
+  before the no-entitlement return, before the Invariant A skip, before any
+  content write — so the widget redacts even when no content write happens.
+  The reader re-checks that SAME flag on every load regardless of what's on
+  disk, so a stale pre-redaction snapshot can never render. Neither side
+  invents its own redaction signal — that's what causes double-redaction bugs.
+- **Cold-launch rule: no snapshot write is scheduled until the App-Lock state
+  has been loaded from persistence and mirrored once in this process.** A
+  scheduler that fires `publish` ahead of the lock bootstrap passes a default
+  `isAppLocked == false` and leaks titles to a user who enabled App Lock.
+- **No thumbnails while locked.** When `isAppLocked`, write entries with
+  `thumbnailRelativePath == nil` and delete the thumbnail files from the
+  container; the redaction flag alone does not remove them from disk.
+- **Serialise the redacted write.** Route every write through one serial
+  queue (or actor) so a lock-triggered redacted write can never be overtaken
+  by an older unlocked write still in flight. Build the `Sendable` snapshot on
+  the caller's side; only values cross to the queue.
+- Mark the bridge DTO, `WidgetBridge`, writer and reader `nonisolated`: under
+  default MainActor isolation the widget process reads them off-main.
 - Writes are atomic (`.atomic, .completeFileProtectionUntilFirstUserAuthentication`)
   so the widget process never reads a half-written file. Do not use
   `.completeFileProtectionUnlessOpen`: a Lock Screen/StandBy widget cannot open
@@ -69,8 +88,9 @@ invariants above.
 Completing the shape:
 
 - **Backfill on launch**: after the store settles (post iCloud first-sync),
-  call `publish` once — heals missing, stale, or version-bumped snapshots:
-  `await store.awaitInitialLoad(); WidgetSnapshotWriter.publish(...)`.
+  call `publish` once with `storeSettled: true` — heals missing, stale, or
+  version-bumped snapshots:
+  `await store.awaitInitialLoad(); WidgetSnapshotWriter.publish(..., storeSettled: true)`.
 - **Resolve relative paths at read time**:
   `WidgetBridge.containerURL?.appendingPathComponent(entry.thumbnailRelativePath)`.
 - **Version the filename** (`-v1`) so a DTO change reads as "no snapshot" (then
@@ -84,6 +104,10 @@ Completing the shape:
 - **a private document-scanner app** — `WidgetBridge` / `WidgetSnapshotReader` commit
   series, incl. `stop iCloud-sync launch from blanking widget recents`
   (invariant A) and the App-Lock redaction mirroring fixes (invariant B).
+  Five widget/App-Lock fixes landed in one day in that app, showing the same
+  ordering class: a cold launch scheduled a snapshot ahead of the lock
+  bootstrap and leaked document names (commit 754064b); no widget thumbnails
+  while App Lock is on (c96a2a1); the redacted write serialised (2d316f5).
 - **a second private iOS app** — independently re-derived the same App-Group snapshot
   architecture, motivating this canonical skill.
 

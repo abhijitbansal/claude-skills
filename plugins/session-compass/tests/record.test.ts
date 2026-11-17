@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Artifact } from '../types'
 import {
-  LIMITS, addArtifact, applyStatus, newRecord, orderIndex, sortByActive, truncate, withFirstPrompt, ago,
+  LIMITS, addArtifact, applyStatus, artifactKey, newRecord, orderIndex, sortByActive, truncate, withFirstPrompt, ago,
 } from '../hooks/record'
+import { isRecord } from '../hooks/io'
 
 describe('truncate', () => {
   test('control characters never reach the display, whitespace still flattens to one space', () => {
@@ -38,9 +39,43 @@ describe('applyStatus', () => {
     expect(out.goal?.length).toBe(LIMITS.goal)
     expect(out.step?.length).toBe(LIMITS.step)
   })
-  test('every field empty returns an error naming the fields', () => {
-    const out = applyStatus(base(), { goal: '  ' }, 2000)
+  test('no field given returns an error naming the fields', () => {
+    const out = applyStatus(base(), {}, 2000)
     expect('error' in out && out.error).toContain('goal, step, next')
+  })
+  test('an empty string clears that field and keeps the others', () => {
+    const set = applyStatus(base(), { goal: 'g', step: 's', next: 'review' }, 2000)
+    if ('error' in set) throw new Error(set.error)
+    const cleared = applyStatus(set, { next: '' }, 3000)
+    if ('error' in cleared) throw new Error(cleared.error)
+    expect(cleared.next).toBeUndefined()
+    expect('next' in cleared).toBe(false)
+    expect(cleared).toMatchObject({ goal: 'g', step: 's', statusAt: 3000 })
+    const blank = applyStatus(set, { step: '   ' }, 4000)
+    if ('error' in blank) throw new Error(blank.error)
+    expect(blank.step).toBeUndefined()
+  })
+})
+
+describe('isRecord', () => {
+  const good = { id: 'x', repo: 'r', worktree: '/w', branch: 'b', lastActive: 1, artifacts: [] }
+  test('accepts a whole record', () => expect(isRecord(good)).toBe(true))
+  test('refuses a record missing its worktree or lastActive', () => {
+    expect(isRecord({ ...good, worktree: undefined })).toBe(false)
+    expect(isRecord({ ...good, lastActive: 'yesterday' })).toBe(false)
+    expect(isRecord({ ...good, lastActive: Number.NaN })).toBe(false)
+  })
+})
+
+describe('artifactKey', () => {
+  test('two PRs with one number in two repos are two entries', () => {
+    const a: Artifact = { kind: 'pr', number: 12, url: 'https://github.com/me/one/pull/12', at: 1 }
+    const b: Artifact = { kind: 'pr', number: 12, url: 'https://github.com/me/two/pull/12', at: 2 }
+    expect(addArtifact(addArtifact(base(), a), b).artifacts).toHaveLength(2)
+  })
+  test('a PR with no URL falls back to its number', () => {
+    const a: Artifact = { kind: 'pr', number: 12, url: '', at: 1 }
+    expect(artifactKey(a)).toBe('pr:12')
   })
 })
 

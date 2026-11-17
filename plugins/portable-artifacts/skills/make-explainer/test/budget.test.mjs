@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { SOFT_CAPS, warnBudget, emojiDensityWarnings, MIN_EMOJI_FOR_DENSITY, words, sentences } from '../scripts/lib/budget.mjs';
+import { SOFT_CAPS, warnBudget, capWarnings, emojiDensityWarnings, MIN_EMOJI_FOR_DENSITY, words, sentences } from '../scripts/lib/budget.mjs';
+import { validateSpec } from '../scripts/lib/spec.mjs';
 
 const w = (n) => Array.from({ length: n }, (_, i) => `w${i}`).join(' ');
 const spec = (sections) => ({ title: 'T', sections });
@@ -240,4 +241,41 @@ test('emoji title: 3 silent, 4 warns at the title path', () => {
 test('emoji density is a warning through warnBudget, never an error', () => {
   const s = spec([{ type: 'text', title: 'T', text: `${EM.repeat(5)}${'x'.repeat(95)}` }]);
   assert.ok(warnBudget(s).some((x) => /emoji/.test(x.message)));
+});
+
+// ---- --strict: the section and page caps become failures (PA-63) --------------------------------
+
+// Twelve 100-word paragraphs: each section is under the 120-word cap, the page is over 900 words.
+const longPage = () => spec(Array.from({ length: 12 }, (_, i) => ({ type: 'text', title: `Part ${i}`, text: w(100) })));
+
+test('capWarnings holds the page cap and the section caps, nothing else', () => {
+  const caps = capWarnings(longPage());
+  assert.deepEqual(caps.map((c) => c.path), ['']);
+  assert.match(caps[0].message, /^page has 1,200 words of prose; aim for 900/);
+  const section = capWarnings(spec([{ type: 'text', title: 'T', text: `${w(70)}.\n\n${w(70)}.` }]));
+  assert.deepEqual(section.map((c) => c.path), ['sections[0]']);
+  assert.match(section[0].message, /^text section is 140 words/);
+  assert.deepEqual(capWarnings(spec([{ type: 'text', title: w(9), text: w(61) }])), [], 'title and paragraph warnings are not caps');
+});
+
+test('warnBudget is unchanged: a long page still only warns', () => {
+  assert.ok(warnBudget(longPage()).some((x) => /^page has 1,200 words/.test(x.message)));
+});
+
+test('validateSpec fails a 1,200-word page under strict, and only warns by default', async () => {
+  const lax = await validateSpec(longPage());
+  assert.equal(lax.ok, true);
+  assert.ok(lax.warnings.some((x) => /^page has 1,200 words/.test(x.message)));
+  const strict = await validateSpec(longPage(), { strict: true });
+  assert.equal(strict.ok, false);
+  const err = strict.errors.find((e) => /^page has 1,200 words/.test(e.message));
+  assert.ok(err, JSON.stringify(strict.errors));
+  assert.match(err.message, /--strict/);
+  assert.ok(!strict.warnings.some((x) => /^page has 1,200 words/.test(x.message)), 'a cap is reported once, as an error');
+});
+
+test('strict leaves a short page valid, and leaves the other warnings as warnings', async () => {
+  const short = await validateSpec(spec([{ type: 'text', title: w(9), text: 'Short.' }]), { strict: true });
+  assert.equal(short.ok, true);
+  assert.ok(short.warnings.some((x) => x.path === 'sections[0].title'));
 });

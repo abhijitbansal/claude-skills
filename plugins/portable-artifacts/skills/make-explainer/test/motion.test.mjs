@@ -121,10 +121,11 @@ test("a motion spec's errors are make-motion's own, re-pathed under the section'
   assert.deepEqual(await at('bad.json'), [
     'sections[1].spec.scenes[0].elements[0].fontSize: must be number (in bad.json)',
   ]);
+  // make-motion's own wording (it now adds the shared-namespace hint); the explainer only re-paths it and adds the file.
   assert.deepEqual(await at('dup.json'), [
-    'sections[1].spec.scenes[0].elements[1].id: duplicate id "a" (first used at scenes[0].elements[0].id) (in dup.json)',
+    'sections[1].spec.scenes[0].elements[1].id: duplicate id "a" (first used at scenes[0].elements[0].id); scene ids and element ids share one namespace; rename one (in dup.json)',
   ]);
-  assert.deepEqual(await at('empty.json'), ['sections[1].spec.scenes: required (in empty.json)']);
+  assert.deepEqual(await at('empty.json'), ['sections[1].spec.scenes: required (array of object) (in empty.json)']);
   const [img] = await at('img.json');
   assert.match(img, /^sections\[1\]\.spec\.scenes\[0\]\.elements\[0\]\.src: must stay inside the spec folder \(in img\.json\)$/);
 });

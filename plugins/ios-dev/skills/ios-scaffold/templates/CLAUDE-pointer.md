@@ -1,5 +1,8 @@
 # CLAUDE.md
 
-**The canonical conventions for this repo live in [AGENTS.md](./AGENTS.md).
-Read it before working in {{APP_NAME}}.** This file is a pointer so the rules
-have a single source of truth across tools (Claude Code, Cursor, Codex, …).
+@AGENTS.md
+
+The canonical conventions for {{APP_NAME}} live in AGENTS.md, imported above:
+Claude Code reads a root AGENTS.md only through an `@AGENTS.md` import once a
+CLAUDE.md exists, so a plain link would leave the rules unloaded. Other tools
+(Cursor, Codex, …) read AGENTS.md directly.

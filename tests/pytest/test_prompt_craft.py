@@ -66,6 +66,33 @@ def test_hooks_json_valid_and_references_existing_scripts():
         assert (PLUGIN / "hooks" / script).exists(), f"{script} missing"
 
 
+def test_every_hook_has_a_bounded_timeout():
+    """CAT-86: a hung python3/git/prettier must not stall the session."""
+    hooks = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())
+    missing = []
+    for event, groups in hooks["hooks"].items():
+        for group in groups:
+            for hook in group["hooks"]:
+                timeout = hook.get("timeout")
+                if not isinstance(timeout, int) or not 0 < timeout <= 60:
+                    missing.append((event, hook["command"]))
+    assert not missing, f"hooks without a 1-60s timeout: {missing}"
+
+
+def test_readme_documents_advisor_switch_and_secret_guard_scope():
+    text = (PLUGIN / "README.md").read_text()
+    assert "PROMPT_CRAFT_ADVISOR=0" in text
+    assert "file tools only" in text
+
+
+def test_readme_lists_every_skill_and_has_no_phase_label():
+    text = (PLUGIN / "README.md").read_text()
+    for skill in EXPECTED_SKILLS:
+        assert f"/prompt-craft:{skill}" in text, f"README missing /prompt-craft:{skill}"
+    assert "structured-output-adaptive-thinking-token-bloat" in text
+    assert "Phase 1" not in text
+
+
 def test_plan_and_review_disable_model_invocation():
     for skill in ("plan", "review"):
         fm = _frontmatter(PLUGIN / "skills" / skill / "SKILL.md")

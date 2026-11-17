@@ -22,7 +22,10 @@ test('a valid inline scene passes', async () => {
 
 test('the file fixture scene passes', async () => {
   const { spec, dir } = loadSpec(path.join(FIX, 'city.scene.json'));
-  assert.deepEqual(await validateSpec(spec, { dir }), { ok: true, errors: [] });
+  const result = await validateSpec(spec, { dir });
+  assert.deepEqual({ ok: result.ok, errors: result.errors }, { ok: true, errors: [] });
+  // the fixture's rows.json carries a link that a city does not draw: the one honest warning
+  assert.deepEqual(result.warnings.map((w) => w.path), ['data.file']);
 });
 
 test('exactly one of data or lift', async () => {
@@ -277,7 +280,7 @@ test('tour focus matches a row label', async () => {
 
 test('tour focus miss suggests a key', async () => {
   const r = await check(scene({ tour: [{ title: 'W', focus: ['api', 'wbe'] }] }));
-  assert.equal(errorAt(r, 'tour[0].focus[1]').message, '"wbe" is not a group or label; did you mean "web"?');
+  assert.equal(errorAt(r, 'tour[0].focus[1]').message, '"wbe" is not a group, label or t value; did you mean "web"?');
 });
 
 test('tour focus is not resolved for a lift (node ids belong to the sibling)', async () => {

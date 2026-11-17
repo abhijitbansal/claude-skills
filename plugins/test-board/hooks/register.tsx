@@ -7,7 +7,7 @@ import {
   appendRun, BAND_TTL_MS, keysToDrop, MAX_LATEST, oldestQuarter, previousRun, STORE_SOFT_CAP_BYTES, touchIndex, visibleRuns,
 } from './history'
 import { parseTestOutput } from './parse'
-import { resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
+import { expandHome, resolveDir, splitCommand, suiteKey, suiteLabel } from './suite'
 import { hasSourceReport, parseSourceCapture, sourceCwd, sourceMatchForRun, sourceRoot, unknownSource } from './source-freshness'
 
 const latest = atom({ plugin: 'test-board', key: 'latest' } as const, [] as TestRun[])
@@ -27,6 +27,8 @@ const asKeys = (v: unknown): string[] => (Array.isArray(v) ? (v as string[]) : [
 function outputOf(ran: Ran): string | null {
   if (ran.deny !== undefined) return null
   const result = ran.result as { stdout?: unknown; stderr?: unknown; backgroundTaskId?: unknown } | undefined
+  // Known limit: a backgrounded run (run_in_background) returns only a task id here, with no output to read,
+  // so such a run is never recorded.
   if (typeof result?.backgroundTaskId === 'string') return null
   if (typeof result?.stdout === 'string') {
     return `${result.stdout}\n${typeof result.stderr === 'string' ? result.stderr : ''}`
@@ -59,8 +61,14 @@ function commandEvidence(ran: Ran): Pick<TestRun, 'exitCode' | 'commandStatus' |
 // A deny-list on purpose: unknown and mcp__* tools still invalidate. Agent/Task only spawn a subagent whose own
 // tool calls reach this same hook (with its agentId), so skipping the spawning call itself loses nothing, except
 // when it asks for a worktree: the directory it creates sits inside the repo (see `isWorktreeSpawn`).
+// LS, NotebookRead, BashOutput and TodoWrite are older names, kept for hosts that still offer them. The task-list
+// tools, MCP resource reads, CronList and SendUserFile write nothing in the worktree; compass_status writes only
+// session-compass's own store. Never listed: anything that can write, move the session (EnterWorktree,
+// ExitWorktree) or start a process (Monitor).
 const READ_ONLY_TOOLS = new Set(['Read', 'Grep', 'Glob', 'LS', 'NotebookRead', 'WebFetch', 'WebSearch', 'TodoWrite',
-  'Agent', 'Task', 'Skill', 'ToolSearch', 'AskUserQuestion', 'TaskOutput', 'BashOutput', 'ExitPlanMode', 'EnterPlanMode'])
+  'Agent', 'Task', 'Skill', 'ToolSearch', 'AskUserQuestion', 'TaskOutput', 'BashOutput', 'ExitPlanMode', 'EnterPlanMode',
+  'TaskCreate', 'TaskGet', 'TaskList', 'TaskUpdate', 'ListMcpResourcesTool', 'ReadMcpResourceTool', 'CronList',
+  'SendUserFile', 'mcp__session-compass__compass_status'])
 const SOURCE_PENDING = '    source checking…'
 // A subagent asked to work in a worktree gets a directory made inside the repo before any of its tools run.
 const isWorktreeSpawn = (e: { tool: string }): boolean =>
@@ -70,7 +78,9 @@ const REFRESH_DELAY_MS = 500
 
 // `isRepo` is false when git could not name a worktree: the cwd then keys history but is never captured.
 type WorktreeRoot = { root: string; isRepo: boolean }
-type Roots = Map<string, WorktreeRoot>
+// A negative answer is asked again after this long: the folder may have become a repo (git init, a new worktree).
+const NEGATIVE_ROOT_TTL_MS = 60_000
+type Roots = Map<string, WorktreeRoot & { at: number }>
 type Loops = Map<string, Loop>
 type Refresh = { timer?: Timer; isRunning: boolean; isQueued: boolean }
 type State = {
@@ -79,8 +89,9 @@ type State = {
 }
 
 async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Promise<WorktreeRoot> {
+  const now = await $.clock.now()
   const cached = roots.get(cwd)
-  if (cached !== undefined) return cached
+  if (cached !== undefined && (cached.isRepo || now - cached.at < NEGATIVE_ROOT_TTL_MS)) return cached
   let found: WorktreeRoot = { root: cwd, isRepo: false }
   try {
     const out = await $.process.run(['git', 'rev-parse', '--show-toplevel'], { cwd, timeoutMs: 1000 })
@@ -90,8 +101,17 @@ async function worktreeRoot($: EngineInterface, roots: Roots, cwd: string): Prom
   } catch {
     // not a repo, or git missing: the cwd stands in for the worktree
   }
-  roots.set(cwd, found)
+  roots.set(cwd, { ...found, at: now })
   return found
+}
+
+// HOME, for a `cd ~/…` prefix; undefined when the host cannot say, and the path then keys as written.
+async function homeDir($: EngineInterface): Promise<string | undefined> {
+  try {
+    return await $.env.get('HOME')
+  } catch {
+    return undefined
+  }
 }
 
 async function captureSource($: EngineInterface, root: string): Promise<SourceSnapshot> {
@@ -130,7 +150,10 @@ const isCheckable = (run: TestRun): boolean => run.stale !== true && hasSourceRe
 async function refreshSource($: EngineInterface, state: State): Promise<void> {
   if (state.activeTools !== 0) return
   const activity = state.activity
-  const held = visibleRuns(await read($, latest), await $.clock.now()).filter(isCheckable).slice(0, MAX_LATEST)
+  const visible = visibleRuns(await read($, latest), await $.clock.now())
+  // A closed band draws no source line, so it needs no collector; the next run reopens it and checks again.
+  if (isDismissed(await read($, dismissed), visible[0])) return
+  const held = visible.filter(isCheckable).slice(0, MAX_LATEST)
   const snapshots = new Map<string, SourceSnapshot>()
   for (const run of held) {
     const root = sourceRoot(run.source)
@@ -287,7 +310,8 @@ async function record(
   if (parsed === null) return
   const loop = call.agentId === undefined ? undefined : state.loops.get(call.agentId)
   const base = loop?.cwd ?? call.startCwd
-  const cwd = parts.cdDir === undefined ? base : resolveDir(base, parts.cdDir)
+  const cdDir = parts.cdDir?.startsWith('~') === true ? expandHome(parts.cdDir, await homeDir($)) : parts.cdDir
+  const cwd = cdDir === undefined ? base : resolveDir(base, cdDir)
   const { root } = await worktreeRoot($, state.roots, cwd)
   const via = call.agentId === undefined ? undefined : loop === undefined || loop.isWorkflow ? 'workflow' : loop.description
   const run: TestRun = {
@@ -410,7 +434,6 @@ export const register: Register = on => {
   on('prompt.submit', async ($, e, next) => {
     // A delivery into a running turn (peer message, notification) is not a new turn.
     if (e.turnId === undefined) {
-      state.turn.isNew = true
       // The person may have edited files since the last check. Drop a 'matching' label now (a cheap state write, no
       // collector) and discard any check in flight, so the band cannot show it while the background check catches up.
       state.activity += 1
@@ -421,7 +444,10 @@ export const register: Register = on => {
       }
       scheduleRefresh($, state)
     }
-    return next(e)
+    const ran = await next(e)
+    // Nor is a prompt a hook dropped (session-compass checks the same): the band keeps this turn's rows.
+    if (e.turnId === undefined && ran.drop === undefined) state.turn.isNew = true
+    return ran
   })
 
   on('session.start', async ($, e, next) => {
@@ -470,7 +496,7 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {rows.map(({ run, parts }, i) => (
-          <Box flexDirection="column">
+          <Box key={`row-${run.key}`} flexDirection="column">
             <Box flexDirection="row">
               <Button key={`run-${run.key}`} plain onPress={() => update($, expanded, v => !v)}>
                 <Text dimColor={run.stale === true}>{parts.label}{GAP}</Text>
@@ -495,8 +521,8 @@ export const register: Register = on => {
               <Text dimColor>{run.sourceCheck === undefined ? SOURCE_PENDING
                 : `    source ${run.sourceCheck.status} at last check ${formatClock(run.sourceCheck.at)}`}</Text>
             )}
-            {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map(f => (
-              <Text dimColor>{`    ${f.id}${f.loc === undefined ? '' : `  ${f.loc}`}`}</Text>
+            {isOpen && run.failures.slice(0, MAX_SHOWN_FAILURES).map((f, n) => (
+              <Text key={`failure-${n}`} dimColor>{`    ${f.id}${f.loc === undefined ? '' : `  ${f.loc}`}`}</Text>
             ))}
           </Box>
         ))}

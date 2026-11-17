@@ -56,7 +56,18 @@ test('all-sessions tab lists other sessions; pressing a row copies the resume co
     expect(await ui.find({ text: /ocr · ocr\/main · table OCR · review/ })).toBeDefined()
     await ui.press({ key: 's-sess-0' })
   }
-  expect(world.copied).toEqual(['claude --resume sess-0', 'claude --resume sess-0'])
+  const resume = 'cd /Users/me/projects/ocr && claude --resume sess-0'
+  expect(world.copied).toEqual([resume, resume])
+})
+
+test('the copied resume command quotes a worktree path with spaces or quotes', async ($, on) => {
+  const spaced = { ...OTHER, worktree: "/Users/me/my projects/o'cr" }
+  const { world } = startWorld(on, {}, { 'session:sess-0': spaced, index: ['sess-0'] })
+  await $.session.start(START)
+  const ui = await mount($, 'terminal')
+  await ui.press({ key: 'tab-all' })
+  await ui.press({ key: 's-sess-0' })
+  expect(world.copied).toEqual([`cd '/Users/me/my projects/o'\\''cr' && claude --resume sess-0`])
 })
 
 test('a corrupt index is rebuilt from session keys', async ($, on) => {

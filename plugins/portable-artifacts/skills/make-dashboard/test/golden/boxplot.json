@@ -8,12 +8,13 @@
     "y": {
       "field": "a",
       "type": "quantitative",
-      "title": "a"
+      "title": "A"
     },
     "x": {
       "field": "g",
       "type": "nominal",
-      "title": "g"
+      "title": "G",
+      "sort": null
     }
   }
 }

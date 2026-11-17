@@ -11,6 +11,8 @@ import {
   KOKORO_BASE_URL, KOKORO_FILES, KOKORO_DIR, ensureKokoroModel, loadModel,
 } from '../scripts/lib/voice.mjs';
 import { runVoiceCli } from '../scripts/lib/voice-cli.mjs';
+import { voiceListText } from '../scripts/lib/voice-list.mjs';
+import { modelsDir } from '../scripts/lib/model-cache.mjs';
 import { writeFileSync } from 'node:fs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -261,7 +263,8 @@ test('the Kokoro pin: a commit-pinned base URL and four files, each with a sha25
     assert.ok(Number.isInteger(bytes) && bytes > 0);
   }
   assert.equal(Object.isFrozen(KOKORO_FILES), true);
-  assert.equal(path.relative(root, KOKORO_DIR), path.join('.cache', 'models', 'onnx-community', 'Kokoro-82M-v1.0-ONNX'));
+  // Merge: the folder is main's stable per-user model cache (model-cache.mjs, cache-dir.test.mjs), not <skill>/.cache/models.
+  assert.equal(MODEL_CACHE_DIR, modelsDir());
   assert.equal(KOKORO_DIR, path.join(MODEL_CACHE_DIR, MODEL_ID));
 });
 
@@ -350,14 +353,16 @@ const VOICES = { af_heart: { language: 'en-us', gender: 'Female', overallGrade: 
 class StubTts { get voices() { return VOICES; } }
 
 test('--list-voices prints the voices without loading or downloading the model', async () => {
+  // Merge: main made the list a static table (voice-list.mjs), so the voice stack does not load either.
   const out = [];
   const deps = {
-    loadKokoro: async () => ({ KokoroTTS: StubTts }),
+    loadKokoro: async () => { throw new Error('the voice stack must not load for --list-voices'); },
     loadModel: async () => { throw new Error('the model must not load for --list-voices'); },
     write: (s) => out.push(s),
   };
   await runVoiceCli(['--list-voices'], deps);
-  assert.deepEqual(out, ['af_heart\ten-us\tFemale\tA\n', 'bm_george\ten-gb\tMale\tC\n']);
+  assert.deepEqual(out, [voiceListText()]);
+  assert.match(out[0], /^af_heart\t/m);
 });
 
 test('a synthesis run loads the model once, with the log line going to the caller, then disposes it', async () => {

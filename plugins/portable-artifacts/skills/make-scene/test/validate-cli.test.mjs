@@ -23,7 +23,8 @@ const inline = { title: 'T', data: { rows: [{ group: 'a', value: 1 }] } };
 test('valid spec exits 0 and says so', () => {
   const r = run([fixture('city.scene.json')]);
   assert.equal(r.status, 0);
-  assert.match(r.stdout, /city\.scene\.json: valid\n$/);
+  assert.match(r.stdout, /^data\.file: warning: 1 link will not be drawn/m, 'the fixture rows.json has a link a city does not draw');
+  assert.match(r.stdout, /city\.scene\.json: valid \(1 warning\)\n$/);
 });
 
 test('invalid spec exits 1 with path: message lines', () => {

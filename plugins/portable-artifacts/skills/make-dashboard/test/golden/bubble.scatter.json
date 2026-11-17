@@ -13,23 +13,23 @@
     "x": {
       "field": "a",
       "type": "quantitative",
-      "title": "a"
+      "title": "A"
     },
     "y": {
       "field": "b",
       "type": "quantitative",
-      "title": "b"
+      "title": "B"
     },
     "tooltip": [
       {
         "field": "a",
         "type": "quantitative",
-        "title": "a"
+        "title": "A"
       },
       {
         "field": "b",
         "type": "quantitative",
-        "title": "b"
+        "title": "B"
       }
     ]
   }

@@ -15,7 +15,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from registry_lib import atomic_write_json  # noqa: E402
 
-SHIM_TEMPLATE = Path(__file__).resolve().parent.parent / "hooks" / "statusline_shim.sh"
+def _shim_template(plugin_root):
+    # type: (object) -> Path
+    return Path(plugin_root) / "hooks" / "statusline_shim.sh"
 
 
 def _pc_dir(home):
@@ -54,9 +56,43 @@ def _load_settings(home):
     if not sp.exists():
         return {}
     try:
-        return json.loads(sp.read_text())
+        settings = json.loads(sp.read_text())
     except ValueError as exc:
         raise ValueError("settings.json is unparseable; refusing to write: %s" % exc)
+    if not isinstance(settings, dict):
+        raise ValueError("settings.json is not a JSON object; refusing to write")
+    return settings
+
+
+def _current_command(settings):
+    # type: (dict) -> str
+    """The statusLine command in settings ("" if none). Raises ValueError on
+    an unexpected shape rather than crashing or overwriting it."""
+    status_line = settings.get("statusLine")
+    if status_line is None:
+        return ""
+    if not isinstance(status_line, dict):
+        raise ValueError("settings.json statusLine is not an object; refusing to write")
+    command = status_line.get("command", "")
+    if not isinstance(command, str):
+        raise ValueError("settings.json statusLine.command is not a string; refusing to write")
+    return command
+
+
+def _backup_settings(home):
+    # type: (object) -> None
+    """Timestamped 0600 copy of settings.json, recorded in the last-backup pointer."""
+    sp = _settings_path(home)
+    if not sp.exists():
+        return
+    _pc_dir(home).mkdir(parents=True, exist_ok=True)
+    # Microseconds keep two backups in the same second from overwriting each other.
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%f")
+    backup = sp.with_name("settings.json.bak.%s" % ts)
+    shutil.copyfile(str(sp), str(backup))
+    os.chmod(str(backup), 0o600)
+    backup.read_text()  # verify readable
+    _backup_pointer(home).write_text(str(backup))
 
 
 def _is_self_reference(command, home):
@@ -70,24 +106,45 @@ def _is_self_reference(command, home):
     return str(_shim_path(home)) in command
 
 
+def _refresh_shim(home, plugin_root):
+    # type: (object, str) -> bool
+    """Overwrite the installed shim with the plugin template when they differ.
+    True if the file changed; a missing template or shim is left alone."""
+    template = _shim_template(plugin_root)
+    shim = _shim_path(home)
+    if not template.is_file() or not shim.is_file():
+        return False
+    if shim.read_bytes() == template.read_bytes():
+        return False
+    shutil.copyfile(str(template), str(shim))
+    os.chmod(str(shim), 0o755)
+    return True
+
+
 def wire(home, plugin_root, dry_run=False):
     # type: (object, str, bool) -> dict
     """Point settings.json statusLine.command at the shim, saving the prior command.
 
-    Returns {"before": str, "after": str, "wired": bool}.
-    wired=False means already wired (no-op) or dry_run.
+    Returns {"before": str, "after": str, "wired": bool, "shim_refreshed": bool}.
+    wired=False means already wired or dry_run; an already-wired install still
+    gets an outdated shim file refreshed (shim_refreshed=True).
     Raises ValueError if settings.json exists but is not valid JSON (aborts, no write).
     """
     settings = _load_settings(home)  # raises ValueError on bad JSON
     shim_cmd = _shim_command(home)
-    current = (settings.get("statusLine") or {}).get("command", "")
+    current = _current_command(settings)  # raises ValueError on a bad shape
 
-    # Idempotency: detect already-wired BEFORE touching sidecar.
+    # Idempotency: detect already-wired BEFORE touching sidecar. settings.json
+    # and the sidecar stay untouched, but an outdated shim file is refreshed
+    # so fixes to the template reach installs that were wired earlier.
     if current == shim_cmd:
-        return {"before": current, "after": current, "wired": False}
+        refreshed = False if dry_run else _refresh_shim(home, plugin_root)
+        return {"before": current, "after": current, "wired": False,
+                "shim_refreshed": refreshed}
 
     if dry_run:
-        return {"before": current, "after": shim_cmd, "wired": False}
+        return {"before": current, "after": shim_cmd, "wired": False,
+                "shim_refreshed": False}
 
     _pc_dir(home).mkdir(parents=True, exist_ok=True)
     try:
@@ -100,38 +157,44 @@ def wire(home, plugin_root, dry_run=False):
         _sidecar_path(home).write_text(current)
 
     # Install the shim from the plugin template.
-    shutil.copyfile(str(SHIM_TEMPLATE), str(_shim_path(home)))
+    template = _shim_template(plugin_root)
+    if not template.is_file():
+        raise ValueError("shim template not found: %s" % template)
+    shutil.copyfile(str(template), str(_shim_path(home)))
     os.chmod(str(_shim_path(home)), 0o755)
 
     # Timestamped 0600 backup BEFORE the write.
     sp = _settings_path(home)
-    if sp.exists():
-        ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        backup = sp.with_name("settings.json.bak.%s" % ts)
-        shutil.copyfile(str(sp), str(backup))
-        os.chmod(str(backup), 0o600)
-        backup.read_text()  # verify readable
-        _backup_pointer(home).write_text(str(backup))
+    _backup_settings(home)
 
     settings.setdefault("statusLine", {})
     settings["statusLine"]["type"] = "command"
     settings["statusLine"]["command"] = shim_cmd
     atomic_write_json(sp, settings, mode=0o600, sort_keys=False)
-    return {"before": current, "after": shim_cmd, "wired": True}
+    return {"before": current, "after": shim_cmd, "wired": True,
+            "shim_refreshed": False}
 
 
 def unwire(home):
     # type: (object) -> dict
     """Restore settings.json statusLine.command from the sidecar and clean up.
 
-    Returns {"restored": str} where str is the restored command (or "" if removed).
+    Acts only when statusLine.command is exactly our shim command: a settings
+    file that was never wired, was already unwired, or was edited since is left
+    untouched. Timestamped backups are kept, never deleted.
+
+    Returns {"restored": str, "changed": bool}; restored is the command put
+    back ("" if the statusLine was removed or nothing was changed).
     """
     settings = _load_settings(home)
+    if _current_command(settings) != _shim_command(home):
+        return {"restored": "", "changed": False}
+
     sidecar = _sidecar_path(home)
     base = sidecar.read_text().strip() if sidecar.exists() else ""
 
+    _backup_settings(home)
     if base:
-        settings.setdefault("statusLine", {})
         settings["statusLine"]["type"] = "command"
         settings["statusLine"]["command"] = base
     else:
@@ -145,18 +208,7 @@ def unwire(home):
         except OSError:
             pass
 
-    ptr = _backup_pointer(home)
-    if ptr.exists():
-        try:
-            Path(ptr.read_text().strip()).unlink()
-        except OSError:
-            pass
-        try:
-            ptr.unlink()
-        except OSError:
-            pass
-
-    return {"restored": base}
+    return {"restored": base, "changed": True}
 
 
 def main(argv=None):
@@ -188,6 +240,8 @@ def main(argv=None):
             ptr = _backup_pointer(args.home)
             if ptr.exists():
                 print("backup: %s" % ptr.read_text().strip())
+        elif r["shim_refreshed"]:
+            print("(already wired — shim refreshed from the plugin template)")
         elif not args.dry_run:
             print("(already wired — no-op)")
         if args.dry_run:
@@ -201,8 +255,14 @@ def main(argv=None):
         except ValueError as exc:
             print("ERROR: %s" % exc, file=sys.stderr)
             return 1
+        if not r["changed"]:
+            print("(statusLine is not the prompt-craft shim — nothing to restore)")
+            return 0
         restored = r["restored"] or "(removed statusLine)"
         print("restored: %s" % restored)
+        ptr = _backup_pointer(args.home)
+        if ptr.exists():
+            print("backup kept: %s" % ptr.read_text().strip())
         print()
         print("Manual recovery: if anything looks wrong, restore the timestamped backup:")
         print("  cp ~/.claude/settings.json.bak.<ts> ~/.claude/settings.json")

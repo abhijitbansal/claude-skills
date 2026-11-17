@@ -18,7 +18,8 @@ export function intakeSection(md) {
 
 // One option per list line: a bold name, then text that must carry a default.
 const OPTIONS = ['platform', 'format', 'length', 'assets', 'voiceover', 'sound', 'theme', 'CTA', 'style', 'hand tone'];
-const VOICEOVER_DISCLOSURE = 'a one-time install of about 250 MB plus a 90 MB voice model';
+// Merge: the measured size of optional/voice (du on macOS), which replaced 1.3.0's figure.
+const VOICEOVER_DISCLOSURE = 'a one-time install of about 440 MB plus a 90 MB voice model';
 const TRIGGERS = ['`claude -p`', '`codex exec`', '`copilot -p`', 'the eval'];
 export const optionLine = (section, name) => section.split('\n').find((l) => l.includes(`**${name}**`));
 
@@ -140,7 +141,7 @@ test('guardrail: a missing option, a missing default or a missing fallback is ca
   assert.ok(section.includes('**voiceover**'));
   assert.deepEqual(problems(section.replace('**voiceover**', '**narration**')), ['no line for option voiceover']);
   assert.deepEqual(problems(section.replace('any run that cannot pause for an answer', 'x')), ['missing "any run that cannot pause for an answer"']);
-  assert.deepEqual(problems(section.replaceAll('250 MB', 'big')), [`missing "${VOICEOVER_DISCLOSURE}"`]);
+  assert.deepEqual(problems(section.replaceAll('440 MB', 'big')), [`missing "${VOICEOVER_DISCLOSURE}"`]);
   assert.deepEqual(problems(section.replace('`codex exec`', 'x')), ['missing "`codex exec`"']);
   assert.deepEqual(problems(section.replace('ding)', 'x)')), ['sound line lacks cue ding']);
   const noDefault = section.split('\n').map((l) => (l.includes('**CTA**') ? l.replace(/default/gi, 'usually') : l)).join('\n');

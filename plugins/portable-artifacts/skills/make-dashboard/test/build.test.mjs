@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadSpec } from '../scripts/lib/spec.mjs';
 import { toJsonSafe, runQueries, checkFields } from '../scripts/lib/data.mjs';
 import { escapeHtml, jsonForScript } from '../scripts/lib/html.mjs';
@@ -270,17 +270,19 @@ test('build prints each resolved source path and a serve hint', () => {
   const dataDir = fs.realpathSync(path.join(ROOT, 'references/examples/data'));
   assert.match(r.stdout, new RegExp(`^source sales: ${path.join(dataDir, 'sales.parquet').replace(/[\\.]/g, '\\$&')}$`, 'm'));
   assert.match(r.stdout, /^serve: node .*serve\.mjs/m);
+  const wrote = /^wrote (.+)$/m.exec(r.stdout)[1];
+  assert.ok(r.stdout.split('\n').includes(pathToFileURL(wrote).href), `a bare file:// line for the page:\n${r.stdout}`);
 });
 
 test('build refuses sources outside the spec folder unless --allow-outside', () => {
   const root = fs.realpathSync(tmp());
   fs.mkdirSync(path.join(root, 'proj'));
   fs.copyFileSync(path.join(FIXTURES, 'data/sales.csv'), path.join(root, 'outside.csv'));
-  const spec = { title: 'T', sources: { sales: { type: 'csv', path: '../outside.csv' } }, queries: { q: 'SELECT 1 AS n FROM sales LIMIT 1' } };
+  const spec = { title: 'T', sources: { sales: { type: 'csv', path: '../outside.csv' } }, queries: { q: 'SELECT 1 AS n FROM sales LIMIT 1' }, kpis: [{ id: 'k', title: 'N', query: 'q', field: 'n' }] };
   fs.writeFileSync(path.join(root, 'proj/d.json'), JSON.stringify(spec));
   const r = build([path.join(root, 'proj/d.json')]);
   assert.equal(r.status, 1);
-  assert.match(r.stdout, /^sources\.sales\.path: resolves outside the spec folder \(.*outside\.csv\); move the data under .*proj or pass --allow-outside$/m);
+  assert.match(r.stdout, /^sources\.sales\.path: resolves outside the spec folder \(.*outside\.csv\); copy or move the data under .*proj and point the path there \(--allow-outside is the owner's flag to add, not a fix to apply\)$/m);
   const ok = build([path.join(root, 'proj/d.json'), '--allow-outside']);
   assert.equal(ok.status, 0, ok.stdout + ok.stderr);
 });
@@ -384,4 +386,55 @@ test('an unknown --theme fails fast with exit 2 and a did-you-mean', () => {
   const r = build([file, '--theme', 'papr']);
   assert.equal(r.status, 2, r.stdout + r.stderr);
   assert.match(r.stderr, /--theme: unknown theme "papr"; did you mean "paper"\?/);
+});
+
+// ---- PA-31: charts must not mislead silently ---------------------------------
+
+test('the truncation note names maxRows as the fix', () => {
+  const p = project({ maxRows: 2, queries: { many: 'SELECT * FROM sales' }, charts: [{ id: 'c1', title: 'Many', query: 'many', vegaLite: { mark: 'bar', encoding: { x: { field: 'region', type: 'nominal' } } } }] });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(r.stdout, /^many: 2 rows \(truncated at maxRows 2\)$/m);
+  assert.match(readPage(path.join(p.dir, 'dist')), /<p class="meta">truncated at 2 rows; raise <code>maxRows<\/code> in the spec or aggregate in SQL<\/p>/);
+});
+
+test('a KPI tile shows its SQL in the card details', () => {
+  const p = project({ queries: { rev: 'SELECT region, SUM(amount) AS revenue FROM sales GROUP BY 1 ORDER BY 2 DESC', total: 'SELECT SUM(amount) AS revenue FROM sales' }, kpis: [{ id: 'k1', title: 'Revenue', query: 'total', field: 'revenue' }] });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(readPage(path.join(p.dir, 'dist')), /<details class="kpi-sql"><summary>Query<\/summary><pre class="sql">SELECT SUM\(amount\) AS revenue FROM sales<\/pre><\/details>/);
+});
+
+test('a KPI query that returns more than one row builds with a warning, not a silent first row', () => {
+  const p = project({ kpis: [{ id: 'k1', title: 'Revenue', query: 'rev', field: 'revenue' }] });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  assert.match(r.stdout, /^kpis\[0\]\.query: warning: "rev" returns 4 rows; the tile shows only the first/m);
+  const j = JSON.parse(build([p.file, '--json']).stdout);
+  assert.equal(j.warnings[0].path, 'kpis[0].query');
+});
+
+// ---- PA-34: tabs name the panel they switch -----------------------------------
+
+test('view tabs control a tabpanel; a paired card wires only its second pane', () => {
+  const p = project({ charts: [
+    { id: 'c1', title: 'Revenue', query: 'rev', kind: 'bar', x: 'region', y: 'revenue' },
+    { id: 'c2', title: 'Pair', query: 'rev', kind: 'bar', x: 'region', y: 'revenue', pair: true, views: ['sorted', 'share'] },
+  ] });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const html = readPage(path.join(p.dir, 'dist'));
+  assert.match(html, /<button type="button" role="tab" id="tab-c1-bar" aria-controls="panel-c1" data-view="bar"/);
+  assert.match(html, /<div class="panes" role="tabpanel" id="panel-c1" aria-labelledby="tab-c1-bar"><div class="chart" id="chart-c1"/);
+  assert.match(html, /role="tab" id="tab-c2-sorted" aria-controls="panel-c2"/);
+  assert.match(html, /<div class="panes pair"><div class="chart" id="chart-c2"[^>]*><\/div><div class="pane-panel" role="tabpanel" id="panel-c2" aria-labelledby="tab-c2-sorted"><div class="chart" id="chart-c2-2"/);
+});
+
+test('a paired card with no tabs has no tabpanel role', () => {
+  const p = project({ charts: [{ id: 'c1', title: 'Pair', query: 'rev', kind: 'bar', x: 'region', y: 'revenue', pair: true, views: ['table'] }] });
+  const r = build([p.file]);
+  assert.equal(r.status, 0, r.stderr + r.stdout);
+  const html = readPage(path.join(p.dir, 'dist'));
+  assert.ok(html.includes('<div class="panes pair"><div class="chart" id="chart-c1" data-pane="0" role="img" aria-label="Pair"></div><div class="chart" id="chart-c1-2"'), 'no tabpanel wrapper');
+  assert.ok(!html.includes('role="tabpanel"'));
 });

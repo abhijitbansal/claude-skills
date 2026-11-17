@@ -79,6 +79,9 @@ test('a failing fix reports ok:false', async () => {
   assert.equal(res[0].ok, false);
 });
 
+// Everything exists except the dev package playwright: a production-only install.
+const noPlaywright = (p) => !/[\\/]node_modules[\\/]playwright$/.test(p);
+
 // A lockfile whose tree holds fast-uri (via ajv) but not sharp or global-agent.
 const LOCK = JSON.stringify({ packages: { '': {}, 'node_modules/ajv': {}, 'node_modules/fast-uri': {}, 'node_modules/@scope/pkg': {} } });
 
@@ -92,7 +95,7 @@ test('node_modules installed before an overrides pin existed counts as missing u
     if (!(p in files)) throw new Error('ENOENT');
     return files[p];
   };
-  const stale = await diagnose([nodeModules()], ctx({ exists: () => true, readFile }));
+  const stale = await diagnose([nodeModules()], ctx({ exists: noPlaywright, readFile }));
   assert.equal(stale.ok, false, 'the stale install must go red, node_modules is a required requirement');
   assert.equal(stale.missing[0].id, 'node_modules');
   assert.match(stale.missing[0].why, /reinstall to get the patched fast-uri pinned in package\.json "overrides"/);
@@ -102,7 +105,7 @@ test('node_modules installed before an overrides pin existed counts as missing u
 });
 
 test('node_modules fix on an existing install says what npm ci removes and which --fix ids restore it', async () => {
-  const exists = () => true;
+  const exists = noPlaywright;
   const dev = (await diagnose([nodeModules({ restore: ['dev_deps'] })], ctx({ exists, readFile: () => { throw new Error('x'); }, skillDir: '/s/x' })));
   assert.deepEqual(dev, { ok: true, missing: [] });
   const stale = { '/s/x/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }), '/s/x/package-lock.json': LOCK, '/s/x/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }) };
@@ -122,7 +125,7 @@ test('sister skill: a node_modules that predates a pin in the sister package.jso
     [dir + '/node_modules/fast-uri/package.json']: JSON.stringify({ version: '3.1.8' }),
   };
   const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
-  const base = { skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h', exists: () => true, readFile };
+  const base = { skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h', exists: noPlaywright, readFile };
   const stale = await diagnose([sisterSkill('make-diagram')], ctx(base));
   assert.equal(stale.ok, false);
   assert.match(stale.missing[0].why, /make-diagram is installed but its dependencies predate the patched fast-uri/);
@@ -899,4 +902,181 @@ test('the make-motion node_modules reinstall names no optional install', async (
   const r = await diagnose([nodeModules({ omitDev: false })], ctx({ exists: () => true, readFile: jsonFiles(stale), skillDir: '/s/x' }));
   assert.equal(r.missing[0].id, 'node_modules', 'the stale install is still reported');
   assert.equal(r.missing[0].notes, undefined);
+});
+
+// --- PA-14: an unknown --fix id lists the ids that exist ---
+
+test('PA-14: an unknown --fix id keeps refused "unknown id" and lists the accepted ids, in JSON and in text', async () => {
+  const res = await runFixes(['nope'], [nodeVersion(20), kokoro()], ctx(), () => assert.fail('must not run'));
+  assert.equal(res[0].refused, 'unknown id');
+  assert.deepEqual(res[0].accepted, ['node', 'kokoro']);
+  const json = await runMain(['--fix', 'nope', '--json'], mainOpts());
+  assert.deepEqual(JSON.parse(json.out)[0].accepted, ['node', 'kokoro']);
+  const text = await runMain(['--fix', 'nope'], mainOpts());
+  assert.match(text.out, /^refused: nope — unknown id \(accepted ids: node, kokoro\)/m);
+  assert.equal(text.code, 1);
+  const known = await runFixes(['kokoro'], [kokoro()], ctx({ exists: () => true }), () => ({ status: 0 }));
+  assert.equal('accepted' in known[0], false, 'only a refused unknown id carries the list');
+});
+
+// --- G-66: a stale install is "stale", not "missing", and a dev checkout keeps its dev packages ---
+
+const STALE_FILES = (dir) => ({
+  [`${dir}/package.json`]: JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }),
+  [`${dir}/package-lock.json`]: LOCK,
+  [`${dir}/node_modules/fast-uri/package.json`]: JSON.stringify({ version: '3.1.8' }),
+});
+const reader = (files) => (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+
+test('G-66: a stale install is reported as stale (older than the pinned override), still required, still exit 1', async () => {
+  const readFile = reader(STALE_FILES('/s/make-motion'));
+  const c = ctx({ exists: noPlaywright, readFile });
+  const r = await diagnose([nodeModules()], c);
+  assert.deepEqual(r.missing[0].stale, ['fast-uri']);
+  assert.equal(r.missing[0].required, true);
+  const text = await runMain([], mainOpts({ requirementsFor: () => [nodeModules()] }), { ctx: c });
+  assert.match(text.out, /^stale \(older than the pinned fast-uri override\) \(required\): node_modules — /m);
+  assert.doesNotMatch(text.out, /missing \(required\)/);
+  assert.equal(text.code, 1, 'a stale security pin stays a failure');
+  const json = JSON.parse((await runMain(['--json'], mainOpts({ requirementsFor: () => [nodeModules()] }), { ctx: c })).out);
+  assert.deepEqual(json.missing[0].stale, ['fast-uri']);
+  assert.equal(json.ok, false);
+});
+
+test('G-66: a node_modules that is truly absent is still "missing", and carries no stale marker', async () => {
+  const r = await diagnose([nodeModules()], ctx());
+  assert.equal('stale' in r.missing[0], false);
+  const text = await runMain([], mainOpts({ requirementsFor: () => [nodeModules()] }));
+  assert.match(text.out, /^missing \(required\): node_modules — /m);
+  assert.doesNotMatch(text.out, /stale/);
+});
+
+test('G-66: keep dev packages when node_modules/playwright exists, at the skill and at a sister skill', async () => {
+  const readFile = reader(STALE_FILES('/s/make-diagram'));
+  const dev = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: () => true, readFile }))).missing[0];
+  assert.equal(dev.fix.auto, 'npm ci --prefix /s/make-diagram', 'no --omit=dev: it would delete the playwright that check.mjs uses');
+  assert.doesNotMatch(dev.notes ?? '', /removes the dev packages/);
+  const prod = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: noPlaywright, readFile }))).missing[0];
+  assert.equal(prod.fix.auto, 'npm ci --omit=dev --prefix /s/make-diagram');
+  const fresh = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram' }))).missing[0];
+  assert.equal(fresh.fix.auto, 'npm ci --omit=dev --prefix /s/make-diagram', 'a first install stays production-only');
+
+  const dir = '/p/.agents/skills/make-diagram';
+  const sisterFiles = reader(STALE_FILES(dir));
+  const base = { skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h', readFile: sisterFiles };
+  const withDev = (await diagnose([sisterSkill('make-diagram')], ctx({ ...base, exists: () => true }))).missing[0];
+  assert.equal(withDev.fix.auto, `npm ci --prefix ${dir}`);
+  assert.match(withDev.notes, /keeps its dev packages/);
+  assert.deepEqual(withDev.stale, ['fast-uri']);
+  assert.match(withDev.why, /predate the patched fast-uri/);
+  const text = await runMain([], { ...mainOpts(), requirementsFor: () => [sisterSkill('make-diagram')] }, { ctx: ctx({ ...base, exists: () => true }) });
+  assert.match(text.out, /^stale \(older than the pinned fast-uri override\) \(required\): make-diagram — /m);
+});
+
+test('G-66: an explicit --fix node_modules on a dev checkout does not strip playwright either', async () => {
+  const ran = [];
+  await runFixes(['node_modules'], [nodeModules()], ctx({ exists: () => true }), (c, a) => { ran.push([c, ...a].join(' ')); return { status: 0 }; });
+  assert.deepEqual(ran, ['npm ci --prefix /s/make-motion']);
+});
+
+// --- PA-11: sizes are per skill and measured ---
+
+test('PA-11: node_modules and sister sizes come from a per-skill table, not one fixed 30-60 MB', async () => {
+  const size = async (skill) => (await diagnose([nodeModules()], ctx({ skillDir: `/s/${skill}` }))).missing[0].size;
+  assert.equal(await size('make-explainer'), '≈3 MB');
+  assert.equal(await size('make-diagram'), '≈11 MB');
+  assert.equal(await size('make-dashboard'), '≈150 MB');
+  assert.equal(await size('make-motion'), '≈58 MB');
+  assert.equal(await size('make-scene'), '≈3 MB');
+  assert.match(await size('make-future'), /depending on the skill/, 'an unknown skill gets an honest range');
+  const own = (await diagnose([nodeModules({ size: '≈1 MB' })], ctx())).missing[0].size;
+  assert.equal(own, '≈1 MB', 'an explicit size wins');
+  const sister = async (name, opts) => (await diagnose([sisterSkill(name, opts)], ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }))).missing[0].size;
+  assert.equal(await sister('make-dashboard'), '≈150 MB');
+  assert.equal(await sister('make-diagram'), '≈11 MB');
+  assert.equal(await sister('make-diagram', { size: '≈2 MB' }), '≈2 MB');
+});
+
+test('PA-11: kokoro states the measured size of its own locked folder, and the old 250 MB and 30-60 MB figures are gone', async () => {
+  const { missing } = await diagnose([kokoro()], ctx());
+  assert.match(missing[0].size, /^≈440 MB/);
+  assert.match(missing[0].size, /90 MB model/);
+  assert.doesNotMatch(JSON.stringify(missing), /250 MB/);
+  assert.doesNotMatch(JSON.stringify(missing), /30–60 MB/);
+});
+
+// --- PA-10: the install hints a script prints are the doctor's own step ---
+// (Merge note: main's form was `npm install <pin> --no-save` plus ffmpeg-static; this branch installs each optional stack
+// with npm ci into its own locked folder and dropped ffmpeg-static, so the hint is optionalInstallArgv.)
+
+test('PA-10: the optional install hint is exactly the step the doctor runs, and installing one stack never touches the other', async () => {
+  const { render } = await import('../doctor.mjs');
+  // The other stack is installed in its own folder: the step names only this one's folder.
+  const other = { kokoro: '/optional/cutout/node_modules/onnxruntime-node', cutout: '/optional/voice/node_modules/kokoro-js' };
+  for (const [id, req] of [['kokoro', kokoro()], ['cutout', cutout()]]) {
+    const c = ctx({ platform: 'linux', exists: (p) => p.endsWith(other[id]) });
+    const doctorSays = (await diagnose([req], c)).missing[0].fix.auto;
+    assert.equal(render([optionalInstallArgv(c, id)], 'linux'), doctorSays);
+    assert.equal(doctorSays, `npm ci --ignore-scripts --prefix /s/make-motion/optional/${OPTIONAL[id].dir}`);
+    assert.doesNotMatch(doctorSays, /--no-save|npm install/);
+  }
+  assert.throws(() => optionalInstallArgv(ctx(), 'ffmpeg-static'), /unknown optional install "ffmpeg-static"; known: kokoro, cutout/);
+  assert.throws(() => optionalInstallArgv(ctx(), 'nope'), /unknown optional install "nope"/);
+});
+
+// --- PA-09: a stable cache dir, and a list of older plugin-cache copies (printed, never removed) ---
+
+test('PA-09: stableCacheDir is CLAUDE_PLUGIN_DATA, else the OS cache dir, else <skill>/.cache', async () => {
+  const { stableCacheDir } = await import('../doctor.mjs');
+  const base = { skillDir: '/s/make-motion', homedir: '/home/u' };
+  assert.equal(stableCacheDir({ ...base, env: { CLAUDE_PLUGIN_DATA: '/data/pa' }, platform: 'linux' }), '/data/pa');
+  assert.equal(stableCacheDir({ ...base, env: { CLAUDE_PLUGIN_DATA: '' }, platform: 'darwin' }), '/home/u/Library/Caches/portable-artifacts');
+  assert.equal(stableCacheDir({ ...base, env: {}, platform: 'linux' }), '/home/u/.cache/portable-artifacts');
+  assert.equal(stableCacheDir({ ...base, env: { XDG_CACHE_HOME: '/xdg' }, platform: 'linux' }), '/xdg/portable-artifacts');
+  assert.equal(stableCacheDir({ ...base, env: { XDG_CACHE_HOME: 'relative' }, platform: 'linux' }), '/home/u/.cache/portable-artifacts', 'a relative XDG_CACHE_HOME is ignored');
+  assert.equal(stableCacheDir({ skillDir: 'C:\\s\\make-motion', homedir: 'C:\\Users\\u', env: { LOCALAPPDATA: 'C:\\Users\\u\\AppData\\Local' }, platform: 'win32' }), 'C:\\Users\\u\\AppData\\Local\\portable-artifacts\\Cache');
+  assert.equal(stableCacheDir({ skillDir: '/s/make-motion', homedir: '', env: {}, platform: 'linux' }), '/s/make-motion/.cache', 'no home to anchor an OS dir: the old location');
+});
+
+const CACHE_HOME = '/h';
+const CACHE = `${CACHE_HOME}/.claude/plugins/cache/mkt/portable-artifacts`;
+const MB = 1e6;
+const cacheCtx = (version, over = {}) => ctx({
+  skillDir: `${CACHE}/${version}/skills/make-motion`,
+  homedir: CACHE_HOME,
+  exists: () => true,
+  readdir: () => ['0.8.0', '1.0.0', '1.1.0', '1.2.0', '1.3.0', 'latest', '.DS_Store'],
+  dirSize: (p) => ({ [`${CACHE}/0.8.0`]: 57 * MB, [`${CACHE}/1.0.0`]: 565 * MB, [`${CACHE}/1.1.0`]: 715 * MB })[p] ?? 1,
+  ...over,
+});
+
+test('PA-09: olderPluginCopies lists only older semver copies of this plugin, with sizes', async () => {
+  const { olderPluginCopies } = await import('../doctor.mjs');
+  assert.deepEqual(olderPluginCopies(cacheCtx('1.2.0')), [
+    { version: '0.8.0', path: `${CACHE}/0.8.0`, bytes: 57 * MB },
+    { version: '1.0.0', path: `${CACHE}/1.0.0`, bytes: 565 * MB },
+    { version: '1.1.0', path: `${CACHE}/1.1.0`, bytes: 715 * MB },
+  ]);
+  assert.deepEqual(olderPluginCopies(cacheCtx('1.0.0')).map((c) => c.version), ['0.8.0'], 'a newer copy is never listed as removable');
+  assert.deepEqual(olderPluginCopies(cacheCtx('0.8.0')), []);
+});
+
+test('PA-09: olderPluginCopies is empty outside the plugin cache and when the folder cannot be read', async () => {
+  const { olderPluginCopies } = await import('../doctor.mjs');
+  assert.deepEqual(olderPluginCopies(cacheCtx('1.2.0', { skillDir: '/repo/plugins/portable-artifacts/skills/make-motion' })), []);
+  assert.deepEqual(olderPluginCopies(cacheCtx('1.2.0', { readdir: () => { throw new Error('EACCES'); } })), []);
+  assert.deepEqual(olderPluginCopies(ctx({ skillDir: '/repo/x' })), [], 'a ctx with no readdir is fine');
+});
+
+test('PA-09: doctor prints the older copies with sizes and an rm line for the user, and runs nothing', async () => {
+  const run = (c) => assert.fail(`must not run ${c}`);
+  const text = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1)] }), { ctx: cacheCtx('1.2.0'), run });
+  assert.equal(text.code, 0, 'old copies are a note, not a failure');
+  assert.match(text.out, /^ok: everything make-motion needs is installed$/m);
+  assert.match(text.out, /Note: older copies of this plugin sit in the plugin cache: 0\.8\.0 \(57 MB\), 1\.0\.0 \(565 MB\), 1\.1\.0 \(715 MB\)\. To free about 1\.3 GB, run: rm -rf \/h\/\.claude\/plugins\/cache\/mkt\/portable-artifacts\/0\.8\.0 /);
+  const json = JSON.parse((await runMain(['--json'], mainOpts({ requirementsFor: () => [nodeVersion(1)] }), { ctx: cacheCtx('1.2.0'), run })).out);
+  assert.equal(json.ok, true);
+  assert.equal(json.olderCopies.length, 3);
+  const none = JSON.parse((await runMain(['--json'], mainOpts({ requirementsFor: () => [nodeVersion(1)] }), { ctx: ctx() })).out);
+  assert.deepEqual(none, { ok: true, missing: [] }, 'no older copies: the JSON is unchanged');
 });

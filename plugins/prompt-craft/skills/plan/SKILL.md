@@ -19,8 +19,9 @@ self-check; weak ones force constant clarification.
    ordered by dependency. Every step carries its own one-line verify check.
 4. **Flag risks / unknowns** — what could block fast iteration (needs a device, a
    migration, an external API), called out so it's scheduled, not discovered late.
-5. **Emit the plan as a TodoWrite list** (one todo per step) so progress is
-   trackable and steerable mid-flight.
+5. **Emit the plan in the host's task list tool** (one item per step) so progress
+   is trackable and steerable mid-flight. Use whichever task tool this session
+   offers; don't assume a particular tool name.
 
 ## Rules
 

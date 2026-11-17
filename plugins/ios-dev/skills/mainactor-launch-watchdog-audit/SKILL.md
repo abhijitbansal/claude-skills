@@ -33,8 +33,19 @@ Walk the call graphs of `App.init`, every `.task`, and every `.onAppear`
 reachable at launch. Grep for the usual heavy suspects:
 
 ```bash
-grep -rnE 'VNImageRequestHandler|VNRecognizeTextRequest|MLModel|\.pdfData\(|Data\(contentsOf:|UIImage\(contentsOfFile:|jpegData\(|CGImageSourceCreate|embed|index\.upsert' Sources/
+grep -rnE 'VNImageRequestHandler|VNRecognizeTextRequest|MLModel|\.pdfData\(|PDFDocument\(url|Data\(contentsOf:|UIImage\(contentsOfFile:|jpegData\(|CGImageSourceCreate|embed|index\.upsert' <source-root>
 ```
+
+`<source-root>` is the app's own source directory — it is not always `Sources/`
+(an Xcode app target is usually a folder named after the target). The grep is
+a **noisy triage list, not a pass/fail gate**: it flagged 26 sites in one real
+app, most legitimate, and a clean run does not prove the launch path is safe.
+Use it to seed a manual call-graph review. It cannot see a heavy call hidden one
+level down, such as a count, badge or filter computed during a view `body` that
+calls a synchronous store or service method which opens files (a field
+`0x8BADF00D` came from `PDFDocument(url:)` parsed inside a toolbar `Menu` body).
+Review line: a value computed during `body` reads a cache only and never parses
+files.
 
 Anything found that is unannotated is implicitly `@MainActor` — it runs on
 main no matter how "background" it looks. Under `SWIFT_APPROACHABLE_CONCURRENCY`
@@ -66,12 +77,20 @@ nonisolated struct EmbeddingBackfillService {
 // Call site: resolve inputs on main, detach the work, hop back ONCE
 .task {
     let inputs = documents.map(\.embeddingInput)        // Sendable DTOs
-    let outputs = await Task.detached(priority: .utility) {
-        try? await EmbeddingBackfillService().embed(inputs)
-    }.value
-    if let outputs { apply(outputs) }                    // single @MainActor hop
+    do {
+        let outputs = try await Task.detached(priority: .utility) {
+            try await EmbeddingBackfillService().embed(inputs)
+        }.value
+        apply(outputs)                                   // single @MainActor hop
+    } catch {
+        // Not `try?`: a swallowed error is a silent, permanent "backfill never
+        // ran". Log the type, not the description.
+        Self.log.error("backfill failed: \(String(describing: type(of: error)))")
+    }
 }
 ```
+
+(Typechecked with `-default-isolation MainActor` against the iOS 27.2 SDK.)
 
 For parallel units (e.g. cubby's report-photo preload — N disk reads + JPEG
 decodes), use a `TaskGroup` of `nonisolated` work and collect `Sendable`

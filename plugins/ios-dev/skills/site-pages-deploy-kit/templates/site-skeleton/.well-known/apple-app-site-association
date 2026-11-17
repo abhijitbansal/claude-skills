@@ -1,7 +1,14 @@
 {
   "applinks": {
     "details": [
-      { "appIDs": ["{{APP_TEAM_ID}}.{{APP_BUNDLE_ID}}"], "components": [{ "/": "/*" }] }
+      {
+        "appIDs": ["{{APP_TEAM_ID}}.{{APP_BUNDLE_ID}}"],
+        "components": [
+          { "/": "/privacy*", "exclude": true },
+          { "/": "/support*", "exclude": true },
+          { "/": "/open/*", "comment": "TODO: replace with the app's real deep-link paths" }
+        ]
+      }
     ]
   }
 }

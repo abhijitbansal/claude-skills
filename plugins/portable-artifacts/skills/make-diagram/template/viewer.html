@@ -6,6 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <!--@GENERATOR-->
+<!--@BUILD_META-->
 <!--@FAVICON-->
 <title><!--@TITLE--></title>
 <script>
@@ -15,6 +16,7 @@
 <style id="pa-theme-css">
 <!--@THEME-->
 </style>
+<style id="pa-weights"><!--@WEIGHTS--></style>
 <style id="pa-diagram-css">
 <!--@DIAGRAM_CSS-->
 </style>
@@ -30,7 +32,7 @@ body { margin: 0; display: flex; flex-direction: column; height: 100vh; height: 
 button { font: inherit; color: inherit; }
 .bar { flex: none; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .titles { min-width: 0; }
-h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); overflow-wrap: anywhere; }
+h1 { margin: 0; font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); overflow-wrap: anywhere; }
 .sub { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
 .pa-provenance { margin: 2px 0 0; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tools .tool[data-theme-toggle] { min-width: 30px; min-height: 0; padding: 4px 6px; }
@@ -81,7 +83,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 .panel[hidden] { display: none; }
 @media (max-width: 719px) { .body { flex-direction: column; } .panel { width: auto; max-height: 36%; border-left: 0; border-top: 1px solid var(--line); } }
 .panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.panel-title { margin: 0; font: 600 var(--fs-base)/var(--lh-head) var(--font-display); overflow-wrap: anywhere; }
+.panel-title { margin: 0; font: var(--display-weight) var(--fs-base)/var(--lh-head) var(--font-display); overflow-wrap: anywhere; }
 .panel-body[hidden], .panel-empty[hidden], .panel-close[hidden] { display: none; }
 .panel-icon { margin: 8px 0; font-size: var(--fs-lg); line-height: 1; }
 .panel-glyph { width: 24px; height: 24px; color: var(--text-2); }
@@ -98,7 +100,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 .chapters[hidden] { display: none; }
 .pa-chip { transition: color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer; color: var(--text-2); font-size: var(--fs-xs); line-height: 1.4; white-space: nowrap; }
 @media (hover: hover) and (pointer: fine) { .pa-chip:hover { color: var(--text); } }
-.pa-chip[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.pa-chip[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: var(--strong-weight); }
 .find { font: inherit; color: inherit; width: 11em; padding: 4px 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 .bar .found { flex: 1 0 100%; display: flex; flex-wrap: wrap; gap: 6px; }
 .found[hidden] { display: none; }
@@ -139,7 +141,7 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <div class="tools" role="group" aria-label="Diagram controls">
 <span class="group" role="group" aria-label="Mode">
 <button type="button" class="tool" data-pa-mode="play" aria-pressed="false" title="Play the story (P)">Play story</button>
-<button type="button" class="tool" data-pa-mode="explore" aria-pressed="true" title="Explore the diagram (E)">Explore</button>
+<button type="button" class="tool" data-pa-mode="explore" aria-pressed="true" title="Explore the diagram (E). Click a node or edge. Shift-click a second node to trace a path.">Explore</button>
 </span>
 <span class="group" role="group" aria-label="View">
 <button type="button" class="tool" data-act="fit" aria-keyshortcuts="0" title="Fit to screen (0)">Fit</button>
@@ -171,10 +173,6 @@ h1 { margin: 0; font: 600 var(--fs-md)/var(--lh-head) var(--font-display); lette
 <div class="panel-head">
 <h2 class="panel-title" data-pa-panel-title tabindex="-1" aria-live="polite">Map</h2>
 <button type="button" class="tool panel-close" data-pa-panel-close aria-label="Close details (Esc)" hidden>Close</button>
-</div>
-<div class="panel-empty" data-pa-empty>
-<div class="counts" data-pa-tally role="list" aria-label="What the map holds"></div>
-<p class="hint">Click a node or edge. Shift-click a second node to trace a path.</p>
 </div>
 <div class="panel-body" data-pa-panel-body hidden></div>
 </aside>

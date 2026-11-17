@@ -6,6 +6,8 @@ __pycache__/
 node_modules/
 .tmp/
 .scratch/
+.superpowers/
+**/.claude/worktrees/
 plugins/*/.claude-plugin/types/
 
 # app-preview iMessage fallback destination: holds a personal contact
@@ -14,6 +16,7 @@ plugins/ios-dev/skills/app-preview/.imessage-to
 # portable-artifacts eval output (summaries are copied to results/summary-*.md)
 plugins/portable-artifacts/eval/results/*
 !plugins/portable-artifacts/eval/results/summary-*.md
+!plugins/portable-artifacts/eval/results/INDEX.md
 plugins/portable-artifacts/**/out/
 plugins/portable-artifacts/**/dist/
 plugins/portable-artifacts/**/.cache/

@@ -98,6 +98,26 @@ def test_builtins_regression_both_global_and_builtin_survive(tmp_path):
     assert "/unique-builtin" in names, "overlay builtin must survive dedup"
 
 
+def test_disabled_plugin_entry_is_not_scanned(tmp_path):
+    """CAT-85: enabledPlugins {"x@m": false} means disabled; its commands must
+    not reach the registry (and so never get recommended)."""
+    home = tmp_path / "home"
+    _cache_skill(home, "alpha", "ecc", "0.1.0", "plan", "Decompose work.")
+    _cache_skill(home, "alpha", "off", "0.1.0", "shout", "Disabled plugin skill.")
+    settings = {"enabledPlugins": {"ecc@alpha": True, "off@alpha": False}}
+    cmds = br.scan_global(home, settings, {"builtins": [], "prefer_over": {}})
+    names = {c["name"] for c in cmds}
+    assert "/ecc:plan" in names
+    assert "/off:shout" not in names
+
+
+def test_disabled_plugin_entry_is_not_in_signature_files(tmp_path):
+    home = tmp_path / "home"
+    _cache_skill(home, "alpha", "off", "0.1.0", "shout", "Disabled plugin skill.")
+    files = br._global_files(home, {"enabledPlugins": {"off@alpha": False}})
+    assert files == []
+
+
 def test_malformed_settings_does_not_raise(tmp_path):
     """Top-level JSON array in settings.json must not raise and must return zero global entries."""
     home = tmp_path / "home"

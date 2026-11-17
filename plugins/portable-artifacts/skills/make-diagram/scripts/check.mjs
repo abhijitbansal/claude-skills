@@ -1,18 +1,24 @@
 #!/usr/bin/env node
-// node scripts/check.mjs <page.html> [--json]
+// node scripts/check.mjs <page.html> [--json] [--shots <dir>]
 // Opens a built page at 1440 and 390 px and fails on console errors, page overflow,
 // text overflowing its node box (> 2 px), a node or participant under the legend
-// overlay at first paint, or a story that cannot reach its last beat.
+// overlay at first paint, labels that draw below the legibility floor at fit (1440 px only),
+// or a story that cannot reach its last beat.
+// --shots <dir> then writes one PNG per viewport (390, 1280) and colour scheme (light, dark) into <dir>
+// through shared/shot.mjs and prints each path: open them and look before you report.
 // exit 0 ok or skipped (no browser), 1 problems, 2 usage/IO
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { launchBrowser, BrowserUnavailable } from './lib/browser.mjs';
 import { skipHint } from './lib/doctor-hint.mjs';
+import { takeShots } from './lib/shots.mjs';
 import { UsageError, parseCli, exitUsage } from '../shared/cli.mjs';
+import { warnIfStaleCopy } from '../shared/stale-copy.mjs';
+import { MIN_STAGE_WIDTH, isLegible, legibilityMessage } from './lib/legibility.mjs';
 
-const USAGE = 'node scripts/check.mjs <page.html> [--json]';
-const OPTIONS = { json: { type: 'boolean' } };
+const USAGE = 'node scripts/check.mjs <page.html> [--json] [--shots <dir>]';
+const OPTIONS = { json: { type: 'boolean' }, shots: { type: 'string' } };
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 780 }];
 const READY_MS = 5000;
 const TEXT_TOLERANCE_PX = 2;
@@ -56,6 +62,15 @@ const coveredByLegend = (tol) => {
   return bad;
 };
 
+// Runs in the page. How large the page drew the diagram at first paint: screen px per diagram unit (the fit scale),
+// and the diagram type (a sequence has no direction to change).
+const renderedFit = () => {
+  const svg = document.querySelector('#pa-stage svg');
+  const box = svg ? svg.viewBox.baseVal : null;
+  const type = JSON.parse(document.getElementById('pa-data').textContent).type;
+  return box && box.width > 0 ? { scale: svg.getBoundingClientRect().width / box.width, type } : null;
+};
+
 const pageFits = () => ({
   scrollW: document.documentElement.scrollWidth,
   innerW: window.innerWidth,
@@ -89,6 +104,10 @@ async function checkViewport(browser, url, viewport) {
     }
     for (const { id, share } of await page.evaluate(coveredByLegend, COVER_TOLERANCE_PX)) {
       problems.push(`${label}: node "${id}" is ${Math.round(share * 100)}% under the legend overlay`);
+    }
+    if (viewport.width >= MIN_STAGE_WIDTH) {
+      const fit = await page.evaluate(renderedFit);
+      if (fit !== null && !isLegible(fit.scale)) problems.push(`${label}: the diagram ${legibilityMessage(fit.scale, 'on this screen', { direction: fit.type !== 'sequence' })}`);
     }
     const beats = await page.evaluate(() => (JSON.parse(document.getElementById('pa-data').textContent).beats || []).length);
     if (beats > 0) await checkPresentation(page, beats, label, problems);
@@ -157,7 +176,7 @@ function report(result, json) {
     const body = result.status === 'skipped' ? { ...base, skipped: true, reason: result.reason, hint: skipHint(result.reason) }
       : result.status === 'ok' ? { ...base, viewports: result.viewports, beats: result.beats }
         : { ...base, errors, problems: result.problems };
-    process.stdout.write(`${JSON.stringify(body)}\n`);
+    process.stdout.write(`${JSON.stringify(result.shots ? { ...body, shots: result.shots, ...(result.shotsError ? { shotsError: result.shotsError } : {}) } : body)}\n`);
   } else if (result.status === 'skipped') process.stdout.write(`check: skipped (no browser: ${result.reason}; ${skipHint(result.reason)})\n`);
   else if (result.status === 'ok') process.stdout.write(`check: ok (${result.viewports} viewports, ${result.beats} beats)\n`);
   else {
@@ -166,6 +185,8 @@ function report(result, json) {
     if (!result.timedOut) process.stdout.write(`check: ${result.problems.length} problem${result.problems.length === 1 ? '' : 's'}\n`);
   }
 }
+
+export { takeShots }; // the --shots half lives in lib/shots.mjs (no browser import), so a test can stub it
 
 // PA_CHECK_TIMEOUT_MS shortens the wall-clock cap (tests; slow machines can raise it).
 function timeoutFromEnv(env) {
@@ -185,9 +206,19 @@ if (process.argv[1] && fs.realpathSync(process.argv[1]) === fileURLToPath(import
     const file = path.resolve(positionals[0]);
     if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new UsageError(`cannot read ${positionals[0]}`);
     const timeoutMs = timeoutFromEnv(process.env);
+    if (values.shots !== undefined && values.shots.trim() === '') throw new UsageError(`--shots needs a folder path; usage: ${USAGE}`);
+    warnIfStaleCopy();
     const result = await checkPage(file, { timeoutMs });
-    report(result, json);
-    process.exitCode = result.status === 'failed' ? 1 : 0;
+    let code = result.status === 'failed' ? 1 : 0;
+    // A skipped check (no browser) takes no screenshots either; a failed one still does: the page is what you need to look at.
+    const shots = values.shots !== undefined && result.status !== 'skipped' ? takeShots(file, path.resolve(values.shots)) : null;
+    report(shots ? { ...result, shots: shots.paths, shotsError: shots.message } : result, json);
+    if (!json && shots) {
+      for (const p of shots.paths) process.stdout.write(`${p}\n`);
+      if (shots.message) process.stderr.write(`shots: ${shots.message}\n`);
+    } else if (!json && values.shots !== undefined) process.stdout.write('shots: skipped (the check was skipped)\n');
+    if (shots && shots.status !== 0) code = Math.max(code, shots.status);
+    process.exitCode = code;
   } catch (e) {
     if (e instanceof UsageError) exitUsage(e, { json });
     else {

@@ -141,11 +141,29 @@ fi
 # shellcheck disable=SC2317  # return/exit pair is intentional: works whether sourced or exec'd
 APP_YML="$(_find_app_yml)" || { echo "no .claude/app.yml found above $(pwd)" >&2; return 1 2>/dev/null || exit 1; }
 
-APP_NAME="$(_yaml_get "${APP_YML}" app.name)";                     export APP_NAME
-APP_BUNDLE_ID="$(_yaml_get "${APP_YML}" app.bundle_id)";           export APP_BUNDLE_ID
-APP_SCHEME="$(_yaml_get "${APP_YML}" app.scheme)";                 export APP_SCHEME
-APP_TEAM_ID="$(_yaml_get "${APP_YML}" app.team_id)";               export APP_TEAM_ID
-APP_URL_SCHEME="$(_yaml_get "${APP_YML}" app.url_scheme)";         export APP_URL_SCHEME
+# Required keys: a missing one is named on stderr. A bare `VAR="$(_yaml_get ...)"`
+# under a caller's `set -e` used to kill the script with no message at all.
+# Callers running with errexit stop here (exit 1) after the message; callers
+# without it keep the old behaviour and continue with an empty value.
+_require_key() {  # $1 = var name, $2 = key path
+  local val
+  if ! val="$(_yaml_get "${APP_YML}" "$2" 2>/dev/null)"; then
+    echo "load_app_config: required key '$2' is missing or empty in ${APP_YML}" >&2
+    [[ "$-" == *e* ]] && return 1
+    val=""
+  fi
+  printf -v "$1" '%s' "${val}"
+  # shellcheck disable=SC2163  # export the variable whose name is in $1
+  export "$1"
+}
+
+_require_key APP_NAME      app.name      || return 1 2>/dev/null || exit 1
+_require_key APP_BUNDLE_ID app.bundle_id || return 1 2>/dev/null || exit 1
+_require_key APP_SCHEME    app.scheme    || return 1 2>/dev/null || exit 1
+_require_key APP_TEAM_ID   app.team_id   || return 1 2>/dev/null || exit 1
+# url_scheme is optional (validate_app_config.sh does not require it): only
+# deep-link features need it, so a missing key must not stop a build.
+APP_URL_SCHEME="$(_yaml_get "${APP_YML}" app.url_scheme 2>/dev/null || true)"; export APP_URL_SCHEME
 APP_BUILD_SCRIPT="$(_yaml_get "${APP_YML}" app.build_script 2>/dev/null || true)"
 APP_BUILD_SCRIPT="${APP_BUILD_SCRIPT:-build.sh}";                  export APP_BUILD_SCRIPT
 APP_PREVIEW_ROOT="$(_yaml_get "${APP_YML}" app.preview_root 2>/dev/null || true)"

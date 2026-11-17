@@ -37,13 +37,25 @@ link_skills() {
     fi
   done
   local d
+  local dst
   while IFS= read -r d; do
-    safe_symlink "${d}" "${dest}/$(basename "${d}")"
+    dst="${dest}/$(basename "${d}")"
+    # A real dir from another installer (portable-artifacts, npx skills) is
+    # skipped with a warning; one collision must not stop the rest linking.
+    # Any other failure (ln permission denied) stays fatal: safe_symlink is
+    # called bare so errexit stays on inside it.
+    if [[ -e "${dst}" && ! -L "${dst}" ]]; then
+      warn "skipped $(basename "${d}"): ${dst} is not ours"
+      continue
+    fi
+    safe_symlink "${d}" "${dst}"
   done < <(skill_dirs)
 }
 
 mode_codex() {
-  local dest="${CODEX_SKILLS_DIR:-${HOME}/.codex/skills}"
+  # Codex reads user skills from ~/.agents/skills (same target as
+  # plugins/portable-artifacts/bin/install.mjs), not ~/.codex/skills.
+  local dest="${CODEX_SKILLS_DIR:-${HOME}/.agents/skills}"
   if [[ -z "${CODEX_SKILLS_DIR:-}" && ! -d "${HOME}/.codex" ]]; then
     info "no ~/.codex — Codex not installed; skipping"
     return 0

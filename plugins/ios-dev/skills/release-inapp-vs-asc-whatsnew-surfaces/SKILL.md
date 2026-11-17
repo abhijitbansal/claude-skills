@@ -1,6 +1,6 @@
 ---
 name: release-inapp-vs-asc-whatsnew-surfaces
-description: An app has BOTH an in-app "What's New"/changelog screen (compiled into the binary from Swift/code data) AND App Store Connect's "What's New"/"What to Test" metadata fields (pasted manually, independent of the binary) — these are two separate surfaces that can silently drift out of sync. Use this whenever adding a ChangelogEntry/FeatureCatalog-style in-app data file, preparing release notes for an app that has one, or when a tester reports "the new build doesn't show the new features in What's New" despite the binary clearly containing the feature. Not relevant for apps with no in-app changelog/feature-list screen — they only have the ASC-metadata surface.
+description: An app has two independent What's New surfaces that silently drift apart, the in-app changelog or feature screen compiled into the binary and the App Store Connect What's New and What to Test fields edited separately. Use when adding or editing a ChangelogEntry or FeatureCatalog style in-app data file, preparing release notes or What to Test text for an app that has an in-app What's New screen, or when a tester says the new build does not show the new features although the binary contains them. Skip apps with no in-app changelog screen.
 ---
 
 # Two Independent "What's New" Surfaces — In-App Binary Data vs. App Store Connect Metadata
@@ -56,8 +56,8 @@ Treat the two surfaces as genuinely separate checklist items, not one
 "release notes" task:
 
 1. **Distinguish them explicitly in the release process docs/skill** — see
-   `release/SKILL.md`'s Stage 3 callout for the wording this repo uses.
-2. **Gate on both, not just one.** `plugins/ios-dev/skills/release/scripts/preflight.sh`
+   the Stage 3 callout in the `release` skill's SKILL.md for the wording.
+2. **Gate on both, not just one.** The `release` skill's preflight script
    already does this: the `whatsnew` gate checks `release.whatsnew_file` (ASC
    metadata) for an entry matching the next version; the sibling
    `inapp-whatsnew` gate checks `release.inapp_changelog_file` (in-app data)
@@ -86,9 +86,8 @@ Treat the two surfaces as genuinely separate checklist items, not one
   entries") and commit `76bd409` ("docs: v0.2.0 release notes (What to Test +
   What's New) + release-runbook rules") are two separate commits for the two
   separate surfaces, motivating this split.
-- **This repo** — `plugins/ios-dev/skills/release/scripts/preflight.sh`'s
-  `inapp-whatsnew` gate, covered by `tests/bats/release_preflight.bats`, is
-  the direct implementation of Fix item 2.
+- **The `release` skill's preflight** — its `inapp-whatsnew` gate is the
+  direct implementation of Fix item 2.
 
 ## Related skills
 

@@ -60,6 +60,33 @@ for (const kind of KIND_NAMES) {
   });
 }
 
+test('snake_case column names become readable axis titles; other names stay as written', () => {
+  const enc = expand1({ kind: 'bar', query: 'cat', x: 'region', y: 'revenue' }).views[0].vegaLite.encoding;
+  assert.equal(enc.x.title, 'Region');
+  assert.equal(enc.y.title, 'Revenue');
+  const p50 = { p: { columns: ['query_path', 'p50_ms'], types: ['VARCHAR', 'DOUBLE'], rows: [{ query_path: 'a', p50_ms: 1 }], rowCount: 1 } };
+  const e2 = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'p', x: 'query_path', y: 'p50_ms' }] }, p50).charts[0].views[0].vegaLite.encoding;
+  assert.equal(e2.x.title, 'Query path');
+  assert.equal(e2.y.title, 'P50 ms');
+  assert.equal(e2.x.field, 'query_path', 'the field itself is unchanged');
+});
+
+test('compact numbers read the same on the axis as on a KPI tile (B, not G; K, not k)', () => {
+  const enc = expand1({ kind: 'bar', query: 'cat', x: 'region', y: 'revenue', format: 'compact' }).views[0].vegaLite.encoding;
+  assert.deepEqual(enc.y.axis, { format: '.3~s', labelExpr: "replace(replace(datum.label, 'G', 'B'), 'k', 'K')" });
+  const tip = enc.tooltip.find((t) => t.field === 'revenue');
+  assert.equal(tip.format, ',.2~f', 'the tooltip shows the exact value');
+});
+
+test('vertical bars never hide a category label: overlap is off and crowded labels turn', () => {
+  const x = expand1({ kind: 'bar', query: 'cat', x: 'region', y: 'revenue' }).views[0].vegaLite.encoding.x;
+  assert.equal(x.axis.labelOverlap, false);
+  assert.match(x.axis.labelAngle.expr, /^bandwidth\('x'\) < \d+ \? -45 : 0$/);
+  assert.match(x.axis.labelAlign.expr, /^bandwidth\('x'\) < \d+ \? 'right' : 'center'$/);
+  const time = expand1({ kind: 'bar', query: 'time', x: 'month', y: 'revenue' }).views[0].vegaLite.encoding.x;
+  assert.equal(time.axis, undefined, 'a date axis is left to Vega');
+});
+
 test('odd column names are escaped in field, shown raw in the axis title', () => {
   const c = expand1({ kind: 'bar', query: 'odd', x: 'a.b', y: 'Total Revenue' });
   const enc = c.views[0].vegaLite.encoding;
@@ -125,6 +152,30 @@ test('line and area with a nominal x keep the query order (sort: null); temporal
     const temporal = expand1({ kind, query: 'time', x: 'month', y: 'revenue' }).views[0].vegaLite;
     assert.equal('sort' in temporal.encoding.x, false);
   }
+});
+
+test('a line or area series with fewer than 3 points draws point marks (one point draws no line)', () => {
+  const pts = (n, color) => ({ columns: ['month', 'g', 'v'], types: ['DATE', 'VARCHAR', 'DOUBLE'], rows: Array.from({ length: n }, (_, i) => ({ month: `2025-0${i + 1}-01`, g: color ?? 'a', v: i })), rowCount: n });
+  const main = (kind, res, extra = {}) => expandCharts({ charts: [{ id: 'c', title: 'C', kind, query: 'q', x: 'month', y: 'v', ...extra }] }, { q: res }).charts[0].views[0].vegaLite.layer[0].mark;
+  assert.deepEqual(main('line', pts(1)), { type: 'line', point: true });
+  assert.deepEqual(main('area', pts(2)), { type: 'area', point: true });
+  assert.equal(main('line', pts(3)), 'line');
+  const mixed = { ...pts(4), rows: [...pts(4).rows, { month: '2025-01-01', g: 'b', v: 1 }] };
+  assert.deepEqual(main('line', mixed, { color: 'g' }), { type: 'line', point: true }, 'one short series is enough');
+});
+
+test('every nominal role keeps the query order (weekday heatmap, boxplot x, donut colour); temporal heatmap axes still sort by time', () => {
+  const week = { columns: ['day', 'hour', 'n'], types: ['VARCHAR', 'VARCHAR', 'INTEGER'], rows: ['Mon', 'Tue', 'Wed'].map((day) => ({ day, hour: '9', n: 1 })), rowCount: 3 };
+  const res = { ...results, week };
+  const one = (chart) => expandCharts({ charts: [{ id: 'c', title: 'C', ...chart }] }, res).charts[0].views[0].vegaLite;
+  const heat = one({ kind: 'heatmap', query: 'week', x: 'hour', y: 'day', value: 'n' });
+  assert.equal(heat.encoding.x.sort, null, 'heatmap x');
+  assert.equal(heat.encoding.y.sort, null, 'heatmap y');
+  assert.equal(one({ kind: 'boxplot', query: 'xy', value: 'a', x: 'g' }).encoding.x.sort, null, 'boxplot x');
+  assert.equal(one({ kind: 'donut', query: 'cat', x: 'region', y: 'revenue' }).encoding.color.sort, null, 'donut colour');
+  const timeGrid = one({ kind: 'heatmap', query: 'time', x: 'month', y: 'region', value: 'revenue' });
+  assert.equal('sort' in timeGrid.encoding.x, false, 'a date axis keeps time order');
+  assert.equal(timeGrid.encoding.y.sort, null);
 });
 
 const r = (rows, columns = ['region', 'revenue'], types = ['VARCHAR', 'DOUBLE']) => ({ rows, columns, types, rowCount: rows.length });
@@ -270,7 +321,8 @@ test('guardrails: the 8-colour cap holds on a non-scatter kind; negatives block 
 
 // ---- format reaches every quantitative encoding and every tooltip ------------
 const CURRENCY = '$,.2~f';
-const tipByTitle = (vl) => Object.fromEntries((vl.encoding.tooltip ?? vl.layer.at(-1).encoding.tooltip).map((t) => [t.title, t]));
+// keyed by field (titles are humanised: revenue -> Revenue); the count row has no field, only its title
+const tipByTitle = (vl) => Object.fromEntries((vl.encoding.tooltip ?? vl.layer.at(-1).encoding.tooltip).map((t) => [t.field ?? t.title, t]));
 const withFormat = (kind) => expand1({ kind, format: 'currency', ...KIND_CHARTS[kind] });
 
 test('format: bar-like and line-like tooltips format the number and leave categories alone', () => {
@@ -282,7 +334,8 @@ test('format: bar-like and line-like tooltips format the number and leave catego
   for (const kind of ['line', 'area']) {
     const vl = withFormat(kind).views[0].vegaLite;
     assert.equal(tipByTitle(vl).revenue.format, CURRENCY, kind);
-    assert.equal(vl.layer[0].mark === 'line' || vl.layer[0].mark === 'area', true, 'the main mark carries no tooltip of its own');
+    const mainMark = vl.layer[0].mark; // a two-point fixture: { type, point: true }
+    assert.equal(['line', 'area'].includes(mainMark.type ?? mainMark) && mainMark.tooltip === undefined, true, 'the main mark carries no tooltip of its own');
   }
 });
 
@@ -313,7 +366,7 @@ test('format: histogram formats the bins but not the count; boxplot formats its 
 test('share and normalized tooltips: raw value formatted, share titled "Share of <y>" in .1%', () => {
   const share = expand1({ kind: 'bar', format: 'currency', ...KIND_CHARTS.bar }).views.find((v) => v.name === 'share').vegaLite;
   assert.deepEqual(share.encoding.tooltip.map((t) => [t.title, t.field, t.format]), [
-    ['region', 'region', undefined], ['revenue', 'revenue', CURRENCY], ['Share of revenue', 'pa_share', '.1%'],
+    ['Region', 'region', undefined], ['Revenue', 'revenue', CURRENCY], ['Share of revenue', 'pa_share', '.1%'],
   ]);
   const norm = expand1({ kind: 'stacked-bar', format: 'currency', ...KIND_CHARTS['stacked-bar'] }).views.find((v) => v.name === 'normalized').vegaLite;
   assert.equal(tipByTitle(norm).revenue.format, CURRENCY);

@@ -6,11 +6,13 @@ Run: python3 -m unittest discover tests
 import argparse
 import datetime
 import importlib.util
+import io
 import json
 import os
 import re
 import sys
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -69,6 +71,40 @@ class DetectLimit(unittest.TestCase):
         text = "Usage limit reached — try again at 6:15pm."
         self.assertEqual(wind.detect_limit(text, PATTERNS, NOW),
                          NOW.replace(hour=18, minute=15))
+
+    # CAT-77. Fixture source: the verbatim UI line from a Claude Code
+    # transcript ("You've hit your session limit · resets 3:45pm"). It is a
+    # transcript string, NOT a captured tmux pane; re-verify against a real
+    # pane when one is available. The usage and weekly wordings are inferred
+    # from the same phrasing and are unconfirmed.
+    def test_session_limit_ui_line(self):
+        text = "You've hit your session limit · resets 3:45pm"
+        self.assertEqual(wind.detect_limit(text, PATTERNS, NOW),
+                         NOW.replace(hour=15, minute=45))
+
+    def test_usage_limit_ui_line(self):
+        text = "You've hit your usage limit · resets 8pm"
+        self.assertEqual(wind.detect_limit(text, PATTERNS, NOW),
+                         NOW.replace(hour=20))
+
+    def test_weekly_limit_ui_line_with_time_only(self):
+        text = "You've hit your weekly limit · resets 9am"
+        self.assertEqual(wind.detect_limit(text, PATTERNS, NOW),
+                         NOW.replace(hour=9) + datetime.timedelta(days=1))
+
+    def test_session_limit_classifies_as_waiting(self):
+        text = "You've hit your session limit · resets 3:45pm"
+        self.assertEqual(wind.classify(text, PATTERNS), "waiting-for-reset")
+
+    def test_prose_mention_of_usage_limit_is_not_a_limit(self):
+        text = ("The API usage limit resets at 8pm UTC, so batch jobs "
+                "should back off until then.")
+        self.assertIsNone(wind.detect_limit(text, PATTERNS, NOW))
+        self.assertEqual(wind.classify(text, PATTERNS), "idle")
+
+    def test_prose_try_again_mention_is_not_a_limit(self):
+        text = "If you hit a usage limit, try again at 6pm."
+        self.assertIsNone(wind.detect_limit(text, PATTERNS, NOW))
 
     def test_no_limit_in_normal_output(self):
         text = "I'll start by reading the config file.\n● Read(wind.py)"
@@ -3223,6 +3259,380 @@ class SettingsInheritance(unittest.TestCase):
         self.assertEqual(command, "claude")
         self.assertNotIn("--settings", command)
         self.assertTrue(all("env" not in k for (a, k) in calls))
+
+
+class VersionConsistency(unittest.TestCase):
+    """CAT-81: wind.py VERSION tracks the plugin version and is reachable via
+    `wind --version`."""
+
+    PLUGIN_JSON = os.path.join(os.path.dirname(__file__), "..", "..", "..",
+                               "plugins", "second-wind", ".claude-plugin",
+                               "plugin.json")
+
+    def test_version_matches_plugin_json(self):
+        # Expected to stay red between the VERSION bump and release-docs
+        # bumping plugin.json to the same value.
+        with open(self.PLUGIN_JSON) as f:
+            plugin_version = json.load(f)["version"]
+        self.assertEqual(wind.VERSION, plugin_version)
+
+    def test_version_flag_prints_version_and_exits_zero(self):
+        out = io.StringIO()
+        with mock.patch("sys.stdout", out), self.assertRaises(SystemExit) as ctx:
+            wind.main(["--version"])
+        self.assertEqual(ctx.exception.code, 0)
+        self.assertIn(wind.VERSION, out.getvalue())
+
+
+class TmuxSafeSessionNames(unittest.TestCase):
+    """CAT-80(a): tmux renames '.' and ':' to '_' in session names, so every
+    lookup must use the name tmux actually stores."""
+
+    def _cfg(self, tmp, repos):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["repos"] = repos
+        path = os.path.join(tmp, "second-wind.json")
+        with open(path, "w") as f:
+            json.dump({"repos": repos}, f)
+        cfg["_path"] = path
+        return cfg
+
+    def test_session_name_replaces_dot_and_colon(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        self.assertEqual(wind.session_name(cfg, {"name": "my.app"}),
+                         "wind-my_app")
+        self.assertEqual(wind.session_name(cfg, {"name": "a:b.c"}),
+                         "wind-a_b_c")
+        self.assertEqual(wind.session_name(cfg, {"name": "plain"}),
+                         "wind-plain")
+
+    def test_session_name_matches_what_tmux_stores(self):
+        # Round trip: the name we look up is the name tmux lists (tmux turns
+        # 'wind-my.app' into 'wind-my_app'; probe in the register evidence).
+        cfg = dict(wind.DEFAULT_CONFIG)
+        asked = "wind-my.app"
+        stored = asked.replace(".", "_").replace(":", "_")
+        self.assertEqual(wind.session_name(cfg, {"name": "my.app"}), stored)
+
+    def test_load_config_rejects_two_repos_with_same_session_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "second-wind.json")
+            with open(path, "w") as f:
+                json.dump({"repos": [{"name": "a.b", "path": "/tmp/1"},
+                                     {"name": "a_b", "path": "/tmp/2"}]}, f)
+            with self.assertRaises(SystemExit):
+                wind.load_config(path)
+
+    def test_load_config_reports_renamed_session(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "second-wind.json")
+            with open(path, "w") as f:
+                json.dump({"repos": [{"name": "my.app",
+                                      "path": "/tmp/1"}]}, f)
+            with mock.patch.object(wind, "log") as logged:
+                cfg = wind.load_config(path)
+            self.assertEqual(cfg["repos"][0]["name"], "my.app")
+            messages = " ".join(str(c.args[0]) for c in logged.call_args_list)
+            self.assertIn("wind-my_app", messages)
+
+    def test_add_repo_reports_the_session_name_it_will_use(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = os.path.join(tmp, "my.app")
+            os.makedirs(os.path.join(repo, ".git"))
+            cfg = self._cfg(tmp, [{"name": "other", "path": "/tmp/o"}])
+            entry = wind.add_repo_to_config(cfg, repo)
+            self.assertEqual(entry["name"], "my.app")
+            self.assertEqual(wind.session_name(cfg, entry), "wind-my_app")
+
+    def test_add_repo_rejects_name_colliding_after_sanitising(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = os.path.join(tmp, "my.app")
+            os.makedirs(os.path.join(repo, ".git"))
+            cfg = self._cfg(tmp, [{"name": "my_app", "path": "/tmp/o"}])
+            with self.assertRaises(ValueError) as ctx:
+                wind.add_repo_to_config(cfg, repo)
+            self.assertIn("wind-my_app", str(ctx.exception))
+
+    def test_watcher_session_name_is_tmux_safe(self):
+        cfg = dict(wind.DEFAULT_CONFIG)
+        cfg["session_prefix"] = "my.wind"
+        self.assertEqual(wind.watcher_session_name(cfg), "my_wind-watcher")
+
+
+class WizardReconfigureKeepsExistingKeys(unittest.TestCase):
+    """CAT-80(b): reconfigure starts from the loaded config, not defaults."""
+
+    def test_reconfigure_keeps_custom_top_level_keys(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            with open(target, "w") as f:
+                json.dump({"limit_patterns": [r"MY_LIMIT (?P<epoch>\d{9,12})"],
+                           "poll_interval_seconds": 77,
+                           "session_prefix": "custom",
+                           "repos": [{"name": "alpha",
+                                      "path": os.path.join(tmp, "alpha")}]},
+                          f)
+            cfg = drive_wizard(
+                texts=["~/projects", "", "", "go on", ""],
+                selects=[2, 0, 0, 0],
+                multiselects=[[0]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+            self.assertEqual(cfg["limit_patterns"],
+                             [r"MY_LIMIT (?P<epoch>\d{9,12})"])
+            self.assertEqual(cfg["poll_interval_seconds"], 77)
+            self.assertEqual(cfg["session_prefix"], "custom")
+            # Wizard-controlled keys still reflect the answers given.
+            self.assertEqual(cfg["resume_message"], "go on")
+
+    def test_fresh_wizard_still_writes_defaults(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            target = os.path.join(tmp, "second-wind.json")
+            cfg = drive_wizard(
+                texts=["~/projects", "", "", "go on", ""],
+                selects=[2, 0, 0, 0],
+                multiselects=[[0]],
+                target=target,
+                scan_result=[("alpha", os.path.join(tmp, "alpha"))])
+            self.assertEqual(cfg["poll_interval_seconds"],
+                             wind.DEFAULT_CONFIG["poll_interval_seconds"])
+
+
+class WatcherStaleMessageAndState(unittest.TestCase):
+    """CAT-78: a handled limit message must not re-trigger, the cooldown
+    survives a watcher restart, and the watcher re-reads state each poll."""
+
+    def _setup(self, tmp):
+        self.statef = os.path.join(tmp, "state.json")
+        self.cfg = dict(wind.DEFAULT_CONFIG)
+        self.cfg["session_prefix"] = "wind"
+        self.cfg["repos"] = [{"name": "x", "path": "/tmp"}]
+        self.cfg["_path"] = os.path.join(tmp, "second-wind.json")
+        self.cfg["caffeinate"] = False
+        self.cfg["resume_buffer_seconds"] = 0
+        self.cfg["resume_cooldown_seconds"] = 0
+        self.sent = []
+
+    def _run(self, pane_text, hooks):
+        """Run cmd_watch; hook i runs on the i-th sleep, then Ctrl-C."""
+        calls = {"n": 0}
+
+        def fake_sleep(seconds, text):
+            i = calls["n"]
+            calls["n"] += 1
+            if i >= len(hooks):
+                raise KeyboardInterrupt
+            hooks[i]()
+
+        args = mock.Mock()
+        args.detach = False
+        args.poll = None
+        with mock.patch.object(wind, "STATE_PATH", self.statef), \
+                mock.patch.object(wind, "LEGACY_STATE_PATH",
+                                  self.statef + ".legacy"), \
+                mock.patch.object(wind, "session_exists", lambda n: True), \
+                mock.patch.object(wind, "capture_pane",
+                                  lambda n, l: pane_text()
+                                  if callable(pane_text) else pane_text), \
+                mock.patch.object(wind, "send_text",
+                                  lambda n, t: self.sent.append((n, t))), \
+                mock.patch.object(wind, "notify", lambda *a, **k: None), \
+                mock.patch.object(wind, "watch_sleep", fake_sleep):
+            wind.cmd_watch(self.cfg, args)
+
+    def _read_state(self):
+        with open(self.statef) as f:
+            return json.load(f)
+
+    # The same clock-time line carries no date, so a lingering message and a
+    # new one on the next day hash alike. What tells them apart is whether
+    # the line left the pane or another copy appeared below it.
+    TIME_LINE = "You've hit your session limit · resets 3pm"
+
+    def _seed_handled(self, **extra):
+        digest = wind.find_limit(self.TIME_LINE, PATTERNS)[1]
+        entry = {"hash": digest, "until": time.time() + 3600, **extra}
+        with open(self.statef, "w") as f:
+            json.dump({"handled": {"wind-x": entry}}, f)
+
+    def test_next_day_repeat_after_line_left_the_pane_is_a_new_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled()
+            pane = {"text": "working...\nall quiet"}
+            # two quiet polls: one missing poll could be a resize wrap
+            self._run(lambda: pane["text"],
+                      [lambda: None,
+                       lambda: pane.update(text=self.TIME_LINE)])
+            state = self._read_state()
+            self.assertEqual(state.get("paused"), ["wind-x"],
+                             "line vanished then returned: a new limit")
+            self.assertEqual(state["handled"]["wind-x"]["n"], 1)
+
+    def test_empty_capture_does_not_drop_handled_entry(self):
+        # W2M-M03: capture_pane returns "" when tmux fails; the lingering
+        # handled line must not read as a new limit on the next good poll.
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled(n=1)
+            pane = {"text": ""}
+            self._run(lambda: pane["text"],
+                      [lambda: pane.update(text=self.TIME_LINE)])
+            state = self._read_state()
+            self.assertNotIn("paused", state)
+            self.assertIn("wind-x", state["handled"])
+
+    def test_single_missing_poll_does_not_drop_handled_entry(self):
+        # W2M-M03: a resize that wraps the line makes the regex miss once.
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled(n=1)
+            pane = {"text": "wrapped\nlimit line\nmangled"}
+            self._run(lambda: pane["text"],
+                      [lambda: pane.update(text=self.TIME_LINE)])
+            state = self._read_state()
+            self.assertNotIn("paused", state)
+            self.assertIn("wind-x", state["handled"])
+
+    def test_handled_count_drops_when_a_copy_scrolls_out(self):
+        # W2M-M02: n=2 recorded, older copy scrolls out, a new copy appears
+        # later. The stored n must follow the visible count down to 1.
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled(n=2)
+            one = self.TIME_LINE
+            two = f"{self.TIME_LINE}\nresumed, working...\n{self.TIME_LINE}"
+            pane = {"text": one}
+            self._run(lambda: pane["text"],
+                      [lambda: pane.update(text=two)])
+            state = self._read_state()
+            self.assertEqual(state.get("paused"), ["wind-x"],
+                             "second copy after scroll-out is a new limit")
+
+    def test_lingering_handled_line_stays_ignored(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled()
+            self._run(self.TIME_LINE, [lambda: None, lambda: None])
+            state = self._read_state()
+            self.assertNotIn("paused", state)
+            self.assertIn("wind-x", state["handled"])
+
+    def test_second_copy_of_handled_line_is_a_new_limit(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self._seed_handled(n=1)
+            text = f"{self.TIME_LINE}\nresumed, working...\n{self.TIME_LINE}"
+            self._run(text, [])
+            self.assertEqual(self._read_state().get("paused"), ["wind-x"])
+            self.assertEqual(self._read_state()["handled"]["wind-x"]["n"], 2)
+
+    def test_limit_digests_counts_each_copy_once(self):
+        text = f"{self.TIME_LINE}\nx\n{self.TIME_LINE}"
+        digests = wind.limit_digests(text, PATTERNS)
+        self.assertEqual(len(digests), 2)
+        self.assertEqual(digests[0], digests[1])
+        self.assertEqual(wind.limit_digests("all quiet", PATTERNS), [])
+
+    def test_find_limit_returns_stable_digest_of_matched_message(self):
+        a = wind.find_limit("noise\nYou've hit your session limit · resets 3pm",
+                            PATTERNS, NOW)
+        b = wind.find_limit("different noise\nYou've hit your session limit"
+                            " · resets 3pm", PATTERNS, NOW)
+        c = wind.find_limit("You've hit your session limit · resets 4pm",
+                            PATTERNS, NOW)
+        self.assertEqual(a[1], b[1])
+        self.assertNotEqual(a[1], c[1])
+        self.assertEqual(a[0], NOW.replace(hour=15))
+
+    def test_find_limit_none_without_match(self):
+        self.assertIsNone(wind.find_limit("all quiet", PATTERNS, NOW))
+
+    def test_find_limit_prefers_bottom_most_message_in_pane(self):
+        # CAT-78: an old (handled) message lingers above a new one.
+        text = ("You've hit your session limit · resets 3pm\n"
+                "work resumed...\n"
+                "You've hit your session limit · resets 8pm")
+        found = wind.find_limit(text, PATTERNS, NOW)
+        self.assertEqual(found[0], NOW.replace(hour=20))
+        new_only = wind.find_limit(
+            "You've hit your session limit · resets 8pm", PATTERNS, NOW)
+        self.assertEqual(found[1], new_only[1])
+
+    def test_find_limit_bottom_most_across_patterns(self):
+        epoch = int(NOW.timestamp()) + 7200
+        text = (f"Claude AI usage limit reached|{epoch - 3600}\n"
+                "You've hit your session limit · resets 8pm")
+        found = wind.find_limit(text, PATTERNS, NOW)
+        self.assertEqual(found[0], NOW.replace(hour=20))
+
+    def test_new_limit_detected_below_handled_old_one(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            old_epoch = int(time.time()) - 60
+            new_epoch = int(time.time()) + 3600
+            old_line = f"Claude AI usage limit reached|{old_epoch}"
+            old_digest = wind.find_limit(old_line, PATTERNS)[1]
+            with open(self.statef, "w") as f:
+                json.dump({"handled": {"wind-x": {
+                    "hash": old_digest,
+                    "until": time.time() + 1000}}}, f)
+            text = (f"{old_line}\nresumed, working...\n"
+                    f"Claude AI usage limit reached|{new_epoch}")
+            self._run(text, [])
+            state = self._read_state()
+            self.assertEqual(state.get("paused"), ["wind-x"])
+            self.assertAlmostEqual(state.get("reset_at"), new_epoch, delta=2)
+
+    def test_same_message_does_not_repause_after_cooldown(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            epoch = int(time.time()) + 1
+            text = f"Claude AI usage limit reached|{epoch}"
+            # poll 1 pauses, poll 2 resumes, poll 3 sees the same stale text
+            self._run(text, [lambda: time.sleep(1.3), lambda: None])
+            self.assertEqual(self.sent, [("wind-x", "continue")],
+                             f"resumed once, then ignored the stale "
+                             f"message: {self.sent}")
+            state = self._read_state()
+            self.assertIn("wind-x", state.get("handled", {}))
+
+    def test_cooldown_is_persisted_after_resume(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            self.cfg["resume_cooldown_seconds"] = 600
+            epoch = int(time.time()) + 1
+            self._run(f"Claude AI usage limit reached|{epoch}",
+                      [lambda: time.sleep(1.3)])
+            self.assertEqual(self.sent, [("wind-x", "continue")])
+            cooldown = self._read_state().get("cooldown", {})
+            self.assertGreater(cooldown.get("wind-x", 0), time.time() + 500)
+
+    def test_cooldown_survives_watcher_restart(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            with open(self.statef, "w") as f:
+                json.dump({"cooldown": {"wind-x": time.time() + 1000}}, f)
+            epoch = int(time.time()) + 3600
+            self._run(f"Claude AI usage limit reached|{epoch}", [])
+            state = self._read_state()
+            self.assertNotIn("paused", state)
+            self.assertNotIn("reset_at", state)
+
+    def test_state_cleared_mid_wait_sends_nothing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            self._setup(tmp)
+            with open(self.statef, "w") as f:
+                json.dump({"paused": ["wind-x"],
+                           "reset_at": time.time() + 0.5}, f)
+
+            def resume_elsewhere():
+                wind.clear_state()   # what `wind resume` / the dashboard do
+                time.sleep(0.8)
+
+            self._run("", [resume_elsewhere])
+            self.assertEqual(self.sent, [],
+                             f"state was cleared externally: {self.sent}")
 
 
 if __name__ == "__main__":

@@ -18,8 +18,8 @@
 // root          element full screen is asked for, and that carries pa-fill when the browser refuses (default: the document element).
 // onChange      called with ctl.state() after any change.
 //
-// Keys: Space plays and pauses, arrows step the beats, P enters Play, E leaves
-// it, F is full screen, 0 fits, / focuses Find, Escape closes the panel, else
+// Keys: Space plays and pauses, arrows step the beats, P enters Play and starts
+// it (motion allowed), E leaves it, F is full screen, 0 fits, / focuses Find, Escape closes the panel, else
 // leaves full screen, else leaves Play, else clears.
 // Every state class (pa-dim, pa-on, pa-hl, pa-hidden, pa-active, pa-selected,
 // pa-route, pa-animate, and pa-playing on the stage) is styled by diagramCss()
@@ -104,6 +104,9 @@
       if (tab && !tab.disabled) tab.focus();
     }
 
+    // P and the Play tab: enter Play on beat 1 and start it (reduced motion waits for Space, as autoplay does).
+    function playStory() { story.present(0); if (!camera.reduced()) story.play(); }
+
     // ---- animation ----------------------------------------------------------------------
     var animateOn = !!data.animate && !camera.reduced();
     function syncAnimate() {
@@ -148,9 +151,9 @@
     function pick(id) {
       if (story.isPresenting()) story.exit();
       trace.select(id);
+      panel.paint(); // opens the panel first (it starts hidden), so the camera frames the node in the room that is left
       camera.unfit();
       camera.moveTo(camera.cameraFor(camera.boxOf([id])));
-      panel.paint();
       emit();
     }
     // Drop the selection or route. Closed from the keyboard while focus is in the
@@ -171,9 +174,11 @@
       var inPanel = within(doc.activeElement, options.panel);
       var hadFocus = trace.hasFocus();
       trace.clear();
-      if (keyboard && inPanel && back && back.focus) back.focus();
+      // The panel hides once nothing is selected: focus may not stay inside it (nor go to its title).
+      if (keyboard && inPanel && back && back.focus && !within(back, options.panel)) back.focus();
+      else if (inPanel) keepFocus([options.panel], 'explore');
       else if (hadFocus && target && target.blur) target.blur(); // focusout clears the focus trace
-      panel.paint();
+      camera.holdView(panel.paint); // the panel hiding widens the stage: no jump on Close either
       emit();
     }
 
@@ -280,7 +285,7 @@
       var from = trace.selected() || (trace.routed() && trace.routed().from);
       if (shift && id && from && id !== from && els.nodes[id] && els.nodes[from]) trace.route(from, id);
       else trace.toggle(id);
-      panel.paint();
+      camera.holdView(panel.paint); // the panel opening narrows the stage: keep the drawing under the pointer
       emit();
     }
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });
@@ -303,7 +308,8 @@
     svg.addEventListener('focusin', function (e) {
       var id = trace.idAt(e.target);
       if (!id) return;
-      if (!story.isPresenting()) camera.ensureVisible(id);
+      // Only keyboard focus scrolls a node into view: a pressed node is already under the pointer, so never jump the view.
+      if (!story.isPresenting() && !downAt) camera.ensureVisible(id);
       trace.focus(id);
     });
     svg.addEventListener('focusout', function () { trace.focus(null); });
@@ -311,7 +317,7 @@
     // ---- keyboard --------------------------------------------------------------------------
     // Space plays and pauses (on the canvas and on every transport control; a
     // button elsewhere keeps Space for itself); arrows, PageUp/PageDown, Home
-    // and End move between beats; P enters Play, E leaves it; F is full screen;
+    // and End move between beats; P enters Play and plays, E leaves it; F is full screen;
     // 0 fits; A toggles the edge animation; / focuses Find; Escape closes the
     // panel, else leaves full screen, else leaves Play, else clears the Find
     // filter, else clears the trace. In Play any key but Space and F (full screen moves no camera) pauses, in a form
@@ -333,7 +339,7 @@
       else if (k === 'f' || k === 'F') fs.toggle();
       else if (k === '+' || k === '=') camera.zoomBy(KEY_ZOOM);
       else if (k === '-' || k === '_') camera.zoomBy(1 / KEY_ZOOM);
-      else if (k === 'p' || k === 'P') { if (!inPlay) story.present(0); }
+      else if (k === 'p' || k === 'P') { if (!inPlay) playStory(); }
       else if (k === 'e' || k === 'E') story.exit();
       else if (k === 'a' || k === 'A') { if (!camera.reduced()) toggleAnimate(); }
       else if (k === '/' && findEl) findEl.focus();
@@ -379,7 +385,7 @@
       svg: svg, stage: stage, state: state,
       fit: camera.fit, zoomBy: camera.zoomBy, panBy: camera.panBy,
       select: pick, closePanel: function () { closeSelection(null, false); }, reset: reset,
-      present: story.present, goTo: story.goTo, next: story.next, prev: story.prev, first: story.first, last: story.last,
+      present: story.present, playStory: playStory, goTo: story.goTo, next: story.next, prev: story.prev, first: story.first, last: story.last,
       nextChapter: story.nextChapter, prevChapter: story.prevChapter, exit: story.exit, togglePresent: story.togglePresent,
       play: story.play, pause: story.pause, togglePlay: story.togglePlay, setSpeed: story.setSpeed, cycleSpeed: story.cycleSpeed,
       setLoop: story.setLoop, toggleLoop: story.toggleLoop,

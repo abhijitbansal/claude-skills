@@ -29,31 +29,38 @@ dead weight.
 
 ## Fix
 
-**Before authoring any hook-rule-file content, grep the whole settings
-stack** for a reference to the rule-file glob/loader:
+**Before authoring any hook-rule-file content, check three things in order.**
 
-```bash
-grep -ln '<rule-glob>' .claude/settings*.json ~/.claude/settings*.json 2>/dev/null
-grep -rln '<rule-glob>' ~/.claude/plugins --include='*.json' --include='*.py' --include='*.sh' --include='*.mjs'
-```
+1. **Grep the settings files** for a reference to the rule-file glob/loader:
 
-(Or drop `--include` entirely.) A real dispatcher (e.g. hookify) keeps the
-rule glob in its Python hook scripts, not in `hooks.json`, so a search
-limited to `hooks.json` reports "no dispatcher" wrongly.
+   ```bash
+   grep -ln '<rule-glob>' .claude/settings*.json ~/.claude/settings*.json 2>/dev/null
+   ```
 
-Use two commands: `--include` also filters the explicit `settings*.json`
-arguments (verified on BSD grep), so a single combined command never reads
-the settings files. zsh aborts on an unmatched glob ("no matches found"):
-run the first command in bash, or `setopt nullglob` first.
+   zsh aborts on an unmatched glob ("no matches found"): run it in bash, or
+   `setopt nullglob` first.
 
-(Plugin hooks live at
-`~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/hooks/hooks.json`,
-so a shallow `~/.claude/plugins/*/hooks.json` glob matches nothing and always
-reports "no dispatcher".)
+2. **Grep the installed plugins' active version** for the same glob, in the
+   hook scripts as well as `hooks.json`:
 
-Also confirm the plugin is listed under `enabledPlugins` in settings, and
-count a hit only in the active version directory (cache keeps old
-versions).
+   ```bash
+   grep -rln '<rule-glob>' ~/.claude/plugins/cache
+   ```
+
+   Use a separate command from step 1: `--include` also filters explicit file
+   arguments (verified on BSD grep), so one combined command never reads the
+   settings files. A real dispatcher (e.g. hookify) keeps the rule glob in its
+   Python hook scripts, not in `hooks.json`, so a search limited to
+   `hooks.json` reports "no dispatcher" wrongly. Plugin hooks live at
+   `~/.claude/plugins/cache/<marketplace>/<plugin>/<version>/hooks/hooks.json`,
+   so a shallow `~/.claude/plugins/*/hooks.json` glob matches nothing. Count a
+   hit only in the active version directory (the cache keeps old versions) and
+   only if the plugin is listed under `enabledPlugins`.
+
+3. **Confirm in a debug run** that the hook actually registers: start
+   `claude --debug` and look for the dispatcher's hook being loaded for the
+   event, then trigger the rule once. A grep hit proves the loader exists; only
+   the debug run proves it is active.
 
 - If nothing loads the rule-file pattern, **do not author rule-file
   content** expecting it to run. Implement the behavior as a native

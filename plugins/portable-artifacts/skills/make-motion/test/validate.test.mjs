@@ -75,12 +75,52 @@ test('bad fps and bad ease', () => {
   assert.ok(e.some((x) => x.includes('scenes[0].elements[0].keyframes[1].ease') && x.includes('did you mean "outCubic"?')), e.join('\n'));
 });
 
+const SHARED_NAMESPACE = 'scene ids and element ids share one namespace; rename one';
+
 test('duplicate ids are global across scenes and elements', () => {
   const s = good();
   s.scenes.push({ id: 's2', duration: 1, elements: [{ id: 't1', type: 'text', text: 'x', x: 0, y: 0 }] });
-  assert.deepEqual(errs(s), ['scenes[1].elements[0].id: duplicate id "t1" (first used at scenes[0].elements[0].id)']);
+  assert.deepEqual(errs(s), [`scenes[1].elements[0].id: duplicate id "t1" (first used at scenes[0].elements[0].id); ${SHARED_NAMESPACE}`]);
   const s2 = good(); s2.scenes[0].id = 't1';
   assert.ok(errs(s2).some((x) => x.includes('duplicate id "t1"')));
+});
+
+test('a scene id and an element id that match fail with the shared-namespace fix', () => {
+  const s = good(); s.scenes[0].id = 'title'; s.scenes[0].elements[0].id = 'title';
+  assert.deepEqual(errs(s), [`scenes[0].elements[0].id: duplicate id "title" (first used at scenes[0].id); ${SHARED_NAMESPACE}`]);
+});
+
+test('blocks.mjs show prints an example element id that cannot collide with a scene id', () => {
+  const list = spawnSync(process.execPath, [path.join(root, 'scripts/blocks.mjs'), 'list'], { encoding: 'utf8' });
+  assert.equal(list.status, 0, list.stderr);
+  const names = list.stdout.trim().split('\n').map((l) => l.split('  ')[0]);
+  assert.ok(names.length > 20);
+  for (const name of names) {
+    const show = spawnSync(process.execPath, [path.join(root, 'scripts/blocks.mjs'), 'show', name], { encoding: 'utf8' });
+    assert.equal(show.status, 0, show.stderr);
+    const element = show.stdout.slice(show.stdout.indexOf('example element (1920x1080):'));
+    assert.equal(JSON.parse(element.slice(element.indexOf('{'))).id, `${name}-1`, name);
+  }
+});
+
+test('an odd canvas size fails at validate, not at the final encode', () => {
+  const s = good(); s.size = [1081, 1920];
+  assert.deepEqual(errs(s), ['size[0]: 1081 is odd; the MP4 encoder needs an even width and height, use 1080 or 1082']);
+  const both = good(); both.size = [101, 51];
+  assert.deepEqual(errs(both).map((x) => x.split(':')[0]), ['size[0]', 'size[1]']);
+  const fine = good(); fine.size = [1080, 1920];
+  assert.deepEqual(errs(fine), []);
+});
+
+test('a scene id is a file-safe name: no slash, dots-only start or spaces', () => {
+  for (const id of ['a/b', '../x', 'a b', '.hidden', 'a\\b']) {
+    const s = good(); s.scenes[0].id = id;
+    assert.ok(errs(s).some((x) => x.startsWith('scenes[0].id: must contain only')), `${id}: ${errs(s).join('|')}`);
+  }
+  for (const id of ['intro', 'scene-1', 'Scene_2', 'a.b', '3d']) {
+    const s = good(); s.scenes[0].id = id;
+    assert.deepEqual(errs(s), [], id);
+  }
 });
 
 test('keyframes must be sorted and within scene duration', () => {

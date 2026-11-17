@@ -14,7 +14,8 @@ Cubby · worktrees/claude-mods (feat/session-mods) · Goal: Ship the session mod
 Up to two lines above the prompt: `repo · worktree (branch) · Goal · Now · N artifacts · tests`.
 
 - It is always up, from the moment the session starts, and updates as the goal, step
-  and artifacts change. Only a survey on screen takes its place, or you hide it (below).
+  and artifacts change. Only a survey on screen takes its place, or you hide it (below). After
+  `/clear` or a resume it is blank until the next prompt or tool call opens the new session's record.
 - **Two lines.** It stays on one line while it fits, dropping optional segments as before.
   Otherwise it wraps onto a second line at a space or at a ` · ` separator, using the
   width the host gives the band. Only the end of line two is ever cut, with an `…`.
@@ -31,9 +32,14 @@ Up to two lines above the prompt: `repo · worktree (branch) · Goal · Now · N
 - With no goal set, it shows your first prompt dimmed and `(no goal set)`.
 - `tests` appears when [test-board](../test-board) is installed and has recent runs. It
   clears when those runs leave test-board 60 minutes after they finished; closing the
-  test-board band with `✕` leaves it up.
+  test-board band with `✕` leaves it up. A run test-board restored from history at
+  session start is not counted.
+- With failing tests, `tests N ✓ M ✗` moves to the front of line one so the failed count
+  survives any terminal width.
 - Narrow terminals drop the artifact count, then `tests`, then shorten the worktree path;
   only when the goal still does not fit on one line does the band take a second line.
+  Widths are counted in terminal cells, so wide characters cannot overflow a line.
+- Outside a branch (no branch name) the `(branch)` part is left out.
 - Runs with a tool error, an interruption, a reported nonzero exit, incomplete output,
   or unavailable/invalid/conflicting counts carry a warning. Failed tests already show
   in the `✗` count, an unknown command status is the normal case for a live run, and
@@ -53,14 +59,20 @@ band (above); any other argument is refused with the accepted list.
   Press an entry to copy it (URL for artifacts and PRs, path for files and documents,
   the commit sha as the Bash tool reports it, branch name for pushes).
 - **All sessions** tab: the other recorded sessions, most recently active first, up to
-  50. Press a row to copy `claude --resume <id>`.
+  50. Press a row to copy `cd <worktree> && claude --resume <id>`.
 
 ### `compass_status` tool
 
 The model sees it as `mcp__session-compass__compass_status` with optional `goal`,
 `step` and `next` strings. A short standing reminder in the prompt asks Claude to call it when
 the goal is first clear and whenever the phase changes (spec, plan, implement, review,
-PR, done), not every turn. A call with no non-empty field is refused.
+PR, done), not every turn. A field left out keeps its value and an empty string clears
+it; a call with no field is refused. It is for the main session only: a subagent's call
+is refused.
+
+The record follows the session id. After `/clear` or a resume the session goes on under
+a new id; the next prompt, tool call or `compass_status` opens the record for that id
+(a resumed session gets its stored goal and artifacts back).
 
 ## What counts as an artifact
 
@@ -68,12 +80,21 @@ Captured automatically from successful tool calls:
 
 - `Artifact` publishes (claude.ai URLs; opens, reads and lists are ignored).
 - `SendUserFile` deliveries (attachments that uploaded without error).
-- `Write` of an `.html`, `.md`, `.pdf`, `.png` or `.svg` file under `.scratch/`, `docs/`,
-  `reports/` or `test-checklists/`, or under a Claude scratchpad directory.
-- Git commits, pushes and created pull requests, as reported by the Bash tool.
+- `Write` of an `.html`, `.md`, `.pdf`, `.png`, `.svg`, `.mp4`, `.gif` or `.webm` file
+  under `.scratch/`, `docs/`, `reports/` or `test-checklists/`, or under a Claude
+  scratchpad directory.
+- Output of a portable-artifacts builder (`make-explainer`, `make-diagram`,
+  `make-dashboard`, `make-motion`, `make-scene`) whose `scripts/build.mjs` or
+  `scripts/render.mjs` runs through Bash: the path on its `wrote <path>` line, its
+  `file://` line or its `--json` `out` field (and, for `make-motion` render, its bare
+  output path line), when the file has one of the extensions above. Any folder counts
+  here. A command that only lists or searches a make-* folder records nothing.
+- Git commits, pushes and created pull requests, as reported by the Bash tool. Pull
+  requests are told apart by URL, so `#12` in two repos is two entries.
 
-A git `checkout`, `switch`, `worktree`, `commit` or `push` from the main session also
-refreshes the recorded worktree and branch. A subagent's git commands do not.
+A git `checkout`, `switch`, `worktree`, `commit` or `push` (also as `git -C <dir> …`),
+`gh pr checkout`, or an `EnterWorktree` / `ExitWorktree` call from the main session also
+refreshes the recorded worktree and branch. A subagent's do not.
 
 ## Install
 
