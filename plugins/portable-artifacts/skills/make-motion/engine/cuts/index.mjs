@@ -40,7 +40,7 @@ const smoothstep = (lo, hi, v) => {
 };
 
 /** The directions a moving cut takes, first the default, each as the unit vector from the centre of the canvas toward
- *  the edge the incoming shot enters by (edges.mjs: `up` enters at the bottom and moves up). */
+ *  the edge the incoming shot enters by (edges.mjs: a direction is the way it moves, so `left` enters at the right). */
 export const EDGES = Object.freeze(Object.fromEntries(Object.keys(ENTRY_EDGE).map((direction) => [direction, entryVector(direction)])));
 const EDGE_NAMES = Object.freeze(Object.keys(EDGES));
 
@@ -200,9 +200,11 @@ const faded = (n, factor) => Object.freeze({ ...n, opacity: n.opacity * factor, 
 const identical = (a, b) => stateKey({ ...a, bbox: undefined }) === stateKey({ ...b, bbox: undefined });
 
 // An unlike pair hands over on one path: the outgoing copy is gone and the incoming one arrives between these points of
-// p, so the two sets of words are never legible at once (look review gate-cuts-1 D1).
-const HAND_FROM = 0.4;
-const HAND_TO = 0.6;
+// p, so the two sets of words are never legible at once (look review gate-cuts-1 D1). Late in the window (round 2
+// ruling 2): the ease does most of its travel around the middle, so a hand-over there hid the move; now the old line is
+// seen travelling and resizing most of the way (to 0.89 of the path at p 0.7) before the words change where it lands.
+const HAND_FROM = 0.7;
+const HAND_TO = 0.9;
 const HAND_MID = (HAND_FROM + HAND_TO) / HALF;
 
 // What a node shows, for deciding whether two heroes are the same: the words of its texts and the src of its images,
@@ -216,13 +218,23 @@ function contentOf(n) {
 // morphs one into the other. Unlike ones (a statement into a number) are not scaled or reflowed into each other.
 const sameHero = (a, b) => a.type === b.type && contentOf(a) === contentOf(b);
 
+// A line of type is carried by what a reader sees of it (round 2 ruling 2): its type size and where its first line
+// starts. Two statements reflow into boxes of nearly the same area and centre, so a carry by box hid the type shrinking
+// from one size to the other and moved the slot about 20 px; by type, the old line visibly shrinks and moves into the
+// new one, and lines set far apart travel the whole way.
+const isTypeLine = (n) => n.type === 'text' && Number.isFinite(n.props.layout?.size) && n.props.layout.size > 0 && n.props.layout.lines?.length > 0;
+const typePlace = (n) => ({
+  centre: [n.x + n.props.layout.lines[0].x * n.scale, n.y + n.props.layout.lines[0].y * n.scale],
+  size: n.props.layout.size * Math.abs(n.scale),
+});
+
 // An unlike pair (a line into a different line) handed over on one path: both copies ride the same centre and size
 // from where the outgoing hero stood to where the incoming one stands, as morph() carries a like pair, but the outgoing
 // copy is gone before the incoming one shows (HAND_FROM to HAND_TO), so the slot is carried and the words change in
 // flight instead of piling up.
 function handOver(a, b, e, p) {
   const useBox = Array.isArray(a.bbox) && Array.isArray(b.bbox) && boxSize(a.bbox) > 0 && boxSize(b.bbox) > 0;
-  const pa = placeOf(a, useBox), pb = placeOf(b, useBox);
+  const [pa, pb] = isTypeLine(a) && isTypeLine(b) ? [typePlace(a), typePlace(b)] : [placeOf(a, useBox), placeOf(b, useBox)];
   const centre = [lerp(pa.centre[0], pb.centre[0], e), lerp(pa.centre[1], pb.centre[1], e)];
   const size = lerp(pa.size, pb.size, e);
   const turn = b.rotate - a.rotate;
@@ -267,12 +279,12 @@ function match({ from, to, p }) {
 export const CUTS = Object.freeze({
   cut: defineCut({ dur: 0, blend: ({ to }) => to, summary: 'A hard cut: the next shot replaces the last on its first frame.', example: 'cut' }),
   slide: defineCut({
-    dur: SLIDE.dur, parts: slideParts, directions: EDGE_NAMES, example: { type: 'slide', direction: 'left' },
-    summary: 'The next shot slides in from the right (left: from the left; up: from below, moving up; down: from above, moving down) and pushes the last one out by the other side over 0.4 s.',
+    dur: SLIDE.dur, parts: slideParts, directions: EDGE_NAMES, example: { type: 'slide', direction: 'right' },
+    summary: 'The next shot slides in moving the way the direction names and pushes the last one out ahead of it: left (the default) comes in from the right edge, right from the left, up from below, down from above, over 0.4 s.',
   }),
   cover: defineCut({
     dur: COVER.dur, parts: coverParts, directions: EDGE_NAMES, example: { type: 'cover', direction: 'up' },
-    summary: 'The next shot slides in from the right (left, up: moving up from below, down: moving down from above) over the last one, which stays where it is, over 0.4 s.',
+    summary: 'The next shot slides in over the last one, which stays where it is, moving the way the direction names: left (the default) comes in from the right edge, right from the left, up from below, down from above, over 0.4 s.',
   }),
   punch: defineCut({
     dur: PUNCH.dur, parts: punchParts, incomingOnly: true, example: 'punch',

@@ -16,7 +16,8 @@ const LAYER_EASE = 'inOutCubic';
 const ZOOM_FROM = Object.freeze({ in: 1.2, out: 0.8 }); // version 1's scales
 const BLUR_SHARE = 24 / 1080; // version 1's 24 px blur on a 1080 px short side, as a share of the short side
 const HALF = 2;
-const WIPE_EDGES = Object.freeze(['left', 'right', 'up', 'down']);
+// The way the edge moves (edges.mjs); the default, right, uncovers from the left edge as the wipe always did.
+const WIPE_EDGES = Object.freeze(['right', 'left', 'up', 'down']);
 const IRIS_WAYS = Object.freeze(['in', 'out']);
 
 const pose = (fields = {}) => Object.freeze({ opacity: 1, clip: null, scale: 1, blur: 0, dim: 0, ...fields });
@@ -24,7 +25,10 @@ const UNTOUCHED = pose();
 const recipe = (under, from, to, backdrop = null) => Object.freeze({ under, from, to, backdrop });
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 const lerp = (a, b, e) => a + (b - a) * e;
-const cornerReach = (canvas) => Math.hypot(canvas.w / HALF, canvas.h / HALF);
+// How far the farthest corner of the canvas is from `centre`: the radius at which a circle about it covers the frame.
+const cornerReach = (canvas, [cx, cy]) => Math.hypot(Math.max(cx, canvas.w - cx), Math.max(cy, canvas.h - cy));
+// Where an iris opens when the look names no point (look.cutMotion.irisAt): the middle of the canvas.
+const IRIS_CENTRE = Object.freeze([0.5, 0.5]);
 
 // The part of the canvas the incoming picture has reached at eased progress e, growing from the edge `direction` enters
 // by (edges.mjs: a wipe up grows from the bottom edge).
@@ -57,8 +61,9 @@ const LAYERS = Object.freeze({
   // a dip: the outgoing shot fades to the incoming background over the first half, the incoming one up over the second
   fade: (e, { p }) => recipe('from', pose({ opacity: 1 - ease(LAYER_EASE)(clamp01(p * HALF)) }), pose({ opacity: ease(LAYER_EASE)(clamp01(p * HALF - 1)) }), 'to'),
   wipe: (e, { direction, canvas }) => recipe('from', UNTOUCHED, pose({ clip: { rect: wipeRect(direction, e, canvas) } })),
-  iris: (e, { p, direction, canvas }) => {
-    const centre = [canvas.w / HALF, canvas.h / HALF], reach = cornerReach(canvas);
+  iris: (e, { p, direction, canvas, look }) => {
+    const [fx, fy] = look?.cutMotion?.irisAt ?? IRIS_CENTRE;
+    const centre = [fx * canvas.w, fy * canvas.h], reach = cornerReach(canvas, centre);
     if (direction === 'in') return recipe('from', pose({ dim: IRIS_DIM * clamp01(p / DIM_BY) }), pose({ clip: { circle: [...centre, reach * e] } }));
     return recipe('to', pose({ clip: { circle: [...centre, reach * (1 - e)] } }), UNTOUCHED);
   },
@@ -71,11 +76,11 @@ function defineLayer(name, { directions = null, summary, example }) {
   const build = LAYERS[name];
   return Object.freeze({
     family: 'layer', dur: LAYER_DUR, summary, example, directions, smearable: false, incomingOnly: false,
-    layers({ p, direction, canvas }) {
+    layers({ p, direction, canvas, look = null }) {
       if (!Number.isFinite(p)) throw new Error(`${name}.layers: p must be a finite number, got ${p}`);
       if (directions !== null && !directions.includes(direction)) throw new Error(`${name}.layers: direction must be one of ${directions.join(', ')}, got ${direction}`);
       const q = clamp01(p);
-      return build(ease(LAYER_EASE)(q), { p: q, direction, canvas });
+      return build(ease(LAYER_EASE)(q), { p: q, direction, canvas, look });
     },
   });
 }
@@ -84,8 +89,8 @@ function defineLayer(name, { directions = null, summary, example }) {
 export const LAYER_CUTS = Object.freeze({
   crossfade: defineLayer('crossfade', { example: 'crossfade', summary: 'The next shot fades in over the last one over 0.4 s.' }),
   fade: defineLayer('fade', { example: { type: 'fade', duration: 0.6 }, summary: 'The last shot fades to the next one\'s background, then the next one fades up, over 0.4 s.' }),
-  wipe: defineLayer('wipe', { directions: WIPE_EDGES, example: { type: 'wipe', direction: 'up' }, summary: 'The next shot is uncovered by a straight line from the left edge (right: from the right; up: from the bottom, moving up; down: from the top, moving down) over 0.4 s.' }),
-  iris: defineLayer('iris', { directions: IRIS_WAYS, example: { type: 'iris', direction: 'out' }, summary: 'A circle opens from the centre on the next shot (in), or closes on the last one (out), over 0.4 s.' }),
+  wipe: defineLayer('wipe', { directions: WIPE_EDGES, example: { type: 'wipe', direction: 'up' }, summary: 'The next shot is uncovered by a straight line that moves the way the direction names: right (the default) starts at the left edge, left at the right edge, up at the bottom edge, down at the top edge, over 0.4 s.' }),
+  iris: defineLayer('iris', { directions: IRIS_WAYS, example: { type: 'iris', direction: 'out' }, summary: 'A circle opens on the next shot (in), or closes on the last one (out), over 0.4 s, about the point the look keeps clear of words (the centre unless it names one).' }),
   zoom: defineLayer('zoom', { directions: IRIS_WAYS, example: { type: 'zoom', direction: 'out' }, summary: 'The next shot fades in from 1.2 times its size (in) or 0.8 (out) over the last one, over 0.4 s.' }),
   blur: defineLayer('blur', { example: 'blur', summary: 'The next shot fades in from a blur over the last one over 0.4 s.' }),
 });

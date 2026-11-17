@@ -16,7 +16,7 @@ import { track } from '../time/track.mjs';
 import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase, isEditorial, heroProblems, fieldNode, enterTracks, onDevices, placeDevices, deviceCamera, unionBox, runInk, plainSay, endTimes, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup,
+  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase, isEditorial, heroProblems, fieldNode, enterTracks, onDevices, placeDevices, deviceCamera, unionBox, runInk, plainSay, endTimes, cutReveal, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup,
 } from './shared.mjs';
 import { defaultCamera, driftReach } from './camera.mjs';
 import { plainTag } from './plain-tag.mjs';
@@ -265,7 +265,7 @@ function expandEnd(shot, ctx) {
   assertNoBlanks(shot, 'end'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
-  const times = endTimes(shot, timing);
+  const times = endTimes(shot, timing, cutReveal(shot, ctx));
   // a look may make the end a centred wordmark card (look.kinds.end.wordmark, cosmos: end-mark.mjs) when there is a mark
   const wordmark = isEditorial(look) && data.wordmark && shot.mark !== undefined && shot.src === undefined;
   const parts = wordmark ? expandWordmark(shot, ctx, data, times, titleOf(shot))

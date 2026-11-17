@@ -6,6 +6,7 @@ import '../../engine/moves/index.mjs';
 import '../../engine/modes/index.mjs';
 import '../../engine/kinds/index.mjs';
 import '../../engine/cuts/index.mjs';
+import { DIRECTION_MEANING, takesEdges } from '../../engine/cuts/edges.mjs';
 import '../../engine/fields/index.mjs';
 import { ACCEPTED_VOICES } from './voice/kokoro.mjs';
 
@@ -93,11 +94,13 @@ function moveText(move) {
   return parts.join(', ');
 }
 
-// A cut's options as one short line: "node, from right (default), left, up or down; 0.4 s; takes smear".
+// A cut's options as one short line: "node, moves left (default), right, up or down (the way the next shot moves on
+// screen: ...); 0.4 s; takes smear", or "layer, in (default) or out; 0.4 s; no smear".
 function cutText(e) {
   const [first, ...rest] = e.directions ?? [];
   const tail = rest.length < 2 ? rest.join('') : `${rest.slice(0, -1).join(', ')} or ${rest.at(-1)}`;
-  const directions = first === undefined ? 'no direction' : `from ${first} (default)${rest.length > 0 ? `, ${tail}` : ''}`;
+  const listed = `${first} (default)${rest.length > 0 ? `, ${tail}` : ''}`;
+  const directions = first === undefined ? 'no direction' : (takesEdges(e.directions) ? `moves ${listed} (${DIRECTION_MEANING})` : listed);
   const palettes = e.palettes.length > 0 ? `; in the palette of ${e.palettes.join(', ')}` : '';
   return `${e.family}, ${directions}; ${e.dur === 0 ? 'no window' : `${e.dur} s`}; ${e.smear ? 'takes smear' : 'no smear'}${palettes}`;
 }

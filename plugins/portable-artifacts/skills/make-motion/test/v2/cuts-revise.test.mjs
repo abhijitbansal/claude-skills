@@ -43,7 +43,8 @@ test('shader uniforms: the clear windows are identity and the ground is the inco
   assert.deepEqual([plain.uClearFrom, plain.uClearTo], [CLEAR_NONE.from, CLEAR_NONE.to]);
   assert.deepEqual(plain.uGround, [1, 128 / 255, 0]);
   assert.ok(smoothstep(...CLEAR_NONE.from, 1) === 0 && smoothstep(...CLEAR_NONE.to, 0) === 1, 'never clears at any progress');
-  for (const name of ['ripple', 'polka-dots', 'glitch-memories', 'water-drop', 'cross-warp', 'window-slices', 'wind', 'page-curl']) {
+  // window-slices left this list in round 2: a slatted wipe with no clear window (window-slices.mjs, cuts-round2)
+  for (const name of ['ripple', 'polka-dots', 'glitch-memories', 'water-drop', 'cross-warp', 'wind', 'page-curl']) {
     const u = shaderUniforms(SHADER_MODULES[name], { p: 0.5, canvas: CANVAS, ground: '#000000' });
     const fromLeft = 1 - smoothstep(...u.uClearFrom, 0.5), toUp = smoothstep(...u.uClearTo, 0.5);
     assert.ok(Math.min(fromLeft, toUp) <= LEGIBLE, `${name} at p 0.5: outgoing ${fromLeft}, incoming ${toUp}`);

@@ -89,8 +89,8 @@
       "frame 299": "4bbaea9f087a4b662d48fcd3652ae9caaf5473174e16bcb98d30d57fef592927",
       "frame 300": "490994ccbea972218fb07f45a773458ceb6997a8fe417936b52847349ef67181",
       "frame 301": "9e6f886fed386ac152f959e8b5e69bdb757d29527821ca237d94388d911d10f4",
-      "frame 302": "843cc7cdbc3f21044fedb7ba7c63cccf72c0ffff2a416d2a3d937cc56f853f3d",
-      "frame 303": "fb7bbe3005d1321a637beede15108b45e919cd8fe7630def179cdd5e135347dd"
+      "frame 302": "2f671627bdf1dc2c7eb4d4619f14252f5dda139e2cd6449aa72b41fb26a25ba8",
+      "frame 303": "f3f89a8789e4dc6723fc2bc32cb561f845c9ab65f8e6ba8d05cc3c58ef822ccb"
     }
   },
   "regenerated": "transitions Task 6: the smear left apply() (engine/cuts/smear.mjs, engine/page/accumulate.mjs); the slide and punch \"frame\" keys are now their \"still\" keys; transitions Task 6 option A: gate-pop's punch windows are smeared in pop, so their film frames moved"

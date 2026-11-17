@@ -169,7 +169,7 @@ jobs:
         env:
           PA_WEBGL_SPIKE: '1'
           PA_REQUIRE_RENDER: '1'
-        run: npm ci && npx playwright install chromium && node --test test/webgl-spike.test.mjs && node --test test/gl-transitions.test.mjs && node --test --test-concurrency=1 test/v2/cuts-browser.test.mjs test/v2/cuts-smear-browser.test.mjs test/v2/cuts-determinism-browser.test.mjs test/v2/cuts-look-browser.test.mjs
+        run: npm ci && npx playwright install chromium && node --test test/webgl-spike.test.mjs && node --test test/gl-transitions.test.mjs && node --test --test-concurrency=1 test/v2/cuts-browser.test.mjs test/v2/cuts-smear-browser.test.mjs test/v2/cuts-determinism-browser.test.mjs test/v2/cuts-look-browser.test.mjs test/v2/cuts-round2-browser.test.mjs test/v2/cuts-legible-browser.test.mjs test/v2/cuts-direction-browser.test.mjs
 
   # AGENTS.md trailer rule: no Claude-Session line and no model-named
   # Co-Authored-By in the PR's commits (the harness reminder asks for both).

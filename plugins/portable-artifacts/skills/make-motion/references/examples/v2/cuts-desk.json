@@ -35,9 +35,9 @@
     {
       "id": "back",
       "show": "statement",
-      "cut": { "type": "slide", "direction": "left" },
-      "kicker": "Slide, from the left",
-      "say": "This one came in from the *left*."
+      "cut": { "type": "slide", "direction": "right" },
+      "kicker": "Slide right",
+      "say": "This one moved right, in from the *left*."
     },
     {
       "id": "dissolve",
@@ -55,7 +55,7 @@
     {
       "id": "page",
       "show": "clipping",
-      "cut": { "type": "wipe", "direction": "left" },
+      "cut": { "type": "wipe", "direction": "right" },
       "src": "clipping.png",
       "kicker": "Wipe",
       "caption": "A straight edge",
@@ -66,8 +66,8 @@
     {
       "id": "steps",
       "show": "list",
-      "cut": { "type": "wipe", "direction": "right" },
-      "title": "A wipe from the right",
+      "cut": { "type": "wipe", "direction": "left" },
+      "title": "A wipe to the left",
       "style": "steps",
       "say": "The edge starts on the right. It crosses the frame. It ends on the left.",
       "items": ["Start on the right", "Cross the frame", "End on the left"]

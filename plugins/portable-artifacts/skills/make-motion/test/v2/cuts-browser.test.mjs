@@ -48,8 +48,8 @@ const near = (actual, expected, levels, label) => {
   actual.forEach((v, k) => assert.ok(Math.abs(v - expected[k]) <= levels, `${label}: ${JSON.stringify(actual)} vs ${JSON.stringify(expected)}`));
 };
 
-test('wipe from the left at mid-window: the left half is the incoming blue, the right half the outgoing red', async (t) => {
-  const s = await open(t, film({ type: 'wipe', direction: 'left' })); if (!s) return;
+test('wipe right (from the left) at mid-window: the left half is the incoming blue, the right half the outgoing red', async (t) => {
+  const s = await open(t, film({ type: 'wipe', direction: 'right' })); if (!s) return;
   const left = [[100, 200], [400, 800], [700, 200], [900, 800]];
   const right = [[1020, 200], [1300, 800], [1600, 200], [1850, 800]];
   const got = await pixelsAt(s, MID, [...left, ...right]);

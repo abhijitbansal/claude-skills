@@ -12,10 +12,10 @@ import { reportOf, formatText } from '../../scripts/v2/report.mjs';
 
 const CANVAS = { w: 320, h: 180 }; // version 1's test size
 const near = (a, b, label) => assert.ok(Math.abs(a - b) < 1e-12, `${label}: ${a} vs ${b}`);
-const cube = (p, direction = 'left', canvas = CANVAS) => shaderUniforms(SHADER_MODULES.cube, { p, direction, canvas });
+const cube = (p, direction = 'right', canvas = CANVAS) => shaderUniforms(SHADER_MODULES.cube, { p, direction, canvas });
 const ripple = (p) => shaderUniforms(SHADER_MODULES.ripple, { p, canvas: CANVAS });
 
-test('ripple and cube are registered shader cuts of 0.6 s; cube takes the four edges, left first; ripple none', () => {
+test('ripple and cube are registered shader cuts of 0.6 s; cube takes the four directions, right first (in from the left edge, as version 1); ripple none', () => {
   for (const name of ['ripple', 'cube']) {
     const entry = registries.cuts.get(name);
     assert.equal(entry.family, 'shader', name);
@@ -24,9 +24,9 @@ test('ripple and cube are registered shader cuts of 0.6 s; cube takes the four e
     assert.equal(entry.shader, SHADER_MODULES[name], name);
   }
   assert.equal(SHADER_DUR, 0.6);
-  assert.deepEqual(registries.cuts.get('cube').directions, ['left', 'right', 'up', 'down']);
+  assert.deepEqual(registries.cuts.get('cube').directions, ['right', 'left', 'up', 'down']);
   assert.equal(registries.cuts.get('ripple').directions, null);
-  assert.deepEqual([resolveCut('cube').direction, resolveCut('cube').dur], ['left', 0.6]);
+  assert.deepEqual([resolveCut('cube').direction, resolveCut('cube').dur], ['right', 0.6]);
 });
 
 // The six cases below are version 1's numbers, copied from test/gl-transitions.test.mjs ("glUniforms: the cube turns 0
@@ -53,9 +53,9 @@ test('cube uniforms at progress 0.5 are version 1\'s: an eighth of a turn with t
   near(middle.uPull, 0.5, 'pull');
 });
 
-test('cube swap and flip per direction: version 1\'s across, and up and down name the way the box turns (edges.mjs)', () => {
-  assert.deepEqual([cube(0.5, 'left').uSwap, cube(0.5, 'left').uFlip], [0, 0]);
-  assert.deepEqual([cube(0.5, 'right').uSwap, cube(0.5, 'right').uFlip], [0, 1]);
+test('cube swap and flip per direction: every direction names the way the box turns (edges.mjs)', () => {
+  assert.deepEqual([cube(0.5, 'right').uSwap, cube(0.5, 'right').uFlip], [0, 0]);
+  assert.deepEqual([cube(0.5, 'left').uSwap, cube(0.5, 'left').uFlip], [0, 1]);
   assert.deepEqual([cube(0.5, 'up').uSwap, cube(0.5, 'up').uFlip], [1, 1]);
   assert.deepEqual([cube(0.5, 'down').uSwap, cube(0.5, 'down').uFlip], [1, 0]);
 });
@@ -65,13 +65,18 @@ test('cube uRatio is version 1\'s: the face across the turn in units of its exte
   assert.equal(cube(0.5, 'up').uRatio, 320 / 180);
 });
 
-test('progress outside 0 to 1 is clamped, as version 1 clamped it; ripple runs at half version 1\'s amplitude, frequency and shine (gate-cuts-1 P7)', () => {
+test('progress outside 0 to 1 is clamped, as version 1 clamped it; ripple runs calm (gate-cuts-1 P7; round 2 ruling 3)', () => {
   assert.equal(ripple(-3).progress, 0);
   assert.equal(ripple(7).progress, 1);
   assert.equal(cube(9).uSin, 1);
   const r = ripple(0.3);
-  assert.deepEqual([r.progress, r.amplitude, r.frequency, r.speed, r.shine], [0.3, 0.015, 14, 14, 0.03]);
+  // a push of at most 9 px on a 1080 px frame, a crest or trough about 3/255 lighter or darker, rings 2.3 times as far
+  // apart as version 1's
+  assert.deepEqual([r.progress, r.amplitude, r.frequency, r.speed, r.shine], [0.3, 0.008, 12, 14, 0.012]);
+  assert.ok(r.amplitude * 1080 <= 9 && r.shine * 255 < 3.1);
   assert.equal(r.ratio, 320 / 180);
+  // and no lens at the centre, where every direction meets: the push fades in over the middle of the frame
+  assert.match(SHADER_MODULES.ripple.source, /smoothstep\(0\.0, centreCalm, dist\)/);
 });
 
 // Every uniform a body declares, by name.
@@ -101,7 +106,7 @@ test('every shader cut stands in with a registered layer cut, which takes the sh
   const r = standInOf(registries.cuts.get('ripple'), null);
   assert.deepEqual([r.name, r.direction], ['crossfade', null]);
   // a stand-in that takes directions, for a shader cut that names one it does not have: the stand-in's default
-  assert.equal(standInOf({ standIn: 'wipe' }, 'in').direction, 'left');
+  assert.equal(standInOf({ standIn: 'wipe' }, 'in').direction, 'right');
 });
 
 test('a module whose source declares no transition() is refused, as is a stand-in that is not crossfade or wipe', () => {

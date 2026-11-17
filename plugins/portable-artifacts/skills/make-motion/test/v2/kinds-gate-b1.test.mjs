@@ -415,13 +415,16 @@ for (const format of FORMATS) {
   });
 }
 
-test('first beat: a feed never holds its first item alone longer than 0.8 s (the reply comes in the first beat)', () => {
+// The 0.8 s first beat of this gate was overruled by the transitions revision, round 2 (lead ruling 4: narration timing
+// wins over "no empty first beat" for later items): the first item is up from frame 0, the reply arrives when spoken.
+test('first beat: a feed shows its first item from frame 0 and the reply when its sentence is spoken', () => {
   const chat = { id: 'chat', show: 'feed', title: 'Studio', items: [{ from: 'them', text: 'North nearly tripled this quarter.' }, { from: 'me', text: 'Then we print more of Dawn.' }, { from: 'them', text: 'Paper comes Friday.' }],
     say: 'North nearly tripled this quarter, and that is a lot of prints. Then we print more of Dawn. Paper comes Friday.' };
   for (const look of LOOKS) {
     const out = expandFilm(filmOf([chat], look, '16:9'), 0);
-    const second = registries.kinds.get('feed').arrivals(chat, out.timing)[1];
-    assert.ok(second <= 0.8 + 1e-9, `${look}: the second item at ${second.toFixed(2)} s`);
+    const [first, second] = registries.kinds.get('feed').arrivals(chat, out.timing);
+    assert.equal(first, 0, `${look}: the first item on frame 0`);
+    assert.ok(Math.abs(second - out.timing.sentences[1].start) < 1e-9, `${look}: the second item at ${second.toFixed(2)} s, its sentence at ${out.timing.sentences[1].start.toFixed(2)} s`);
   }
 });
 

@@ -114,12 +114,12 @@ function lineInkOf(ctx) {
 
 // The recipe a frame inside a cut window is composed by in 2D (engine/cuts/layers.mjs): a layer cut's own, or the
 // stand-in of a shader cut the post pass cannot run.
-function cutRecipe(cut, canvas) {
+function cutRecipe(cut, canvas, look) {
   const entry = registries.cuts.get(cut.name);
-  if (entry.family === 'layer') return entry.layers({ p: cut.p, direction: cut.direction, canvas });
+  if (entry.family === 'layer') return entry.layers({ p: cut.p, direction: cut.direction, canvas, look });
   if (entry.family === 'shader') {
     const standIn = standInOf(entry, cut.direction);
-    return standIn.entry.layers({ p: cut.p, direction: standIn.direction, canvas });
+    return standIn.entry.layers({ p: cut.p, direction: standIn.direction, canvas, look });
   }
   throw new Error(`cut "${cut.name}": the page cannot compose a ${entry.family} cut`);
 }
@@ -237,7 +237,7 @@ async function init() {
       const { shader } = registries.cuts.get(state.cut.name);
       return { from: cutPictures.outgoing(state), shader: state.cut.name, params: shaderUniforms(shader, { p: state.cut.p, direction: state.cut.direction, canvas, ground: state.background }) };
     }
-    cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas), t);
+    cutPictures.compose(ctx, state, cutRecipe(state.cut, canvas, look), t);
     return null;
   };
   const keys = frameKeys({ frameState, fps, grainNow: () => grain });

@@ -35,7 +35,7 @@
     {
       "id": "sheet",
       "show": "clipping",
-      "cut": { "type": "cover", "direction": "left" },
+      "cut": { "type": "cover", "direction": "right" },
       "src": "clipping.png",
       "caption": "A sheet slides over",
       "say": "A cover slides the new shot over the old one.",

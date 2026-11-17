@@ -84,6 +84,16 @@ export function compositionRect(ctx) {
 /** A shot that arrives on a match cut keeps its hero on screen from the first frame: no entrance. */
 export const arrivesMatched = (shot, ctx) => ctx.timing.index > 0 && resolveCut(shot.cut).name === 'match';
 
+/** A shot that arrives on a cut with a window (anything but the hard cut): the cut is its entrance. */
+export const arrivesOnWindow = (shot, ctx) => ctx.timing.index > 0 && resolveCut(shot.cut).dur > 0;
+
+/** The length of the window of the cut that brings `shot` in, in shot seconds: 0 for the first shot or a hard cut. */
+export const cutWindowOf = (shot, ctx) => (ctx.timing.index > 0 ? Math.min(resolveCut(shot.cut).dur, ctx.timing.duration) : 0);
+
+/** words.mjs wordTimes's `reveal` for `shot`: the words spoken inside its cut's window are revealed by the window's end,
+ *  allowing the look's emphasize move (a ghost word lights over it) to finish there. */
+export const cutReveal = (shot, ctx) => ({ by: cutWindowOf(shot, ctx), settle: ctx.look.moves.emphasize.dur });
+
 const EASE_SAMPLES = 100;
 /** The highest value an ease reaches between 0 and 1 (1 for one that does not overshoot). */
 export const easePeak = (name) => Math.max(1, ...Array.from({ length: EASE_SAMPLES + 1 }, (_, i) => ease(name)(i / EASE_SAMPLES)));
@@ -443,12 +453,13 @@ export function plainSay(say) {
 /**
  * When a title's words and its ask land, in shot seconds: { title: [{ at, spoken }], ask } (end, quote). An ask whose
  * words are spoken lands on the first of them; otherwise ASK_LAG after the title's last word, ASK_HOLD before the shot
- * ends at the latest (never before that last word). With no narration the title's first word lands at 0.
+ * ends at the latest (never before that last word). With no narration the title's first word lands at 0. `reveal` is
+ * wordTimes's (cutReveal): words spoken inside the cut's window are revealed by its end.
  */
-export function endTimes(shot, timing) {
+export function endTimes(shot, timing, reveal) {
   const title = wordsOf(shot.title ?? plainSay(shot.say));
   const ask = shot.ask === undefined ? [] : wordsOf(shot.ask);
-  const times = wordTimes([...title, ...ask], timing);
+  const times = wordTimes([...title, ...ask], timing, reveal);
   const titleTimes = times.slice(0, title.length);
   if (ask.length === 0) return { title: titleTimes, ask: null };
   const spoken = times.slice(title.length).find((t) => t.spoken !== null);

@@ -16,7 +16,7 @@ import { glowFill, glowStyle } from '../devices/glow.mjs';
 import { sunNodes, sunAnchor, hasSun, besideSun, belowSun } from '../devices/sun.mjs';
 import { parseSay, SayError } from '../script/say.mjs';
 import {
-  CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, inkSpan, setCase, capBox, isEditorial, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, ghostWords, plainSay, overlaps, NOT_BLANK, assertNoBlanks,
+  CAP_HEIGHT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, cutReveal, wordsOf, fitDisplay, inkSpan, setCase, capBox, isEditorial, heroProblems, compositionRect, fieldNode, enterTracks, pulseScale, onDevices, placeDevices, deviceCamera, unionBox, runInk, ghostTracks, easePeak, ghostWords, plainSay, overlaps, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 import { defaultCamera, driftReach } from './camera.mjs';
 import { highlightBands, highlightLines } from './highlighter.mjs';
@@ -289,7 +289,7 @@ function expandStacked(shot, ctx) {
   const hook = timing.index === 0 && ctx.mode.hookFromFrameZero === true;
   const placed = composeStack(sourceText(shot, look), shot, ctx, undefined, { hook });
   const texts = placed.lines.flatMap((line) => line.layout.lines[0].words.map((w) => w.text));
-  const times = wordTimes(texts, timing).map(({ at, spoken }) => ({ at, emphasised: spoken !== null && timing.words[spoken].emphasis }));
+  const times = wordTimes(texts, timing, cutReveal(shot, ctx)).map(({ at, spoken }) => ({ at, emphasised: spoken !== null && timing.words[spoken].emphasis }));
   const hero = heroId(shot, 'text');
   const { group, kicker, boxes } = stackNodes(shot, ctx, placed, { times, ghost: ghostWords(ctx), matched: arrivesMatched(shot, ctx), hero });
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
@@ -309,7 +309,7 @@ function expandStatement(shot, ctx) {
   if (look.composition === 'stack') return expandStacked(shot, ctx);
   const placed = compose(sourceText(shot, look), shot, ctx);
   const words = placedWords(placed.layout).sort((a, b) => a.word.index - b.word.index);
-  const times = wordTimes(words.map((w) => w.word.text), timing);
+  const times = wordTimes(words.map((w) => w.word.text), timing, cutReveal(shot, ctx));
   const matched = arrivesMatched(shot, ctx);
   const hero = heroId(shot, 'text');
   const span = look.emphasis === 'highlight' ? highlightLines(placed.layout, times, timing) : undefined;

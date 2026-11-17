@@ -51,16 +51,16 @@ for (const name of LAYERS) {
   });
 }
 
-test('the directions are version 1\'s: wipe from left, right, up, down; iris and zoom in or out', () => {
-  assert.deepEqual(registries.cuts.get('wipe').directions, ['left', 'right', 'up', 'down']);
+test('the directions: wipe right (the default, from the left edge as in version 1), left, up, down; iris and zoom in or out', () => {
+  assert.deepEqual(registries.cuts.get('wipe').directions, ['right', 'left', 'up', 'down']);
   assert.deepEqual(registries.cuts.get('iris').directions, ['in', 'out']);
   assert.deepEqual(registries.cuts.get('zoom').directions, ['in', 'out']);
   for (const name of ['crossfade', 'fade', 'blur']) assert.equal(registries.cuts.get(name).directions, null, name);
 });
 
-test('wipe from each edge at p 0.5 clips the incoming picture to the half on that side', () => {
-  // a wipe up grows from the bottom edge, a wipe down from the top (engine/cuts/edges.mjs)
-  const half = { left: [0, 0, 960, 1080], right: [960, 0, 960, 1080], up: [0, 540, 1920, 540], down: [0, 0, 1920, 540] };
+test('wipe each way at p 0.5 clips the incoming picture to the half its edge has crossed', () => {
+  // the edge moves the way the direction names: right grows from the left edge, up from the bottom (engine/cuts/edges.mjs)
+  const half = { right: [0, 0, 960, 1080], left: [960, 0, 960, 1080], up: [0, 540, 1920, 540], down: [0, 0, 1920, 540] };
   for (const [direction, rect] of Object.entries(half)) {
     const r = recipe('wipe', 0.5, direction);
     assert.deepEqual(r.to.clip, { rect }, direction);
@@ -107,7 +107,7 @@ test('blur never returns a negative radius, and its radius grows with the canvas
 
 test('a recipe asks for p in 0..1 and a direction the cut has', () => {
   assert.throws(() => recipe('wipe', Number.NaN), /p must be a finite number/);
-  assert.throws(() => recipe('wipe', 0.5, 'in'), /direction must be one of left, right, up, down/);
+  assert.throws(() => recipe('wipe', 0.5, 'in'), /direction must be one of right, left, up, down/);
 });
 
 // ---- frameAt inside a layer window ----

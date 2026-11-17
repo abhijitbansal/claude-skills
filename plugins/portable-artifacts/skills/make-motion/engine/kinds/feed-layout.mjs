@@ -141,17 +141,15 @@ function settling(values, times, look) {
 }
 
 /** When each item appears: one per sentence when the counts match, else evenly over the narration (or the shot); the
- *  first on frame 0, the second by FIRST_BEAT (a lone first message held for a whole sentence read as an unfinished
- *  frame: gate-kinds-b-1), every one landed by `latest`. */
+ *  first on frame 0 and every later one when it is spoken (lead ruling 4, round 2: narration timing wins over the old
+ *  0.8 s "no lone first message" beat of gate-kinds-b-1), every one landed by `latest`. */
 export function feedTimes(n, timing, latest) {
   const sentences = timing.sentences ?? [];
   const end = Math.min(latest, timing.words?.length ? timing.words.at(-1).end ?? latest : latest);
-  const times = sentences.length === n
+  return sentences.length === n
     ? sentences.map((s, k) => (k === 0 ? 0 : Math.min(s.start, latest)))
     : Array.from({ length: n }, (_, k) => (n <= 1 ? 0 : (k * end) / (n - 1)));
-  return times.map((t, k) => (k === 1 ? Math.min(t, FIRST_BEAT, latest) : t));
 }
-const FIRST_BEAT = 0.8; // s: the longest a feed shows its first item alone
 
 /** When a `them` message's dots show, or null: DOTS before it, after the message before it, never on frame 0. */
 export function dotsWindow(shot, k, times) {

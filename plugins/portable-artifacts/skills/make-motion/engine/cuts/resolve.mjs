@@ -4,6 +4,7 @@
 // cut every reader uses: the film, the camera, the review, the strips, the sound. Pure and DOM-free.
 import { registries } from '../registry.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
+import { DIRECTION_MEANING, takesEdges } from './edges.mjs';
 import './index.mjs';
 
 /** The cut a shot gets when neither it nor the film names one. */
@@ -54,7 +55,9 @@ const smearableNames = (cuts) => cuts.names().filter((name) => cuts.get(name).sm
 function directionProblem(value, name, entry) {
   const directions = Array.isArray(entry.directions) ? entry.directions : null;
   if (directions === null) return `the "${name}" cut takes no direction; remove "direction"`;
-  return directions.includes(value) ? null : `the "${name}" cut takes a direction of ${orList(directions)}, got ${shown(value)}`;
+  if (directions.includes(value)) return null;
+  const meaning = takesEdges(directions) ? ` (${DIRECTION_MEANING})` : '';
+  return `the "${name}" cut takes a direction of ${orList(directions)}${meaning}, got ${shown(value)}`;
 }
 
 function durationProblem(value, entry) {

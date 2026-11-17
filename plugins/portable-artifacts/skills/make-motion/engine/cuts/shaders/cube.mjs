@@ -1,7 +1,7 @@
 // The `cube` shader cut. Written in this repository for make-motion version 1 (template/gl-transitions.mjs, `gl-cube`)
 // and moved here onto the gl-transitions contract (engine/cuts/shaders/index.mjs): a box turning about its centre, seen
 // in perspective; the outgoing shot is its front face and the incoming one the face that swings round to replace it,
-// from edge `direction`. Same constants and maths as version 1: the uniforms come from derive() in JavaScript, and the
+// moving the way `direction` names (edges.mjs). Same constants and maths as version 1: the uniforms come from derive() in JavaScript, and the
 // body turns the contract's bottom-left uv into version 1's top-left pixel place before it starts. Pure and DOM-free.
 import { ENTRY_EDGE } from '../edges.mjs';
 
@@ -14,8 +14,9 @@ const DOUBLE = 2;
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
 
 // uSwap 1: the cube turns about the horizontal axis; uFlip 1: the incoming face comes from the right or the bottom. The
-// edge each direction enters by is edges.mjs's (a cube up turns its new face in from the bottom).
-const CUBE_ORDER = Object.freeze(['left', 'right', 'up', 'down']);
+// edge each direction enters by is edges.mjs's (a cube up turns its new face in from the bottom, a cube left from the
+// right). The default, right, turns the new face in from the left edge, the picture the cube always had by default.
+const CUBE_ORDER = Object.freeze(['right', 'left', 'up', 'down']);
 const DIRECTIONS = Object.freeze(Object.fromEntries(CUBE_ORDER.map((direction) => {
   const edge = ENTRY_EDGE[direction];
   return [direction, Object.freeze({ uSwap: edge === 'top' || edge === 'bottom' ? 1 : 0, uFlip: edge === 'right' || edge === 'bottom' ? 1 : 0 })];
@@ -94,6 +95,6 @@ export const cube = Object.freeze({
   derive,
   standIn: 'wipe',
   license: null,
-  summary: 'The shot turns away as one face of a box and the next one turns in from the left (right; up: the box rolls up, the new face from below; down: from above), over 0.6 s (WebGL2; a wipe without it).',
+  summary: 'The shot turns away as one face of a box and the next one turns in moving the way the direction names: right (the default) comes in from the left edge, left from the right, up rolls the box up with the new face from below, down from above, over 0.6 s (WebGL2; a wipe without it).',
   example: { type: 'cube', direction: 'up' },
 });

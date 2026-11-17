@@ -50,7 +50,7 @@ test('samples never leave 0..1, at either end of the window', () => {
 });
 
 test('slide parts: the shared field is still, both shots move, and the travel is the eased distance times the side', () => {
-  const parts = registries.cuts.get('slide').parts({ from: [field(), fakeSampled('a', 900)], to: [field(), fakeSampled('b', 100)], p: 0.5, canvas: CANVAS, direction: 'right' });
+  const parts = registries.cuts.get('slide').parts({ from: [field(), fakeSampled('a', 900)], to: [field(), fakeSampled('b', 100)], p: 0.5, canvas: CANVAS, direction: 'left' });
   assert.deepEqual(ids(parts.still), ['field']);
   assert.deepEqual(ids(parts.moving(0.5)), ['a', 'b']);
   near(parts.moving(0.5)[0].x, 900 - 0.5 * 1920, 'the outgoing node half way out');
@@ -63,10 +63,10 @@ test('slide parts: the shared field is still, both shots move, and the travel is
 });
 
 test('cover parts: the outgoing shot and the field are still; the sheet moves with its backdrop and its copy of the field', () => {
-  const parts = registries.cuts.get('cover').parts({ from: [field(), fakeSampled('a', 900)], to: [field(), fakeSampled('b', 100)], p: 0.5, canvas: CANVAS, background: '#101010', direction: 'left' });
+  const parts = registries.cuts.get('cover').parts({ from: [field(), fakeSampled('a', 900)], to: [field(), fakeSampled('b', 100)], p: 0.5, canvas: CANVAS, background: '#101010', direction: 'right' });
   assert.deepEqual(ids(parts.still), ['field', 'a']);
   assert.deepEqual(ids(parts.moving(0.5)), ['cover.backdrop', 'field.cover', 'b']);
-  near(parts.moving(0.5)[2].x, 100 - 0.5 * 1920, 'from the left, half way in');
+  near(parts.moving(0.5)[2].x, 100 - 0.5 * 1920, 'moving right, from the left, half way in');
   near(parts.travel(0.4, 0.6), 0.488 * 1920, 'the travel');
 });
 
@@ -96,9 +96,9 @@ test('a punch never needs the box filter: its fastest frame stays under the cap 
 test('cover\'s leading edge is look data: a keyline and a fading shadow just outside the side that leads', () => {
   const palette = { ink: '#111111', rule: '#cccccc' };
   const edge = { line: { color: 'rule', width: 3, alpha: 0.6 }, shadow: { color: 'ink', width: 24, alpha: 0.2, steps: 4 } };
-  const nodes = coverEdgeNodes(edge, 'right', CANVAS, palette);
+  const nodes = coverEdgeNodes(edge, 'left', CANVAS, palette);
   assert.deepEqual(ids(nodes), ['cover.edge.shadow0', 'cover.edge.shadow1', 'cover.edge.shadow2', 'cover.edge.shadow3', 'cover.edge.line']);
-  assert.equal(nodes.at(-1).props.d, 'M-3 0H0V1080H-3Z', 'from the right the sheet leads with its left side');
+  assert.equal(nodes.at(-1).props.d, 'M-3 0H0V1080H-3Z', 'moving left, in from the right, the sheet leads with its left side');
   assert.equal(nodes[0].props.d, 'M-9 0H-3V1080H-9Z');
   assert.deepEqual(nodes.map((n) => n.props.fill), ['#111111', '#111111', '#111111', '#111111', '#cccccc']);
   assert.ok(nodes[0].opacity > nodes[3].opacity, 'the shadow fades outwards');
@@ -132,7 +132,7 @@ test('inside a smeared window the frame holds the still nodes and the smear; wit
   assert.ok(!frame.sampled.some((n) => n.id === 'one.text' || n.id === 'two.text'), 'the moving text is not in sampled');
   assert.ok(frame.smear.layers.length >= SMEAR_MIN_SAMPLES && frame.smear.layers.length <= SMEAR_MAX_SAMPLES);
   assert.ok(frame.smear.layers.every((layer) => layer.some((n) => n.id === 'one.text') && layer.some((n) => n.id === 'two.text')), 'both texts in every layer');
-  assert.deepEqual([frame.smear.cut.name, frame.smear.cut.direction], ['slide', 'right']);
+  assert.deepEqual([frame.smear.cut.name, frame.smear.cut.direction], ['slide', 'left']);
   assert.ok(frame.smear.whole.some((n) => n.id === 'two.text'), 'the whole frame at p for the review');
   const unsmeared = { type: 'slide', smear: false }; // desk smears its slides by default (cutStyle)
   const plain = filmFor(shots(unsmeared), 'desk').frameAt(midOf(unsmeared, 'desk'));

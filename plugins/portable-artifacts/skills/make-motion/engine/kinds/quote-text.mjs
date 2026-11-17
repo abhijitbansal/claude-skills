@@ -32,8 +32,8 @@ export const quotationOf = (shot) => quoteBody(shot.text ?? plainSay(shot.say));
 export const attributionOf = (shot) => (shot.role === undefined ? shot.by : `${shot.by}${BY_SEPARATOR}${shot.role}`);
 
 /** When the quotation's words land and when the attribution does (end.mjs endTimes: on its own spoken words, else just
- *  after the quotation's last word): { words: [{ at, spoken }], by }. */
-export function quoteTimes(shot, timing) {
-  const times = endTimes({ say: shot.say, title: quotationOf(shot), ask: attributionOf(shot) }, timing);
+ *  after the quotation's last word): { words: [{ at, spoken }], by }. `reveal` as endTimes's (shared.mjs cutReveal). */
+export function quoteTimes(shot, timing, reveal) {
+  const times = endTimes({ say: shot.say, title: quotationOf(shot), ask: attributionOf(shot) }, timing, reveal);
   return { words: times.title, by: times.ask };
 }

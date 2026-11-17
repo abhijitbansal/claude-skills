@@ -407,7 +407,8 @@ test('a match between unlike heroes carries one slot from the old place and size
   assert.ok(copy(0.3, 'h.from').opacity > 0.9 && copy(0.3, 'h.to').opacity === 0, 'outgoing words only');
   assert.ok(copy(0.3, 'h.from').scale > 1.5, 'resized on the way (the figure box is larger)');
   // late the figure, near its place; the kicker left before it arrived
-  assert.ok(copy(0.7, 'h.to').opacity > 0.9 && copy(0.7, 'h.from').opacity === 0, 'incoming figure only');
+  // (the hand-over is late since round 2, p 0.7 to 0.9: the outgoing words are seen travelling first)
+  assert.ok(copy(0.95, 'h.to').opacity > 0.9 && copy(0.95, 'h.from').opacity === 0, 'incoming figure only');
   assert.equal(at(0.45).find((n) => n.id === 'k').opacity, 0, 'the rest of the outgoing frame is gone by the hand-over');
   const home = copy(0.999, 'h.to');
   assert.ok(Math.abs(home.x - 1000) < 2 && Math.abs(home.opacity - 1) < 0.01, 'the incoming hero ends where it belongs');

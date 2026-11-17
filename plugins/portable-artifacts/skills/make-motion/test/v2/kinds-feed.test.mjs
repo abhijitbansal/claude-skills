@@ -30,8 +30,8 @@ test('timing: one item per sentence when the counts match; evenly otherwise; eve
   assert.deepEqual(feed.arrivals(s, so.timing), so.timing.sentences.map((x, k) => (k === 0 ? 0 : x.start)));
   const h = CHAT(FOUR, { hold: 4 });
   const th = feed.arrivals(h, expand(h).timing);
-  // the second item comes by 0.8 s at the latest (gate-kinds-b-1: no first beat of one message alone)
-  th.forEach((t, k) => assert.ok(Math.abs(t - (k === 1 ? Math.min(0.8, 3.4 / 3) : (k * 3.4) / 3)) < 1e-6, `held ${k}: ${t}`));
+  // evenly, the second item too: narration timing wins over gate-kinds-b-1's 0.8 s first beat (lead ruling 4, round 2)
+  th.forEach((t, k) => assert.ok(Math.abs(t - (k * 3.4) / 3) < 1e-6, `held ${k}: ${t}`));
   assert.deepEqual(feed.events(s, so.timing), feed.arrivals(s, so.timing).slice(1).map((t) => ({ kind: 'device', device: 'message', t })));
 });
 

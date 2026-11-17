@@ -229,12 +229,16 @@ function coverEdgeErrors(name, look) {
   return [...unknown, ...Object.keys(EDGE_PARTS).filter((part) => edge[part] !== undefined).flatMap((part) => edgePartErrors(name, look, part, edge[part]))];
 }
 
-// look.cutMotion (absent, or { punchZoom?, punchEase?, smearShutter? }): how hard the punch lands and on what ease
-// (engine/cuts/index.mjs punchParts), and the share of a frame the smear's shutter is open (engine/cuts/smear.mjs).
+// look.cutMotion (absent, or { punchZoom?, punchEase?, smearShutter?, irisAt? }): how hard the punch lands and on what
+// ease (engine/cuts/index.mjs punchParts), the share of a frame the smear's shutter is open (engine/cuts/smear.mjs), and
+// the point the iris opens from, [x, y] as fractions of the canvas: a point the look's layouts keep clear of words
+// (engine/cuts/layers.mjs; gate-cuts-1 D8).
+const isFraction = (v) => typeof v === 'number' && v >= 0 && v <= 1;
 const CUT_MOTION = Object.freeze({
   punchZoom: [(v) => typeof v === 'number' && v > 1 && v <= 2, 'must be a number above 1 and at most 2'],
   punchEase: [(v) => typeof v === 'string' && easeProblem(v) === null, 'must be an ease name (linear; in, out or inOut with Quad, Cubic, Quart, Expo or Back)'],
   smearShutter: [(v) => typeof v === 'number' && v > 0 && v <= 1, 'must be a number above 0 and at most 1'],
+  irisAt: [(v) => Array.isArray(v) && v.length === 2 && v.every(isFraction), 'must be two numbers from 0 to 1 (x and y as fractions of the canvas)'],
 });
 
 // The error ease(name) throws, or null when it names a curve.

@@ -62,6 +62,8 @@ export const desk = {
   cutPalette: ['cut', 'match', 'slide', 'crossfade', 'wipe', 'fade', 'page-curl'],
   // the motion blur on the cuts that move (engine/cuts/smear.mjs)
   cutStyle: { slide: { smear: true }, cover: { smear: true }, punch: { smear: true } },
+  // the iris opens right of the flush-left text column, where desk's layouts keep the page clear (gate-cuts-1 D8)
+  cutMotion: { irisAt: [0.8, 0.5] },
   // a cover's sheet shows its leading edge on identical paper: a hairline and a soft shadow cast on the sheet below
   coverEdge: { line: { color: 'ink2', width: 2, alpha: 0.35 }, shadow: { color: 'ink', width: 28, alpha: 0.16, steps: 7 } },
   keyline: 8,

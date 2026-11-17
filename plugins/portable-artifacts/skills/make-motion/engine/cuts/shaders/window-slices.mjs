@@ -18,14 +18,18 @@ vec4 transition (vec2 p) {
 }
 `;
 
-import { MIXED_CLEAR } from './clear.mjs';
+// A slatted wipe, left to right (look review gate-cuts-1 D12; round 2 ruling 3): a narrow band of slats in flight
+// (smoothness 0.2, two slats at a time, where 0.5 left half the frame in slivers of the old picture that read as
+// hairline seams), and no clear window: each picture keeps its own paper, so no slat shows the bare ground as a
+// lighter band.
+const SLAT_BAND = 0.2;
 
 export const windowSlices = Object.freeze({
   name: 'window-slices',
   source: SOURCE,
-  params: Object.freeze({ count: 10, smoothness: 0.5, ...MIXED_CLEAR }), // clear windows: no A|ftast interleave (gate-cuts-1 D12)
+  params: Object.freeze({ count: 10, smoothness: SLAT_BAND }),
   standIn: 'wipe',
   license: Object.freeze({ spdx: 'MIT', author: 'gre', origin: 'transitions/WindowSlices.glsl', commit: 'e7c6ce2c9173ab57382279b58d056133caed5d1f' }),
-  summary: 'The next shot shows through vertical slices that widen from the left, over 0.6 s (WebGL2; a wipe without it).',
+  summary: 'The next shot shows through vertical slats that open one after another from the left, over 0.6 s (WebGL2; a wipe without it).',
   example: 'window-slices',
 });

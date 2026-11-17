@@ -58,7 +58,7 @@ test('validateLook refuses a cutStyle key that is not a registered cut, with a d
 });
 
 test('validateLook refuses a cutStyle direction or duration the cut does not accept', () => {
-  assert.throws(() => validateLook(withCuts({ cutStyle: { slide: { direction: 'sideways' } } })), /cutStyle\.slide\.direction: the "slide" cut takes a direction of right, left, up or down/);
+  assert.throws(() => validateLook(withCuts({ cutStyle: { slide: { direction: 'sideways' } } })), /cutStyle\.slide\.direction: the "slide" cut takes a direction of left, right, up or down \(the way the next shot moves on screen: "left" moves leftward and enters by the right edge/);
   assert.throws(() => validateLook(withCuts({ cutStyle: { match: { direction: 'up' } } })), /cutStyle\.match\.direction: the "match" cut takes no direction/);
   assert.throws(() => validateLook(withCuts({ cutStyle: { slide: { duration: 3 } } })), /cutStyle\.slide\.duration: must be a number of seconds from 0\.1 to 2/);
   assert.throws(() => validateLook(withCuts({ cutStyle: { cut: { duration: 0.5 } } })), /cutStyle\.cut\.duration: a hard cut has no duration/);
@@ -76,7 +76,7 @@ test('resolveCut reads cutStyle: a look\'s slide with no option takes the look\'
   assert.deepEqual([cut.direction, cut.dur, cut.smear], ['up', 0.6, true]);
   const own = resolveCut({ type: 'slide', direction: 'left', smear: false }, { look });
   assert.deepEqual([own.direction, own.dur, own.smear], ['left', 0.6, false], 'the shot\'s own options win; the look fills the rest');
-  assert.deepEqual([resolveCut('slide', { look: registries.looks.get('pop') }).direction, resolveCut('slide', { look: registries.looks.get('pop') }).smear], ['right', true], 'pop smears its slide (Task 6) and keeps the default direction');
+  assert.deepEqual([resolveCut('slide', { look: registries.looks.get('pop') }).direction, resolveCut('slide', { look: registries.looks.get('pop') }).smear], ['left', true], 'pop smears its slide (Task 6) and keeps the default direction');
 });
 
 test('--list cuts names, per cut, the looks whose palette holds it', () => {

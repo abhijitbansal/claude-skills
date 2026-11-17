@@ -9,7 +9,7 @@
 import { registries } from '../registry.mjs';
 import { kindData, kindSupportProblems } from '../looks/index.mjs';
 import {
-  HERO_SCHEMA, heroId, wordsOf, isEditorial, heroProblems, fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks,
+  HERO_SCHEMA, heroId, wordsOf, isEditorial, cutReveal, heroProblems, fieldNode, onDevices, placeDevices, deviceCamera, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 import { defaultCamera } from './camera.mjs';
 import { quotationOf, quoteTimes } from './quote-text.mjs';
@@ -28,7 +28,7 @@ function expandQuote(shot, ctx) {
   assertNoBlanks(shot, 'quote'); // a blank text is the validator's to refuse; expand names it rather than failing in layout
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
-  const times = quoteTimes(shot, timing);
+  const times = quoteTimes(shot, timing, cutReveal(shot, ctx));
   const hero = heroId(shot, isEditorial(look) ? 'card' : 'text');
   const parts = isEditorial(look) ? expandDeskQuote(shot, ctx, data, times, hero) : expandPopQuote(shot, ctx, data, times, hero);
   // a highlight under a stack goes behind it; in desk the words sit on an opaque card, so a band placed before the card

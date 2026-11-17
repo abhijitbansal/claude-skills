@@ -14,7 +14,7 @@ import { glowStyle } from '../devices/glow.mjs';
 import { track } from '../time/track.mjs';
 import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
 import {
-  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, setCase, inkBox, shownFrom, isEditorial, heroProblems, fieldNode, enterTracks, pulseScale, runInk, inkExtent, onDevices, placeDevices, deviceCamera, openingLanding, formatValue, NOT_BLANK, assertNoBlanks,
+  CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, arrivesOnWindow, setCase, inkBox, shownFrom, isEditorial, heroProblems, fieldNode, enterTracks, pulseScale, runInk, inkExtent, onDevices, placeDevices, deviceCamera, openingLanding, easePeak, formatValue, NOT_BLANK, assertNoBlanks,
 } from './shared.mjs';
 import { defaultCamera } from './camera.mjs';
 import { plainTag } from './plain-tag.mjs';
@@ -105,6 +105,21 @@ export function countLanding(timing, value, decimals) {
 function landingOf(shot, timing) {
   const spoken = countLanding(timing, shot.value, shot.decimals ?? 0);
   return Math.max(spoken, Math.min(MIN_COUNT, timing.duration - LABEL_ROOM));
+}
+
+// The figure is on screen from the shot's first frame, showing the count's start value until the count moves (lead
+// ruling 4, round 2: a cut never lands on an empty number, however late the figure is spoken). A cut with a window is
+// its entrance, so under one it is whole from frame 0 (arrivesOnWindow); on the first shot or after a hard cut it
+// enters over the look's enter move from frame 0.
+function figureEntrance(shot, ctx) {
+  return openingLanding(shot, ctx, ctx.look.moves.enter.dur, ctx.look.moves.enter, 0, 1);
+}
+
+// The largest scale the figure reaches (shared.mjs pulseScale): the emphasize pulse's peak with its ease's overshoot, or
+// an entrance that starts larger than full size.
+function pulsePeak(look) {
+  const { emphasize, enter } = look.moves;
+  return Math.max(1, enter.scale ?? 1, 1 + ((emphasize.scale ?? 1) - 1) * easePeak(emphasize.ease));
 }
 
 // A value part way through the count, cut toward zero at `decimals` so it never shows the final value early.
@@ -374,7 +389,7 @@ function deskParts(shot, ctx, steps, times) {
   // the label's last baseline: over the delta, which sits on the figure baseline (beside), or under the figure
   const labelBaseline = beside ? baseline - deltaUp : baseline + underGap + label.up;
   const y = labelBaseline - label.layout.lines.at(-1).y;
-  const fade = times.matched ? {} : { opacity: openingLanding(shot, ctx, times.start + look.moves.enter.dur, look.moves.enter, 0, 1) };
+  const fade = times.entered ? {} : { opacity: figureEntrance(shot, ctx) };
   const figure = figureGroup(shot, ctx, extra.glow ? glowingFigure(fig, ctx, times) : fig, { left, baseline, tracks: fade });
   const labelNode = node('text', `${shot.id}.label`, { x: label.x, y, layout: label.layout, font: label.font, fill: look.palette.ink, role: 'label' }, { tracks: enterTracks(look, unit, labelAt, { y }) });
   const boxes = { value: figure.box, label: inkBox(label.x, y, label.layout) };
@@ -419,18 +434,26 @@ function popParts(shot, ctx, steps, times) {
   const labelH = labelTag(0).box[3];
   const deltaH = shot.delta === undefined ? 0 : POP.deltaGap * unit + deltaTag(0).box[3];
   // the figure no taller than the area leaves it, with room for a punch's scale (a tall band no longer caps it by width)
-  const room = (area.h - kickerH - POP.tagGap * unit - labelH - deltaH) / (CAP_HEIGHT * (look.devices.punch?.scale ?? 1));
+  // and for its own pulse (pulseSwell)
+  const peak = pulsePeak(look);
+  const swells = shot.kicker === undefined ? 1 : 2; // the swell is kept under the figure, and over it when a kicker is
+  const growth = 1 + ((peak - 1) * swells) / HALF;
+  const room = (area.h - kickerH - POP.tagGap * unit - labelH - deltaH) / (CAP_HEIGHT * (look.devices.punch?.scale ?? 1) * growth);
   const maxSize = Math.max(sizeAt(look, FIGURE_STEP, unit), Math.min(widest, room));
   const fig = figureAt(shot, ctx, { maxWidth: area.w, minSize: sizeAt(look, FIGURE_STEP, unit), maxSize, steps });
-  const blockH = kickerH + CAP_HEIGHT * fig.size + POP.tagGap * unit + labelH + deltaH;
-  const baseline = centredTop(area, blockH, ctx) + kickerH + CAP_HEIGHT * fig.size; // on the optical centre when tall
-  const enterAt = times.start + look.moves.enter.dur;
-  const tracks = times.matched
+  // the pulse scales the figure about the middle of its cap height, so at its peak the digits reach this far past their
+  // cap line and baseline: the kicker and label plates keep that far off as well, never under the digits (lead ruling 4)
+  const swell = ((peak - 1) * CAP_HEIGHT * fig.size) / HALF;
+  const over = shot.kicker === undefined ? 0 : swell;
+  const blockH = kickerH + over + CAP_HEIGHT * fig.size + swell + POP.tagGap * unit + labelH + deltaH;
+  const baseline = centredTop(area, blockH, ctx) + kickerH + over + CAP_HEIGHT * fig.size; // on the optical centre when tall
+  const enterAt = look.moves.enter.dur;
+  const tracks = times.entered
     ? { scale: pulseScale(look, { pulse: times.land }) }
-    : { opacity: openingLanding(shot, ctx, enterAt, look.moves.enter, 0, 1), scale: pulseScale(look, { enterAt, pulse: times.land }) };
+    : { opacity: figureEntrance(shot, ctx), scale: pulseScale(look, { enterAt, pulse: times.land }) };
   const figure = figureGroup(shot, ctx, fig, { left: area.left, baseline, tracks });
-  const label = labelTag(baseline + POP.tagGap * unit);
-  const kicker = shot.kicker === undefined ? null : kickerTag(baseline - CAP_HEIGHT * fig.size - kickerH);
+  const label = labelTag(baseline + swell + POP.tagGap * unit);
+  const kicker = shot.kicker === undefined ? null : kickerTag(baseline - CAP_HEIGHT * fig.size - over - kickerH);
   const boxes = { value: figure.box, label: label.box, ...(kicker ? { kicker: kicker.box } : {}) };
   const nodes = [...(kicker ? kicker.nodes : []), figure.group, ...label.nodes];
   if (shot.delta === undefined) return { nodes, boxes, hero: figure.hero };
@@ -449,7 +472,7 @@ function expandNumber(given, ctx) {
   const rate = look.moves.draw.step ?? fps;
   const counted = countSteps({ value: shot.value, decimals: shot.decimals ?? 0, start, land, rate, curve: ease(look.moves.count.ease) });
   const steps = look.kinds?.number?.fromFirst ? fromFirstStep(counted, start) : counted;
-  const times = { land, start, matched: arrivesMatched(shot, ctx) };
+  const times = { land, start, matched: arrivesMatched(shot, ctx), entered: arrivesMatched(shot, ctx) || arrivesOnWindow(shot, ctx) };
   const parts = isEditorial(look) ? deskParts(shot, ctx, steps, times) : popParts(shot, ctx, steps, times);
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'value' });
   return {

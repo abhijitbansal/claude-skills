@@ -70,8 +70,19 @@ export function align(shown, said) {
  * narration the first word lands at 0 and word i after it at NO_SAY_START + NO_SAY_STAGGER * i, never past the shot's
  * end. Each entry is { at, spoken } with `spoken` the
  * index of the matched spoken word or null.
+ * `reveal` = { by, settle } (shared.mjs cutReveal): a word that lands inside the window of the cut that brings the shot
+ * in (before `by` seconds) lands `settle` seconds before the window ends at the latest, so the move that reveals it
+ * (an entrance landing on `at`, a ghost lighting over `settle` after it) is done when the cut ends (lead ruling 4,
+ * round 2). The default changes nothing.
  */
-export function wordTimes(texts, timing) {
+export function wordTimes(texts, timing, reveal = NO_REVEAL) {
+  return spokenTimes(texts, timing).map((entry) => (entry.at < reveal.by ? { ...entry, at: Math.max(0, Math.min(entry.at, reveal.by - reveal.settle)) } : entry));
+}
+
+/** No cut window to reveal words by: wordTimes's default. */
+export const NO_REVEAL = Object.freeze({ by: 0, settle: 0 });
+
+function spokenTimes(texts, timing) {
   const spoken = timing.words;
   if (spoken.length === 0) return texts.map((_, i) => ({ at: i === 0 ? 0 : Math.min(timing.duration, NO_SAY_START + NO_SAY_STAGGER * i), spoken: null }));
   const matches = align(texts.map(wordForm), spoken.map((w) => wordForm(w.text)));

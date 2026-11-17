@@ -11,8 +11,8 @@
     "example statement pop 9:16": "bca27cf0c780a978be982eeb489b2b1a2dde71f00e02aeac617e5ca09cbeb999",
     "example number desk 16:9": "a86a8a428424836ac28fc681931d6cfd62cc856ddd767f81cc8ad59ab79afa75",
     "example number desk 9:16": "4a04f182e7e088906649019e74a10aa865093e775ebe4afeee24224e096d5340",
-    "example number pop 16:9": "9d81c1c91b4ae1da752f86b292a9abada0d37da31e3c6fd0a3628e7f272f5baa",
-    "example number pop 9:16": "18dfd90ca97ea90ad6f030bc4782c8af37e1d452dd0fc0e76091c18f83af4fbf",
+    "example number pop 16:9": "43eadf98fd546ff841a72783caa6e6aef5289e404ca3f204a21aae394f8b120f",
+    "example number pop 9:16": "8c824751cd4db6c3cfcf48b012dd9e19f49a21df5e980a657f76ea5b9989e481",
     "example clipping desk 16:9": "8baa8f65a572ecd0c976ebad60ece660590514503576d09fbede9aefad9311e7",
     "example clipping desk 9:16": "b2d7f0eab4ca6058101830e1d8b7cb631d0d966c3858fa04e27e11ca2244148d",
     "example clipping pop 16:9": "a284a63022e9423e4821d053d70cf8cda3958fab8e68fc70a39d6bae9fa161ac",
@@ -45,10 +45,10 @@
     "film gate-desk frames": "3a8085a320b934401c3d437178cc509bf37490f0d350790379f397ae8a61d1c4",
     "film gate-pop shot hook": "2436b1b6ca8ada4a2f47373fa19e033722c8b7570d3e397cc3995e3c30bb6ffe",
     "film gate-pop shot proof": "ddf755b325278c8fa6bdaaca42dbdeb3485b49b1971439b4eb9331efaf4aa489",
-    "film gate-pop shot count": "00ef07207754fa0a839fc020d56c67d94b3041537e288953f68fad69de1790f9",
+    "film gate-pop shot count": "226c869dc678b4bec60969aa88c1e95e35d9c14beff582f181968ef1e2bd410c",
     "film gate-pop shot local": "e525714311fb4affdb3e4b092c703c9ddcafb833535b715f2e41b81549a8a548",
     "film gate-pop shot ask": "43e2bd308967d9e27e97d20e6b9257edefb480af80fa6d913f59131d7b62d238",
-    "film gate-pop frames": "bef01c2ea1e2d7663dfe36d9b6e83a0c86c2f77c8e8825f45bcdd255adf9c76a",
+    "film gate-pop frames": "b650d04cb4f9754e99babf42d30e923b3ece92b37bcb8a0ea268838fce89b643",
     "film kinds-desk shot idea": "e85d91741f2722d90c40124d10b3405bfc92ace4ecaa85b5c9ad60e5f77eb6e2",
     "film kinds-desk shot how": "64b13f822dbaeafac0be7f2f83a031aecdbb1e4c37cca9d7d49eaedecceea928",
     "film kinds-desk shot swap": "5d295a4bc94fff5c7f2466486e21b87ea04f4e04a33dc7fb0a4edc8c2a13aaee",
@@ -63,10 +63,10 @@
     "film kinds-pop shot swap": "409fef0b224f664afcb1a7b89e89227ac059cef462776934a1edf5f21f3eea92",
     "film kinds-pop shot proof": "5338400e7ad0a7e4bd4a53fd7bf0d800a157ca9dbdb34767baef6c435a3de80c",
     "film kinds-pop shot tests": "918ba55dd856211800997202f26bcf6b76935324bb339383e26e73c040d48c60",
-    "film kinds-pop shot count": "33bf9c8588e17a6ce824c716c5ac06989e60857adeecf6c78d024726bc7908c4",
+    "film kinds-pop shot count": "66203841a6813fbd2ed11ad3415a0c3870e6d1587fd61728da233cfebc3a73d8",
     "film kinds-pop shot bar": "4eafd504125bc701859bce72899c250f58a6e5bb7a1fd61ae36d773a7bf8864f",
     "film kinds-pop shot close": "bb660013a36948d36fc6991552fcbab6de05a9916926d8a2a75b4171b7a4f2bf",
-    "film kinds-pop frames": "58af3a41da7c9fc3f9f48836de2bbd827337752457fa96cb639cc1b40d954471"
+    "film kinds-pop frames": "709fe2a358a83ce8d4287e765dbb4be3e700fdcbd61225a987d9ad3fe43bf081"
   },
   "regenerated": "transitions Task 6 (motion blur on slide, cover and punch in desk and pop): film gate-pop frames; every other entry unchanged"
 }

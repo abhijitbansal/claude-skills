@@ -26,23 +26,27 @@ const faceAt = (s, points) => s.page.evaluate(([i, list, p, [lo, hi]]) => {
   return list.filter(([x, y]) => {
     const [r, , b] = ctx.getImageData(x, y, 1, 1).data;
     return b > lo && b < hi && r < 40;
-  }).map(([, y]) => y);
+  }).map(([, y, along]) => along ?? y); // a point's third value, when given, is what to report instead of its y
 }, [START, points, EARLY, SHADED]);
 
 const column = (x) => Array.from({ length: 27 }, (_, k) => [x, 20 + k * 40]);
+const row = (y) => Array.from({ length: 47 }, (_, k) => [20 + k * 40, y]);
 const MIDDLE_Y = 540;
+const MIDDLE_X = 960;
 
-for (const [direction, entry] of [['down', 'top'], ['up', 'bottom']]) {
+// A direction is the way the incoming face moves (round 2 ruling 1): down enters at the top, left at the right.
+for (const [direction, entry] of [['down', 'top'], ['up', 'bottom'], ['left', 'right'], ['right', 'left']]) {
   test(`cube ${direction}: the incoming face first shows along the ${entry} of the frame`, async (t) => {
     const session = await sessionOrNull(film({ type: 'cube', direction }));
     if (!session) return t.skip('no browser');
     t.after(() => session.close());
     if (session.info.post !== 'webgl2') return t.skip('this browser has no WebGL2');
     await session.page.evaluate((zero) => window.__setPost(zero), ZERO);
-    // the shaded incoming face, down the middle column: above the centre for down, below it for up
-    const ys = await faceAt(session, column(960));
-    const above = ys.filter((y) => y < MIDDLE_Y).length, below = ys.length - above;
-    const [near, far] = entry === 'top' ? [above, below] : [below, above];
-    assert.ok(near > 2 && far === 0, `${direction}: incoming face at y ${JSON.stringify(ys)}`);
+    // the shaded incoming face, down the middle column (vertical turns) or along the middle row (horizontal ones)
+    const vertical = entry === 'top' || entry === 'bottom';
+    const places = await faceAt(session, vertical ? column(MIDDLE_X) : row(MIDDLE_Y).map(([x, y]) => [x, y, x]));
+    const before = places.filter((v) => v < (vertical ? MIDDLE_Y : MIDDLE_X)).length, after = places.length - before;
+    const [near, far] = entry === 'top' || entry === 'left' ? [before, after] : [after, before];
+    assert.ok(near > 2 && far === 0, `${direction}: incoming face at ${JSON.stringify(places)}`);
   });
 }

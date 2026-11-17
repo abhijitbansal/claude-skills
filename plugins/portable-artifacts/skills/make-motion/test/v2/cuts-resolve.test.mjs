@@ -53,9 +53,9 @@ test(`baseline: every frame inside the cut windows of ${BASELINE_FILM} is the fr
 
 // ---- resolveCut ----
 
-test('resolveCut: a name gets the cut\'s own defaults (slide: from the right, 0.4 s, no smear)', () => {
+test('resolveCut: a name gets the cut\'s own defaults (slide: moving left, in from the right, 0.4 s, no smear)', () => {
   const cut = resolveCut('slide');
-  assert.deepEqual({ name: cut.name, family: cut.family, direction: cut.direction, dur: cut.dur, smear: cut.smear }, { name: 'slide', family: 'node', direction: 'right', dur: 0.4, smear: false });
+  assert.deepEqual({ name: cut.name, family: cut.family, direction: cut.direction, dur: cut.dur, smear: cut.smear }, { name: 'slide', family: 'node', direction: 'left', dur: 0.4, smear: false });
   assert.equal(cut.entry, registries.cuts.get('slide'));
 });
 
@@ -123,25 +123,25 @@ const plain = (id, x, y, depth = 0) => Object.freeze({ type: 'path', id, depth, 
 const OUT = [plain('field', 0, 0, 1), plain('a', 900, 200)];
 const IN = [plain('field', 0, 0, 1), plain('b', 100, 900)];
 const E = 0.0625; // inOutCubic(0.25) = 4 * 0.25^3
-// [direction, outgoing a at p 0.25, incoming b at p 0.25]: the incoming shot comes in by the edge the direction enters
-// by (left and right name it; up enters at the bottom and moves up, down at the top: engine/cuts/edges.mjs), the
-// outgoing leaves by the other
+// [direction, outgoing a at p 0.25, incoming b at p 0.25]: both shots move the way the direction names, so the incoming
+// shot comes in by the edge across from it (left enters at the right edge, up at the bottom: engine/cuts/edges.mjs)
+// and the outgoing leaves by the other
 const SLIDE_AT = [
-  ['right', [900 - E * W, 200], [100 + (1 - E) * W, 900]],
-  ['left', [900 + E * W, 200], [100 - (1 - E) * W, 900]],
+  ['left', [900 - E * W, 200], [100 + (1 - E) * W, 900]],
+  ['right', [900 + E * W, 200], [100 - (1 - E) * W, 900]],
   ['up', [900, 200 - E * H], [100, 900 + (1 - E) * H]],
   ['down', [900, 200 + E * H], [100, 900 - (1 - E) * H]],
 ];
 
 for (const [direction, a, b] of SLIDE_AT) {
-  test(`slide from the ${direction}: both shots move at p 0.25 and the shared background stays`, () => {
+  test(`slide ${direction}: both shots move at p 0.25 and the shared background stays`, () => {
     const out = registries.cuts.get('slide').apply({ from: OUT, to: IN, p: 0.25, canvas: CANVAS, direction });
     assert.deepEqual([at(out, 'a').x, at(out, 'a').y], a);
     assert.deepEqual([at(out, 'b').x, at(out, 'b').y], b);
     assert.deepEqual([at(out, 'field').x, at(out, 'field').y], [0, 0]);
   });
 
-  test(`cover from the ${direction}: only the incoming shot moves, over the outgoing one where it was`, () => {
+  test(`cover ${direction}: only the incoming shot moves, over the outgoing one where it was`, () => {
     const out = registries.cuts.get('cover').apply({ from: OUT, to: IN, p: 0.25, canvas: CANVAS, direction, background: '#123456' });
     assert.deepEqual([at(out, 'a').x, at(out, 'a').y], [900, 200]);
     assert.deepEqual([at(out, 'b').x, at(out, 'b').y], b);
@@ -151,7 +151,7 @@ for (const [direction, a, b] of SLIDE_AT) {
 }
 
 test('cover: the incoming shot brings its own backdrop, so it covers the outgoing one as it slides in', () => {
-  const out = registries.cuts.get('cover').apply({ from: OUT, to: IN, p: 0.25, canvas: CANVAS, direction: 'right', background: '#123456' });
+  const out = registries.cuts.get('cover').apply({ from: OUT, to: IN, p: 0.25, canvas: CANVAS, direction: 'left', background: '#123456' });
   const backdrop = out.find((n) => n.props.fill === '#123456');
   assert.ok(backdrop, 'a backdrop in the incoming background colour');
   assert.equal(backdrop.x, (1 - E) * W);
@@ -164,9 +164,9 @@ test('cover: the endpoints are the plain frames', () => {
   assert.equal(cover.apply({ from: OUT, to: IN, p: 1, canvas: CANVAS, direction: 'left' }), IN);
 });
 
-test('slide with no direction is the slide from the right (today\'s picture)', () => {
+test('slide with no direction is the slide left, in from the right edge (today\'s picture)', () => {
   const slide = registries.cuts.get('slide');
-  assert.deepEqual(slide.apply({ from: OUT, to: IN, p: 0.25, canvas: CANVAS }), slide.apply({ from: OUT, to: IN, p: 0.25, canvas: CANVAS, direction: 'right' }));
+  assert.deepEqual(slide.apply({ from: OUT, to: IN, p: 0.25, canvas: CANVAS }), slide.apply({ from: OUT, to: IN, p: 0.25, canvas: CANVAS, direction: 'left' }));
 });
 
 // ---- the registry entries ----
@@ -182,8 +182,8 @@ test('every registered cut has a family, a length, a summary, an example, its di
     assert.equal(typeof entry.smearable, 'boolean', name);
     assert.equal(typeof entry.incomingOnly, 'boolean', name);
   }
-  assert.deepEqual(registries.cuts.get('slide').directions, ['right', 'left', 'up', 'down']);
-  assert.deepEqual(registries.cuts.get('cover').directions, ['right', 'left', 'up', 'down']);
+  assert.deepEqual(registries.cuts.get('slide').directions, ['left', 'right', 'up', 'down']);
+  assert.deepEqual(registries.cuts.get('cover').directions, ['left', 'right', 'up', 'down']);
   assert.deepEqual(['cut', 'slide', 'cover', 'punch', 'match'].map((n) => registries.cuts.get(n).smearable), [false, true, true, true, false]);
 });
 
@@ -192,11 +192,13 @@ test('every registered cut has a family, a length, a summary, an example, its di
 test('--list cuts: each cut with its family, directions, default length, whether it takes smear, and its example', () => {
   const slide = listEntries('cuts').find((e) => e.name === 'slide');
   assert.deepEqual({ family: slide.family, directions: slide.directions, dur: slide.dur, smear: slide.smear, example: slide.example },
-    { family: 'node', directions: ['right', 'left', 'up', 'down'], dur: 0.4, smear: true, example: { type: 'slide', direction: 'left' } });
+    { family: 'node', directions: ['left', 'right', 'up', 'down'], dur: 0.4, smear: true, example: { type: 'slide', direction: 'right' } });
   const match = listEntries('cuts').find((e) => e.name === 'match');
   assert.deepEqual([match.directions, match.smear], [null, false]);
   const text = formatList('cuts', listEntries('cuts'));
-  assert.match(text, /^slide {2}.+\n {2}node, from right \(default\), left, up or down; 0\.4 s; takes smear; in the palette of desk, pop\n {2}example: \{"type":"slide","direction":"left"\}$/m);
+  // a direction is the way the next shot moves (lead ruling 1, round 2), and the list says so in those words
+  assert.match(text, /^slide {2}.+\n {2}node, moves left \(default\), right, up or down \(the way the next shot moves on screen: "left" moves leftward and enters by the right edge, "up" moves upward and enters by the bottom edge\); 0\.4 s; takes smear; in the palette of desk, pop\n {2}example: \{"type":"slide","direction":"right"\}$/m);
+  assert.match(text, /^iris {2}.+\n {2}layer, in \(default\), out; 0\.4 s; no smear/m);
   assert.match(text, /^cut {2}.+\n {2}node, no direction; no window; no smear; in the palette of desk, pop, cosmos\n {2}example: "cut"$/m);
 });
 
@@ -269,10 +271,12 @@ test('validation: a direction on a cut that has none is refused', () => {
   assert.match(e.message, /"match" cut takes no direction/);
 });
 
-test('validation: a direction outside the cut\'s list names the list', () => {
+test('validation: a direction outside the cut\'s list names the list and says what a direction means', () => {
   const e = only(deskFilm({ type: 'slide', direction: 'sideways' }));
   assert.equal(e.path, 'shots[2].cut.direction');
-  assert.match(e.message, /right, left, up or down/);
+  assert.match(e.message, /left, right, up or down \(the way the next shot moves on screen: "left" moves leftward and enters by the right edge, "up" moves upward and enters by the bottom edge\), got "sideways"/);
+  // in and out are not edges: no edge words
+  assert.doesNotMatch(only(deskFilm({ type: 'iris', direction: 'up' })).message, /moves/);
 });
 
 test('validation: a duration outside 0.1 to 2 s is refused', () => {

@@ -29,6 +29,15 @@ after(() => rmSync(specDir, { recursive: true, force: true }));
 
 // Look revision 1: a pop block on a tall frame sits with its middle on 45% of the safe height (look.stack.centre), or on
 // the middle when that would take it past the safe zone's edge: the middle of a block `height` tall.
+// How far a pop figure's pulse carries its cap line up and its baseline down at its peak: it scales about the middle of
+// its cap height (0.7 em) by 1 + (emphasize.scale - 1) times the ease's overshoot (number.mjs pulsePeak).
+const swellOf = (look, size) => {
+  const curve = ease(look.moves.emphasize.ease);
+  const overshoot = Math.max(1, ...Array.from({ length: 101 }, (_, i) => curve(i / 100)));
+  const peak = Math.max(1, look.moves.enter.scale ?? 1, 1 + (look.moves.emphasize.scale - 1) * overshoot);
+  return ((peak - 1) * 0.7 * size) / 2;
+};
+
 const opticalMiddle = (safe, canvas, height) => {
   const h = canvas.h - safe.top - safe.bottom;
   const optical = safe.top + 0.45 * h;
@@ -177,7 +186,8 @@ test('pop number: the figure fills the safe width up to 900 units, flush left; l
   const label = nodes.find((n) => n.id === 'n.label');
   const labelBox = plateBox(label);
   near(labelBox[0], safe.left, 'label tag flush left');
-  near(labelBox[1], baseline + 40, 'label tag 40 units under the baseline');
+  // 40 units under the baseline as the pulse leaves it at its peak (lead ruling 4, round 2: the digits never reach a plate)
+  near(labelBox[1], baseline + swellOf(look, digits.props.font.size) + 40, 'label tag 40 units under the swollen baseline');
   assert.equal(label.children.find((n) => n.type === 'path').props.fill, look.palette.accent);
   assert.equal(label.children.find((n) => n.type === 'text').props.font.size, look.scale[2], 'scale step 3');
   const delta = nodes.find((n) => n.id === 'n.delta');
@@ -260,7 +270,8 @@ test('pop number: a kicker is a tag at step 2, flush left, 28 units over the fig
   assert.deepEqual(text.props.layout.lines[0].words.map((w) => w.text), ['IN', 'NUMBERS']);
   const box = plateBox(kicker);
   near(box[0], safe.left, 'flush left');
-  near(boxes.value[1] - (box[1] + box[3]), 28, '28 units over the figure cap line');
+  const digits = textNode(nodes, 'n.value.digits');
+  near(boxes.value[1] - (box[1] + box[3]), swellOf(look, digits.props.font.size) + 28, '28 units over the cap line as the pulse leaves it at its peak');
   assert.ok(box[1] >= safe.top - EPS, 'inside the safe zone');
   near((box[1] + boxes.label[1] + boxes.label[3]) / 2, opticalMiddle(safe, canvas, boxes.label[1] + boxes.label[3] - box[1]), 'the block, kicker included, on the optical centre');
 });

@@ -63,7 +63,7 @@ test('soundEvents: a statement emphasis per run, a slide and a highlight on the 
   const want = [
     { kind: 'emphasis', t: 0.5, shot: 'open' },
     { kind: 'emphasis', t: 2.2, shot: 'open' },
-    { kind: 'cut', t: 3, shot: 'clip', cut: 'slide', dur: 0.4, direction: 'right' },
+    { kind: 'cut', t: 3, shot: 'clip', cut: 'slide', dur: 0.4, direction: 'left' },
     { kind: 'device', t: 3.8, shot: 'clip', device: 'highlight' },
     { kind: 'cut', t: 5.5, shot: 'rows', cut: 'cut', dur: 0, direction: null },
     { kind: 'land', t: 6.1, shot: 'rows' },

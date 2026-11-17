@@ -5,6 +5,13 @@ import assert from 'node:assert/strict';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/cuts/index.mjs';
 import { matchFindings } from '../../scripts/v2/review.mjs';
+import { readFileSync } from 'node:fs';
+import { buildTimeline } from '../../engine/script/timing.mjs';
+import { resolveCut } from '../../engine/cuts/resolve.mjs';
+import { filmFor } from './helpers/kinds.mjs';
+
+const FPS = 30;
+const DESK_FILM = new URL('../../references/examples/v2/cuts-desk.json', import.meta.url);
 
 const CANVAS = { w: 1920, h: 1080 };
 const LEGIBLE = 0.2; // a copy at or under this opacity does not read as words over the other one
@@ -53,6 +60,70 @@ test('match: the rest of the two shots never stands on screen at once (no 01 ove
     const [out, into] = ['open.kicker', 'carry.kicker'].map((id) => frame.find((n) => n.id === id)?.opacity ?? 0);
     assert.ok(Math.min(out, into) <= LEGIBLE, `p ${p}: outgoing kicker ${out}, incoming kicker ${into}`);
   }
+});
+
+// ---- two lines of type: the line itself travels, by its type size and where its first line starts ----
+
+// Round 2 ruling 2: the desk film's two statements reflow into boxes of nearly the same area and centre, so a carry by
+// box moved the slot about 20 px and never showed the type shrinking. A line of type is carried by its type size and by
+// where its first line starts (the place a reader's eye is), so the old line visibly shrinks and moves into the new one.
+const typeLine = (id, say, x, y, size, firstY) => Object.freeze({
+  ...text(id, say, x, y, 1, [x, y, 900, 500]),
+  props: Object.freeze({ layout: Object.freeze({ ...words(say), size, lines: Object.freeze([Object.freeze({ ...words(say).lines[0], x: 0, y: firstY })]) }) }),
+});
+const BIG = typeLine('line', 'Every shot has to end somewhere', 236, 273, 172, 150);
+const SMALL = typeLine('line', 'A match carries one line across the cut', 237, 322, 104, 90);
+const lineAt = (from, to, p) => registries.cuts.get('match').apply({ from: [field, from], to: [field, to], p, canvas: CANVAS }).find((n) => n.id === 'line').children;
+const visibleOf = (copies) => copies.reduce((best, n) => (n.opacity > best.opacity ? n : best));
+// the type size a copy shows and where its first line starts on the canvas
+const shownSize = (n) => n.scale * n.props.layout.size;
+const anchorOf = (n) => [n.x + n.props.layout.lines[0].x * n.scale, n.y + n.props.layout.lines[0].y * n.scale];
+
+test('match: a line of type shrinks visibly from its old type size to the new one across the window', () => {
+  const sizes = STEPS.map((p) => shownSize(visibleOf(lineAt(BIG, SMALL, p))));
+  assert.ok(Math.abs(sizes[0] - 172) < 0.05 * 172 && Math.abs(sizes.at(-1) - 104) < 0.05 * 104, `type size ${sizes[0]} to ${sizes.at(-1)}`);
+  sizes.slice(1).forEach((s, k) => assert.ok(s <= sizes[k] + 1e-9, `never grows back: ${sizes[k]} then ${s}`));
+  // and it passes through the sizes between: the shrink is seen, not a jump at the hand-over
+  const seen = (p) => shownSize(visibleOf(lineAt(BIG, SMALL, p)));
+  assert.ok(seen(0.4) < 0.9 * 172, `before the hand-over the old line has shrunk: ${seen(0.4)}`);
+  assert.ok(seen(0.6) > 1.1 * 104, `after it the new line is still growing down to size: ${seen(0.6)}`);
+});
+
+test('match: lines far apart travel the whole distance between their two layouts, and the move spans the window', () => {
+  const far = typeLine('line', 'A match carries one line across the cut', 1100, 760, 104, 90);
+  const [a, b] = [anchorOf(BIG), anchorOf(far)];
+  const span = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const path = STEPS.map((p) => anchorOf(visibleOf(lineAt(BIG, far, p))));
+  assert.ok(Math.hypot(path[0][0] - a[0], path[0][1] - a[1]) < 0.05 * span, 'starts where the old line starts');
+  assert.ok(Math.hypot(path.at(-1)[0] - b[0], path.at(-1)[1] - b[1]) < 0.05 * span, 'ends where the new line starts');
+  const half = path[STEPS.indexOf(0.5)] ?? path[9];
+  const mid = Math.hypot(half[0] - a[0], half[1] - a[1]);
+  assert.ok(mid > 0.3 * span && mid < 0.7 * span, `half way through the window it is half way: ${mid} of ${span}`);
+});
+
+test('match in the desk film: the carried line travels between the two shots\' own layouts, type size and place', () => {
+  const film = JSON.parse(readFileSync(DESK_FILM, 'utf8'));
+  const shots = film.shots.slice(0, 2);
+  const built = filmFor(shots, film.look, film.format, { cut: film.cut });
+  const start = buildTimeline({ ...film, shots, fps: FPS }, { fps: FPS }).shots[1].start;
+  const window = resolveCut(shots[1].cut).dur;
+  const lineIn = (t) => built.sampleAt(t).find((n) => n.id === 'line');
+  const [a, b] = [lineIn(start - 1 / FPS), lineIn(start + window + 1 / FPS)];
+  const seen = (p) => visibleOf(lineIn(start + p * window).children);
+  const [sizeA, sizeB] = [shownSize(a), shownSize(b)];
+  assert.ok(sizeA > 1.3 * sizeB, `the two layouts set the line at different sizes: ${sizeA}, ${sizeB}`);
+  const sizes = [0.1, 0.4, 0.6, 0.9].map((p) => shownSize(seen(p)));
+  assert.ok(sizes[0] > 0.9 * sizeA && sizes[3] < 1.1 * sizeB, `from ${sizeA} to ${sizeB}: ${sizes}`);
+  assert.ok(sizes[1] < 0.95 * sizeA && sizes[2] > 1.05 * sizeB, `seen shrinking on both sides of the hand-over: ${sizes}`);
+  // the old line is seen most of the way: before the words change it has covered most of the size change (the sheet
+  // of round 2's first render showed the move happening while both copies were faded)
+  const before = shownSize(seen(0.65));
+  assert.ok((sizeA - before) / (sizeA - sizeB) > 0.6, `by p 0.65 the old line has shrunk ${(sizeA - before).toFixed(1)} of ${(sizeA - sizeB).toFixed(1)} px`);
+  assert.ok(seen(0.65).id === 'line.from', 'and it is still the old line that shows');
+  const [pa, pb] = [anchorOf(a), anchorOf(b)];
+  const span = Math.hypot(pb[0] - pa[0], pb[1] - pa[1]);
+  const end = anchorOf(seen(0.95));
+  assert.ok(Math.hypot(end[0] - pb[0], end[1] - pb[1]) <= 0.1 * span + 1, `lands where the new line starts: ${end} vs ${pb}`);
 });
 
 // ---- the review: a match that carries nothing ----
