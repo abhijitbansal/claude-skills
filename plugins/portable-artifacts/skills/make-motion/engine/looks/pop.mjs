@@ -68,7 +68,9 @@ export const pop = {
   cutPalette: ['cut', 'punch', 'slide', 'cover', 'zoom', 'polka-dots', 'glitch-memories', 'cross-zoom'],
   // the motion blur on the cuts that move (engine/cuts/smear.mjs)
   // the punch gets 0.3 s to land and settle (look review gate-cuts-1 P1: 0.2 s read as a 3% nudge)
-  cutStyle: { slide: { smear: true }, cover: { smear: true }, punch: { smear: true, duration: 0.3 } },
+  // slides and covers smear only when they move across the frame: on the condensed type the blur of a vertical move
+  // still read as striped bars at the quarter-frame shutter (t5 P2/P3), so up and down draw their plain frames (f4-2)
+  cutStyle: { slide: { smear: true, smearAxes: ['x'] }, cover: { smear: true, smearAxes: ['x'] }, punch: { smear: true, duration: 0.3 } },
   // a cover's sheet leads with a hard accent keyline: a shadow would not show on the dark paper
   coverEdge: { line: { color: 'accent', width: 6, alpha: 1 } },
   // a punch lands 1.25 times its size with a small overshoot; the smear's shutter is a quarter frame, half the

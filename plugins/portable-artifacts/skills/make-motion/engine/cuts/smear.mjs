@@ -14,9 +14,25 @@ export const SMEAR_MIN_SAMPLES = 2;
 /** The most samples a smeared frame takes; past it the box filter fills the gaps. */
 export const SMEAR_MAX_SAMPLES = 32;
 
+/** The axes a look may smear along (cutStyle.<cut>.smearAxes): x across the frame, y down it. */
+export const SMEAR_AXES = Object.freeze(['x', 'y']);
+
 const HALF = 2;
 const COUNT_EPSILON = 1e-9; // keeps 10.000000000000009 px of travel at 10 samples
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
+
+/**
+ * Does a cut moving along `vector` (its parts' unit vector; null for a zoom) smear in a look whose cutStyle names
+ * `axes` for it? A look that names none smears along both; a zoom moves along no axis and always smears. Pop names x
+ * alone: on its condensed type the blur of a vertical move read as striped bars (t5 P2/P3, lead ruling f4-2), so a
+ * vertical move draws its plain frame.
+ * @param {number[] | null} vector
+ * @param {string[] | undefined} axes
+ */
+export function smearsAlong(vector, axes) {
+  if (axes === undefined || vector === null) return true;
+  return axes.includes(Math.abs(vector[0]) >= Math.abs(vector[1]) ? 'x' : 'y');
+}
 
 /**
  * @param {{ p: number, frame: number, travel: (q0: number, q1: number) => number, shutter?: number }} options the frame's

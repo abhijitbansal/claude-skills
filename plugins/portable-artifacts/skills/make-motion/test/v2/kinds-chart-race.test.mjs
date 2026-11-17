@@ -33,32 +33,36 @@ test('ties keep the given order', () => {
   assert.deepEqual(rankByPeriod(tied)[0].ranked.map((r) => r.index), [0, 1, 2]);
 });
 
-test('bar lengths at each period and halfway between two (the settle move on its way); rows move to their rank', () => {
+test('bar lengths at each period and on the way between two (the count\'s first step); rows move to their rank', () => {
   const shot = RACE();
   const out = expand(shot);
   const t = raceTimes(shot, out.timing);
   const len = (k, at) => sample(find(out, `r.mark.${k}`).tracks.scaleX, at);
   const max = 40;
   ROWS.forEach((row, k) => row.values.forEach((v, p) => assert.ok(Math.abs(len(k, t[p] + 0.7) - v / max) < 1e-6 || p === 0 && Math.abs(len(k, 0) - v / max) < 1e-6, `${row.name} at period ${p}`)));
-  const half = t[1] + registries.looks.get('desk').moves.settle.dur / 2;
-  const mid = len(0, half);
-  assert.ok(mid > 10 / max && mid < 20 / max, `Ada halfway from 2023 to 2024: ${mid}`);
+  // ruling f4-1: the count's first step shows on the period's arrival, part way (the bars count with the values)
+  const mid = len(0, t[1]);
+  assert.ok(mid > 10 / max && mid < 20 / max, `Ada on the way from 2023 to 2024: ${mid}`);
   const y = (k, at) => sample(find(out, `r.row.${k}`).tracks.y, at);
   assert.ok(y(0, t[2] + 0.7) < y(0, 0), 'Ada climbs to the top by the last period');
   assert.equal(chart.landing(shot, out.timing), t[2], 'the land event is the last period');
 });
 
-test('a row overtaken (moving down a rank) dims while it moves, so the row passing over it reads; a row moving up or staying stays whole', () => {
+// ruling f4-1 replaced the overtaken row's dim (rows glided over each other while their values waited): a row now changes
+// place on the count step its value passes the other's, so two rows never sit on each other and none needs dimming
+test('rows change place on a count step: through a reorder every row is whole and in its own place on every frame', () => {
   for (const look of ['desk', 'pop']) {
     const shot = RACE();
     const out = expand(shot, look);
     const t = raceTimes(shot, out.timing);
-    const half = t[2] + registries.looks.get(look).moves.settle.dur / 2;
-    const opacity = (k, at) => sample(find(out, `r.row.${k}`).tracks.opacity, at);
+    const row = (k) => find(out, `r.row.${k}`);
     // 2024 to 2025: Ada climbs 3 -> 1, Di 4 -> 2; Bo 2 -> 3 and Cy 1 -> 4 are overtaken
-    assert.ok(opacity(1, half) < 1 && opacity(2, half) < 1, `${look}: the overtaken rows dim mid-move`);
-    assert.equal(opacity(0, half), 1, `${look}: the climbing row stays whole`);
-    [0, 1, 2, 3].forEach((k) => assert.equal(opacity(k, t[2] + 0.7), 1, `${look}: row ${k} whole once settled`));
+    for (let at = t[2]; at <= t[2] + registries.looks.get(look).moves.settle.dur; at += 1 / 30) {
+      const ys = [0, 1, 2, 3].map((k) => sample(row(k).tracks.y, at));
+      [0, 1, 2, 3].forEach((k) => assert.equal(sample(row(k).tracks.opacity, at), 1, `${look}: row ${k} whole at ${at.toFixed(3)}`));
+      assert.equal(new Set(ys.map((y) => y.toFixed(6))).size, 4, `${look}: two rows share a place at ${at.toFixed(3)}: ${ys}`);
+    }
+    assert.ok(sample(row(0).tracks.y, t[2] + 0.7) < sample(row(1).tracks.y, t[2] + 0.7), `${look}: Ada over Bo once settled`);
   }
 });
 
@@ -82,7 +86,8 @@ test('top hides the rest without a finding only when the highlight is shown at t
   const out = expand(RACE({ top: 2, highlight: 'Ada' }));
   const t = raceTimes(RACE(), out.timing);
   assert.equal(sample(find(out, 'r.row.3').tracks.opacity, 0), 0, 'Di is not in the first top 2');
-  assert.equal(sample(find(out, 'r.row.3').tracks.opacity, t[2]), 1, 'Di is in the last top 2');
+  // ruling f4-1: Di enters on the count step its value passes Bo's, by the time the period's values have landed
+  assert.equal(sample(find(out, 'r.row.3').tracks.opacity, t[2] + registries.looks.get('desk').moves.settle.dur), 1, 'Di is in the last top 2');
 });
 
 test('honesty: a negative value and a values list of the wrong length are findings at their paths', () => {

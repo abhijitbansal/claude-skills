@@ -209,7 +209,8 @@ for (const look of LOOKS) {
         for (const row of rows) {
           if (sample(row.tracks.opacity, t) === 0) continue;
           const bar = row.children.find((c) => /\.mark\.\d+$/.test(c.id));
-          const values = row.children.filter((c) => /\.value\.\d+\.\d+$/.test(c.id) && sample(c.tracks.opacity, t) > 0);
+          // ruling f4-1: a count step on the way to a period's value is value.row.period.step
+          const values = row.children.filter((c) => /\.value\.\d+\.\d+(\.\d+)?$/.test(c.id) && sample(c.tracks.opacity, t) > 0);
           assert.equal(values.length, 1, `${row.id} shows ${values.length} values at ${t.toFixed(2)} s`);
           const end = bar.props.x + barWidth(bar) * sample(bar.tracks.scaleX, t);
           const x = values[0].tracks.x ? sample(values[0].tracks.x, t) : values[0].props.x;

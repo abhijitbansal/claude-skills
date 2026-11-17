@@ -1,12 +1,13 @@
 // The chart kind's `race` type (plan 2026-11-16-pa2-shot-kinds-b, Task 10): `data` { periods, rows: [{ name, values }] },
 // the top `top` rows of each period as bars from zero on one scale for every period, ranked by value (ties keep the given
 // order; ranking adapted from version 1's race block, template/blocks/race.mjs rankByPeriod, which broke ties by name).
-// The periods are spread over the narration; at each the bars change length and rank with the look's settle move and
-// the values step to the period's (set in fixed advances); the period shows top right, a numeral in the display face
+// The periods are spread over the narration; at each the values count to the period's over the look's settle move (set
+// in fixed advances), and the bars' lengths and ranks follow the values shown, step for step; the period shows top right, a numeral in the display face
 // in a stack look (pop) and a label in the label face otherwise (desk). The land event is the last period's arrival.
 // Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
+import { ease } from '../time/ease.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, fontFor, isEditorial, rectPath, shownFrom } from './shared.mjs';
 import { valueText, numeralLayout } from './chart-scale.mjs';
 import { label, labelWidth } from './chart-labels.mjs';
@@ -86,7 +87,8 @@ export function raceHonesty(shot) {
 export function raceField(shot, rest) {
   let m = /^name\.(\d+)$/.exec(rest);
   if (m) return `data.rows[${m[1]}].name`;
-  m = /^value\.(\d+)\.(\d+)$/.exec(rest);
+  m = /^value\.(\d+)\.(\d+)(\.\d+)?$/.exec(rest); // a count step (value.row.period.step) shows the period's value counting
+
   if (m) return shot.unit === undefined ? `data.rows[${m[1]}].values[${m[2]}]` : 'unit'; // a value label shows the unit too
   m = /^period\.(\d+)(\.|$)/.exec(rest);
   if (m) return 'data.periods';
@@ -94,27 +96,65 @@ export function raceField(shot, rest) {
   return /^(row|mark)\.\d+$/.test(rest) ? 'data' : null; // the bars show the data
 }
 
-// A track that holds values[0] and moves to each next value with `move`, starting at times[i].
-function moving(values, times, move) {
-  const keys = [{ t: 0, v: values[0] }];
-  values.slice(1).forEach((v, i) => {
-    const from = keys.at(-1).v;
-    if (v !== from) keys.push({ t: times[i + 1], v: from }, { t: times[i + 1] + move.dur, v, ease: move.ease });
-  });
-  return track(keys);
+// ---- the count (lead ruling f4-1) ----
+// One schedule drives every part of a row, so the value it shows, its bar's length and its place never disagree, and
+// none of them shows the last period's value once the new period is up (gate-kinds-b-2: the values used to wait for the
+// bars to settle, so at Q2 they still read Q1 and a lower value ranked above a higher one). At each period the values
+// count from the last shown to the period's in fixed steps over the look's settle move, at the look's own rhythm (desk
+// on its 12 fps step, pop every frame), the first step on the period's arrival; at every step the rows are ranked on
+// the values shown, so a row changes place on the step its value passes the other's.
+const STEP_EPSILON = 1e-9; // keeps 0.6 s * 12 from flooring to 7 for float noise, and a whole value from rounding up
+
+// A step part way from `from` to `to`, rounded toward `to` at `decimals`: it leaves `from` on the first step and never
+// passes `to`.
+function toward(from, to, share, decimals) {
+  const scale = 10 ** decimals;
+  const x = (from + (to - from) * share) * scale;
+  const v = (to >= from ? Math.ceil(x - STEP_EPSILON) : Math.floor(x + STEP_EPSILON)) / scale;
+  return to >= from ? Math.min(v, to) : Math.max(v, to);
 }
 
-// A row's opacity: shown while it is in the top rows (a step at each period), and dimmed to OVERTAKEN while it moves
-// down a rank, so the row passing over it reads and the two names never sit on each other at full strength.
-const OVERTAKEN = 0.35;
-function rowOpacity(ranks, ys, times, move) {
-  const shownAt = (p) => (ranks[p] ? 1 : 0);
-  const keys = [{ t: 0, v: shownAt(0) }];
-  for (let p = 1; p < ranks.length; p++) {
-    keys.push({ t: times[p], v: shownAt(p - 1) }, { t: times[p], v: shownAt(p) });
-    if (ranks[p - 1] && ranks[p] && ys[p] > ys[p - 1]) {
-      keys.push({ t: times[p] + move.dur / HALF, v: OVERTAKEN, ease: 'inOutQuad' }, { t: times[p] + move.dur, v: 1, ease: 'inOutQuad' });
+// Each row's place at one step: its rank among the values shown (ties in the given order), null outside the top.
+function slotsOf(shown, top) {
+  const order = shown.map((v, k) => ({ v, k })).filter((r) => Number.isFinite(r.v)).sort((a, b) => b.v - a.v).slice(0, top);
+  const slots = shown.map(() => null);
+  order.forEach((r, rank) => { slots[r.k] = rank; });
+  return slots;
+}
+
+/**
+ * The race's steps: [{ t, shown: [value per row], slots: [rank per row or null] }], the first at 0 (period 0's values),
+ * then at each later period's arrival a count over `move` (the share eased by its ease, clamped and never going back,
+ * so a spring's overshoot never shows a value past the period's), cut short by the next period's arrival.
+ */
+export function raceSteps(shot, times, { move, rate, decimals }) {
+  const top = topOf(shot);
+  const at = (p) => rowsOf(shot).map((r) => r.values?.[p]);
+  const curve = ease(move.ease);
+  const count = Math.max(1, Math.floor(move.dur * rate + STEP_EPSILON));
+  let shown = at(0);
+  const steps = [{ t: 0, shown, slots: slotsOf(shown, top) }];
+  for (let p = 1; p < times.length; p++) {
+    const from = shown;
+    const to = at(p);
+    let share = 0;
+    for (let k = 1; k <= count; k++) {
+      const t = times[p] + (move.dur * (k - 1)) / count;
+      if (times[p + 1] !== undefined && t >= times[p + 1]) break;
+      share = k === count ? 1 : Math.max(share, Math.min(1, curve(k / count)));
+      shown = to.map((v, r) => (Number.isFinite(v) && Number.isFinite(from[r]) ? toward(from[r], v, share, decimals) : v));
+      steps.push({ t, shown, slots: slotsOf(shown, top) });
     }
+  }
+  return steps;
+}
+
+// A stepped track of `valueAt(step)` over the steps: each value holds until the step that changes it.
+function stepped(steps, valueAt) {
+  const keys = [{ t: 0, v: valueAt(steps[0]) }];
+  for (const step of steps.slice(1)) {
+    const v = valueAt(step);
+    if (v !== keys.at(-1).v) keys.push({ t: step.t, v: keys.at(-1).v }, { t: step.t, v });
   }
   return track(keys);
 }
@@ -140,7 +180,6 @@ export function drawRace(shot, ctx, style, area, { headroom = 0 } = {}) {
   const { look } = ctx;
   const { font, gap } = style;
   const times = raceTimes(shot, ctx.timing);
-  const table = rankByPeriod(shot);
   const shown = topOf(shot);
   const period = periodNodes(shot, ctx, style, { area: { ...area, y: area.y + headroom }, times });
   const all = rowsOf(shot).flatMap((r) => (Array.isArray(r.values) ? r.values : [])).filter(Number.isFinite);
@@ -152,34 +191,44 @@ export function drawRace(shot, ctx, style, area, { headroom = 0 } = {}) {
   plot.h = Math.max(1, area.y + area.h - plot.y);
   const rowH = plot.h / shown;
   const thick = rowH * BAND_FILL;
+  const steps = raceSteps(shot, times, { move: look.moves.settle, rate: look.moves.draw.step ?? ctx.fps, decimals });
   const rows = rowsOf(shot).map((row, k) => {
-    const ranks = table.map((t) => t.ranked.find((r) => r.index === k) ?? null);
-    const ys = ranks.map((r) => (r === null ? shown : r.rank) * rowH);
-    const lengths = ranks.map((r) => (r === null ? 0 : r.value / max));
-    const visible = rowOpacity(ranks, ys, times, look.moves.settle);
+    const shownOf = (step) => (step.slots[k] === null ? 0 : step.shown[k]);
     const hl = row.name === shot.highlight;
     const mid = plot.y + rowH / HALF;
-    const bar = node('path', `${shot.id}.mark.${k}`, { d: rectPath(plot.w, thick), x: plot.x, y: mid - thick / HALF, fill: hl ? (style.hlFill ?? style.accent) : style.mark }, { tracks: { scaleX: moving(lengths, times, look.moves.settle) } });
+    const bar = node('path', `${shot.id}.mark.${k}`, { d: rectPath(plot.w, thick), x: plot.x, y: mid - thick / HALF, fill: hl ? (style.hlFill ?? style.accent) : style.mark }, { tracks: { scaleX: stepped(steps, (s) => shownOf(s) / max) } });
     const name = label(ctx, { id: `${shot.id}.name.${k}`, text: String(row.name), font, x: plot.x - gap, y: mid + (CAP_HEIGHT * font.size) / HALF, align: 'right', fill: hl ? style.strong : style.text, tracks: {} }).node;
-    const values = valueNodes(shot, ctx, { ranks, lengths, times, plot, gap, font, decimals, k, y: mid + (CAP_HEIGHT * font.size) / HALF, fill: style.text });
-    return node('group', `${shot.id}.row.${k}`, {}, { tracks: { y: moving(ys, times, look.moves.settle), opacity: visible }, children: [bar, name, ...values] });
+    const values = valueNodes(shot, ctx, { steps, times, plot, gap, font, decimals, k, max, y: mid + (CAP_HEIGHT * font.size) / HALF, fill: style.text });
+    const tracks = { y: stepped(steps, (s) => (s.slots[k] ?? shown) * rowH), opacity: stepped(steps, (s) => (s.slots[k] === null ? 0 : 1)) };
+    return node('group', `${shot.id}.row.${k}`, {}, { tracks, children: [bar, name, ...values] });
   });
   const boxes = Object.fromEntries(rowsOf(shot).map((_, k) => [`mark:${k}`, [plot.x, plot.y + k * rowH, plot.w, rowH]]));
   const counts = countsNode(shot, ctx, style, { x: area.x, y: area.y + headroom + CAP_HEIGHT * style.font.size });
   return { nodes: [...period.nodes, ...counts, ...rows], boxes: { plot: [plot.x, plot.y, plot.w, plot.h], ...boxes }, plot, highlight: null };
 }
 
-// A row's value labels, one per period: each rides its bar's end (the same move as the bar) and stays until the next
-// period's bars have settled, so a value is never off screen while its bar moves (gate-kinds-b-1: values vanished
-// mid-reorder); the next value takes over as the bar lands.
-function valueNodes(shot, ctx, { ranks, lengths, times, plot, gap, font, decimals, k, y, fill }) {
-  const settle = ctx.look.moves.settle;
-  const x = moving(lengths.map((len) => plot.x + plot.w * len + gap / HALF), times, settle);
-  const until = (p) => (times[p + 1] === undefined ? undefined : times[p + 1] + settle.dur);
-  return ranks.map((r, p) => (r === null ? null : label(ctx, {
-    id: `${shot.id}.value.${k}.${p}`, text: valueText(r.value, decimals, shot.unit), font, x: plot.x + plot.w * lengths[p] + gap / HALF, y, fill, numeric: true,
-    tracks: { x, opacity: shownFrom(p === 0 ? 0 : times[p] + settle.dur, until(p)) },
-  }).node)).filter(Boolean);
+// The period a time falls in: the last one that has arrived.
+const periodAt = (times, t) => times.findLastIndex((at) => at <= t + STEP_EPSILON);
+
+// A row's value labels, one for each value the steps show it, at its bar's end (the bar is that long on the same
+// steps), so the row always shows exactly one value, never off screen while its bar moves (gate-kinds-b-1: values
+// vanished mid-reorder). A period's own value is `value.<row>.<period>`; a count step on the way to it adds the step.
+function valueNodes(shot, ctx, { steps, times, plot, gap, font, decimals, k, max, y, fill }) {
+  const valueAt = (s) => (s.slots[k] === null ? null : s.shown[k]);
+  const runs = steps.filter((s, i) => i === 0 || valueAt(s) !== valueAt(steps[i - 1]));
+  const ids = new Set();
+  return runs.map((s, i) => {
+    const v = valueAt(s);
+    if (v === null) return null;
+    const p = periodAt(times, s.t);
+    const own = `${shot.id}.value.${k}.${p}`;
+    const id = v === rowsOf(shot)[k].values[p] && !ids.has(own) ? own : `${own}.${i}`;
+    ids.add(id);
+    return label(ctx, {
+      id, text: valueText(v, decimals, shot.unit), font, x: plot.x + plot.w * (v / max) + gap / HALF, y, fill, numeric: true,
+      tracks: { opacity: shownFrom(s.t, runs[i + 1]?.t) },
+    }).node;
+  }).filter(Boolean);
 }
 
 // What the values count (`valueLabel`, "orders to date" for a running total), in the label face on the period's row at

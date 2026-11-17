@@ -9,7 +9,7 @@ import '../modes/index.mjs';
 import '../kinds/index.mjs';
 import '../cuts/index.mjs';
 import { resolveShotCut, explicitCut } from '../cuts/resolve.mjs';
-import { smearPlan } from '../cuts/smear.mjs';
+import { smearPlan, smearsAlong } from '../cuts/smear.mjs';
 import { applyAccent, gridX } from '../looks/index.mjs';
 import { unitOf } from '../units.mjs';
 import { srcsOfShot } from '../assets.mjs';
@@ -169,6 +169,8 @@ function expandOne({ film, timeline, index, canvas, measure, assets, look, viral
  */
 function smearedFrame(shot, args, frame) {
   const parts = shot.cut.entry.parts(args);
+  // a move across the axes the look smears along (cutStyle.<cut>.smearAxes) draws its plain frame
+  if (!smearsAlong(parts.vector, args.look?.cutStyle?.[shot.cut.name]?.smearAxes)) return { background: shot.background, sampled: shot.cut.entry.apply(args) };
   const plan = smearPlan({ p: args.p, frame, travel: parts.travel, shutter: args.look?.cutMotion?.smearShutter });
   return {
     background: shot.background,

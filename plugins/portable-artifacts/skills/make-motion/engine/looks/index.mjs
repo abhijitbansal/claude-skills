@@ -60,9 +60,10 @@ import { cosmos } from './cosmos.mjs';
  * @property {string[]} cuts  the cuts a film in this look may name: registered cut names (every shipped look lists all)
  * @property {string[]} cutPalette  the look's preferred cuts, in order: a non-empty subset of `cuts` holding "cut" (what
  *   --list cuts names per look and the director reaches for; a cut outside it is not a finding)
- * @property {Record<string, { direction?: string, duration?: number, smear?: boolean }>} [cutStyle]  the look's defaults
- *   per cut, each checked against that cut's options (engine/cuts/resolve.mjs resolveCut reads them after the shot's and
- *   the film's root cut); `smear: true` makes a smearable cut draw its motion smear
+ * @property {Record<string, { direction?: string, duration?: number, smear?: boolean, smearAxes?: string[] }>} [cutStyle]
+ *   the look's defaults per cut, each checked against that cut's options (engine/cuts/resolve.mjs resolveCut reads them
+ *   after the shot's and the film's root cut); `smear: true` makes a smearable cut draw its motion smear, and
+ *   `smearAxes` (look data, no film option) limits it to moves along those axes (engine/cuts/smear.mjs smearsAlong)
  * @property {{ line?: { color: string, width: number, alpha: number }, shadow?: { color: string, width: number,
  *   alpha: number, steps: number } }} [coverEdge]  the leading edge of a cover cut's sheet (engine/cuts/cover.mjs):
  *   palette colour names, widths in pixels
@@ -172,7 +173,7 @@ function movesErrors(name, moves, names) {
     .map((key) => `look "${name}": moves.${key} must be a move { ease, dur } or null, got ${JSON.stringify(moves[key]) ?? 'undefined'}`);
 }
 
-const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear']);
+const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear', 'smearAxes']);
 const PALETTE_SHAPE = 'cutPalette must be a non-empty list of its cuts holding "cut"';
 
 // The errors of a look's cut set (`cuts`: registered cut names) and its palette (a non-empty subset holding "cut").

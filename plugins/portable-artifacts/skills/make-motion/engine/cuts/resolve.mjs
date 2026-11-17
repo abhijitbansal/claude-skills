@@ -5,6 +5,7 @@
 import { registries } from '../registry.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
 import { DIRECTION_MEANING, takesEdges } from './edges.mjs';
+import { SMEAR_AXES } from './smear.mjs';
 import './index.mjs';
 
 /** The cut a shot gets when neither it nor the film names one. */
@@ -71,6 +72,13 @@ function smearProblem(value, name, entry, cuts) {
   return value && entry.smearable !== true ? `the "${name}" cut takes no smear; the cuts that do: ${smearableNames(cuts).join(', ')}` : null;
 }
 
+// a look's cutStyle only (engine/cuts/smear.mjs smearsAlong): the axes the cut's smear runs along
+function smearAxesProblem(value, name, entry, cuts) {
+  const listed = Array.isArray(value) && value.length > 0 && value.every((axis) => SMEAR_AXES.includes(axis)) && new Set(value).size === value.length;
+  if (!listed) return `must be a list of ${SMEAR_AXES.join(', ')} (each once), got ${shown(value)}`;
+  return entry.smearable !== true ? `the "${name}" cut takes no smear; the cuts that do: ${smearableNames(cuts).join(', ')}` : null;
+}
+
 /**
  * What is wrong with the options of registered cut `name` in `options` (a cut object, or a look's cutStyle entry), as
  * [{ key, message }]: a key outside `keys` (with a did-you-mean), a direction outside the cut's list or on a cut with
@@ -87,8 +95,10 @@ export function cutOptionProblems(options, name, { keys = CUT_KEYS, cuts = regis
     ['direction', (v) => directionProblem(v, name, entry)],
     ['duration', (v) => durationProblem(v, entry)],
     ['smear', (v) => smearProblem(v, name, entry, cuts)],
+    ['smearAxes', (v) => smearAxesProblem(v, name, entry, cuts)],
   ];
-  const known = checks.filter(([key]) => options[key] !== undefined)
+  // a key outside `keys` is reported once, as unknown (smearAxes in a film's cut object), not checked as well
+  const known = checks.filter(([key]) => keys.includes(key) && options[key] !== undefined)
     .map(([key, check]) => ({ key, message: check(options[key]) }))
     .filter((problem) => problem.message !== null);
   return [...unknown, ...known];
