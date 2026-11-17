@@ -162,7 +162,7 @@ function groundsUnder(ink, order, { grounds, lights }, background) {
   const base = under.length > 0 ? under.at(-1) : (colourChannels(background) ? { order: 0, colour: background } : null);
   if (base === null || base.colour === null) return [];
   const partly = grounds.filter((g) => g.order > base.order && g.order < order && !g.picture && g.box !== null && meets(g.box, ink));
-  return [base, ...partly].map((g) => lit(g, ink, order, lights));
+  return [base, ...partly].map((g, i) => ({ colour: lit(g, ink, order, lights), box: i === 0 ? null : g.box }));
 }
 
 // A text's own glyph glow (props.glow, lit by its words' glow tracks) over its ground: screened (draw.mjs), at its full
@@ -175,11 +175,21 @@ function withGlyphGlow(node, ground) {
 }
 
 // The distinct colours of the words a viewer reads on this frame: on screen at opacity 1 and not an unspoken ghost.
-function wordColours(node) {
+const wordIndices = (node) => node.layout.lines.flatMap((line) => line.words.map((w) => w.index));
+function wordColours(node, only = null) {
   const base = node.props?.fill ?? DEFAULT_TEXT_FILL;
-  const indices = node.layout.lines.flatMap((line) => line.words.map((w) => w.index));
+  const indices = wordIndices(node).filter((i) => only === null || only.includes(i));
   const shown = indices.map((i) => node.words?.[i] ?? {}).filter((w) => (w.opacity ?? 1) >= 1 && !((w.ghost ?? 0) > 0));
   return [...new Set(shown.map((w) => w.fill ?? base))];
+}
+
+// The words of an upright text that a shape covering only part of its ink box (a highlight bar under one word of a
+// line) lies under: a word the shape does not reach is not judged against it. null when the text is turned or scaled
+// (its words' boxes are not the layout's), and the whole text is judged, as before.
+function wordsUnder(node, box) {
+  const { x, rotate = 0, scale = 1 } = node; // a sampled node's moving values (engine/graph/sample.mjs)
+  if (!Number.isFinite(x) || rotate !== 0 || scale !== 1 || !node.layout) return null;
+  return node.layout.lines.flatMap((line) => line.words.filter((w) => x + w.x < box[0] + box[2] && box[0] < x + w.x + w.width).map((w) => w.index));
 }
 
 /**
@@ -189,9 +199,17 @@ function wordColours(node) {
 export function contrastFindings(texts, sampled, ctx, finding) {
   const drawn = groundsOf(sampled);
   return texts.filter((t) => t.opacity >= 1).flatMap((t) => {
-    const grounds = groundsUnder(t.ink, drawn.textOrder.get(t.node.id) ?? Infinity, drawn, ctx.background).map((g) => withGlyphGlow(t.node, g));
-    const fills = wordColours(t.node);
-    const worst = grounds.flatMap((ground) => fills.map((fill) => ({ fill, ground, ratio: contrastRatio(fill, ground) }))).filter((c) => c.ratio !== null)
+    const grounds = groundsUnder(t.ink, drawn.textOrder.get(t.node.id) ?? Infinity, drawn, ctx.background);
+    const all = wordColours(t.node);
+    // a shape over part of the ink is the ground of the words it reaches (when the text is upright), and those words are
+    // not judged against the ground under it; the words it does not reach keep that ground
+    const reachedBy = grounds.map(({ box }) => (box === null ? null : wordsUnder(t.node, box)));
+    const covered = new Set(reachedBy.flatMap((r) => r ?? []));
+    const worst = grounds.flatMap(({ colour, box }, i) => {
+      const ground = withGlyphGlow(t.node, colour);
+      const fills = box === null ? (covered.size > 0 ? wordColours(t.node, wordIndices(t.node).filter((w) => !covered.has(w))) : all) : reachedBy[i] === null ? all : wordColours(t.node, reachedBy[i]);
+      return fills.map((fill) => ({ fill, ground, ratio: contrastRatio(fill, ground) }));
+    }).filter((c) => c.ratio !== null)
       .reduce((low, c) => (low === null || c.ratio < low.ratio ? c : low), null);
     if (worst === null || worst.ratio >= MIN_CONTRAST) return [];
     const ratio = worst.ratio.toFixed(RATIO_DECIMALS);

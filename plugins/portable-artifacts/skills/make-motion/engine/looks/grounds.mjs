@@ -12,6 +12,20 @@ import { node } from '../graph/node.mjs';
 import { mixOklab } from '../color/oklab.mjs';
 
 const DIM = 0.55; // a dimmed mark: the ink this share of the way to the ground
+const BAR_SHOWS = 3; // a bar against its ground
+const BAR_READS = 4.5; // the words over a bar against the bar
+
+// WCAG contrast of two #rrggbb colours (shared/contrast.mjs is not served to the page, which loads this module)
+const LINEAR_KNEE = 0.03928, LINEAR_SLOPE = 12.92, GAMMA_OFFSET = 0.055, GAMMA_SCALE = 1.055, GAMMA = 2.4;
+const LUMA = Object.freeze([0.2126, 0.7152, 0.0722]);
+const FLARE = 0.05;
+const luminance = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255)
+  .map((s) => (s <= LINEAR_KNEE ? s / LINEAR_SLOPE : ((s + GAMMA_OFFSET) / GAMMA_SCALE) ** GAMMA))
+  .reduce((sum, c, i) => sum + c * LUMA[i], 0);
+function contrastRatio(a, b) {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + FLARE) / (lo + FLARE);
+}
 
 /** The id of the ground sheet a grounded shot opens with. */
 export const GROUND_ID = 'ground';
@@ -33,14 +47,18 @@ export function groundKeys(look, count, seed) {
   return keys;
 }
 
-// The palette for ground `key`: the look's colours renamed through its pairing table. `plate`: the first other ground
-// the ink may sit on (a highlight bar under the ink).
+// The palette for ground `key`: the look's colours renamed through its pairing table. `card`: the first other ground
+// the ink may sit on and the ground itself permits as a mark (look.on[key]), else the ground itself: the colour of a
+// plate on a card (cardPlate, cardPlateText: the URL pill on a browser frame, a code highlight band on a code card), where
+// the ground's own colour shows. `plate`: a plate on the ground itself (a highlight bar, a keyline): the card colour,
+// except where that is the ground (blue: its only permitted mark is the paper, the ink) and the plate is the ink.
 function groundPalette(look, key) {
   const p = look.palette;
   const [first, second, third] = look.on[key];
   const ink = p[first];
   const accent = p[second ?? first];
-  const plate = look.grounds.find((k) => k !== key && look.on[k]?.includes(first)) ?? key;
+  const card = look.grounds.find((k) => k !== key && look.on[k]?.includes(first) && look.on[key].includes(k)) ?? key;
+  const plate = card === key ? first : card;
   // dim: a mark not being discussed, the ink mixed DIM of the way to the ground (opaque, never an alpha: ban 6)
   const dim = mixOklab(ink, p[key], DIM);
   // text on a plate filled with the ink (inkText) or with the plate colour (plateText): that plate colour's own ink as a
@@ -48,12 +66,23 @@ function groundPalette(look, key) {
   // and on the paper ground the ink on a red plate read ink on red: display-only pairs at text size)
   const inkText = p[look.on[first]?.[0] ?? key];
   const plateText = p[look.on[plate]?.[0] ?? first];
-  // textPlate: a second ground the ink reads on at text size (labels over a map's land): the plate, or the dim where the
-  // ink on the plate is a display-only pair (look.displayOnly: ground -> the colours set on it at display sizes only)
-  const textPlate = look.displayOnly?.[plate]?.includes(first) ? dim : p[plate];
+  const cardPlateText = p[look.on[card]?.[0] ?? first];
+  // textPlate: a second ground the ink reads on at text size (labels over a map's land): the card colour, or the dim where
+  // the ink on it is a display-only pair (look.displayOnly: ground -> the colours set on it at display sizes only)
+  const textPlate = look.displayOnly?.[card]?.includes(first) ? dim : p[card];
   // accentText: text on a plate in the accent, which the ground always permits as a mark (the plate may not: red on blue)
   const accentText = p[look.on[second ?? first]?.[0] ?? key];
-  return Object.freeze({ ...p, paper: p[key], ink, ink2: ink, accent, accent2: third === undefined ? accent : p[third], rule: accent, plate: p[plate], dim, inkText, plateText, textPlate, accentText });
+  // landLine: the line between land masses, in the ground's colour so it cuts the land; where the land is the ground's
+  // colour itself (no permitted colour to fill it) the ink draws the coast instead
+  const landLine = textPlate === p[key] ? ink : p[key];
+  // coastLine: the land's outline: the land's own colour (unseen), or the ink where the land is the ground (blue), so the
+  // coast shows
+  const coastLine = textPlate === p[key] ? ink : textPlate;
+  // bar: a highlight bar behind words, the first colour the ground permits that shows on it (3:1) and carries its own ink
+  // at 4.5:1 (barText, the words' colour over the bar: the red bar left 3.78:1 and 4.17:1, the plate on blue was the ink)
+  const barKey = look.on[key].find((k) => contrastRatio(p[k], p[key]) >= BAR_SHOWS && contrastRatio(p[look.on[k]?.[0] ?? first], p[k]) >= BAR_READS) ?? plate;
+  const barText = p[look.on[barKey]?.[0] ?? first];
+  return Object.freeze({ ...p, paper: p[key], ink, ink2: ink, accent, accent2: third === undefined ? accent : p[third], rule: accent, plate: p[plate], cardPlate: p[card], dim, inkText, plateText, cardPlateText, textPlate, accentText, landLine, coastLine, bar: p[barKey], barText });
 }
 
 /** The look a shot on ground `key` draws with, memoised per look and ground; the look itself when it has no grounds. */

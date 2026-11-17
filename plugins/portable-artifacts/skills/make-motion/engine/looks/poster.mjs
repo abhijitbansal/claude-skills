@@ -39,7 +39,7 @@ export const poster = {
   // reads on (a highlight bar), set per ground; here blue, unused before a ground is applied
   // `dim` likewise: a mark not being discussed, the ink mixed toward the ground (here toward paper)
   // inkText / plateText: the text on an ink plate and on a plate-coloured plate, set per ground (grounds.mjs)
-  palette: { paper: '#f2ede2', ink: '#141414', ink2: '#141414', accent: '#d92b1c', accent2: '#1f3fc4', rule: '#141414', plate: '#1f3fc4', dim: '#8a8681', inkText: '#f2ede2', plateText: '#f2ede2', textPlate: '#1f3fc4', accentText: '#f2ede2' },
+  palette: { paper: '#f2ede2', ink: '#141414', ink2: '#141414', accent: '#d92b1c', accent2: '#1f3fc4', rule: '#141414', plate: '#1f3fc4', dim: '#8a8681', inkText: '#f2ede2', plateText: '#f2ede2', textPlate: '#1f3fc4', accentText: '#f2ede2', landLine: '#f2ede2', coastLine: '#1f3fc4', bar: '#141414', barText: '#f2ede2', cardPlate: '#1f3fc4', cardPlateText: '#f2ede2' },
   // the four grounds, as palette keys, and what may sit on each (first: the ground's ink; then its accents). Red on paper
   // and ink on red are display sizes only (step 3 and up): the kinds set them only as display type
   grounds: ['paper', 'accent', 'accent2', 'ink'],
@@ -103,7 +103,8 @@ export const poster = {
     underline: { color: 'ink', width: BAR, cap: 'butt' },
     bracket: { color: 'ink', width: BAR, cap: 'butt' },
     circle: { color: 'ink', width: BAR, cap: 'butt' },
-    highlight: { color: 'plate' },
+    // a bar the words over it read on at 4.5:1: the words take `text` while the bar is under them (kinds/stack.mjs bars)
+    highlight: { color: 'bar', text: 'barText', fit: true },
     punch: { scale: 1.1, dur: 0.12 },
     focus: { dim: 0.6 },
     halftone: { dark: 'ink', light: 'paper', cell: 12 },
@@ -144,14 +145,14 @@ export const poster = {
     chart: { settle: 1.2, pointLabels: true, pointFace: 'text', tagSteps: [2, 3], tagGap: 24, numeralMax: 320, numeralShare: 0.2, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, dimTo: 'dim', refs: false, minPlot: 0.4, point: 14 },
     // at 9:16 the route to the region panel draws once the panel is in (linkAfter), and a panel crop of 80 percent of the
     // picture's width or more takes all of it (wholeWidth): words were cut at its edge
-    screen: { linkAfter: true, wholeWidth: 0.8, fill: 'ink', line: 'ink', lineWidth: 10, dots: 'rule', pill: 'plate', text: 'inkText', urlText: 'plateText', wideShare: 0.8, gap: 44 },
+    screen: { linkAfter: true, wholeWidth: 0.8, fill: 'ink', line: 'ink', lineWidth: 10, dots: 'rule', pill: 'cardPlate', text: 'inkText', urlText: 'cardPlateText', wideShare: 0.8, gap: 44 },
     // land on textPlate: the place labels (ink, text size) read on it on every ground (red land put ink on red)
     // wholeTall: at 9:16 the whole land fits the width (the tall crop cut the Americas off at the frame edge, ban 10)
-    map: { wholeTall: true, card: false, land: 'textPlate', borders: 'paper', borderWidth: 1.5, highlight: 'ink', multiply: false, pin: 'ink', titleTo: 4, titleSteps: [3], listGap: 12, gap: 36, keyFill: 'ink', keyText: 'inkText', keyLine: 'ink', keyLineWidth: 4 },
+    map: { wholeTall: true, card: false, land: 'textPlate', coast: 'coastLine', borders: 'landLine', borderWidth: 1.5, highlight: 'ink', multiply: false, pin: 'ink', titleTo: 4, titleSteps: [3], listGap: 12, gap: 36, keyFill: 'ink', keyText: 'inkText', keyLine: 'ink', keyLineWidth: 4 },
     diagram: { card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 18, gap: 56, margin: 12, platePad: 10, plate: 'paper', arrow: 'ink', arrowWidth: 12, head: 34, text: 'paper', edgeText: 'ink', titleSteps: [3], titleGap: 40, dim: 1, current: false, advance: 0.48 },
     timeline: { whenSteps: [5, 4], whatSteps: [3, 2], whenLines: 2, whatLines: 3, rail: 48, dot: 12, ring: 1.7, rule: 'ink', ruleWidth: 4, dotFill: 'ink', lit: 'ink', when: 'ink', what: 'ink', partGap: 24, gap: 24, titleSteps: [3], titleGap: 40, advance: 0.45 },
     // lineHeight 1.3 (pop's 1.4): at 16:9 the 72-unit margins leave room for 10 rows at 1.4, and the example has 11
-    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.3, pad: 32, steps: [2, 3], card: false, fill: 'ink', line: 'ink', lineWidth: 10, roles: { plain: 'inkText', keyword: 'inkText', string: 'inkText', number: 'inkText', comment: 'inkText', name: 'inkText', punct: 'inkText' }, highlight: { band: 'plate', text: 'plateText' }, removed: 'inkText', added: 'inkText', strike: 6, prompt: 'inkText', heroAdvance: 0.45 },
+    code: { font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.3, pad: 32, steps: [2, 3], card: false, fill: 'ink', line: 'ink', lineWidth: 10, roles: { plain: 'inkText', keyword: 'inkText', string: 'inkText', number: 'inkText', comment: 'inkText', name: 'inkText', punct: 'inkText' }, highlight: { band: 'cardPlate', text: 'cardPlateText' }, removed: 'inkText', added: 'inkText', strike: 6, prompt: 'inkText', heroAdvance: 0.45 },
     feed: { steps: [2, 3, 4], maxLines: 4, pad: 26, gap: 24, share: 0.82, radius: 0, bold: 900, me: { fill: 'ink', text: 'inkText' }, them: { fill: 'accent', text: 'accentText' }, card: { fill: 'ink', text: 'inkText' }, discs: ['ink'], discText: 'inkText', dots: 'ink', title: 'ink', line: 'ink', lineWidth: 6, shadow: false },
     // fitTall: at 9:16 the picture is a cut-out filling the band over its caption in the ground's ink (a bleed's caption
     // card in ink was lost on the ink ground and left the band's lower part to a dark picture)

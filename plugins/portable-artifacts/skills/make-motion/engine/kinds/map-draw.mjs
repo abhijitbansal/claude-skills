@@ -48,7 +48,9 @@ function disc(x, y, r) {
 function mapGroup(shot, ctx, data, { x, y, s }, times) {
   const { look } = ctx;
   const style = ctx.data;
-  const land = node('path', `${shot.id}.land`, { d: data.land, fill: colourOf(look, style.land) });
+  // a look whose land may be the ground's own colour (poster on blue) outlines it: style.coast, drawn borderWidth wide
+  const coast = style.coast === undefined ? {} : { stroke: colourOf(look, style.coast), strokeWidth: (style.borderWidth * ctx.unit) / s };
+  const land = node('path', `${shot.id}.land`, { d: data.land, fill: colourOf(look, style.land), ...coast });
   const lit = data.highlights.map((h, k) => node('path', `${shot.id}.hl${k}`, { d: h.d, fill: colourOf(look, style.highlight), ...(style.multiply ? { blend: 'multiply' } : {}) }, { tracks: { opacity: arrivalTrack(times.highlights[k] ?? 0) } }));
   const borders = node('path', `${shot.id}.borders`, { d: data.borders, stroke: colourOf(look, style.borders), strokeWidth: (style.borderWidth * ctx.unit) / s });
   return node('group', `${shot.id}.map`, { x, y, scale: s }, { children: [land, ...lit, borders] });

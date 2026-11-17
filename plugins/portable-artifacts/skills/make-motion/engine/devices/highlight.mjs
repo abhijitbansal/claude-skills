@@ -100,7 +100,9 @@ function buildHighlight(params) {
   const style = styleOf(look, 'highlight');
   if (style.shape === 'pill') return pillHighlight({ id, box, at, look, unit, stops }, style);
   const [x, y, w, h] = box;
-  const band = h * BAND_HEIGHT;
+  // style.fit: the band is the box itself, not taller (poster: a bar over a stack's cap box, whose lines are set close,
+  // would reach the line above and below)
+  const band = h * (style.fit === true ? 1 : BAND_HEIGHT);
   const area = [x, y - (band - h) / 2, w, band];
   const hand = isHand(look);
   const d = hand

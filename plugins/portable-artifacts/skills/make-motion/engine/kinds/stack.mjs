@@ -14,7 +14,7 @@ import { track } from '../time/track.mjs';
 import { layoutText, reservedFont } from '../text/layout.mjs';
 import { stackLines, FORCE_MARK, isWeakEnd } from '../text/breaks.mjs';
 import { gridX, gridSpan } from '../looks/index.mjs';
-import { landing } from '../devices/shared.mjs';
+import { landing, colourOf } from '../devices/shared.mjs';
 import { STRETCH_KEYWORDS } from '../fonts/index.mjs';
 import { emphasisFlags } from './emphasis-flags.mjs';
 import { turnedStack, turnedWordBox } from './stack-turn.mjs';
@@ -257,7 +257,17 @@ export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = fa
 // colour (poster's scale) recolours nothing; a look whose hook opens at full ink (look.hookInk) shows every word in ink
 // from frame 0 instead of a ghost; a look that opens composed (opensSet) sets every word from frame 0. `widen`: the
 // keyword an emphasised word steps to on its beat (its line is measured at it).
-function wordTracks(look, { at, emphasised }, { ghost, matched, widen }) {
+function wordTracks(look, time, flags) {
+  const tracks = baseWordTracks(look, time, flags);
+  const { bar } = flags; // a highlight bar lands under this word at `bar` (look.devices.highlight.text): the word takes the bar's text colour
+  if (bar === undefined) return tracks;
+  const to = colourOf(look, look.devices.highlight.text);
+  // half way through the bar's wipe (it lands on `bar`): the bar is under the word by the time its colour is the bar's text
+  const from = Math.max(0, bar - look.moves.draw.dur / 2);
+  return { ...tracks, fill: track([{ t: 0, v: look.palette.ink }, { t: from, v: look.palette.ink }, { t: from + look.moves.emphasize.dur, v: to, ease: FILL_EASE }]) };
+}
+
+function baseWordTracks(look, { at, emphasised }, { ghost, matched, widen }) {
   const keeps = emphasisFlags(look).keepsColour === true;
   const lit = emphasised && !keeps ? look.palette.accent : look.palette.ink;
   const turn = (from) => track([{ t: 0, v: from }, { t: at, v: from }, { t: at + look.moves.emphasize.dur, v: lit, ease: FILL_EASE }]);
@@ -270,10 +280,11 @@ function wordTracks(look, { at, emphasised }, { ghost, matched, widen }) {
 
 /**
  * The stack's nodes: the hero group of line nodes, the kicker tag (or nothing), and the targets' boxes.
- * @param {{ times: { at: number, emphasised: boolean }[], ghost: boolean, matched: boolean, hero: string }} opts
+ * @param {{ times: { at: number, emphasised: boolean }[], ghost: boolean, matched: boolean, hero: string, bars?: Map<number, number> }} opts
  *   times: per word index, when it is spoken and whether it is emphasised
+ *   bars: word index -> the time a highlight bar lands under it; the word takes the look's bar text colour from then
  */
-export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero }) {
+export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bars = new Map() }) {
   const { look, unit, seed, measure } = ctx;
   const boxes = [];
   const children = placed.lines.map((line, k) => {
@@ -287,7 +298,7 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero }) {
     // a turned line (stack-turn.mjs) is placed by its layout's top-left corner and turned about it
     const at = line.turn === undefined ? { x: line.x, y } : { x: line.turn.x, y: line.turn.y, rotate: line.turn.rotate };
     return node('text', `${hero}.line${k}`, { ...at, layout: line.layout, font: line.font, fill: look.palette.ink, role: 'hero', stack: hero }, {
-      wordTracks: row.map((i) => wordTracks(look, times[i], { ghost, matched, widen })),
+      wordTracks: row.map((i) => wordTracks(look, times[i], { ghost, matched, widen, bar: bars.get(i) })),
     });
   });
   const group = node('group', hero, {}, { children });

@@ -304,6 +304,22 @@ function stackEmphasis(shot, text, ctx) {
   return { lead, ...(flags.widens === true && lead.size > 0 ? { widen: widerKeyword(ctx.look.fonts.display.width) } : {}) };
 }
 
+// A look whose highlight styles the words over its bar (look.devices.highlight.text, poster: the bar's own ink, 4.5:1 on
+// it): word index -> the time its bar lands (the earliest, when several do), for a highlight on a word or on the text.
+function barTimes(shot, ctx, count) {
+  const bars = new Map();
+  if (ctx.look.devices?.highlight?.text === undefined) return bars;
+  (shot.on ?? []).forEach((item) => {
+    if (item.do !== 'highlight') return;
+    const target = item.target ?? 'text';
+    const word = /^word:(\d+)$/.exec(target);
+    const covered = word !== null ? [Number(word[1])] : target === 'text' ? Array.from({ length: count }, (_, i) => i) : [];
+    const at = ctx.at(item.at);
+    covered.forEach((i) => bars.set(i, Math.min(at, bars.get(i) ?? at)));
+  });
+  return bars;
+}
+
 // A stack (stack.mjs): one text node per line inside the hero group, the kicker as a tag over the first line.
 function expandStacked(shot, ctx) {
   const { look, unit, timing } = ctx;
@@ -314,7 +330,7 @@ function expandStacked(shot, ctx) {
   const texts = placed.lines.flatMap((line) => line.layout.lines[0].words.map((w) => w.text));
   const times = wordTimes(texts, timing, cutReveal(shot, ctx)).map(({ at, spoken }) => ({ at, emphasised: spoken !== null && timing.words[spoken].emphasis }));
   const hero = heroId(shot, 'text');
-  const { group, kicker, boxes } = stackNodes(shot, ctx, placed, { times, ghost: ghostWords(ctx), matched: arrivesMatched(shot, ctx), hero });
+  const { group, kicker, boxes } = stackNodes(shot, ctx, placed, { times, ghost: ghostWords(ctx), matched: arrivesMatched(shot, ctx), hero, bars: barTimes(shot, ctx, texts.length) });
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'text', behind });
   return {
