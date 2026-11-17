@@ -10,6 +10,7 @@ import '../../engine/kinds/index.mjs';
 import { lookForFormat } from '../../engine/looks/index.mjs';
 import { sampleGraph } from '../../engine/graph/sample.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
+import { regionMarkIds } from '../../engine/review/regions.mjs';
 import { safeRectFor } from '../../scripts/v2/review.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { barInput, drawnLeaves, contentOf, snapshotOf } from './helpers/bar.mjs';
@@ -45,7 +46,8 @@ for (const format of FORMATS) {
     test(`ledger ${kind} at ${format}: the example builds with no finding from the frame review`, () => {
       const input = barInput(kind, shot, { look: LOOK, format, prepare: PREPARED.includes(kind) });
       const resolved = lookForFormat(input.look, format);
-      const ctx = { look: resolved, canvas: input.canvas, mode: registries.modes.get('pro'), shotId: shot.id, shotIndex: 0, safe: safeRectFor(input.canvas, resolved) };
+      // regionMarks: a mark the example draws on a region is held inside the frame (regions.mjs region-off-frame)
+      const ctx = { look: resolved, canvas: input.canvas, mode: registries.modes.get('pro'), shotId: shot.id, shotIndex: 0, safe: safeRectFor(input.canvas, resolved), regionMarks: regionMarkIds(shot) };
       const findings = timesOf(input.duration).flatMap((t) => auditFrame(snapshotOf(sampleGraph(input.nodes, t)), { ...ctx, t })
         .map((f) => `at ${t.toFixed(2)} s: ${f.kind} ${f.rule}: ${f.message}`));
       assert.deepEqual([...new Set(findings)], []);

@@ -84,7 +84,10 @@ test('a step-4 hero is at least three times the secondary floor (five ascending 
 });
 
 test('camera locked with no drift', () => {
-  assert.deepEqual({ ...look().camera }, { drift: 0, style: 'locked' });
+  const { closeUp, ...camera } = look().camera;
+  assert.deepEqual(camera, { drift: 0, style: 'locked' });
+  // the close-up shares (region-off-frame, ruling 4) are data for the close-up's size, not a camera move
+  assert.deepEqual(Object.keys(closeUp ?? {}).sort(), ['height', 'minGain', 'pad', 'width']);
 });
 
 test('cutPalette is the four named cuts', () => {

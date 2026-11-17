@@ -17,6 +17,8 @@
 import { registries } from '../../engine/registry.mjs';
 import { resolveLook, shotTime } from '../../engine/graph/film.mjs';
 import { auditFrame, textStatesIn, textLandings } from '../../engine/review/frame.mjs';
+import { regionMarkIds } from '../../engine/review/regions.mjs';
+import { withLookEmphasis } from '../../engine/kinds/emphasis-fallback.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
 import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
@@ -211,7 +213,17 @@ function frameContext(film, timeline, restingOf, { frame, whole }, backgrounds =
     isFirstShot: shot.index === 0, ...restingOf.get(shot.id),
     opensShot: opensShotAt(film, timeline, frame, whole),
     background: backgrounds[shot.index],
+    regionMarks: regionMarksOf(film)[shot.index] ?? [],
   };
+}
+
+/** Per shot, the ids of the marks it draws on its regions (the frame review's ctx.regionMarks), from the shots as the
+ *  engine builds them: an emphasis device the look does not draw is taken out of `on` first, which renumbers the
+ *  devices after it. Cached per film object. */
+const REGION_MARKS = new WeakMap();
+export function regionMarksOf(film) {
+  if (!REGION_MARKS.has(film)) REGION_MARKS.set(film, (withLookEmphasis(film).film.shots ?? []).map(regionMarkIds));
+  return REGION_MARKS.get(film);
 }
 
 function frameFindings(film, timeline, restingOf, snap, backgrounds) {

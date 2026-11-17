@@ -339,7 +339,9 @@ export const rectPath = (w, h) => `M0 0H${w}V${h}H0Z`;
 function extrasFor(name, box, ctx) {
   if (name === 'arrow') {
     const reach = ARROW_REACH * ctx.unit;
-    const x = box[0] - reach < 0 ? box[0] + box[2] + reach : box[0] - reach;
+    // from the left of the target, else its right, else (a target as wide as the frame) under its middle
+    const left = box[0] - reach, right = box[0] + box[2] + reach;
+    const x = left >= 0 ? left : right <= ctx.canvas.w ? right : box[0] + box[2] / HALF;
     const y = box[1] + box[3] + reach > ctx.canvas.h ? box[1] - reach : box[1] + box[3] + reach;
     return { from: [x, y] };
   }

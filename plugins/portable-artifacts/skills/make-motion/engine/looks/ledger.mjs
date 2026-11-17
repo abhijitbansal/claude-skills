@@ -11,6 +11,16 @@ const GRID = Object.freeze({ columns: 12, margin: 96, gutter: 24 });
 const GRID_TALL = Object.freeze({ columns: 12, margin: 72, gutter: 20 });
 const RULE_ALPHA = 0.6; // the grid's hairlines in the rule colour at this alpha
 const ENTER = Object.freeze({ ease: 'outCubic', dur: 0.45, dist: 16 });
+// A region close-up (controller ruling 4): a window of the source round the region, CLOSE_UP_PAD of the region's size
+// more on every side (the words at its edge are not cut, and a ruled circle, 1.25 times the region, rings it on the
+// picture instead of running past the frame as pop's region-only close-up does). The window takes CLOSE_UP_WIDTH of the
+// width between the margins, at most CLOSE_UP_HEIGHT of the height. A close-up that would draw the region less than
+// CLOSE_UP_GAIN times as wide as the establishing picture does (a wide region on a tall frame: a thin strip that reads
+// as a zoom out) is not cut to: the region is ringed on the establishing picture instead.
+const CLOSE_UP_PAD = 0.2;
+const CLOSE_UP_GAIN = 1.25;
+const CLOSE_UP_WIDTH = 0.86;
+const CLOSE_UP_HEIGHT = 0.7;
 
 // tracking(sizeUnits, role = 'display') -> em: sentence case throughout, so labels are not tracked out
 function tracking(sizeUnits, role = 'display') {
@@ -70,8 +80,9 @@ export const ledger = {
     settle: { ease: 'inOutCubic', dur: 0.6 },
   },
   wordStagger: 0,
-  // no drift: a locked camera keeps the grid on the columns; a region close-up is a cut, not a push
-  camera: { drift: 0, style: 'locked' },
+  // no drift: a locked camera keeps the grid on the columns; a region close-up is a cut, not a push, to a window of the
+  // source round the region (the CLOSE_UP constants above)
+  camera: { drift: 0, style: 'locked', closeUp: { width: CLOSE_UP_WIDTH, height: CLOSE_UP_HEIGHT, pad: CLOSE_UP_PAD, minGain: CLOSE_UP_GAIN } },
   cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'match', 'fade', 'wipe'],

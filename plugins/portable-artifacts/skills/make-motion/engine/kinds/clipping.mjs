@@ -14,7 +14,7 @@ import { track, sample } from '../time/track.mjs';
 import { landing, pathPoints, roundedRect, colourOf } from '../devices/shared.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { regionMark } from './region-mark.mjs';
-import { closeUpPlan, closeUps } from './close-ups.mjs';
+import { closeUpPlan, closeUps, closeUpRegionWidth } from './close-ups.mjs';
 import { clippingProblems, establishingFindings } from './clipping-rules.mjs';
 import { pinnedRoom, captionNodes, kickerNodes } from './clipping-captions.mjs';
 import { stackArea, centredTop } from './stack.mjs';
@@ -267,6 +267,17 @@ function reachHeight(w, h, turn, { peak, edge, keyline }) {
 const pictureSize = (ctx, picture, crop, room) => withinReach(ctx, plainSize(ctx, picture, crop, room), room);
 
 const isRegionEvent = (item) => regionOf(item.target) !== null;
+
+// Does a locked look's close-up enlarge the shot's first marked region? Always, unless the look sets a least gain
+// (look.camera.closeUp.minGain, ledger): the region's width on its close-up over its width on the establishing picture
+// (`shownWidth`: the whole picture's drawn width, so a region of share fw stands fw * shownWidth wide). A wide region on
+// a tall frame is drawn no larger on its close-up than in the establishing window, and a cut to it reads as a zoom out.
+function closeUpGains(shot, ctx, { picture, area, shownWidth }) {
+  const least = ctx.look.camera?.closeUp?.minGain;
+  const region = shot.regions?.[regionOf((shot.on ?? []).find(isRegionEvent)?.target)];
+  if (least === undefined || !region) return true;
+  return closeUpRegionWidth(region, picture, area, ctx.look) >= least * region[2] * shownWidth;
+}
 const isRegionHighlight = (item) => item.do === 'highlight' && isRegionEvent(item);
 
 // The parts of the picture card a region scrim covers: the card's paper and tape strips or, in a look without a card,
@@ -347,20 +358,22 @@ function pictureLayout(shot, ctx, room) {
     const sx = w / cw, sy = h / ch;
     return [(fx * picture.width - cx0) * sx - w / HALF, (fy * picture.height - cy0) * sy - h / HALF, fw * picture.width * sx, fh * picture.height * sy];
   };
-  // A moving camera pushes in on a region; a locked one cuts to a close-up of it instead (close-ups.mjs).
-  const plan = closeUp ? closeUpPlan(shot, ctx) : null;
+  // A moving camera pushes in on a region; a locked one cuts to a close-up of it instead (close-ups.mjs), unless the
+  // close-up would not enlarge it (closeUpGains): then the region is marked on the establishing picture.
+  const area = availableArea(ctx, room);
+  const plan = closeUp && closeUpGains(shot, ctx, { picture, area, shownWidth: w * (picture.width / (crop ?? [0, 0, picture.width])[2]) }) ? closeUpPlan(shot, ctx) : null;
   if (plan && plan.cuts.length > 0) requireDevice(look, 'punch', 'clipping');
-  const marks = closeUp ? [] : regionMarks(shot, ctx, { cover: scrimOutlines(parts, tilt), tilt, local });
-  const group = pictureGroup(shot, ctx, { hero, centre, children: [...parts, ...marks.map((m) => m.group)], hideAt: plan?.cuts[0]?.at });
-  // each marker frame's box on the canvas at rest, by region name (an editorial caption card moves under it)
-  const frames = Object.fromEntries(marks.map((m) => [m.region, turnedBox(centre, turn, m.frame)]));
   // a region's box is the part of it the drawn picture shows (an establishing crop may cut it)
   const shown = (r) => {
     const left = Math.max(r[0], -w / HALF), top = Math.max(r[1], -h / HALF);
     return [left, top, Math.max(0, Math.min(r[0] + r[2], w / HALF) - left), Math.max(0, Math.min(r[1] + r[3], h / HALF) - top)];
   };
+  const marks = plan ? [] : regionMarks(shot, ctx, { cover: scrimOutlines(parts, tilt), tilt, local: (r) => shown(local(r)) });
+  const group = pictureGroup(shot, ctx, { hero, centre, children: [...parts, ...marks.map((m) => m.group)], hideAt: plan?.cuts[0]?.at });
+  // each marker frame's box on the canvas at rest, by region name (an editorial caption card moves under it)
+  const frames = Object.fromEntries(marks.map((m) => [m.region, turnedBox(centre, turn, m.frame)]));
   const inPicture = Object.fromEntries(Object.entries(shot.regions ?? {}).map(([name, region]) => [`${REGION_PREFIX}${name}`, turnedBox(centre, turn, shown(local(region)))]));
-  const close = plan ? closeUps(shot, ctx, { picture, area: availableArea(ctx, room), centre, plan }) : { nodes: [], camera: [], boxes: {} };
+  const close = plan ? closeUps(shot, ctx, { picture, area, centre, plan }) : { nodes: [], camera: [], boxes: {} };
   const boxes = { image: turnedBox(centre, turn, [-w / HALF, -h / HALF, w, h]), ...inPicture, ...close.boxes };
   return { hero, group, plan, close, boxes, frames };
 }
@@ -406,7 +419,8 @@ function expandClipping(given, ctx) {
   const drift = defaultCamera(look, timing, unit);
   const pins = pinnedParts(shot, ctx, laid, followOf(laid, pushed, push, drift));
   const boxes = { ...laid.boxes, ...pins.boxes };
-  const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'image', skip: closeUp ? isRegionEvent : isRegionHighlight });
+  // a close-up draws its region's devices itself; without one they land on the region of the picture
+  const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'image', skip: laid.plan ? isRegionEvent : isRegionHighlight });
   return {
     nodes: placeDevices([fieldNode(shot, ctx), laid.group, ...laid.close.nodes, ...pins.nodes], devices),
     camera: [...drift, ...(push ? [push] : []), ...laid.close.camera, ...deviceCamera(devices)],

@@ -52,6 +52,7 @@ import { unitOf } from '../units.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, unionBox as union } from '../kinds/shared.mjs';
 import { contrastFindings } from './contrast.mjs';
 import { markBoxes, showsItself } from './marks.mjs';
+import { regionFindings } from './regions.mjs';
 import { registries } from '../registry.mjs';
 import '../modes/index.mjs';
 
@@ -575,7 +576,9 @@ export function openingFindings(sampled, ctx) {
  *   restScales: node id -> the accumulated scale it rests at in its shot (textScalesIn); a text is judged only while it
  *   stands within 0.2% of it (SETTLE_TOLERANCE). restWords: node id -> per word index the scale it rests at; a word
  *   is at rest within 0.2% of it (1 when absent). opensShot: the frame is the one its shot opens on (the opening rule,
- *   openingFindings).
+ *   openingFindings). regionMarks: the ids of the marks the shot draws on its regions (regions.mjs regionMarkIds); a
+ *   mark among them that runs past the frame is a finding (region-off-frame), as is a text the frame edge slices during
+ *   a close-up (frame-edge).
  * @returns {{ kind: 'mechanical' | 'creative', path: string, message: string, rule: string, node: string, role?: string }[]}
  */
 export function auditFrame(sampled, ctx) {
@@ -584,6 +587,8 @@ export function auditFrame(sampled, ctx) {
   const { texts, unmeasured } = visibleTexts(sampled, unit, ctx);
   const lost = unmeasured.map((id) => finding(ctx, MECHANICAL, 'measure', id, `${id}: could not be measured`));
   const opening = ctx.opensShot === true ? openingFindings(sampled, ctx) : [];
-  const contrast = contrastFindings(texts, sampled, ctx, (kind, rule, node, message, role) => finding(ctx, kind, rule, node, message, role));
-  return [...lost, ...opening, ...contrast, ...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit), ...captionRules(texts, sampled, ctx, unit)];
+  const make = (kind, rule, node, message, role) => finding(ctx, kind, rule, node, message, role);
+  const contrast = contrastFindings(texts, sampled, ctx, make);
+  const regions = regionFindings(sampled, texts, ctx, make);
+  return [...lost, ...opening, ...contrast, ...regions,...textRules(texts, ctx), ...overlapRules(texts, ctx, unit), ...wordOverlapRules(texts, ctx, unit), ...hierarchyRules(texts, ctx), ...wordRules(texts, ctx), ...highlightRules(texts, ctx), ...cardRules(texts, textCards(sampled), ctx, unit), ...coverRules(texts, sampled, ctx, unit), ...captionRules(texts, sampled, ctx, unit)];
 }
