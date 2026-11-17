@@ -119,5 +119,8 @@ export const highlight = Object.freeze({
   name: 'highlight',
   summary: 'A marker swipe that wipes in behind a phrase.',
   supports: styledBy('highlight'),
+  // an emphasis device: a look that does not draw it gives its target word the look's own emphasis instead
+  // (kinds/emphasis-fallback.mjs)
+  emphasis: true,
   build: buildHighlight,
 });

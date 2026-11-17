@@ -44,9 +44,9 @@ before(() => {
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
 
-test('the sweep covers every kind ledger ships: sixteen less the two it parks (number, map)', () => {
-  assert.equal(SHIPPED.length, 14);
-  assert.deepEqual(registries.kinds.names().filter((kind) => isParkedKind(look, kind)), ['number', 'map']);
+test('the sweep covers every kind ledger ships: sixteen less the one it parks (number)', () => {
+  assert.equal(SHIPPED.length, 15);
+  assert.deepEqual(registries.kinds.names().filter((kind) => isParkedKind(look, kind)), ['number']);
 });
 
 for (const format of FORMATS) {

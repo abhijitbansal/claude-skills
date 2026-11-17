@@ -20,9 +20,9 @@ const FORMATS = Object.freeze(['16:9', '9:16']);
 const AUDIT_STEP = 0.5; // s between audited frames
 const MAX_EMPTY = 0.35; // of the tall composition height
 const PREPARED = Object.freeze(['map', 'code']); // kinds whose example needs the prepare step
-// A kind parked in ledger (isParkedKind: number, map) is not held to the sweep or the tall rule: parking is what a
-// failure there leads to (looks-four plan, Global Constraints).
-const PARKED_IN_LEDGER = Object.freeze(['number', 'map']);
+// A kind parked in ledger (isParkedKind: number) is not held to the sweep or the tall rule: parking is what a failure
+// there leads to (looks-four plan, Global Constraints).
+const PARKED_IN_LEDGER = Object.freeze(['number']);
 const look = () => registries.looks.get(LOOK);
 const flat = (nodes) => nodes.flatMap((n) => [n, ...flat(n.children ?? [])]);
 const timesOf = (duration) => [...Array.from({ length: Math.floor(duration / AUDIT_STEP) + 1 }, (_, i) => i * AUDIT_STEP), duration];
@@ -155,6 +155,46 @@ test('ledger statement with a kicker at 16:9: the claim hangs right under the ta
   assert.ok(claim[1] >= tag[1] + tag[3], 'under the tag');
   assert.ok(claim[1] - (tag[1] + tag[3]) <= 4 * gutter, `${(claim[1] - tag[1] - tag[3]).toFixed(0)} px under the tag (at most four gutters)`);
   assert.ok(claim[1] + claim[3] <= 1080 - look().grid.margin, 'inside the bottom margin');
+});
+
+for (const format of FORMATS) {
+  test(`ledger quote at ${format}: the quotation in the serif with a 4-unit accent rule down its left`, () => {
+    const shot = { id: 'voice', show: 'quote', say: 'Every chart should show its work.', by: 'The data desk' };
+    const { nodes, timing } = expandShot(shot, LOOK, format);
+    const snap = flat(snapshotOf(sampleGraph(nodes, timing.duration)));
+    const text = snap.find((n) => n.id === 'voice.text'), bar = snap.find((n) => n.id === 'voice.bar');
+    assert.equal(text.props.font.family, look().fonts.text.family);
+    assert.ok(bar, 'a rule down the left');
+    assert.equal(bar.props.fill, look().palette.accent);
+    assert.ok(Math.abs(bar.bbox[2] - 4) < 0.5, `four units wide: ${bar.bbox[2]}`);
+    assert.ok(bar.bbox[0] + bar.bbox[2] <= text.bbox[0], 'left of the quotation');
+    assert.ok(bar.bbox[3] >= text.bbox[3] * 0.9, 'down the quotation\'s height');
+  });
+
+  test(`ledger end at ${format}: the ask in the serif, the mark on the look's tag`, () => {
+    const shot = { id: 'close', show: 'end', say: 'Every number, with its source.', ask: 'Start today', mark: 'make-motion' };
+    const { nodes, timing } = expandShot(shot, LOOK, format);
+    const snap = flat(snapshotOf(sampleGraph(nodes, timing.duration)));
+    const ask = snap.find((n) => n.type === 'text' && n.props.layout.lines.some((l) => l.words.some((w) => w.text === 'today')));
+    assert.equal(ask.props.font.family, look().fonts.text.family, 'the ask in the serif');
+    const plate = snap.find((n) => n.id === 'close.mark.plate');
+    assert.ok(plate, 'the mark on a tag plate');
+    assert.equal(plate.props.fill, look().palette.accent);
+    assert.equal(snap.find((n) => n.id === 'close.mark.text').props.fill, look().palette.paper);
+  });
+}
+
+test('ledger draws reference lines for line and area charts only: bars and columns carry their values', () => {
+  const data = [{ label: 'Mar', value: 92 }, { label: 'Apr', value: 97 }, { label: 'May', value: 104 }, { label: 'Jun', value: 118 }];
+  const refsOf = (type) => {
+    const shot = { id: 'r', show: 'chart', type, title: 'Orders climbed', say: 'Orders climbed every month.', data };
+    const { nodes, timing } = expandShot(shot, LOOK, '16:9');
+    return flat(sampleGraph(nodes, timing.duration)).filter((n) => /^r\.(ref|tick)\./.test(n.id)).length;
+  };
+  assert.ok(refsOf('line') > 0, 'line: reference lines');
+  assert.ok(refsOf('area') > 0, 'area: reference lines');
+  assert.equal(refsOf('bar'), 0, 'bar: none');
+  assert.equal(refsOf('column'), 0, 'column: none');
 });
 
 test('ledger line chart whose axis does not start at zero labels its baseline value', () => {

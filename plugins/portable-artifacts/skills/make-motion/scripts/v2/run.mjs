@@ -15,6 +15,8 @@ import { performance } from 'node:perf_hooks';
 import { findFfmpeg, findFfprobe } from '../lib/ffmpeg.mjs';
 import { registries } from '../../engine/registry.mjs';
 import { PlacementError, buildTimeline } from '../../engine/script/timing.mjs';
+import { withLookEmphasis, fallbackNotice } from '../../engine/kinds/emphasis-fallback.mjs';
+import { resolveLook } from '../../engine/graph/film.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { SpecError, readRecording, timedAnchorErrors } from './spec.mjs';
 import { openSession, pageErrorMessage, machineMessage, canvasSize } from './session.mjs';
@@ -479,6 +481,8 @@ async function execute(options, state, io) {
   // so does a parked kind (or chart type) in the film's look: one line each, and the report's `kinds`
   state.kinds = experimentalKinds(film);
   for (const entry of state.kinds) io.log(experimentalKindLine(entry));
+  // an emphasis device the look does not draw takes the look's own emphasis: one info line per event, never a finding
+  for (const entry of withLookEmphasis(film).moved) io.log(fallbackNotice(resolveLook(film).name, entry));
   // --outline makes no voice (it needs only Node): its times are the word-count estimate, and it says so.
   const voiced = film.voice !== undefined && options.outline !== true;
   const made = !voiced ? null

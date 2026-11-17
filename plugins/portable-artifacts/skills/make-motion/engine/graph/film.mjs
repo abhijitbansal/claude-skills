@@ -17,6 +17,7 @@ import { resolveAnchor } from '../script/anchors.mjs';
 import { captionsOn, shotCaptions, kindContext } from '../captions/index.mjs';
 import { sampleGraph } from './sample.mjs';
 import { handLayer } from '../hand/index.mjs';
+import { withLookEmphasis } from '../kinds/emphasis-fallback.mjs';
 import { localMatrix } from '../page/bounds.mjs';
 import { camera as trackCamera, applyCamera, layeredCamera } from './camera.mjs';
 
@@ -199,8 +200,10 @@ function smearedFrame(shot, args, frame) {
  * @returns {{ duration: number, frameCount: number, look: object, frameAt(t): { background: string, sampled: object[] },
  *   sampleAt(t): object[], sampleShot(index, t): object[], backgrounds: string[] }}
  */
-export function buildFilm({ film, timeline, measure, assets = new Map(), canvas, viralInsets = null, prepared = {} }) {
-  if (!film || !Array.isArray(film.shots)) throw new Error('buildFilm: film must have a shots array');
+export function buildFilm({ film: given, timeline, measure, assets = new Map(), canvas, viralInsets = null, prepared = {} }) {
+  if (!given || !Array.isArray(given.shots)) throw new Error('buildFilm: film must have a shots array');
+  // the shots buildTimeline timed: an emphasis device the look does not draw is the look's emphasis on its word
+  const { film } = withLookEmphasis(given);
   if (!timeline || timeline.shots?.length !== film.shots.length) throw new Error('buildFilm: timeline must have one entry per shot (see buildTimeline)');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
   if (!(canvas?.w > 0 && canvas?.h > 0)) throw new Error('buildFilm: canvas must be { w, h }');

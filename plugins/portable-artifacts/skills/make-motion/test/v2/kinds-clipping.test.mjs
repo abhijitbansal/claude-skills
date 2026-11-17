@@ -14,6 +14,7 @@ import { buildTimeline } from '../../engine/script/timing.mjs';
 import { gridX } from '../../engine/looks/index.mjs';
 import { landing } from '../../engine/devices/shared.mjs';
 import { establishingFindings } from '../../engine/kinds/clipping-rules.mjs';
+import { withLookEmphasis } from '../../engine/kinds/emphasis-fallback.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { validateFilm, SpecError } from '../../scripts/v2/spec.mjs';
 import { loadFilm } from '../../scripts/v2/pipeline.mjs';
@@ -300,14 +301,21 @@ test('pop clippings never push the camera, and the pop field ignores the camera'
   assert.equal(out[0].scale, 1, 'a punch cut leaves a fixed field alone');
 });
 
-test('the validator lets a clipping take a highlight on a region in pop, and still refuses highlight on text in pop', () => {
-  const pop = (shots) => validateFilm({ version: 2, mode: 'viral', shots }, { specDir });
+// looks-four Task 4b (controller ruling): an emphasis device a look does not draw is no longer refused; the event takes
+// the look's own emphasis instead (kinds/emphasis-fallback.mjs), while a clipping still draws its own region highlight
+test('the validator lets a clipping take a highlight on a region in pop; a highlight pop does not draw falls back to its emphasis', () => {
+  const film = (shots) => ({ version: 2, mode: 'viral', shots });
+  const pop = (shots) => validateFilm(film(shots), { specDir });
   const clip = { id: 'c', show: 'clipping', src: 'shot.png', hold: 3, regions: { q: [0.1, 0.1, 0.2, 0.2] } };
-  assert.deepEqual(pop([{ ...clip, on: [{ at: 1, do: 'highlight', target: 'region:q' }] }]).errors, []);
-  const onImage = pop([{ ...clip, on: [{ at: 1, do: 'highlight', target: 'image' }] }]);
-  assert.match(onImage.errors[0].message, /device "highlight" is not supported by look "pop"/);
-  const onText = pop([{ id: 'a', show: 'statement', say: 'One file.', on: [{ at: 0, do: 'highlight', target: 'text' }] }]);
-  assert.match(onText.errors[0].message, /device "highlight" is not supported by look "pop"/);
+  const onRegion = [{ ...clip, on: [{ at: 1, do: 'highlight', target: 'region:q' }] }];
+  assert.deepEqual(pop(onRegion).errors, []);
+  assert.deepEqual(withLookEmphasis(film(onRegion)).moved, [], 'the clipping draws its region highlight itself');
+  const onImage = [{ ...clip, on: [{ at: 1, do: 'highlight', target: 'image' }] }];
+  assert.deepEqual(pop(onImage).errors, []);
+  assert.deepEqual(withLookEmphasis(film(onImage)).moved.map((m) => m.starred), [false]);
+  const onText = [{ id: 'a', show: 'statement', say: 'One file.', on: [{ at: 0, do: 'highlight', target: 'text' }] }];
+  assert.deepEqual(pop(onText).errors, []);
+  assert.deepEqual(withLookEmphasis(film(onText)).moved.map((m) => m.device), ['highlight']);
 });
 
 test('the push never shows the edge of the field', () => {

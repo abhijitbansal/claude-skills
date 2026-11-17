@@ -333,6 +333,9 @@ function checkDevice(item, at, ctx, kind) {
     return [{ path: pathJoin(at, 'do'), message: `"${item.do}" is built by shot kinds, not placed by an on event; the devices an on event can place: ${can.join(', ')}` }];
   }
   if (!ctx.look || supportsLook(found.value, ctx.look) || kindDrawsIt(item, kind)) return [];
+  // an emphasis device the look does not draw is not refused: its target takes the look's own emphasis, which make says
+  // in one info line (engine/kinds/emphasis-fallback.mjs)
+  if (found.value.emphasis === true) return [];
   const supported = placeable.filter((name) => supportsLook(ctx.regs.devices.get(name), ctx.look));
   const message = `device "${item.do}" is not supported by look "${ctx.look.name}"; it supports: ${supported.join(', ') || 'no devices'}`;
   return [{ path: pathJoin(at, 'do'), message }];

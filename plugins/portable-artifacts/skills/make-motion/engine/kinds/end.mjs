@@ -104,6 +104,7 @@ function clearCard(card, block, y, ctx) {
 function cardNodes(shot, ctx, parts, placed, data) {
   const { look, unit, seed } = ctx;
   const id = `${shot.id}.mark`;
+  if (data.markTag && parts.picture === null) return tagMark(shot, ctx, id, placed.box);
   const card = cardOf(ctx, id, placed.box, look.moves.enter.dur);
   const left = -parts.w / HALF + parts.pad, top = -parts.h / HALF + parts.pad;
   const picture = parts.picture === null ? [] : [node('image', `${id}.picture`, { src: shot.src, w: parts.picture.w, h: parts.picture.h, x: left, y: top })];
@@ -113,6 +114,18 @@ function cardNodes(shot, ctx, parts, placed, data) {
     fill: look.palette.ink, role: 'mark',
   })];
   return [cardGroup(card, id, [...picture, ...mark], { rotate: data.turn, fixed: true }), ...ringNodes(id, placed.box, ctx, data)];
+}
+
+// The mark as the look's tag (data.markTag, ledger: the tag is its sign-off), its right edge and bottom on the card's
+// place (`box`: bottom right, inside the margins), pinned to the frame; built at its own width, so a ruled tag draws no
+// rule. Its text is the film's mark (role 'mark', judged like any text).
+function tagMark(shot, ctx, id, box) {
+  const { look, unit, seed, measure } = ctx;
+  const build = (x, y) => registries.devices.get('tag').build({ id, box: [x, y, 1, 1], at: look.moves.enter.dur, look, unit, seed, measure, text: shot.mark });
+  const [, , w, h] = build(0, 0).boxes.tag;
+  const [group] = build(box[0] + box[2] - w, box[1] + box[3] - h).nodes;
+  const children = group.children.map((n) => (n.type === 'text' ? node('text', `${id}.text`, { ...n.props, role: 'mark' }, { tracks: n.tracks }) : n));
+  return [node('group', id, { ...group.props, fixed: true }, { tracks: group.tracks, children })];
 }
 
 // The slow ring (look.kinds.end.ring: { gap, width, dur } in units and seconds): a rounded outline `gap` outside the
@@ -146,8 +159,10 @@ function deskBlock(shot, ctx, data) {
   // the ask in the label face (look review 1: a small grotesque line read as off-system and vanished on the phone tile)
   // a third of the title, the largest the hero rule allows (director's note after look review 2: the step-2 ask was
   // lost on the phone tile); the title is the hero, the ask the second size, the mark the third
-  const font = fontFor(look, 'label', size / MIN_HERO_RATIO, unit);
-  const layout = layoutText({ text: setCase(look, 'label', shot.ask), font, maxWidth: span.w, measure });
+  // (a look may set it in another face: data.askFace, ledger: the serif, as its source lines)
+  const askFace = data.askFace ?? 'label';
+  const font = fontFor(look, askFace, size / MIN_HERO_RATIO, unit);
+  const layout = layoutText({ text: setCase(look, askFace, shot.ask), font, maxWidth: span.w, measure });
   const y = last + data.askGap * size + CAP_HEIGHT * font.size - layout.lines[0].y;
   return { title, ask: { font, layout, y }, span, top, bottom: y + layout.lines.at(-1).y };
 }

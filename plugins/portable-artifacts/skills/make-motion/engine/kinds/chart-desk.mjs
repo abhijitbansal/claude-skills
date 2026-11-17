@@ -96,7 +96,10 @@ function annotationNodes(shot, ctx, data, { plot, plotArea, size }) {
 /** The desk chart: { nodes, boxes } with the chart group carrying the hero id. */
 export function expandDeskChart(shot, ctx, data, hero) {
   const { look, canvas, unit } = ctx;
-  const style = chartStyle(ctx, data);
+  // a look may keep reference lines for some chart types only (data.refsTypes, ledger: line and area, whose axis needs
+  // labelling; bars and columns carry their values)
+  const base = chartStyle(ctx, data);
+  const style = data.refsTypes === undefined ? base : { ...base, refs: data.refsTypes.includes(shot.type) };
   const { font, gap } = style;
   const caption = captionTop(ctx);
   const wide = isWide(canvas);

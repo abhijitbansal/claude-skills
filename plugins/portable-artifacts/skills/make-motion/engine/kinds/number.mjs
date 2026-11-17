@@ -318,10 +318,12 @@ function plainDelta(ctx, id, words, { left, top, maxWidth, at }) {
 
 // The label in the display face at scale step `step`, in ink, with its ink starting at `left`, wrapped to the right
 // edge `right` (look review 1: mono capitals at headline size read as borrowed from another system).
+// A look may set it in another of its faces (look.kinds.number.labelFace, ledger: the serif).
 function deskLabel(shot, ctx, left, step, right) {
   const { look, unit, measure } = ctx;
-  const font = fontFor(look, 'display', sizeAt(look, step, unit), unit);
-  const layout = layoutText({ text: setCase(look, 'display', shot.label), font, maxWidth: right - left, measure });
+  const face = look.kinds?.number?.labelFace ?? 'display';
+  const font = fontFor(look, face, sizeAt(look, step, unit), unit);
+  const layout = layoutText({ text: setCase(look, face, shot.label), font, maxWidth: right - left, measure });
   const ink = firstLineInk(layout, font, measure);
   // up: first line's ink top to the last baseline
   return { font, layout, x: left - ink.left, up: ink.up + layout.lines.at(-1).y - layout.lines[0].y };

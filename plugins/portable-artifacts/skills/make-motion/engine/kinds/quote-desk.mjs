@@ -73,8 +73,10 @@ function cardLayout(shot, ctx, data, { span, plan, room, keep = true }) {
   const pad = data.pad * unit;
   // the text edge: `pad` in, or further when the opening mark (at the largest size) would hang off the paper; with a
   // large mark (data.mark: its size in quotations), `pad` in, the mark standing over the text (markDrop)
-  const maxFont = fontFor(look, 'display', data.max * unit, unit);
-  const markFont = data.mark ? fontFor(look, 'display', data.mark * data.max * unit, unit) : null;
+  // the quotation in the display face, or the face a look names (data.face, ledger: the serif)
+  const face = data.face ?? 'display';
+  const maxFont = fontFor(look, face, data.max * unit, unit);
+  const markFont = data.mark ? fontFor(look, face, data.mark * data.max * unit, unit) : null;
   const markDrop = (size) => (markFont ? markInk({ ...markFont, size: data.mark * size }, measure).height + look.grid.gutter * unit : 0);
   const edge = markFont ? pad : Math.max(pad, measure(OPEN_MARK, maxFont).width + maxFont.tracking * maxFont.size + HANG_INSET * unit);
   const width = span.w - edge - pad - (plan === null ? 0 : plan.reserve);
@@ -87,7 +89,7 @@ function cardLayout(shot, ctx, data, { span, plan, room, keep = true }) {
   const body = sentenceLines(setCase(look, 'display', quotationOf(shot)), data.sentenceLines);
   const text = `${markFont ? '' : OPEN_MARK}${body}${markFont ? '' : CLOSE_MARK}`;
   // breaks by sense, no line of one word: the fit trades size for a layout without one, down to its floor (fitText)
-  const opts = { text, font: fontFor(look, 'display', data.max * unit, unit), maxWidth: width, align: 'left', measure, optical: true, accept: noLoneLine };
+  const opts = { text, font: fontFor(look, face, data.max * unit, unit), maxWidth: width, align: 'left', measure, optical: true, accept: noLoneLine };
   const min = Math.max(MIN_HERO_RATIO * sizeAt(look, Math.min(...data.attrSteps), unit), keep ? heroFloor(look, unit) : 0);
   const quote = fitDisplay(opts, { min, max: data.max * unit, maxHeight: Math.max(1, maxHeight), maxLines: data.maxLines, tradeFloor: min }, look, unit);
   const size = quote.font.size;
@@ -208,7 +210,21 @@ function cardChildren(shot, ctx, lay, times) {
   const mark = lay.mark ? [markNode(shot, ctx, lay, ox, oy, plain ? 0 : times.words[0]?.at ?? 0)] : [];
   const close = lay.close ? [closeMarkNode(shot, ctx, lay, ox, oy, times.words.at(-1)?.at ?? 0)] : [];
   const attribution = lay.dropped.length ? [] : lay.pill ? [pillNode(shot, ctx, lay, ox, oy, times.by), by] : [rule, by, ...attributionEarth(shot, ctx, lay, ox, attrY, times.by)];
-  return { children: [...highlightBands(shot.id, placed, times.words, ctx, 'quote'), ...mark, quote, ...close, ...attribution], placed, attrY };
+  const bar = barNode(shot, ctx, lay, { ox, oy, at: times.words[0]?.at ?? 0 });
+  return { children: [...highlightBands(shot.id, placed, times.words, ctx, 'quote'), ...bar, ...mark, quote, ...close, ...attribution], placed, attrY };
+}
+
+// A rule down the quotation's left (data.bar: { width units, color }, ledger): on the block's left edge, from the first
+// line's cap line to the last line's descent, there from the first word (it opens the frame, so no shot opens empty). []
+// without it.
+function barNode(shot, ctx, lay, { ox, oy, at }) {
+  const bar = ctx.look.kinds?.quote?.bar;
+  if (!bar) return [];
+  const { layout, font } = lay.quote;
+  const top = oy + lay.textY + layout.lines[0].y - CAP_HEIGHT * font.size;
+  const bottom = oy + lay.textY + layout.lines.at(-1).y + WORD_DESCENT * font.size;
+  const w = bar.width * ctx.unit;
+  return [node('path', `${shot.id}.bar`, { d: rectPath(w, bottom - top), fill: colourOf(ctx.look, bar.color), x: ox, y: top }, { tracks: at > 0 ? enterTracks(ctx.look, ctx.unit, at, { y: top }) : {} })];
 }
 
 // The Earth mark hung before the attribution on its cap middle (data.earth, cosmos: the pale blue dot the quotation
@@ -254,8 +270,10 @@ function withCard(ctx, hero, box, lay, children, times, data) {
 }
 
 /** The desk quote: { nodes (the card group, the portrait), boxes } with the card group carrying the hero id. */
-export function expandDeskQuote(shot, ctx, data, times, hero) {
+export function expandDeskQuote(shot, ctx, given, times, hero) {
   const { look, canvas, unit, seed } = ctx;
+  // a look may let the quotation grow larger on a tall frame (data.maxTall, ledger), so it fills the height
+  const data = !isWide(canvas) && given.maxTall !== undefined ? { ...given, max: given.maxTall } : given;
   const span = isWide(canvas) ? editorialSpan(ctx, FIRST_COLUMN, data.toWide) : editorialSpan(ctx, data.fromTall, data.toTall);
   const plan = portraitPlan(shot, ctx, data, span);
   const margin = look.grid.margin * unit;

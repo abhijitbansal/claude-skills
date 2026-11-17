@@ -28,9 +28,8 @@ lookContract(NAME, {
   banned: [['rule', 'paper'], ['rule', WHITE]],
   secondaryMin: 46,
   kinds: registries.kinds.names(),
-  // number: its tall composition leaves 76% of the height empty; map: at 16:9 its title or its third place name breaks
-  // a rule (ledger-kinds.test.mjs); each parked in ledger alone
-  parked: { number: true, map: true },
+  // number: its tall composition leaves 76% of the height empty (ledger-kinds.test.mjs); parked in ledger alone
+  parked: { number: true },
 });
 
 // The canvases a field is planned for: the bled size fieldNode gives it (kinds/shared.mjs fieldNode).
@@ -76,6 +75,12 @@ test('a look without gridTall resolves to itself at every format (desk, pop, cos
   for (const name of ['desk', 'pop', 'cosmos']) {
     for (const format of ['16:9', '9:16', '1:1', '4:5']) assert.equal(lookForFormat(registries.looks.get(name), format), registries.looks.get(name), `${name} ${format}`);
   }
+});
+
+test('a step-4 hero is at least three times the secondary floor (five ascending steps kept)', () => {
+  const { scale, secondary } = look();
+  assert.ok(scale[3] >= 3 * secondary.min, `step 4 ${scale[3]} >= 3 x ${secondary.min}`);
+  assert.ok(scale.every((v, i) => i === 0 || v > scale[i - 1]));
 });
 
 test('camera locked with no drift', () => {

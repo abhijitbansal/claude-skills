@@ -6,6 +6,7 @@ import { parseSay, SayError } from './say.mjs';
 import { registries } from '../registry.mjs';
 import '../modes/index.mjs';
 import { cutNameOf, filmLook, resolveShotCut } from '../cuts/resolve.mjs';
+import { withLookEmphasis } from '../kinds/emphasis-fallback.mjs';
 
 const LETTERS_PER_WORD = 5;
 const LENGTH_FACTOR_MIN = 0.6;
@@ -310,9 +311,11 @@ function recordedTimeline(film, { fps, pace, words, cuts, modes }) {
  * fromWhisper: one file, times from its start) and the timeline follows the file (recordedTimeline); `cuts` is the
  * cuts registry whose durations it checks against the shots (default: the shared one).
  */
-export function buildTimeline(film, { fps, modes = registries.modes, words, recording = false, cuts = registries.cuts } = {}) {
+export function buildTimeline(given, { fps, modes = registries.modes, words, recording = false, cuts = registries.cuts } = {}) {
   if (!Number.isFinite(fps) || fps <= 0) throw new RangeError(`fps must be a positive number, got ${fps}`);
-  if (!Array.isArray(film.shots)) throw new TypeError('film.shots must be an array');
+  if (!Array.isArray(given.shots)) throw new TypeError('film.shots must be an array');
+  // an emphasis device the look does not draw becomes the look's emphasis on its word (kinds/emphasis-fallback.mjs)
+  const { film } = withLookEmphasis(given);
   checkWords(words, film);
   const pace = paceOf(film.mode ?? DEFAULT_MODE, modes);
   if (recording) {
