@@ -51,7 +51,7 @@ function expandMedia(shot, ctx) {
   assertNoBlanks(shot, KIND);
   const { look, timing, unit } = ctx;
   const data = kindData(look, KIND);
-  const laid = isBleed(shot) ? bleedLayout(shot, { ...ctx, data }) : cutoutLayout(shot, { ...ctx, data });
+  const laid = isBleed(shot, { ...ctx, data }) ? bleedLayout(shot, { ...ctx, data }) : cutoutLayout(shot, { ...ctx, data });
   const devices = onDevices(shot, ctx, { boxes: laid.boxes, defaultTarget: 'picture' });
   return {
     nodes: placeDevices([fieldNode(shot, ctx), ...laid.nodes], devices),

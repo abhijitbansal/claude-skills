@@ -234,4 +234,6 @@ export function cutoutLayout(shot, ctx) {
   return { nodes, boxes, hero: `${shot.id}.picture` };
 }
 
-export const isBleed = (shot) => (shot.fit ?? 'bleed') === 'bleed';
+// The shot's fit: its own, else on a tall frame the look's `fitTall` (look.kinds.media; poster's cut-out, which fills the
+// band with the picture over its caption), else bleed.
+export const isBleed = (shot, ctx) => (shot.fit ?? (ctx !== undefined && !isWide(ctx.canvas) ? ctx.data?.fitTall : undefined) ?? 'bleed') === 'bleed';

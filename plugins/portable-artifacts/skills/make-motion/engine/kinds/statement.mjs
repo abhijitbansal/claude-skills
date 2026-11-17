@@ -309,7 +309,8 @@ function expandStacked(shot, ctx) {
   const { look, unit, timing } = ctx;
   // a viral film's first statement (the hook, read from frame 0) may be set a word a line, larger (stack.mjs hookLines)
   const hook = timing.index === 0 && ctx.mode.hookFromFrameZero === true;
-  const placed = composeStack(sourceText(shot, look), shot, ctx, undefined, { hook, ...stackEmphasis(shot, sourceText(shot, look), ctx) });
+  // a statement may be turned on a tall frame it leaves short (look.stack.turn; stack-turn.mjs)
+  const placed = composeStack(sourceText(shot, look), shot, ctx, undefined, { hook, turn: true, ...stackEmphasis(shot, sourceText(shot, look), ctx) });
   const texts = placed.lines.flatMap((line) => line.layout.lines[0].words.map((w) => w.text));
   const times = wordTimes(texts, timing, cutReveal(shot, ctx)).map(({ at, spoken }) => ({ at, emphasised: spoken !== null && timing.words[spoken].emphasis }));
   const hero = heroId(shot, 'text');

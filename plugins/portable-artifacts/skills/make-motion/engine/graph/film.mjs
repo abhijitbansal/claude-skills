@@ -146,10 +146,10 @@ function withCaptions(out, shot, kind, ctx, film, cam) {
 }
 
 // A grounded look's shot (engine/looks/grounds.mjs, poster): the ground sheet first, and the field told the text area
-// its cut-paper shapes keep clear of, at depth 0 so each shot keeps its own ground through a cut. Any other look: the
-// nodes as they are.
+// its cut-paper shapes keep clear of, at depth 0 so each shot keeps its own ground through a cut. Any other look, and a
+// shot that draws no look field (a free shot, written by hand with its own background): the nodes as they are.
 function groundLayer(nodes, ctx) {
-  if (!hasGrounds(ctx.look)) return nodes;
+  if (!hasGrounds(ctx.look) || !nodes.some((n) => n.type === 'field' && n.id === FIELD_ID)) return nodes;
   const area = stackArea(ctx);
   const clear = [area.left, area.top, area.w, area.h];
   const field = (n) => node('field', n.id, { ...n.props, params: { ...n.props.params, clear } }, { depth: 0 });

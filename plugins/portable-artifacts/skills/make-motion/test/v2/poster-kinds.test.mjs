@@ -14,12 +14,14 @@ import { safeRectFor } from '../../scripts/v2/review.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { snapshotOf, drawnLeaves, contentOf } from './helpers/bar.mjs';
-import { filmOf, filmFor, expandIn } from './helpers/kinds.mjs';
+import { filmOf, filmFor, expandIn, FILLER } from './helpers/kinds.mjs';
 import { stackArea } from '../../engine/kinds/stack.mjs';
 
 const LOOK = 'poster';
 const AUDIT_STEP = 0.5;
 const MIN_TALL_USE = 0.65;
+const MAX_EMPTY = 0.35; // ban 2: no band of the composition area over this share left empty at 9:16
+const SECOND_AT = 1.5; // s into a second shot: its words are all on screen
 const MAX_SIZES = 2;
 const PREPARED = Object.freeze(['map', 'code']);
 const SIZE_DECIMALS = 1;
@@ -33,12 +35,11 @@ const CASES = Object.freeze([['16:9', 'pro'], ['9:16', 'pro'], ['9:16', 'viral']
 // here (measured: .scratch/p2/sweep.mjs with LOOK=pop)
 const MEASURE_RULES = Object.freeze(['safe-area', 'overflow']);
 const INK_IN = 0.02; // em: helpers/kinds.mjs measure's inkLeft
-// OPEN WORK (Task 7, impl-p2 report): the cases below fail today and are left visible as todo, not passed. Tall frames
-// in the stack family leave the lower part of the band empty (measured here; seen on the rendered sheets in
-// .scratch/p2/films/out), and the end shot sets a third size (the ask). Remove an entry when its composition is fixed.
+// OPEN WORK: a case that fails and is left visible as todo, not passed. None is open since round three (the turned tall
+// stack, the tall two-up compare, the tall media cut-out, the larger quote mark, the end card's ask at the tag's size).
 const OPEN = Object.freeze({
-  tall: ['statement pro', 'statement viral', 'list pro', 'list viral', 'quote viral', 'compare pro', 'compare viral', 'media pro', 'media viral'],
-  sizes: ['end 9:16 pro'],
+  tall: [],
+  sizes: [],
 });
 const openTodo = (list, key) => (OPEN[list].includes(key) ? { todo: `open work: ${list} (see the OPEN note)` } : {});
 
@@ -99,7 +100,9 @@ for (const { kind, shot } of EXAMPLES.filter((e) => e.kind !== 'free' && !parked
     for (const t of texts) assert.ok(inside(inkOf(t), ctx.safe), `${t.id} at ${t.bbox.map(Math.round)} is outside ${JSON.stringify(ctx.safe)}`);
   });
 
-  for (const mode of ['pro', 'viral']) {
+  // the viral hook (a one-shot viral film's statement) is exempt: the lead's ruling keeps it upright on frame 0, its fill
+  // reported (the hook test below); a viral statement after the hook is held to the share (the second-shot tests)
+  for (const mode of ['pro', 'viral'].filter((m) => !(kind === 'statement' && m === 'viral'))) {
     // of the composition area's height (the band at 9:16 in both modes: kinds/shared.mjs compositionRect)
     test(`poster ${kind} at 9:16 in ${mode}: the tall frame is at least 65 percent used`, openTodo('tall', `${kind} ${mode}`), () => {
       const { built, canvas } = posterFilm(kind, shot, '9:16', mode);
@@ -109,8 +112,50 @@ for (const { kind, shot } of EXAMPLES.filter((e) => e.kind !== 'free' && !parked
       const top = Math.max(area.top, Math.min(...boxes.map((b) => b[1]))), bottom = Math.min(area.top + area.h, Math.max(...boxes.map((b) => b[1] + b[3])));
       const used = (bottom - top) / area.h;
       assert.ok(used >= MIN_TALL_USE, `${(100 * used).toFixed(0)}% of the height used (at least ${100 * MIN_TALL_USE}%)`);
+      // and no empty band inside the area over the ban's share (ban 2): content pinned to both ends does not pass
+      const gap = largestGap(boxes, area.top, area.top + area.h);
+      assert.ok(gap <= MAX_EMPTY * area.h, `an empty band of ${((100 * gap) / area.h).toFixed(0)}% of the height (at most ${100 * MAX_EMPTY}%)`);
     });
   }
+}
+
+// The largest empty band (px) between `top` and `bottom` that no box covers (helpers/bar.mjs largestGap, with the
+// area's own ends counted, so space left above or below the content counts as empty).
+function largestGap(boxes, top, bottom) {
+  const spans = boxes.map((b) => [Math.max(top, b[1]), Math.min(bottom, b[1] + b[3])]).filter(([a, b]) => b > a).sort((p, q) => p[0] - q[0]);
+  let reach = top, gap = 0;
+  for (const [a, b] of spans) {
+    gap = Math.max(gap, a - reach);
+    reach = Math.max(reach, b);
+  }
+  return Math.max(gap, bottom - reach);
+}
+
+// The viral hook: upright on frame 0 (the lead's ruling), exempt from the turn; its measured fill is reported here
+test('poster statement as the viral hook at 9:16: upright, its fill reported', (t) => {
+  const statement = EXAMPLES.find((e) => e.kind === 'statement').shot;
+  const built = filmFor([statement], LOOK, '9:16', { mode: 'viral' });
+  const area = stackArea(expandIn(filmOf([statement], LOOK, '9:16', { mode: 'viral' }), 0).ctx);
+  const leaves = contentOf(drawnLeaves(built.sampleShot(0, 0)), { w: 1080, h: 1920 });
+  assert.ok(leaves.filter((l) => l.node.type === 'text').every((l) => (l.node.rotate ?? 0) === 0), 'no turned line');
+  const boxes = leaves.map((l) => l.box).filter((b) => b[2] * b[3] < 0.9 * 1080 * 1920);
+  const used = (Math.min(area.top + area.h, Math.max(...boxes.map((b) => b[1] + b[3]))) - Math.max(area.top, Math.min(...boxes.map((b) => b[1])))) / area.h;
+  t.diagnostic(`viral hook fill (fake measure): ${(100 * used).toFixed(1)}% of the band`);
+});
+
+// The statement as a viral film's second shot (not the hook): the path the rendered films take (stack.mjs grownLines)
+for (const mode of ['pro', 'viral']) {
+  test(`poster statement as a second shot at 9:16 in ${mode}: the tall frame is at least 65 percent used`, () => {
+    const statement = EXAMPLES.find((e) => e.kind === 'statement').shot;
+    const shots = [FILLER, statement];
+    const built = filmFor(shots, LOOK, '9:16', { mode });
+    const area = stackArea(expandIn(filmOf(shots, LOOK, '9:16', { mode }), 1).ctx);
+    const canvas = { w: 1080, h: 1920 };
+    const boxes = contentOf(drawnLeaves(built.sampleShot(1, SECOND_AT)), canvas).map((l) => l.box).filter((b) => b[2] * b[3] < 0.9 * canvas.w * canvas.h);
+    const top = Math.max(area.top, Math.min(...boxes.map((b) => b[1]))), bottom = Math.min(area.top + area.h, Math.max(...boxes.map((b) => b[1] + b[3])));
+    assert.ok((bottom - top) / area.h >= MIN_TALL_USE, `${((100 * (bottom - top)) / area.h).toFixed(0)}% used`);
+    assert.ok(largestGap(boxes, area.top, area.top + area.h) <= MAX_EMPTY * area.h);
+  });
 }
 
 for (const [format, mode] of CASES) {

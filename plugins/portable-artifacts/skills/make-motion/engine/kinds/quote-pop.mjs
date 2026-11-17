@@ -8,7 +8,7 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { landing } from '../devices/shared.mjs';
-import { setCase, arrivesMatched, ghostWords, fitLongestSide } from './shared.mjs';
+import { setCase, arrivesMatched, ghostWords, fitLongestSide, opensSet } from './shared.mjs';
 import { plainTag } from './plain-tag.mjs';
 import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
 import { quotationOf, attributionOf } from './quote-text.mjs';
@@ -98,8 +98,9 @@ export function expandPopQuote(shot, ctx, data, times, hero) {
   const line0 = placed.lines[0];
   const markH = data.mark * line0.font.size;
   const markTop = line0.baseline - line0.ink.up - markAbove(line0.font.size);
+  // the mark lands over the enter move, or is whole from frame 0 in a look that opens set (ban 5)
   const mark = node('path', `${shot.id}.mark`, { d: markPath(area.left, markTop, markH), fill: look.palette.accent }, {
-    tracks: { opacity: landing(look.moves.enter.dur, look.moves.enter, 0, 1) },
+    tracks: opensSet(look) ? {} : { opacity: landing(look.moves.enter.dur, look.moves.enter, 0, 1) },
   });
   const flags = { ghost: ghostWords(ctx), matched: arrivesMatched(shot, ctx) };
   const stackTimes = times.words.map(({ at, spoken }) => ({ at, emphasised: spoken !== null && ctx.timing.words[spoken].emphasis }));

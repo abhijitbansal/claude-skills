@@ -388,7 +388,9 @@ function pinnedParts(shot, ctx, { plan, boxes, close }, follow) {
   // shown from frame 0, the caption shares the frame with every close-up the shot cuts to: it goes under all of them
   // and the marks drawn round them (close-ups.mjs marks)
   const closes = (plan?.cuts ?? []).map((c) => boxes[`${REGION_PREFIX}${c.region}`]).filter(Boolean);
-  const anchor = lift ? boxes[`${REGION_PREFIX}${lift.region}`] : unionBox([boxes.image, ...closes, ...(marks ?? [])]);
+  // the close-ups as drawn (close-ups.mjs shown): a context window shows picture round its region, which the caption
+  // clears too (it sat on the zoomed picture under the region alone); without one each is its region's box
+  const anchor = lift ? boxes[`${REGION_PREFIX}${lift.region}`] : unionBox([boxes.image, ...closes, ...(close?.shown ?? []), ...(marks ?? [])]);
   const caption = captionNodes(shot, ctx, { left: area?.left, maxWidth: area?.w, anchor, at: lift?.at ?? 0, follow });
   return { nodes: [...kicker, ...(caption ? caption.nodes : [])], boxes: caption ? { caption: caption.box } : {} };
 }

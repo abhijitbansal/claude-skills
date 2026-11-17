@@ -240,7 +240,8 @@ function expandPop(shot, ctx, data, times) {
   // with the hero margin: at exactly three times, the page's measured sizes read 2.99 (review-browser, captions-browser)
   const stepFor = (p) => stepUnder(look, data.askSteps, unit, [{ size: Math.max(...p.lines.map((l) => l.font.size)), ratio: HERO_MARGIN * MIN_HERO_RATIO }]);
   const tagAt = (step) => (top, at) => plainTag(ctx, `${shot.id}.ask`, shot.ask, {
-    left: area.left, top, maxWidth: area.w, at, fromStep: step, toStep: step, fill: 'accent', text: 'paper', snap: true, role: 'ask',
+    // the tag's colours: look.kinds.end.askFill / askText (palette keys; poster's plate pairing), else accent and paper
+    left: area.left, top, maxWidth: area.w, at, fromStep: step, toStep: step, fill: data.askFill ?? 'accent', text: data.askText ?? 'paper', snap: true, role: 'ask',
   });
   const placeWith = (step) => {
     const probe = shot.ask === undefined ? null : tagAt(step)(0, 0);

@@ -17,6 +17,7 @@ import { gridX, gridSpan } from '../looks/index.mjs';
 import { landing } from '../devices/shared.mjs';
 import { STRETCH_KEYWORDS } from '../fonts/index.mjs';
 import { emphasisFlags } from './emphasis-flags.mjs';
+import { turnedStack, turnedWordBox } from './stack-turn.mjs';
 import { sizeAt, fontFor, compositionRect, runInk, inkExtent, capBox, unionBox, requireDevice, ghostTracks, isWide, opensSet } from './shared.mjs';
 
 export const STACK = Object.freeze({ fromStep: 3, max: 400, gap: 0.08, kickerGap: 28, ref: 100 });
@@ -41,7 +42,7 @@ function markedWords(text) {
   return words;
 }
 
-const bare = (word) => (word.endsWith(FORCE_MARK) ? word.slice(0, -FORCE_MARK.length) : word);
+export const bare = (word) => (word.endsWith(FORCE_MARK) ? word.slice(0, -FORCE_MARK.length) : word);
 
 // The space a stack composes in: the platform safe zone on 9:16, else columns 1 to 12 inside the margins.
 export function stackArea(ctx) {
@@ -54,7 +55,7 @@ export function stackArea(ctx) {
 
 // One line's words laid out at `size`: { font, layout, ink, width } with the ink in the line's own space. `reserve`
 // ({ width }): every word measured at that width, so a word that steps to it moves nothing (text/layout.mjs).
-function lineAt(words, size, ctx, reserve) {
+export function lineAt(words, size, ctx, reserve) {
   const font = fontFor(ctx.look, 'display', size, ctx.unit);
   const layout = layoutText({ text: words.join(' '), font, maxWidth: NO_WRAP, measure: ctx.measure, ...(reserve === undefined ? {} : { reserve }) });
   const ink = runInk(layout.lines[0], reservedFont(font, reserve), ctx.measure);
@@ -72,7 +73,7 @@ export function widerKeyword(width) {
 const clampTo = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 // The size at which a line's ink is `width` wide, between `min` and `max`; a line still too wide at `min` overflows.
-function fitLine(words, available, { min, max }, ctx, reserve) {
+export function fitLine(words, available, { min, max }, ctx, reserve) {
   const width = available - FIT_SLACK;
   let line = lineAt(words, STACK.ref * ctx.unit, ctx, reserve);
   for (let i = 0; i < FIT_PASSES; i++) {
@@ -96,7 +97,7 @@ function leadRows(rows, lead) {
 const blockHeight = (lines) => lines.reduce((sum, l, k) => sum + l.ink.up + l.ink.down + (k === 0 ? 0 : STACK.gap * Math.max(l.font.size, lines[k - 1].font.size)), 0);
 
 // The kicker tag's plate height (the tag device sizes itself from its text), or 0 without a kicker.
-function kickerHeight(shot, ctx) {
+export function kickerHeight(shot, ctx) {
   if (shot.kicker === undefined) return 0;
   requireDevice(ctx.look, 'tag', 'statement');
   const probe = registries.devices.get('tag').build({ id: 'probe', text: shot.kicker, box: [0, 0, 1, 1], at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure });
@@ -106,8 +107,9 @@ function kickerHeight(shot, ctx) {
 // Lines fill the width by size only, never stretched, at two sizes: the smallest fitted size and look.stack.ratio times
 // it (a line that would grow past that is set at it, still flush left). With `lead` (the emphasised word indexes of a
 // look whose emphasis leads, poster's `scale`), the rows holding one take the large size, at most what each fits, and
-// every other row the small one.
-function keepRatio(lines, rows, words, ctx, lead) {
+// every other row the small one: at most what each fits and never more than the large size over the ratio, so the
+// emphasised row reads larger even when it is the widest (the viral hook).
+export function keepRatio(lines, rows, words, ctx, lead) {
   const ratio = ctx.look.stack?.ratio;
   if (!Number.isFinite(ratio) || lines.length < 2) return lines;
   // two sizes (look review 2: line-by-line fitting read as auto-fit): the smallest fitted size, and the ratio times it
@@ -115,8 +117,10 @@ function keepRatio(lines, rows, words, ctx, lead) {
   const small = Math.min(...lines.map((l) => l.font.size));
   const leads = leadRows(rows, lead);
   if (leads !== null) {
-    const large = Math.min(small * ratio, ...lines.filter((_, k) => leads[k]).map((l) => l.font.size));
-    return lines.map((line, k) => lineAt(rows[k].map((i) => bare(words[i])), leads[k] ? large : small, ctx));
+    const fits = (flag) => Math.min(...lines.filter((_, k) => leads[k] === flag).map((l) => l.font.size));
+    const large = Math.min(fits(true), fits(false) * ratio);
+    const rest = Math.min(fits(false), large / ratio);
+    return lines.map((line, k) => lineAt(rows[k].map((i) => bare(words[i])), leads[k] ? large : rest, ctx));
   }
   const hero = small * ratio;
   return lines.map((line, k) => lineAt(rows[k].map((i) => bare(words[i])), line.font.size >= hero - EPSILON ? hero : small, ctx));
@@ -200,10 +204,18 @@ export function centredTop(area, height, ctx) {
   return optical < area.top || optical + height > area.top + area.h ? middle : optical;
 }
 
+// Does an upright block `height` tall leave a tall frame's area short of the look's turn share (look.stack.turn)? A
+// look without the share never turns.
+function shortOnTall(height, area, ctx) {
+  const share = ctx.look.stack?.turn;
+  return Number.isFinite(share) && !isWide(ctx.canvas) && height < share * area.h;
+}
+
 /** The stack laid out: { rows (word indexes per line), lines [{ font, layout, ink, x, baseline }], area, kicker } . */
 // `lead`: the word indexes whose rows take the large size (keepRatio); `widen`: a stretch keyword a one-line stack is
 // measured at, so its emphasised word can step to it (poster's scale emphasis)
-export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = false, maxSize = Infinity, lead, widen } = {}) {
+// `turn`: the caller (a statement) allows the turned stack (stack-turn.mjs) when the look's stack.turn share asks for it
+export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = false, maxSize = Infinity, lead, widen, turn = false } = {}) {
   const { look, unit } = ctx;
   const words = markedWords(text);
   const limits = { min: sizeAt(look, STACK.fromStep, unit), max: Math.min(STACK.max * unit, maxSize) };
@@ -224,6 +236,11 @@ export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = fa
   // than the area (a long word at the floor), whose fit flag the ratio, hook and shrink passes rebuild it without
   const tooWide = (line) => line.width > area.w + WIDTH_TOLERANCE;
   lines = lines.map((line) => (line.font.size < limits.min || tooWide(line) ? { ...line, layout: { ...line.layout, overflow: true } } : line));
+  // never a hook: a viral film's first statement opens upright on frame 0 (looks-four Task 7 round three ruling)
+  if (turn && !hook && shortOnTall(blockHeight(lines) + above, area, ctx)) {
+    const turned = turnedStack(words, shot, ctx, area, { lead });
+    if (turned !== null) return turned;
+  }
   let top = centredTop(area, blockHeight(lines) + above, ctx) + above;
   const placed = lines.map((line, k) => {
     if (k > 0) top += STACK.gap * Math.max(line.font.size, lines[k - 1].font.size);
@@ -264,10 +281,12 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero }) {
     const y = line.baseline - line.layout.lines[0].y;
     line.layout.lines[0].words.forEach((w, j) => {
       const ink = inkExtent(w.text, line.font, measure); // the box a word's glyphs cover, so a flush edge is the ink's
-      boxes[row[j]] = capBox(line.x + w.x + ink.left, line.baseline, ink.right - ink.left, line.font.size);
+      boxes[row[j]] = line.turn === undefined ? capBox(line.x + w.x + ink.left, line.baseline, ink.right - ink.left, line.font.size) : turnedWordBox(line, w, ink);
     });
     const widen = line.layout.reserve?.width;
-    return node('text', `${hero}.line${k}`, { x: line.x, y, layout: line.layout, font: line.font, fill: look.palette.ink, role: 'hero', stack: hero }, {
+    // a turned line (stack-turn.mjs) is placed by its layout's top-left corner and turned about it
+    const at = line.turn === undefined ? { x: line.x, y } : { x: line.turn.x, y: line.turn.y, rotate: line.turn.rotate };
+    return node('text', `${hero}.line${k}`, { ...at, layout: line.layout, font: line.font, fill: look.palette.ink, role: 'hero', stack: hero }, {
       wordTracks: row.map((i) => wordTracks(look, times[i], { ghost, matched, widen })),
     });
   });

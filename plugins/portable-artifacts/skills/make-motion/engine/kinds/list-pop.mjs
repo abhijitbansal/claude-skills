@@ -82,17 +82,19 @@ function runningHead(shot, id, { tag, plate, lines }, area, ctx) {
 // One item set on its own: its staged shot, note and stack placed (restack), its tag on top.
 function itemStack(shot, item, k, n, ctx, data) {
   const staged = { ...shot, id: `${shot.id}.item${k}`, kicker: countText(shot, k, n) };
-  const first = composeStack(hitText(setCase(ctx.look, 'display', item.text)), staged, ctx);
+  // an item without a note may be turned on a tall frame it leaves short (look.stack.turn; stack-turn.mjs), as is
+  const first = composeStack(hitText(setCase(ctx.look, 'display', item.text)), staged, ctx, undefined, { turn: item.note === null });
+  if (first.lines[0].turn !== undefined) return { staged, note: null, placed: first };
   const note = item.note === null ? null : noteFor(item.note, first.lines, stackArea(ctx), ctx, data);
   return { staged, note, placed: restack(first, ctx, { below: note === null ? 0 : note.room }) };
 }
 
 const topOf = (placed) => (placed.kicker === null ? placed.lines[0].baseline - placed.lines[0].ink.up : placed.kicker.top);
 
-// `placed` moved down by `dy` px: its lines and its tag.
+// `placed` moved down by `dy` px: its lines (a turned line's corner too) and its tag.
 const shifted = (placed, dy) => ({
   ...placed,
-  lines: placed.lines.map((line) => ({ ...line, baseline: line.baseline + dy })),
+  lines: placed.lines.map((line) => ({ ...line, baseline: line.baseline + dy, ...(line.turn === undefined ? {} : { turn: { ...line.turn, y: line.turn.y + dy } }) })),
   kicker: placed.kicker === null ? null : { ...placed.kicker, top: placed.kicker.top + dy },
 });
 

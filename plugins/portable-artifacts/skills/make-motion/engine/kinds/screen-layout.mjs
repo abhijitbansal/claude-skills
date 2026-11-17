@@ -80,15 +80,18 @@ function panelCrop(picture, region, aspect) {
 
 // The panel's crop and its scale onto the area: as large as fits, never past the picture's own pixels (one picture
 // pixel to one frame pixel at most; larger is a soft upscale). `wanted` is the scale it would take with no cap.
-function panelFit(picture, region, area) {
-  const crop = panelCrop(picture, region, area.w / area.h);
+// `whole` (look.kinds.screen.wholeWidth): a crop at least this share of the picture's width takes all of it, so no word
+// is cut at its sides (poster); absent, the crop as it is
+function panelFit(picture, region, area, whole) {
+  const near = panelCrop(picture, region, area.w / area.h);
+  const crop = Number.isFinite(whole) && near[2] >= whole * picture.width ? panelCrop(picture, [0, region[1], 1, region[3]], area.w / area.h) : near;
   const wanted = Math.min(area.w / crop[2], area.h / crop[3]);
   return { crop, wanted, fit: Math.min(NATIVE, wanted) };
 }
 
 function panelNodes(shot, ctx, { picture, region, area, zoomAt, regionAt }) {
-  const { look, unit, seed } = ctx;
-  const { crop, fit } = panelFit(picture, region, area);
+  const { look, unit, seed, data } = ctx;
+  const { crop, fit } = panelFit(picture, region, area, data.wholeWidth);
   const [w, h] = [crop[2] * fit, crop[3] * fit];
   const box = [area.x + (area.w - w) / HALF, area.y, w, h];
   const image = node('image', `${shot.id}.panel.image`, { src: shot.src, w, h, clip: crop });
@@ -98,7 +101,10 @@ function panelNodes(shot, ctx, { picture, region, area, zoomAt, regionAt }) {
   const panel = node('group', `${shot.id}.panel`, { x: box[0] + w / HALF, y: box[1] + h / HALF }, { tracks, children: cutout });
   const from = [regionAt[0] + regionAt[2] / HALF, regionAt[1] + regionAt[3]];
   const to = [box[0] + w / HALF, box[1]];
-  const route = registries.devices.get('route').build({ id: `${shot.id}.link`, at: zoomAt, look, unit, seed, points: [from, [(from[0] + to[0]) / HALF, (from[1] + to[1]) / HALF], to], pins: false }).nodes;
+  // the route lands on the zoom, or (look.kinds.screen.linkAfter: poster) starts drawing on it, once the panel is there:
+  // landing on it, it drew under the frame before the panel came (a stray tick)
+  const linkAt = data.linkAfter === true ? zoomAt + look.moves.draw.dur : zoomAt;
+  const route = registries.devices.get('route').build({ id: `${shot.id}.link`, at: linkAt, look, unit, seed, points: [from, [(from[0] + to[0]) / HALF, (from[1] + to[1]) / HALF], to], pins: false }).nodes;
   return { nodes: [...route, panel], box };
 }
 
@@ -157,7 +163,7 @@ export function zoomReach(shot, ctx, picture, region) {
     const topH = Math.min(room.h * (1 - MIN_PANEL), (outerOf(frame, unit, [0, 0, room.w, (room.w * picture.height) / picture.width])[3]));
     const outer = outerOf(frame, unit, fitFramed(frame, unit, picture, { x: room.x, y: room.y, w: room.w, h: topH }));
     const top = outer[1] + outer[3] + data.gap * unit;
-    const { wanted } = panelFit(picture, region, { x: room.x, y: top, w: room.w, h: room.y + room.h - top });
+    const { wanted } = panelFit(picture, region, { x: room.x, y: top, w: room.w, h: room.y + room.h - top }, ctx.data?.wholeWidth);
     return { wanted, cap: NATIVE };
   }
   if (cutsToCloseUp(look)) return null;

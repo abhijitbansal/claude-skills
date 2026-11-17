@@ -105,6 +105,7 @@ export function closeUps(shot, ctx, { picture, area, centre, plan }) {
   const boxes = {};
   const camera = [];
   const marks = []; // the band each drawn device takes round its close-up, its stroke included (a pinned caption clears it)
+  const shown = []; // each close-up's picture: with a context window it is larger than its region (a pinned caption clears it)
   const nodes = plan.cuts.map((cut, k) => {
     const [fx, fy, fw, fh] = shot.regions[cut.region];
     const region = [fx * picture.width, fy * picture.height, fw * picture.width, fh * picture.height];
@@ -116,6 +117,7 @@ export function closeUps(shot, ctx, { picture, area, centre, plan }) {
     const marked = clip === region ? box : [box[0] + (region[0] - clip[0]) * scale, box[1] + (region[1] - clip[1]) * scale, region[2] * scale, region[3] * scale];
     const gap = clip === region ? reach : CONTEXT_GAP * unit; // inside the picture there is no keyline or shadow to clear
     boxes[`${REGION_PREFIX}${cut.region}`] ??= marked;
+    shown.push(box);
     const id = `${shot.id}.close${k}`;
     const image = node('image', `${id}.photo`, { src: shot.src, w, h, clip });
     const mine = plan.events.filter((e) => e.region === cut.region && e.at >= cut.at && (cut.until === undefined || e.at < cut.until));
@@ -130,5 +132,5 @@ export function closeUps(shot, ctx, { picture, area, centre, plan }) {
     camera.push(...devices.map((d) => d.camera).filter((keys) => keys.length > 0));
     return node('group', id, {}, { tracks: { opacity: shownFrom(cut.at, cut.until) }, children: [...cutout, ...devices.flatMap((d) => d.nodes)] });
   });
-  return { nodes, camera, boxes, marks };
+  return { nodes, camera, boxes, marks, shown };
 }

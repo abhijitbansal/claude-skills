@@ -325,7 +325,9 @@ export function mapLayout(shot, ctx, data, times) {
   const left = beside ? gridSpan(look, canvas, ctx.data.titleTo + 1, look.grid.columns).x : room.x;
   const top = beside ? room.y : room.y + title.h + (title.h > 0 ? gap : 0);
   const area = { x: left, y: top, w: room.x + room.w - left, h: room.y + room.h - top - sourceH - listH };
-  const view = viewIn(data, area, !wide);
+  // a look whose tall map fits the whole land (look.kinds.map.wholeTall: poster, ban 10: no land sliced by the frame)
+  // composes it as a wide frame does
+  const view = viewIn(data, area, !wide && ctx.data.wholeTall !== true);
   const card = ctx.data.card ? [cardOf(ctx, `${shot.id}.sheet`, [view.box[0] - gap / HALF, view.box[1] - gap / HALF, view.box[2] + gap, view.box[3] + gap], 0)] : [];
   const places = wide ? placeNodes(shot, ctx, data, view, times) : keyedPlaces(shot, ctx, data, view, times);
   const below = view.box[1] + view.box[3] + gap;
