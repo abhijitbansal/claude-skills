@@ -17,7 +17,7 @@ import { shownDecimals } from './values.mjs';
 
 const MAX_STAGGER = 0.08; // seconds between one mark starting to grow and the next
 const STAGGER_SHARE = 0.3; // of the growth, at most, taken by the staggers together
-const LABEL_SHARE = 0.94; // of a column's band, the widest its label may be
+export const LABEL_SHARE = 0.94; // of a column's band, the widest its label may be
 const BAR_LABELS_MAX = 0.32; // of the area, the widest the bar labels' column may be
 const CATEGORY_LINES = 2;
 const FIT_EPSILON = 0.5;

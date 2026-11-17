@@ -19,18 +19,21 @@ const DEFAULT_FILL = 'ink';
 const DEFAULT_TEXT = 'paper';
 const HALF = 2;
 
-function labelFont(look, unit) {
-  const sizeUnits = look.scale[SCALE_STEP];
+// `size` (px, optional): the label's size in place of scale step 1 (a poster compare's side tag at its points' size, so
+// the frame keeps two sizes)
+function labelFont(look, unit, size) {
+  const sizeUnits = size === undefined ? look.scale[SCALE_STEP] : size / unit;
   const { family, weight, width } = look.fonts.label;
   return { family, weight, width, size: sizeUnits * unit, tracking: look.tracking(sizeUnits, 'label') };
 }
 
 function buildTag(params) {
-  const { id, box, at, look, unit, seed, measure } = checkParams('tag', params, ['text']);
-  const { text } = params;
+  const { id, box, at, look, unit, seed, measure } = checkParams('tag', params, ['text', 'size']);
+  const { text, size } = params;
   if (typeof text !== 'string' || text.trim() === '') throw new Error('tag: text must be a non-empty string');
   if (measure === undefined) throw new Error('tag: needs params.measure (text, font) => { width, ascent, descent } to size its plate');
-  const font = labelFont(look, unit);
+  if (size !== undefined && !(Number.isFinite(size) && size > 0)) throw new Error(`tag: size must be a positive number of px, got ${JSON.stringify(size)}`);
+  const font = labelFont(look, unit, size);
   const layout = layoutText({ text: look.caps.label ? text.toUpperCase() : text, font, maxWidth: NO_WRAP, measure });
   const w = layout.width + HALF * PAD_X * unit, h = layout.height + HALF * PAD_Y * unit;
   const style = styleOf(look, 'tag'), rng = deviceRng(seed, id, 'tag');

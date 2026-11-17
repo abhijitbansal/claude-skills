@@ -14,6 +14,7 @@ import { fontFor, sizeAt, isWide, isEditorial, setCase, cardOf, rectPath } from 
 import { roomOf } from './arrivals.mjs';
 import { plainTag } from './plain-tag.mjs';
 import { fitDiagram, edgeRoutes, labelPlates } from './diagram-layout.mjs';
+import { struck } from './strike.mjs';
 
 const HALF = 2;
 const HERO_RATIO = 3; // the title holds three times the labels (the frame review's hero rule)
@@ -62,7 +63,9 @@ function titleOf(shot, ctx, room) {
   // frame too: the title the hero in the display capitals, the labels at most a third of it
   if (isEditorial(ctx.look) || displayTitle(ctx.data, ctx.canvas)) {
     const set = deskTitle(shot, ctx, room.w);
-    return { nodes: [node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: set.layout, font: set.font, fill: ctx.look.palette.ink, role: 'hero' })], h: set.layout.height, maxSize: set.font.size / HERO_RATIO };
+    const title = node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: set.layout, font: set.font, fill: ctx.look.palette.ink, role: 'hero' });
+    // data.beatAt (poster, gate-poster-2 ruling 3): the title changes ground on a spoken word (strike.mjs)
+    return { nodes: struck(title, ctx, ctx.data.beatAt), h: set.layout.height, maxSize: set.font.size / HERO_RATIO };
   }
   // the look's tag colours at the largest of titleSteps that holds it on a line, down to the floor, then wrapped: the
   // tag device's fixed size ran past a tall frame's safe width with a long title

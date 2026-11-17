@@ -22,6 +22,7 @@ const DOTS_SPAN = 8; // radii: three dots, each 2 wide, a radius apart
 const DISC = 1.6; // of the text size: an app disc's diameter, room for its initial at the one text size (1.15 let it spill)
 const DISC_GAP = 0.4; // of the text size: between the disc and the app's name
 const FRAME = 1 / 30;
+const TIME_EPSILON = 1e-6; // s
 
 /** The format's reading floor as a 1-based step: the second at 9:16, the first at 16:9. */
 export const floorStep = (canvas) => (isWide(canvas) ? 1 : HALF);
@@ -141,7 +142,9 @@ function itemNodes(id, item, shot, k, { x, y }, ctx, data, fit) {
   const fill = colourOf(look, style.text);
   if (chat) {
     const lit = data.lit ? { wordTracks: item.text.lines.flatMap((line) => line.words.map(() => ({ fill: fit.lit[k] }))) } : {};
-    return [...plate(id, box, style, ctx, data), node('text', `${id}.text`, { x: x + sidePad(data, unit), y: y + pad, layout: item.text, font: fit.font, fill }, lit)];
+    // data.roomOnOpen: each word steps in on its spoken time inside a plate there from frame 0 (fit.wordTimes)
+    const arriving = fit.wordTimes ? { wordTracks: fit.wordTimes[k].map((at) => (at <= 0 ? {} : { opacity: track([{ t: 0, v: 0 }, { t: at, v: 0 }, { t: at, v: 1 }]) })) } : {};
+    return [...plate(id, box, style, ctx, data), node('text', `${id}.text`, { x: x + sidePad(data, unit), y: y + pad, layout: item.text, font: fit.font, fill }, { ...lit, ...arriving })];
   }
   const discD = DISC * fit.size, cy = y + pad + item.header / HALF;
   const discFill = colourOf(look, data.discs[appIndex(shot, k) % data.discs.length]);
@@ -211,6 +214,20 @@ function spokenTimes(texts, timing, latest) {
   return times;
 }
 
+// data.roomOnOpen (poster, gate-poster-2 rulings 3 and 6): when each word of item k steps in: the first item's all on
+// frame 0; a later item's word j on the spoken word j places after the first spoken at or after the item's time, when it
+// is that word (else on the item's time), so the reply is typed in place word by word as it is said.
+function wordTimes(item, k, times, timing) {
+  const words = item.text.lines.flatMap((line) => line.words);
+  if (k === 0) return words.map(() => 0);
+  const spoken = timing?.words ?? [];
+  const from = spoken.findIndex((w) => w.start >= times[k] - TIME_EPSILON);
+  return words.map((w, j) => {
+    const said = from < 0 ? undefined : spoken[from + j];
+    return said !== undefined && wordForm(said.text) === wordForm(w.text) ? Math.max(times[k], said.start) : times[k];
+  });
+}
+
 /** When a `them` message's dots show, or null: DOTS before it, after the message before it, never on frame 0. */
 export function dotsWindow(shot, k, times) {
   if (!isChat(shot) || k === 0 || shot.items[k].from !== 'them') return null;
@@ -222,7 +239,9 @@ export function dotsWindow(shot, k, times) {
 export function feedLayout(shot, ctx, data, given, times) {
   const { look, unit } = ctx;
   const { room, slug } = slugRoom(shot, ctx, data, given);
-  const fit = { ...feedFit(shot, ctx, data, room), lit: data.lit ? shot.items.map((_, k) => litTrack(look, data.lit, k, times)) : null };
+  const base = feedFit(shot, ctx, data, room);
+  const opens = data.roomOnOpen === true && isChat(shot);
+  const fit = { ...base, lit: data.lit ? shot.items.map((_, k) => litTrack(look, data.lit, k, times)) : null, wordTimes: opens ? base.items.map((it, k) => wordTimes(it, k, times, ctx.timing)) : null };
   const gap = data.gap * unit;
   const titleNodes = fit.title ? [node('text', `${shot.id}.title`, { x: room.x, y: room.y, layout: fit.title, font: fit.titleFont, fill: colourOf(look, data.title) })] : [];
   const top = room.y + (fit.title ? fit.title.height + gap : 0);
@@ -272,9 +291,10 @@ function chatThread(shot, ctx, data, fit, { room, top, bottom, gap, times }) {
   const children = fit.items.flatMap((it, k) => {
     const id = `${shot.id}.item${k}`;
     // ruled rows have no typing dots (a bubble's device); lit rows (data.lit) are all set from frame 0, the spoken one lit
-    const win = data.rows ? null : dotsWindow(shot, k, times);
+    // a thread whose room is set on frame 0 (fit.wordTimes, data.roomOnOpen) has no dots: the plate waits, its words arrive
+    const win = data.rows || fit.wordTimes ? null : dotsWindow(shot, k, times);
     const dots = win ? dotsNodes(`${id}.dots`, { x: room.x, y: ys[k] }, ctx, data, fit, win[0], win[1]) : [];
-    const shown = shownFrom(data.lit ? 0 : times[k], hideAt[k]);
+    const shown = shownFrom(data.lit || fit.wordTimes ? 0 : times[k], hideAt[k]);
     return [...dots, node('group', id, {}, { tracks: { opacity: shown }, children: itemNodes(id, it, shot, k, { x: xOf(k), y: ys[k] }, ctx, data, fit) })];
   });
   const thread = node('group', `${shot.id}.thread`, {}, { tracks: { y: settling(offsets.map((o) => -o), starts, ctx.look) }, children });

@@ -39,19 +39,35 @@ export const hasGrounds = (look) => Array.isArray(look?.grounds) && look.grounds
  * The ground key of each of the first `count` shots: seeded, never the same as the shot before. `shows` (optional): each
  * shot's kind; a kind whose look data names `grounds` (poster's chart: the grounds its red accent reads on, gate-poster-1
  * ruling 2) stands only on those, unless the shot before took the only one left. One draw a shot either way.
+ * look.groundsFresh (poster, gate-poster-2 ruling 5: a ground per shot, every ground shown): a shot also avoids the
+ * grounds of the `groundsFresh` shots before it, as far back as leaves it a choice its kind permits; absent, only the
+ * shot before.
  */
 export function groundKeys(look, count, seed, shows = []) {
   if (!hasGrounds(look)) throw new Error(`look "${look?.name}" has no grounds`);
   const rng = mulberry32(seed >>> 0);
+  const fresh = Number.isInteger(look.groundsFresh) ? look.groundsFresh : 1;
   const keys = [];
   for (let i = 0; i < count; i++) {
     const free = i === 0 ? look.grounds : look.grounds.filter((k) => k !== keys[i - 1]);
     const wanted = look.kinds?.[shows[i]]?.grounds;
     const narrowed = Array.isArray(wanted) ? free.filter((k) => wanted.includes(k)) : free;
-    const choices = narrowed.length > 0 ? narrowed : free;
+    const allowed = narrowed.length > 0 ? narrowed : free;
+    const choices = freshest(allowed, keys, fresh);
     keys.push(choices[Math.floor(rng() * choices.length)]);
   }
   return keys;
+}
+
+// The keys of `allowed` not used by the last `back` keys picked, the window shortened until some are left (never past
+// one shot: `allowed` already excludes the shot before).
+function freshest(allowed, keys, back) {
+  for (let n = back; n > 1; n--) {
+    const recent = new Set(keys.slice(-n));
+    const left = allowed.filter((k) => !recent.has(k));
+    if (left.length > 0) return left;
+  }
+  return allowed;
 }
 
 // The palette for ground `key`: the look's colours renamed through its pairing table. `card`: the first other ground

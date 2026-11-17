@@ -9,21 +9,45 @@ import { colourOf } from '../devices/shared.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, fontFor, setCase, sizeAt, isWide } from './shared.mjs';
 import { stackArea } from './stack.mjs';
 import { numeralLayout } from './chart-scale.mjs';
-import { chartStyle } from './chart-draw.mjs';
+import { chartStyle, valueDecimals, LABEL_SHARE } from './chart-draw.mjs';
 import { drawPlot, captionTop } from './chart-plot.mjs';
-import { label } from './chart-labels.mjs';
+import { label, labelWidth } from './chart-labels.mjs';
+import { chartData } from './chart-marks.mjs';
+import { valueText } from './chart-scale.mjs';
+import { struck } from './strike.mjs';
 
 const HERO_RATIO = 3; // the hero at least this many times the claim (the review's hero rule)
 const TITLE_LINES = 3; // the claim wraps to at most this many lines, else it says it does not fit
 const INK = CAP_HEIGHT + WORD_DESCENT; // a line's ink height, in ems
 
+// The room the hero numeral has: numeralMax, the column's width and numeralShare of the height (px).
+function numeralRoom(ctx, data, text, { width, height }) {
+  const { look, unit, measure } = ctx;
+  const perUnit = numeralLayout(text, { ...fontFor(look, 'display', 1, unit), size: 1 }, measure).width;
+  return Math.min(data.numeralMax * unit, width / perUnit, (data.numeralShare * height) / INK);
+}
+
+// data.heroThird (poster, gate-poster-2 ruling 6): the labels, claim and source exactly a third of the hero, so they read
+// at phone size and the hero rule still holds: the largest size at which every category and value label fits its band
+// (LABEL_SHARE of it) and a third of the numeral's room, never under the look's secondary floor. null: the style's own.
+function thirdSize(shot, ctx, data, { text, room, plotW }) {
+  if (data.heroThird !== true || text === null) return null;
+  const items = chartData(shot).items ?? [];
+  const decimals = valueDecimals(items.map((i) => i.value));
+  const one = fontFor(ctx.look, 'label', 1, ctx.unit);
+  const band = (plotW / Math.max(1, items.length)) * LABEL_SHARE;
+  const widest = Math.max(...items.flatMap((it) => [labelWidth(ctx, one, it.key), labelWidth(ctx, one, valueText(it.value, decimals, shot.unit), true)]));
+  const fits = widest > 0 ? band / widest : Infinity;
+  return Math.max(ctx.look.secondary.min * ctx.unit, Math.min(fits, room / HERO_RATIO));
+}
+
 // The hero numeral: as large as numeralMax, the column's width and numeralShare of the height allow, never under three
-// times the labels; its top left at (left, top). -> { node, bottom } or null without a highlighted value.
+// times the labels (exactly three times with heroThird); its top left at (left, top). -> { node, bottom } or null without
+// a highlighted value.
 function heroNumeral(shot, ctx, data, text, { left, top, width, height, labelSize }) {
   if (text === null) return null;
   const { look, unit, measure } = ctx;
-  const perUnit = numeralLayout(text, { ...fontFor(look, 'display', 1, unit), size: 1 }, measure).width;
-  const size = Math.max(Math.ceil(HERO_RATIO * labelSize), Math.min(data.numeralMax * unit, width / perUnit, (data.numeralShare * height) / INK));
+  const size = data.heroThird === true ? HERO_RATIO * labelSize : Math.max(Math.ceil(HERO_RATIO * labelSize), numeralRoom(ctx, data, text, { width, height }));
   const font = fontFor(look, 'display', size, unit);
   const layout = numeralLayout(text, font, measure);
   // the layout box's top on `top` (a viral frame's safe edge holds the box, not the cap line), and its bottom (the comma's
@@ -58,13 +82,17 @@ function footSource(shot, ctx, style, data, { left, width, bottom }) {
  *  text, or null. */
 export function expandHeroChart(shot, ctx, data, hero, heroValue) {
   const { unit } = ctx;
-  const style = chartStyle(ctx, data);
+  const base = chartStyle(ctx, data);
   const area = stackArea(ctx);
-  const bottom = Math.min(area.top + area.h, captionTop(ctx) - style.gap);
+  const bottom = Math.min(area.top + area.h, captionTop(ctx) - base.gap);
   const wide = isWide(ctx.canvas);
   const column = wide ? area.w * data.heroColumn : area.w;
-  const labelSize = style.font.size;
   const share = wide ? data.numeralShare : data.numeralShareTall ?? data.numeralShare;
+  const third = heroValue === null ? null : thirdSize(shot, ctx, data, {
+    text: heroValue, room: numeralRoom(ctx, { ...data, numeralShare: share }, heroValue, { width: column, height: bottom - area.top }), plotW: wide ? area.w - column - data.heroGap * unit : area.w,
+  });
+  const style = third === null ? base : { ...base, font: fontFor(ctx.look, 'label', third, unit) };
+  const labelSize = style.font.size;
   const numeral = heroNumeral(shot, ctx, { ...data, numeralShare: share }, heroValue, { left: area.left, top: area.top, width: column, height: bottom - area.top, labelSize });
   const titleTop = numeral === null ? area.top : numeral.bottom + data.numeralGap * unit;
   const title = claim(shot, ctx, data, { left: area.left, top: titleTop, width: column, heroSize: numeral?.size ?? null, labelSize });
@@ -79,7 +107,8 @@ export function expandHeroChart(shot, ctx, data, hero, heroValue) {
   // data.heroLabel (poster, gate-poster-2 ruling 6): the highlighted bar carries its own value label too
   const plot = drawPlot(shot, ctx, style, box, { valueOnHighlight: data.heroLabel === true, headroom: 0 });
   return {
-    nodes: [...(numeral === null ? [] : [numeral.node]), title.node, node('group', hero, {}, { children: plot.nodes }), ...(source === null ? [] : [source.node])],
+    // data.beatAt (gate-poster-2 ruling 3): the hero numeral changes ground on a spoken word (strike.mjs)
+    nodes: [...(numeral === null ? [] : struck(numeral.node, ctx, data.beatAt)), title.node, node('group', hero, {}, { children: plot.nodes }), ...(source === null ? [] : [source.node])],
     boxes: { chart: [box.x, box.y, box.w, box.h], title: title.box, ...plot.boxes },
   };
 }

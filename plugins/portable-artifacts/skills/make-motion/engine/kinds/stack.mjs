@@ -93,16 +93,26 @@ function leadRows(rows, lead) {
   return flags.some(Boolean) && !flags.every(Boolean) ? flags : null;
 }
 
-// The block's height: each line's ink plus the gaps between them.
-const blockHeight = (lines) => lines.reduce((sum, l, k) => sum + l.ink.up + l.ink.down + (k === 0 ? 0 : STACK.gap * Math.max(l.font.size, lines[k - 1].font.size)), 0);
+// The block's height: each line's ink plus the gaps between them, `em` of the larger neighbour.
+const blockHeight = (lines, em = STACK.gap) => lines.reduce((sum, l, k) => sum + l.ink.up + l.ink.down + (k === 0 ? 0 : em * Math.max(l.font.size, lines[k - 1].font.size)), 0);
+
+// The gap between a stack's rows, in ems of the larger neighbour: look.stack.rowGap (poster, gate-poster-2 ruling 6: room
+// for the beat bar's clear space, look.stack.beatPadY, without meeting the next row), else STACK.gap.
+const rowGap = (look) => look.stack?.rowGap ?? STACK.gap;
+
+/** The clear space a beat bar keeps above and below `line`'s ink (look.stack.beatPadY ems), px; 0 without the beat. */
+export const beatPad = (look, line) => (look.stack?.beat === 'bar' ? (look.stack.beatPadY ?? 0) * line.font.size : 0);
 
 // The kicker tag's plate height (the tag device sizes itself from its text), or 0 without a kicker.
 export function kickerHeight(shot, ctx) {
   if (shot.kicker === undefined) return 0;
   requireDevice(ctx.look, 'tag', 'statement');
-  const probe = registries.devices.get('tag').build({ id: 'probe', text: shot.kicker, box: [0, 0, 1, 1], at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure });
+  const probe = registries.devices.get('tag').build({ id: 'probe', text: shot.kicker, box: [0, 0, 1, 1], at: 0, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, ...kickerSized(shot) });
   return probe.boxes.tag[3];
 }
+
+// the kicker tag's size when the caller sets one (shot.kickerSize, px: a poster compare's side tag at its points' size)
+const kickerSized = (shot) => (shot.kickerSize === undefined ? {} : { size: shot.kickerSize });
 
 // Lines fill the width by size only, never stretched, at two sizes: the smallest fitted size and look.stack.ratio times
 // it (a line that would grow past that is set at it, still flush left). With `lead` (the emphasised word indexes of a
@@ -130,6 +140,7 @@ const HOOK_MAX_WORDS = 4; // a hook this short may be set a word a line
 const HOOK_WRAP_MAX_WORDS = 10; // a wrapping hook (look.stack.hookWrap) tries every set of rows up to this many words
 const SHORT_ALONE = 4; // letters: a word this short never gets a line to itself when a stack grows
 const CEILING_STEPS = 20; // bisection steps for a hook's size ceiling: well under a pixel
+const WIDTH_SHARE_TIE = 0.02; // two row sets whose narrowest rows are this close in width share tie on width
 
 // Every way to break `count` words into rows in order (word indexes per row) with no row but the last ending on a weak
 // word (breaks.mjs isWeakEnd).
@@ -166,9 +177,13 @@ function hookCandidates(words, own, ctx, lead) {
 // (no more wrapping than the size needs). A line wider than the area counts at the size that would fit it (fitLine
 // clamps it to the floor, which would rank a one-row set of the whole hook above every wrap).
 // `largeFirst` (a look with stack.hookRatio: one word dominates): the larger largest line ranks before the smallest.
-function betterHook(area, min, largeFirst = false) {
+// `widthFirst` (a justified fill, look.stack.justify): the set whose narrowest row takes more of the width ranks first, so
+// the rows run edge to edge before the stack grows by size.
+function betterHook(area, min, largeFirst = false, widthFirst = false) {
   const sizes = ({ lines }) => lines.map((l) => l.font.size * Math.min(1, area.w / l.width));
   const clean = (set) => sizes(set).every((s) => s >= min - EPSILON);
+  const narrowest = ({ lines }) => Math.min(...lines.map((l) => Math.min(1, l.width / area.w)));
+  const byWidth = (a, b) => (Math.abs(narrowest(a) - narrowest(b)) > WIDTH_SHARE_TIE ? (narrowest(b) > narrowest(a) ? b : a) : null);
   const bySmall = (a, b) => {
     const [smallA, smallB] = [Math.min(...sizes(a)), Math.min(...sizes(b))];
     return Math.abs(smallA - smallB) > EPSILON ? (smallB > smallA ? b : a) : null;
@@ -177,7 +192,7 @@ function betterHook(area, min, largeFirst = false) {
     const [largeA, largeB] = [Math.max(...sizes(a)), Math.max(...sizes(b))];
     return Math.abs(largeA - largeB) > EPSILON ? (largeB > largeA ? b : a) : null;
   };
-  const order = largeFirst ? [byLarge, bySmall] : [bySmall, byLarge];
+  const order = [...(widthFirst ? [byWidth] : []), ...(largeFirst ? [byLarge, bySmall] : [bySmall, byLarge])];
   return (a, b) => {
     if (clean(a) !== clean(b)) return clean(b) ? b : a;
     for (const rank of order) {
@@ -191,29 +206,30 @@ function betterHook(area, min, largeFirst = false) {
 // A hook (a viral film's first statement) may be set in other rows when that sets it larger (hookCandidates), each set
 // kept to look.stack.hook of the area's height.
 // `min`: the floor a clean set's lines keep; `largeFirst`: rank by the dominant word first (betterHook).
-function hookLines(words, own, fitted, area, ctx, lead, { min = sizeAt(ctx.look, STACK.fromStep, ctx.unit), largeFirst = false } = {}) {
+function hookLines(words, own, fitted, area, ctx, lead, { min = sizeAt(ctx.look, STACK.fromStep, ctx.unit), largeFirst = false, widthFirst = false } = {}) {
   const share = ctx.look.stack?.hook;
   const plain = words.map(bare);
   const forced = words.some((w) => w.endsWith(FORCE_MARK));
   const sets = Number.isFinite(share) && words.length >= 2 && !forced ? hookCandidates(words, own, ctx, lead) : null;
   if (sets === null) return own;
   const limit = share * area.h;
+  const em = rowGap(ctx.look);
   // too tall: the largest lines come down first (a ceiling), and only when every line is at the ceiling all shrink
   const within = (lines, rows) => {
-    if (blockHeight(lines) <= limit) return lines;
+    if (blockHeight(lines, em) <= limit) return lines;
     const capped = (c) => rows.map((row, k) => (lines[k].font.size <= c ? lines[k] : lineAt(row.map((i) => plain[i]), c, ctx)));
     let low = Math.min(...lines.map((l) => l.font.size)), high = Math.max(...lines.map((l) => l.font.size));
     const floor = capped(low);
-    if (blockHeight(floor) > limit) return rows.map((row, k) => lineAt(row.map((i) => plain[i]), floor[k].font.size * (limit / blockHeight(floor)), ctx));
+    if (blockHeight(floor, em) > limit) return rows.map((row, k) => lineAt(row.map((i) => plain[i]), floor[k].font.size * (limit / blockHeight(floor, em)), ctx));
     for (let i = 0; i < CEILING_STEPS; i++) {
       const mid = (low + high) / HALF;
-      if (blockHeight(capped(mid)) <= limit) low = mid;
+      if (blockHeight(capped(mid), em) <= limit) low = mid;
       else high = mid;
     }
     return capped(low);
   };
   const setOf = (rows) => ({ rows, lines: within(rows === own.rows ? own.lines : fitted(rows), rows) });
-  if (ctx.look.stack?.hookWrap === true) return sets.map(setOf).reduce(betterHook(area, min, largeFirst));
+  if (ctx.look.stack?.hookWrap === true) return sets.map(setOf).reduce(betterHook(area, min, largeFirst, widthFirst));
   const smallest = ({ lines }) => Math.min(...lines.map((l) => l.font.size));
   return sets.map(setOf).reduce((best, c) => (smallest(c) > smallest(best) + EPSILON ? c : best));
 }
@@ -224,12 +240,13 @@ function hookLines(words, own, fitted, area, ctx, lead, { min = sizeAt(ctx.look,
 function grownLines(words, own, fitted, area, ctx) {
   const share = ctx.look.stack?.grow;
   if (!Number.isFinite(share) || isWide(ctx.canvas)) return own; // a wide frame has the height already
+  const em = rowGap(ctx.look);
   let best = own;
-  for (let pass = 0; pass < words.length && blockHeight(best.lines) < share * area.h; pass++) {
+  for (let pass = 0; pass < words.length && blockHeight(best.lines, em) < share * area.h; pass++) {
     const rows = best.rows.flatMap((row) => (row.length < HALF ? [row] : splitRow(row, words)));
     if (rows.length === best.rows.length) break;
     const lines = fitted(rows);
-    if (blockHeight(lines) > area.h) break;
+    if (blockHeight(lines, em) > area.h) break;
     best = { rows, lines };
   }
   return best;
@@ -279,27 +296,37 @@ export const uprightOnly = (ctx) => ctx.look.stack?.turnSafe === false && ctx.mo
 // `lead`: the word indexes whose rows take the large size (keepRatio); `widen`: a stretch keyword a one-line stack is
 // measured at, so its emphasised word can step to it (poster's scale emphasis)
 // `turn`: the caller (a statement) allows the turned stack (stack-turn.mjs) when the look's stack.turn share asks for it
-export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = false, maxSize = Infinity, lead, widen, turn = false } = {}) {
+// `cap` (units): the largest a line may be set, in place of STACK.max (a compare title on a wide frame, poster)
+export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = false, maxSize = Infinity, lead, widen, turn = false, cap = STACK.max } = {}) {
   const { look, unit } = ctx;
   const words = markedWords(text);
+  const em = rowGap(look);
   // look.stack.hookRatio and hookFloor (poster, gate-poster-2 ruling 1): in a hook with an emphasised word that word's row
   // is set as large as the width allows and the other rows hookRatio smaller, down to scale step hookFloor (one word
   // dominates; at the stack's ratio and floor the starred row read 1.35 times the others)
   const dominant = hook && Number.isFinite(look.stack?.hookRatio) && lead instanceof Set && lead.size > 0;
-  const limits = { min: sizeAt(look, dominant ? look.stack.hookFloor ?? STACK.fromStep : STACK.fromStep, unit), max: Math.min(STACK.max * unit, maxSize) };
-  const ratio = dominant ? look.stack.hookRatio : look.stack?.ratio;
-  const fitted = (rows) => keepRatio(rows.map((row) => fitLine(row.map((i) => bare(words[i])), area.w, limits, ctx)), rows, words, ctx, lead, ratio);
-  let rows = stackLines(words);
-  let lines = fitted(rows);
   // a stack that may not turn where it would (uprightOnly) fills its tall area by the hook's row search instead
   const fills = hook || (turn && uprightOnly(ctx) && !isWide(ctx.canvas) && words.length <= HOOK_WRAP_MAX_WORDS);
-  if (fills) ({ rows, lines } = hookLines(words, { rows, lines }, fitted, area, ctx, lead, { min: limits.min, largeFirst: dominant }));
+  // look.stack.justify (poster, gate-poster-2 ruling 6): a fill with no emphasised word sets each row at the size that
+  // runs it edge to edge (the review counts a stack's lines as one size), up to justifyCap units, and the row set whose
+  // narrowest row takes the most width wins (the 9:16 close and list rows left 35 to 50 percent of the width empty)
+  const justify = fills && !dominant && !(lead instanceof Set && lead.size > 0) && look.stack?.justify === true && !isWide(ctx.canvas);
+  const top = justify && Number.isFinite(look.stack.justifyCap) ? look.stack.justifyCap : cap;
+  const limits = { min: sizeAt(look, dominant ? look.stack.hookFloor ?? STACK.fromStep : STACK.fromStep, unit), max: Math.min(top * unit, maxSize) };
+  const ratio = dominant ? look.stack.hookRatio : look.stack?.ratio;
+  const fit = (rows) => rows.map((row) => fitLine(row.map((i) => bare(words[i])), area.w, limits, ctx));
+  const fitted = justify ? fit : (rows) => keepRatio(fit(rows), rows, words, ctx, lead, ratio);
+  let rows = stackLines(words);
+  let lines = fitted(rows);
+  if (fills) ({ rows, lines } = hookLines(words, { rows, lines }, fitted, area, ctx, lead, { min: limits.min, largeFirst: dominant, widthFirst: justify }));
   else ({ rows, lines } = grownLines(words, { rows, lines }, fitted, area, ctx));
   if (widen !== undefined && rows.length === 1) lines = [fitLine(rows[0].map((i) => bare(words[i])), area.w, limits, ctx, { width: widen })];
   const tag = kickerHeight(shot, ctx);
-  const above = tag === 0 ? 0 : tag + STACK.kickerGap * unit;
-  for (let i = 0; i < SHRINK_PASSES && blockHeight(lines) + above > area.h; i++) {
-    const share = (area.h - above) / blockHeight(lines);
+  // the kicker sits clear of a beat bar's pad over the first line too (beatPad)
+  const kickerGap = STACK.kickerGap * unit + beatPad(look, lines[0]);
+  const above = tag === 0 ? 0 : tag + kickerGap;
+  for (let i = 0; i < SHRINK_PASSES && blockHeight(lines, em) + above > area.h; i++) {
+    const share = (area.h - above) / blockHeight(lines, em);
     lines = rows.map((row, k) => lineAt(row.map((j) => bare(words[j])), lines[k].font.size * share, ctx, lines[k].layout.reserve));
   }
   // set smaller than scale step 3 to fit the height, a line no longer reads as a stack: it says so, as a statement
@@ -308,7 +335,7 @@ export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = fa
   const tooWide = (line) => line.width > area.w + WIDTH_TOLERANCE;
   lines = lines.map((line) => (line.font.size < limits.min || tooWide(line) ? { ...line, layout: { ...line.layout, overflow: true } } : line));
   // never a hook: a viral film's first statement opens upright on frame 0 (looks-four Task 7 round three ruling)
-  if (turn && !hook && shortOnTall(blockHeight(lines) + above, area, ctx)) {
+  if (turn && !hook && shortOnTall(blockHeight(lines, em) + above, area, ctx)) {
     const turned = turnedStack(words, shot, ctx, area, { lead });
     if (turned !== null) return turned;
   }
@@ -316,33 +343,36 @@ export function composeStack(text, shot, ctx, area = stackArea(ctx), { hook = fa
   // its whole area, row gaps opened evenly, so a dominant word with smaller rows round it still fills the frame
   // (in a platform mode only: a pro 9:16 close spread to its band's foot put its ask past the review's safe area)
   const spread = fills && uprightOnly(ctx) && Number.isFinite(look.stack?.spread) && lines.length > 1;
-  const placed = spread ? spreadRows(lines, area.top + above, area.h - above, look.stack.spread * area.h, area) : placeRows(lines, centredTop(area, blockHeight(lines) + above, ctx) + above, area);
-  const kicker = tag === 0 ? null : { top: placed[0].baseline - placed[0].ink.up - STACK.kickerGap * unit - tag, left: area.left };
+  const placed = spread ? spreadRows(lines, area.top + above, area.h - above, look.stack.spread * area.h, area, em) : placeRows(lines, centredTop(area, blockHeight(lines, em) + above, ctx) + above, area, undefined, em);
+  const kicker = tag === 0 ? null : { top: placed[0].baseline - placed[0].ink.up - kickerGap - tag, left: area.left };
   return { rows, lines: placed, area, kicker, ...(spread ? { spread: look.stack.spread } : {}) };
 }
 
-// Lines placed flush left from `top`, STACK.gap of the larger neighbour apart, or `gap` px apart when given.
-function placeRows(lines, top, area, gap) {
+// Lines placed flush left from `top`, `em` of the larger neighbour apart (rowGap), or `gaps` px apart when given (one per
+// pair of rows).
+function placeRows(lines, top, area, gaps, em = STACK.gap) {
   let y = top;
   return lines.map((line, k) => {
-    if (k > 0) y += gap ?? STACK.gap * Math.max(line.font.size, lines[k - 1].font.size);
+    if (k > 0) y += gaps?.[k - 1] ?? em * Math.max(line.font.size, lines[k - 1].font.size);
     const baseline = y + line.ink.up;
     y = baseline + line.ink.down;
     return { ...line, x: area.left - line.ink.left, baseline };
   });
 }
 
-// Lines spaced down `room` px from `top`: the gaps opened evenly to fill it, each at least the stack's own and at most
-// `most` px; a block that cannot fill it at that is centred in it.
-function spreadRows(lines, top, room, most, area) {
+// Lines spaced down `room` px from `top`: each gap the stack's own for its pair (`em` of the larger neighbour) plus one
+// even share of the room left, at most `most` px unless its own is more; a block that cannot fill it is centred in it.
+// (One gap for every pair, the largest pair's own, ran rows of very different sizes, a justified stack, past the room.)
+function spreadRows(lines, top, room, most, area, em = STACK.gap) {
   // the last line's layout box below its ink stays inside the room too (its descent: nothing set below the band's foot)
   const last = lines.at(-1);
   room -= Math.max(0, last.layout.height - last.layout.lines[0].y - last.ink.down);
   const ink = lines.reduce((sum, l) => sum + l.ink.up + l.ink.down, 0);
-  const least = Math.max(...lines.slice(1).map((l, k) => STACK.gap * Math.max(l.font.size, lines[k].font.size)));
-  const gap = Math.min(most, Math.max(least, (room - ink) / (lines.length - 1)));
-  const height = ink + gap * (lines.length - 1);
-  return placeRows(lines, top + Math.max(0, (room - height) / HALF), area, gap);
+  const least = lines.slice(1).map((l, k) => em * Math.max(l.font.size, lines[k].font.size));
+  const extra = Math.max(0, (room - ink - least.reduce((sum, g) => sum + g, 0)) / (lines.length - 1));
+  const gaps = least.map((g) => Math.min(Math.max(most, g), g + extra));
+  const height = ink + gaps.reduce((sum, g) => sum + g, 0);
+  return placeRows(lines, top + Math.max(0, (room - height) / HALF), area, gaps);
 }
 
 // A word's tracks: lit from a ghost when spoken (a mode that reads from frame 0), or fading in on its time; an emphasised
@@ -377,10 +407,11 @@ function baseWordTracks(look, { at, emphasised }, { ghost, matched, widen }) {
  *   times: per word index, when it is spoken and whether it is emphasised
  *   bars: word index -> the time a highlight bar lands under it; the word takes the look's bar text colour from then
  */
-export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bars = new Map() }) {
+// `until`: when the last beat bar comes off (a compare side's at the turn), else it stays to the end
+export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bars = new Map(), until = Infinity }) {
   const { look, unit, seed, measure } = ctx;
   const boxes = [];
-  const beats = beatWindows(placed, times, look);
+  const beats = beatWindows(placed, times, look, until);
   const beatOf = new Map(beats.map((b) => [b.k, b]));
   const lineNodes = placed.lines.map((line, k) => {
     const row = placed.rows[k];
@@ -405,7 +436,7 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bar
   const group = node('group', hero, {}, { children: [...lineNodes, ...beatNodes] });
   const kicker = placed.kicker === null ? [] : registries.devices.get('tag').build({
     // set on the shot's first frame in a look whose shots open set (poster: gate-poster-1 ruling 7, chips not faded in)
-    id: `${shot.id}.kicker`, text: shot.kicker, box: [placed.kicker.left, placed.kicker.top, 1, 1], at: opensSet(look) ? 0 : look.moves.enter.dur, look, unit, seed, measure,
+    id: `${shot.id}.kicker`, text: shot.kicker, box: [placed.kicker.left, placed.kicker.top, 1, 1], at: opensSet(look) ? 0 : look.moves.enter.dur, look, unit, seed, measure, ...kickerSized(shot),
   }).nodes;
   return { group, kicker, boxes: Object.fromEntries([['text', unionBox(boxes)], ...boxes.map((box, i) => [`word:${i}`, box])]) };
 }
@@ -416,25 +447,29 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bar
 // row) on that row's first spoken word, steps to each later row on its first word and stays on the last, so the frame at
 // the end is never the frame at 0. Rows whose words are untimed (all at 0: a list item, a compare side) or turned get
 // none. [{ k (row index), at, until }]
-function beatWindows(placed, times, look) {
+function beatWindows(placed, times, look, until = Infinity) {
   if (look.stack?.beat !== 'bar') return [];
   const rows = placed.rows.map((row, k) => ({ k, at: Math.min(...row.map((i) => times[i]?.at ?? 0)), lead: row.some((i) => times[i]?.emphasised === true) }))
-    .filter((r) => r.at > 0 && placed.lines[r.k].turn === undefined);
+    .filter((r) => r.at > 0 && r.at < until && placed.lines[r.k].turn === undefined);
   const live = rows.slice(Math.max(0, rows.findIndex((r) => r.lead)));
-  return live.map((r, j) => ({ k: r.k, at: r.at, until: live[j + 1]?.at ?? Infinity }));
+  // rows spoken at one time (a struck compare title) share it: only the last of them takes the bar
+  return live.map((r, j) => ({ k: r.k, at: r.at, until: live[j + 1]?.at ?? until })).filter((w) => w.until > w.at);
 }
 
 // Hard steps on [at, until): `on` from at, `off` again from until (none when until is Infinity).
-const stepped = (off, on, { at, until }) => track([{ t: 0, v: off }, { t: at, v: off }, { t: at, v: on }, ...(Number.isFinite(until) ? [{ t: until, v: on }, { t: until, v: off }] : [])]);
+export const stepped =(off, on, { at, until }) => track([{ t: 0, v: off }, { t: at, v: off }, { t: at, v: on }, ...(Number.isFinite(until) ? [{ t: until, v: on }, { t: until, v: off }] : [])]);
 
 // The beat for one row: the look's highlight bar (one builder, devices/highlight.mjs) round the row's word boxes,
 // look.stack.beatPad units wider each side and the line's ink high, and a knockout copy of the row's line over it in the
 // bar's text colour (look.devices.highlight.text), both on by a hard step on the row's first spoken word and off on the
 // next row's: the row changes ground. [bar, copy]
-function beatPair(id, beat, rowBoxes, lineNode, line, ctx) {
+export function beatPair(id, beat, rowBoxes, lineNode, line, ctx) {
   const { look, unit, seed } = ctx;
   const [x, , w] = unionBox(rowBoxes);
-  const y = line.baseline - line.ink.up, h = line.ink.up + line.ink.down;
+  // look.stack.beatPadY (ems of the line, gate-poster-2 ruling 6): clear space above the cap line and below the ink, so
+  // the letters do not touch the bar's edges
+  const padY = beatPad(look, line);
+  const y = line.baseline - line.ink.up - padY, h = line.ink.up + line.ink.down + HALF * padY;
   const padX = (look.stack.beatPad ?? 0) * unit;
   const built = registries.devices.get('highlight').build({ id, box: [x - padX, y, w + HALF * padX, h], at: beat.at, look, unit, seed }).nodes[0];
   const on = { opacity: stepped(0, 1, beat) };
@@ -462,10 +497,11 @@ export function restack(placed, ctx, { above = 0, below = 0 }) {
   const first = placed.lines[0];
   const tag = placed.kicker === null ? 0 : first.baseline - first.ink.up - placed.kicker.top; // the tag and its gap
   const min = sizeAt(ctx.look, STACK.fromStep, ctx.unit);
+  const em = rowGap(ctx.look);
   const room = Math.max(1, area.h - tag - above - below); // never zero: the lines then shrink to the floor and say so
   let lines = placed.lines;
-  for (let i = 0; i < FIT_PASSES && blockHeight(lines) > room + EPSILON; i++) {
-    const share = room / blockHeight(lines);
+  for (let i = 0; i < FIT_PASSES && blockHeight(lines, em) > room + EPSILON; i++) {
+    const share = room / blockHeight(lines, em);
     lines = lines.map((line) => {
       const next = textLine(lineText(line), line.font.size * share, ctx);
       return next.font.size < min ? { ...next, layout: { ...next.layout, overflow: true } } : next;
@@ -473,8 +509,8 @@ export function restack(placed, ctx, { above = 0, below = 0 }) {
   }
   // a spread stack (composeStack, look.stack.spread) is spaced down the room left to it
   const out = Number.isFinite(placed.spread) && lines.length > 1
-    ? spreadRows(lines, area.top + above + tag, room, placed.spread * area.h, area)
-    : placeRows(lines, centredTop(area, blockHeight(lines) + tag + above + below, ctx) + above + tag, area);
+    ? spreadRows(lines, area.top + above + tag, room, placed.spread * area.h, area, em)
+    : placeRows(lines, centredTop(area, blockHeight(lines, em) + tag + above + below, ctx) + above + tag, area, undefined, em);
   const kicker = placed.kicker === null ? null : { ...placed.kicker, top: out[0].baseline - out[0].ink.up - tag };
   return { ...placed, lines: out, kicker };
 }

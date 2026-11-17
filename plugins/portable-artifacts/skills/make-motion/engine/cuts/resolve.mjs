@@ -79,6 +79,16 @@ function smearAxesProblem(value, name, entry, cuts) {
   return entry.smearable !== true ? `the "${name}" cut takes no smear; the cuts that do: ${smearableNames(cuts).join(', ')}` : null;
 }
 
+// a look's cutStyle only, the cover (engine/cuts/cover.mjs snappedOffset): { tail }, the share of the frame the sheet jumps
+// before home
+const SNAP_TAIL_MAX = 0.5;
+function snapProblem(value, name) {
+  if (name !== 'cover') return `the "${name}" cut takes no snap; only the cover does`;
+  const ok = value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every((k) => k === 'tail')
+    && (value.tail === undefined || (Number.isFinite(value.tail) && value.tail >= 0 && value.tail < SNAP_TAIL_MAX));
+  return ok ? null : `must be { tail } with tail a number from 0 to under ${SNAP_TAIL_MAX}, got ${shown(value)}`;
+}
+
 /**
  * What is wrong with the options of registered cut `name` in `options` (a cut object, or a look's cutStyle entry), as
  * [{ key, message }]: a key outside `keys` (with a did-you-mean), a direction outside the cut's list or on a cut with
@@ -96,6 +106,7 @@ export function cutOptionProblems(options, name, { keys = CUT_KEYS, cuts = regis
     ['duration', (v) => durationProblem(v, entry)],
     ['smear', (v) => smearProblem(v, name, entry, cuts)],
     ['smearAxes', (v) => smearAxesProblem(v, name, entry, cuts)],
+    ['snap', (v) => snapProblem(v, name)],
   ];
   // a key outside `keys` is reported once, as unknown (smearAxes in a film's cut object), not checked as well
   const known = checks.filter(([key]) => keys.includes(key) && options[key] !== undefined)

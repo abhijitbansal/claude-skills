@@ -196,7 +196,7 @@ function movesErrors(name, moves, names) {
     .map((key) => `look "${name}": moves.${key} must be a move { ease, dur } or null, got ${JSON.stringify(moves[key]) ?? 'undefined'}`);
 }
 
-const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear', 'smearAxes']);
+const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear', 'smearAxes', 'snap']);
 const PALETTE_SHAPE = 'cutPalette must be a non-empty list of its cuts holding "cut"';
 
 // The errors of a look's cut set (`cuts`: registered cut names) and its palette (a non-empty subset holding "cut").

@@ -11,21 +11,36 @@ import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { landing, colourOf } from '../devices/shared.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, fitInBox, numeralLayout } from './shared.mjs';
-import { STACK, composeStack, stackNodes, stackArea, restack } from './stack.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, fitInBox, numeralLayout, isWide } from './shared.mjs';
+import { STACK, composeStack, stackNodes, stackArea, restack, beatPad } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
+import { strikeAt } from './strike.mjs';
 
 // a side's tag, a label line of its own over the title (look review 2: "B" over "A SCRIPT" read as "B A SCRIPT")
 const TAGS = Object.freeze({ versus: ['OPTION A', 'OPTION B'], 'before-after': ['BEFORE', 'AFTER'] });
 const TURN_BAR = Object.freeze({ width: 0.24, height: 14 }); // the turn's accent bar: a share of the stack width, units tall
 const HALF = 2;
 const SHARE_PASSES = 2;
+const TAG_PASSES = 6; // pointThird: at most this many layouts to bring the side tag to its points' size
+const TAG_AGREE = 0.05; // the tag and the points within this share of each other (the review's one size is 1.1)
 
 // The points' font: the largest of data.pointSteps the stack's largest line stays MIN_HERO_RATIO times, else the smallest.
+// data.pointThird (poster, gate-poster-2 ruling 6): exactly a third of the largest line (MIN_HERO_RATIO), at least the
+// look's secondary floor: the points read at phone size and the hero rule still holds
 function pointFont(look, data, lines, unit) {
   const largest = Math.max(...lines.map((line) => line.font.size));
+  if (data.pointThird === true) return fontFor(look, 'text', Math.max(look.secondary.min * unit, largest / MIN_HERO_RATIO), unit);
   return fontFor(look, 'text', sizeAt(look, stepUnder(look, data.pointSteps, unit, [{ size: largest, ratio: MIN_HERO_RATIO }]), unit), unit);
+}
+
+// The points' text laid out at the font pointFont gives for `lines`, and the room it takes under them (null without points).
+function pointsSet(look, data, { words, lines, area, unit, measure }) {
+  if (words === null) return null;
+  const font = pointFont(look, data, lines, unit);
+  const layout = layoutText({ text: words, font, maxWidth: area.w, measure });
+  const pad = Math.max(...lines.map((line) => beatPad(look, line))); // a beat bar's clear space under the stack
+  return { font, layout, room: pad + data.pointGap * unit + CAP_HEIGHT * font.size + layout.lines.at(-1).y - layout.lines[0].y + WORD_DESCENT * font.size };
 }
 
 // A side's picture fitted into the stack area's width and `data.picture` of its height, with the room it takes over the
@@ -51,23 +66,47 @@ function pictureNodes(shot, key, ctx, data, { fit, placed, at }) {
 
 // One side in `area` (the stack area, or its part on a tall frame): its wrapper's children (the picture, the tag, the
 // stack, the points) and its box.
-function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinity }) {
+function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinity, turn, both }) {
   const { look, unit, measure } = ctx;
-  const staged = { ...shot, id: `${shot.id}.${key}`, kicker: TAGS[shot.mode ?? 'versus'][k] };
-  const first = composeStack(setCase(look, 'display', shot[key].title), staged, ctx, area, { maxSize });
+  // data.titleCap (poster, gate-poster-2 ruling 6): on a wide frame a short title may be set past the stack's cap, so the
+  // side fills its frame (at STACK.max "A SCRIPT" filled 73 percent of the width)
+  const cap = isWide(ctx.canvas) && Number.isFinite(data.titleCap) ? data.titleCap : STACK.max;
+  const title = setCase(look, 'display', shot[key].title);
+  const words = pointsText(shot[key]);
+  const withValue = (lines) => [...lines, ...(value === null ? [] : [{ font: value.font }])];
   const numeral = value === null ? null : numeralLayout(value.texts[k], value.font, measure);
   const valueRoom = numeral === null ? 0 : STACK.gap * value.font.size + (CAP_HEIGHT + WORD_DESCENT) * value.font.size;
-  const words = pointsText(shot[key]);
-  const font = words === null ? null : pointFont(look, data, [...first.lines, ...(value === null ? [] : [{ font: value.font }])], unit);
-  const points = words === null ? null : layoutText({ text: words, font, maxWidth: area.w, measure });
-  const room = points === null ? 0 : data.pointGap * unit + CAP_HEIGHT * font.size + points.lines.at(-1).y - points.lines[0].y + WORD_DESCENT * font.size;
   const fit = pictureFit(shot, key, ctx, data, area);
-  const placed = restack(first, ctx, { above: fit === null ? 0 : fit.room, below: valueRoom + room });
+  // the stack composed and set again with room for the points under it; a stack set smaller to make room keeps its points
+  // a third of it (pointThird): set again at the lines' new size, which takes less room than was kept
+  const laid = (staged) => {
+    const first = composeStack(title, staged, ctx, area, { maxSize, cap });
+    const sized = pointsSet(look, data, { words, lines: withValue(first.lines), area, unit, measure });
+    const placed = restack(first, ctx, { above: fit === null ? 0 : fit.room, below: valueRoom + (sized === null ? 0 : sized.room) });
+    const final = data.pointThird === true ? pointsSet(look, data, { words, lines: withValue(placed.lines), area, unit, measure }) : sized;
+    return { staged, placed, final };
+  };
+  const tagged = { ...shot, id: `${shot.id}.${key}`, kicker: TAGS[shot.mode ?? 'versus'][k] };
+  // with pointThird the side's tag is set at its points' size (the tag device's `size`), so the frame keeps two sizes:
+  // laid out again with the tag at the last pass's points size until the two agree within TAG_AGREE (a larger tag takes
+  // room from the stack, which sets the points smaller)
+  let side = laid(tagged);
+  for (let pass = 0; data.pointThird === true && side.final !== null && pass < TAG_PASSES; pass++) {
+    const tag = side.staged.kickerSize;
+    if (tag !== undefined && Math.abs(tag / side.final.font.size - 1) <= TAG_AGREE) break;
+    side = laid({ ...tagged, kickerSize: side.final.font.size });
+  }
+  const { staged, placed, final } = side;
+  const font = final?.font ?? null, points = final?.layout ?? null;
   const hero = `${staged.id}.title`;
-  const built = stackNodes(staged, ctx, placed, { times: placed.rows.flat().map(() => ({ at: 0, emphasised: false })), ghost: false, matched: true, hero });
+  // data.beatAt (poster, gate-poster-2 ruling 3): the title takes the stack's beat bar on a spoken word of its own side
+  // (strike.mjs strikeAt over the words before the turn, or from it); A's comes off at the turn when both sides show
+  const sideWords = (ctx.timing?.words ?? []).filter((w) => (k === 0 ? w.start < turn : w.start >= turn));
+  const struckAt = strikeAt({ words: sideWords }, data.beatAt) ?? 0;
+  const built = stackNodes(staged, ctx, placed, { times: placed.rows.flat().map(() => ({ at: struckAt, emphasised: false })), ghost: false, matched: true, hero, until: k === 0 && both ? turn : Infinity });
   const children = [...pictureNodes(shot, key, ctx, data, { fit, placed, at }), ...built.kicker, built.group];
   const last = placed.lines.at(-1);
-  let under = last.baseline + last.ink.down; // the lowest ink so far
+  let under = last.baseline + last.ink.down + beatPad(look, last); // the lowest ink so far, and a beat bar's clear space
   if (numeral !== null) {
     // the value: a numeral line of its own under the title, at the size both sides share (never styled as better), its
     // own size class (review B I6): expandPopCompare sets it at the titles' size, so the review sees one size honestly
@@ -84,7 +123,7 @@ function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinit
   // the whole side, its tag (or first line) to its lowest ink: the turn bar keeps clear of it; `foot`: the lowest text
   // layout box's bottom (descent included), which a spread side keeps inside the band (spreadAreas)
   const top = placed.kicker === null ? placed.lines[0].baseline - placed.lines[0].ink.up : placed.kicker.top;
-  const foot = Math.max(...children.filter((n) => n.type === 'text').map((n) => n.props.y + n.props.layout.height), ...built.group.children.map((n) => n.props.y + n.props.layout.height));
+  const foot = Math.max(...children.filter((n) => n.type === 'text').map((n) => n.props.y + n.props.layout.height), ...built.group.children.filter((n) => n.type === 'text').map((n) => n.props.y + n.props.layout.height));
   return { id: staged.id, children, box: built.boxes.text, block: [area.left, top, area.w, under - top], foot, largest: Math.max(...placed.lines.map((line) => line.font.size)) };
 }
 
@@ -127,7 +166,7 @@ export function expandPopCompare(shot, ctx, data, { turn, both }) {
   const areas = both ? sideAreas(ctx, data) : [stackArea(ctx), stackArea(ctx)];
   const fitted = sharedValue(shot, ctx, data, both ? areas[0].h : Infinity);
   // a side's picture is whole the moment its side is (the stack is too): no fade in after the hard cut at the turn
-  const partsIn = (inside) => (maxSize, value) => SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: both ? 0 : spans[k][0], value, area: inside[k], maxSize }));
+  const partsIn = (inside) => (maxSize, value) => SIDES.map((key, k) => sideParts(shot, key, k, ctx, data, { at: both ? 0 : spans[k][0], value, area: inside[k], maxSize, turn, both }));
   const shared = sharedSizes(fitted, partsIn(areas), { both, look: ctx.look, unit: ctx.unit });
   const { value } = shared;
   const parts = both && data.spreadTall === true ? partsIn(spreadAreas(areas, shared.parts))(Math.min(...shared.parts.map((p) => p.largest)), value) : shared.parts;
@@ -170,7 +209,8 @@ function sideColours(part, k, ctx, data, { turn, both }) {
     return node('text', n.id, props, { tracks: n.tracks, ...(swaps ? { wordTracks: base.map((w) => ({ ...w, fill: stepped(full) })) } : { wordTracks: n.wordTracks }) });
   };
   return part.children.map((n) => {
-    if (n.id === `${part.id}.title`) return node('group', n.id, n.props, { tracks: n.tracks, children: n.children.map((line) => recolour(line, hero)) });
+    // only the title's lines recolour: its beat bar and knockout copy (data.beatAt) keep the bar's colours
+    if (n.id === `${part.id}.title`) return node('group', n.id, n.props, { tracks: n.tracks, children: n.children.map((c) => (/\.line\d+$/.test(c.id) ? recolour(c, hero) : c)) });
     if (n.id === `${part.id}.points`) return recolour(n, n.props.fill);
     return n;
   });

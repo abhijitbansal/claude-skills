@@ -75,7 +75,9 @@ function fillOf(name, id, t) {
 
 test('poster 16:9 diagram: the title is the hero in condensed capitals, at least three times the card labels', () => {
   const end = texts(leavesAt(WIDE, 'flow', endOf(WIDE, 'flow')));
-  const title = end.find((l) => l.node.id === 'flow.title');
+  // the title, or at the end its knockout copy under the strike (gate-poster-2 ruling 3: the title changes ground on a
+  // spoken word; the copy stands in for it, same text, face and size)
+  const title = end.find((l) => l.node.id === 'flow.title' || l.node.props.beatOf === 'flow.title');
   const label = end.find((l) => l.node.id === 'flow.node0.label');
   assert.ok(title, `a title text: ${end.map((l) => l.node.id).join(', ')}`);
   assert.equal(title.node.props.font.width, look().fonts.display.width, 'the condensed display face');
@@ -118,8 +120,10 @@ test('poster 16:9 film: at least one composition uses turned type (the quote tur
 // ---- ruling 1: the compare, at 16:9 and 9:16 ----
 
 const SIDE_TITLES = (id) => [`${id}.left.title`, `${id}.right.title`];
+// the title row's own colour, not its beat bar's knockout copy (gate-poster-2 ruling 3: a struck title's copy is in the
+// bar's text colour over the bar)
 const titleFill = (leaves, hero) => {
-  const line = texts(leaves).find((l) => l.node.props.stack === hero);
+  const line = texts(leaves).find((l) => l.node.props.stack === hero && l.node.props.beatOf === undefined);
   return line ? sampledFill(line.node) : null;
 };
 // a text's drawn colour: its first word's sampled fill, else its own
@@ -132,7 +136,9 @@ for (const [name, id] of [[WIDE, 'swap'], [TALL, 'swap']]) {
     const turnEnd = endOf(name, id);
     const ground = lookOfShot(gate(name).film, indexOf(name, id)).palette.paper;
     const a = titleFill(leavesAt(name, id, format === '16:9' ? 0.2 : turnEnd), left);
-    const b = titleFill(leavesAt(name, id, turnEnd), right);
+    // B's row as it last shows before its beat bar's knockout copy stands in for it (gate-poster-2 ruling 3)
+    const shownTimes = Array.from({ length: Math.ceil(turnEnd / 0.1) }, (_, k) => turnEnd - k * 0.1);
+    const b = shownTimes.map((t) => titleFill(leavesAt(name, id, t), right)).find((c) => c !== null) ?? null;
     assert.ok(a && b, `both titles drawn (${a}, ${b})`);
     const shownA = format === '16:9' ? a : titleFill(leavesAt(name, id, 0.2), left);
     assert.notEqual(shownA, b, `A ${shownA} vs B ${b}`);

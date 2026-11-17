@@ -14,6 +14,7 @@ import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { shownFrom, isWide, fontFor, setCase, inkExtent } from './shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
+import { struck } from './strike.mjs';
 
 const HALF = 2;
 const PROMPT = '$';
@@ -217,7 +218,8 @@ export function codeLayout(shot, ctx, data, room) {
   const geo = geometryOf(shot, ctx, data, room);
   const mode = shot.mode ?? 'type';
   const made = (mode === 'diff' ? diffMode : mode === 'run' ? runMode : typeMode)(shot, ctx, data, geo);
-  const heroNode = made.nodes.filter((n) => n.id === `${shot.id}.hero`);
+  // data.beatAt (poster, gate-poster-2 ruling 3): the hero changes ground on a spoken word (strike.mjs)
+  const heroNode = made.nodes.filter((n) => n.id === `${shot.id}.hero`).flatMap((n) => struck(n, ctx, data.beatAt));
   const content = [...titleNodes(shot, geo, ctx, data), ...made.nodes.filter((n) => n.id !== `${shot.id}.hero`)];
   const first = geo.titleRow ? 1 : 0;
   const shown = mode === 'diff' ? ctx.prepared.after : mode === 'run' ? ctx.prepared.output : ctx.prepared.code;

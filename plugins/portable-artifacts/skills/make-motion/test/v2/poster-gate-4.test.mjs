@@ -184,9 +184,9 @@ function longestStill(b, i) {
 }
 
 for (const name of [WIDE, TALL]) {
-  // todo: ruling 3 is done for the stack kinds (statement, quote, close: the beat bar); the chart, code, diagram, compare
-  // and feed shots still hold over 2 s (p8 report)
-  test(`poster ${name}: no shot is a still for more than 2 s (estimated timing)`, { todo: 'ruling 3 for the non-stack kinds is not done (p8 report)' }, () => {
+  // ruling 3: the stack kinds move by the beat bar (p8); the chart, code and diagram heroes take a strike, the compare
+  // titles a beat bar and the feed's later words step in on their spoken words (p9)
+  test(`poster ${name}: no shot is a still for more than 2 s (estimated timing)`, () => {
     const b = gate(name);
     const long = b.film.shots.map((s, i) => [s.id, longestStill(b, i)]).filter(([, s]) => s > STILL_MAX + 1e-9).map(([id, s]) => `${id} ${s.toFixed(2)} s`);
     assert.deepEqual(long, []);
