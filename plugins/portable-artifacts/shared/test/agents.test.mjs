@@ -5,20 +5,18 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { AGENT_NAME, agentFile, INSTRUCTIONS, tomlString, writeAgentFile } from '../agents.mjs';
+import { AGENT_HOSTS, AGENT_NAME, agentFile, INSTRUCTIONS, tomlString, writeAgentFile } from '../agents.mjs';
 
 const PHRASES = [
-  /SKILL\.md/,
-  /spec JSON/,
-  /build script/,
-  /validate script/,
-  /last line/,
   /already artifact-builder/,
-  /Do not delegate/,
+  /Never delegate/,
+  /scripts\/make\.mjs/,
+  /--json/,
   /--out/,
-  /exactly as SKILL\.md shows/,
-  /fix the spec and rerun it, up to 2 times/,
-  /fails? after 2 fix attempts/,
+  /"mechanical"/,
+  /"creative"/,
+  /at most 2 times/,
+  /reply with only the last report/i,
   /Never report an output path for a build that did not run/,
 ];
 
@@ -29,6 +27,71 @@ function checkBody(body) {
 
 test('AGENT_NAME is artifact-builder', () => {
   assert.equal(AGENT_NAME, 'artifact-builder');
+});
+
+test('AGENT_HOSTS is claude, copilot, codex', () => {
+  assert.deepEqual([...AGENT_HOSTS], ['claude', 'copilot', 'codex']);
+});
+
+// The operator runs one command. The old text told it to read SKILL.md, write the spec and run two scripts,
+// which was wrong for make-motion (no build script) and let a cheap model choose the content.
+test('the instructions name make.mjs and --json, and name no validate or build script', () => {
+  assert.match(INSTRUCTIONS, /node <skill-dir>\/scripts\/make\.mjs <spec> --json/);
+  assert.doesNotMatch(INSTRUCTIONS, /validate script/i);
+  assert.doesNotMatch(INSTRUCTIONS, /build script/i);
+  assert.doesNotMatch(INSTRUCTIONS, /validate\.mjs|build\.mjs/);
+});
+
+test('the instructions forbid writing a spec and acting on creative findings, and allow two fix rounds', () => {
+  assert.match(INSTRUCTIONS, /Never create a spec/);
+  assert.match(INSTRUCTIONS, /Never change wording, theme, look, layout, or data/);
+  assert.match(INSTRUCTIONS, /Never act on a "creative" finding/);
+  assert.match(INSTRUCTIONS, /change only the JSON paths those findings name/);
+  assert.match(INSTRUCTIONS, /at most 2 times/);
+  // Nothing in the text asks for a spec, a theme or new wording: every such verb is under a "Never".
+  for (const sentence of INSTRUCTIONS.split(/(?<=\.)\s+/)) {
+    if (/\b(write|create|choose|pick|reword|rewrite)\b[^.]*\b(spec|theme|look|wording)\b/i.test(sentence)) {
+      assert.match(sentence, /\bNever\b|\bnever\b/, `unforbidden: ${sentence}`);
+    }
+  }
+});
+
+test('the instructions say to reply with the report only', () => {
+  assert.match(INSTRUCTIONS, /Reply with only the last report, as JSON\. No other text\./);
+  assert.match(INSTRUCTIONS, /cannot run/);
+  assert.match(INSTRUCTIONS, /empty path/);
+});
+
+test('the claude agent file has name, description, model haiku and a tools line without a subagent tool or Write', () => {
+  const { fileName, content } = agentFile('claude');
+  assert.equal(fileName, 'artifact-builder.md');
+  assert.ok(content.startsWith('---\n'));
+  const front = content.slice(4, content.indexOf('\n---\n', 4));
+  const lines = front.split('\n');
+  assert.deepEqual(lines.map((l) => l.split(':')[0]), ['name', 'description', 'model', 'tools']);
+  assert.equal(lines[0], 'name: artifact-builder');
+  assert.equal(lines[2], 'model: haiku');
+  const desc = lines[1].slice('description: '.length);
+  assert.ok(desc.length > 0 && !desc.includes(': ') && !desc.includes(' #'), 'strict-YAML-safe one-line description');
+  const tools = lines[3].slice('tools: '.length).split(',').map((t) => t.trim());
+  assert.deepEqual(tools, ['Read', 'Edit', 'Bash']);
+  for (const banned of ['Write', 'Agent', 'Task', 'NotebookEdit']) assert.ok(!tools.includes(banned), banned);
+  checkBody(content.slice(content.indexOf('\n---\n', 4) + 5));
+});
+
+// The plugin ships agents/artifact-builder.md and install.mjs writes the same text for non-plugin installs.
+const PLUGIN_AGENT = fileURLToPath(new URL('../../agents/artifact-builder.md', import.meta.url));
+const matchesClaudeBuilder = (text) => text === agentFile('claude').content;
+
+test('P/agents/artifact-builder.md equals agentFile(claude).content', () => {
+  assert.ok(matchesClaudeBuilder(fs.readFileSync(PLUGIN_AGENT, 'utf8')));
+});
+
+test('guard: the equality check fails on a changed byte, a missing newline or an extra one', () => {
+  const on = fs.readFileSync(PLUGIN_AGENT, 'utf8');
+  assert.equal(matchesClaudeBuilder(on.replace('model: haiku', 'model: sonnet')), false);
+  assert.equal(matchesClaudeBuilder(on.slice(0, -1)), false);
+  assert.equal(matchesClaudeBuilder(`${on}\n`), false);
 });
 
 test('copilot agent file has cheap model list and frontmatter', () => {
@@ -65,7 +128,11 @@ test('tomlString escapes quotes, backslashes and newlines', () => {
 });
 
 test('unknown host throws', () => {
-  assert.throws(() => agentFile('claude'), /unknown agent host/);
+  assert.throws(() => agentFile('gemini'), /unknown agent host/);
+});
+
+test('INSTRUCTIONS has no three single quotes in a row (the TOML literal block would end early)', () => {
+  assert.ok(!INSTRUCTIONS.includes("'''"));
 });
 
 // Writer + CLI: shared by bin/install.mjs and `doctor --fix builder_agent`.
@@ -94,6 +161,14 @@ test('writeAgentFile: never writes through a symlink; a directory is not-file', 
   assert.equal(fs.readFileSync(target, 'utf8'), 'keep me');
   fs.mkdirSync(path.join(dir, 'd.md'));
   assert.equal(writeAgentFile(dir, path.join(dir, 'd.md'), 'x', true), 'not-file');
+});
+
+test('cli: `write claude <dir>` creates artifact-builder.md and exits 0', () => {
+  const dir = path.join(tmpDir(), 'agents');
+  const r = spawnSync(process.execPath, [AGENTS, 'write', 'claude', dir], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, 'artifact-builder.md'), 'utf8'), agentFile('claude').content);
+  assert.match(r.stdout, /agent: .*artifact-builder\.md/);
 });
 
 test('cli: `write copilot <dir>` creates artifact-builder.agent.md and exits 0', () => {
@@ -145,7 +220,7 @@ test('cli: unknown host, missing dir or unknown command exit 2 with usage and wr
   for (const args of [['write', 'gemini', dir], ['write', 'copilot'], ['frobnicate'], []]) {
     const r = spawnSync(process.execPath, [AGENTS, ...args], { encoding: 'utf8' });
     assert.equal(r.status, 2, args.join(' '));
-    assert.match(r.stderr, /usage: .*agents\.mjs write <copilot\|codex> <agents-dir>/);
+    assert.match(r.stderr, /usage: .*agents\.mjs write <claude\|copilot\|codex> <agents-dir>/);
   }
   assert.equal(fs.existsSync(dir), false);
 });

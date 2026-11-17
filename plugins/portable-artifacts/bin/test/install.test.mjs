@@ -355,13 +355,14 @@ test('the make-motion hint also fires when make-motion is only pulled in as a re
 
 // --- artifact-builder agent files -----------------------------------------
 
-test('agentTargetsFor maps each host and scope to its agent dirs (claude and gemini get none)', () => {
+test('agentTargetsFor maps each host and scope to its agent dirs (claude gets .claude/agents, gemini none)', () => {
   const ctx = { home: '/h', proj: '/p' };
+  const claude = (base, rel) => ({ host: 'claude', dir: `${base}/${rel}` });
   const copilot = (base, rel) => ({ host: 'copilot', dir: `${base}/${rel}` });
   const codex = (base, rel) => ({ host: 'codex', dir: `${base}/${rel}` });
   const table = [
-    ['claude', 'user', []],
-    ['claude', 'project', []],
+    ['claude', 'user', [claude('/h', '.claude/agents')]],
+    ['claude', 'project', [claude('/p', '.claude/agents')]],
     ['gemini', 'user', []],
     ['gemini', 'project', []],
     ['copilot', 'user', [copilot('/h', '.copilot/agents')]],
@@ -413,18 +414,50 @@ test('user-scope install writes the agent file under HOME', () => {
   assert.ok(fs.existsSync(path.join(home, '.codex/agents/artifact-builder.toml')));
 });
 
-test('claude and gemini installs write no agent file', () => {
-  for (const host of ['claude', 'gemini']) {
-    const home = tmp();
-    const proj = tmp();
-    const r = runInstall([host, '--project', proj], home);
-    assert.equal(r.status, 0, `${host}: ${r.stderr}`);
-    assert.doesNotMatch(r.stdout, /agent:/, host);
-    assert.equal(fs.existsSync(path.join(proj, '.github/agents')), false, host);
-    assert.equal(fs.existsSync(path.join(proj, '.codex/agents')), false, host);
-    assert.equal(fs.existsSync(path.join(home, '.copilot/agents')), false, host);
-    assert.equal(fs.existsSync(path.join(home, '.codex/agents')), false, host);
+const claudeAgent = (proj) => path.join(proj, '.claude/agents/artifact-builder.md');
+
+test('a claude install writes artifact-builder.md and a gemini install writes no agent file', () => {
+  const home = tmp();
+  const proj = tmp();
+  const r = runInstall(['claude', '--project', proj], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.readFileSync(claudeAgent(proj), 'utf8'), agentFile('claude').content);
+  assert.ok(r.stdout.split('\n').includes(`agent: ${claudeAgent(proj)}`), r.stdout);
+  // The other hosts' folders stay untouched.
+  assert.equal(fs.existsSync(path.join(proj, '.github/agents')), false);
+  assert.equal(fs.existsSync(path.join(proj, '.codex/agents')), false);
+
+  const gHome = tmp();
+  const gProj = tmp();
+  const g = runInstall(['gemini', '--project', gProj], gHome);
+  assert.equal(g.status, 0, g.stderr);
+  assert.doesNotMatch(g.stdout, /agent:/);
+  for (const dir of ['.claude/agents', '.github/agents', '.codex/agents']) assert.equal(fs.existsSync(path.join(gProj, dir)), false, dir);
+  for (const dir of ['.claude/agents', '.copilot/agents', '.codex/agents']) assert.equal(fs.existsSync(path.join(gHome, dir)), false, dir);
+});
+
+test('the agents host still writes only the copilot and codex files', () => {
+  const home = tmp();
+  const proj = tmp();
+  const r = runInstall(['agents', '--project', proj], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(copilotAgent(proj)));
+  assert.ok(fs.existsSync(codexAgent(proj)));
+  assert.equal(fs.existsSync(path.join(proj, '.claude')), false);
+});
+
+test("a claude install into the plugin's own checkout never targets P/agents", () => {
+  const pluginRoot = path.resolve(here, '../..');
+  for (const scope of ['user', 'project']) {
+    const targets = agentTargetsFor('claude', scope, { home: pluginRoot, proj: pluginRoot });
+    assert.deepEqual(targets.map((t) => t.dir), [path.join(pluginRoot, '.claude/agents')], scope);
+    assert.notEqual(targets[0].dir, path.join(pluginRoot, 'agents'));
   }
+  // A real install into a temp project writes under .claude/agents only, never a top-level agents folder.
+  const proj = tmp();
+  assert.equal(runInstall(['claude', '--project', proj, '--skills', 'make-motion'], tmp()).status, 0);
+  assert.equal(fs.existsSync(path.join(proj, 'agents')), false);
+  assert.deepEqual(fs.readdirSync(path.join(proj, '.claude')).sort(), ['agents', 'skills']);
 });
 
 test('an existing agent file is kept without --force and replaced with it', () => {
@@ -599,15 +632,87 @@ test('--agents-only works at user scope under HOME', () => {
   assert.ok(fs.existsSync(path.join(home, '.codex/agents/artifact-builder.toml')));
 });
 
-test('--agents-only on claude or gemini says there is no agent file and exits 0', () => {
-  for (const host of ['claude', 'gemini']) {
-    const home = tmp();
-    const proj = tmp();
-    const r = runRaw([host, '--project', proj, '--agents-only'], home);
-    assert.equal(r.status, 0, `${host}: ${r.stderr}`);
-    assert.ok(r.stdout.split('\n').includes(`no agent file for ${host}`), r.stdout);
-    assert.equal(fs.readdirSync(proj).length, 0, host);
+test('--agents-only on claude writes the file; on gemini it says there is no agent file and exits 0', () => {
+  const home = tmp();
+  const proj = tmp();
+  const c = runRaw(['claude', '--project', proj, '--agents-only'], home);
+  assert.equal(c.status, 0, c.stderr);
+  assert.ok(c.stdout.split('\n').includes(`agent: ${claudeAgent(proj)}`), c.stdout);
+  assert.equal(fs.readFileSync(claudeAgent(proj), 'utf8'), agentFile('claude').content);
+  assert.equal(fs.existsSync(path.join(proj, '.claude/skills')), false);
+
+  const gHome = tmp();
+  const gProj = tmp();
+  const g = runRaw(['gemini', '--project', gProj, '--agents-only'], gHome);
+  assert.equal(g.status, 0, g.stderr);
+  assert.ok(g.stdout.split('\n').includes('no agent file for gemini'), g.stdout);
+  assert.equal(fs.readdirSync(gProj).length, 0);
+});
+
+// The agent-file paths are host-independent code (installAgents, writeAgentFile). These repeat the
+// copilot cases above for claude so a regression in the claude target shows up.
+test('claude: an existing agent file is kept without --force and replaced with it (--agents-only, user scope)', () => {
+  const home = tmp();
+  const file = path.join(home, '.claude/agents/artifact-builder.md');
+  assert.equal(runRaw(['claude', '--agents-only'], home).status, 0);
+  fs.writeFileSync(file, 'hand edited');
+  const r2 = runRaw(['claude', '--agents-only'], home);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.ok(r2.stdout.split('\n').includes(`agent: kept existing ${file}`), r2.stdout);
+  assert.equal(fs.readFileSync(file, 'utf8'), 'hand edited');
+  const r3 = runRaw(['claude', '--agents-only', '--force'], home);
+  assert.equal(r3.status, 0, r3.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), agentFile('claude').content);
+});
+
+test('claude: an unwritable agent dir warns; the skills still install (exit 0), --agents-only fails (exit 1)', { skip: process.getuid?.() === 0 && 'root ignores file modes' }, () => {
+  const home = tmp();
+  const proj = tmp();
+  const agentsDir = path.join(proj, '.claude/agents');
+  fs.mkdirSync(agentsDir, { recursive: true });
+  fs.chmodSync(agentsDir, 0o555);
+  try {
+    const full = runInstall(['claude', '--project', proj, '--skills', 'make-motion'], home);
+    assert.equal(full.status, 0, full.stderr);
+    assert.match(full.stderr, /agent: could not write .*artifact-builder\.md/);
+    assert.ok(fs.existsSync(path.join(proj, '.claude/skills/make-motion/SKILL.md')));
+    const only = runRaw(['claude', '--project', proj, '--agents-only'], home);
+    assert.equal(only.status, 1, only.stdout + only.stderr);
+    assert.match(only.stderr, /could not write/);
+    assert.equal(fs.existsSync(claudeAgent(proj)), false);
+  } finally {
+    fs.chmodSync(agentsDir, 0o755);
   }
+});
+
+test('claude: a symlink at the agent path is kept, and --force replaces the link, not the file it points to', () => {
+  const home = tmp();
+  const proj = tmp();
+  const real = path.join(tmp(), 'precious.md');
+  fs.writeFileSync(real, 'precious');
+  const file = claudeAgent(proj);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.symlinkSync(real, file);
+  const r1 = runRaw(['claude', '--project', proj, '--agents-only'], home);
+  assert.equal(r1.status, 0, r1.stderr);
+  assert.ok(r1.stdout.split('\n').includes(`agent: kept existing ${file}`), r1.stdout);
+  assert.ok(fs.lstatSync(file).isSymbolicLink());
+  const r2 = runRaw(['claude', '--project', proj, '--agents-only', '--force'], home);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.equal(fs.readFileSync(real, 'utf8'), 'precious');
+  assert.equal(fs.readFileSync(file, 'utf8'), agentFile('claude').content);
+});
+
+test('claude: a directory at the agent path is neither kept nor overwritten', () => {
+  const home = tmp();
+  const proj = tmp();
+  const file = claudeAgent(proj);
+  fs.mkdirSync(file, { recursive: true });
+  fs.writeFileSync(path.join(file, 'inside.txt'), 'x');
+  const only = runRaw(['claude', '--project', proj, '--agents-only', '--force'], home);
+  assert.equal(only.status, 1, only.stderr);
+  assert.match(only.stderr, /agent: .*artifact-builder\.md is not a file/);
+  assert.ok(fs.existsSync(path.join(file, 'inside.txt')));
 });
 
 test('--agents-only with --skills, --link or --no-deps is a usage error naming the flags', () => {

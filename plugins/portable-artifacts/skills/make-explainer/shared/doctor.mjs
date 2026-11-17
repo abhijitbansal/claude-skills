@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
+import { CURRENT_MARKER } from './agents.mjs';
 
 const REPO = 'abhijitbansal/claude-skills';
 const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
@@ -501,51 +502,96 @@ export const cutout = () => optionalPackage({
   notes: 'installs from optional/cutout/package-lock.json; the 25 MB MODNet model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone',
 });
 
-// The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing file
-// never fails doctor. The auto fix runs the skill's own shared/agents.mjs writer; the plugin's installer
-// (bin/install.mjs) writes the same file and is the way to a project-level install.
+// The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing or
+// outdated file never fails doctor. The auto fix runs the skill's own shared/agents.mjs writer; the plugin's
+// installer (bin/install.mjs) writes the same file and is the way to a project-level install.
 // Doctor does not know its host, so it looks in every host folder, user level and project level.
-// It applies only where Copilot or Codex plausibly exists (~/.copilot or ~/.codex is there): on a
-// Claude Code or Gemini machine no agent file is ever installed, so nothing is reported at all.
+// It applies only where Claude Code, Copilot or Codex plausibly exists (~/.claude, ~/.copilot or ~/.codex
+// is there): on a Gemini machine no agent file is ever installed, so nothing is reported at all.
+// The Claude Code plugin ships the same file as <plugin>/agents/artifact-builder.md; where this skill runs
+// from a plugin, that file counts as present (a plugin update replaces it, so its text is not compared).
+// A file without CURRENT_MARKER (make.mjs) predates the one-command operator and is reported as outdated, with
+// the command that replaces it. The doctor never overwrites it: the writer keeps an existing file.
 // Limit: project level means the current folder, not the git root.
-const BUILDER_AGENT_HOST_DIRS = ['.copilot', '.codex'];
-const BUILDER_AGENT_FILES = ['artifact-builder.agent.md', 'artifact-builder.toml'];
-const BUILDER_AGENT_FILE_FOR = { copilot: BUILDER_AGENT_FILES[0], codex: BUILDER_AGENT_FILES[1] };
-const BUILDER_AGENT_USER_HOSTS = [{ host: 'copilot', dotDir: '.copilot' }, { host: 'codex', dotDir: '.codex' }];
-const BUILDER_AGENT_DIRS = (ctx) => {
+const BUILDER_AGENT_HOST_DIRS = ['.claude', '.copilot', '.codex'];
+const BUILDER_AGENT_FILE_FOR = { claude: 'artifact-builder.md', copilot: 'artifact-builder.agent.md', codex: 'artifact-builder.toml' };
+const BUILDER_AGENT_HOST_OF = Object.fromEntries(Object.entries(BUILDER_AGENT_FILE_FOR).map(([host, file]) => [file, host]));
+const BUILDER_AGENT_FILES = Object.values(BUILDER_AGENT_FILE_FOR);
+// Writer order: the order `--fix` writes in. Claude Code last, so the Copilot and Codex order is as it was.
+const BUILDER_AGENT_USER_HOSTS = [{ host: 'copilot', dotDir: '.copilot' }, { host: 'codex', dotDir: '.codex' }, { host: 'claude', dotDir: '.claude' }];
+// [where, folder under it]: user level then project level.
+const BUILDER_AGENT_PLACES = [['home', '.claude/agents'], ['home', '.copilot/agents'], ['home', '.codex/agents'], ['cwd', '.claude/agents'], ['cwd', '.github/agents'], ['cwd', '.codex/agents']];
+
+// Existing agent files, any of the three names in any folder: { file, host, project }.
+function builderAgentFiles(ctx) {
   const P = pp(ctx);
-  const home = ctx.homedir ?? os.homedir();
-  const cwd = ctx.cwd ?? process.cwd();
-  return [P.join(home, '.copilot', 'agents'), P.join(home, '.codex', 'agents'), P.join(cwd, '.github', 'agents'), P.join(cwd, '.codex', 'agents')];
-};
+  const base = { home: ctx.homedir ?? os.homedir(), cwd: ctx.cwd ?? process.cwd() };
+  return BUILDER_AGENT_PLACES.flatMap(([where, rel]) => BUILDER_AGENT_FILES
+    .map((name) => ({ file: P.join(base[where], ...rel.split('/'), name), host: BUILDER_AGENT_HOST_OF[name], project: where === 'cwd' }))
+    .filter(({ file }) => ctx.exists(file)));
+}
+
+// The files among them whose text lacks the marker. An unreadable file counts as current: nothing to compare.
+function outdatedBuilderAgents(ctx) {
+  return builderAgentFiles(ctx).filter(({ file }) => {
+    try {
+      return !ctx.readFile(file).includes(CURRENT_MARKER);
+    } catch {
+      return false;
+    }
+  });
+}
+
+const pluginBuilderAgent = (ctx) => pp(ctx).join(ctx.skillDir, '..', '..', 'agents', BUILDER_AGENT_FILE_FOR.claude);
+// The plugin file serves Claude Code only. It satisfies the requirement only on a machine that has no
+// ~/.copilot or ~/.codex, and the writer then skips the claude file (the plugin already ships that agent).
+const pluginServes = (ctx) => ctx.exists(pluginBuilderAgent(ctx));
+const otherHostsPresent = (ctx) => ['.copilot', '.codex'].some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d)));
 
 export function builderAgent() {
   const install = 'node <path-to-claude-skills>/plugins/portable-artifacts/bin/install.mjs';
   return {
     id: 'builder_agent',
     rank: RANK.other,
-    why: 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Copilot or Codex)',
+    why: (ctx) => {
+      const old = outdatedBuilderAgents(ctx).map((f) => f.file);
+      const base = 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Claude Code, Copilot or Codex)';
+      return old.length ? `${base}; ${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)` : base;
+    },
     required: false,
     size: '≈2 KB',
     // diagnose() skips a requirement whose applies(ctx) is false: not missing, not listed.
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
-    check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
+    check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0,
     // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
     // exists (user level; an existing file is kept). That works for an install made with the skills CLI,
     // which has no bin/. The manual line offers that same writer first, then the installer (project-level install).
     // The program is this process's own Node, not "node" from PATH: it may not be on PATH, and on Windows
     // cmd.exe would look in the current (project) folder first.
+    // An outdated file has no auto fix, because the writer keeps what is there: the manual line names the
+    // installer with --force, which replaces it, and `outdated` lists the files so the report says so.
     fix: (ctx) => {
       const P = pp(ctx);
+      const old = outdatedBuilderAgents(ctx);
+      if (old.length) {
+        const cwd = ctx.cwd ?? process.cwd();
+        const cmds = old.map(({ host, project }) => `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''}`);
+        return {
+          auto: null,
+          outdated: old.map((f) => f.file),
+          manual: manualAll(`${cmds.join(' ; ')} (replaces the outdated file; <path-to-claude-skills> is a local checkout, or clone the repo)`),
+          notes: `${old.map((f) => f.file).join(' and ')} predates make.mjs; the doctor never overwrites an agent file, so run the command yourself`,
+        };
+      }
       const home = ctx.homedir ?? os.homedir();
       const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
-      const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ dotDir }) => ctx.exists(P.join(home, dotDir)));
+      const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ host, dotDir }) => ctx.exists(P.join(home, dotDir)) && !(host === 'claude' && pluginServes(ctx)));
       const auto = hosts.map(({ host, dotDir }) => [ctx.execPath ?? process.execPath, writer, 'write', host, P.join(home, dotDir, 'agents')]);
       const files = hosts.map(({ host, dotDir }) => P.join(home, dotDir, 'agents', BUILDER_AGENT_FILE_FOR[host]));
       const byHand = hosts.map(({ host, dotDir }) => `node ${writer} write ${host} ${P.join(home, dotDir, 'agents')}`);
       return {
         auto: auto.length ? auto : null,
-        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
+        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} claude --agents-only (Claude Code), ${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both Copilot and Codex; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
         notes: `writes ${files.join(' and ')} (user level, outside this project; an existing file is kept)`,
       };
     },
@@ -577,6 +623,8 @@ export async function diagnose(requirements, ctx) {
     if (fix.notes) entry.notes = fix.notes;
     // Installed, but older than a pin in package.json "overrides": reported as stale, not missing. Still required, still exit 1.
     if (fix.stale?.length > 0) entry.stale = fix.stale;
+    // An installed file that predates the current text: reported as outdated, not missing. The doctor never overwrites it.
+    if (fix.outdated?.length > 0) entry.outdated = fix.outdated;
     if (fix.sudoHint) entry.sudoHint = fix.sudoHint;
     missing.push(entry);
   }
@@ -691,7 +739,7 @@ function describe(m, platform) {
   const cmd = m.fix.auto ?? m.fix.manual[platform] ?? m.fix.manual.linux;
   const sudo = m.needsSudo ? ' (needs sudo: run it yourself)' : '';
   const notes = m.notes ? ` Note: ${m.notes}.` : '';
-  const state = m.stale ? `stale (older than the pinned ${m.stale.join(', ')} override${m.stale.length > 1 ? 's' : ''})` : 'missing';
+  const state = m.stale ? `stale (older than the pinned ${m.stale.join(', ')} override${m.stale.length > 1 ? 's' : ''})` : m.outdated ? 'outdated' : 'missing';
   return `${state} (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${cmd}${sudo}${notes}`;
 }
 

@@ -182,6 +182,7 @@ test('builder_agent is an optional requirement in every target, and a missing ag
   assert.equal(miss.required, false);
   assert.match(miss.fix.manual.darwin, /install\.mjs copilot --agents-only/);
   fs.mkdirSync(path.join(home, '.codex/agents'));
-  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
+  // A current file carries make.mjs; a stub without it would be reported as outdated.
+  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n# node scripts/make.mjs <spec> --json\n');
   assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
 });

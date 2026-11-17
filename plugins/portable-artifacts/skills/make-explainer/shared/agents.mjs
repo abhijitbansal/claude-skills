@@ -1,9 +1,10 @@
-// Builds the cheap-model "artifact-builder" agent definition for hosts that support custom agents,
-// and writes it. Claude Code and Gemini get no agent file.
+// Builds the cheap-model "artifact-builder" (the operator) agent definition for hosts that support custom
+// agents, and writes it. Gemini gets no agent file.
 // It lives in shared/ so every skill folder carries it: bin/install.mjs imports it, and
 // `doctor --fix builder_agent` runs it as a CLI, which is how an install made with the skills CLI
 // (skill folders only, no bin/) gets the agent file.
-//   node agents.mjs write <copilot|codex> <agents-dir>     writes the file, keeps an existing one
+//   node agents.mjs write <claude|copilot|codex> <agents-dir>     writes the file, keeps an existing one
+// The Claude Code text is also shipped as the plugin's agents/artifact-builder.md; a test holds the two equal.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,23 +12,38 @@ import { fileURLToPath } from 'node:url';
 export const AGENT_NAME = 'artifact-builder';
 
 const DESCRIPTION =
-  'Builds one portable-artifacts page from a brief. Reads the named SKILL.md, writes the spec JSON, runs validate and build, returns the output path';
+  'Runs one portable-artifacts make.mjs command on a finished spec, fixes only mechanical findings in it, and returns the report';
 
-// One instruction text, used by both host formats. Must not contain three single quotes in a row (TOML literal block).
-export const INSTRUCTIONS = `You are already artifact-builder. Do not delegate again: never hand this work to another agent or to artifact-builder.
+// The operator's one instruction text, used by all three host formats. It operates; it never directs: no spec,
+// no theme or look, no wording. Must not contain three single quotes in a row (TOML literal block).
+export const INSTRUCTIONS = `You are already artifact-builder. Never delegate: do not hand this work to another agent or to artifact-builder again.
 
-The brief gives you three inputs: the skill directory, the spec path (where to write the JSON), and optionally an output folder. Do exactly this:
-1. Read the SKILL.md in the skill directory named in the brief and follow its spec format.
-2. Write the spec JSON from the brief to the spec path.
-3. Run the skill's validate script on the spec, then its build script. Run both commands exactly as SKILL.md shows them. If validation reports errors, fix the spec and rerun it, up to 2 times. If the brief gives an output folder, pass it to the build script's --out option.
-4. Reply with only the output path and the validator's last line. No other text.
+The brief gives you the skill directory, the spec path (the file already exists), and optionally an output path. Do exactly this:
+1. Run: node <skill-dir>/scripts/make.mjs <spec> --json
+   Use the real paths from the brief. Add --out <output path> when the brief gives one.
+2. The command prints one JSON report. If it has findings of kind "mechanical", change only the JSON paths those findings name in the spec file (apply the finding's fix when it has one), then run the same command again. Do this at most 2 times. A mechanical finding with an empty path names nothing you may change: stop and report it.
+3. Never create a spec. Never change wording, theme, look, layout, or data. Never act on a "creative" finding: leave it in the report.
+4. Reply with only the last report, as JSON. No other text.
 
-If validation still fails after 2 fix attempts, stop. Reply with the spec path and the validator's last line, and say it failed. Never report an output path for a build that did not run.`;
+If the command cannot run (it prints an error, or no report), reply with its error line and stop. Never report an output path for a build that did not run.`;
 
 // TOML basic string: JSON string escapes are valid TOML escapes.
 export const tomlString = (s) => JSON.stringify(s);
 
 const BUILDERS = {
+  // tools: no subagent tool (it cannot delegate again) and no Write (it cannot create a spec). Edit only changes an existing file.
+  claude: () => ({
+    fileName: `${AGENT_NAME}.md`,
+    content: `---
+name: ${AGENT_NAME}
+description: ${DESCRIPTION}
+model: haiku
+tools: Read, Edit, Bash
+---
+
+${INSTRUCTIONS}
+`,
+  }),
   copilot: () => ({
     fileName: `${AGENT_NAME}.agent.md`,
     content: `---
@@ -81,6 +97,10 @@ export function writeAgentFile(dir, file, content, force) {
   }
   return 'written';
 }
+
+// Text every current agent file carries and no earlier one did (they told the builder to write the spec and run two scripts).
+// The doctor uses it to tell an outdated file from a current one.
+export const CURRENT_MARKER = 'make.mjs';
 
 const USAGE = `usage: node agents.mjs write <${AGENT_HOSTS.join('|')}> <agents-dir>`;
 

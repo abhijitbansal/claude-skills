@@ -682,7 +682,12 @@ test('devDeps size option is disclosed', async () => {
 
 // --- builderAgent: the optional artifact-builder agent file ---
 
-const AGENT_DIRS = ["/h/.copilot/agents", "/h/.codex/agents", "/p/.github/agents", "/p/.codex/agents"];
+const AGENT_DIRS = ["/h/.claude/agents", "/h/.copilot/agents", "/h/.codex/agents", "/p/.claude/agents", "/p/.github/agents", "/p/.codex/agents"];
+const AGENT_FILE_NAMES = ["artifact-builder.md", "artifact-builder.agent.md", "artifact-builder.toml"];
+// A current agent file carries make.mjs; the text before this plan told the builder to write the spec and run two scripts.
+const CURRENT_TEXT = "Run: node <skill-dir>/scripts/make.mjs <spec> --json";
+const OLD_TEXT = "Run the skill's validate script on the spec, then its build script.";
+const readerOf = (files) => (p) => { if (!(p in files)) throw new Error("ENOENT"); return files[p]; };
 // files: existing agent files; dirs: other existing folders (the host's home folder is what makes the requirement apply).
 const agentCtx = (files = [], dirs = ["/h/.codex"]) => ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", exists: (p) => files.includes(p) || dirs.includes(p) });
 const EMPTY_HOME = [];
@@ -698,8 +703,9 @@ test("builderAgent: false on an empty home and cwd; optional with the shared req
   assert.equal(await b.check(agentCtx()), false);
 });
 
+// builderAgent knows three file names (one per host) in six folders (user and project level): every pair counts.
 for (const dir of AGENT_DIRS) {
-  for (const file of ["artifact-builder.agent.md", "artifact-builder.toml"]) {
+  for (const file of AGENT_FILE_NAMES) {
     test(`builderAgent: ${file} in ${dir} counts as installed`, async () => {
       assert.equal(await builderAgent().check(agentCtx([`${dir}/${file}`])), true);
     });
@@ -707,7 +713,88 @@ for (const dir of AGENT_DIRS) {
 }
 
 test("builderAgent: another file in an agents folder does not count", async () => {
-  assert.equal(await builderAgent().check(agentCtx(["/h/.copilot/agents/other.agent.md", "/h/.codex/agents/artifact-builder.md"])), false);
+  assert.equal(await builderAgent().check(agentCtx(["/h/.copilot/agents/other.agent.md", "/h/.codex/agents/artifact-builder.yaml"])), false);
+});
+
+test("builderAgent: the plugin's own agents/artifact-builder.md counts as installed", async () => {
+  // skillDir is <plugin>/skills/<skill>; the plugin file is <plugin>/agents/artifact-builder.md
+  const c = ctx({ homedir: "/h", cwd: "/p", skillDir: "/plug/skills/make-motion", exists: (p) => p === "/plug/agents/artifact-builder.md" || p === "/h/.claude" });
+  assert.deepEqual(await diagnose([builderAgent()], c), { ok: true, missing: [] });
+});
+
+test("builderAgent: the plugin file satisfies Claude Code only; ~/.codex or ~/.copilot still wants its own file, and no claude file is written beside the plugin's", async () => {
+  const plugin = "/plug/agents/artifact-builder.md";
+  for (const other of ["/h/.codex", "/h/.copilot"]) {
+    const c = ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", skillDir: "/plug/skills/make-motion", exists: (p) => [plugin, "/h/.claude", other].includes(p) });
+    const { missing } = await diagnose([builderAgent()], c);
+    assert.deepEqual(missing.map((m) => m.id), ["builder_agent"], other);
+    const hosts = builderAgent().fix(c).auto.map((argv) => argv[3]);
+    assert.deepEqual(hosts, [other === "/h/.codex" ? "codex" : "copilot"], "the writer skips claude: the plugin already ships that agent");
+  }
+});
+
+// An agent file is outdated when it lacks make.mjs: the earlier text told the builder to write the spec itself.
+const stateCtx = (path, text, dirs = ["/h/.claude"]) => ctx({
+  homedir: "/h", cwd: "/p", execPath: "/n/node",
+  exists: (p) => p === path || dirs.includes(p),
+  readFile: readerOf({ [path]: text }),
+});
+
+test("builderAgent: a file without the text make.mjs is reported as outdated with the command that replaces it", async () => {
+  const file = "/h/.claude/agents/artifact-builder.md";
+  const c = stateCtx(file, OLD_TEXT);
+  assert.equal(await builderAgent().check(c), false);
+  const { ok, missing } = await diagnose([builderAgent()], c);
+  assert.equal(ok, true);
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].id, "builder_agent");
+  assert.deepEqual(missing[0].outdated, [file]);
+  assert.match(missing[0].why, /outdated/);
+  assert.equal(missing[0].fix.auto, null, "no automatic fix: the doctor never overwrites");
+  assert.match(missing[0].fix.manual.darwin, /install\.mjs claude --agents-only --force/);
+  const human = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
+  assert.equal(human.code, 0);
+  assert.match(human.out, /outdated \(optional\): builder_agent — /);
+  assert.match(human.out, /install\.mjs claude --agents-only --force/);
+});
+
+test("builderAgent: an outdated project-level file names the project in the replacing command, and each host its own", async () => {
+  const proj = "/p/.github/agents/artifact-builder.agent.md";
+  const c1 = stateCtx(proj, OLD_TEXT, ["/h/.copilot"]);
+  const m1 = (await diagnose([builderAgent()], c1)).missing[0];
+  assert.match(m1.fix.manual.linux, /install\.mjs copilot --agents-only --force --project \/p/);
+  const toml = "/h/.codex/agents/artifact-builder.toml";
+  const m2 = (await diagnose([builderAgent()], stateCtx(toml, OLD_TEXT, ["/h/.codex"]))).missing[0];
+  assert.match(m2.fix.manual.linux, /install\.mjs codex --agents-only --force(?! --project)/);
+});
+
+test("builderAgent: an up-to-date file is ok, and an unreadable one is not called outdated", async () => {
+  const file = "/h/.claude/agents/artifact-builder.md";
+  assert.deepEqual(await diagnose([builderAgent()], stateCtx(file, `---\n---\n${CURRENT_TEXT}\n`)), { ok: true, missing: [] });
+  const unreadable = ctx({ homedir: "/h", cwd: "/p", exists: (p) => p === file || p === "/h/.claude", readFile: () => { throw new Error("EACCES"); } });
+  assert.deepEqual(await diagnose([builderAgent()], unreadable), { ok: true, missing: [] });
+});
+
+test("builderAgent: the outdated report never fails doctor, and --fix refuses it and writes nothing", async () => {
+  const file = "/h/.claude/agents/artifact-builder.md";
+  const c = stateCtx(file, OLD_TEXT);
+  const run = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
+  assert.equal(run.code, 0);
+  const json = JSON.parse((await runMain(["--json"], mainOpts({ requirementsFor: () => [builderAgent()] }), { ctx: c })).out);
+  assert.equal(json.ok, true);
+  const ran = [];
+  const res = await runFixes(["builder_agent"], [builderAgent()], c, (...a) => { ran.push(a); return { status: 0 }; });
+  assert.deepEqual(ran, []);
+  assert.equal(res[0].refused, "no automatic fix");
+  assert.match(res[0].manual, /--agents-only --force/);
+});
+
+test("builderAgent: one outdated file among current ones still reports, and names only the outdated one", async () => {
+  const old = "/h/.claude/agents/artifact-builder.md";
+  const cur = "/h/.codex/agents/artifact-builder.toml";
+  const c = ctx({ homedir: "/h", cwd: "/p", exists: (p) => [old, cur, "/h/.claude"].includes(p), readFile: readerOf({ [old]: OLD_TEXT, [cur]: CURRENT_TEXT }) });
+  const m = (await diagnose([builderAgent()], c)).missing[0];
+  assert.deepEqual(m.outdated, [old]);
 });
 
 test("builderAgent: auto fix writes the agent file for each host folder that exists; manual names the installer", () => {
@@ -717,6 +804,13 @@ test("builderAgent: auto fix writes the agent file for each host folder that exi
     ["/s/make-motion/shared/agents.mjs", "write", "codex", "/h/.codex/agents"],
   ]);
   assert.ok(both.auto.every((s) => s[0] === "/n/node"), "runs this process's Node, not node from PATH");
+  const withClaude = builderAgent().fix(agentCtx([], ["/h/.claude", "/h/.codex"]));
+  assert.deepEqual(withClaude.auto.map((s) => s.slice(1)), [
+    ["/s/make-motion/shared/agents.mjs", "write", "codex", "/h/.codex/agents"],
+    ["/s/make-motion/shared/agents.mjs", "write", "claude", "/h/.claude/agents"],
+  ]);
+  assert.match(withClaude.notes, /\/h\/\.claude\/agents\/artifact-builder\.md/);
+  assert.match(withClaude.manual.darwin, /install\.mjs claude --agents-only/);
   const codexOnly = builderAgent().fix(agentCtx([], ["/h/.codex"]));
   assert.deepEqual(codexOnly.auto.map((s) => s.slice(1)), [["/s/make-motion/shared/agents.mjs", "write", "codex", "/h/.codex/agents"]]);
   assert.match(codexOnly.notes, /\/h\/\.codex\/agents\/artifact-builder\.toml/);
@@ -744,7 +838,7 @@ test("builderAgent: a missing agent file is optional and never makes doctor exit
   assert.equal(json.ok, true);
 });
 
-test("builderAgent: not reported at all when neither ~/.copilot nor ~/.codex exists (Claude Code, Gemini)", async () => {
+test("builderAgent: not reported at all when none of ~/.claude, ~/.copilot and ~/.codex exists (Gemini)", async () => {
   const empty = agentCtx([], EMPTY_HOME);
   assert.equal(builderAgent().applies(empty), false);
   assert.deepEqual(await diagnose([builderAgent()], empty), { ok: true, missing: [] });
@@ -757,8 +851,8 @@ test("builderAgent: not reported at all when neither ~/.copilot nor ~/.codex exi
   assert.deepEqual(json, { ok: true, missing: [] });
 });
 
-test("builderAgent: ~/.codex or ~/.copilot present without the file is a missing optional, exit 0", async () => {
-  for (const dir of ["/h/.codex", "/h/.copilot"]) {
+test("builderAgent: ~/.claude, ~/.codex or ~/.copilot present without the file is a missing optional, exit 0", async () => {
+  for (const dir of ["/h/.claude", "/h/.codex", "/h/.copilot"]) {
     const c = agentCtx([], [dir]);
     assert.equal(builderAgent().applies(c), true, dir);
     const { ok, missing } = await diagnose([builderAgent()], c);
@@ -766,7 +860,7 @@ test("builderAgent: ~/.codex or ~/.copilot present without the file is a missing
     assert.deepEqual(missing.map((m) => [m.id, m.required]), [["builder_agent", false]]);
     const human = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
     assert.equal(human.code, 0);
-    assert.match(human.out, /missing \(optional\): builder_agent — .*Run: \/n\/node \/s\/make-motion\/shared\/agents\.mjs write (codex|copilot) \/h\/\.(codex|copilot)\/agents/);
+    assert.match(human.out, /missing \(optional\): builder_agent — .*Run: \/n\/node \/s\/make-motion\/shared\/agents\.mjs write (claude|codex|copilot) \/h\/\.(claude|codex|copilot)\/agents/);
   }
 });
 
