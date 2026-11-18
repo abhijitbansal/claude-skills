@@ -106,6 +106,7 @@ Use it when the user wants a plan, proposal or design reviewed and answered: wha
 - `timeline`: dated events.
 - `compare`: 2-3 columns of points.
 - `callout`: `tone` info, warn, good or bad (a `tldr` takes neutral, accent, good, warn or bad).
+- `quote`: one line set large (`text`, `by`, `tone`); in a deck one slide, and as the last slide it closes the deck.
 - `code`: a block with a copy button.
 - `diff`: a unified diff (`diff`, at most 200 lines; `file`, `caption`), each line marked added, deleted or context; no highlighting.
 - `details`: a collapsed block.

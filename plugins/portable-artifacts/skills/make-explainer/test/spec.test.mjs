@@ -16,15 +16,16 @@ const text = (t = 'Body.') => ({ type: 'text', text: t });
 const ONE_NODE = { type: 'flow', nodes: [{ id: 'a', label: 'A' }] };
 const errorsOf = async (spec, opts = { dir: FIXTURES }) => (await validateSpec(spec, opts)).errors;
 const section = (type, patch) => ({ ...fixture().sections.find((s) => s.type === type), ...patch });
-const TYPE_LIST = '"tldr", "text", "kpis", "cards", "table", "risks", "files", "steps", "timeline", "compare", "callout", "code", "diff", "details", "checklist", "diagram", "chart", "scene", "motion", "image", "decision", "approval", "question", "review", "verdict"';
+const TYPE_LIST = '"tldr", "text", "kpis", "cards", "table", "risks", "files", "steps", "timeline", "compare", "callout", "code", "diff", "details", "checklist", "diagram", "chart", "scene", "motion", "image", "decision", "approval", "question", "review", "verdict", "quote"';
 
 test('the all-types fixture is valid with no warnings', async () => {
   const r = await validateSpec(fixture(), { dir: FIXTURES });
   assert.deepEqual(r, { ok: true, errors: [], warnings: [] });
 });
 
-test('every section type has a schema (the fixture covers all 25)', () => {
-  assert.deepEqual(fixture().sections.map((s) => s.type), TYPE_LIST.replaceAll('"', '').split(', '));
+test('every section type has a schema (the fixture covers all 26)', () => {
+  // The verdict must be the last section, so the fixture lists the quote before it: compare as sets.
+  assert.deepEqual(fixture().sections.map((s) => s.type).sort(), TYPE_LIST.replaceAll('"', '').split(', ').sort());
 });
 
 test('loadSpec reports unreadable and malformed files as UsageError', () => {
@@ -549,6 +550,24 @@ test('unregisterCheck removes one check and tolerates unknown ones', () => {
   assert.ok(!checksFor('table').includes(fn));
   unregisterCheck('table', fn);
   unregisterCheck('nothing-here', fn);
+});
+
+test('a quote needs text', async () => {
+  assert.deepEqual(await errorsOf(doc([{ type: 'quote' }])), [{ path: 'sections[0].text', message: 'required (string)' }]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'quote', text: 'Short and quotable.' }])), []);
+  assert.deepEqual(await errorsOf(doc([{ type: 'quote', text: 'Short.', by: 'Ada', tone: 'accent' }])), []);
+});
+
+test('an unknown key in a quote is refused with did-you-mean', async () => {
+  assert.deepEqual(await errorsOf(doc([{ type: 'quote', text: 'x', bye: 'Ada' }])), [{ path: 'sections[0].bye', message: 'unknown property; did you mean "by"?' }]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'quote', text: 'x', source: 'Ada' }])), [{ path: 'sections[0].source', message: 'unknown property; allowed: type, id, title, label, text, by, tone, simple' }]);
+});
+
+test('a quote over its length limits is an error naming the field and the limit', async () => {
+  const long = await errorsOf(doc([{ type: 'quote', text: 'x'.repeat(301) }]));
+  assert.deepEqual(long, [{ path: 'sections[0].text', message: 'text is 301 characters; the limit is 300 — shorten it' }]);
+  const by = await errorsOf(doc([{ type: 'quote', text: 'x', by: 'y'.repeat(81) }]));
+  assert.deepEqual(by, [{ path: 'sections[0].by', message: 'by is 81 characters; the limit is 80 — shorten it' }]);
 });
 
 test('a checklist preset warns, never errors, when a checklist section has no intro', async () => {

@@ -38,11 +38,12 @@ Every section has `type` (required), an optional `id` (`^[a-z][a-z0-9-]*$`, uniq
 | `decision`, `approval`, `question` | `id` at most 80 characters; `question`, `item` and `text` at most 500; option `label` at most 200; 2 to 5 options |
 | `review.items` | 1 to 5 |
 | `verdict` | at most one, the last section |
+| `quote` | `text` 300 characters, `by` 80 |
 | `image.src` | png, jpg, webp or svg, at most 1.5 MB |
 | `motion.video` | `.mp4`, at most 50 MB |
 | `diagram` file, `scene` file, `motion.spec` file | `.json`, at most 1 MB |
 | `scene` sections | at most 4 per page |
-| Text length | Soft caps, warnings only: title 8 words, label 4, paragraph 3 sentences or 60 words, text section 120, card text 30, list item 20, page prose 900 (1,800 on a plan page), tldr 3 points |
+| Text length | Soft caps, warnings only: title 8 words, label 4, paragraph 3 sentences or 60 words, text section 120, card text 30, list item 20, page prose 900 (1,800 on a plan page), tldr 3 points, quote 40 words and its `by` 8 |
 
 Slides mode adds a budget to each section (errors): at most 6 points (tldr points, `- ` list lines, items of list-like sections, compare points, checklist items), 8 table rows, 12 code lines and 80 words of prose (the title, the label and captions do not count).
 

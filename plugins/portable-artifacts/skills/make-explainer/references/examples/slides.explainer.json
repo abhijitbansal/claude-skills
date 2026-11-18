@@ -115,6 +115,13 @@
       "title": "Diagrams, charts and videos fit slides too",
       "label": "Embeds",
       "text": "- A diagram section draws a make-diagram figure with hover tracing and a Present mode.\n- A chart section draws a make-dashboard chart as a static image with a data table.\n- A motion section plays a clip, like the one on slide 4, and never autoplays."
+    },
+    {
+      "type": "quote",
+      "title": "One rule closes the deck",
+      "label": "Closing",
+      "text": "You write the facts; the tool owns the layout.",
+      "by": "The rule behind every skill"
     }
   ]
 }

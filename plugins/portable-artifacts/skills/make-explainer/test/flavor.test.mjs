@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { flavorFor, FLAVORS, CARD_INKS, flavorVars, cardInkProblems, SCRIM, scrimProblems, scrimVar } from '../scripts/lib/flavor.mjs';
 import { loadTheme, listThemes } from '../shared/theme.mjs';
 import { contrastRatio, mixHex } from '../shared/contrast.mjs';
@@ -47,6 +48,19 @@ test('scrim: text and text-2 pass 4.5:1 on the scrim over any art pixel, in ever
   assert.deepEqual(scrimProblems(SCRIM, loaded, contrastRatio, mixHex), []);
 });
 
+// Every theme now draws art under its title slide, so the same proof covers all nine, not just the three flavors.
+const allThemes = Object.fromEntries(listThemes().map((name) => [name, loadTheme(name)]));
+
+test('scrim: the same proof holds for all nine themes, classic ones included', () => {
+  assert.equal(Object.keys(allThemes).length, 9);
+  assert.deepEqual(scrimProblems(SCRIM, allThemes, contrastRatio, mixHex), []);
+});
+
+test('scrim guardrail over nine themes: a thin scrim is reported for a classic theme too', () => {
+  const thin = scrimProblems({ ...SCRIM, alpha: 0.4 }, allThemes, contrastRatio, mixHex);
+  assert.ok(thin.some((p) => /^(paper|ink|blueprint|editorial|mono|brief) (light|dark): text on the scrim over /.test(p)), thin.join('\n'));
+});
+
 test('scrim guardrail: a thin scrim or a muted ink is reported', () => {
   const thin = scrimProblems({ ...SCRIM, alpha: 0.4 }, loaded, contrastRatio, mixHex);
   assert.ok(thin.some((p) => p.startsWith('dusk light: text on the scrim over ')), thin.join('\n'));
@@ -54,7 +68,31 @@ test('scrim guardrail: a thin scrim or a muted ink is reported', () => {
   assert.ok(muted.some((p) => p.startsWith('press light: accent on the scrim over #000000')), muted.join('\n'));
 });
 
-test('scrimVar: one declaration, the scrim alpha of --page; empty for classic', () => {
-  assert.equal(scrimVar('dusk'), `:root{--scrim:color-mix(in srgb, var(--page) ${Math.round(SCRIM.alpha * 100)}%, transparent)}`);
-  assert.equal(scrimVar('classic'), '');
+test('scrimVar: one declaration, the scrim alpha of --page, for every flavor and for classic', () => {
+  const declaration = `:root{--scrim:color-mix(in srgb, var(--page) ${Math.round(SCRIM.alpha * 100)}%, transparent)}`;
+  for (const flavor of ['dusk', 'press', 'poster', 'classic']) assert.equal(scrimVar(flavor), declaration, flavor);
+});
+
+// Every flavor still styles the hero (page) and the cover (deck) after the shared pieces moved to their own sheets.
+const read = (f) => fs.readFileSync(new URL(`../template/${f}`, import.meta.url), 'utf8');
+
+test('every flavor still styles the hero: flavors.css has its title, art and verdict-card rules', () => {
+  const css = read('flavors.css');
+  for (const rule of ['html[data-flavor] h1 {', '.hero-art {', 'html[data-flavor] .hero-tldr {']) assert.ok(css.includes(rule), rule);
+  for (const flavor of FLAVORS) assert.ok(css.includes(`:root[data-flavor="${flavor}"]`), `${flavor} has its own knobs`);
+});
+
+test('every flavor still styles the deck cover: deck-art.css and deck-flavors.css between them', () => {
+  const css = `${read('deck-art.css')}\n${read('deck-flavors.css')}`;
+  assert.ok(css.includes('.slide-cover h1'), 'the cover title');
+  assert.ok(css.includes('.slide-art {'), 'the art layer');
+  assert.ok(css.includes('.slide-close'), 'the closing slide');
+  for (const flavor of FLAVORS) assert.ok(read('deck-flavors.css').includes(`:root[data-flavor="${flavor}"] .slide-cover`), `${flavor} styles its cover`);
+});
+
+test('the cover title takes the hero tokens (size floor, leading, tracking)', () => {
+  const rule = /\.slide-cover h1 \{([^}]*)\}/.exec(read('deck-art.css'))?.[1] ?? '';
+  assert.match(rule, /var\(--fs-hero\)/);
+  assert.match(rule, /var\(--lh-hero\)/);
+  assert.match(rule, /var\(--track-hero\)/);
 });

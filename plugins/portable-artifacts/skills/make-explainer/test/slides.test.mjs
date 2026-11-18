@@ -138,7 +138,7 @@ test('a flavored deck puts full-bleed art on the first and last slides only, in 
   for (const theme of FLAVORED) {
     const { html } = await example(theme);
     const chunks = slideChunks(html);
-    assert.equal(chunks.length, 11);
+    assert.equal(chunks.length, 12);
     assert.deepEqual(chunks.map((c) => c.includes('<div class="slide-art"')), chunks.map((_, i) => i === 0 || i === chunks.length - 1), theme);
     for (const c of [chunks[0], chunks.at(-1)]) {
       const art = c.match(/<div class="slide-art" aria-hidden="true">([\s\S]*?)<\/div>/);
@@ -163,17 +163,67 @@ test('data-flavor on <html>: dusk by default, the theme name for press and poste
   for (const theme of ['paper', 'blueprint', 'ink', 'editorial']) assert.equal(flavorOf((await build(deck([text(1)]), { theme })).html), 'classic', theme);
 });
 
-test('a classic deck gets no art and no flavor stylesheet', async () => {
+// Every one of the nine themes draws its own art on the first and last slide (shared/art, Task 3); a classic theme
+// gets the art and its scrim but none of the flavor stylesheets.
+const ALL_THEMES = ['blueprint', 'brief', 'dusk', 'editorial', 'ink', 'mono', 'paper', 'poster', 'press'];
+
+test('every theme draws its own art on the title and closing slides, classic themes included', async () => {
+  for (const theme of ALL_THEMES) {
+    const { html } = await build(deck([text(1), text(2)]), { theme });
+    const chunks = slideChunks(html);
+    assert.deepEqual(chunks.map((c) => c.includes('<div class="slide-art"')), [true, false, true], theme);
+    assert.ok(html.includes('--scrim:color-mix('), `${theme}: the title slide's scrim is defined`);
+    assert.ok(html.includes('.slide-art {'), `${theme}: the art stylesheet ships`);
+  }
+});
+
+test('a classic deck gets no flavor stylesheet', async () => {
   for (const theme of ['paper', 'ink']) {
     const { html } = await build(deck([text(1), text(2)]), { theme });
-    assert.ok(!html.includes('slide-art'), theme);
     assert.ok(!html.includes('/* deck flavors */'), theme);
     assert.ok(!html.includes('/* flavors */'), theme);
-    assert.ok(!html.includes('--scrim'), theme);
   }
   const { html } = await example(undefined); // the example names paper
   assert.equal(flavorOf(html), 'classic');
-  assert.ok(!html.includes('slide-art'));
+  assert.ok(html.includes('slide-art'));
+});
+
+test('no two themes draw the same title-slide art for the same deck', async () => {
+  const art = async (theme) => slideChunks((await build(deck([text(1)]), { theme })).html)[0].match(/<div class="slide-art"[\s\S]*?<\/div>/)[0];
+  const seen = new Map();
+  for (const theme of ALL_THEMES) {
+    const drawing = await art(theme);
+    assert.ok(!seen.has(drawing), `${theme} draws the same art as ${seen.get(drawing)}`);
+    seen.set(drawing, theme);
+  }
+});
+
+// ---- the closing slide ------------------------------------------------------------------------
+
+const closing = async (last) => slideChunks((await build(deck([text(1), last]))).html).at(-1).match(/<section class="slide ([^"]*)"/)[1].split(' ');
+
+test('the last slide of a deck ending in a tldr, a callout or a quote has slide-close', async () => {
+  for (const last of [{ type: 'tldr', text: 'The call.' }, { type: 'callout', tone: 'info', title: 'Keep going', text: 'x' }, { type: 'quote', text: 'Said it.' }]) {
+    assert.ok((await closing(last)).includes('slide-close'), last.type);
+  }
+});
+
+test('a deck ending in a table, or any slide that is not the last, does not have slide-close', async () => {
+  assert.ok(!(await closing({ type: 'table', title: 'T', columns: ['a'], rows: [['1']] })).includes('slide-close'));
+  const html = (await build(deck([{ type: 'tldr', text: 'First.' }, text(2), text(3)]))).html;
+  assert.ok(!html.includes('slide-tldr slide-close'), 'a tldr that opens or sits mid-deck is an ordinary slide');
+  assert.equal((html.match(/<section class="slide [^"]*slide-close/g) ?? []).length, 0, 'no slide carries the class');
+});
+
+test('a quote is one slide: its heading when titled, its figure, no second heading', async () => {
+  const html = (await build(deck([text(1), { type: 'quote', title: 'What they said', text: 'It reads like one voice.', by: 'A reviewer' }]))).html;
+  const chunk = slideChunks(html).at(-1);
+  assert.match(chunk, /class="slide slide-quote slide-close/);
+  assert.match(chunk, /<h2 class="slide-title" id="slide-3-title">What they said<\/h2>/);
+  assert.match(chunk, /<figure class="quote tone-neutral">/);
+  assert.match(html, /aria-label="Slide 3 of 3: What they said"/);
+  const untitled = (await build(deck([text(1), { type: 'quote', text: 'Said it.' }]))).html;
+  assert.match(untitled, /aria-label="Slide 3 of 3: Quote"/);
 });
 
 test('a flavored deck carries the page flavor sheet, the deck flavor sheet and the scrim', async () => {
@@ -185,7 +235,7 @@ test('a flavored deck carries the page flavor sheet, the deck flavor sheet and t
 
 test('flavored decks keep the golden deck\'s slides, ids, labels and outline entries', async () => {
   const golden = slideHeads(fs.readFileSync(GOLDEN, 'utf8'));
-  assert.equal(golden.length, 11, 'precondition: the golden is the 11-slide example');
+  assert.equal(golden.length, 12, 'precondition: the golden is the 12-slide example (it now closes on a quote)');
   for (const theme of FLAVORED) {
     const { html } = await example(theme);
     assert.deepEqual(slideHeads(html), golden, theme);

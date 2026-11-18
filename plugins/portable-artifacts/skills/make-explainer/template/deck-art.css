@@ -1,0 +1,55 @@
+/* deck art */
+/* Every deck, whatever its theme: full-bleed art under the title slide and the closing slide (shared/art draws one
+   style per theme, in a light and a dark drawing). Colours are theme tokens; the title slide's text sits on the
+   scrim (--scrim, defined with this sheet) in the proven inks only (flavor.mjs SCRIM, checked for all nine themes
+   by test/flavor.test.mjs). The closing slide sets its content on solid --page, because any section type can close
+   a deck, and its layout is a single statement. The flavored decks' own looks are in deck-flavors.css, loaded after. */
+
+/* the art: full-bleed under the slide's content, one drawing per mode */
+.slide-art { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: var(--page); }
+.slide { position: relative; isolation: isolate; }
+.slide-art svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.slide-art .art-dark { display: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .slide-art .art-light { display: none; }
+  :root:not([data-theme="light"]) .slide-art .art-dark { display: block; }
+}
+:root[data-theme="dark"] .slide-art .art-light { display: none; }
+:root[data-theme="dark"] .slide-art .art-dark { display: block; }
+
+/* title slide: the text sits on the scrim, in the proven inks only. The title takes the hero's tokens at projection
+   scale: never below the page hero's size, the same leading and tracking. */
+.slide-cover .slide-inner { width: auto; max-width: min(52rem, 100%); margin: auto auto auto 0; padding: clamp(22px, 3.4vw, 52px); background: var(--scrim); color: var(--text); }
+.slide-cover h1 { max-width: 13em; font-size: max(var(--fs-hero), clamp(2.3rem, 1rem + 4.6vw, 5.4rem)); line-height: var(--lh-hero); letter-spacing: var(--track-hero); }
+.slide-cover .subtitle { color: var(--text-2); }
+.slide-cover .meta div { background: var(--surface); }
+/* a flavor may clear the pill, leaving the labels on the scrim: keep them in a proven ink */
+.slide-cover .meta :is(dt, dd) { color: var(--text-2); }
+
+/* closing slide: any section type can close, so its content gets solid ground; the art frames it. A closing tldr,
+   callout or quote (class slide-close) is one centred statement at projection size. */
+.slide-has-art:not(.slide-cover) .slide-inner { padding: clamp(20px, 3vw, 44px); background: var(--page); }
+.slide-has-art:not(.slide-cover) .pa-footer { padding: 10px clamp(20px, 3vw, 44px); background: var(--page); }
+.slide-close .slide-inner { max-width: 48rem; margin-inline: auto; text-align: center; }
+.slide-close .lead { max-width: 22ch; margin-inline: auto; font-size: clamp(1.9rem, 1.1rem + 3vw, 3.4rem); line-height: 1.12; }
+.slide-close .points { display: inline-block; max-width: 40ch; text-align: left; }
+.slide-close .callout { margin-inline: auto; text-align: left; }
+.slide-close .slide-title { margin-inline: auto; }
+
+/* phone and short screens */
+@media (max-width: 640px) {
+  .slide-cover .slide-inner { margin: auto 0; }
+  /* base.css drops the chip box on a phone (padding 0, no border): the surface fill would then paint a strip behind
+     each line of text, so the chips are plain text on the scrim there too */
+  .slide-cover .meta div { background: none; }
+  .slide-cover h1 { font-size: clamp(2rem, 9vw, 2.8rem); }
+}
+
+/* print: no art, no scrim; the content prints on the page in ink. !important: the flavor rules are more specific */
+@media print {
+  .slide-art { display: none !important; }
+  .slide-has-art .slide-inner, .slide-has-art .pa-footer { background: none !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; color: var(--text) !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important; }
+  /* the classic deck's print placement (slides.html): full width, the title 30vh down */
+  .slide-cover .slide-inner { max-width: none !important; margin: 30vh 0 0 !important; }
+  .slide-close .slide-inner { text-align: left; }
+}

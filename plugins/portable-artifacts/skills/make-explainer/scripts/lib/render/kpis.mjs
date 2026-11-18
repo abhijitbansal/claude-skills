@@ -42,7 +42,7 @@ export function render(section) {
     const delta = k.delta === undefined && !toneChip(k.tone) ? '' : `<dd class="kpi-delta">${toneChip(k.tone)}${k.delta === undefined ? '' : `<span>${esc(k.delta)}</span>`}</dd>`;
     const note = k.note === undefined ? '' : `<dd class="kpi-note">${inline(k.note)}</dd>`;
     const own = wide ? ` style="--n: ${chars}"` : '';
-    return `<div class="kpi ${toneClass(k.tone)}${wide}"><dt>${inline(k.label)}</dt><dd class="kpi-value"${own}>${esc(value)}</dd>${delta}${note}</div>`;
+    return `<div class="kpi ${toneClass(k.tone)}${wide}"><dt class="pa-caps">${inline(k.label)}</dt><dd class="kpi-value pa-num"${own}>${esc(value)}</dd>${delta}${note}</div>`;
   });
   return `<dl class="kpis"${groupN > 0 ? ` style="--n: ${groupN}"` : ''}>\n${items.join('\n')}\n</dl>`;
 }

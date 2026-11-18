@@ -1098,7 +1098,7 @@ test('the motion prompts ask for eight kinds between them, and each is a kind ma
 });
 
 test('every make-explainer section type except motion and scene has a prompt that expects it', () => {
-  assert.ok(SECTION_TYPES.includes('diff') && SECTION_TYPES.length === 25, `${SECTION_TYPES.length} section types`);
+  assert.ok(SECTION_TYPES.includes('diff') && SECTION_TYPES.length === 26, `${SECTION_TYPES.length} section types`);
   const wanted = SECTION_TYPES.filter((t) => !EXPLAINER_EXEMPT.includes(t));
   assert.deepEqual(uncovered('explainer', wanted.map((t) => `type=${t}`)), []);
 });

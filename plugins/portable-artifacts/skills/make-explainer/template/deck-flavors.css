@@ -1,7 +1,8 @@
 /* deck flavors */
-/* Loaded after flavors.css, only for a dusk, press or poster deck. Colours are theme tokens (color-mix derived);
-   text on a solid fill uses --card-bg / --card-fg, and text on the title slide's art uses --scrim with only the
-   inks flavor.mjs proves on it (--text, --text-2). The closing slide sets its content on solid --page. */
+/* Loaded after flavors.css and deck-art.css, only for a dusk, press or poster deck. Colours are theme tokens
+   (color-mix derived); text on a solid fill uses --card-bg / --card-fg, and text on the title slide's art uses
+   --scrim with only the inks flavor.mjs proves on it (--text, --text-2). The closing slide sets its content on
+   solid --page. */
 
 /* ---- every flavored deck ----------------------------------------------------------------------------- */
 :root[data-flavor] { --emoji: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji"; --deck-pad: clamp(16px, 4vw, 56px); }
@@ -31,36 +32,20 @@
   :root[data-flavor] .slide-tldr .tldr > :not(.lead, .points) { grid-column: 1 / -1; }
   :root[data-flavor] .slide-tldr .points { margin-top: 0; }
 }
+/* a closing tldr (deck-art.css) is one centred statement: its points sit under it, not beside it */
+:root[data-flavor] .slide-close .tldr { display: block; }
+:root[data-flavor] .slide-close .points { margin-top: var(--sp-5); }
 
-/* the art: full-bleed under the slide's content, one drawing per mode */
-.slide-art { position: absolute; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: var(--page); }
-.slide-art svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.slide-art .art-dark { display: none; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .slide-art .art-light { display: none; }
-  :root:not([data-theme="light"]) .slide-art .art-dark { display: block; }
-}
-:root[data-theme="dark"] .slide-art .art-light { display: none; }
-:root[data-theme="dark"] .slide-art .art-dark { display: block; }
+/* The art layer, the title slide's scrim and the closing slide's ground are in deck-art.css (every theme). */
 
-/* title slide: the text sits on the scrim, in the proven inks only */
-.slide-cover .slide-inner { width: auto; max-width: min(52rem, 100%); margin: auto auto auto 0; padding: clamp(22px, 3.4vw, 52px); background: var(--scrim); color: var(--text); }
-/* :root[data-flavor] outranks flavors.css's html[data-flavor] h1 */
+/* title slide: :root[data-flavor] outranks flavors.css's html[data-flavor] h1 */
 :root[data-flavor] .slide-cover h1 { max-width: 13em; font-size: clamp(2.4rem, 1rem + 4.6vw, 5.4rem); line-height: var(--lh-hero); font-weight: var(--head-weight); letter-spacing: var(--head-track); text-transform: var(--head-case); }
-.slide-cover .subtitle { color: var(--text-2); }
-.slide-cover .meta div { background: var(--surface); }
-/* a flavor may clear the pill, leaving the labels on the scrim: keep them in a proven ink */
-.slide-cover .meta :is(dt, dd) { color: var(--text-2); }
 /* links and code on any cover ground (scrim, accent card, lime block) take that ground's proven ink, as the
    page's verdict card does; the focus ring follows it, since --accent may be the ground itself */
 :root[data-flavor] .slide-cover :is(a, code) { color: inherit; }
 :root[data-flavor] .slide-cover a { text-decoration-color: currentColor; }
 :root[data-flavor] .slide-cover code { background: none; box-shadow: inset 0 0 0 1px currentColor; }
 :root[data-flavor] .slide-cover :focus-visible { outline-color: currentColor; }
-
-/* closing slide: any section type can close, so its content gets solid ground; the art frames it */
-.slide-has-art:not(.slide-cover) .slide-inner { padding: clamp(20px, 3vw, 44px); background: var(--page); }
-.slide-has-art:not(.slide-cover) .pa-footer { padding: 10px clamp(20px, 3vw, 44px); background: var(--page); }
 
 /* the numeral: decoration only, so "/ ''" keeps it out of the accessible name */
 .slide:not(.slide-has-art)::before { content: counter(slide, decimal-leading-zero); content: counter(slide, decimal-leading-zero) / ""; position: absolute; z-index: -1; pointer-events: none; user-select: none; font-family: var(--font-display); font-weight: var(--head-weight); font-variant-numeric: var(--num); line-height: 0.8; }
@@ -141,7 +126,6 @@
 @media (max-width: 640px) {
   :root[data-flavor] .slide-art { inset: 0; border-radius: 0; }
   :root[data-flavor] .slide::after { display: none; }
-  .slide-cover .slide-inner { margin: auto 0; }
   :root[data-flavor] .slide-cover h1 { font-size: clamp(2rem, 9vw, 2.8rem); }
   :root[data-flavor="poster"] .slide-cover h1 { font-size: clamp(2.4rem, 12vw, 3.4rem); }
   :root[data-flavor="dusk"] .slide-cover .subtitle { margin-top: var(--sp-5); padding: var(--sp-3) var(--sp-4); }
@@ -153,9 +137,6 @@
 @media print {
   .slide-art, .slide::before, .slide::after { display: none !important; }
   .slide { background: none !important; }
-  .slide-has-art .slide-inner, .slide-has-art .pa-footer { background: none !important; box-shadow: none !important; -webkit-backdrop-filter: none !important; backdrop-filter: none !important; color: var(--text) !important; border: 0 !important; border-radius: 0 !important; padding: 0 !important; }
-  /* the classic deck's print placement (slides.html): full width, the title 30vh down */
-  .slide-cover .slide-inner { max-width: none !important; margin: 30vh 0 0 !important; }
   :root[data-flavor="dusk"] .slide-cover .subtitle { color: var(--text) !important; padding: 0 !important; }
   :root[data-flavor="dusk"] .slide-cover .subtitle::before { display: none; }
 }

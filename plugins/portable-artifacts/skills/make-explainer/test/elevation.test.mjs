@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 
 const read = (f) => fs.readFileSync(new URL(`../template/${f}`, import.meta.url), 'utf8');
-const BLOCKS = ['.tldr', '.kpi', '.card', '.files', '.cmp-col', '.det'];
+const BLOCKS = ['.tldr', '.kpi', '.card', '.files', '.cmp-col', '.det', '.sec-alt'];
 // The declaration block of the first top-level rule whose selector is exactly `sel` (no @media wrapper).
 const topRule = (css, sel) => new RegExp(`(?:^|\\n)${sel.replace('.', '\\.')} \\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 

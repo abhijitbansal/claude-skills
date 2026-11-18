@@ -31,6 +31,7 @@
     { "type": "approval", "id": "ship-themes", "title": "Ship the themes", "item": "Ship the mono and brief themes", "why": "Both pass the contrast checks.", "impact": "Every skill can use them", "owner": "Design" },
     { "type": "question", "id": "rollout-owner", "title": "Rollout owner", "text": "Who owns the rollout?", "default": "The branch author" },
     { "type": "review", "title": "Review these first", "items": [{ "point": "The storage choice", "why": "It decides the export.", "target": "answer-store" }, { "point": "Theme contrast", "why": "Only a script checks it." }] },
+    { "type": "quote", "title": "In one line", "text": "The model writes JSON, never markup.", "by": "The rule", "tone": "accent" },
     { "type": "verdict", "title": "Verdict", "text": "Approve the branch as a whole." }
   ]
 }

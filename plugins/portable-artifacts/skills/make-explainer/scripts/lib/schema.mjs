@@ -51,6 +51,9 @@ export const LIMITS = Object.freeze({
   planQuestion: 500,
   planLabel: 200,
   reviewItems: [1, 5],
+  // A pull quote is one line worth setting large, and who said it.
+  quoteText: 300,
+  quoteBy: 80,
 });
 
 // Slide content budget (each section is one slide in slides mode).
@@ -181,6 +184,7 @@ export const SECTION_SCHEMAS = {
     items: items({ point: text, why: text, target: text }, ['point', 'why']),
   }),
   verdict: section('verdict', [], { text }),
+  quote: section('quote', ['text'], { text, by: text, tone }),
 };
 
 export const TYPES = Object.keys(SECTION_SCHEMAS);

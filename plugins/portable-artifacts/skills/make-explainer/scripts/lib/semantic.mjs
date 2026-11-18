@@ -236,6 +236,10 @@ function checkSection(s, i, errors, state) {
     case 'question': length(errors, s, 'text', at, LIMITS.planQuestion); break;
     case 'review': checkReview(s, at, errors, state.ids); break;
     case 'verdict': checkVerdict(i, at, errors, state); break;
+    case 'quote':
+      length(errors, s, 'text', at, LIMITS.quoteText);
+      length(errors, s, 'by', at, LIMITS.quoteBy);
+      break;
     default:
   }
 }

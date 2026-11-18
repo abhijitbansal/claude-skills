@@ -51,9 +51,9 @@
 <p class="sec-eyebrow pa-label">One build</p>
 <h2 class="sec-title" id="what-one-build-produces-title">What one build produces<a class="anchor" href="#what-one-build-produces" aria-label="Link to this section: What one build produces">#</a></h2>
 <dl class="kpis" style="--n: 2">
-<div class="kpi tone-neutral"><dt>Network requests</dt><dd class="kpi-value">0</dd><dd class="kpi-note">fonts and script are inlined</dd></div>
-<div class="kpi tone-accent"><dt>Section types</dt><dd class="kpi-value">18</dd><dd class="kpi-delta"><span>4 need a sibling skill</span></dd></div>
-<div class="kpi tone-neutral"><dt>Themes</dt><dd class="kpi-value">4</dd><dd class="kpi-note">light and dark each</dd></div>
+<div class="kpi tone-neutral"><dt class="pa-caps">Network requests</dt><dd class="kpi-value pa-num">0</dd><dd class="kpi-note">fonts and script are inlined</dd></div>
+<div class="kpi tone-accent"><dt class="pa-caps">Section types</dt><dd class="kpi-value pa-num">18</dd><dd class="kpi-delta"><span>4 need a sibling skill</span></dd></div>
+<div class="kpi tone-neutral"><dt class="pa-caps">Themes</dt><dd class="kpi-value pa-num">4</dd><dd class="kpi-note">light and dark each</dd></div>
 </dl>
 </section>
 <section class="sec sec-text" id="a-hand-written-page-drifts-a-generated-o" aria-labelledby="a-hand-written-page-drifts-a-generated-o-title">
@@ -64,6 +64,12 @@
 <p>With an outline, the layout is not up for discussion. Each section <strong>type</strong> has one renderer, and the renderer is the only place that knows about markup. The <code>title</code> of a section is a claim a reader can agree or disagree with, not a label such as &quot;Overview&quot;.</p>
 <p>Text fields accept a small subset of markdown: bold, italic, <code>code</code>, <a href="https://example.com" rel="noopener noreferrer">links to https pages</a> and <code>- </code> lists. Anything else is shown as plain text, so a stray angle bracket can never become a tag.</p>
 </div>
+</section>
+<section class="sec sec-quote" id="section-4">
+<figure class="quote tone-accent">
+<blockquote>You write the facts; the tool owns the layout.</blockquote>
+<figcaption class="quote-by pa-caps">The rule behind every skill</figcaption>
+</figure>
 </section>
 <section class="sec sec-image" id="three-steps-from-facts-to-a-finished-pag" aria-labelledby="three-steps-from-facts-to-a-finished-pag-title">
 <p class="sec-eyebrow pa-label">The pipeline</p>
@@ -269,7 +275,7 @@ node scripts/build.mjs explainer.json --out ./page.html</code></pre>
 <p>A field such as <code>&lt;img onerror=alert(1)&gt;</code> is shown as characters on the page. If you need real markup, the section type is missing, not the escape.</p>
 </aside>
 </section>
-<section class="sec sec-details" id="section-14">
+<section class="sec sec-details" id="section-15">
 <details class="det">
 <summary>Why not let the model write HTML directly?</summary>
 <div class="det-body prose">

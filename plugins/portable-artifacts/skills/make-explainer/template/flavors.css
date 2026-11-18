@@ -11,7 +11,7 @@
 
 html[data-flavor] body { -webkit-font-smoothing: antialiased; }
 /* print looks: blocks stay flat (hard offset shadows only, set per flavor below), never the soft classic elevation */
-html[data-flavor] :is(.tldr, .kpi, .card, .files, .cmp-col, .det) { box-shadow: none; }
+html[data-flavor] :is(.tldr, .kpi, .card, .files, .cmp-col, .det, .sec-alt) { box-shadow: none; }
 /* only the hero clips sideways: the tilted card and its offset shadow reach a few px past its box */
 html[data-flavor] .hero { overflow-x: clip; }
 

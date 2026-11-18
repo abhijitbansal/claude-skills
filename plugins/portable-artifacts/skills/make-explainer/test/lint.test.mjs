@@ -124,6 +124,15 @@ test('bold, italic, code, links, dash lists, a hash inside a line and a year wit
   assert.deepEqual(mdWarn('#hashtag is not a heading'), []);
 });
 
+test('a quote over its budget warns with its path through validate, and its text is linted like any prose', async () => {
+  const long = Array.from({ length: 45 }, (_, i) => `w${i}`).join(' ');
+  const r = await validateSpec({ title: 'T', sections: [{ type: 'quote', text: long, by: 'A name and a very long role that runs on and on' }] });
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.deepEqual(r.warnings.map((x) => x.path), ['sections[0].text', 'sections[0].by']);
+  const bad = await validateSpec({ title: 'T', sections: [{ type: 'quote', text: 'We leverage the cache' }] });
+  assert.deepEqual(bad.errors, [{ path: 'sections[0].text', message: 'banned phrase "leverage"; replace it with "use"' }]);
+});
+
 test('a label title warns; the scaffold\'s own generated titles do not', () => {
   for (const title of ['Overview', 'summary', 'Introduction:', ' Changes ', 'Background.', 'Conclusion']) {
     const found = labelTitleWarnings(title, 'sections[1].title');

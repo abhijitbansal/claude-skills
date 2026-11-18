@@ -375,8 +375,8 @@ your project folder):
 risks), `checklist` (a group per area of changed files, a regression group, an
 intro and "If something fails"), `concept` (tl;dr, explanation, cards, steps),
 `slides` (a deck), `plan` (a plan that explains before it asks, which the
-reviewer answers on the page, see below). **Sections** (25): `tldr`, `text`,
-`kpis`, `cards`, `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `code`, `diff` (a unified diff,
+reviewer answers on the page, see below). **Sections** (26): `tldr`, `text`,
+`kpis`, `cards`, `table`, `risks`, `files`, `steps`, `timeline`, `compare`, `callout`, `quote`, `code`, `diff` (a unified diff,
 one marked row per line),
 `details`, `checklist`, `diagram`, `chart`, `motion`, `scene`, `image`, and
 for plans `decision`, `approval`, `question`, `review`, `verdict`.

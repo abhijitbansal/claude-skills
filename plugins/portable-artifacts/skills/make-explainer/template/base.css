@@ -19,13 +19,13 @@ code, pre, .path, .tl-date, .code-lang { font-family: var(--mono); }
 /* layout measures: the section column, the contents column and its gap, and how far a band reaches past the
    column into each gutter. 16px fits the narrowest gutter (24px); 32px needs the contents gap on the left and,
    on the right, a column track wider than the column, which holds from 1200px. */
-:root { --col: 52rem; --toc-w: 13.5rem; --toc-gap: 56px; --band-x: 16px; --band-y: 32px; --card-rule: 3px; }
+:root { --col: 52rem; --toc-w: 13.5rem; --toc-gap: 56px; --band-x: 16px; --band-y: 32px; --card-rule: 3px; --gap-band: 104px; --gap-text: 60px; }
 @media (min-width: 1200px) {
   .has-toc { --band-x: 32px; }
 }
 
 /* hero: title, subtitle, meta chips and the toggle; a leading tldr is its card */
-.hero { max-width: 76rem; margin: 0 auto; padding: 44px 24px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: start; }
+.hero { max-width: 76rem; margin: 0 auto; padding: 64px 24px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: start; }
 .mast-text { grid-column: 1; grid-row: 1; min-width: 0; }
 .hero > .theme-toggle { grid-column: 2; grid-row: 1; }
 h1 { margin: 0; max-width: 22em; font: var(--display-weight)var(--fs-hero)/var(--lh-hero) var(--font-display); letter-spacing: var(--track-hero); text-wrap: balance; overflow-wrap: anywhere; }
@@ -33,6 +33,10 @@ h1 { margin: 0; max-width: 22em; font: var(--display-weight)var(--fs-hero)/var(-
 /* baseline: chips with a mono value are shorter, so align the text, not the boxes */
 .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 20px 0 0; padding: 0; font-size: var(--fs-sm); }
 .meta div { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; padding: 2px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+/* On a classic page the chips are quiet (a caps label and its value, no box), so the verdict card under them is the
+   loudest thing in the hero. The flavored pages and the deck cover keep the chips their own sheets style. */
+:root[data-flavor="classic"] .hero .meta { gap: 6px 22px; margin-top: 22px; }
+:root[data-flavor="classic"] .hero .meta div { padding: 0; border: 0; background: none; }
 .meta dt { color: var(--text-3); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--track-caps); font-weight: var(--strong-weight); }
 .meta dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
 .meta .m-branch dd, .meta .m-repo dd, .meta .m-version dd { font-family: var(--mono); font-size: var(--fs-xs); }
@@ -44,7 +48,7 @@ h1 { margin: 0; max-width: 22em; font: var(--display-weight)var(--fs-hero)/var(-
 /* In one column the card's box matches a band's (the column plus --band-x on each side) and its text keeps the
    column edge. Beside a contents list it starts at the text edge, spans the list, and ends where a band ends.
    The left rule takes the tldr tone (accent when it has none). */
-.hero-tldr { grid-column: 1 / -1; margin: 28px calc(-1 * var(--band-x)) 0; max-width: calc(var(--col) + 2 * var(--band-x)); scroll-margin-top: 24px; background: var(--surface); border-left: var(--card-rule) solid var(--tc, var(--accent)); border-radius: 0 14px 14px 0; padding: 22px 28px 22px calc(var(--band-x) - var(--card-rule)); }
+.hero-tldr { grid-column: 1 / -1; margin: var(--sp-7) calc(-1 * var(--band-x)) 0; max-width: calc(var(--col) + 2 * var(--band-x)); scroll-margin-top: 24px; background: var(--surface); border-left: var(--card-rule) solid var(--tc, var(--accent)); border-radius: 0 14px 14px 0; padding: 22px 28px 22px calc(var(--band-x) - var(--card-rule)); }
 @media (min-width: 1100px) {
   .has-toc .hero-tldr { margin-left: 0; padding-left: 28px; max-width: calc(var(--toc-w) + var(--toc-gap) + var(--col) + var(--band-x)); }
 }
@@ -77,12 +81,15 @@ h1 { margin: 0; max-width: 22em; font: var(--display-weight)var(--fs-hero)/var(-
   .toc summary::-webkit-details-marker { display: none; }
 }
 
-/* sections: wide gaps instead of dividers; visual sections alternate onto a surface band (1st, 3rd, ...).
+/* sections: wide gaps instead of dividers, by role (--gap-band between sections in general and around a band,
+   --gap-text between two text sections, so a run of prose reads as one argument, not a stack of islands); visual
+   sections alternate onto a surface band (1st, 3rd, ...), lifted with the shared elevation (print drops it).
    The band reaches out into the gutters by --band-x, so its content keeps the column's edges and width; the
    hero card ends where a band ends. */
 .sec:first-child { margin-top: 24px; }
-.sec + .sec { margin-top: 96px; }
-.sec-alt { background: var(--surface); border-radius: 16px; padding: var(--band-y) var(--band-x); margin-inline: calc(-1 * var(--band-x)); }
+.sec + .sec { margin-top: var(--gap-band); }
+.sec-text + .sec-text { margin-top: var(--gap-text); }
+.sec-alt { background: var(--surface); border-radius: 16px; padding: var(--band-y) var(--band-x); margin-inline: calc(-1 * var(--band-x)); box-shadow: var(--elev-1); }
 /* inner surfaces drop to the page colour so they stay visible on the band (diagram.css and chart.css do the same) */
 .sec-alt :is(.kpi, .card, .cmp-col, .tablewrap) { background: var(--page); }
 .sec-eyebrow { margin: 0 0 8px; }
@@ -117,7 +124,9 @@ h1 { margin: 0; max-width: 22em; font: var(--display-weight)var(--fs-hero)/var(-
 /* the value leads each tile (visual order only), so values line up however long the labels are */
 /* the tile is a size container so the value can be sized from the tile's width (cqi) and never spills */
 .kpi { display: flex; flex-direction: column; container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; box-shadow: var(--elev-1); }
-.kpi dt { color: var(--text-2); font-size: var(--fs-sm); }
+/* the label is the shared caps label (.pa-caps, set by the renderer: size, tracking, weight); it keeps the second text
+   ink it had, so the refresh lowers no contrast */
+.kpi dt { color: var(--text-2); }
 .kpi dd { margin: 0; }
 /* the whole value is one line ("87%", "1,204 ms"). --n (a character count, set by the renderer on the section:
    the longest of its one-line values, so they share one size; a wide or long value sets its own on the value)
@@ -150,9 +159,10 @@ h1 { margin: 0; max-width: 22em; font: var(--display-weight)var(--fs-hero)/var(-
   .cards.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; box-shadow: var(--elev-1); }
-.card.tone-accent { border-color: var(--accent); }
-.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; }
-.card-head h3 { margin: 0; font-size: var(--fs-base); line-height: var(--lh-head); font-weight: var(--strong-weight); flex: 1 1 8rem; min-width: 0; overflow-wrap: anywhere; }
+/* a tone is a top rule in the tone's colour, not a full border (the card keeps its hairline on the other sides) */
+.card:not(.tone-neutral), .cmp-col:not(.tone-neutral) { border-top: var(--card-rule) solid var(--tc); }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 8px; }
+.card-head h3 { margin: 0; font-size: var(--fs-md); line-height: var(--lh-head); font-weight: var(--strong-weight); flex: 1 1 8rem; min-width: 0; overflow-wrap: anywhere; }
 .card-icon { color: var(--accent); flex: none; }
 .card p { margin: 0 0 0.6em; font-size: var(--fs-sm); color: var(--text-2); }
 .card p:last-child { margin-bottom: 0; }
@@ -220,8 +230,7 @@ tbody th { font-weight: var(--strong-weight); }
   .compare.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .cmp-col { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; box-shadow: var(--elev-1); }
-.cmp-col.tone-accent { border-color: var(--accent); }
-.cmp-col h3 { margin: 0 0 8px; font-size: var(--fs-base); font-weight: var(--strong-weight); overflow-wrap: anywhere; }
+.cmp-col h3 { margin: 0 0 8px; font-size: var(--fs-md); line-height: var(--lh-head); font-weight: var(--strong-weight); overflow-wrap: anywhere; }
 .cmp-col h3 + .chip { margin-bottom: 8px; }
 .cmp-col ul { margin: 0; padding-left: 1.2em; color: var(--text-2); font-size: var(--fs-sm); }
 .cmp-col li + li { margin-top: 0.35em; }
@@ -328,6 +337,7 @@ tbody th { font-weight: var(--strong-weight); }
     --title-line: calc(var(--fs-hero-phone) * var(--lh-hero));
     --glyph-overhang: calc(var(--fs-hero-phone) * 0.12);
   }
+  :root { --gap-band: 64px; --gap-text: 40px; }
   .hero { display: block; position: relative; padding: var(--hero-top) 16px 4px; }
   .hero > .theme-toggle { position: absolute; top: calc(var(--hero-top) + var(--title-line) - var(--glyph-overhang) - var(--toggle-size)); right: 16px; width: var(--toggle-size); height: var(--toggle-size); }
   h1 { font-size: var(--fs-hero-phone); }
@@ -337,7 +347,6 @@ tbody th { font-weight: var(--strong-weight); }
   .meta div { padding: 0; border: 0; background: none; }
   .layout { padding: 4px 16px 72px; }
   .tldr { padding: 18px 18px; }
-  .sec + .sec { margin-top: 64px; }
   .sec-alt { margin-inline: -16px; border-radius: 0; padding: 28px 16px; }
   .cl-group { padding: 10px 14px 2px; }
   .sec-title { font-size: var(--fs-md); }
@@ -346,7 +355,7 @@ tbody th { font-weight: var(--strong-weight); }
 @media print {
   :root { color-scheme: light; --page: #fff; --surface: #fff; --text: #000; --text-2: #333; --text-3: #555; --line: #bbb; --accent: #000; --accent-soft: #eee; }
   body { font-size: 11pt; }
-  .tldr, .kpi, .card, .files, .cmp-col, .det { box-shadow: none; }
+  .tldr, .kpi, .card, .files, .cmp-col, .det, .sec-alt { box-shadow: none; }
   .theme-toggle, .toc, .copy, .anchor, .skip, .cl-reset, .cl-confirm { display: none !important; }
   .layout, .has-toc .layout { display: block; padding: 0; }
   .hero { padding: 0 0 8px; }

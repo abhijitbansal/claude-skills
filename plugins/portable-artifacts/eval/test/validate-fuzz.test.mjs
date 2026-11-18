@@ -26,7 +26,7 @@ after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true 
 const CASES = [
   { skill: 'make-dashboard', dir: 'references/examples', file: 'minimal.json', lookups: [['theme'], ['charts', 0, 'kind'], ['charts', 0, 'x'], ['charts', 0, 'query']], nested: [['charts', 0]] },
   { skill: 'make-diagram', dir: 'references/examples', file: 'architecture.diagram.json', lookups: [['theme'], ['type'], ['direction'], ['nodes', 0, 'kind'], ['nodes', 1, 'icon'], ['nodes', 1, 'group'], ['edges', 0, 'from']], nested: [['nodes', 0], ['edges', 0], ['groups', 0]] },
-  { skill: 'make-explainer', dir: 'references/examples', file: 'concept.explainer.json', lookups: [['theme'], ['preset'], ['mode'], ['sections', 0, 'type'], ['sections', 0, 'tone'], ['sections', 9, 'items', 0, 'severity'], ['sections', 10, 'items', 0, 'change'], ['sections', 12, 'tone']], nested: [['sections', 0], ['sections', 4, 'items', 0], ['meta']] },
+  { skill: 'make-explainer', dir: 'references/examples', file: 'concept.explainer.json', lookups: [['theme'], ['preset'], ['mode'], ['sections', 0, 'type'], ['sections', 0, 'tone'], ['sections', 10, 'items', 0, 'severity'], ['sections', 11, 'items', 0, 'change'], ['sections', 13, 'tone']], nested: [['sections', 0], ['sections', 5, 'items', 0], ['meta']] },
   // make-motion has no validate.mjs since the cut-over; its film validator is fuzzed in-process by make-motion/test/v2/hostile-names.test.mjs.
   { skill: 'make-scene', dir: 'references/examples', file: 'city.scene.json', lookups: [['world'], ['theme']], nested: [['data']] },
 ];
