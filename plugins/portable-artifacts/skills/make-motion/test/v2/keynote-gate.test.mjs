@@ -62,7 +62,10 @@ test('gate 9:16 screen: the region enlarges to the full safe width, whole, insid
   const card = end.find((l) => l.node.id === 'dash.region.image');
   assert.ok(card, 'a region card');
   const clip = card.node.props.clip;
-  const want = [fx * PICTURE.width, fy * PICTURE.height, fw * PICTURE.width, fh * PICTURE.height];
+  // n5: the crop starts `trim` of the picture's width inside the region's rect on every side, clear of the UI round the
+  // panel (keynote-gate3.test.mjs measures it against the screenshot); the region whole otherwise
+  const trim = look().kinds.screen.trim * PICTURE.width;
+  const want = [fx * PICTURE.width + trim, fy * PICTURE.height + trim, fw * PICTURE.width - 2 * trim, fh * PICTURE.height - 2 * trim];
   assert.ok(clip.every((v, i) => Math.abs(v - want[i]) <= 1), `the card shows the region whole: ${clip.map(Math.round)} against ${want.map(Math.round)}`);
   assert.ok(card.box[2] >= safe[2] - 1, `the region card is ${Math.round(card.box[2])} px wide (the safe width is ${safe[2]})`);
   const head = end.find((l) => l.node.id === 'dash.headline');
@@ -142,10 +145,13 @@ test('gate 16:9 screen: the band of light crosses the card once', () => {
   assert.ok(sweeps.length > 0, 'a band of light over the screen');
 });
 
-test('gate 9:16 screen: the band of light crosses the region card once', () => {
+// n5 (gate-keynote-3 medium item) replaced "the band of light crosses the 9:16 region card once": the band is drawn under
+// the card and can only show round it, where it was two pale rectangles outside the ring; the 9:16 region card has none
+// (keynote-gate3.test.mjs holds it)
+test('gate 9:16 screen: the region card has no band of light (it showed only as pale rectangles outside the ring)', () => {
   const film = built(shotOf(TALL, 'dash'), '9:16');
   const sweeps = framesOf(film.duration).filter((t) => drawnLeaves(film.sampleShot(0, t)).some((l) => l.node.id.startsWith('dash.sweep') && l.opacity > 0));
-  assert.ok(sweeps.length > 0, 'a band of light over the region card');
+  assert.equal(sweeps.length, 0, 'no band of light on the region card');
 });
 
 // ---- ruling 3: charts open set and fill the plot ----
@@ -189,8 +195,8 @@ test('gate 9:16 chart: the tallest column fills the free height under the claim'
 for (const film of [WIDE, TALL]) {
   test(`gate ${film.format}: the engine picks soft cuts, never a hard cut and never three alike in a row`, () => {
     const names = film.shots.slice(1).map((_, i) => resolveShotCut(filmOf(film.shots, 'keynote', film.format, { mode: 'pro' }), i + 1, { look: look() })?.name ?? 'cut');
-    // n4 (gate-keynote-2 ruling 8) added the dip and the wipe the look takes between two type shots
-    assert.ok(names.every((n) => ['crossfade', 'blur', 'zoom', 'cross-zoom', 'match', 'fade', 'wipe'].includes(n)), `cuts: ${names.join(', ')}`);
+    // n4 (gate-keynote-2 ruling 8) added the dip the look takes between two type shots; n5 dropped its wipe (a moving edge)
+    assert.ok(names.every((n) => ['crossfade', 'blur', 'zoom', 'cross-zoom', 'match', 'fade'].includes(n)), `cuts: ${names.join(', ')}`);
     assert.ok(names.every((n, i) => i < 2 || !(n === names[i - 1] && n === names[i - 2])), `three alike in a row: ${names.join(', ')}`);
   });
 }

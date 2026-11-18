@@ -52,7 +52,7 @@ test('flagged in one look, the kind is still listed, with looks naming the other
 
 test('a kind that reads no look data is listed in every listed look', () => {
   assert.deepEqual(listEntries('kinds').find((e) => e.name === 'statement').looks, registries.looks.names());
-  assert.deepEqual(listEntries('kinds').find((e) => e.name === 'quote').looks, ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'park-a', 'park-b', 'park-c']);
+  assert.deepEqual(listEntries('kinds').find((e) => e.name === 'quote').looks, ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote', 'park-a', 'park-b', 'park-c']);
 });
 
 test('flagged in every listed look, it leaves --list kinds and shows under --all marked experimental', () => {

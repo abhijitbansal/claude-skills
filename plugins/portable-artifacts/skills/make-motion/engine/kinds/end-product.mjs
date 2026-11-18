@@ -44,9 +44,8 @@ function textBlock(shot, ctx, data, span, maxHeight, title) {
 }
 
 // The product on its elevated card: the picture whole, `pad` inside the card, the card as wide as `span`: { nodes, box }.
-function productCard(shot, ctx, picture, span, top, maxH) {
+function productCard(shot, ctx, picture, span, top, maxH, { pad, radius }) {
   const { look, unit } = ctx;
-  const pad = ctx.data.product.pad * unit, radius = (look.devices.card?.radius ?? 0) * unit;
   const iw = Math.min(span.w - HALF * pad, ((maxH - HALF * pad) * picture.width) / picture.height), ih = (iw * picture.height) / picture.width;
   const box = [span.x + (span.w - iw - HALF * pad) / HALF, top, iw + HALF * pad, ih + HALF * pad];
   const id = `${shot.id}.product`;
@@ -58,6 +57,27 @@ function productCard(shot, ctx, picture, span, top, maxH) {
   return { nodes, box };
 }
 
+// Where the closing line and the product card go (n5, gate-keynote-3: the card's detail did not read, and the line stood
+// 12 px from it): at 16:9 the picture `pictureShare` of the frame's width, its card on the title-safe right edge (`safe`;
+// on the margin edge the line had too little room and its real-glyph size fell under three times the ask), with the
+// line in the room left of the card less the grid gutter; at 9:16 the picture the title-safe width (`safe` units in from each side,
+// no pad: the picture is the card, as the tall region card) under the line, which keeps the grid's span. Returns
+// { cardSpan, text, card: { pad, radius } }.
+function productSpans(ctx, p, wide) {
+  const { look, unit, canvas } = ctx;
+  const radius = (look.devices.card?.radius ?? 0) * unit;
+  if (!wide) {
+    const safe = p.safe * unit;
+    return { cardSpan: { x: safe, w: canvas.w - 2 * safe }, text: editorialSpan(ctx, 1, 12), card: { pad: 0, radius: 0 } };
+  }
+  const pad = p.pad * unit, cardW = p.pictureShare * canvas.w + HALF * pad;
+  const right = canvas.w - p.safe * unit, left = editorialSpan(ctx, 1, 1).x;
+  const cardSpan = { x: right - cardW, w: cardW };
+  // the line's layout box may reach `inkSlack` units into the gutter: its ink starts about 9 units inside the box's left
+  // (the optical edge) and ends inside its right, so the ink still clears the card by the gutter
+  return { cardSpan, text: { x: left, w: cardSpan.x - look.grid.gutter * unit - left + p.inkSlack * unit }, card: { pad, radius } };
+}
+
 /** The product end card's { nodes, boxes, hero } for `title` with the product `picture` ({ src, width, height }). */
 export function expandProduct(shot, ctx, data, times, title, picture, hero) {
   const { look, unit, canvas } = ctx;
@@ -65,19 +85,18 @@ export function expandProduct(shot, ctx, data, times, title, picture, hero) {
   const c = { ...ctx, data };
   const bounds = editorialBounds(ctx);
   const wide = isWide(canvas);
-  const text = editorialSpan(ctx, 1, wide ? p.textTo : 12);
-  const cardSpan = wide ? editorialSpan(ctx, p.cardFrom, 12) : text;
+  const { cardSpan, text, card: style } = productSpans(ctx, p, wide);
   const block = textBlock(shot, ctx, data, text, bounds.height(wide ? p.heightWide : p.heightTall), title);
   const tagProbe = shot.mark === undefined ? null : tagAt(shot, ctx, text.x, 0);
   const tagH = tagProbe === null ? 0 : tagProbe.box[3] + p.tagGap * unit;
   const stackH = tagH + block.h;
   const gap = p.gap * unit;
   const cardMaxH = wide ? bounds.bottom - bounds.top : bounds.bottom - bounds.top - stackH - gap;
-  const probe = productCard(shot, c, picture, cardSpan, 0, cardMaxH);
+  const probe = productCard(shot, c, picture, cardSpan, 0, cardMaxH, style);
   const whole = wide ? stackH : stackH + gap + probe.box[3];
   const top = bounds.top + (bounds.bottom - bounds.top - whole) / HALF;
   const textTop = wide ? bounds.top + (bounds.bottom - bounds.top - stackH) / HALF : top;
-  const card = productCard(shot, c, picture, cardSpan, wide ? bounds.top + (bounds.bottom - bounds.top - probe.box[3]) / HALF : top + stackH + gap, cardMaxH);
+  const card = productCard(shot, c, picture, cardSpan, wide ? bounds.top + (bounds.bottom - bounds.top - probe.box[3]) / HALF : top + stackH + gap, cardMaxH, style);
   const tag = tagProbe === null ? null : tagAt(shot, ctx, text.x, textTop);
   const capTop = textTop + tagH;
   const size = block.title.font.size;

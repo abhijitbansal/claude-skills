@@ -39,7 +39,7 @@ lookContract(NAME, {
   secondaryMin: 46,
   kinds: registries.kinds.names(),
   parked: PARKED,
-  listed: false,
+  listed: true,
 });
 
 // WCAG relative luminance of #rrggbb

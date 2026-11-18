@@ -153,7 +153,9 @@ for (const film of [WIDE, TALL]) {
     for (const [name, x] of [['ask', ask.box[0]], ['tag', tag[0]]]) assert.ok(Math.abs(x - hero.box[0]) <= 24, `the ${name} starts at ${Math.round(x)}, the hero at ${Math.round(hero.box[0])}`);
     const content = union([hero.box, ask.box, tag, product.box]);
     if (film.format === '16:9') {
-      assert.ok(product.box[0] >= w.canvas.w / 2 - 1 && product.box[2] >= 0.3 * w.canvas.w, `the product ${product.box.map(Math.round)} fills the right half`);
+      // n5 (gate-keynote-3 medium item): the picture is at least half the frame wide, so it starts left of the middle
+      // (keynote-gate3.test.mjs holds the line's clearance from the card)
+      assert.ok(product.box[0] >= hero.box[0] + hero.box[2] && product.box[2] >= 0.5 * w.canvas.w - 1, `the product ${product.box.map(Math.round)} fills the right half`);
       assert.ok(content[2] >= 0.8 * w.canvas.w, `the content spans ${Math.round(content[2])} px`);
     } else {
       assert.ok(product.box[2] >= 0.8 * w.canvas.w && product.box[1] >= hero.box[1] + hero.box[3], `the product ${product.box.map(Math.round)} under the line, the width of the frame`);
@@ -250,10 +252,19 @@ test('gate 9:16 inside: the list starts on the same left inset as the other shot
 
 // ---- ruling 8: soft cuts never lay one headline over another ----
 
-const CLEAR_CUTS = new Set(['fade', 'wipe']); // a dip through the ground, a mask reveal: never both pictures at once
+// n5 (gate-keynote-3 medium item): the wipe is out (its edge held a half-cut word), and a second screen in a row now ends
+// on a headline over its card, so the crossfade after it is a type cut too. What the ruling asks is that the two headlines
+// are never both on at one frame, so the test bounds that overlap itself (the most opaque both sides are together)
+// instead of naming cuts: a dip never overlaps, a crossfade or blur up to a tenth for two frames.
+const OVERLAP_MAX = 0.15;
+const P_STEPS = 60;
+const overlapOf = (cut, canvas) => Math.max(...Array.from({ length: P_STEPS + 1 }, (_, i) => {
+  const r = cut.entry.layers({ p: i / P_STEPS, direction: cut.direction, canvas });
+  return Math.min(r.from.opacity, r.to.opacity);
+}));
 const HEADLINE = 84; // px at these canvases (unit 1): the look's scale step 3, the smallest headline size
 for (const film of [WIDE, TALL]) {
-  test(`gate ${film.format}: a cut between two type shots dips or wipes, and no three cuts in a row alike`, () => {
+  test(`gate ${film.format}: a cut between two type shots never holds both headlines, and no three cuts in a row alike`, () => {
     const spec = filmOf(film.shots.map(withTestPicture), 'keynote', film.format, { mode: 'pro' });
     const names = film.shots.slice(1).map((_, k) => resolveShotCut(spec, k + 1, { look: look() })?.name ?? 'cut');
     // a type cut: both sides draw headline-size text (step 3 or more) at the cut, judged from the built frames, not kinds
@@ -262,7 +273,10 @@ for (const film of [WIDE, TALL]) {
     const headline = (id, t) => textsOf(drawnLeaves(w.b.sampleShot(w.index(id), t))).some((l) => sizeOf(l) >= HEADLINE);
     names.forEach((name, k) => {
       const [a, b] = [film.shots[k].id, film.shots[k + 1].id];
-      if (headline(a, w.duration(a) - 0.05) && headline(b, 0)) assert.ok(CLEAR_CUTS.has(name), `${a} to ${b} is a ${name}, over two headlines`);
+      if (headline(a, w.duration(a) - 0.05) && headline(b, 0)) {
+        const worst = overlapOf(resolveShotCut(spec, k + 1, { look: look() }), CANVAS[film.format]);
+        assert.ok(worst <= OVERLAP_MAX, `${a} to ${b} is a ${name}, holding two headlines at once (up to ${worst.toFixed(2)})`);
+      }
       assert.ok(name !== 'cut', `${film.shots[k].id} to ${film.shots[k + 1].id} is a hard cut`);
     });
     assert.ok(names.every((n, k) => k < 2 || !(n === names[k - 1] && n === names[k - 2])), `three alike in a row: ${names.join(', ')}`);

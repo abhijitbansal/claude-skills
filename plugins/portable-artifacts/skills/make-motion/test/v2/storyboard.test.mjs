@@ -61,7 +61,9 @@ test('a look decision offers the listed looks with their feel, recommends the fi
   const { film, timeline } = loadFilm(writeFilm('long-look', LONG));
   const plan = storyboardPlan(film, timeline, { name: 'long-look' });
   const decision = plan.sections.find((s) => s.type === 'decision');
-  const looks = listEntries('looks');
+  // a decision holds at most 5 options (make-explainer's schema) and six looks are listed since keynote: the first five
+  // here, the film's own look among them
+  const looks = listEntries('looks').slice(0, 5);
   assert.deepEqual(decision.options.map((o) => o.label), looks.map((l) => l.name));
   assert.deepEqual(decision.options.map((o) => o.pros), looks.map((l) => [l.summary]));
   assert.equal(decision.recommended, 'desk');
@@ -71,6 +73,16 @@ test('a look decision offers the listed looks with their feel, recommends the fi
   assert.equal(plan.sections.at(-1).type, 'verdict');
   assert.equal(plan.preset, 'plan');
   assert.match(plan.key, /^[a-z0-9][a-z0-9._-]*$/);
+});
+
+test('a film in a look past the fifth listed one still has it among the five options, and recommended', () => {
+  const { film, timeline } = loadFilm(writeFilm('long-keynote', { ...LONG, mode: 'pro', look: 'keynote' }));
+  const decision = storyboardPlan(film, timeline, { name: 'long-keynote' }).sections.find((s) => s.type === 'decision');
+  const labels = decision.options.map((o) => o.label);
+  assert.equal(labels.length, 5);
+  assert.ok(labels.includes('keynote'), `the film's own look is offered: ${labels}`);
+  assert.equal(decision.recommended, 'keynote');
+  assert.equal(new Set(labels).size, 5, 'no look twice');
 });
 
 test('the film and timeline passed in are not changed', () => {

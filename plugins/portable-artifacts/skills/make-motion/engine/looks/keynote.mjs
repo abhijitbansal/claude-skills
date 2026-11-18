@@ -3,7 +3,8 @@
 // across the spoken words; product screens on elevated white cards with depth; a band of light crossing type once (the
 // look's only light); a ring drawn round a region as the camera pushes in. Long ease-out settles and a camera that never
 // rests. Light ground only: the near-black variant is the slide-deck look the gates banned (looks-four plan, ban 1).
-// Plain data plus one pure function; index.mjs freezes and registers it. Experimental until its gate (Task 11).
+// Plain data plus one pure function; index.mjs freezes and registers it. Listed after its gate (gate record, keynote
+// 2026-11-18) with number and clipping parked in it.
 const DISPLAY_TIGHT_FROM = 152; // units: display type at or above this size is tracked in
 const DISPLAY_TIGHT = -0.02; // em
 const LABEL_TRACKING = 0.01; // em: labels are tracked out a little
@@ -25,7 +26,6 @@ function tracking(sizeUnits, role = 'display') {
 
 export const keynote = {
   name: 'keynote',
-  experimental: true,
   summary: 'Product launch film: a near-white ground with a soft mesh, one variable sans swept from light to heavy, product screens on elevated cards and a band of light. The launch look of mode pro.',
   modes: ['pro'],
   // one variable family in every role (Geist Variable, engine/fonts: the static shared Geist cannot sweep)
@@ -91,7 +91,9 @@ export const keynote = {
   // gate-keynote-2 ruling 8: between two shots with no picture (two headlines) a dip through the ground or a wipe, taken
   // in turn (`typeCuts`): a crossfade there laid one headline over the other for a few muddy frames. On a tall frame a
   // titled screen sets its title as the headline (kinds.screen.tallHero), so it is no picture shot there
-  cutPick: { cuts: ['crossfade', 'blur', 'crossfade', 'zoom'], every: 1, typeCuts: ['fade', 'wipe'], pictureKinds: { wide: ['screen', 'media', 'clipping'], tall: ['media', 'clipping'] } },
+  // n5 (gate-keynote-3 medium item): no wipe among them, whose moving edge held a half-cut word for about four frames; a
+  // dip and a blur dissolve (the old picture is gone by the middle, the new one up from the third tenth) taken in turn
+  cutPick: { cuts: ['crossfade', 'blur', 'crossfade', 'zoom'], every: 1, typeCuts: ['fade', 'blur'], pictureKinds: { wide: ['screen', 'media', 'clipping'], tall: ['media', 'clipping'] } },
   keyline: 8,
   // nothing casts a hard shadow: depth is the elevated card's own soft two-layer shadow (devices/card.mjs elevated)
   shadow: { dx: 0, dy: 0, blur: 0, alpha: 0, color: '#4a5068' },
@@ -139,9 +141,12 @@ export const keynote = {
     free: {},
     // the wordmark at 800 (`titleWeight`) with the band of light crossing it once (`sweep`), the ask under it
     // gate-keynote-2 ruling 3 (`product`, kinds/end-product.mjs): the film's first screen picture again on an elevated
-    // card, in columns `cardFrom` to 12 beside the closing line (columns 1 to `textTo`) at 16:9 and under it at 9:16; the
-    // wordmark tag over the line and the ask under it on its left edge (the pill floated mid-right on a bare frame)
-    end: { product: { show: 'screen', textTo: 6, cardFrom: 7, fromStep: 3, heightWide: 0.62, heightTall: 0.34, tagGap: 32, gap: 96, pad: 16 }, titleWeight: 800, sweep: true, fromStep: 4, max: 264, toWide: 11, toTall: 11, height: 0.56, centre: 0.5, askGap: 0.42, askSteps: [2, 3], markSteps: [1, 2], turn: 0, askFace: 'text', markTag: true },
+    // card beside the closing line at 16:9 and under it at 9:16; the wordmark tag over the line and the ask under it on its
+    // left edge (the pill floated mid-right on a bare frame)
+    // n5 (gate-keynote-3 medium item): `pictureShare` 0.5: the picture half the 16:9 frame wide on the right margin edge,
+    // the line in the room left of the card less the gutter (columns 1 to 6 left the picture 796 px, its detail unread,
+    // and the line 12 px from the card); `safe` 60 (the title-safe inset): at 9:16 the picture the safe width, no pad
+    end: { product: { show: 'screen', pictureShare: 0.5, safe: 60, inkSlack: 2, fromStep: 3, heightWide: 0.62, heightTall: 0.34, tagGap: 32, gap: 96, pad: 0 }, titleWeight: 800, sweep: true, fromStep: 4, max: 264, toWide: 11, toTall: 11, height: 0.56, centre: 0.5, askGap: 0.42, askSteps: [2, 3], markSteps: [1, 2], turn: 0, askFace: 'text', markTag: true },
     // on a tall frame the items from column 3, so the figures hang inside the narrow tall margin (ledger's fix)
     // gate-keynote-2 ruling 7: a list with no figures from column 1 on a tall frame (`fromTallPlain`), the left inset
     // every other shot has (from column 3 it sat twice as far in); a numbered one keeps column 3 for its figures
@@ -184,7 +189,13 @@ export const keynote = {
     // wide frame (the whole browser card cannot land at 80 percent: too tall), the picture `pad` units inside its edge,
     // and on both formats the screen fades out under the lifting card instead of dimming under the focus veil (the veil
     // washed the screenshot's colours out; at 9:16 its sliced text showed beside the card)
-    screen: { lift: { share: 0.8, pad: 24 }, pushPad: 60, sweep: true, pushFrame: 'card', tallHero: true, heroMax: 264, heroLines: 3, heroShare: 0.4, cropRegion: true, linkAfter: true, wholeWidth: 0.8, elevated: true, ring: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
+    // n5 (gate-keynote-3 medium items): `lift.alt` { share }: a screen right after a screen lifts a card `share` of a wide
+    // frame wide on the title-safe right edge, under its title as a headline on the left (a tall one swaps the headline
+    // and the card), so two back to back never share one framing; `trim`: the lifted crop starts this share of the
+    // picture's width inside the film's region rect on every side (the rect reaches 14 px of dashboard.png past its panel:
+    // the page's grey above and beside it and the panel's border, the strip and the double edge of the sheet); `tallSweep`
+    // false: no band of light on a tall region card (grown past the card it showed as two pale rectangles outside the ring)
+    screen: { lift: { share: 0.8, pad: 24, alt: { share: 0.62, headShare: 0.8 } }, trim: 0.005, tallSweep: false, pushPad: 60, sweep: true, pushFrame: 'card', tallHero: true, heroMax: 264, heroLines: 3, heroShare: 0.4, cropRegion: true, linkAfter: true, wholeWidth: 0.8, elevated: true, ring: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
     // map: at 16:9 the title over a map the full width (`titleAbove`, ledger's switch: beside it the map was too narrow to
     // hold a third place name, a creative finding on the first render)
     map: { titleAbove: true, titleStepsWide: [4, 3], sourceFace: 'text', sourceStep: 1, sourcePrefix: true, sourceAt: 'title', card: true, land: '#dfe1e8', borders: 'card', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'card' },

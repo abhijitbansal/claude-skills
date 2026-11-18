@@ -165,11 +165,11 @@ export const isTallHero = (shot, picture, canvas, data) => data?.tallHero === tr
 
 // The headline: the title in the display face as large as fits the room's width, at most data.heroMax and three lines,
 // never under three times the chrome text (the review's hero rule).
-function headlineSet(shot, ctx, room) {
+function headlineSet(shot, ctx, room, share = ctx.data.heroShare) {
   const { look, unit, measure } = ctx;
   const max = ctx.data.heroMax * unit;
   const opts = { text: setCase(look, 'display', shot.title), font: fontFor(look, 'display', max, unit), maxWidth: room.w, align: 'left', measure };
-  return fitDisplay(opts, { min: MIN_HERO_RATIO * sizeAt(look, CHROME_STEP_TALL, unit), max, maxHeight: room.h * ctx.data.heroShare, maxLines: ctx.data.heroLines }, look, unit);
+  return fitDisplay(opts, { min: MIN_HERO_RATIO * sizeAt(look, CHROME_STEP_TALL, unit), max, maxHeight: room.h * share, maxLines: ctx.data.heroLines }, look, unit);
 }
 
 export function tallHeroLayout(shot, ctx, { picture, zoom }) {
@@ -183,9 +183,12 @@ export function tallHeroLayout(shot, ctx, { picture, zoom }) {
   const fitted = fitFramed(frame, unit, picture, below);
   const outer = outerOf(frame, unit, fitted);
   // the headline and the card stand as one block centred down the room
+  // a second tall screen in a row (look.kinds.screen.lift.alt) swaps them: the card first, the headline under it
+  const flip = data.lift?.alt !== undefined && isRepeat(ctx);
   const drop = (room.h - (headH + gap + outer[3])) / HALF;
-  const image = [fitted[0], room.y + drop + headH + gap + (fitted[1] - outer[1]), fitted[2], fitted[3]];
-  const top = room.y + drop;
+  const block = room.y + drop;
+  const image = [fitted[0], block + (flip ? 0 : headH + gap) + (fitted[1] - outer[1]), fitted[2], fitted[3]];
+  const top = flip ? block + outer[3] + gap : block;
   const headline = node('text', `${shot.id}.headline`, { x: room.x, y: top + CAP_HEIGHT * set.font.size - set.layout.lines[0].y, layout: set.layout, font: set.font, fill: colourOf(look, 'ink'), role: 'hero' });
   const { title: _shown, ...untitled } = shot; // the headline carries the title: the chrome row keeps its dots alone
   const regions = regionBoxes(shot, image);
@@ -225,10 +228,14 @@ const SWEEP_GROW = 0.12; // of the region card's height: the band's box past the
 function regionCard(shot, ctx, { picture, region, from, image, at }) {
   const { look, unit, seed, canvas, data, timing } = ctx;
   const [fx, fy, fw, fh] = region;
-  const crop = [fx * picture.width, fy * picture.height, fw * picture.width, fh * picture.height];
-  const wide = data.lift !== undefined && isWide(canvas) ? liftedSize(ctx, crop) : null;
+  // data.trim (n5): the crop starts inside the panel, `trim` of the picture's width in from the region's rect on every
+  // side, so the strip of page above and beside the panel and its border do not show (the film's rect reaches past it)
+  const trim = (data.trim ?? 0) * picture.width;
+  const crop = [fx * picture.width + trim, fy * picture.height + trim, fw * picture.width - HALF * trim, fh * picture.height - HALF * trim];
+  const alt = altLift(ctx);
+  const wide = data.lift !== undefined && isWide(canvas) ? liftedSize(ctx, crop, alt) : null;
   const w = wide ? wide.w : canvas.w - HALF * data.pushPad * unit, h = wide ? wide.h : (w * crop[3]) / crop[2];
-  const [cx, cy] = wide ? [canvas.w / HALF, canvas.h / HALF] : [canvas.w / HALF, image[1] + image[3] / HALF];
+  const [cx, cy] = wide ? [liftCentreX(ctx, shot, w, alt), canvas.h / HALF] : [canvas.w / HALF, image[1] + image[3] / HALF];
   const local = [-w / HALF, -h / HALF, w, h];
   const settle = moveOf(look, 'settle');
   const start = Math.max(0, at - settle.dur);
@@ -250,8 +257,10 @@ function regionCard(shot, ctx, { picture, region, from, image, at }) {
     : [node('image', `${shot.id}.region.image`, { src: shot.src, w, h, x: local[0], y: local[1], clip: crop })];
   // the band of light under the card (gate-keynote-2 ruling 5: over the picture it greyed the dashboard's type and striped
   // its bars), crossing the ground round it: a box grown by SWEEP_GROW of the card's height on every side
+  // data.tallSweep false (n5): none on a tall frame, where the band grown past the card showed as two pale rectangles
+  // outside the ring (gate-keynote-3, the 9:16 dash at 5.67 s)
   const grow = SWEEP_GROW * h;
-  const sweep = registries.devices.get('sweep').supports(look) ? registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: [local[0] - grow, local[1] - grow, w + HALF * grow, h + HALF * grow], at: at + SWEEP_AFTER, look, unit, seed }).nodes : [];
+  const sweep = registries.devices.get('sweep').supports(look) && (isWide(canvas) || data.tallSweep !== false) ? registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: [local[0] - grow, local[1] - grow, w + HALF * grow, h + HALF * grow], at: at + SWEEP_AFTER, look, unit, seed }).nodes : [];
   const children = [
     ...sweep,
     ...elevatedShadow(`${shot.id}.region`, local, wide ? (look.devices.card?.radius ?? 0) * unit : 0, look, unit, look.devices.card?.layers ?? []),
@@ -264,12 +273,48 @@ function regionCard(shot, ctx, { picture, region, from, image, at }) {
 // The lifted card's size on a wide frame (look.kinds.screen.lift { share, pad }: gate-keynote-2 ruling 4): the region's
 // picture whole and as large as fits inside the title-safe inset (pushPad) less the card's own pad, on a card at least
 // `share` of the frame wide (the whole browser card is too tall to land that wide), padded on its sides to that width.
-function liftedSize(ctx, crop) {
+// `alt` (look.kinds.screen.lift.alt, a screen after a screen: altLift): the card exactly `alt.share` of the frame wide,
+// the picture as large as fits inside it.
+function liftedSize(ctx, crop, alt) {
   const { canvas, unit, data } = ctx;
   const safe = data.pushPad * unit, pad = data.lift.pad * unit;
   const aspect = crop[2] / crop[3];
+  if (alt !== null) {
+    const ih = Math.min(canvas.h - HALF * (safe + pad), (alt.share * canvas.w - HALF * pad) / aspect), iw = ih * aspect;
+    return { iw, ih, w: iw + HALF * pad, h: ih + HALF * pad };
+  }
   const ih = Math.min(canvas.h - HALF * (safe + pad), (canvas.w - HALF * (safe + pad)) / aspect), iw = ih * aspect;
   return { iw, ih, w: Math.min(canvas.w - HALF * safe, Math.max(data.lift.share * canvas.w, iw + HALF * pad)), h: ih + HALF * pad };
+}
+
+// A screen right after a screen (every second one of a longer run) is framed differently (look.kinds.screen.lift.alt,
+// gate-keynote-3 medium item: dash and month shared one framing back to back): the lift data's `alt` at 16:9, else null.
+// On a tall frame the same shots swap the headline and the card (tallHeroLayout).
+const isRepeat = (ctx) => ctx.run % HALF === 1;
+const altLift = (ctx) => (isWide(ctx.canvas) && ctx.data.lift?.alt !== undefined && isRepeat(ctx) ? ctx.data.lift.alt : null);
+
+// The lifted card's centre x: the frame's centre, or (an alt lift of a titled screen, whose headline takes the left) the
+// card's right edge on the title-safe inset.
+function liftCentreX(ctx, shot, w, alt) {
+  const { canvas, unit, data } = ctx;
+  return alt !== null && shot.title !== undefined ? canvas.w - data.pushPad * unit - w / HALF : canvas.w / HALF;
+}
+
+// An alt lift's headline: the screen's title (its chrome keeps it too) in the display face, in the left column up to the
+// card less the gutter, centred down the frame; it comes in once the card has landed, on the bare ground.
+const HEADLINE_FADE = 0.35; // s
+function liftHeadline(shot, ctx, card, at) {
+  const { look, unit, canvas } = ctx;
+  const x = look.grid.margin * unit;
+  const room = { x, y: x, w: card[0] - look.grid.gutter * unit - x, h: canvas.h - HALF * x };
+  // the column holds the headline alone, so it may take `alt.headShare` of the frame's height (the tall hero's 0.4 share
+  // is for a headline over a card: at that height a three-line title could not reach the 144 floor and overflowed)
+  const set = headlineSet(shot, ctx, room, ctx.data.lift.alt.headShare);
+  const headH = set.layout.lines.at(-1).y - set.layout.lines[0].y + (CAP_HEIGHT + WORD_DESCENT) * set.font.size;
+  const top = (canvas.h - headH) / HALF;
+  const opacity = track([{ t: 0, v: 0 }, { t: at, v: 0 }, { t: at + HEADLINE_FADE, v: 1 }]);
+  const text = node('text', `${shot.id}.headline`, { x, y: top + CAP_HEIGHT * set.font.size - set.layout.lines[0].y, layout: set.layout, font: set.font, fill: colourOf(look, 'ink'), role: 'hero' }, { tracks: { opacity } });
+  return { node: text, box: [x, top, set.layout.width, headH] };
 }
 
 // The span the screen fades out over before its region lifts off it: LIFT_FADE seconds ending where the card starts to
@@ -287,7 +332,9 @@ function liftSpan(ctx, at) {
 function liftLayout(shot, ctx, { picture, zoom, frame, image, boxes, target }) {
   const card = regionCard(shot, ctx, { picture, region: shot.regions[zoom.region], from: target, image, at: zoom.at });
   const screen = screenGroup(shot, ctx, frame, image, undefined, undefined, liftSpan(ctx, zoom.at));
-  return { nodes: [screen, ...card.nodes], boxes: { ...boxes, regionCard: card.box }, camera: [] };
+  if (altLift(ctx) === null || shot.title === undefined) return { nodes: [screen, ...card.nodes], boxes: { ...boxes, regionCard: card.box }, camera: [] };
+  const headline = liftHeadline(shot, ctx, card.box, zoom.at);
+  return { nodes: [screen, ...card.nodes, headline.node], boxes: { ...boxes, regionCard: card.box, headline: headline.box }, camera: [] };
 }
 
 // The zoom at which the drawn picture shows one picture pixel per frame pixel: a push past it is a soft upscale.

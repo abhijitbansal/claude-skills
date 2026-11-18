@@ -154,12 +154,14 @@ const IMAGE = { width: 1600, height: 1000 }; // helpers/kinds.mjs IMAGES shot.pn
 for (const [label, shot] of [['titled', exampleOf('screen')], ['untitled', (({ title, ...rest }) => rest)(exampleOf('screen'))]]) {
   test(`keynote screen at 9:16 (${label}): no picture is cropped inside the region's width`, () => {
     const { built } = keynoteFilm('screen', shot, '9:16');
+    // n5: the lifted crop starts `trim` of the picture's width inside the region (clear of the UI round its panel)
+    const trim = look().kinds.screen.trim * IMAGE.width;
     const [fx, , fw] = shot.regions.total;
     const images = flat(built.sampleShot(0, built.duration)).filter((n) => n.type === 'image');
     assert.ok(images.length > 0, 'a picture');
     for (const n of images) {
       const clip = n.props.clip ?? [0, 0, IMAGE.width, IMAGE.height];
-      assert.ok(clip[0] <= fx * IMAGE.width + 1 && clip[0] + clip[2] >= (fx + fw) * IMAGE.width - 1, `${n.id} crops ${clip.map(Math.round)} inside the region ${Math.round(fx * IMAGE.width)} to ${Math.round((fx + fw) * IMAGE.width)}`);
+      assert.ok(clip[0] <= fx * IMAGE.width + trim + 1 && clip[0] + clip[2] >= (fx + fw) * IMAGE.width - trim - 1,`${n.id} crops ${clip.map(Math.round)} inside the region ${Math.round(fx * IMAGE.width)} to ${Math.round((fx + fw) * IMAGE.width)}`);
     }
   });
 }

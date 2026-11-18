@@ -49,14 +49,18 @@ function shotEvents(film, timeline) {
 function lookDecision(film, looks) {
   const listed = looks.map((l) => ({ label: l.name, pros: [l.summary] }));
   const own = film.look;
-  const options = listed.some((o) => o.label === own) ? listed : [...listed, { label: own, pros: ['the look the film names (experimental: not in the list)'] }];
+  const pool = listed.some((o) => o.label === own) ? listed : [...listed, { label: own, pros: ['the look the film names (experimental: not in the list)'] }];
+  // at most MAX_OPTIONS: the first ones in listed order, the film's own always among them (it is the recommended option;
+  // past the fifth listed look it takes the last place)
+  const first = pool.slice(0, MAX_OPTIONS);
+  const options = first.some((o) => o.label === own) ? first : [...first.slice(0, MAX_OPTIONS - 1), pool.find((o) => o.label === own)];
   return {
     type: 'decision',
     id: 'look',
     title: `The film is drawn in ${own}`,
     label: 'Look',
     question: 'Which look should the film use?',
-    options: options.slice(0, MAX_OPTIONS),
+    options,
     recommended: own,
     why: `The draft film names ${own}. A look changes the type, the colours and the motion of every shot, not the words or the timing. If nobody answers, ${own} is used.`,
     default: own,

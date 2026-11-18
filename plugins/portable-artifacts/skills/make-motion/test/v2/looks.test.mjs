@@ -32,8 +32,8 @@ const ACCENT_SAMPLE = '#ff6600';
 const lookNames = () => registries.looks.names();
 const closeTo = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`);
 
-test('desk, pop, cosmos, ledger and poster are the listed looks, in showreel order (cosmos un-parked after the final gate review, ledger and poster listed after their gates)', () => {
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster']);
+test('desk, pop, cosmos, ledger, poster and keynote are the listed looks, in showreel order (cosmos un-parked after the final gate review, ledger, poster and keynote listed after their gates)', () => {
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
   assert.equal(registries.looks.get('desk').name, 'desk');
   assert.equal(registries.looks.get('pop').name, 'pop');
@@ -342,7 +342,7 @@ test('mode values are the brief values', () => {
 test('registering twice is harmless: a second evaluation of the index does not throw', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?again'));
   await assert.doesNotReject(() => import('../../engine/modes/index.mjs?again'));
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster']);
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
 });
 
@@ -390,7 +390,7 @@ test('the validator reads each look cuts: every registered cut in either look (d
 
 test('an unknown look still lists the real ones', () => {
   const r = validate({ version: 2, look: 'dsk', shots: shots(undefined) });
-  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos, ledger, poster)' }]);
+  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos, ledger, poster, keynote)' }]);
 });
 
 test('every look names its composition: desk is editorial, pop is a stack', () => {

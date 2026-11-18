@@ -71,6 +71,13 @@ function filmPicture(film, assets) {
   };
 }
 
+// The number of shots right before shot `index` that show the same kind, with no other kind between.
+function runBefore(film, index) {
+  let n = 0;
+  while (index - n - 1 >= 0 && film.shots[index - n - 1]?.show === film.shots[index].show) n += 1;
+  return n;
+}
+
 // { prepared } for a shot whose kind declares `prepared: true`: its entry in the film's prepared data (by shot id), which
 // must be there; {} for any other kind. A missing entry is an error naming the shot, never an empty frame.
 function preparedOf(shot, kind, prepared) {
@@ -109,6 +116,9 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
     captions: captionsOn(film, registries.modes.get(film.mode ?? DEFAULT_MODE)), // whether the film shows captions
     asset: shotAsset(shot, kind, assets),
     filmPicture: filmPicture(film, assets),
+    // how many shots of this shot's kind run unbroken right before it: 0 for the first of a run, 1 for the second (a
+    // screen after a screen is framed differently, look.kinds.screen.lift.alt)
+    run: runBefore(film, index),
     // the shot's 1-based place among the film's numbered shots (kinds with `numbered: true`): what a slug shows
     // (a kind's `numbered` may be a function of the shot: a compare counts only when it shows a slug)
     ordinal: film.shots.slice(0, index + 1).filter((s) => registries.kinds.has(s.show) && isNumbered(registries.kinds.get(s.show), s)).length,
