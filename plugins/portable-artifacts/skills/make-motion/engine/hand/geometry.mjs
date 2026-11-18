@@ -1,5 +1,5 @@
-// A COPY of template/sketch/geometry.mjs (version 1), made for the drawing hand (looks-four Task 2): version 1 is deleted
-// at cut-over and is never imported by version 2, so what the hand needs lives here. Changes from the original: its own
+// A COPY of version 1's template/sketch/geometry.mjs (deleted at cut-over), made for the drawing hand (looks-four Task 2):
+// version 2 never imported version 1, so what the hand needs lives here. Changes from the original: its own
 // `unit`, `hashSeed` and `makeRng` are dropped (version 2 has engine/units.mjs unitOf and engine/seeded.mjs mulberry32,
 // seeded per id through engine/devices/shared.mjs deviceRng); `isPoint` is dropped (nothing here takes a `to`).
 //

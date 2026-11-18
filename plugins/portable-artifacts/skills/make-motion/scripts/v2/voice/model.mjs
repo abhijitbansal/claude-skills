@@ -1,5 +1,5 @@
 // The pinned timestamped Kokoro model (Apache-2.0) that version 2 narrates with, and its verified download.
-// Version 1 reads a different model (scripts/lib/voice.mjs); the two live in separate cache folders until cut-over.
+// Version 1 read a different model (its scripts/lib/voice.mjs, deleted at cut-over) from the folder scripts/lib/model-cache.mjs names.
 // Every file is fetched through ensurePinnedFile at one commit, with its byte count and SHA-256; nothing here calls the network itself.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

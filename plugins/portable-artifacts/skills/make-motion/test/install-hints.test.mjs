@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { defaultCtx, diagnose, kokoro, cutout } from '../shared/doctor.mjs';
-import { INSTALL_HINT as VOICE_HINT } from '../scripts/lib/voice.mjs';
+import { INSTALL_HINT as VOICE_HINT } from '../scripts/v2/voice/worker.mjs';
 import { INSTALL_HINT as CUTOUT_HINT } from '../scripts/lib/cutout.mjs';
 import { optionalInstall, SKILL_DIR } from '../scripts/lib/doctor-hint.mjs';
 
@@ -39,9 +39,6 @@ test('every hint is a locked install into its own folder, never --no-save', () =
   assert.throws(() => optionalInstall('ffmpeg-static'), /unknown optional install "ffmpeg-static"/);
 });
 
-test('the voice hint states the install size the doctor states, not the old 250 MB or 465 MB', async () => {
-  const size = (await diagnose([kokoro()], { ...defaultCtx(root), exists: () => false })).missing[0].size;
-  const mb = /^≈(\d+) MB/.exec(size)[1];
-  assert.match(VOICE_HINT, new RegExp(`about ${mb} MB`));
-  assert.doesNotMatch(VOICE_HINT, /250 MB|465 MB/);
+test('the voice hint names no install size: the doctor reports it', () => {
+  assert.doesNotMatch(VOICE_HINT, /\bMB\b/);
 });

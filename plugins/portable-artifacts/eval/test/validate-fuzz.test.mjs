@@ -27,8 +27,7 @@ const CASES = [
   { skill: 'make-dashboard', dir: 'references/examples', file: 'minimal.json', lookups: [['theme'], ['charts', 0, 'kind'], ['charts', 0, 'x'], ['charts', 0, 'query']], nested: [['charts', 0]] },
   { skill: 'make-diagram', dir: 'references/examples', file: 'architecture.diagram.json', lookups: [['theme'], ['type'], ['direction'], ['nodes', 0, 'kind'], ['nodes', 1, 'icon'], ['nodes', 1, 'group'], ['edges', 0, 'from']], nested: [['nodes', 0], ['edges', 0], ['groups', 0]] },
   { skill: 'make-explainer', dir: 'references/examples', file: 'concept.explainer.json', lookups: [['theme'], ['preset'], ['mode'], ['sections', 0, 'type'], ['sections', 0, 'tone'], ['sections', 9, 'items', 0, 'severity'], ['sections', 10, 'items', 0, 'change'], ['sections', 12, 'tone']], nested: [['sections', 0], ['sections', 4, 'items', 0], ['meta']] },
-  { skill: 'make-motion', dir: 'references/examples', file: 'launch-title.json', lookups: [['theme'], ['scenes', 0, 'background'], ['scenes', 1, 'transition'], ['scenes', 0, 'elements', 1, 'role'], ['scenes', 0, 'elements', 2, 'type']], nested: [['scenes', 0], ['scenes', 0, 'elements', 0]] },
-  { skill: 'make-motion', dir: 'references/examples/blocks', file: 'title-card.json', lookups: [['scenes', 0, 'elements', 0, 'block']], nested: [['scenes', 0, 'elements', 0, 'params']] },
+  // make-motion has no validate.mjs since the cut-over; its film validator is fuzzed in-process by make-motion/test/v2/hostile-names.test.mjs.
   { skill: 'make-scene', dir: 'references/examples', file: 'city.scene.json', lookups: [['world'], ['theme']], nested: [['data']] },
 ];
 
@@ -111,7 +110,7 @@ for (const c of CASES) {
 test('every skill that has a validate.mjs is fuzzed', () => {
   const have = fs.readdirSync(SKILLS).filter((d) => fs.existsSync(path.join(SKILLS, d, 'scripts/validate.mjs'))).sort();
   assert.deepEqual([...new Set(CASES.map((c) => c.skill))].sort(), have);
-  assert.equal(have.length, 5);
+  assert.equal(have.length, 4);
 });
 
 test('guardrail proof: a scratch validator that looks a kind up with `in` is caught accepting constructor', async () => {

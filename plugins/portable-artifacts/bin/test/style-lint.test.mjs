@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const SKILLS = fileURLToPath(new URL('../../skills/', import.meta.url));
 const SOURCES = ['make-explainer/template/base.css', 'make-explainer/template/flavors.css', 'make-explainer/template/chart.css', 'make-explainer/template/diagram.css',
   'make-explainer/template/motion.css', 'make-explainer/template/scene.css', 'make-explainer/template/slides.html', 'make-explainer/template/page.html',
-  'make-diagram/template/viewer.html', 'make-diagram/scripts/lib/css.mjs', 'make-dashboard/template/page.html', 'make-motion/template/styles.css',
+  'make-diagram/template/viewer.html', 'make-diagram/scripts/lib/css.mjs', 'make-dashboard/template/page.html', 'make-motion/engine/page/viewer.html',
   'make-scene/template/page.css', 'make-scene/template/page.html'];
 
 export const findUnderlines = (css) => [...css.matchAll(/text-decoration(?:-line)?\s*:\s*[^;}]*underline/g)].map((m) => m[0]);
@@ -41,21 +41,21 @@ export const findShorthandFamilies = (css) => [...css.matchAll(/(?<![-\w])font\s
 export const findFontVars = (css) => [...css.matchAll(/(--(?:font|font-display|mono|sans)|--[\w-]*font[\w-]*)\s*:\s*([^;}]+)/g)].map((m) => m[2].trim());
 
 // Only the FIRST family is checked: a theme variable, a generic/system keyword, or a bundled family.
-// Every skill draws from the same bundled families. make-motion names its font roles --sans and
-// --display (the theme stylesheet it is served sets them), so only its sources may use those variables.
+// Every skill draws from the same bundled families. make-motion's preview page (engine/page/viewer.html) uses system
+// keywords only; its films draw bundled fonts by name on the render page, which is not a stylesheet. (Version 1's
+// stylesheet named its roles --sans and --display; it was deleted at cut-over, so no skill may use those variables.)
 const BASE_BUNDLED = ['Geist', 'Geist Mono', 'Newsreader', 'Bricolage Grotesque', 'Atkinson Hyperlegible',
   'Funnel Display', 'Host Grotesk', 'Commit Mono', 'Young Serif', 'Schibsted Grotesk', 'JetBrains Mono', 'Big Shoulders Display', 'Familjen Grotesk', 'Martian Mono'];
 const KEYWORDS = 'inherit|system-ui|-apple-system|ui-monospace|monospace|sans-serif|serif';
-export function allowedFamily(skill) {
-  const motion = skill === 'make-motion';
+export function allowedFamily() {
   const names = BASE_BUNDLED.join('|');
-  const vars = motion ? 'font|font-display|mono|sans|display' : 'font|font-display|mono';
+  const vars = 'font|font-display|mono';
   return new RegExp(`^(?:var\\(--(?:${vars})\\)|${KEYWORDS}|(['"])(?:${names})\\1|(?:${names}))\\s*(?:,|$)`);
 }
 
 // strip @font-face -> find every family declaration (font-family, font shorthand, font custom properties) -> match.
-export function lintFonts(src, skill) {
-  const re = allowedFamily(skill);
+export function lintFonts(src) {
+  const re = allowedFamily();
   const body = src.replace(/@font-face\s*\{[^}]*\}/g, '');
   return [...findFontFamilies(body), ...findShorthandFamilies(body), ...findFontVars(body)]
     .filter((fam) => !re.test(fam));
@@ -74,12 +74,13 @@ test('lint catches what it should (guardrail proof)', () => {
   assert.deepEqual(lintFonts("a{font: 600 var(--size) 'Comic Sans MS'}", 'make-explainer'), ["'Comic Sans MS'"]);
   assert.deepEqual(lintFonts("a{font: 600 min(1rem,2vw) 'Comic Sans MS'}", 'make-explainer'), ["'Comic Sans MS'"]);
   assert.equal(lintFonts('a{font: 600 wibble var(--font)}', 'make-explainer').length, 1, 'unrecognised size fails loudly');
-  // Inter is no longer bundled anywhere (make-motion's old default look); --sans / --display belong to make-motion only.
+  // Inter is no longer bundled anywhere (make-motion's old default look); --sans / --display belonged to version 1's stylesheet.
   assert.deepEqual(lintFonts("a{font-family:'Inter', sans-serif}", 'make-explainer'), ["'Inter', sans-serif"]);
   assert.deepEqual(lintFonts("a{font-family:'Inter', sans-serif}", 'make-motion'), ["'Inter', sans-serif"]);
   assert.deepEqual(lintFonts('a{font-family:var(--sans)}', 'make-dashboard'), ['var(--sans)']);
   assert.deepEqual(lintFonts('a{font-family:var(--display)}', 'make-explainer'), ['var(--display)']);
-  assert.deepEqual(lintFonts('a{font-family:var(--display); font: 12px var(--sans)}', 'make-motion'), []);
+  assert.deepEqual(lintFonts('a{font-family:var(--display); font: 12px var(--sans)}', 'make-motion'), ['var(--display)', 'var(--sans)']);
+  assert.deepEqual(lintFonts('a{font: 14px/1.4 system-ui, sans-serif} #e{font-family: ui-monospace, monospace} b{font: inherit}', 'make-motion'), [], 'the preview page\'s own shapes');
   // the passing shapes
   assert.deepEqual(lintFonts('a{font: 600 var(--fs-lg)/var(--lh-head) var(--font-display); font: 12px/1.5 var(--mono); font: inherit}', 'make-explainer'), []);
   assert.deepEqual(lintFonts('a{font: var(--display-weight) var(--fs-md)/var(--lh-head) var(--font-display)}', 'make-diagram'), []);

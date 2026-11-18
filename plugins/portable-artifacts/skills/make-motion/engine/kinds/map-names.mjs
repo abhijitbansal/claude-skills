@@ -1,6 +1,6 @@
 // The feature names of the two atlases the `map` kind draws, as the atlases spell them (Natural Earth's short forms:
 // "United States of America", "Dem. Rep. Congo", "Bosnia and Herz."): what a `highlight` may name, so a name no map has
-// is a validation error with did-you-mean. Copied from version 1's template/map-names.mjs (lists only).
+// is a validation error with did-you-mean. Copied from version 1's template/map-names.mjs (deleted at cut-over; lists only).
 // test/v2/kinds-map.test.mjs reads the pinned atlas files and fails when these lists and the files part (a version bump).
 // Pure and DOM-free.
 

@@ -68,20 +68,20 @@ test('ffmpeg is reported required-missing when PATH is empty and FFMPEG_PATH uns
   assert.ok(f && f.required === true);
 });
 
-test('--for voiceover asks for kokoro; plain does not; --for check is accepted and never asks for kokoro', () => {
+test('--for voiceover asks for kokoro; plain does not; --for check (version 1\'s target) is refused with the accepted targets', () => {
   const ids = (args) => JSON.parse(run(SKILL, ['--json', ...args]).stdout).missing.map((m) => m.id);
   assert.equal(ids([]).includes('kokoro'), false);
   const hasKokoro = fs.existsSync(path.join(SKILL, 'optional/voice/node_modules/kokoro-js'));
   assert.equal(ids(['--for', 'voiceover']).includes('kokoro'), !hasKokoro);
-  assert.notEqual(run(SKILL, ['--for', 'check']).status, 2);
-  assert.equal(ids(['--for', 'check']).includes('kokoro'), false);
+  const refused = run(SKILL, ['--for', 'check']);
+  assert.equal(refused.status, 2);
+  assert.match(refused.stderr, /voiceover/);
+  assert.match(refused.stderr, /cutout/);
 });
 
-test('requirementsFor check: node, node_modules and a required browser; no ffmpeg (check.mjs captures no video)', async () => {
-  const requirementsFor = await loadRequirements();
-  assert.deepEqual(idsOf(requirementsFor('check')), ['node', 'node_modules', 'chromium', 'builder_agent']);
-  assert.equal(requirementsFor('check')[2].required, true);
-  assert.equal(requirementsFor('check')[3].required, false, 'the agent file is optional');
+test('the doctor targets are voiceover and cutout; the check target went with version 1', async () => {
+  const { targets } = await import(pathToFileURL(path.join(SKILL, 'scripts/lib/requirements.mjs')).href);
+  assert.deepEqual(targets, ['voiceover', 'cutout']);
 });
 
 test('requirementsFor: rendering always needs ffmpeg and a required browser; ALL adds kokoro', async () => {
@@ -108,11 +108,10 @@ test('--for cutout asks for onnxruntime-node (optional, so exit 0), plain and th
   assert.match(fresh.why, /MODNet/);
 });
 
-test('install hints name the doctor with its real path and the missing item id', async () => {
+test('the voice hint is the doctor\'s own npm ci step (version 2 wording: it names no doctor id), and the ffmpeg hint names the doctor with its real path and id', async () => {
   const lib = (f) => import(pathToFileURL(path.join(SKILL, 'scripts/lib', f)).href);
   const doctor = quoteArg(path.join(SKILL, 'scripts/doctor.mjs'));
-  const { INSTALL_HINT } = await lib('voice.mjs');
-  assert.ok(INSTALL_HINT.includes(`node ${doctor} --for voiceover, id kokoro)`), INSTALL_HINT);
+  const { INSTALL_HINT } = await import(pathToFileURL(path.join(SKILL, 'scripts/v2/voice/worker.mjs')).href);
   assert.ok(INSTALL_HINT.includes(`npm ci --ignore-scripts --prefix ${quoteArg(path.join(SKILL, 'optional', 'voice'))}`), INSTALL_HINT);
   assert.doesNotMatch(INSTALL_HINT, /<skill-dir>/);
   const { findFfmpeg } = await lib('ffmpeg.mjs');

@@ -2,8 +2,7 @@
 // It runs apart from make.mjs because the phonemizer (an Emscripten build of eSpeak NG) installs a process-wide
 // uncaughtException hook (spike report, open risk 9); here that hook can only affect this process.
 //
-// It loads the optional voice package through importOptional (INSTALL_HINT: version 2 wording, version 1's install
-// command), re-checks the pinned model offline (make.mjs fetched and checked it before starting the worker), then for
+// It loads the optional voice package through importOptional (INSTALL_HINT: the install command the doctor runs), re-checks the pinned model offline (make.mjs fetched and checked it before starting the worker), then for
 // each narrated shot plans the calls, runs them, concatenates the waveforms and the silences, maps the model's
 // durations to word times, and writes one 24 kHz mono 16-bit WAV per shot that has sound. The job's folder is a
 // staging folder of this run alone; the sidecar is written last, and make.mjs renames the folder into the cache.
@@ -40,7 +39,7 @@ export const FADE_SAMPLES = 5 * SAMPLES_PER_MS;
 /** The pad-trim settings as one value: part of the cache hash (synth.mjs voiceHash), since they shape every WAV and time. */
 export const TRIM = Object.freeze({ leadKeepSamples: LEAD_KEEP_SAMPLES, fadeSamples: FADE_SAMPLES });
 export const JOB_VERSION = 1;
-/** What is missing, in version 2 terms, then the same install command as version 1 (scripts/lib/voice.mjs). */
+/** What is missing, then the install command the doctor runs for the voice package. */
 export const INSTALL_HINT = `the optional voice package is not installed. Run: ${optionalInstall('kokoro')}`;
 /** The prefix of the worker's last stderr line on failure; JSON { kind, message, hint } follows it. */
 export const ERROR_MARKER = 'voice-error ';

@@ -44,7 +44,7 @@ test('project install copies both skills without node_modules, tests or build ou
   for (const s of ['make-dashboard', 'make-motion']) {
     const dst = path.join(proj, '.agents/skills', s);
     assert.ok(fs.existsSync(path.join(dst, 'SKILL.md')), `${s}/SKILL.md`);
-    assert.ok(fs.existsSync(path.join(dst, 'scripts/validate.mjs')));
+    assert.ok(fs.existsSync(path.join(dst, 'scripts/doctor.mjs'))); // every skill has one; make-motion's validate.mjs was deleted at cut-over
     assert.ok(fs.existsSync(path.join(dst, 'package-lock.json')));
     assert.equal(fs.existsSync(path.join(dst, 'node_modules')), false);
     assert.equal(fs.existsSync(path.join(dst, 'test')), false);

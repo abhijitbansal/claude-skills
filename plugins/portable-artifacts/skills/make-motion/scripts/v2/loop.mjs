@@ -1,7 +1,7 @@
 // A looping film (root `loop: true`, version 1's `viral.loop`): the review compares the last frame with the first and,
-// past LOOP_DIFF_MAX, says the film does not loop cleanly. The contract is version 1's check (scripts/lib/viral-checks.mjs
-// loopWarnings): the mean absolute per-channel difference over 255 of the two frames as drawn, post pass included.
-// Copied, not imported: version 1 is deleted at the cut-over.
+// past LOOP_DIFF_MAX, says the film does not loop cleanly. The contract is version 1's check (loopWarnings in
+// scripts/lib/viral-checks.mjs, deleted at cut-over): the mean absolute per-channel difference over 255 of the two frames
+// as drawn, post pass included. Copied, not imported.
 import { readPng } from './png.mjs';
 
 /** The largest first-to-last frame difference a looping film may have (version 1's LOOP_DIFF_MAX). */

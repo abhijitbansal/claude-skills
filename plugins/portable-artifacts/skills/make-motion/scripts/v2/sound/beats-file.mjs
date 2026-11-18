@@ -1,6 +1,6 @@
 // The beats file: the beat grid scripts/beats.mjs writes for a user's music ({ source, bpm, confidence, beats }), and
-// that a film's music.beats names so a corrected tempo is used instead of detecting one. Replaces version 1's
-// scripts/lib/beats-file.mjs. A beats file is data from outside: its path stays inside the film's folder after links are
+// that a film's music.beats names so a corrected tempo is used instead of detecting one. Replaced version 1's
+// scripts/lib/beats-file.mjs (deleted at cut-over). A beats file is data from outside: its path stays inside the film's folder after links are
 // followed (as a picture's src: spec-common.mjs srcProblem), its size is capped, and its shape is checked (a bounded,
 // rising list of finite seconds). It is never executed.
 import { closeSync, mkdirSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';

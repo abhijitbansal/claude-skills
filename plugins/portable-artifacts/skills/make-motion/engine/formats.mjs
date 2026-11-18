@@ -1,6 +1,6 @@
 // Format presets, the safe area and the viral platform zone: a DOM-free table the render page and Node both load.
-// A copy of the part of version 1's template/formats.mjs that version 2 uses; the values are the same (test/v2/formats.test.mjs
-// records them, and test/formats.test.mjs holds the two files equal until the cut-over deletes the old one).
+// A copy of the part of version 1's template/formats.mjs (deleted at cut-over) that version 2 uses; the values are the same
+// (test/v2/formats.test.mjs records them).
 
 // Each preset sets the canvas size. `captionTop` (where version 1's caption zone starts, as a share of the height) stays
 // so the table is the old one value for value; version 2's captions place themselves.

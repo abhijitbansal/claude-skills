@@ -1,6 +1,6 @@
 // The chart kind's `race` type (plan 2026-11-16-pa2-shot-kinds-b, Task 10): `data` { periods, rows: [{ name, values }] },
 // the top `top` rows of each period as bars from zero on one scale for every period, ranked by value (ties keep the given
-// order; ranking adapted from version 1's race block, template/blocks/race.mjs rankByPeriod, which broke ties by name).
+// order; ranking adapted from version 1's race block, rankByPeriod in template/blocks/race.mjs (deleted at cut-over), which broke ties by name).
 // The periods are spread over the narration; at each the values count to the period's over the look's settle move (set
 // in fixed advances), and the bars' lengths and ranks follow the values shown, step for step; the period shows top right, a numeral in the display face
 // in a stack look (pop) and a label in the label face otherwise (desk). The land event is the last period's arrival.

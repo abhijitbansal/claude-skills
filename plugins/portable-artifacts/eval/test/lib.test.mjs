@@ -782,15 +782,14 @@ test('the vars-batch prompt can be rendered per row: data/rows.json has the vari
 
 const dataFile = (name) => path.join(evalDir, 'fixtures/data', name);
 
-// make-motion's own tests still read five of the files no motion prompt names (music.wav: the kept beats tests; captions,
-// badge.lottie.json and portrait-cutout.png: version 1 tests that the delete in Task 3 removes with them, and these files
-// with them). clip.mp4 had no reader once its byte check went, so it is gone.
-test('every data fixture a motion prompt names exists, and clip.mp4, which nothing reads any more, is gone', () => {
+// make-motion's kept beats tests read one file no motion prompt names (music.wav). clip.mp4, captions.srt, captions.vtt,
+// badge.lottie.json and portrait-cutout.png had no reader once version 1's tests went at cut-over, so they are gone.
+test('every data fixture a motion prompt names exists, music.wav stays for the beats tests, and the five fixtures nothing reads are gone', () => {
   const named = new Set(readJson('prompts', 'motion.json').flatMap((p) => [...p.prompt.matchAll(/\bdata\/([\w-]+\.\w+)/g)].map((m) => m[1])));
   assert.deepEqual([...named].sort(), ['portrait.jpg', 'rows.json']);
   for (const file of named) assert.ok(fs.existsSync(dataFile(file)), file);
-  assert.equal(fs.existsSync(dataFile('clip.mp4')), false);
-  for (const kept of ['music.wav', 'captions.srt', 'captions.vtt', 'badge.lottie.json', 'portrait-cutout.png']) assert.ok(fs.existsSync(dataFile(kept)), `${kept} is still read by a make-motion test`);
+  for (const gone of ['clip.mp4', 'captions.srt', 'captions.vtt', 'badge.lottie.json', 'portrait-cutout.png']) assert.equal(fs.existsSync(dataFile(gone)), false, `${gone} has no reader left`);
+  assert.ok(fs.existsSync(dataFile('music.wav')), 'music.wav is still read by make-motion\'s beats test');
 });
 
 test('rows.json has 3 rows of name, city and count', () => {

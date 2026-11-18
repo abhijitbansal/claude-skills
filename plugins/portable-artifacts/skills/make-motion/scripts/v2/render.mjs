@@ -14,7 +14,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { findFfmpeg } from '../lib/ffmpeg.mjs';
-// for scripts/v2 modules that run ffmpeg themselves (clips.mjs) without importing a version 1 module directly
+// for scripts/v2 modules that run ffmpeg themselves (clips.mjs) without importing scripts/lib/ffmpeg.mjs directly
 export { findFfmpeg, findFfprobe } from '../lib/ffmpeg.mjs';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/modes/index.mjs'; // registers the modes whose loudness a voiced film is mastered to
@@ -23,8 +23,7 @@ import { openSession } from './session.mjs';
 import { withStamp } from './stamp.mjs';
 import { captureParallel, workerRanges } from './workers.mjs';
 
-// The voice steps, loaded only for a voiced film: a silent film imports nothing of the voice (nor version 1's loudness
-// module, which brings its whole spec validator, about 200 ms of loading measured on the dev machine).
+// The voice steps, loaded only for a voiced film: a silent film imports nothing of the voice.
 const voiceSteps = async () => ({ ...await import('./voice/master.mjs'), ...await import('./voice/remaster.mjs') });
 
 export const JPEG_QUALITY = 98;

@@ -1,5 +1,5 @@
-// The `ripple` shader cut. Written in this repository for make-motion version 1 (template/gl-transitions.mjs,
-// `gl-ripple`) and moved here onto the gl-transitions contract (engine/cuts/shaders/index.mjs): both shots ripple out
+// The `ripple` shader cut. Written in this repository for make-motion version 1 (its
+// `gl-ripple`; template/gl-transitions.mjs, deleted at cut-over) and moved here onto the gl-transitions contract (engine/cuts/shaders/index.mjs): both shots ripple out
 // from the centre and cross over; the wave dies away at both ends of the window, so progress 0 is the outgoing shot and
 // progress 1 the incoming one. Same constants and maths as version 1; only the names changed (uP is progress, the
 // aspect is ratio). Pure and DOM-free.

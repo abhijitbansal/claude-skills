@@ -2,8 +2,8 @@
 // WAV with Buffer. No dependencies; noise comes from a seeded generator, so the same cue is the same bytes.
 // Every cue is built in layers: a short transient (a click), a body (a pitched tone or a filtered noise sweep), an
 // optional short reverb tail, then optional stereo width above 120 Hz (mono below, so the low end stays centred).
-// Moved here from version 1's scripts/lib/cues.mjs (cut-over plan, Task 1) with the bytes unchanged: test/v2/cue-synth.test.mjs
-// holds the sha256 of every cue as that file made it. Nothing here reads recorded samples, the film spec or template/.
+// Moved here from version 1's scripts/lib/cues.mjs (deleted at cut-over) with the bytes unchanged: test/v2/cue-synth.test.mjs
+// holds the sha256 of every cue as that file made it. Nothing here reads recorded samples or the film spec.
 import { mulberry32 } from '../../../engine/seeded.mjs';
 
 export const SAMPLE_RATE = 48000; // the mix's rate: no resampling

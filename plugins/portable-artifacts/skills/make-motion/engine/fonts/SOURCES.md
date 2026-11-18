@@ -33,7 +33,7 @@ the licence text for each family is in `LICENSES/`. Bundled faces for text and m
   bytes (the variable file fits the budget, so the static 700 fallback was not needed). Source:
   `https://registry.npmjs.org/@fontsource-variable/caveat/-/caveat-5.3.0.tgz` (tarball SHA-256
   `2f50d55732648330ec8dcb4eef79666ef1131a57e7f0441975657a4b2ff20ba9`); package licence `OFL-1.1`. It replaces
-  version 1's `template/sketch/caveat-700.woff2`, which cut-over deletes.
+  version 1's `template/sketch/caveat-700.woff2` (deleted at cut-over).
 
 The Fraunces and Archivo Latin files came from the smallest variant that carries every axis a look needs, so no
 trade-off was made: the two files total 211120 bytes (206 KiB). With Nunito the three total 250248 bytes (244 KiB),

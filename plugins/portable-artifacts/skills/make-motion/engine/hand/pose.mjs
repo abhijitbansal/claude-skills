@@ -1,5 +1,5 @@
 // Where the drawing hand's marker tip is at any moment (looks-four Task 2), a pure lookup over a shot's stroke plan
-// (strokes.mjs), as template/sketch/hand.mjs handPose was in version 1 (its pose logic copied and reworked: no idle sway,
+// (strokes.mjs), as handPose was in version 1's template/sketch/hand.mjs (deleted at cut-over; its pose logic copied and reworked: no idle sway,
 // so a resting hand is still and its frames are reused). On a stroke the tip is on the stroke's visible end; between
 // strokes it holds, then travels in one eased move; with no stroke for more than look.hand.rest seconds it goes to the
 // look's rest point (look.hand.restAt, shares of the canvas per format), clear of the writing. Pure and DOM-free.

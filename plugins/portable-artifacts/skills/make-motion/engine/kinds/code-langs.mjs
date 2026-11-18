@@ -1,5 +1,5 @@
 // The languages a `code` shot may name, and common names for them. Copied from version 1's code theme
-// (template/code-theme.mjs, CODE_LANGS and LANG_ALIASES); `text` is drawn in one colour. Pure and DOM-free.
+// (CODE_LANGS and LANG_ALIASES in template/code-theme.mjs, deleted at cut-over); `text` is drawn in one colour. Pure and DOM-free.
 
 export const CODE_LANGS = Object.freeze(['text', 'javascript', 'typescript', 'json', 'bash', 'python', 'diff', 'go', 'rust', 'swift', 'yaml', 'html', 'css', 'markdown']);
 

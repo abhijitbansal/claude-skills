@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { quoteArg } from '../shared/doctor.mjs';
 import { importOptional, optionalEntryUrl } from '../scripts/lib/optional.mjs';
-import { loadKokoro, INSTALL_HINT } from '../scripts/lib/voice.mjs';
+import { loadRuntime, INSTALL_HINT } from '../scripts/v2/voice/worker.mjs';
 import { UsageError } from '../shared/cli.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -23,15 +23,20 @@ function stubPkg(dir, name, src) {
   writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify({ name, type: 'module', exports: './index.mjs' }));
   writeFileSync(path.join(pkgDir, 'index.mjs'), src);
 }
+const RUNTIME_STUB = 'export class InferenceSession { static create() {} } export class Tensor {}';
+const PHONEMIZE_STUB = 'export function phonemize() { return []; }';
+// The packages the real optional/voice/index.mjs imports: the version 2 runtime, and (until the dependency trim) the version 1 pair it still re-exports.
 const stubVoiceStack = (voiceDir) => {
+  stubPkg(voiceDir, 'onnxruntime-node', RUNTIME_STUB);
+  stubPkg(voiceDir, 'phonemizer', PHONEMIZE_STUB);
   stubPkg(voiceDir, 'kokoro-js', 'export class KokoroTTS {} export class TextSplitterStream {}');
   stubPkg(voiceDir, '@huggingface/transformers', 'export const env = {}; export class RawAudio {}');
 };
-const VOICE_DEPS = { 'kokoro-js': '1.2.1', '@huggingface/transformers': '3.8.1' };
+const VOICE_DEPS = { 'onnxruntime-node': '1.21.0', phonemizer: '1.2.1' };
 const writeManifest = (dir, dependencies) => writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'make-motion-voice', dependencies }));
 const lockOf = (packages) => JSON.stringify({ lockfileVersion: 3, packages: { '': {}, ...packages } });
 const writeLock = (dir, packages) => writeFileSync(path.join(dir, 'package-lock.json'), lockOf(packages));
-const VOICE_LOCK = { 'node_modules/kokoro-js': { version: '1.2.1' }, 'node_modules/@huggingface/transformers': { version: '3.8.1' } };
+const VOICE_LOCK = { 'node_modules/onnxruntime-node': { version: '1.21.0' }, 'node_modules/phonemizer': { version: '1.2.1' } };
 // readFile for injected tests: the folder's package.json lists `dependencies`, its package-lock.json lists `lockPackages`.
 const manifestOf = (dependencies, lockPackages = {}) => (file) => (file.endsWith('package-lock.json') ? lockOf(lockPackages) : JSON.stringify({ dependencies }));
 const notFound = (pkg) => Object.assign(new Error(`Cannot find package '${pkg}' imported from x`), { code: 'ERR_MODULE_NOT_FOUND' });
@@ -41,16 +46,11 @@ test('loads through a file URL when the path has a space and a #', async () => {
   const voiceDir = path.join(root, 'voice');
   mkdirSync(voiceDir, { recursive: true });
   cpSync(REAL_VOICE_ENTRY, path.join(voiceDir, 'index.mjs'));
-  // The real index.mjs also re-exports the version 2 runtime, so this folder carries all four of its imports.
-  writeManifest(voiceDir, { ...VOICE_DEPS, 'onnxruntime-node': '1.21.0', phonemizer: '1.2.1' });
-  writeLock(voiceDir, { ...VOICE_LOCK, 'node_modules/onnxruntime-node': { version: '1.21.0' }, 'node_modules/phonemizer': { version: '1.2.1' } });
+  writeManifest(voiceDir, VOICE_DEPS);
+  writeLock(voiceDir, VOICE_LOCK);
   stubVoiceStack(voiceDir);
-  stubPkg(voiceDir, 'onnxruntime-node', 'export class InferenceSession {} export class Tensor {}');
-  stubPkg(voiceDir, 'phonemizer', 'export function phonemize() { return []; }');
-  const mod = await loadKokoro({ root });
-  assert.equal(typeof mod.KokoroTTS, 'function');
-  assert.equal(typeof mod.RawAudio, 'function');
-  assert.equal(typeof mod.ort.InferenceSession, 'function');
+  const mod = await loadRuntime(voiceDir);
+  assert.equal(typeof mod.ort.InferenceSession.create, 'function');
   assert.equal(typeof mod.phonemize, 'function');
   assert.equal(optionalEntryUrl('voice', root), pathToFileURL(path.join(root, 'voice', 'index.mjs')).href);
 });
@@ -61,7 +61,7 @@ test('the loader never falls back to the skill\'s own node_modules', async () =>
   mkdirSync(voiceDir, { recursive: true });
   cpSync(REAL_VOICE_ENTRY, path.join(voiceDir, 'index.mjs'));
   stubVoiceStack(skill); // a complete old `npm install --no-save` tree one level up: without the guard it would load
-  await assert.rejects(() => loadKokoro({ root: path.join(skill, 'optional') }), (e) => e instanceof UsageError && e.message === INSTALL_HINT);
+  await assert.rejects(() => loadRuntime(voiceDir), (e) => e instanceof UsageError && e.message === INSTALL_HINT);
 });
 
 test('a direct dependency that would load from outside the optional folder is refused, naming the stray path', async () => {
@@ -70,10 +70,10 @@ test('a direct dependency that would load from outside the optional folder is re
   mkdirSync(voiceDir, { recursive: true });
   cpSync(REAL_VOICE_ENTRY, path.join(voiceDir, 'index.mjs'));
   writeManifest(voiceDir, VOICE_DEPS);
-  stubPkg(voiceDir, 'kokoro-js', 'export class KokoroTTS {} export class TextSplitterStream {}'); // a partial install: transformers is missing here
-  stubPkg(skill, '@huggingface/transformers', 'export const env = {}; export class RawAudio {}'); // ...but an old unlocked copy sits above
-  const stray = path.join(skill, 'node_modules', '@huggingface', 'transformers');
-  await assert.rejects(() => loadKokoro({ root: path.join(skill, 'optional') }), (e) => e instanceof UsageError && e.message.includes(stray) && e.message.includes('@huggingface/transformers'));
+  stubPkg(voiceDir, 'onnxruntime-node', RUNTIME_STUB); // a partial install: phonemizer is missing here
+  stubPkg(skill, 'phonemizer', PHONEMIZE_STUB); // ...but an old unlocked copy sits above
+  const stray = path.join(skill, 'node_modules', 'phonemizer');
+  await assert.rejects(() => loadRuntime(voiceDir), (e) => e instanceof UsageError && e.message.includes(stray) && e.message.includes('phonemizer'));
 });
 
 test('a transitive package listed in the lockfile but missing from the folder is refused, even when an old copy sits above it', async () => {
@@ -81,12 +81,12 @@ test('a transitive package listed in the lockfile but missing from the folder is
   const voiceDir = path.join(skill, 'optional', 'voice');
   mkdirSync(voiceDir, { recursive: true });
   cpSync(REAL_VOICE_ENTRY, path.join(voiceDir, 'index.mjs'));
-  writeManifest(voiceDir, VOICE_DEPS);
-  writeLock(voiceDir, { ...VOICE_LOCK, 'node_modules/phonemizer': { version: '1.2.1' } }); // an interrupted install: phonemizer never arrived
-  stubVoiceStack(voiceDir);
-  stubPkg(skill, 'phonemizer', 'export default 1;'); // ...but an old unlocked tree has one
-  const missing = path.join(voiceDir, 'node_modules', 'phonemizer');
-  await assert.rejects(() => loadKokoro({ root: path.join(skill, 'optional') }), (e) => e instanceof UsageError && e.message.includes(missing) && /re-run|rerun/i.test(e.message) && e.message.includes(INSTALL_HINT));
+  writeManifest(voiceDir, { 'onnxruntime-node': '1.21.0' });
+  writeLock(voiceDir, { 'node_modules/onnxruntime-node': { version: '1.21.0' }, 'node_modules/some-transitive': { version: '1.0.0' } }); // an interrupted install: the second never arrived
+  stubPkg(voiceDir, 'onnxruntime-node', RUNTIME_STUB);
+  stubPkg(skill, 'some-transitive', 'export default 1;'); // ...but an old unlocked tree has one
+  const missing = path.join(voiceDir, 'node_modules', 'some-transitive');
+  await assert.rejects(() => loadRuntime(voiceDir), (e) => e instanceof UsageError && e.message.includes(missing) && /re-run|rerun/i.test(e.message) && e.message.includes(INSTALL_HINT));
 });
 
 test('importOptional walks the lockfile: it names the first missing package and skips what this platform or the install may leave out', async () => {
@@ -126,10 +126,10 @@ test('importOptional: a lockfile with no packages map, or an unreadable one, is 
   await assert.rejects(() => importOptional({ name: 'voice', pkg: 'a', hint: 'HINT', root: '/r', importer, exists: () => true, readFile: unreadable }), (e) => e.message.includes(lockFile));
 });
 
-test('the voice install hint is npm ci into optional/voice and names doctor id kokoro', () => {
+test('the voice install hint is npm ci into optional/voice', () => {
   assert.ok(INSTALL_HINT.includes(`npm ci --ignore-scripts --prefix ${quoteArg(path.join(SKILL, 'optional', 'voice'))}`), INSTALL_HINT);
   assert.doesNotMatch(INSTALL_HINT, /npm install/);
-  assert.match(INSTALL_HINT, /--for voiceover, id kokoro\)/);
+  assert.match(INSTALL_HINT, /^the optional voice package is not installed\. Run: /);
 });
 
 test('importOptional: a missing package folder is the hint, and nothing is imported', async () => {

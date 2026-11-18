@@ -8,7 +8,7 @@ test('make-motion declares no unused font package in package.json or its lockfil
   }
 });
 
-// voice: kokoro-js and transformers serve version 1 (scripts/voice.mjs); onnxruntime-node and phonemizer serve version 2 (scripts/v2/voice).
+// voice: kokoro-js and transformers served version 1 (scripts/voice.mjs, deleted at cut-over; the trim in Task 4 removes them); onnxruntime-node and phonemizer serve version 2 (scripts/v2/voice).
 const OPTIONAL = { voice: { deps: ['@huggingface/transformers', 'kokoro-js', 'onnxruntime-node', 'phonemizer'], overrides: { sharp: '0.35.5', 'global-agent': '4.1.3' } },
   cutout: { deps: ['onnxruntime-node'], overrides: { 'global-agent': '4.1.3' } } };
 for (const [name, want] of Object.entries(OPTIONAL)) {

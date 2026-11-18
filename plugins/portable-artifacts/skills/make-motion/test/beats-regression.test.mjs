@@ -2,7 +2,6 @@
 // Each group is a failure the re-reviews found (octave errors, busy grooves failing the confidence gate, quiet sound
 // trimmed as silence), written so it fails on the code that had the bug; test/beats.test.mjs covers the CLI and the click sweep.
 import { test } from 'node:test';
-import { readSchema } from './helpers/schema-docs.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -288,18 +287,7 @@ test('--bpm forces the grid at that tempo and reports the fit as the confidence'
 
 // --- the docs describe what the detector does ---------------------------------------------------------------------
 
-test('schema.md quotes the numbers of the committed example beats file', () => {
-  const beats = JSON.parse(readFileSync(path.join(root, 'references/examples/data/on-the-beat.beats.json'), 'utf8'));
-  const schema = readSchema(root);
-  assert.ok(schema.includes(`"bpm": ${beats.bpm}, "confidence": ${beats.confidence}`), `schema.md should show "bpm": ${beats.bpm}, "confidence": ${beats.confidence}`);
-  assert.ok(schema.includes(`${beats.bpm} BPM, ${beats.beats.length} beats`), `schema.md should show "${beats.bpm} BPM, ${beats.beats.length} beats"`);
-});
-
-test('schema.md and SKILL.md name the tempo flags and the known limits', () => {
-  const schema = readSchema(root);
+test('SKILL.md names the tempo flags', () => {
   const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
-  for (const text of [schema, skill]) {
-    for (const flag of ['--bpm', '--min-bpm', '--max-bpm']) assert.ok(text.includes(flag), `${flag} is documented`);
-  }
-  for (const limit of ['swing', 'tempo change']) assert.ok(schema.includes(limit), `schema.md names the limit: ${limit}`);
+  for (const flag of ['--bpm', '--min-bpm', '--max-bpm']) assert.ok(skill.includes(flag), `${flag} is documented`);
 });

@@ -1,6 +1,6 @@
 // What the cut-out tool takes from a clip, Node side: probe it with ffprobe, hash it in chunks, and decode a trimmed range
-// into numbered frames with ffmpeg. It imports nothing from template/ or the version 1 spec, so the tool and version 2 stand
-// without them. scripts/lib/video.mjs (version 1's `video` element) builds its frame cache on these and re-exports them.
+// into numbered frames with ffmpeg. It imports nothing from version 1, so the tool and version 2 stand without it. (Version
+// 1's `video` element, scripts/lib/video.mjs, built its frame cache on these; it was deleted at cut-over.)
 import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, rmSync, writeFileSync } from 'node:fs';

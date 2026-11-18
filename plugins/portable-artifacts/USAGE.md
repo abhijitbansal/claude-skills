@@ -56,7 +56,7 @@ never prompts and never installs anything on its own.
 ```bash
 node <skill-dir>/scripts/doctor.mjs --json                  # what is missing, with the fix for your OS
 node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # any skill; make-explainer and make-scene add the sister skills the spec needs
-node <skill-dir>/scripts/doctor.mjs --json --for check      # every skill: Playwright and a browser, before check.mjs
+node <skill-dir>/scripts/doctor.mjs --json --for check      # make-dashboard, make-diagram, make-explainer and make-scene: Playwright and a browser, before check.mjs
 node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: kokoro-js, before a voiceover
 node <skill-dir>/scripts/doctor.mjs --json --for cutout     # make-motion: onnxruntime-node, before cutout.mjs
 node <skill-dir>/scripts/doctor.mjs --fix node_modules      # install the named ids (comma-separated)
@@ -72,15 +72,14 @@ network) comes back to you as the exact command to run yourself; in Claude Code
 prefix it with `!`. On no the agent does what it can without the item, for
 example make-motion still writes and validates `motion.json` and hands you the
 render commands. `--for` takes a spec `.json` in every skill (make-explainer and
-make-scene add sister skills from it), `check` (every skill), and `voiceover` or `cutout` (make-motion). Unknown or
+make-scene add sister skills from it), `check` (make-dashboard, make-diagram, make-explainer and make-scene), and `voiceover` or `cutout` (make-motion). Unknown or
 misspelled arguments exit 2 and list the accepted ones. `--fix` takes the same
 `--for` the diagnosis used: it resolves ids against that target, so an id the
 target does not list (say `chromium` with a spec that has no check step) is
 refused as "unknown id". Without `--for` it accepts every id the skill could
 need, sister skills included. `dev_deps` (Playwright) and `chromium` (the browser
 `check.mjs` uses) are required under `--for check`; plain diagnosis needs
-neither. make-motion's Playwright is a regular dependency, so its `--for check`
-asks only for `chromium` (and no ffmpeg). make-explainer names the browser that renders its motion section
+neither. make-motion has no `check` target (its review runs inside `make.mjs`). make-explainer names the browser that renders its motion section
 `motion_chromium`: it installs through make-motion's Playwright, apart from its
 own `chromium`. `--fix` exits 1 when any requested id is refused, skipped,
 failed, still missing afterwards or installed elsewhere, optional ids included.
@@ -703,11 +702,8 @@ flac) with `at` (seconds), or `scene` plus `at` so the clip moves with its
 scene, and optional `duration`, `volume`, `fadeIn` and `fadeOut`. ffmpeg
 mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
 (approximately; `M` mutes) and the MP4 timing is exact. Music is always a
-file you supply. For narration the agent runs
-`voice.mjs --text-file voice/<scene>.txt --out voice/<scene>.wav` (a text file, not a quoted argument, because the shell expands `$` and backticks; Kokoro, local, 28 voices,
-`--voice af_heart` by default) after asking once to install the voice package (doctor --fix kokoro: about 440 MB on macOS from optional/voice's lockfile, plus a 90 MB model downloaded once, pinned and SHA-256 checked).
-`voice.mjs --list-voices` prints the voices without loading the model, and `voice.mjs --dir voice/` turns every `.txt` in
-a folder into a `.wav` beside it on one model load, skipping the ones that are unchanged. Short UI sounds need no
+file you supply. For narration the agent writes `say` on a shot of a version 2 film (make-motion 2 speaks it locally) after asking once to install the voice package (doctor --fix kokoro: about 440 MB on macOS from optional/voice's lockfile, plus a 90 MB model downloaded once, pinned and SHA-256 checked).
+`make.mjs --list voices` prints the voices without loading the model. (This section still describes version 1's tracks and cues; the cut-over's document pass rewrites it.) Short UI sounds need no
 file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`,
 `swoosh`, `typing`, `drop`, `ding`, each with `at`, or `scene` plus `at`, and optional `volume`,
 `pan` and `note`; a `typing` cue can instead name a text with `follow`) is synthesised at

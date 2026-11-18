@@ -110,7 +110,7 @@ test('clipInput opens a clip through the file protocol only and the plain clip c
 // Every place version 2 and the kept tools put a literal '-i' in an ffmpeg argument list, by file: a new one fails here
 // until it is added with the reason it is safe. The list may only shrink.
 const INPUT_SITES = Object.freeze({
-  'scripts/lib/ffmpeg.mjs': 4, // the frame pipe (-i -); fileInput, the whitelisting builder; the preflight's own lavfi colour source; measureLoudness (our own MP4)
+  'scripts/lib/ffmpeg.mjs': 1, // fileInput, the whitelisting builder (version 1's frame pipe, preflight source and measureLoudness went at cut-over)
   'scripts/v2/clips.mjs': 1, // clipInput, the whitelisting builder
   'scripts/v2/render.mjs': 1, // the frame pipe (-i -)
   'scripts/v2/voice/master.mjs': 3, // recordingInput, ownWavInput, ownMp4Input: the whitelisting builders
@@ -131,7 +131,5 @@ test('a literal -i appears in an ffmpeg argument list only at the sites reviewed
     const count = readFileSync(path.join(SKILL_DIR, rel), 'utf8').split('\n').filter((line) => /'-i'/.test(line) && !/^\s*\/\//.test(line)).length;
     if (count > 0) found[rel] = count;
   }
-  // scripts/lib also holds version 1's files until the cut-over deletes them: only the kept ones count.
-  const kept = Object.fromEntries(Object.entries(found).filter(([rel]) => !rel.startsWith('scripts/lib/') || /\/(ffmpeg|beats|cutout|cutout-cli|video-probe)\.mjs$/.test(rel)));
-  assert.deepEqual(kept, INPUT_SITES);
+  assert.deepEqual(found, INPUT_SITES);
 });

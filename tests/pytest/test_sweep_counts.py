@@ -105,31 +105,19 @@ def test_catalog_row_count_must_equal_live_total(tmp_path, capsys):
     assert "docs/catalog.html [rows] found 2 Skill rows expected 3" in capsys.readouterr().out
 
 
-BLOCKS_INDEX = "plugins/portable-artifacts/skills/make-motion/template/blocks/index.mjs"
-
-
 def _add_marketplace(root: Path, names) -> None:
     (root / ".claude-plugin").mkdir()
     plugins = ",".join(f'{{"name": "{n}", "source": "./plugins/{n}"}}' for n in names)
     (root / ".claude-plugin" / "marketplace.json").write_text(f'{{"plugins": [{plugins}]}}')
 
 
-def _add_block_registry(root: Path, names) -> None:
-    path = root / BLOCKS_INDEX
-    path.parent.mkdir(parents=True)
-    body = "".join(f"  '{n}': b{i},\n" for i, n in enumerate(names))
-    path.write_text(f"import x from './x.mjs';\nexport const BLOCKS = Object.freeze({{\n{body}}});\n"
-                    "export const BLOCK_NAMES = Object.freeze(Object.keys(BLOCKS));\n")
-
-
-def test_live_counts_reads_plugins_from_marketplace_and_blocks_from_registry(tmp_path):
+def test_live_counts_reads_plugins_from_marketplace(tmp_path):
     sc = _load_module()
     _build_tree(tmp_path)
     _add_marketplace(tmp_path, ["alpha", "beta"])
-    _add_block_registry(tmp_path, ["title-card", "race", "timeline"])
     live = sc.live_counts(tmp_path)
     assert live["plugins"] == 2
-    assert live["make-motion-blocks"] == 3
+    assert "make-motion-blocks" not in live, "version 1's block registry is gone: no block scope"
 
 
 def test_stale_plugin_footer_fails_check_and_write_fixes_it(tmp_path, capsys):
@@ -143,23 +131,21 @@ def test_stale_plugin_footer_fails_check_and_write_fixes_it(tmp_path, capsys):
     assert "2 plugins · 3 skills" in (tmp_path / "site.html").read_text()
 
 
-def test_stale_block_count_fails_check(tmp_path, capsys):
+def test_a_site_naming_a_scope_with_no_live_count_is_an_error(tmp_path, capsys):
     sc = _load_module()
     _build_tree(tmp_path)
-    _add_block_registry(tmp_path, ["title-card", "race"])
     (tmp_path / "page.html").write_text("<p>(28 blocks in all)</p>\n")
     sites = [("page.html", "make-motion-blocks", r"\((\d+) blocks in all\)")]
     assert sc.main(["--check"], root=tmp_path, sites=sites) == 1
-    assert "STALE page.html [make-motion-blocks] found 28 expected 2" in capsys.readouterr().out
+    assert "ERROR page.html [make-motion-blocks] unknown scope 'make-motion-blocks'" in capsys.readouterr().out
 
 
-def test_live_sites_cover_plugin_footers_and_block_counts():
+def test_live_sites_cover_plugin_footers():
     sc = _load_module()
     scopes = {(rel, scope) for rel, scope, _ in sc.SITES}
     assert ("site/og.html", "plugins") in scopes
     assert ("docs/catalog.html", "plugins") in scopes
-    assert ("docs/catalog.html", "make-motion-blocks") in scopes
-    assert ("docs/skills-catalog.md", "make-motion-blocks") in scopes
+    assert not any(scope == "make-motion-blocks" for _, scope in scopes)
 
 
 def test_live_tree_counts_in_sync(capsys):

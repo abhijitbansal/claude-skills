@@ -436,7 +436,7 @@ test('the scans find what they should', () => {
   assert.ok(manifests.length >= 7, `manifests: ${manifests.map(rel).join(', ')}`);
   assert.ok(lockfiles.length >= 7, `lockfiles: ${lockfiles.map(rel).join(', ')}`);
   const codeNames = code.map(rel);
-  assert.ok(codeNames.includes('plugins/portable-artifacts/skills/make-motion/scripts/lib/voice.mjs'));
+  assert.ok(codeNames.includes('plugins/portable-artifacts/skills/make-motion/scripts/v2/voice/model.mjs'));
   assert.ok(codeNames.includes('plugins/portable-artifacts/skills/make-motion/scripts/lib/cutout.mjs'));
   assert.ok(codeNames.includes('plugins/portable-artifacts/shared/doctor.mjs'));
   assert.ok(prose.map(rel).includes('plugins/portable-artifacts/skills/make-motion/SKILL.md'));
@@ -472,13 +472,13 @@ test('every model or binary download is pinned and has a sha256 after it, and no
   assert.deepEqual([...collect(code, downloadViolations), ...collect(binCode, downloadViolations), ...collect(code, urlBuildViolations)], []);
 });
 
-test('make-motion makes no network call outside pinned-file.mjs, and ensurePinnedFile has only its three reviewed callers', () => {
+test('make-motion makes no network call outside pinned-file.mjs, and ensurePinnedFile has only its two reviewed callers', () => {
   assert.deepEqual(collect(motionScripts.filter((file) => file !== PINNED_FILE), networkCallViolations), []);
   const callers = motionScripts.filter((file) => file !== PINNED_FILE && fs.readFileSync(file, 'utf8').includes('ensurePinnedFile(')).map(rel);
   // scripts/v2/voice/model.mjs was reviewed with the timestamped Kokoro pin: one commit, a byte count and a SHA-256 per file.
   // Repo-relative paths, so a renamed or moved file (or a second model.mjs) is a new caller that needs its own review.
   const MOTION = 'plugins/portable-artifacts/skills/make-motion/scripts/';
-  assert.deepEqual(callers.sort(), [`${MOTION}lib/cutout.mjs`, `${MOTION}lib/voice.mjs`, `${MOTION}v2/voice/model.mjs`], 'a new caller needs a review of its URL table and its hashes');
+  assert.deepEqual(callers.sort(), [`${MOTION}lib/cutout.mjs`, `${MOTION}v2/voice/model.mjs`], 'a new caller needs a review of its URL table and its hashes');
 });
 
 test('every Hugging Face URL under scripts/v2/voice names a 40-hex commit, and every pinned voice file has a byte count and a 64-hex SHA-256', async () => {

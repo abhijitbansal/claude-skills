@@ -171,9 +171,8 @@ The motion prompts read two files from `fixtures/data/`, which every run copies 
 | `rows.json` | 3 rows of `{ "name", "city", "count" }` for the `vars-batch` prompt |
 | `portrait.jpg` | a drawn portrait (1280x720) for the `clipping-highlight` prompt |
 
-`music.wav` (a 10 s, 120 BPM click track) stays because make-motion's `beats` tests read it; `captions.srt`, `captions.vtt`,
-`badge.lottie.json` and `portrait-cutout.png` stay until the cut-over's delete removes the version 1 tests that read them. No motion
-prompt names them.
+`music.wav` (a 10 s, 120 BPM click track) stays because make-motion's `beats` tests read it; no motion prompt names it. The
+version 1 fixtures `clip.mp4`, `captions.srt`, `captions.vtt`, `badge.lottie.json` and `portrait-cutout.png` were deleted at cut-over.
 
 ## Other fixtures
 

@@ -1,4 +1,4 @@
-// The `cube` shader cut. Written in this repository for make-motion version 1 (template/gl-transitions.mjs, `gl-cube`)
+// The `cube` shader cut. Written in this repository for make-motion version 1 (its `gl-cube`; template/gl-transitions.mjs, deleted at cut-over)
 // and moved here onto the gl-transitions contract (engine/cuts/shaders/index.mjs): a box turning about its centre, seen
 // in perspective; the outgoing shot is its front face and the incoming one the face that swings round to replace it,
 // moving the way `direction` names (edges.mjs). Same constants and maths as version 1: the uniforms come from derive() in JavaScript, and the

@@ -1,7 +1,7 @@
 // The device frames of the `screen` kind, drawn from paths and styled by the look (look.kinds.screen): a browser (a
 // title row with window dots and the `title`, an address row with the `url` in a pill), a window (the title row only),
 // a phone (a bezel round the screen and a speaker slot) or none. Chrome sizes in units, copied from version 1's
-// browser frame block (template/blocks, browser-window; title row 72, address row 88, corner radius 20). The title and the url are the
+// browser frame block (browser-window in template/blocks, deleted at cut-over; title row 72, address row 88, corner radius 20). The title and the url are the
 // author's words: set at the format's reading floor, one size; one that does not fit its row is cut to what fits and
 // says so (props.dropped, the frame review's "left out its ..." finding). The url is display text, never fetched.
 // Pure and DOM-free.
@@ -11,7 +11,7 @@ import { colourOf, roundedRect } from '../devices/shared.mjs';
 import { elevatedShadow } from '../devices/card.mjs';
 import { fontFor, sizeAt, isWide } from './shared.mjs';
 
-// units; from version 1's browser frame block (template/blocks, browser-window): title row 72, address row 88, corner radius 20
+// units; from version 1's browser frame block (browser-window in template/blocks, deleted at cut-over): title row 72, address row 88, corner radius 20
 const CHROME = Object.freeze({
   browser: Object.freeze({ top: 160, side: 0, bottom: 0, radius: 20, title: 72, address: 88 }),
   window: Object.freeze({ top: 72, side: 0, bottom: 0, radius: 20, title: 72, address: 0 }),

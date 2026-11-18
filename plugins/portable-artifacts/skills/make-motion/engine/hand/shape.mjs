@@ -1,7 +1,7 @@
 // The drawing hand's picture (looks-four Task 2): point lists drawn as path nodes with role 'hand', the marker's tip at
 // the origin. look.hand.shape picks 'hand' (a hand in a tripod grip holding a chisel marker) or 'tip' (the fallback the
 // kill rule names: the marker's chisel nib and the start of its barrel alone). The hand's outline is the version 1
-// hand's (template/sketch/hand.mjs BODY and fingers, original line art) sampled into point lists here; the pencil is
+// hand's (BODY and fingers of template/sketch/hand.mjs, deleted at cut-over; original line art) sampled into point lists here; the pencil is
 // replaced by a marker. The drawing's units are scaled by HAND_SCALE * look.hand.scale units. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { colourOf, polyline } from '../devices/shared.mjs';

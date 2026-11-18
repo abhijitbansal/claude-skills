@@ -23,7 +23,7 @@ import { viral } from './viral.mjs';
 export const VOICE_SPEED_MIN = 0.8;
 export const VOICE_SPEED_MAX = 1.25;
 export const EMPHASIS_PAUSE_MAX = 3; // as the longest pause a say can write (engine/script/say.mjs PAUSE_MAX)
-// The ranges version 1 accepts for a film's loudness (scripts/lib/loudness.mjs), and loudnorm's own LRA range.
+// The ranges version 1 accepted for a film's loudness (its scripts/lib/loudness.mjs, deleted at cut-over), and loudnorm's own LRA range.
 export const LUFS_MIN = -30;
 export const LUFS_MAX = -5;
 export const TRUE_PEAK_MIN = -3;
