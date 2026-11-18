@@ -1,0 +1,109 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "keynote",
+  "format": "16:9",
+  "voice": {
+    "name": "af_heart"
+  },
+  "sound": "on",
+  "music": {
+    "bed": "drift",
+    "bpm": 90
+  },
+  "seed": 41,
+  "shots": [
+    {
+      "id": "open",
+      "show": "statement",
+      "kicker": "Ridgeline Prints",
+      "say": "Every order, on one *page*."
+    },
+    {
+      "id": "dash",
+      "show": "screen",
+      "src": "dashboard.png",
+      "title": "Orders dashboard",
+      "url": "ridgelineprints.shop/orders",
+      "regions": {
+        "region": [
+          0.497,
+          0.226,
+          0.485,
+          0.476
+        ]
+      },
+      "zoom": "region",
+      "say": "The dashboard counts every paid order, region by region."
+    },
+    {
+      "id": "inside",
+      "show": "list",
+      "title": "On the page",
+      "say": "Orders by month. Orders by region. The query behind each chart.",
+      "items": [
+        "Orders by month",
+        "Orders by region",
+        "The query behind each chart"
+      ]
+    },
+    {
+      "id": "regions",
+      "show": "chart",
+      "type": "bar",
+      "title": "The North leads",
+      "say": "The North leads, with one hundred and eighty two paid orders.",
+      "data": [
+        {
+          "label": "North",
+          "value": 182
+        },
+        {
+          "label": "South",
+          "value": 121
+        },
+        {
+          "label": "East",
+          "value": 97
+        },
+        {
+          "label": "West",
+          "value": 59
+        }
+      ],
+      "highlight": "North",
+      "source": "Ridgeline Prints dashboard: paid orders to date"
+    },
+    {
+      "id": "year",
+      "show": "timeline",
+      "title": "How we got here",
+      "events": [
+        {
+          "when": "Mar",
+          "what": "The first print sold"
+        },
+        {
+          "when": "Jun",
+          "what": "The shop went online"
+        },
+        {
+          "when": "Sep",
+          "what": "Orders from abroad"
+        },
+        {
+          "when": "Dec",
+          "what": "A dashboard for orders"
+        }
+      ],
+      "say": "March: the first print sold. June: the shop went online. September: orders from abroad. December: a dashboard for orders."
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "See every order, as it comes in.",
+      "ask": "ridgelineprints.shop/orders",
+      "mark": "Ridgeline Prints"
+    }
+  ]
+}

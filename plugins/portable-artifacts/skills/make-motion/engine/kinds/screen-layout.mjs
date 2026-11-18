@@ -10,7 +10,8 @@ import { moveOf } from '../moves/index.mjs';
 import { REGION_PREFIX, isWide, compositionRect, captionTop, cutsToCloseUp, regionOf, paperScrim, fitDisplay, fontFor, setCase, sizeAt, CAP_HEIGHT, WORD_DESCENT } from './shared.mjs';
 import { colourOf } from '../devices/shared.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
-import { pushLayer, pushZoom } from './camera.mjs';
+import { pushLayer, pushZoom, driftAt, PUSH_MIN } from './camera.mjs';
+import { elevatedShadow } from '../devices/card.mjs';
 import { closeUps } from './close-ups.mjs';
 import { arrivalTrack } from './arrivals.mjs';
 import { defaultFrame, outerOf, frameNodes, chromeOf } from './screen-frame.mjs';
@@ -189,9 +190,51 @@ export function tallHeroLayout(shot, ctx, { picture, zoom }) {
   if (!zoom) return { nodes: [screen, headline], boxes, camera: [] };
   const target = regions[`${REGION_PREFIX}${zoom.region}`];
   const focus = registries.devices.get('focus').build({ id: `${shot.id}.focus`, box: target, at: zoom.at, look, unit, seed, cover: [0, 0, canvas.w, canvas.h] }).nodes;
+  // data.pushPad (gate-keynote-1 ruling 1): the region lifts off the card as its own card, the full title-safe width,
+  // so the dashboard's detail reads at phone size; without it the ring is drawn round the region on the card
+  if (data.pushPad !== undefined) {
+    const card = regionCard(shot, ctx, { picture, region: shot.regions[zoom.region], from: target, image, at: zoom.at });
+    return { nodes: [screen, ...focus, ...card.nodes, headline], boxes: { ...boxes, regionCard: card.box }, camera: [] };
+  }
   const ring = registries.devices.get('circle').build({ id: `${shot.id}.ring`, box: target, at: zoom.at, look, unit, seed }).nodes;
   // the focus dims the rest of the screen; the headline is drawn over it, in ink
   return { nodes: [screen, ...focus, ...ring, headline], boxes, camera: [] };
+}
+
+// ---- the region card (look.kinds.screen.pushPad on a tall frame) ----
+
+const SWEEP_AFTER = 0.5; // s after the landing the band of light is centred on
+
+/**
+ * The region as its own elevated card: the picture cropped to the region whole, as wide as the frame inside pushPad (the
+ * title-safe inset), centred where the screen's picture is. It grows out of the region's place on the screen card by the
+ * look's settle move, landing on `at`, and then holds still while the camera drifts (its x carries the drift), the ring
+ * exactly round it and the band of light crossing it once.
+ */
+function regionCard(shot, ctx, { picture, region, from, image, at }) {
+  const { look, unit, seed, canvas, data, timing } = ctx;
+  const [fx, fy, fw, fh] = region;
+  const crop = [fx * picture.width, fy * picture.height, fw * picture.width, fh * picture.height];
+  const w = canvas.w - HALF * data.pushPad * unit, h = (w * crop[3]) / crop[2];
+  const [cx, cy] = [canvas.w / HALF, image[1] + image[3] / HALF];
+  const local = [-w / HALF, -h / HALF, w, h];
+  const settle = moveOf(look, 'settle');
+  const start = Math.max(0, at - settle.dur);
+  const drift = (t) => driftAt(look, timing, unit, t);
+  const [x0, y0] = [from[0] + from[2] / HALF, from[1] + from[3] / HALF];
+  const tracks = {
+    opacity: track([{ t: 0, v: 0 }, { t: start, v: 0 }, { t: start, v: 1 }]),
+    scale: landing(at, settle, from[2] / w, 1),
+    x: track([{ t: 0, v: x0 }, { t: start, v: x0 }, { t: at, v: cx + drift(at), ease: settle.ease }, { t: Math.max(at, timing.duration), v: cx + drift(Math.max(at, timing.duration)) }]),
+    y: landing(at, settle, y0, cy),
+  };
+  const children = [
+    ...elevatedShadow(`${shot.id}.region`, local, 0, look, unit, look.devices.card?.layers ?? []),
+    node('image', `${shot.id}.region.image`, { src: shot.src, w, h, x: local[0], y: local[1], clip: crop }),
+    ...registries.devices.get('circle').build({ id: `${shot.id}.ring`, box: local, at, look, unit, seed }).nodes,
+    ...(registries.devices.get('sweep').supports(look) ? registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: local, at: at + SWEEP_AFTER, look, unit, seed }).nodes : []),
+  ];
+  return { nodes: [node('group', `${shot.id}.region`, { x: cx, y: cy }, { tracks, children })], box: [cx - w / HALF, cy - h / HALF, w, h] };
 }
 
 // The zoom at which the drawn picture shows one picture pixel per frame pixel: a push past it is a soft upscale.
@@ -226,9 +269,16 @@ export function zoomReach(shot, ctx, picture, region) {
     return { wanted, cap: NATIVE };
   }
   if (cutsToCloseUp(look)) return null;
-  const space = isWide(canvas) ? { ...room, x: room.x + (room.w * (1 - data.wideShare)) / HALF, w: room.w * data.wideShare } : room;
-  const image = fitFramed(frame, unit, picture, space);
+  const shared = isWide(canvas) ? { ...room, x: room.x + (room.w * (1 - data.wideShare)) / HALF, w: room.w * data.wideShare } : room;
+  const image = fitFramed(frame, unit, picture, data.pushPad === undefined ? shared : pushSpace(shared, canvas, data.pushPad * unit));
   return { wanted: pushZoom(ctx, regionBox(image, region)), cap: nativeZoom(picture, image) };
+}
+
+// The space a padded push's card is fitted to (look.kinds.screen.pushPad): no larger than the frame inside the pad over
+// PUSH_MIN, so the push that lands it whole inside the pad still pushes at least PUSH_MIN; centred in `space`.
+function pushSpace(space, canvas, pad) {
+  const w = Math.min(space.w, (canvas.w - HALF * pad) / PUSH_MIN), h = Math.min(space.h, (canvas.h - HALF * pad) / PUSH_MIN);
+  return { x: space.x + (space.w - w) / HALF, y: space.y + (space.h - h) / HALF, w, h };
 }
 
 const regionBoxes = (shot, image) => Object.fromEntries(Object.entries(shot.regions ?? {}).map(([name, r]) => [`${REGION_PREFIX}${name}`, regionBox(image, r)]));
@@ -239,7 +289,8 @@ export function singleLayout(shot, ctx, { picture, zoom }) {
   const { look, unit, seed, canvas, data } = ctx;
   const room = roomOf(ctx);
   const frame = frameFor(shot, picture);
-  const space = isWide(canvas) ? { ...room, x: room.x + (room.w * (1 - data.wideShare)) / HALF, w: room.w * data.wideShare } : room;
+  const shared = isWide(canvas) ? { ...room, x: room.x + (room.w * (1 - data.wideShare)) / HALF, w: room.w * data.wideShare } : room;
+  const space = zoom && data.pushPad !== undefined ? pushSpace(shared, canvas, data.pushPad * unit) : shared;
   const image = fitFramed(frame, unit, picture, space);
   const regions = regionBoxes(shot, image);
   const boxes = { screen: outerOf(frame, unit, image), image, ...regions };
@@ -253,13 +304,18 @@ export function singleLayout(shot, ctx, { picture, zoom }) {
       // data.pushFrame 'card' (keynote): the push frames the whole card, so no row of the screen is sliced at the frame's
       // top or bottom (n1's 16:9 sheet: the dimmed rows over the ring cut at the top); absent, it frames the region
       const keep = data.pushFrame === 'card' ? boxes.screen : null;
-      const push = pushLayer(ctx, target, zoom.at, { max: nativeZoom(picture, image), keep });
+      // data.pushPad (keynote, gate-keynote-1 ruling 2): the card lands centred, inside the title-safe inset, so its
+      // title and url stay on and readable
+      const padded = keep !== null && data.pushPad !== undefined;
+      const push = pushLayer(ctx, target, zoom.at, { max: nativeZoom(picture, image), keep, ...(padded ? { pad: data.pushPad * unit, centre: true } : {}) });
       const rest = data.pushDim === undefined ? build('focus', `${shot.id}.focus`) : [pushMask(shot, ctx, target, zoom.at)];
       // data.ring (keynote): the look's circle (the zoom ring) drawn round the region as the camera pushes in
       const ring = data.ring === true ? registries.devices.get('circle').build({ id: `${shot.id}.ring`, box: target, at: zoom.at, look, unit, seed }).nodes : [];
+      // data.sweep (keynote, ruling 4): the band of light crosses the screen once after the push lands
+      const sweep = data.sweep === true && registries.devices.get('sweep').supports(look) ? registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: image, at: zoom.at + SWEEP_AFTER, look, unit, seed }).nodes : [];
       // the chrome texts fade as the push begins: carried out of the frame, or (a push that frames the card) past the
-      // title-safe edge, they would be cut or reported
-      return { nodes: [screenGroup(shot, ctx, frame, image, undefined, push[0].t), ...rest, ...ring], boxes, camera: [push] };
+      // title-safe edge, they would be cut or reported; a padded push keeps them inside it
+      return { nodes: [screenGroup(shot, ctx, frame, image, undefined, padded ? undefined : push[0].t), ...rest, ...ring, ...sweep], boxes, camera: [push] };
     }
     const focus = build('focus', `${shot.id}.focus`);
     const sweep = registries.devices.get('sweep').supports(look) ? registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: target, at: zoom.at, look, unit, seed }).nodes : [];

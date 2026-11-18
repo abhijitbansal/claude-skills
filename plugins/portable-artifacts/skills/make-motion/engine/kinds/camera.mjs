@@ -22,8 +22,11 @@ export function defaultCamera(look, timing, unit) {
   return [[{ t: 0, x: -half * dir }, { t: timing.duration, x: half * dir }]];
 }
 
-// The drift's camera x at shot time t (linear, as defaultCamera keys it).
-function driftAt(look, timing, unit, t) {
+/** The smallest zoom a push takes (PUSH.min). */
+export const PUSH_MIN = PUSH.min;
+
+/** The drift's camera x at shot time t (linear, as defaultCamera keys it). */
+export function driftAt(look, timing, unit, t) {
   if (!drifts(look)) return 0;
   const half = (look.camera.drift * unit) / HALF;
   const dir = timing.index % HALF === 0 ? 1 : -1;
@@ -77,17 +80,21 @@ function keepPan(pan, keep, canvas, zoom, pad, axis) {
  * upscale), never under 1. `keep` (a box, or null) caps the zoom and moves the pan so that whole box stays in the frame
  * (keepPad inside each edge): nothing at its border is sliced by the frame's edge.
  */
-export function pushLayer(ctx, box, at, { below = -Infinity, caption = false, max = Infinity, keep = null } = {}) {
+// `pad` (px, or undefined for keepPad) and `centre` (true: the kept box, not `box`, lands on the frame's centre; keynote's
+// pushPad, gate-keynote-1 ruling 2: panned toward a region at the card's right, the card hugged the left edge and left
+// the right 29 percent of the frame empty) refine `keep`.
+export function pushLayer(ctx, box, at, { below = -Infinity, caption = false, max = Infinity, keep = null, pad: keepAt, centre = false } = {}) {
   const { look, canvas, unit, timing } = ctx;
   const rect = compositionRect(ctx);
-  const pad = keep === null ? 0 : keepPad(look, unit);
+  const pad = keep === null ? 0 : Math.max(keepAt ?? 0, keepPad(look, unit));
   const zoom = Math.min(pushZoom(ctx, box, { caption }), Math.max(1, max), keep === null ? Infinity : keepZoom(keep, canvas, pad));
   const drift = driftReach(look, unit);
   const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
   const kept = (value, axis) => (keep === null ? value : keepPan(value, keep, canvas, zoom, pad, axis));
-  const x = kept(pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx), 0) - driftAt(look, timing, unit, at);
+  const aim = keep !== null && centre ? keep : box;
+  const x = kept(pan(canvas.w / HALF, aim[0] + aim[2] / HALF, centre ? canvas.w / HALF : rect.cx), 0) - driftAt(look, timing, unit, at);
   // the pushed box's top stays under `below` (a slug card's bottom), moving its centre down from the composition's
-  const y = kept(pan(canvas.h / HALF, box[1] + box[3] / HALF, Math.max(rect.cy, below + (box[3] * zoom) / HALF)), 1);
+  const y = kept(pan(canvas.h / HALF, aim[1] + aim[3] / HALF, centre ? canvas.h / HALF : Math.max(rect.cy, below + (aim[3] * zoom) / HALF)), 1);
   return [
     { t: Math.max(0, at - PUSH.dur), x: 0, y: 0, zoom: 1 },
     { t: at, x: clampAbs(x, panLimit(canvas.w, zoom, drift)), y: clampAbs(y, panLimit(canvas.h, zoom, drift)), zoom, ease: look.moves.enter.ease },

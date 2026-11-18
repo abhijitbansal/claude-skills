@@ -125,10 +125,23 @@ function boxPath([x, y, w, h], pad) {
   return `M${at2([l, t])}L${at2([r, t])}L${at2([r, b])}L${at2([l, b])}Z`;
 }
 
+// The same box as two strokes from its top left corner, one along the top and down the right, one down the left and
+// along the bottom, meeting at the bottom right (a box style with `split`, keynote: gate-keynote-1 ruling 2, drawn
+// clockwise from one corner the box opened as a lone line under the content above it).
+function splitBox([x, y, w, h], pad) {
+  const [l, t, r, b] = [x - pad, y - pad, x + w + pad, y + h + pad];
+  return [`M${at2([l, t])}L${at2([r, t])}L${at2([r, b])}`, `M${at2([l, t])}L${at2([l, b])}L${at2([r, b])}`];
+}
+
 function buildCircle(params) {
   const { id, box, at, look, unit, seed } = checkParams('circle', params);
   const [x, y, w, h] = box;
   const style = styleOf(look, 'circle');
+  if (style.shape === 'box' && style.split === true && !isHand(look)) {
+    const [one, two] = splitBox(box, (style.pad ?? 0) * unit);
+    const strokes = [[`${id}.a`, one], [`${id}.b`, two]];
+    return { nodes: strokes.flatMap(([sid, d]) => markNode({ id: sid, d, look, unit, at, name: 'circle', fallbackColour: 'accent2' }).nodes) };
+  }
   const width = style.width ?? DEFAULT_WIDTH;
   const ellipse = () => ellipsePath(x + w / HALF, y + h / HALF, (w * CIRCLE_SCALE) / HALF, (h * CIRCLE_SCALE) / HALF);
   const ruled = () => (style.shape === 'box' ? boxPath(box, (style.pad ?? 0) * unit) : ellipse());

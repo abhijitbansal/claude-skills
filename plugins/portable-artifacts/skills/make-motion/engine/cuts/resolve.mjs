@@ -155,7 +155,10 @@ function pickedCut(film, look, index) {
   if (!pick || index % pick.every !== 0) return undefined;
   if (pick.plates === true && sheetUnseen(film, look, index)) return undefined;
   const turn = index / pick.every - 1;
-  return pick.directions ? { type: pick.cut, direction: pick.directions[turn % pick.directions.length] } : pick.cut;
+  // `cuts` (keynote, gate-keynote-1 ruling 4): a list of cuts taken in turn instead of the one `cut`, so no two soft cuts
+  // in a row are the same where the list alternates
+  const name = Array.isArray(pick.cuts) ? pick.cuts[turn % pick.cuts.length] : pick.cut;
+  return pick.directions ? { type: name, direction: pick.directions[turn % pick.directions.length] } : name;
 }
 
 const DEFAULT_SEED = 1; // as engine/graph/film.mjs: the seed of a film that names none

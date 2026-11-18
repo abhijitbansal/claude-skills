@@ -85,6 +85,9 @@ export const keynote = {
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'match', 'crossfade', 'zoom', 'blur', 'cross-zoom'],
   cutStyle: { crossfade: { duration: 0.5 } },
+  // the cut the engine opens every shot with when the film names none (cuts/resolve.mjs pickedCut), taken in turn: a
+  // crossfade, then a blur dissolve, then a zoom dissolve; never a hard cut (gate-keynote-1 ruling 4: every cut was hard)
+  cutPick: { cuts: ['crossfade', 'blur', 'crossfade', 'zoom'], every: 1 },
   keyline: 8,
   // nothing casts a hard shadow: depth is the elevated card's own soft two-layer shadow (devices/card.mjs elevated)
   shadow: { dx: 0, dy: 0, blur: 0, alpha: 0, color: '#4a5068' },
@@ -96,8 +99,10 @@ export const keynote = {
     // the band of light: white, screened, crossing a headline or a screen once
     sweep: { color: '#ffffff', alpha: 0.7 },
     // the ring round a region (the zoom ring, a clipping's region): an accent line 4 units wide drawn round it as a box
-    // 16 units out (an ellipse round a wide region ran past the frame)
-    circle: { color: 'accent', width: 4, cap: 'round', shape: 'box', pad: 16 },
+    // (an ellipse round a wide region ran past the frame), exactly on the region (`pad` 0: 16 units out it crossed the
+    // neighbouring panel's heading, gate-keynote-1 ruling 2) and drawn from its top left corner both ways at once
+    // (`split`: drawn clockwise from one corner it opened as a lone line under the content above the region)
+    circle: { color: 'accent', width: 4, cap: 'round', shape: 'box', pad: 0, split: true },
     arrow: { color: 'accent', width: 4, cap: 'round' },
     tag: { shape: 'pill', fill: 'card', text: 'ink2' },
     label: { text: 'ink', line: 'rule', width: 2 },
@@ -141,7 +146,10 @@ export const keynote = {
     compare: { recede: 0.94, gap: 6, centre: 0.5, pad: 56, fill: 0.9, valueFromStep: 4, valueMax: 264, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 152, titleLines: 4, titleGap: 0.45, pointStep: 2, pointScale: 1.25, picture: 0.4, pictureGap: 32 },
     // `valuesSet` (n2 ruling 4): a value label appears at full ink once its bar has grown (n1's sheets: the first label
     // faint mid-growth)
-    chart: { valuesSet: true, settle: 1.2, pointLabels: true, fillFollowsLine: true, startFinal: true, claimLast: true, rowDrop: 0.75, pointLift: 0.6, pointNudge: 1, plotHeight: 0.2, titleToWide: 11, titleFromTall: 1, titleToTall: 12, titleMax: 152, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 1, sourceStep: 1, sourceFace: 'text', gap: 14, line: 5, ref: 1, axis: 2, dim: 0.3, refs: false, direct: true, dimTo: 'dim', minPlot: 0.4, point: 10, annotation: { face: 'label', leader: 'joined', barLeader: 'none' } },
+    // `growFrom` 0.12 (gate-keynote-1 ruling 3, poster's switch): every bar is on frame 0 at an eighth of its length and
+    // grows after (the sheets opened on a bare claim); `tight`: the longest bar reaches the plot's end, so bars and values
+    // fill the free width (the 16:9 sheet left about 30 percent of it empty)
+    chart: { growFrom: 0.12, tight: true, valuesSet: true, settle: 1.2, pointLabels: true, fillFollowsLine: true, startFinal: true, claimLast: true, rowDrop: 0.75, pointLift: 0.6, pointNudge: 1, plotHeight: 0.2, titleToWide: 11, titleFromTall: 1, titleToTall: 12, titleMax: 152, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 1, sourceStep: 1, sourceFace: 'text', gap: 14, line: 5, ref: 1, axis: 2, dim: 0.3, refs: false, direct: true, dimTo: 'dim', minPlot: 0.4, point: 10, annotation: { face: 'label', leader: 'joined', barLeader: 'none' } },
     // screen: the framed screenshot on the elevated card's shadow (`elevated`), the camera pushing in with the rest under
     // the focus scrim, and the zoom ring drawn round the region (`ring`): no paper mask (desk's pushDim left a wide region
     // a thin strip floating on an empty frame on the first sheets)
@@ -157,7 +165,13 @@ export const keynote = {
     // wide cannot be enlarged on a tall panel without slicing it); `cropRegion`: an untitled one keeps the region panel,
     // its crop never narrower than the region
     // The plan's turned-in-depth card with a second card behind and parallax is not built (open, n2 report)
-    screen: { pushFrame: 'card', tallHero: true, heroMax: 264, heroLines: 3, heroShare: 0.4, cropRegion: true, linkAfter: true, wholeWidth: 0.8, elevated: true, ring: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
+    // gate-keynote-1 rulings 1, 2 and 4: `pushPad` 60 units (the title-safe inset, template/formats.mjs safeInsets: 60 px
+    // at 1080): at 16:9 the push lands the whole card centred inside it, its title and url kept on (pushed toward the
+    // region the card hugged the left edge, the right 29 percent of the frame empty, and the chrome text faded leaving
+    // blank pills); at 9:16 the region lifts off the card as its own card that wide (regionCard: shown whole on the card,
+    // the dashboard's detail did not read at phone size); `sweep`: the band of light crosses the screen once after the
+    // push lands (it crossed only the end card, where it read as grey on black type)
+    screen: { pushPad: 60, sweep: true, pushFrame: 'card', tallHero: true, heroMax: 264, heroLines: 3, heroShare: 0.4, cropRegion: true, linkAfter: true, wholeWidth: 0.8, elevated: true, ring: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
     // map: at 16:9 the title over a map the full width (`titleAbove`, ledger's switch: beside it the map was too narrow to
     // hold a third place name, a creative finding on the first render)
     map: { titleAbove: true, titleStepsWide: [4, 3], sourceFace: 'text', sourceStep: 1, sourcePrefix: true, sourceAt: 'title', card: true, land: '#dfe1e8', borders: 'card', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'card' },
