@@ -65,7 +65,9 @@ function nodeStrokes(n, unit) {
   if (n.type !== 'path') return [];
   const points = polylinePoints(n.props.d);
   if (points === null) return [];
-  if (n.props.stroke) return [makeStroke(offset(points, x, y), { kind: n.props.hatch === true ? 'fill' : 'line', lesser: n.props.decor === true })];
+  // a ground (flatten.mjs groundOf): put on the board whole, never drawn
+  if (n.props.put === true) return [makeStroke(offset(points, x, y), { kind: 'line', put: true })];
+  if (n.props.stroke)return [makeStroke(offset(points, x, y), { kind: n.props.hatch === true ? 'fill' : 'line', lesser: n.props.decor === true })];
   if (!n.props.fill) return [];
   const [bx, by, bw, bh] = boxOf(offset(points, x, y));
   const hatch = boxHatch(bx + bw / 2, by + bh / 2, bw, bh, HATCH_GAP * unit, unit);
@@ -152,9 +154,10 @@ function timeWindow(strokes, [opens, to], unit, before, { cap, hardEnd }) {
   const from = Math.max(opens, before?.end ?? opens);
   const limit = Math.max(to, hardEnd);
   const floorEnd = (run) => from + sum(travelsOf(run, unit, before)) + sum(run.map((s) => floorOf(s, unit, cap)));
-  const lesser = strokes.filter((s) => s.lesser).sort((a, b) => b.total - a.total);
-  let kept = strokes;
-  const skipped = [];
+  const lesser = strokes.filter((s) => s.lesser && !s.put).sort((a, b) => b.total - a.total);
+  // a ground is put on when its sentence opens, whatever the time: the hand writes onto it
+  const skipped = strokes.filter((s) => s.put);
+  let kept = strokes.filter((s) => !s.put);
   while (floorEnd(kept) > limit + EPS && lesser.length > 0) {
     const drop = lesser.shift();
     skipped.push(drop);
@@ -197,8 +200,11 @@ export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {
     const mine = isWindow(e.node.props.window) ? own++ : sentenceOf(e, i, elements.length, sentences.length);
     return e.strokes.map((s, k) => ({ ...s, id: `${e.node.id}#${k}`, node: e.node.id, sentence: mine }));
   });
-  const first = [...standing, ...tagged[0].map((s) => ({ ...s, start: 0, end: 0, speed: 0 }))];
-  const later = tagged.slice(1).flat();
+  // the first element on the board is the first that does not name a time of its own: a ring drawn on its word is not on
+  // the board when the shot opens
+  const lead = elements.findIndex((e) => !isWindow(e.node.props.window));
+  const first = [...standing, ...(lead < 0 ? [] : tagged[lead].map((s) => ({ ...s, start: 0, end: 0, speed: 0 })))];
+  const later = tagged.filter((_, i) => i !== lead).flat();
   // with look.hand.restAtStart the hand comes in from its rest point to the first stroke after the first element
   const origin = rest ? { points: [rest], end: 0, rest: true } : null;
   const order = windows.map((win, w) => w).sort((x, y) => windows[x][0] - windows[y][0] || x - y);

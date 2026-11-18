@@ -398,9 +398,21 @@ export function onDevices(shot, ctx, { boxes, defaultTarget, behind = {}, skip =
 export function buildDevice(shot, ctx, { item, j, box, at }) {
   const extra = extrasFor(item.do, box, ctx);
   if (extra === null) throw new Error(`shot "${shot.id}": on[${j}]: device "${item.do}" needs more than a target and cannot be placed with "on"`);
-  return registries.devices.get(item.do).build({
+  const built = registries.devices.get(item.do).build({
     id: `${shot.id}.on${j}`, box, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, ...extra,
   });
+  return ctx.look.hand ? { ...built, nodes: built.nodes.map(spokenWindow) } : built;
+}
+
+// A drawn stroke an author put on a word or a region (an `on` event) names the time it is drawn in (props.window: the
+// draw track's first rise to its end), so a drawing hand draws it on that word and never takes it for the board's first thing.
+function spokenWindow(n) {
+  const keys = n.tracks?.draw?.points;
+  if (n.type !== 'path' || !n.props.stroke || keys === undefined || keys.length < 2 || n.props.window !== undefined) return n;
+  const from = keys.findLast((k) => k.v <= 0)?.t ?? keys[0].t;
+  const to = keys.find((k) => k.t > from && k.v >= 1)?.t ?? keys.at(-1).t;
+  if (!(from > 0 && to > from)) return n;
+  return node(n.type, n.id, { ...n.props, window: [from, to] }, { tracks: n.tracks, children: n.children, depth: n.depth, step: n.step, wordTracks: n.wordTracks });
 }
 
 /** A copy of a top-level node with props.fixed: the camera leaves it where it stands (a slug or a caption pinned to the

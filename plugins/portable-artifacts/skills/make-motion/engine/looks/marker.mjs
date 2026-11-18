@@ -12,7 +12,7 @@ const GRID_TALL = Object.freeze({ columns: 12, margin: 80, gutter: 20 });
 const SHEEN = 0.5; // the board's sheen strength (fields/board.mjs)
 const STROKE = 'linear'; // every move is a stroke at a constant speed: nothing eases, nothing overshoots
 const MARK_WIDTH = 7; // units: the marker's line
-const PARKED_FROM_DESK = Object.freeze(['list', 'compare', 'feed', 'media']);
+const PARKED_FROM_DESK = Object.freeze(['feed']);
 
 // tracking(sizeUnits, role = 'display') -> em: handwriting is not tracked
 function tracking(sizeUnits, role = 'display') {
@@ -64,9 +64,10 @@ export const marker = {
     settle: { ease: STROKE, dur: 0 },
   },
   wordStagger: 0,
-  // locked: nothing on a whiteboard zooms. A region close-up (clipping) is a cut to a window of the source round the region
-  // (ledger's values: a window 86 percent of the width between the margins, at most 70 percent of the height)
-  camera: { drift: 0, style: 'locked', closeUp: { width: 0.86, height: 0.7, pad: 0.2, minGain: 1.25 } },
+  // locked: nothing on a whiteboard zooms. No region close-up either (closeUp: false, m3): a cut to a window of the source
+  // laid a second print over the first, and the hand drew a second frame on it, misaligned; clipping keeps one pinned print
+  // and the hand rings the region on it
+  camera: { drift: 0, style: 'locked', closeUp: false },
   cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop', 'erase'],
   cutPalette: ['cut', 'erase'],
@@ -109,24 +110,22 @@ export const marker = {
   // PARKED in marker alone (experimental: true: they validate and render here, and are not listed), each measured on its
   // registered example by scripts/v2/review.mjs (the hand's findings are in the review, scripts/v2/review-hand.mjs); the
   // shortest path to finish each is named below (docs/decisions-pending.md has no entries for them yet). m2: the hand's
-  // per-element speed model made quote and diagram review clean; the numbers below are from .scratch/m1/sweep.mjs after the
-  // model and the tall compositions, the sheets from .scratch/m2/out:
-  //   media: review clean at both formats, but on the sheets the drawn caption box is empty (the hand drops the board-coloured
-  //     plate), so the picture's own text shows through the caption at both formats: it needs a plate put on at once
-  //   map: review clean at both formats; at 16:9 the map is small and pushed right and the title "Where we ship" is stacked in
-  //     three short lines that meet the map's frame
-  //   clipping: review clean at both formats; at 16:9 the pinned print shows two misaligned drawn frames, at 9:16 the
-  //     red ring is on the print from the first sampled frame, before it is spoken (not diagnosed)
+  // per-element speed model made quote and diagram review clean. m3 shipped list, compare, media, map and clipping
+  // by changing what is drawn, where and when (never a threshold): list writes its figure before its item (bulletFirst);
+  // compare's arrow is drawn between the cards
+  // (betweenFirst); a board-coloured plate over a picture is an opaque ground put on at once (media's caption box); map's 16:9
+  // title runs across the top over a map scaled to the board (titleAbove); clipping keeps one print (no close-up cut) and
+  // its ring is drawn on its word and is never the first thing on the board. The numbers below are from
+  // .scratch/m1/sweep.mjs, the sheets from .scratch/m3/out:
+  //   number: review clean at both formats (m3 underGap: the label under the digits' ink box), but at 9:16 the figure, label
+  //     and delta are one small block: the settled board uses 35 percent of the height where marker-tall.test.mjs (ban 2)
+  //     wants 65; it needs a tall composition (spread figure, label and delta down the band) the number kind has no data for
   //   free: review clean at 16:9; the example's bar runs off the right of a 9:16 frame (the new stroke-edge audit,
   //     engine/hand/index.mjs, finds it); free is author-placed, so the example needs its own tall layout
   //   chart (race parked in it as well, a board can only change ranks by erasing): hand-speed at both formats (16:9: no
   //     time left, 9:16: 10948 units a second against 2600); about 20 strokes in two sentences, chart-draw gives no
   //     element a lesser (set at once) form, so the hand cannot spare any of them
   //   feed: hand-speed at both formats (16:9 5243, 9:16 8892): speech bubbles are many strokes in one sentence each
-  //   list: covered at both formats (the hand rests over the finished item for 1.4 s at 16:9, 4.5 s at 9:16): the bullet
-  //     figure sits left of its item, so the hand writing it hangs over the item's text
-  //   number: 16:9 covered (0.37 s over the digits, the most is 0.3 s); 9:16 clean
-  //   compare: 16:9 clean; 9:16 covered (0.37 s over "swap.right.title")
   //   timeline: 16:9 three dates at three times the 60 minimum do not fit side by side (kind rule); 9:16 clean
   kinds: {
     // a tall board is written down the page: lines 2 high apart and the block allowed 85 percent of the band (m2, ban 2:
@@ -135,8 +134,15 @@ export const marker = {
     end: { ...desk.kinds.end, tallLineHeight: 2, tallHeight: 0.8 },
     diagram: desk.kinds.diagram,
     ...Object.fromEntries(PARKED_FROM_DESK.map((kind) => [kind, { ...desk.kinds[kind], experimental: true }])),
-    number: { experimental: true },
-    clipping: { experimental: true },
+    media: desk.kinds.media,
+    // the hand writes each step's figure before its item (m3), so it ends an item at its right end, not hanging over it
+    list: { ...desk.kinds.list, bulletFirst: true },
+    // the arrow (or vs) is drawn between the cards, before the second card's copy (m3): the hand ends it on the second
+    // card's top edge and must not then hang over that card's finished title
+    compare: { ...desk.kinds.compare, betweenFirst: true },
+    // the label is written under the digits' ink box (0.22 em under the baseline: the review's measure), not in it (m3)
+    number: { underGap: 90, experimental: true },
+    clipping: {},
     free: { experimental: true },
     // the claim up to step 5 (240): three times the labels at step 2 is 180 (desk's cap of 180 left no room)
     chart: { ...desk.kinds.chart, titleMax: 240, labelScale: 1, experimental: true, experimentalTypes: ['race'] },
@@ -145,7 +151,10 @@ export const marker = {
     // dates at step 5 or 4: three times the events' text at the 60 minimum
     timeline: { ...desk.kinds.timeline, whenSteps: [5, 4], experimental: true },
     // the key's numbers in ink on the board (a paper number on a plate the hand does not fill)
-    map: { ...desk.kinds.map, keyText: 'ink', keyFill: 'paper', pin: 'accent', experimental: true },
+    // m3: at 16:9 the title runs across the top in one line (titleAbove, ledger's data) and the map takes the board under it,
+    // so the title never stacks against the map's frame; at step 5 (240) it stays over three times the place names (step 4,
+    // 150, was 2.5 times the smallest text and the review's hero rule refused it)
+    map: { ...desk.kinds.map, keyText: 'ink', keyFill: 'paper', pin: 'accent', titleAbove: true, titleStepsWide: [5] },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {

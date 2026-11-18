@@ -5,7 +5,8 @@
 //     label is drawn part by part; a group that turns or scales stays as it is (it appears at once, see `stepped`);
 //   - a path of M, L, H, V, Q, C and Z segments becomes a polyline (curves sampled), still stroked in its colour;
 //   - a fill in the board's own colour (the card's paper, a tag's plate) is dropped, and the stroke it had stays: a drawn
-//     box is its outline; any other fill becomes its outline and, for a rectangle, a hatch of strokes inside it in the
+//     box is its outline, except over a picture (painted after one): there it is kept as an opaque ground with its edge on
+//     it, `put` on the board at once (strokes.mjs), so the picture shows through nothing the hand writes on it; any other fill becomes its outline and, for a rectangle, a hatch of strokes inside it in the
 //     fill's colour (a scribble fill), never a flat colour;
 //   - a translucent or soft shape (opacity below 1, a shadow) is made opaque, and a path that only sits behind (a card's
 //     shadow, `under` with no stroke and a translucent fill) is dropped;
@@ -101,6 +102,8 @@ function lift(n, dx = 0, dy = 0, fixed = false) {
   return n.children.flatMap((child) => lift(child, gx, gy, fixed || n.props.fixed === true));
 }
 
+const holdsPicture = (n) => n.type === 'image' || (n.children ?? []).some(holdsPicture);
+
 // A fill the board already is: none, or white (the card's paper, a tag's plate on a white board).
 const isBoard = (look, fill) => fill === undefined || sameColour(fill, look.palette.paper) || PAPER_FILLS.some((c) => sameColour(fill, c));
 
@@ -113,12 +116,38 @@ function hatchOf(n, points, fill, look, unit) {
   return [node('path', `${n.id}.hatch`, { d: polyline(zig), stroke: fill, strokeWidth: look.hand.width.fill * unit, lineCap: 'round', decor: true, hatch: true, ...place }, { depth: n.depth })];
 }
 
-// One path as the hand's nodes: its outline and, for a rectangle filled in a colour that is not the board's, a hatch.
-function drawnPath(n, look, unit) {
+// A plate in the board's colour that lies over a picture hides what the picture shows behind the writing on it: it is kept as
+// an opaque ground, `put` (set on the board at once, never drawn), with its own edge when it has one.
+function groundOf(n, parsed) {
+  const { opacity, ...rest } = n.props;
+  return node('path', n.id, { ...rest, d: polyline(parsed.points, parsed.closed), put: true }, { depth: n.depth });
+}
+
+// The edge a ground's card drew as a path of its own (same outline, a stroke and no fill) moves onto the ground: the box is one
+// node put on whole.
+function mergeEdges(list) {
+  const edgeOf = (g) => list.find((e) => e !== g && e.type === 'path' && e.props.put !== true && e.props.stroke !== undefined && e.props.fill === undefined
+    && e.props.d === g.props.d && (e.props.x ?? 0) === (g.props.x ?? 0) && (e.props.y ?? 0) === (g.props.y ?? 0));
+  const merged = new Map();
+  for (const g of list.filter((m) => m.type === 'path' && m.props.put === true && m.props.stroke === undefined)) {
+    const edge = edgeOf(g);
+    if (edge !== undefined) merged.set(g, edge);
+  }
+  const gone = new Set(merged.values());
+  return list.filter((m) => !gone.has(m)).map((m) => {
+    const edge = merged.get(m);
+    return edge === undefined ? m : node('path', m.id, { ...m.props, stroke: edge.props.stroke, strokeWidth: edge.props.strokeWidth, lineCap: edge.props.lineCap }, { depth: m.depth });
+  });
+}
+
+// One path as the hand's nodes: its outline and, for a rectangle filled in a colour that is not the board's, a hatch. `over`: a
+// picture lies under it (see groundOf).
+function drawnPath(n, look, unit, over = false) {
   const parsed = pathToPolyline(n.props.d);
   if (parsed === null) return [stepped(n)];
   const { fill, stroke, opacity, ...rest } = n.props;
   const board = isBoard(look, fill);
+  if (over && board && fill !== undefined && parsed.closed) return [groundOf(n, parsed)];
   const rectangle = isRectangle(parsed.points);
   if (stroke === undefined && (board || (opacity < 1 && rest.under === true && !rectangle))) return [];
   const outline = node('path', n.id, {
@@ -132,9 +161,15 @@ function drawnPath(n, look, unit) {
  * back with a stepped opacity. The field and the hand are not touched.
  */
 export function flattenForHand(nodes, look, unit) {
-  return nodes.flatMap((n) => {
+  let pictured = false; // a picture is under what comes next (painted before it)
+  const out = nodes.flatMap((n) => {
     if (n.type === 'field' || n.props?.role === 'hand') return [n];
-    return lift(n).flatMap((m) => (m.type === 'path' ? drawnPath(m, look, unit) : m.type === 'text' ? [m] : [stepped(m)]));
+    return lift(n).flatMap((m) => {
+      const over = pictured;
+      if (holdsPicture(m)) pictured = true;
+      return m.type === 'path' ? drawnPath(m, look, unit, over) : m.type === 'text' ? [m] : [stepped(m)];
+    });
   });
+  return mergeEdges(out);
 }
 

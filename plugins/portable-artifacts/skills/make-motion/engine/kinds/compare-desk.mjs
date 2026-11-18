@@ -338,7 +338,10 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
     const rim = rimLight(id, card, ctx, data, turn, i === 1);
     return node('group', id, { ...card.props }, { tracks: card.tracks, children: [rim, ...asTextCard(id, card.children), ...picture, ...texts, ...scrim] });
   });
-  const group = node('group', hero, {}, { children: cards });
   const between = columns ? [columnDivider(shot, ctx, data, boxes)] : betweenMarks(shot, ctx, data, boxes, turn);
-  return { nodes: [...slugNodes(shot, ctx), group, ...between], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };
+  // look data betweenFirst (marker): the mark between the cards is drawn between them, after the first card and before the
+  // second card's copy, so the hand finishing it does not hang over the second card's finished text
+  const first = data.betweenFirst === true;
+  const group = node('group', hero, {}, { children: first ? [cards[0], ...between, ...cards.slice(1)] : cards });
+  return { nodes: [...slugNodes(shot, ctx), group, ...(first ? [] : between)], boxes: { left: boxes[0], right: boxes[1], sides: unionBox(boxes) } };
 }

@@ -242,9 +242,12 @@ export function expandDeskList(shot, ctx, given, times, hero) {
     const y = cursor + CAP_HEIGHT * set.size - part.layout.lines[0].y;
     const enter = (at, rest) => ((matched && k === 0) || data.previews ? {} : enterTracks(look, unit, at, { y: rest }));
     const dim = { fill: data.previews ? previewTrack(look, times[k], times[k + 1]) : dimTrack(look, times[k + 1]) };
-    children.push(node('text', id, { x: span.x, y, layout: part.layout, font: set.font, fill: look.palette.ink, role: 'hero', ...(numbered ? { stack: hero } : {}) }, {
+    const itemNode = node('text', id, { x: span.x, y, layout: part.layout, font: set.font, fill: look.palette.ink, role: 'hero', ...(numbered ? { stack: hero } : {}) }, {
       tracks: enter(times[k], y), wordTracks: part.layout.lines.flatMap((line) => line.words.map(() => dim)),
-    }));
+    });
+    // look data bulletFirst (marker): a drawing hand writes the figure in the margin first and then its item, so the hand
+    // ends each item at the item's right end and never rests, finished, over the text it hangs from
+    if (!data.bulletFirst) children.push(itemNode);
     itemBoxes.push(unionBox(part.layout.lines.map((line) => capBox(span.x + line.x, y + line.y, line.width, set.size))));
     if (dots) centres.push([grid.x + dots.radius * unit, y + part.layout.lines[0].y - (CAP_HEIGHT * set.size) / HALF]);
     let last = y + part.layout.lines.at(-1).y;
@@ -253,6 +256,7 @@ export function expandDeskList(shot, ctx, given, times, hero) {
       const figure = figureNode(`${shot.id}.figure${k}`, k, set.size, { right: span.x - look.grid.gutter * unit, baseline: y + part.layout.lines[0].y, stack: hero }, ctx);
       children.push(node(figure.node.type, figure.node.id, figure.node.props, { tracks: enter(times[k], figure.y), wordTracks: [dim] }));
     }
+    if (data.bulletFirst) children.push(itemNode);
     if (part.note !== null) {
       const noteY = last + data.noteGap * set.size + CAP_HEIGHT * set.small - part.note.lines[0].y;
       children.push(node('text', `${shot.id}.note${k}`, { x: span.x, y: noteY, layout: part.note, font: set.noteFont, fill: look.palette.ink2, role: 'body' }, {

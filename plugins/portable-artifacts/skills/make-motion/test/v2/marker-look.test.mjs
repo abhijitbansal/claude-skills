@@ -42,8 +42,10 @@ test('screen and code are excluded: refused with the looks that support them; ev
 
 // m2: the kinds whose registered example reviews clean at both formats once the hand has its per-element speed model
 // (marker-examples-browser.test.mjs runs each of them); the rest stay parked with the measured reason in marker.mjs
-const SHIPPED_KINDS = Object.freeze(['statement', 'end', 'quote', 'diagram']);
-const STILL_PARKED = Object.freeze(['number', 'list', 'compare', 'chart', 'timeline', 'feed', 'media', 'map', 'clipping', 'free']);
+// m3: list, compare, media, map and clipping joined them (what is drawn, where and when changed; no threshold did). number
+// reviews clean at both formats now but its 9:16 board uses 35 percent of the height (marker-tall.test.mjs wants 65): parked
+const SHIPPED_KINDS = Object.freeze(['statement', 'end', 'quote', 'diagram', 'list', 'compare', 'media', 'map', 'clipping']);
+const STILL_PARKED = Object.freeze(['number', 'chart', 'timeline', 'feed', 'free']);
 
 test('marker ships exactly the kinds that review clean; the others are parked in it alone', () => {
   const names = registries.kinds.names().filter((k) => supportsKind(look(), k));
@@ -84,7 +86,7 @@ test('the field is the board, still, with the look\'s margins; the camera is loc
   assert.equal(look().field.field, 'board');
   assert.equal(registries.fields.get('board').animated, false);
   assert.deepEqual({ drift: look().camera.drift, style: look().camera.style }, { drift: 0, style: 'locked' });
-  assert.equal(look().camera.closeUp.width, 0.86, 'a region close-up is a cut to a window, as in ledger');
+  assert.equal(look().camera.closeUp, false, 'no region close-up (m3): one pinned print, the region ringed on it');
   assert.deepEqual({ ...look().post }, { grain: 0.006, halftone: 0, bloom: 0 });
 });
 

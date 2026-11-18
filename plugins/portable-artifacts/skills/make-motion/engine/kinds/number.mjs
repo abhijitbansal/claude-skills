@@ -373,7 +373,9 @@ function deskParts(shot, ctx, steps, times) {
   const deltaAt = (top) => plainDelta(ctx, `${shot.id}.delta`, shot.delta, { left: blockLeft, top, maxWidth: rightEdge - blockLeft, at: labelAt + DELTA_LAG });
   const probe = shot.delta === undefined ? null : deltaAt(0);
   const deltaUp = probe === null ? 0 : DESK.deltaGap * unit + probe.box[3] - probe.descent; // label baseline to delta baseline
-  const underGap = DESK.underGap * unit;
+  // look data underGap (marker): the label's ink this far under the baseline, past the digits' ink box, so a hand writing it
+  // does not hang over the figure
+  const underGap = (extra.underGap ?? DESK.underGap) * unit;
   const placeAt = (step) => {
     const label = deskLabel(shot, ctx, blockLeft, step, rightEdge);
     // in the safe zone the label's real descenders (from the Sun to you) stay over the band's bottom

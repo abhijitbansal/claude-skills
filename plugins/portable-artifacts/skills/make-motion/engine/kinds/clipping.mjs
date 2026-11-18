@@ -272,7 +272,9 @@ const isRegionEvent = (item) => regionOf(item.target) !== null;
 // (look.camera.closeUp.minGain, ledger): the region's width on its close-up over its width on the establishing picture
 // (`shownWidth`: the whole picture's drawn width, so a region of share fw stands fw * shownWidth wide). A wide region on
 // a tall frame is drawn no larger on its close-up than in the establishing window, and a cut to it reads as a zoom out.
+// A look with camera.closeUp: false (marker) never cuts to one: its single print stays and the hand rings the region on it.
 function closeUpGains(shot, ctx, { picture, area, shownWidth }) {
+  if (ctx.look.camera?.closeUp === false) return false;
   const least = ctx.look.camera?.closeUp?.minGain;
   const region = shot.regions?.[regionOf((shot.on ?? []).find(isRegionEvent)?.target)];
   if (least === undefined || !region) return true;
