@@ -32,6 +32,32 @@ export function mixHex(a, b, share) {
   return `#${ca.map((v, i) => hex2(Math.round(v * share + cb[i] * (1 - share)))).join('')}`;
 }
 
+// What a theme written before surface2, surface3 and shadow existed gets in their place (themeCss applies it, checkTheme
+// names it). The surface steps are `surface` mixed toward `text` by these shares, the same rule in light and dark (so
+// light steps go darker and dark steps go lighter, as surfaceOrder requires); the shadow is the plain black the
+// elevation scale used before it had a shadow colour.
+export const SURFACE_STEP_MIX = [0.03, 0.06];
+export const FALLBACK_SHADOW = '#000000';
+
+const isSet = (v) => typeof v === 'string' && v.trim() !== '';
+
+/**
+ * `tokens` (one mode of a theme) with a missing surface2, surface3 or shadow filled in. A token the theme sets is never
+ * replaced, so a complete set comes back equal. The surface steps need a #rrggbb surface and text to mix; without
+ * them they stay missing (checkTheme reports those two).
+ */
+export function withTokenFallbacks(tokens) {
+  const out = { ...tokens };
+  const { surface, text } = tokens;
+  if (HEX.test(surface) && HEX.test(text)) {
+    ['surface2', 'surface3'].forEach((k, i) => {
+      if (!isSet(out[k])) out[k] = mixHex(text, surface, SURFACE_STEP_MIX[i]);
+    });
+  }
+  if (!isSet(out.shadow)) out.shadow = FALLBACK_SHADOW;
+  return out;
+}
+
 const TEXT = ['text', 'text2', 'text3'];
 const UI = ['accent', 'warn', 'good', 'bad'];
 const SEQ = ['seq1', 'seq2', 'seq3', 'seq4', 'seq5', 'seq6', 'seq7'];
@@ -65,6 +91,8 @@ export function checkTheme(theme) {
     const t = theme[mode];
     const missing = [...TEXT, ...BACKGROUNDS, ...UI].filter((k) => typeof t?.[k] !== 'string' || !HEX.test(t[k]));
     for (const k of missing) errors.push({ path: `${mode}.${k}`, message: `missing; needs a #rrggbb colour` });
+    // shadow is not a contrast input, so a missing one is reported without skipping the checks below
+    if (!isSet(t.shadow)) errors.push({ path: `${mode}.shadow`, message: `missing; themeCss uses ${FALLBACK_SHADOW} (plain black elevation shadow) instead` });
     if (missing.length) continue;
     for (const k of TEXT) {
       for (const bg of BACKGROUNDS) {

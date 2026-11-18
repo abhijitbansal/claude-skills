@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { typeCss } from './type.mjs';
+import { withTokenFallbacks } from './contrast.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const THEMES = path.join(HERE, 'themes');
@@ -65,8 +66,13 @@ export const themeWeights = (theme) => ({ display: nearestWeight(theme.fonts.dis
 
 // Fonts and weights are mode-independent: they are declared once, on the light :root, and never repeated, so no
 // later block can override them.
-function vars(tokens, theme) {
-  const colours = TOKENS.map((k) => `${VARS[k]}:${tokens[k]}`).join(';');
+// A token is written only when it holds a value: never `undefined`, `null` or `NaN`. surface2, surface3 and shadow,
+// which older themes lack, are derived first (see withTokenFallbacks); any other missing token is left out.
+const hasValue = (v) => (typeof v === 'string' && v.trim() !== '') || (typeof v === 'number' && Number.isFinite(v));
+
+function vars(rawTokens, theme) {
+  const tokens = withTokenFallbacks(rawTokens);
+  const colours = TOKENS.filter((k) => hasValue(tokens[k])).map((k) => `${VARS[k]}:${tokens[k]}`).join(';');
   if (!theme) return colours;
   const { fonts } = theme;
   const w = themeWeights(theme);

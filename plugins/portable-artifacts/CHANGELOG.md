@@ -141,13 +141,18 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
   `--surface-2` and `--surface-3` with `--shadow`, and a three-level elevation scale `--elev-1` to `--elev-3`. Every
   theme sets `surface2`, `surface3` and `shadow` in both modes, and `checkTheme` now checks them: text and the accent at
   4.5:1 and the status colours at 3:1 on all three surfaces, and surface steps in order and at least 1.04:1 apart.
-  - **A theme written against the old token set still builds, but is flagged.** Checked by
-    `shared/test/theme-old-tokens.test.mjs` (a copy of `paper` with `surface2`, `surface3` and `shadow` removed): `themeCss`
-    does not throw and writes every older token, but those three variables are written as `undefined`, and
-    `checkTheme` reports `surface2` and `surface3` as missing in both modes. `checkTheme` does not report a missing
-    `shadow`, and the build does not stop on any of the three. Add the three tokens to such a theme (copy `paper.json`'s
-    and adjust); make-scene reads `shadow` for the contact shadow in light mode. How a page with those variables unset
-    renders in a browser was not checked.
+  - **A theme written against the old token set still builds, with fallbacks, and is flagged.** Checked by
+    `shared/test/theme-old-tokens.test.mjs` (a copy of `paper` with `surface2`, `surface3` and `shadow` removed):
+    `themeCss` writes every older token and never `undefined`, `null` or `NaN` for any token (a token a theme leaves
+    out is omitted). A missing `surface2` and `surface3` become `surface` mixed 3% and 6% toward `text`, the same rule
+    in light and dark; a missing `shadow` becomes `#000000`, the plain black the elevation scale used before it had a
+    shadow colour. The test checks that the fallback surfaces of the old `paper` copy pass every `checkTheme` contrast
+    rule. `checkTheme` reports `surface2`, `surface3` and `shadow` as missing in both modes, and its `shadow` message
+    names the `#000000` fallback; its entries carry no severity field, so all three are reported the same way.
+    make-dashboard turns every `checkTheme` entry into a build error (`skills/make-dashboard/scripts/lib/pipeline.mjs`,
+    read, not run), so there such a theme is refused until it sets the three tokens (the other skills were not checked). Add the
+    three tokens to such a theme (copy `paper.json`'s and adjust) to choose the look; make-scene reads `shadow` for the
+    contact shadow in light mode. How a page built from the fallbacks renders in a browser was not checked.
 - **make-dashboard `kpis[].trend`.** `{ "query": "<a declared query>", "field": "<column>" }` draws a small line of that
   column beside the KPI. It names a query the spec already declares, never SQL text; an unknown query fails validation.
   A KPI without `trend` is drawn as before.
