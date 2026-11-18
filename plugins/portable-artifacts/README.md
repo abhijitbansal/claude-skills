@@ -88,8 +88,8 @@ colours. Every skill accepts every theme by name (the spec's `theme` field or
 | `press` | Young Serif / Schibsted Grotesk / JetBrains Mono | bone paper, ink and vermilion, marginal numerals | dense docs, long reads, changelogs, branch recaps |
 | `poster` | Big Shoulders Display / Familjen Grotesk / Martian Mono | near-black, acid lime and orange, condensed caps, halftone | launch decks, pitches, demos, energetic clips |
 | `paper`, `blueprint`, `ink`, `editorial` | Geist and Geist Mono; `ink` has Bricolage Grotesque headings, `editorial` Newsreader headings and an Atkinson Hyperlegible body | the earlier looks | when you name one; `paper` is make-dashboard's default, `blueprint` make-diagram's |
-| `mono` | JetBrains Mono for display, body and mono | terminal and engineering console: in dark mode a near-black page, one cyan accent and cool grey lines; a clean light mode; no art. Regular weight only (no bold face); bold text is synthesized by the browser | technical pages and plans |
-| `brief` | Newsreader / Atkinson Hyperlegible / Geist Mono | executive: warm white page, deep burgundy accent, high contrast, calm; no art | decision briefs and sign-off pages |
+| `mono` | JetBrains Mono for display, body and mono | terminal and engineering console: in dark mode a near-black page, one cyan accent and cool grey lines; a clean light mode; no art on a page, dot-matrix art on a deck's title and closing slides. Regular weight only (no bold face): headings, labels and numbers are drawn in regular weight, and any other bold text is synthesized by the browser | technical pages and plans |
+| `brief` | Newsreader / Atkinson Hyperlegible / Geist Mono | executive: warm white page, deep burgundy accent, high contrast, calm; no art on a page, folder-tab art on a deck's title and closing slides | decision briefs and sign-off pages |
 
 **How make-explainer picks a theme.** A theme you name wins
 (`--theme poster`, or "use poster" in the prompt). Otherwise the agent picks
@@ -105,6 +105,7 @@ title: blobs and orbs with grain in
 `dusk`, halftone and contour lines in `press`, halftone grids and registration
 marks in `poster`. The same seed always gives the same picture, and nothing is
 fetched. It fills the explainer page hero and a deck's title and closing slides.
+The other six themes draw their own art on a deck's title and closing slides only.
 
 **Numbers stay on one line.** A number with its unit or percent sign (`1,204 ms`, `18%`, `$4.2M`) is kept on one line, in a different way per skill. make-explainer wraps each token in a no-wrap span when it renders (the spec text is not changed); its `validate.mjs` warns when a KPI value is longer than 12 characters, and its `check.mjs` fails on a token that wraps or a KPI value that overflows its tile. The one-line values in one `kpis` section are drawn at one size, the one that fits the longest; a wide or long value keeps its own. make-dashboard sets KPI values to no-wrap and sizes them to fit the tile; a value longer than 17 characters may wrap instead of spilling, and make-dashboard has no wrap check.
 **Emoji** are allowed in explainer text. Validation warns, and never fails,

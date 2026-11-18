@@ -91,6 +91,74 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
   10 of 10 valid, 10 of 10 delegated, operator `claude-haiku-5-5`, director `claude-opus-5-5`, first build valid in 9 of
   10, $4.66 in all ([record](eval/results/summary-director-operator-2026-11-18.md)). Copilot and Codex: install-tested,
   not run live.
+- **make-dashboard, make-diagram, make-explainer and make-scene are redrawn.** A page you built before looks
+  different when you rebuild it; no spec format, SQL rule, validator rule or CSP changed. What to expect:
+  - **make-dashboard.** Charts are drawn as in a newsroom: a line ends in a dot and its series name, bars have rounded
+    tops, and a multi-series chart claims one series in the theme accent and draws the rest in neutral greys (a
+    chart whose title names no series keeps the category colours). Line and area charts take the theme accent.
+    Month ticks on a phone are evenly spaced, and the tallest bar stays under the top gridline. A KPI tile carries a
+    caps label and a large aligned numeral with no empty band when it has no sparkline. The 100% tab no longer
+    draws a slashed zero.
+  - **make-diagram.** A phone opens a diagram at a readable size on its first group and pans (four edge tabs show where
+    nodes lie off screen); a desktop still opens the whole drawing, and Fit shows the whole drawing on both. The
+    phone toolbar is one row plus a More button, and the legend opens as one panel. Return, reply and event
+    edges are lighter than calls and dotted or dashed edges keep a readable width and contrast. Decision diamonds
+    keep their hue outline, and the state example shows its outcomes in the legend as success and failure.
+  - **make-explainer.** More air above the hero, section rhythm by role (bands stand apart from text), cards mark
+    their tone with a top rule instead of a full border, and chips on the classic themes are plain caps text.
+    A deck's title slide takes the hero type, every theme draws art on the title and closing slides, and a
+    last slide that is a `tldr`, `callout` or `quote` gets a closing layout (one centred statement at projection
+    size) with a one-line colophon. A deck example that ends on a quote is now 12 slides.
+  - **make-scene.** Lit by a key light from the viewer's side with a lower fill (so a wall has two clear tones), a
+    rim light at night, five material roles (ground, mass, accent, body and water, each with its own roughness),
+    fog that starts behind the middle of the scene, a soft pool of light under a world and a contact shadow or glow
+    under lifted bars and diagram nodes. Boxes get a silhouette edge in dark mode. Labels are caps in the theme's
+    strong weight, numerals stay tabular, and no label draws below 11 px. City row names stand in one column left
+    of the city. `scene-graph.md` and the city golden changed with this.
+  - **The forest row ceiling is 1,224, not 1,248** (24 groups; 1,240 for 8 groups with two-decimal values, 1,288 for 8
+    groups with whole values). The bundle grew by shader code, so fewer rows fit under the page cap. Re-measured with
+    `heaviestPage` in `row-ceilings.test.mjs`.
+- **Five accents were retuned** so they stand out from the neutrals in grouped and stacked charts: `blueprint` dark
+  `#45b6ff`, `brief` dark `#f28aa5`, `editorial` dark `#6aaeff`, `poster` light `#3b5f00`, `mono` light `#00659e`.
+  Anything that read those tokens changes colour, and the seeded `poster` light art draws in the new accent.
+- **Heading and strong text ask for a weight the theme ships.** Every theme gets `--display-weight` and
+  `--strong-weight` (the weight nearest 600 that the font has, the heavier on a tie), so a theme whose font lacks 600
+  draws a real face, not a synthesised one. `mono` draws headings, labels and numbers in regular weight (its font
+  ships 400 only), which removes the synthesised bold there.
+- **The tour flight time follows the distance (make-scene).** A beat's camera flight takes 450 ms plus 650 ms per span
+  (the move over the camera-to-target distance), capped at 1,400 ms; it was a fixed 900 ms. The curve is the same
+  ease in and out, and under reduced motion a beat still cuts.
+- **The diagram story player is calmer (make-diagram).** On Play the caption (count, title, note, line) paints 60 ms
+  after the camera settles, not at the same moment; every beat glides 600 ms, ease in and out (was 450 ms for a
+  story beat and 300 ms for a step, ease out); during Play the dim is softer (opacity .4, was .25) and fades over .35 s
+  (was .2 s). Manual step, pause and
+  exit paint at once. Under reduced motion a beat applies at once and no CSS transition runs.
+
+### Added
+
+- **Shared tokens and classes.** Three display sizes `--fs-d3` (28px), `--fs-d2` (37px) and `--fs-d1` (49px), `--lh-tight`,
+  `--track-caps`, `--num` (tabular, lining figures), the `.pa-caps` and `.pa-num` classes, three surface steps
+  `--surface-2` and `--surface-3` with `--shadow`, and a three-level elevation scale `--elev-1` to `--elev-3`. Every
+  theme sets `surface2`, `surface3` and `shadow` in both modes, and `checkTheme` now checks them: text and the accent at
+  4.5:1 and the status colours at 3:1 on all three surfaces, and surface steps in order and at least 1.04:1 apart.
+  - **A theme written against the old token set still builds, but is flagged.** Checked by
+    `shared/test/theme-old-tokens.test.mjs` (a copy of `paper` with `surface2`, `surface3` and `shadow` removed): `themeCss`
+    does not throw and writes every older token, but those three variables are written as `undefined`, and
+    `checkTheme` reports `surface2` and `surface3` as missing in both modes. `checkTheme` does not report a missing
+    `shadow`, and the build does not stop on any of the three. Add the three tokens to such a theme (copy `paper.json`'s
+    and adjust); make-scene reads `shadow` for the contact shadow in light mode. How a page with those variables unset
+    renders in a browser was not checked.
+- **make-dashboard `kpis[].trend`.** `{ "query": "<a declared query>", "field": "<column>" }` draws a small line of that
+  column beside the KPI. It names a query the spec already declares, never SQL text; an unknown query fails validation.
+  A KPI without `trend` is drawn as before.
+- **make-explainer `quote` section** (`text`, `by`, `tone`): one line set large with a hanging mark and a caps
+  attribution. Limits: 300 characters of text, 80 of attribution, warnings over 40 words or 8 attribution words. In a deck
+  it is one slide, and as the last slide it closes the deck. The section types are now 26.
+- **Seeded art for the other six themes.** `paper`, `ink`, `blueprint`, `mono`, `brief` and `editorial` each have
+  their own generator (feint rules and a fold, brush washes, a construction grid, a dot matrix, folder tabs, a masthead
+  with a fleuron). `dusk`, `press` and `poster` draw the same bytes as before (pinned by `shared/test/art.test.mjs`), except `poster` light,
+  which draws in its retuned accent.
+  `shared/art.mjs` is the entry point and the generators live in `shared/art/`.
 
 ## [1.3.0] - 2026-11-15
 

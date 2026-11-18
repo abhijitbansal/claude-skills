@@ -477,7 +477,7 @@ make-explainer follows these rules (a make-motion film has a look, not a theme; 
 `paper`, `blueprint`, `ink`, `editorial`, `mono` and `brief` still work, but only
 when you name them (`mono` and `brief` are meant for plan pages; a `plan` defaults to `mono`). In `dusk`, `press` and `poster` the page hero and a deck's title and
 closing slides carry procedural art drawn from the title: no network, and the
-same title gives the same picture.
+same title gives the same picture. The other six themes draw their own art on a deck's title and closing slides only; their page hero carries none.
 
 ### Optional hero image
 
@@ -681,7 +681,7 @@ Funnel Display, Host Grotesk and Commit Mono; `press` Young Serif, Schibsted
 Grotesk and JetBrains Mono; `poster` Big Shoulders Display, Familjen Grotesk
 and Martian Mono; `paper` and `blueprint` Geist and Geist Mono; `ink` Bricolage
 Grotesque headings over Geist; `editorial` Newsreader headings and an Atkinson
-Hyperlegible body; `mono` JetBrains Mono throughout, in regular weight only (no bold face, so bold text is synthesized by the browser); `brief` Newsreader headings,
+Hyperlegible body; `mono` JetBrains Mono throughout, in regular weight only (no bold face: headings, labels and numbers are drawn in regular weight, and any other bold text is synthesized by the browser); `brief` Newsreader headings,
 an Atkinson Hyperlegible body and Geist Mono. A make-motion film uses the fonts of its look, bundled with the skill. Links in running text are underlined; buttons,
 navigation and cards are not.
 
