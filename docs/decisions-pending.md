@@ -300,3 +300,15 @@ The security-lens review of the make-motion 2 cut-over (`.superpowers/sdd/2026-1
 - **F15, stale example and doc claims.** (a) `make-explainer/references/examples/slides.explainer.json` shows `clip.mp4`, a version 1 render, captioned as made by make-motion; (b) the `viewer-run.mjs` comment on where clips are decoded is wrong (they go to `clipCacheDir`); (c) `eval/README.md` says every `validate.mjs` call adds an EVAL_LOG line, which make-motion 2 does not write; (d) `eval/README.md` still says "the five `validate.mjs` scripts". Default: fix all four in the release polish pass; re-render the clip from `clip.motion.json` with the gallery.
 - **F17, the Playwright context does not block service workers** (`session.mjs`). The CSP still stops off-origin fetches and no page registers a worker. Default: add `serviceWorkers: 'block'` to `newContext` the next time `session.mjs` is touched.
 - **Also left, from the F12 sweep.** The runtime hints in `make-dashboard` (`pipeline.mjs`), `make-explainer` and `make-scene` (`siblings.mjs`, `checks.mjs`) and the stale-copy warning still print `npm ci --omit=dev --prefix …` or a bare `npm ci`, and the plans under `docs/superpowers/plans/` still name `references/examples/v2/hand-spike.json`. Default: change the hints with their tests when a skill next ships; leave the plans as history.
+
+## make-explainer deck art: confirm-review leftovers (2026-11-18)
+
+The explainer refresh look passed: review 1 SHIP AFTER FIXES, review 2 SHIP AFTER FIXES, the confirm review of round 2 SHIP (`.superpowers/sdd/2026-11-16-pa2-run2/gate-explainer-1.md` to `-3.md`). Two revision rounds were used, so these low items stay open. Default for all: leave until the deck art is next touched.
+
+- **N6:** mono's dark-mode art shows a faint panel edge on the closing slide.
+- **F1, F8:** the fade above the colophon shows as a faint oval halo (editorial, mono, paper closing-tldr; 1280 light) with faint bands inside it on editorial.
+- **F2, F3:** the fade line cuts mono's last row of squares into dashes, and stops ink's art on one flat line.
+- **F4, F5:** brief's FILED stamp sits flush right at 1280; ink's title splatter touches the progress bar.
+- **F6, F11:** editorial's masthead stops 14 px from the edge at 1280 but runs to the edge at 390; a paper crease stub shows at the left edge (1280 light).
+- **F7, F9, F10:** taste calls: editorial's fleuron reads as clip-art; ink's 390 title art is flat blobs; blueprint's arcs start 15 px below the meta row.
+- **N11, N13 (by choice):** the slashed zero is Atkinson Hyperlegible's own glyph; blueprint's 390 art needs a new composition.
