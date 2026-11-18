@@ -177,7 +177,7 @@ only links skill folders: it runs no `npm ci`, installs no agent file and does n
 skills, so for `portable-artifacts` use that plugin's own installer, below.
 
 The `portable-artifacts` skills (`make-dashboard`, `make-diagram`, `make-explainer`, `make-motion`, `make-scene`) are Node packages: they also
-need `npm ci` in each skill folder. Their own installer does that and covers Gemini CLI and
+need `npm ci --ignore-scripts` in each skill folder. Their own installer does that and covers Gemini CLI and
 project-scoped installs too:
 `node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`
 — see [plugins/portable-artifacts/USAGE.md](plugins/portable-artifacts/USAGE.md).
