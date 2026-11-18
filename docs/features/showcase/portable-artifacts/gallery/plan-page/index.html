@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>One PR: one-line numbers, cheap models, plan pages</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cstyle%3E.t%7Bfill%3A%230e7490%7D.g%7Bfill%3A%23ffffff%7D.s%2C.l%7Bstroke%3A%23ffffff%3Bstroke-width%3A2.5%3Bstroke-linecap%3Around%3Bfill%3Anone%7D.l%7Bstroke%3A%230e7490%7D%40media%20(prefers-color-scheme%3A%20dark)%7B.t%7Bfill%3A%2322d3ee%7D.g%7Bfill%3A%23080a0d%7D.s%7Bstroke%3A%23080a0d%7D.l%7Bstroke%3A%2322d3ee%7D%7D%3C%2Fstyle%3E%3Crect%20class%3D%22t%22%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%2F%3E%3Crect%20class%3D%22g%22%20x%3D%229%22%20y%3D%226%22%20width%3D%2214%22%20height%3D%2220%22%20rx%3D%222%22%2F%3E%3Cpath%20class%3D%22l%22%20d%3D%22M12%2012h8M12%2016h8M12%2020h5%22%2F%3E%3C%2Fsvg%3E">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cstyle%3E.t%7Bfill%3A%2300659e%7D.g%7Bfill%3A%23ffffff%7D.s%2C.l%7Bstroke%3A%23ffffff%3Bstroke-width%3A2.5%3Bstroke-linecap%3Around%3Bfill%3Anone%7D.l%7Bstroke%3A%2300659e%7D%40media%20(prefers-color-scheme%3A%20dark)%7B.t%7Bfill%3A%2322d3ee%7D.g%7Bfill%3A%23080a0d%7D.s%7Bstroke%3A%23080a0d%7D.l%7Bstroke%3A%2322d3ee%7D%7D%3C%2Fstyle%3E%3Crect%20class%3D%22t%22%20width%3D%2232%22%20height%3D%2232%22%20rx%3D%227%22%2F%3E%3Crect%20class%3D%22g%22%20x%3D%229%22%20y%3D%226%22%20width%3D%2214%22%20height%3D%2220%22%20rx%3D%222%22%2F%3E%3Cpath%20class%3D%22l%22%20d%3D%22M12%2012h8M12%2016h8M12%2020h5%22%2F%3E%3C%2Fsvg%3E">
 <meta name="generator" content="portable-artifacts make-explainer; model=not reported; effort=not reported; agent=not reported">
 <script>
 // Before first paint: apply the saved theme (no flash; storage may throw) and, when motion
@@ -24,16 +24,19 @@
 </script>
 <style>
 @font-face{font-family:"JetBrains Mono";font-style:normal;font-weight:400;font-display:swap;src:url(data:font/woff2;base64,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) format("woff2")}
-:root{color-scheme:light;--page:#f2f4f6;--surface:#ffffff;--text:#0c1117;--text-2:#3b4552;--text-3:#586473;--line:#d5dbe2;--grid:#e4e8ed;--accent:#0e7490;--accent-soft:#d9eff5;--warn:#9a5b06;--good:#2f7d12;--bad:#b42318;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#4a3aa7;--s8:#e34948;--seq1:#d0eef5;--seq2:#afd1d9;--seq3:#8db4be;--seq4:#6c97a2;--seq5:#4b7a86;--seq6:#295d6b;--seq7:#08404f;--k-person:#a3480a;--k-service:#1d5fd1;--k-data:#6d28d9;--k-queue:#be185d;--k-external:#666a72;--k-decision:#4338ca;--glow:#0e7490;--font-display:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;--font:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;--mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--page:#080a0d;--surface:#0e1217;--text:#dbe2ea;--text-2:#a7b2be;--text-3:#8590a0;--line:#242c37;--grid:#171d25;--accent:#22d3ee;--accent-soft:#0a2a33;--warn:#ffb02e;--good:#a3e635;--bad:#ff6b6b;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;--seq1:#0d4a5a;--seq2:#266675;--seq3:#408190;--seq4:#599dab;--seq5:#72b9c6;--seq6:#8cd4e1;--seq7:#a5f0fc;--k-person:#f5a524;--k-service:#6aa5ff;--k-data:#a78bfa;--k-queue:#f472b6;--k-external:#a1a1aa;--k-decision:#818cf8;--glow:#67e8f9}}
-:root[data-theme="dark"]{color-scheme:dark;--page:#080a0d;--surface:#0e1217;--text:#dbe2ea;--text-2:#a7b2be;--text-3:#8590a0;--line:#242c37;--grid:#171d25;--accent:#22d3ee;--accent-soft:#0a2a33;--warn:#ffb02e;--good:#a3e635;--bad:#ff6b6b;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;--seq1:#0d4a5a;--seq2:#266675;--seq3:#408190;--seq4:#599dab;--seq5:#72b9c6;--seq6:#8cd4e1;--seq7:#a5f0fc;--k-person:#f5a524;--k-service:#6aa5ff;--k-data:#a78bfa;--k-queue:#f472b6;--k-external:#a1a1aa;--k-decision:#818cf8;--glow:#67e8f9}
-:root{--fs-xs:12px;--fs-sm:14px;--fs-base:17px;--fs-md:21px;--fs-lg:27px;--fs-xl:34px;--fs-hero:clamp(40px, 6vw, 60px);--lh-body:1.6;--lh-head:1.15;--lh-hero:1.05;--track-display:-0.02em;--track-hero:-0.03em;--fs-display:clamp(2.5rem, 1.25rem + 4.2vw, 4.75rem);--fs-numeral:clamp(4.5rem, 2rem + 9vw, 9rem);--sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;--sp-8:72px;--sp-9:112px}
+:root{color-scheme:light;--page:#f2f4f6;--surface:#ffffff;--text:#0c1117;--text-2:#3b4552;--text-3:#586473;--surface-2:#f8f8f8;--surface-3:#f1f1f1;--shadow:#0c1117;--line:#d5dbe2;--grid:#e4e8ed;--accent:#00659e;--accent-soft:#d9eff5;--warn:#9a5b06;--good:#2f7d12;--bad:#b42318;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#4a3aa7;--s8:#e34948;--seq1:#d0eef5;--seq2:#afd1d9;--seq3:#8db4be;--seq4:#6c97a2;--seq5:#4b7a86;--seq6:#295d6b;--seq7:#08404f;--k-person:#a3480a;--k-service:#1d5fd1;--k-data:#6d28d9;--k-queue:#be185d;--k-external:#666a72;--k-decision:#4338ca;--glow:#0e7490;--font-display:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;--font:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;--mono:"JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;--display-weight:400;--strong-weight:400}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){color-scheme:dark;--page:#080a0d;--surface:#0e1217;--text:#dbe2ea;--text-2:#a7b2be;--text-3:#8590a0;--surface-2:#15191e;--surface-3:#1b1f24;--shadow:#030405;--line:#242c37;--grid:#171d25;--accent:#22d3ee;--accent-soft:#0a2a33;--warn:#ffb02e;--good:#a3e635;--bad:#ff6b6b;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;--seq1:#0d4a5a;--seq2:#266675;--seq3:#408190;--seq4:#599dab;--seq5:#72b9c6;--seq6:#8cd4e1;--seq7:#a5f0fc;--k-person:#f5a524;--k-service:#6aa5ff;--k-data:#a78bfa;--k-queue:#f472b6;--k-external:#a1a1aa;--k-decision:#818cf8;--glow:#67e8f9}}
+:root[data-theme="dark"]{color-scheme:dark;--page:#080a0d;--surface:#0e1217;--text:#dbe2ea;--text-2:#a7b2be;--text-3:#8590a0;--surface-2:#15191e;--surface-3:#1b1f24;--shadow:#030405;--line:#242c37;--grid:#171d25;--accent:#22d3ee;--accent-soft:#0a2a33;--warn:#ffb02e;--good:#a3e635;--bad:#ff6b6b;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#e66767;--seq1:#0d4a5a;--seq2:#266675;--seq3:#408190;--seq4:#599dab;--seq5:#72b9c6;--seq6:#8cd4e1;--seq7:#a5f0fc;--k-person:#f5a524;--k-service:#6aa5ff;--k-data:#a78bfa;--k-queue:#f472b6;--k-external:#a1a1aa;--k-decision:#818cf8;--glow:#67e8f9}
+:root{--elev-1:0 1px 2px rgba(0,0,0,0.08),0 2px 6px rgba(0,0,0,0.06);--elev-2:0 2px 6px rgba(0,0,0,0.1),0 10px 24px rgba(0,0,0,0.1);--elev-3:0 6px 16px rgba(0,0,0,0.14),0 20px 48px rgba(0,0,0,0.16)}
+@supports (color: color-mix(in srgb, red, red)){:root{--elev-1:0 1px 2px color-mix(in srgb, var(--shadow) 8%, transparent),0 2px 6px color-mix(in srgb, var(--shadow) 6%, transparent);--elev-2:0 2px 6px color-mix(in srgb, var(--shadow) 10%, transparent),0 10px 24px color-mix(in srgb, var(--shadow) 10%, transparent);--elev-3:0 6px 16px color-mix(in srgb, var(--shadow) 14%, transparent),0 20px 48px color-mix(in srgb, var(--shadow) 16%, transparent)}}
+:root{--fs-xs:12px;--fs-sm:14px;--fs-base:17px;--fs-md:21px;--fs-lg:27px;--fs-xl:34px;--fs-hero:clamp(40px, 6vw, 60px);--lh-body:1.6;--lh-head:1.15;--lh-hero:1.05;--track-display:-0.02em;--track-hero:-0.03em;--fs-display:clamp(2.5rem, 1.25rem + 4.2vw, 4.75rem);--fs-numeral:clamp(4.5rem, 2rem + 9vw, 9rem);--sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;--sp-6:32px;--sp-7:48px;--sp-8:72px;--sp-9:112px;--fs-d3:28px;--fs-d2:37px;--fs-d1:49px;--lh-tight:1.1;--track-caps:0.07em;--num:tabular-nums lining-nums}
 a{color:var(--accent);text-decoration:none}
 .prose a, p a, li a, td a, dd a, figcaption a{text-decoration-line:underline;text-decoration-thickness:1px;text-underline-offset:0.22em;text-decoration-color:var(--accent)}
 @supports (color: color-mix(in srgb, red, red)){.prose a, p a, li a, td a, dd a, figcaption a{text-decoration-color:color-mix(in srgb, var(--accent) 45%, transparent)}}
 .prose a:hover, p a:hover, li a:hover, td a:hover, dd a:hover, figcaption a:hover{text-decoration-color:var(--accent)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.pa-label:not(text){font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:0.06em;color:var(--text-3);font-weight:600}
+.pa-caps,.pa-label:not(text){font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:var(--track-caps);color:var(--text-3);font-weight:var(--strong-weight)}
+.pa-num:not(text){font-variant-numeric:var(--num)}
 </style>
 <style>
 * { box-sizing: border-box; }
@@ -57,21 +60,25 @@ code, pre, .path, .tl-date, .code-lang { font-family: var(--mono); }
 /* layout measures: the section column, the contents column and its gap, and how far a band reaches past the
    column into each gutter. 16px fits the narrowest gutter (24px); 32px needs the contents gap on the left and,
    on the right, a column track wider than the column, which holds from 1200px. */
-:root { --col: 52rem; --toc-w: 13.5rem; --toc-gap: 56px; --band-x: 16px; --band-y: 32px; --card-rule: 3px; }
+:root { --col: 52rem; --toc-w: 13.5rem; --toc-gap: 56px; --band-x: 16px; --band-y: 32px; --card-rule: 3px; --gap-band: 104px; --gap-text: 60px; }
 @media (min-width: 1200px) {
   .has-toc { --band-x: 32px; }
 }
 
 /* hero: title, subtitle, meta chips and the toggle; a leading tldr is its card */
-.hero { max-width: 76rem; margin: 0 auto; padding: 44px 24px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: start; }
+.hero { max-width: 76rem; margin: 0 auto; padding: 64px 24px 8px; display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 24px; align-items: start; }
 .mast-text { grid-column: 1; grid-row: 1; min-width: 0; }
 .hero > .theme-toggle { grid-column: 2; grid-row: 1; }
-h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--font-display); letter-spacing: var(--track-hero); text-wrap: balance; overflow-wrap: anywhere; }
+h1 { margin: 0; max-width: 22em; font: var(--display-weight)var(--fs-hero)/var(--lh-hero) var(--font-display); letter-spacing: var(--track-hero); text-wrap: balance; overflow-wrap: anywhere; }
 .subtitle { margin: 14px 0 0; max-width: 42em; color: var(--text-2); font-size: var(--fs-md); line-height: var(--lh-body); text-wrap: pretty; }
 /* baseline: chips with a mono value are shorter, so align the text, not the boxes */
 .meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; margin: 20px 0 0; padding: 0; font-size: var(--fs-sm); }
 .meta div { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; max-width: 100%; padding: 2px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
-.meta dt { color: var(--text-3); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+/* On a classic page the chips are quiet (a caps label and its value, no box), so the verdict card under them is the
+   loudest thing in the hero. The flavored pages and the deck cover keep the chips their own sheets style. */
+:root[data-flavor="classic"] .hero .meta { gap: 6px 22px; margin-top: 22px; }
+:root[data-flavor="classic"] .hero .meta div { padding: 0; border: 0; background: none; }
+.meta dt { color: var(--text-3); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--track-caps); font-weight: var(--strong-weight); }
 .meta dd { margin: 0; color: var(--text-2); overflow-wrap: anywhere; }
 .meta .m-branch dd, .meta .m-repo dd, .meta .m-version dd { font-family: var(--mono); font-size: var(--fs-xs); }
 .theme-toggle { flex: none; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; color: var(--text-2); }
@@ -82,11 +89,11 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 /* In one column the card's box matches a band's (the column plus --band-x on each side) and its text keeps the
    column edge. Beside a contents list it starts at the text edge, spans the list, and ends where a band ends.
    The left rule takes the tldr tone (accent when it has none). */
-.hero-tldr { grid-column: 1 / -1; margin: 28px calc(-1 * var(--band-x)) 0; max-width: calc(var(--col) + 2 * var(--band-x)); scroll-margin-top: 24px; background: var(--surface); border-left: var(--card-rule) solid var(--tc, var(--accent)); border-radius: 0 14px 14px 0; padding: 22px 28px 22px calc(var(--band-x) - var(--card-rule)); }
+.hero-tldr { grid-column: 1 / -1; margin: var(--sp-7) calc(-1 * var(--band-x)) 0; max-width: calc(var(--col) + 2 * var(--band-x)); scroll-margin-top: 24px; background: var(--surface); border-left: var(--card-rule) solid var(--tc, var(--accent)); border-radius: 0 14px 14px 0; padding: 22px 28px 22px calc(var(--band-x) - var(--card-rule)); }
 @media (min-width: 1100px) {
   .has-toc .hero-tldr { margin-left: 0; padding-left: 28px; max-width: calc(var(--toc-w) + var(--toc-gap) + var(--col) + var(--band-x)); }
 }
-.hero-tldr-title { margin: 0 0 12px; max-width: 40em; font: 600 var(--fs-base)/var(--lh-head) var(--font); color: var(--text-2); text-wrap: balance; overflow-wrap: anywhere; }
+.hero-tldr-title { margin: 0 0 12px; max-width: 40em; font: var(--strong-weight) var(--fs-base)/var(--lh-head) var(--font); color: var(--text-2); text-wrap: balance; overflow-wrap: anywhere; }
 .hero-tldr .tldr { background: none; border: 0; border-radius: 0; padding: 0; }
 @media (min-width: 900px) {
   .hero-tldr .tldr { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: 40px; align-items: start; }
@@ -106,26 +113,29 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .toc ol { list-style: none; margin: 0; padding: 0; }
 .toc a { display: block; padding: 5px 0 5px 14px; color: var(--text-2); text-decoration: none; font-size: var(--fs-sm); line-height: 1.35; box-shadow: inset 1px 0 0 var(--line); }
 .toc a:hover { color: var(--text); }
-.toc a[aria-current="location"] { color: var(--text); font-weight: 600; box-shadow: inset 2px 0 0 var(--accent); }
+.toc a[aria-current="location"] { color: var(--text); font-weight: var(--strong-weight); box-shadow: inset 2px 0 0 var(--accent); }
 @media (min-width: 1100px) {
   /* "Contents" lines up with the first section's eyebrow (inside the band's padding when that section is banded) */
   .toc { position: sticky; top: 24px; align-self: start; max-height: calc(100vh - 48px); overflow: auto; margin-top: 24px; }
   .layout:has(.sections > .sec-alt:first-child) .toc { margin-top: calc(24px + var(--band-y)); }
-  .toc summary { padding: 0 0 6px; cursor: default; list-style: none; text-transform: uppercase; letter-spacing: 0.06em; font-size: var(--fs-xs); color: var(--text-3); pointer-events: none; }
+  .toc summary { padding: 0 0 6px; cursor: default; list-style: none; text-transform: uppercase; letter-spacing: var(--track-caps); font-size: var(--fs-xs); color: var(--text-3); pointer-events: none; }
   .toc summary::-webkit-details-marker { display: none; }
 }
 
-/* sections: wide gaps instead of dividers; visual sections alternate onto a surface band (1st, 3rd, ...).
+/* sections: wide gaps instead of dividers, by role (--gap-band between sections in general and around a band,
+   --gap-text between two text sections, so a run of prose reads as one argument, not a stack of islands); visual
+   sections alternate onto a surface band (1st, 3rd, ...), lifted with the shared elevation (print drops it).
    The band reaches out into the gutters by --band-x, so its content keeps the column's edges and width; the
    hero card ends where a band ends. */
 .sec:first-child { margin-top: 24px; }
-.sec + .sec { margin-top: 96px; }
-.sec-alt { background: var(--surface); border-radius: 16px; padding: var(--band-y) var(--band-x); margin-inline: calc(-1 * var(--band-x)); }
+.sec + .sec { margin-top: var(--gap-band); }
+.sec-text + .sec-text { margin-top: var(--gap-text); }
+.sec-alt { background: var(--surface); border-radius: 16px; padding: var(--band-y) var(--band-x); margin-inline: calc(-1 * var(--band-x)); box-shadow: var(--elev-1); }
 /* inner surfaces drop to the page colour so they stay visible on the band (diagram.css and chart.css do the same) */
 .sec-alt :is(.kpi, .card, .cmp-col, .tablewrap) { background: var(--page); }
 .sec-eyebrow { margin: 0 0 8px; }
 .sec-eyebrow.pa-label { color: var(--accent); }
-.sec-title { position: relative; margin: 0 0 18px; max-width: 28em; font: 600 var(--fs-lg)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; scroll-margin-top: 24px; }
+.sec-title { position: relative; margin: 0 0 18px; max-width: 28em; font: var(--display-weight)var(--fs-lg)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; scroll-margin-top: 24px; }
 .sec { scroll-margin-top: 24px; }
 .anchor { margin-left: 0.5em; color: var(--text-3); font-family: var(--font); font-weight: 400; font-size: 0.8em; opacity: 0; }
 .sec-title:hover .anchor, .anchor:focus-visible { opacity: 1; }
@@ -136,16 +146,16 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .prose ul { padding-left: 1.3em; }
 .prose li + li { margin-top: 0.3em; }
 .prose code, .lead code, li code, td code, th code, p code { background: var(--accent-soft); border-radius: 4px; padding: 0.05em 0.35em; font-size: 0.88em; overflow-wrap: anywhere; }
-.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 6px; border: 1px solid var(--tc, var(--line)); border-radius: 5px; color: var(--tc, var(--text-2)); font-size: var(--fs-xs); font-weight: 600; line-height: 1.5; white-space: nowrap; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 8px 1px 6px; border: 1px solid var(--tc, var(--line)); border-radius: 5px; color: var(--tc, var(--text-2)); font-size: var(--fs-xs); font-weight: var(--strong-weight); line-height: 1.5; white-space: nowrap; }
 .gl { flex: none; }
 .btn { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 2px 10px; cursor: pointer; color: var(--text-2); font-size: var(--fs-xs); }
 .btn:hover { color: var(--text); }
 
 /* tldr */
-.tldr { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 24px 28px; }
+.tldr { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 24px 28px; box-shadow: var(--elev-1); }
 .tldr.tone-accent { border-color: var(--accent); }
 .tldr-tone { margin: 0 0 12px; }
-.lead { margin: 0; max-width: 46ch; font: 600 var(--fs-md)/1.35 var(--font-display); text-wrap: pretty; }
+.lead { margin: 0; max-width: 46ch; font: var(--display-weight)var(--fs-md)/1.35 var(--font-display); text-wrap: pretty; }
 .points { margin: 18px 0 0; padding-left: 1.2em; max-width: 60ch; }
 .points li + li { margin-top: 0.4em; }
 .sec-tldr .sec-title { font-size: var(--fs-base); font-family: var(--font); color: var(--text-2); margin-bottom: 10px; }
@@ -154,8 +164,10 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr)); align-items: start; gap: 12px; margin: 0; }
 /* the value leads each tile (visual order only), so values line up however long the labels are */
 /* the tile is a size container so the value can be sized from the tile's width (cqi) and never spills */
-.kpi { display: flex; flex-direction: column; container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
-.kpi dt { color: var(--text-2); font-size: var(--fs-sm); }
+.kpi { display: flex; flex-direction: column; container-type: inline-size; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; min-width: 0; box-shadow: var(--elev-1); }
+/* the label is the shared caps label (.pa-caps, set by the renderer: size, tracking, weight); it keeps the second text
+   ink it had, so the refresh lowers no contrast */
+.kpi dt { color: var(--text-2); }
 .kpi dd { margin: 0; }
 /* the whole value is one line ("87%", "1,204 ms"). --n (a character count, set by the renderer on the section:
    the longest of its one-line values, so they share one size; a wide or long value sets its own on the value)
@@ -176,7 +188,7 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
    scripts/lib/render/kpis.mjs) cannot be one line: it wraps inside its tile at the same size, and may break
    anywhere (an unbroken string, a long identifier), instead of widening the tile and the page. */
 .kpi-long .kpi-value { white-space: normal; overflow-wrap: anywhere; }
-.kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); order: -1; margin-bottom: 6px; font: 600 var(--fs-xl)/var(--lh-head) var(--font-display); font-size: min(var(--fs-xl), var(--kpi-fit)); letter-spacing: var(--track-display); font-variant-numeric: tabular-nums; white-space: nowrap; overflow-wrap: break-word; }
+.kpi-value { --kpi-fit: max(var(--fs-md), calc(100cqi / (var(--n, 8) * 0.7))); order: -1; margin-bottom: 6px; font: var(--display-weight)var(--fs-xl)/var(--lh-head) var(--font-display); font-size: min(var(--fs-xl), var(--kpi-fit)); letter-spacing: var(--track-display); font-variant-numeric: var(--num); white-space: nowrap; overflow-wrap: break-word; }
 .kpi-delta { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--tc, var(--text-2)); }
 .kpi-note { margin-top: 6px; color: var(--text-3); font-size: var(--fs-xs); }
 
@@ -187,10 +199,11 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
   .cards.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .cards.cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
-.card.tone-accent { border-color: var(--accent); }
-.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 6px; }
-.card-head h3 { margin: 0; font-size: var(--fs-base); line-height: var(--lh-head); font-weight: 600; flex: 1 1 8rem; min-width: 0; overflow-wrap: anywhere; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; box-shadow: var(--elev-1); }
+/* a tone is a top rule in the tone's colour, not a full border (the card keeps its hairline on the other sides) */
+.card:not(.tone-neutral), .cmp-col:not(.tone-neutral) { border-top: var(--card-rule) solid var(--tc); }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-bottom: 8px; }
+.card-head h3 { margin: 0; font-size: var(--fs-md); line-height: var(--lh-head); font-weight: var(--strong-weight); flex: 1 1 8rem; min-width: 0; overflow-wrap: anywhere; }
 .card-icon { color: var(--accent); flex: none; }
 .card p { margin: 0 0 0.6em; font-size: var(--fs-sm); color: var(--text-2); }
 .card p:last-child { margin-bottom: 0; }
@@ -199,12 +212,12 @@ h1 { margin: 0; max-width: 22em; font: 600 var(--fs-hero)/var(--lh-hero) var(--f
 
 /* tables */
 .tablewrap { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); overflow: auto; max-height: 32rem; }
-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); font-variant-numeric: var(--num); }
 caption { caption-side: bottom; padding: 8px 14px; color: var(--text-3); font-size: var(--fs-sm); text-align: left; }
 th, td { padding: 9px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); min-width: 5.5rem; }
 tbody tr:last-child > * { border-bottom: 0; }
-thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); color: var(--text-3); font-weight: 600; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
-tbody th { font-weight: 600; }
+thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); color: var(--text-3); font-weight: var(--strong-weight); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--track-caps); }
+tbody th { font-weight: var(--strong-weight); }
 .a-r { text-align: right; }
 .nw { white-space: nowrap; }
 .a-c { text-align: center; }
@@ -219,7 +232,7 @@ tbody th { font-weight: 600; }
 }
 
 /* files */
-.files { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.files { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: var(--elev-1); }
 .files-sum { margin: 0 0 10px; color: var(--text-2); font-size: var(--fs-sm); }
 .tree { list-style: none; margin: 0; padding: 0; }
 .tree .tree { margin: 2px 0 4px 10px; padding-left: 14px; border-left: 1px solid var(--line); }
@@ -238,7 +251,7 @@ tbody th { font-weight: 600; }
 /* steps and timeline */
 .steps { list-style: none; counter-reset: step; margin: 0; padding: 0; max-width: 66ch; }
 .step { counter-increment: step; position: relative; padding: 0 0 18px 44px; }
-.step::before { content: counter(step); position: absolute; left: 0; top: 0; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; }
+.step::before { content: counter(step); position: absolute; left: 0; top: 0; width: 28px; height: 28px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: var(--num); }
 .step:last-child { padding-bottom: 0; }
 .step-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; min-height: 28px; }
 .step p { margin: 4px 0 0; color: var(--text-2); }
@@ -257,9 +270,8 @@ tbody th { font-weight: 600; }
   .compare.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .compare.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
-.cmp-col { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
-.cmp-col.tone-accent { border-color: var(--accent); }
-.cmp-col h3 { margin: 0 0 8px; font-size: var(--fs-base); font-weight: 600; overflow-wrap: anywhere; }
+.cmp-col { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; box-shadow: var(--elev-1); }
+.cmp-col h3 { margin: 0 0 8px; font-size: var(--fs-md); line-height: var(--lh-head); font-weight: var(--strong-weight); overflow-wrap: anywhere; }
 .cmp-col h3 + .chip { margin-bottom: 8px; }
 .cmp-col ul { margin: 0; padding-left: 1.2em; color: var(--text-2); font-size: var(--fs-sm); }
 .cmp-col li + li { margin-top: 0.35em; }
@@ -275,9 +287,20 @@ tbody th { font-weight: 600; }
 .code-lang { color: var(--text-3); font-size: var(--fs-xs); }
 .code pre { margin: 0; padding: 14px 16px; overflow: auto; font-size: var(--fs-sm); line-height: 1.55; tab-size: 2; }
 .code pre code { background: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
+/* a diff: one block per line, the sign is in the text; a bar and a tint back it up, never colour alone */
+.dl { display: block; margin: 0 -16px; padding: 0 16px; white-space: pre; }
+.dl-add { box-shadow: inset 3px 0 0 var(--good); }
+.dl-del { box-shadow: inset 3px 0 0 var(--bad); }
+.dl-hunk { color: var(--text-3); box-shadow: inset 3px 0 0 var(--line); }
+.dl-meta, .dl-note { color: var(--text-3); }
+@supports (color: color-mix(in srgb, red, red)) {
+  .dl-add { background: color-mix(in srgb, var(--good) 13%, transparent); }
+  .dl-del { background: color-mix(in srgb, var(--bad) 13%, transparent); }
+  .dl-hunk { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+}
 .code figcaption, .img figcaption { padding: 8px 16px 10px; color: var(--text-3); font-size: var(--fs-sm); border-top: 1px solid var(--line); }
-.det { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; max-width: 66ch; }
-.det summary { cursor: pointer; padding: 12px 16px; font-weight: 600; }
+.det { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; max-width: 66ch; box-shadow: var(--elev-1); }
+.det summary { cursor: pointer; padding: 12px 16px; font-weight: var(--strong-weight); }
 .det-body { padding: 0 16px 14px; }
 .img { margin: 0; }
 .img img { display: block; max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -288,9 +311,9 @@ tbody th { font-weight: 600; }
 .cl-context { margin: 0 0 20px; max-width: none; }
 .cl-bar { position: sticky; top: 0; z-index: 3; margin: 0 0 18px; padding: 10px 0 12px; background: var(--page); border-bottom: 1px solid var(--line); }
 .cl-bar-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; min-height: 30px; }
-.cl-count { font-size: var(--fs-base); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.cl-count strong { font-weight: 600; }
-.cl-pct { color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cl-count { font-size: var(--fs-base); font-variant-numeric: var(--num); white-space: nowrap; }
+.cl-count strong { font-weight: var(--strong-weight); }
+.cl-pct { color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: var(--num); white-space: nowrap; }
 .cl-reset { margin-left: auto; }
 .cl-reset[aria-disabled="true"] { opacity: 0.55; cursor: default; }
 .cl-reset[aria-disabled="true"]:hover { color: var(--text-2); }
@@ -303,9 +326,9 @@ tbody th { font-weight: 600; }
 .cl-flag .chip { white-space: normal; }
 .cl-group { margin: 0 0 16px; padding: 12px 16px 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .cl-group-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
-.cl-group-head h3 { margin: 0; font-size: var(--fs-base); font-weight: 600; overflow-wrap: anywhere; }
-.cl-tally { flex: none; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.is-complete .cl-tally { color: var(--good); font-weight: 600; }
+.cl-group-head h3 { margin: 0; font-size: var(--fs-base); font-weight: var(--strong-weight); overflow-wrap: anywhere; }
+.cl-tally { flex: none; color: var(--text-2); font-size: var(--fs-sm); font-variant-numeric: var(--num); white-space: nowrap; }
+.is-complete .cl-tally { color: var(--good); font-weight: var(--strong-weight); }
 .cl-items { list-style: none; margin: 0; padding: 0; }
 .cl-item + .cl-item { border-top: 1px solid var(--line); }
 .cl-label { display: flex; gap: 12px; align-items: flex-start; min-height: 44px; padding: 10px 0; cursor: pointer; }
@@ -318,10 +341,17 @@ tbody th { font-weight: 600; }
 .cl-text { overflow-wrap: anywhere; }
 .is-done .cl-text { color: var(--text-2); }
 .cl-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; }
-.cl-item-chip { display: inline-flex; }
+.cl-item-chip { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+.cl-group-intro { margin: 10px 0 2px; font-size: var(--fs-sm); color: var(--text-2); max-width: 62ch; }
+.cl-group-intro p { margin: 0 0 0.6em; }
+.cl-detail { margin: -4px 0 10px 2.1rem; max-width: 62ch; font-size: var(--fs-sm); }
+.cl-steps { margin: 0 0 6px; padding-left: 1.3em; }
+.cl-steps li + li { margin-top: 0.25em; }
+.cl-expect { margin: 0; color: var(--text-2); }
+.cl-expect strong { color: var(--text); font-weight: var(--strong-weight); }
 .cl-note { display: block; margin-top: 2px; color: var(--text-3); font-size: var(--fs-sm); }
 .cl-fail { margin-top: 24px; max-width: 66ch; }
-.cl-fail-title { margin: 0 0 8px; font-size: var(--fs-base); font-weight: 600; }
+.cl-fail-title { margin: 0 0 8px; font-size: var(--fs-base); font-weight: var(--strong-weight); }
 .cl-fail p, .cl-fail ul { margin: 0 0 0.8em; }
 .cl-fail ul { padding-left: 1.3em; }
 .cl-fail li + li { margin-top: 0.3em; }
@@ -348,6 +378,7 @@ tbody th { font-weight: 600; }
     --title-line: calc(var(--fs-hero-phone) * var(--lh-hero));
     --glyph-overhang: calc(var(--fs-hero-phone) * 0.12);
   }
+  :root { --gap-band: 64px; --gap-text: 40px; }
   .hero { display: block; position: relative; padding: var(--hero-top) 16px 4px; }
   .hero > .theme-toggle { position: absolute; top: calc(var(--hero-top) + var(--title-line) - var(--glyph-overhang) - var(--toggle-size)); right: 16px; width: var(--toggle-size); height: var(--toggle-size); }
   h1 { font-size: var(--fs-hero-phone); }
@@ -357,7 +388,6 @@ tbody th { font-weight: 600; }
   .meta div { padding: 0; border: 0; background: none; }
   .layout { padding: 4px 16px 72px; }
   .tldr { padding: 18px 18px; }
-  .sec + .sec { margin-top: 64px; }
   .sec-alt { margin-inline: -16px; border-radius: 0; padding: 28px 16px; }
   .cl-group { padding: 10px 14px 2px; }
   .sec-title { font-size: var(--fs-md); }
@@ -366,6 +396,7 @@ tbody th { font-weight: 600; }
 @media print {
   :root { color-scheme: light; --page: #fff; --surface: #fff; --text: #000; --text-2: #333; --text-3: #555; --line: #bbb; --accent: #000; --accent-soft: #eee; }
   body { font-size: 11pt; }
+  .tldr, .kpi, .card, .files, .cmp-col, .det, .sec-alt { box-shadow: none; }
   .theme-toggle, .toc, .copy, .anchor, .skip, .cl-reset, .cl-confirm { display: none !important; }
   .layout, .has-toc .layout { display: block; padding: 0; }
   .hero { padding: 0 0 8px; }
@@ -382,7 +413,7 @@ tbody th { font-weight: 600; }
   .cl-box:checked::before { background: #fff; }
   .sec-title { break-after: avoid; }
   .tablewrap, .code pre { max-height: none; overflow: visible; }
-  .code pre { white-space: pre-wrap; }
+  .code pre, .dl { white-space: pre-wrap; }
   a { color: inherit; }
 }
 </style>
@@ -408,11 +439,11 @@ main { counter-reset: plan-item; }
 .plan-verdict { border: 2px solid var(--text); }
 
 /* the kicker: a big running number and what is asked ("Decision needed") */
-.plan-kicker { display: flex; align-items: baseline; gap: 12px; margin: 0 0 10px; color: var(--accent); font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; }
-.plan-num::before { content: counter(plan-item, decimal-leading-zero); color: var(--text); font: 600 var(--plan-num)/1 var(--font-display); letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.plan-kicker { display: flex; align-items: baseline; gap: 12px; margin: 0 0 10px; color: var(--accent); font-size: var(--fs-xs); font-weight: var(--strong-weight); letter-spacing: var(--track-caps); text-transform: uppercase; }
+.plan-num::before { content: counter(plan-item, decimal-leading-zero); color: var(--text); font: var(--display-weight)var(--plan-num)/1 var(--font-display); letter-spacing: 0; font-variant-numeric: var(--num); }
 .plan-verdict .plan-num { display: none; }
 
-.plan-q { display: block; margin: 0 0 var(--plan-gap); padding: 0; max-width: 34em; color: var(--text); font: 600 var(--fs-md)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; }
+.plan-q { display: block; margin: 0 0 var(--plan-gap); padding: 0; max-width: 34em; color: var(--text); font: var(--display-weight)var(--fs-md)/var(--lh-head) var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; }
 .plan-decision .plan-q { font-size: var(--fs-lg); }
 .plan-set { min-width: 0; margin: 0; padding: 0; border: 0; }
 /* a floated legend lays out like a block (margins apply); what follows clears it */
@@ -429,7 +460,7 @@ main { counter-reset: plan-item; }
 .plan-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); box-shadow: 0 0 0 1px var(--accent); }
 .plan-opt-body { display: grid; flex: 1; gap: 6px; min-width: 0; }
 .plan-opt-head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.plan-opt-label { color: var(--text); font-size: var(--fs-md); font-weight: 600; line-height: var(--lh-head); overflow-wrap: anywhere; }
+.plan-opt-label { color: var(--text); font-size: var(--fs-md); font-weight: var(--strong-weight); line-height: var(--lh-head); overflow-wrap: anywhere; }
 .plan-pc { display: grid; gap: 3px; margin: 0; padding: 0; list-style: none; color: var(--text-2); font-size: var(--fs-sm); }
 .plan-pc li { display: flex; align-items: baseline; gap: 8px; overflow-wrap: anywhere; }
 .plan-pc .gl { position: relative; top: 2px; }
@@ -444,20 +475,20 @@ main { counter-reset: plan-item; }
 
 /* why, default */
 .plan-why { margin: var(--plan-gap) 0 0; border-top: 1px solid var(--line); }
-.plan-why summary { padding: 12px 0 6px; color: var(--text); font-weight: 600; cursor: pointer; overflow-wrap: anywhere; }
+.plan-why summary { padding: 12px 0 6px; color: var(--text); font-weight: var(--strong-weight); cursor: pointer; overflow-wrap: anywhere; }
 .plan-why-body { color: var(--text-2); }
 .plan-default { margin: 12px 0 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.plan-default-k { color: var(--text); font-weight: 600; }
+.plan-default-k { color: var(--text); font-weight: var(--strong-weight); }
 
 /* approval facts */
 .plan-facts { display: flex; flex-wrap: wrap; gap: 6px 24px; margin: 0 0 var(--plan-gap); font-size: var(--fs-sm); }
 .plan-facts div { display: flex; gap: 8px; min-width: 0; }
-.plan-facts dt { color: var(--text-3); font-size: var(--fs-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.9; }
+.plan-facts dt { color: var(--text-3); font-size: var(--fs-xs); font-weight: var(--strong-weight); letter-spacing: var(--track-caps); text-transform: uppercase; line-height: 1.9; }
 .plan-facts dd { margin: 0; color: var(--text); overflow-wrap: anywhere; }
 
 /* approve / changes / reject and the verdict: a row of answer chips */
 .plan-choices { display: flex; flex-wrap: wrap; gap: 8px; }
-.plan-choice { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: max(2px, calc(var(--plan-r) - 4px)); background: var(--page); color: var(--text); font-weight: 600; cursor: pointer; }
+.plan-choice { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 14px; border: 1px solid var(--line); border-radius: max(2px, calc(var(--plan-r) - 4px)); background: var(--page); color: var(--text); font-weight: var(--strong-weight); cursor: pointer; }
 .plan-choice input[type="radio"] { margin: 0; accent-color: var(--tc); }
 .plan-choice .gl { color: var(--tc); }
 .plan-choice:hover { border-color: var(--tc); }
@@ -465,7 +496,7 @@ main { counter-reset: plan-item; }
 
 /* free text */
 .plan-field { display: grid; gap: 6px; margin: var(--plan-gap) 0 0; }
-.plan-field-label { color: var(--text-2); font-size: var(--fs-sm); font-weight: 600; }
+.plan-field-label { color: var(--text-2); font-size: var(--fs-sm); font-weight: var(--strong-weight); }
 .plan-text, .plan-input { width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line); border-radius: max(2px, calc(var(--plan-r) - 6px)); background: var(--page); color: var(--text); font: inherit; font-size: var(--fs-base); }
 .plan-text { resize: vertical; }
 .plan-question .plan-text { min-height: 6rem; }
@@ -475,7 +506,7 @@ main { counter-reset: plan-item; }
 .plan-verdict-foot { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; margin-top: var(--plan-gap); }
 .plan-reviewer { flex: 1 1 14rem; margin: 0; }
 .plan-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.plan-btn { min-height: 44px; padding: 8px 16px; border-color: var(--text-3); color: var(--text); font-size: var(--fs-sm); font-weight: 600; }
+.plan-btn { min-height: 44px; padding: 8px 16px; border-color: var(--text-3); color: var(--text); font-size: var(--fs-sm); font-weight: var(--strong-weight); }
 .plan-btn:hover { border-color: var(--accent); }
 .plan-status { margin: 10px 0 0; color: var(--text-2); font-size: var(--fs-sm); }
 .plan-status:empty { margin: 0; }
@@ -485,15 +516,15 @@ main { counter-reset: plan-item; }
 /* review these first: numbered, each with why and a link down to the detail */
 .plan-review { display: grid; gap: 10px; max-width: 46rem; margin: 0; padding: 0; list-style: none; counter-reset: review; }
 .plan-review-item { counter-increment: review; position: relative; padding: 12px 16px 12px 56px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
-.plan-review-item::before { content: counter(review); position: absolute; left: 16px; top: 10px; width: 28px; color: var(--accent); font: 600 var(--fs-lg)/1 var(--font-display); font-variant-numeric: tabular-nums; text-align: center; }
-.plan-review-point { margin: 0; color: var(--text); font-weight: 600; overflow-wrap: anywhere; }
+.plan-review-item::before { content: counter(review); position: absolute; left: 16px; top: 10px; width: 28px; color: var(--accent); font: var(--display-weight)var(--fs-lg)/1 var(--font-display); font-variant-numeric: var(--num); text-align: center; }
+.plan-review-point { margin: 0; color: var(--text); font-weight: var(--strong-weight); overflow-wrap: anywhere; }
 .plan-review-why { margin: 2px 0 0; color: var(--text-2); font-size: var(--fs-sm); overflow-wrap: anywhere; }
-.plan-review-go { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--accent); font-size: var(--fs-sm); font-weight: 600; overflow-wrap: anywhere; }
+.plan-review-go { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; color: var(--accent); font-size: var(--fs-sm); font-weight: var(--strong-weight); overflow-wrap: anywhere; }
 .plan-review-go code { background: none; padding: 0; }
 
 /* the deck form: no controls */
 /* the indent holds a two-character numeral ("1.") inside the panel's text edge */
-.plan-opts-static { display: grid; gap: 6px; margin: 0 0 var(--plan-gap); padding-left: 2.2em; font-variant-numeric: tabular-nums; }
+.plan-opts-static { display: grid; gap: 6px; margin: 0 0 var(--plan-gap); padding-left: 2.2em; font-variant-numeric: var(--num); }
 .plan-opts-static li { padding-left: 4px; }
 .plan-opts-static .plan-opt-label { font-size: inherit; }
 .plan-opt-static.is-rec .chip { margin-left: 10px; vertical-align: 2px; }
@@ -521,7 +552,7 @@ main { counter-reset: plan-item; }
 [data-theme-name="mono"] .plan-opt, [data-theme-name="mono"] .plan-choice, [data-theme-name="mono"] .plan-text, [data-theme-name="mono"] .plan-input { border-radius: 2px; }
 [data-theme-name="mono"] .plan-opts { gap: 6px; }
 [data-theme-name="mono"] .plan-opt { padding: 10px 12px; }
-[data-theme-name="mono"] .plan-kicker, [data-theme-name="mono"] .plan-default-k, [data-theme-name="mono"] .plan-why summary { text-transform: uppercase; letter-spacing: 0.08em; }
+[data-theme-name="mono"] .plan-kicker, [data-theme-name="mono"] .plan-default-k, [data-theme-name="mono"] .plan-why summary { text-transform: uppercase; letter-spacing: var(--track-caps); }
 [data-theme-name="mono"] .plan-why summary, [data-theme-name="mono"] .plan-default-k { font-size: var(--fs-xs); color: var(--accent); }
 [data-theme-name="mono"] .plan-item .chip { border-radius: 2px; }
 [data-theme-name="mono"] .plan-item strong { color: var(--accent); }
@@ -578,16 +609,16 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 }
 .pa-diagram{display:block;font-family:var(--font);font-size:14px;font-variant-numeric:normal;color:var(--text)}
 .pa-group-box{fill:var(--surface);stroke:var(--line);stroke-width:1}
-@supports (color: color-mix(in srgb, red, red)){.pa-group-box{fill:color-mix(in srgb,var(--text-3) 7%,transparent)}}
+@supports (color: color-mix(in srgb, red, red)){.pa-group-box{fill:color-mix(in srgb,var(--text-3) 7%,var(--surface))}:where(.pa-group:not([data-depth="0"])) > .pa-group-box{fill:color-mix(in srgb,var(--text-3) 14%,var(--surface))}}
 .pa-lane{stroke:none}
 .pa-group-label{fill:var(--text-2);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}
-.pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.25;stroke-linejoin:round}
-.pa-edge-dashed .pa-wire{stroke-dasharray:6 4}
-.pa-edge-async .pa-wire{stroke-dasharray:1.5 4;stroke-linecap:round}
+.pa-wire{fill:none;stroke:var(--text-3);stroke-width:1.5;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.pa-edge-dashed .pa-wire{stroke-width:1.25;stroke-dasharray:6 4}
+.pa-edge-async .pa-wire{stroke-width:1.25;stroke-dasharray:1 4.5;stroke-linecap:round}
 .pa-hit{fill:none;stroke:transparent;stroke-width:12px;vector-effect:non-scaling-stroke;pointer-events:visibleStroke}
 .pa-arrow-fill{fill:var(--text-3);fill:context-stroke;stroke:none}
 .pa-arrow-open{fill:none;stroke:var(--text-3);stroke:context-stroke;stroke-width:1.25;stroke-linecap:round;stroke-linejoin:round}
-.pa-edge-plate{fill:var(--surface);stroke:var(--line);stroke-width:1}
+.pa-edge-plate{fill:var(--surface);stroke:none}
 .pa-edge-text{fill:var(--text-2);font-size:12px;font-weight:400}
 .pa-node{outline:none}
 .pa-shape{fill:var(--surface);stroke:var(--line);stroke-width:1.5}
@@ -609,44 +640,39 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 .pa-frame-label{fill:var(--text-2);font-size:12px;font-weight:400}
 .pa-seq-note-box{fill:var(--surface);stroke:var(--text-3);stroke-width:1}
 .pa-seq-note-text{fill:var(--text-2);font-family:var(--mono);font-size:11px;font-weight:400}
-.pa-family-person .pa-shape{fill:var(--surface);stroke:var(--k-person)}
-.pa-family-person .pa-decor{stroke:var(--k-person)}
+.pa-family-person .pa-shape{fill:var(--surface);stroke:var(--line)}
 .pa-family-person .pa-tile{fill:var(--surface)}
 .pa-family-person .pa-icon{color:var(--k-person)}
 .pa-family-person .pa-type{fill:var(--k-person)}
-.pa-edge[data-family="person"] .pa-wire{stroke:var(--k-person)}
-.pa-family-service .pa-shape{fill:var(--surface);stroke:var(--k-service)}
-.pa-family-service .pa-decor{stroke:var(--k-service)}
+.pa-family-service .pa-shape{fill:var(--surface);stroke:var(--line)}
 .pa-family-service .pa-tile{fill:var(--surface)}
 .pa-family-service .pa-icon{color:var(--k-service)}
 .pa-family-service .pa-type{fill:var(--k-service)}
-.pa-edge[data-family="service"] .pa-wire{stroke:var(--k-service)}
-.pa-family-data .pa-shape{fill:var(--surface);stroke:var(--k-data)}
-.pa-family-data .pa-decor{stroke:var(--k-data)}
+.pa-family-data .pa-shape{fill:var(--surface);stroke:var(--line)}
 .pa-family-data .pa-tile{fill:var(--surface)}
 .pa-family-data .pa-icon{color:var(--k-data)}
 .pa-family-data .pa-type{fill:var(--k-data)}
-.pa-edge[data-family="data"] .pa-wire{stroke:var(--k-data)}
-.pa-family-queue .pa-shape{fill:var(--surface);stroke:var(--k-queue)}
-.pa-family-queue .pa-decor{stroke:var(--k-queue)}
+.pa-family-queue .pa-shape{fill:var(--surface);stroke:var(--line)}
 .pa-family-queue .pa-tile{fill:var(--surface)}
 .pa-family-queue .pa-icon{color:var(--k-queue)}
 .pa-family-queue .pa-type{fill:var(--k-queue)}
-.pa-edge[data-family="queue"] .pa-wire{stroke:var(--k-queue)}
-.pa-family-external .pa-shape{fill:var(--surface);stroke:var(--k-external)}
-.pa-family-external .pa-decor{stroke:var(--k-external)}
+.pa-family-external .pa-shape{fill:var(--surface);stroke:var(--line)}
 .pa-family-external .pa-tile{fill:var(--surface)}
 .pa-family-external .pa-icon{color:var(--k-external)}
 .pa-family-external .pa-type{fill:var(--k-external)}
-.pa-edge[data-family="external"] .pa-wire{stroke:var(--k-external)}
-.pa-family-decision .pa-shape{fill:var(--surface);stroke:var(--k-decision)}
-.pa-family-decision .pa-decor{stroke:var(--k-decision)}
+.pa-family-decision .pa-shape{fill:var(--surface);stroke:var(--line)}
 .pa-family-decision .pa-tile{fill:var(--surface)}
 .pa-family-decision .pa-icon{color:var(--k-decision)}
 .pa-family-decision .pa-type{fill:var(--k-decision)}
-.pa-edge[data-family="decision"] .pa-wire{stroke:var(--k-decision)}
 .pa-family-bare .pa-shape{fill:var(--surface);stroke:var(--line)}
-@supports (color: color-mix(in srgb, red, red)){.pa-family-person .pa-shape{fill:color-mix(in srgb,var(--k-person) 10%,var(--surface))}.pa-family-person .pa-tile{fill:color-mix(in srgb,var(--k-person) 18%,var(--surface))}.pa-family-service .pa-shape{fill:color-mix(in srgb,var(--k-service) 10%,var(--surface))}.pa-family-service .pa-tile{fill:color-mix(in srgb,var(--k-service) 18%,var(--surface))}.pa-family-data .pa-shape{fill:color-mix(in srgb,var(--k-data) 10%,var(--surface))}.pa-family-data .pa-tile{fill:color-mix(in srgb,var(--k-data) 18%,var(--surface))}.pa-family-queue .pa-shape{fill:color-mix(in srgb,var(--k-queue) 10%,var(--surface))}.pa-family-queue .pa-tile{fill:color-mix(in srgb,var(--k-queue) 18%,var(--surface))}.pa-family-external .pa-shape{fill:color-mix(in srgb,var(--k-external) 10%,var(--surface))}.pa-family-external .pa-tile{fill:color-mix(in srgb,var(--k-external) 18%,var(--surface))}.pa-family-decision .pa-shape{fill:color-mix(in srgb,var(--k-decision) 10%,var(--surface))}.pa-family-decision .pa-tile{fill:color-mix(in srgb,var(--k-decision) 18%,var(--surface))}}
+@supports (color: color-mix(in srgb, red, red)){.pa-family-person .pa-tile{fill:color-mix(in srgb,var(--k-person) 28%,var(--surface))}.pa-family-service .pa-tile{fill:color-mix(in srgb,var(--k-service) 28%,var(--surface))}.pa-family-data .pa-tile{fill:color-mix(in srgb,var(--k-data) 28%,var(--surface))}.pa-family-queue .pa-tile{fill:color-mix(in srgb,var(--k-queue) 28%,var(--surface))}.pa-family-external .pa-tile{fill:color-mix(in srgb,var(--k-external) 28%,var(--surface))}.pa-family-decision .pa-tile{fill:color-mix(in srgb,var(--k-decision) 28%,var(--surface))}}
+@media (prefers-color-scheme: dark){:where(:root:not([data-theme="light"])) .pa-node .pa-shape{stroke:var(--text-3)}}
+:where(:root[data-theme="dark"]) .pa-node .pa-shape{stroke:var(--text-3)}
+.pa-node .pa-shape-diamond,.pa-node .pa-shape-small-diamond{stroke:var(--text-3)}
+.pa-kind-external .pa-shape{stroke:var(--text-3)}
+.pa-node:not(.pa-family-bare) .pa-shape{filter:drop-shadow(0 1px 2px rgba(0,0,0,.08))}
+@supports (color: color-mix(in srgb, red, red)){.pa-node:not(.pa-family-bare) .pa-shape{filter:drop-shadow(0 1px 2px color-mix(in srgb,var(--shadow) 14%,transparent))}}
+@media print{.pa-shape{filter:none}}
 .pa-node .pa-shape-filled-dot{fill:var(--text-2);stroke:var(--text-2)}
 .pa-node .pa-shape-ringed-dot{stroke:var(--text-2);stroke-width:1.5}
 .pa-node .pa-decor-dot{fill:var(--text-2);stroke:none}
@@ -654,15 +680,19 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 .pa-tone-accent .pa-shape{stroke:var(--accent);stroke-width:2}
 .pa-tone-accent .pa-shape-filled-dot{fill:var(--accent)}
 .pa-tone-accent .pa-icon{color:var(--accent)}
+.pa-swatch.pa-tone-accent{stroke:var(--accent);stroke-width:2}
 .pa-tone-good .pa-shape{stroke:var(--good);stroke-width:2}
 .pa-tone-good .pa-shape-filled-dot{fill:var(--good)}
 .pa-tone-good .pa-icon{color:var(--good)}
+.pa-swatch.pa-tone-good{stroke:var(--good);stroke-width:2}
 .pa-tone-warn .pa-shape{stroke:var(--warn);stroke-width:2}
 .pa-tone-warn .pa-shape-filled-dot{fill:var(--warn)}
 .pa-tone-warn .pa-icon{color:var(--warn)}
+.pa-swatch.pa-tone-warn{stroke:var(--warn);stroke-width:2}
 .pa-tone-bad .pa-shape{stroke:var(--bad);stroke-width:2}
 .pa-tone-bad .pa-shape-filled-dot{fill:var(--bad)}
 .pa-tone-bad .pa-icon{color:var(--bad)}
+.pa-swatch.pa-tone-bad{stroke:var(--bad);stroke-width:2}
 .pa-group[data-lane="0"] .pa-lane{fill:var(--s1)}
 .pa-group[data-lane="1"] .pa-lane{fill:var(--s2)}
 .pa-group[data-lane="2"] .pa-lane{fill:var(--s3)}
@@ -671,18 +701,24 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 .pa-group[data-lane="5"] .pa-lane{fill:var(--s6)}
 .pa-group[data-lane="6"] .pa-lane{fill:var(--s7)}
 .pa-group[data-lane="7"] .pa-lane{fill:var(--s8)}
+@supports (color: color-mix(in srgb, red, red)){.pa-group[data-lane="0"] .pa-lane{fill:color-mix(in srgb,var(--s1) 45%,var(--surface))}.pa-group[data-lane="1"] .pa-lane{fill:color-mix(in srgb,var(--s2) 45%,var(--surface))}.pa-group[data-lane="2"] .pa-lane{fill:color-mix(in srgb,var(--s3) 45%,var(--surface))}.pa-group[data-lane="3"] .pa-lane{fill:color-mix(in srgb,var(--s4) 45%,var(--surface))}.pa-group[data-lane="4"] .pa-lane{fill:color-mix(in srgb,var(--s5) 45%,var(--surface))}.pa-group[data-lane="5"] .pa-lane{fill:color-mix(in srgb,var(--s6) 45%,var(--surface))}.pa-group[data-lane="6"] .pa-lane{fill:color-mix(in srgb,var(--s7) 45%,var(--surface))}.pa-group[data-lane="7"] .pa-lane{fill:color-mix(in srgb,var(--s8) 45%,var(--surface))}}
 .pa-legend-text{fill:var(--text-2);font-size:11px}
-.pa-swatch{stroke-width:1}
-.pa-swatch.pa-family-person{fill:var(--surface);stroke:var(--k-person)}
-.pa-swatch.pa-family-service{fill:var(--surface);stroke:var(--k-service)}
-.pa-swatch.pa-family-data{fill:var(--surface);stroke:var(--k-data)}
-.pa-swatch.pa-family-queue{fill:var(--surface);stroke:var(--k-queue)}
-.pa-swatch.pa-family-external{fill:var(--surface);stroke:var(--k-external)}
-.pa-swatch.pa-family-decision{fill:var(--surface);stroke:var(--k-decision)}
-.pa-swatch.pa-family-bare{fill:var(--surface);stroke:var(--line)}
-@supports (color: color-mix(in srgb, red, red)){.pa-swatch.pa-family-person{fill:color-mix(in srgb,var(--k-person) 10%,var(--surface))}.pa-swatch.pa-family-service{fill:color-mix(in srgb,var(--k-service) 10%,var(--surface))}.pa-swatch.pa-family-data{fill:color-mix(in srgb,var(--k-data) 10%,var(--surface))}.pa-swatch.pa-family-queue{fill:color-mix(in srgb,var(--k-queue) 10%,var(--surface))}.pa-swatch.pa-family-external{fill:color-mix(in srgb,var(--k-external) 10%,var(--surface))}.pa-swatch.pa-family-decision{fill:color-mix(in srgb,var(--k-decision) 10%,var(--surface))}}
-.pa-legend-sample .pa-wire{stroke-width:1.5}
+.pa-swatch{fill:var(--surface);stroke:var(--line);stroke-width:1}
+@media (prefers-color-scheme: dark){:where(:root:not([data-theme="light"])) .pa-swatch{stroke:var(--text-3)}}
+:where(:root[data-theme="dark"]) .pa-swatch{stroke:var(--text-3)}
+.pa-swatch-mark.pa-family-person{fill:var(--k-person)}
+.pa-swatch-mark.pa-family-service{fill:var(--k-service)}
+.pa-swatch-mark.pa-family-data{fill:var(--k-data)}
+.pa-swatch-mark.pa-family-queue{fill:var(--k-queue)}
+.pa-swatch-mark.pa-family-external{fill:var(--k-external)}
+.pa-swatch-mark.pa-family-decision{fill:var(--k-decision)}
+.pa-swatch.pa-family-external{stroke:var(--text-3);stroke-dasharray:3 2}
+.pa-swatch-diamond{stroke:var(--text-3)}
+.pa-swatch-stadium{stroke:var(--text-3)}
+.pa-swatch-filled-dot{fill:var(--text-2);stroke:none}
+.pa-swatch-ringed-dot{fill:var(--surface);stroke:var(--text-2);stroke-width:1.5}
 .pa-dim{opacity:.25}
+.pa-presenting .pa-dim{opacity:.4}
 .pa-hidden{opacity:0;visibility:hidden}
 .pa-hl .pa-shape,.pa-on .pa-shape{stroke:var(--accent);stroke-width:2}
 .pa-hl > .pa-group-box{stroke:var(--accent);stroke-width:2}
@@ -704,11 +740,12 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 .pa-animate .pa-edge .pa-wire{animation:pa-flow 1.2s linear infinite}
 @keyframes pa-flow{to{stroke-dashoffset:calc(var(--pa-period) * -1)}}
 .pa-node,.pa-edge,.pa-edge-label,.pa-group,.pa-lifeline,.pa-frame,.pa-seq-note{transition:opacity .2s cubic-bezier(.23,1,.32,1),visibility .2s}
+.pa-presenting .pa-node,.pa-presenting .pa-edge,.pa-presenting .pa-edge-label,.pa-presenting .pa-group,.pa-presenting .pa-lifeline,.pa-presenting .pa-frame,.pa-presenting .pa-seq-note{transition:opacity .35s ease,visibility .35s}
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}:root:not([data-theme="light"]) .pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}@supports (color: color-mix(in srgb, red, red)){:root:not([data-theme="light"]) .pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}}}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}:root:not([data-theme="light"]) .pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}@supports (color: color-mix(in srgb, red, red)){:root:not([data-theme="light"]) .pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}:root:not([data-theme="light"]) .pa-edge-plate{fill:color-mix(in srgb,var(--text-3) 38%,var(--surface))}}}
 :root[data-theme="dark"] .pa-edge.pa-active .pa-wire{stroke-width:2.5;filter:drop-shadow(0 0 6px var(--glow))}
 :root[data-theme="dark"] .pa-dot{fill:var(--glow);filter:drop-shadow(0 0 6px var(--glow))}
-@supports (color: color-mix(in srgb, red, red)){:root[data-theme="dark"] .pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}}
+@supports (color: color-mix(in srgb, red, red)){:root[data-theme="dark"] .pa-group-box{fill:color-mix(in srgb,var(--text-3) 12%,transparent)}:root[data-theme="dark"] .pa-edge-plate{fill:color-mix(in srgb,var(--text-3) 38%,var(--surface))}}
 /* diagram sections: the card, the Present button and the full-screen overlay */
 .dg {
   --dg-max-h: 70vh; /* a tall card stops growing here ... */
@@ -735,6 +772,9 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 .dg-stage > svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .dg figcaption { grid-column: 1; grid-row: 2; max-width: 66ch; color: var(--text-3); font-size: var(--fs-sm); }
 .dg-present { grid-column: 2; grid-row: 2; padding: 4px 14px; font-size: var(--fs-sm); }
+/* shown by diagram.js while the slot scrolls sideways */
+.dg-cue { grid-column: 1 / -1; grid-row: 3; margin: 0; color: var(--text-2); font-size: var(--fs-sm); }
+.dg-cue[hidden] { display: none; }
 .dg > script { display: none; }
 
 .dg-overlay { width: 100vw; height: 100vh; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; background: var(--page); color: var(--text); }
@@ -743,7 +783,7 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 .dg-fs { flex: 1 1 0; min-height: 0; display: flex; flex-direction: column; background: var(--page); color: var(--text); }
 .dg-overlay::backdrop { background: var(--page); }
 .dg-top { flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 16px; background: var(--surface); border-bottom: 1px solid var(--line); }
-.dg-top-title { min-width: 0; font: 600 var(--fs-base)/var(--lh-head) var(--font-display); overflow-wrap: break-word; }
+.dg-top-title { min-width: 0; font: var(--display-weight)var(--fs-base)/var(--lh-head) var(--font-display); overflow-wrap: break-word; }
 /* narrow: the title takes its own row so the controls never squeeze it into mid-word breaks */
 @media (max-width: 719px) { .dg-top-title { flex: 1 1 100%; } }
 .dg-key { display: inline-block; margin-left: 4px; padding: 0 4px; border: 1px solid var(--line); border-radius: 4px; color: var(--text-3); font-size: var(--fs-xs); line-height: 1.5; }
@@ -778,13 +818,13 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 .dg-panel { flex: none; width: 300px; min-height: 0; overflow: auto; padding: 12px 16px; background: var(--surface); border-left: 1px solid var(--line); font-size: var(--fs-sm); }
 .dg-panel[hidden] { display: none; }
 .dg-panel-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.dg-panel-title { margin: 0; font: 600 var(--fs-base)/var(--lh-head) var(--font-display); overflow-wrap: anywhere; }
+.dg-panel-title { margin: 0; font: var(--display-weight)var(--fs-base)/var(--lh-head) var(--font-display); overflow-wrap: anywhere; }
 .dg-panel-body[hidden], .dg-panel-empty[hidden], .dg-panel [data-pa-panel-close][hidden] { display: none; }
 .dg-counts { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
 .dg-hint { margin: 8px 0 0; color: var(--text-2); }
 .dg-panel .panel-icon { margin: 8px 0; font-size: var(--fs-lg); line-height: 1; }
 .dg-panel .panel-glyph { width: 24px; height: 24px; color: var(--text-2); }
-.dg-panel .panel-kind, .dg-panel h3 { margin: 0; color: var(--text-3); font-size: var(--fs-xs); letter-spacing: 0.08em; text-transform: uppercase; }
+.dg-panel .panel-kind, .dg-panel h3 { margin: 0; color: var(--text-3); font-size: var(--fs-xs); letter-spacing: var(--track-caps); text-transform: uppercase; }
 .dg-panel h3 { margin: 14px 0 4px; }
 .dg-panel .panel-note, .dg-panel .panel-detail { margin: 8px 0 0; color: var(--text-2); overflow-wrap: anywhere; }
 .dg-panel ul { margin: 0; padding: 0; list-style: none; }
@@ -794,21 +834,21 @@ body:has(textarea:focus, input[type="text"]:focus) .plan-save-solo { display: no
 .dg-overlay .pa-row { display: block; width: 100%; margin: 0; padding: 4px 6px; background: none; border: 0; border-radius: 6px; color: inherit; font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
 .dg-overlay .pa-row:hover { background: var(--accent-soft); }
 .dg-overlay .pa-chip { background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px; cursor: pointer; color: var(--text-2); font: inherit; font-size: var(--fs-xs); line-height: 1.4; white-space: nowrap; }
-.dg-overlay .pa-chip[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: 600; }
+.dg-overlay .pa-chip[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--text); font-weight: var(--strong-weight); }
 .dg-cap { flex: none; display: flex; flex-direction: column; gap: 8px; padding: 10px 16px; background: var(--surface); border-top: 1px solid var(--line); }
 .dg-cap[hidden] { display: none; }
 .dg-cap-line { margin: 0; font-size: var(--fs-sm); line-height: 1.4; overflow-wrap: anywhere; }
 .dg-beats { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
 .dg-transport { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .dg-scrub { flex: 1 1 160px; min-width: 120px; margin: 0; }
-.dg-cap-count { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dg-cap-count { color: var(--text-3); font-size: var(--fs-xs); font-variant-numeric: var(--num); white-space: nowrap; }
 @media (max-width: 719px) { .dg-main { flex-direction: column; } .dg-panel { width: auto; max-height: 36%; border-left: 0; border-top: 1px solid var(--line); } }
 
 /* in a deck the card is bounded by the viewport, with a floor so a short window never collapses it */
 .slide-diagram .dg { --dg-max-h: max(calc(100dvh - 17rem), 160px); }
 
 @media print {
-  .dg-present { display: none; }
+  .dg-present, .dg-cue { display: none; }
   .dg-slot { break-inside: avoid; overflow: visible; }
   .dg-stage { width: 100%; }
 }
@@ -825,7 +865,7 @@ html[data-simple="on"] span[data-text="simple"] { display: inline; }
 
 /* The toggle is a theme-toggle pill (same surface, line and text tokens, same flavor treatment) that carries a word.
    Off is a hollow dot and on is a filled one, so the state does not rest on colour. */
-.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: var(--strong-weight); line-height: 1; white-space: nowrap; cursor: pointer; }
 .simple-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-radius: 50%; }
 /* The root attribute is there at first paint, before the script has set aria-pressed, so the look follows both. */
 html[data-simple="on"] .simple-toggle, .simple-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }
@@ -1044,9 +1084,9 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 <p class="sec-eyebrow pa-label">Numbers</p>
 <h2 class="sec-title" id="one-pr-one-cost-sample-one-untested-host-title">One PR, one cost sample, one untested host<a class="anchor" href="#one-pr-one-cost-sample-one-untested-host" aria-label="Link to this section: One PR, one cost sample, one untested host">#</a></h2>
 <dl class="kpis" style="--n: 6">
-<div class="kpi tone-neutral"><dt>Ships as</dt><dd class="kpi-value">1 PR</dd><dd class="kpi-note">one branch, three workstreams</dd></div>
-<div class="kpi tone-neutral"><dt>Cost</dt><dd class="kpi-value">$0.19</dd><dd class="kpi-note">one trial; the hand-off failed and the main model finished</dd></div>
-<div class="kpi tone-warn"><dt>Risk</dt><dd class="kpi-value">Medium</dd><dd class="kpi-delta"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></dd><dd class="kpi-note">Codex files ship untested</dd></div>
+<div class="kpi tone-neutral"><dt class="pa-caps">Ships as</dt><dd class="kpi-value pa-num">1 PR</dd><dd class="kpi-note">one branch, three workstreams</dd></div>
+<div class="kpi tone-neutral"><dt class="pa-caps">Cost</dt><dd class="kpi-value pa-num">$0.19</dd><dd class="kpi-note">one trial; the hand-off failed and the main model finished</dd></div>
+<div class="kpi tone-warn"><dt class="pa-caps">Risk</dt><dd class="kpi-value pa-num">Medium</dd><dd class="kpi-delta"><span class="chip tone-warn"><svg class="gl" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M8 2.5l6 10.5H2z"/><path d="M8 6.8v3M8 11.4v.1"/></svg><span>Caution</span></span></dd><dd class="kpi-note">Codex files ship untested</dd></div>
 </dl>
 </section>
 <section class="sec sec-decision" id="routing" aria-labelledby="routing-title">
@@ -1247,7 +1287,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 <h2 class="sec-title" id="out-as-a-page-back-as-a-file-title">Out as a page, back as a file<a class="anchor" href="#out-as-a-page-back-as-a-file" aria-label="Link to this section: Out as a page, back as a file">#</a></h2>
 <figure class="dg" data-diagram style="--dg-w: 419; --dg-h: 936">
 <div class="dg-slot" data-dg-slot data-dg-label="Diagram: The plan answer loop">
-<div class="dg-stage" data-dg-stage><svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-flow" viewBox="0 0 419 936" role="graphics-document" aria-labelledby="dg_10-title dg_10-desc"><title id="dg_10-title">The plan answer loop</title><desc id="dg_10-desc">flow diagram with 5 nodes and 4 edges.</desc><defs><marker id="dg_10-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="dg_10-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-edge pa-edge-solid" data-id="edge-0" data-from="spec" data-to="page" data-family="service"><path class="pa-wire" d="M263 126L263 290" fill="none" marker-end="url(#dg_10-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-1" data-from="page" data-to="file" data-family="service"><path class="pa-wire" d="M263 346L263 510" fill="none" marker-end="url(#dg_10-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-2" data-from="file" data-to="check" data-family="service"><path class="pa-wire" d="M263 564L263 636" fill="none" marker-end="url(#dg_10-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-3" data-from="check" data-to="agent" data-family="service"><path class="pa-wire" d="M263 708L263 872" fill="none" marker-end="url(#dg_10-arrow)"/></g><g class="pa-node pa-kind-io pa-family-service pa-tone-neutral" data-id="spec" tabindex="0" role="graphics-symbol" aria-label="Plan spec: io"><path class="pa-shape pa-shape-parallelogram" d="M192 54L346 54L334 126L180 126Z"/><rect class="pa-tile" x="206.2" y="76" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(211.2 81) scale(0.75)"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></g><text class="pa-type" text-anchor="middle"><tspan x="282" y="75">IO</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="282" y="94.24">Plan spec</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="282" y="111.69">plan.json</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Plan page: step"><path class="pa-shape pa-shape-rect" d="M208 290L318 290A2 2 0 0 1 320 292L320 344A2 2 0 0 1 318 346L208 346A2 2 0 0 1 206 344L206 292A2 2 0 0 1 208 290Z"/><text class="pa-label" text-anchor="middle"><tspan x="263" y="314.64">Plan page</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="263" y="332.09">mono or brief</tspan></text></g><g class="pa-node pa-kind-io pa-family-service pa-tone-neutral" data-id="file" tabindex="0" role="graphics-symbol" aria-label="plan-answers.json: io"><path class="pa-shape pa-shape-parallelogram" d="M158 510L380 510L368 564L146 564Z"/><rect class="pa-tile" x="172.6" y="523" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(177.6 528) scale(0.75)"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></g><text class="pa-type" text-anchor="middle"><tspan x="282" y="530.26">IO</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="282" y="549.5">plan-answers.json</tspan></text></g><g class="pa-node pa-kind-subprocess pa-family-service pa-tone-neutral" data-id="check" tabindex="0" role="graphics-symbol" aria-label="answers.mjs: subprocess"><path class="pa-shape pa-shape-double-bar-rect" d="M164 636L362 636A2 2 0 0 1 364 638L364 706A2 2 0 0 1 362 708L164 708A2 2 0 0 1 162 706L162 638A2 2 0 0 1 164 636Z"/><path class="pa-decor" d="M170 636L170 708"/><path class="pa-decor" d="M356 636L356 708"/><rect class="pa-tile" x="184.6" y="658" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(189.6 663) scale(0.75)"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></g><text class="pa-type" text-anchor="middle"><tspan x="282" y="657">SUBPROCESS</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="282" y="676.24">answers.mjs</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="282" y="693.69">hash, ids, choices</tspan></text></g><g class="pa-node pa-kind-end pa-family-bare pa-tone-neutral" data-id="agent" tabindex="0" role="graphics-symbol" aria-label="Agent acts: end"><path class="pa-shape pa-shape-stadium" d="M219 872L307 872A20 20 0 0 1 307 912L219 912A20 20 0 0 1 219 872Z"/><text class="pa-label" text-anchor="middle"><tspan x="263" y="896.9">Agent acts</tspan></text></g><g class="pa-edge-label" data-edge="edge-0"><rect class="pa-edge-plate" x="237" y="198" width="52" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="263" y="212.2">build</tspan></text></g><g class="pa-edge-label" data-edge="edge-1"><rect class="pa-edge-plate" x="154" y="418" width="218" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="263" y="432.2">reviewer copies or downloads</tspan></text></g><g class="pa-edge-label" data-edge="edge-3"><rect class="pa-edge-plate" x="208" y="780" width="110" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="263" y="794.2">valid summary</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-service" x="24.4" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="42.4" y="37.85">2 io</tspan></text><rect class="pa-swatch pa-family-service" x="84.8" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="102.8" y="37.85">1 step</tspan></text><rect class="pa-swatch pa-family-service" x="158.4" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="176.4" y="37.85">1 subprocess</tspan></text><rect class="pa-swatch pa-family-bare" x="271.6" y="28" width="12" height="12" rx="3"/><text class="pa-legend-text" text-anchor="start"><tspan x="289.6" y="37.85">1 end</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M338.6 34L362.6 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="368.6" y="37.85">call</tspan></text></g></svg></div>
+<div class="dg-stage" data-dg-stage><svg xmlns="http://www.w3.org/2000/svg" class="pa-diagram pa-type-flow" viewBox="0 0 419 936" role="graphics-document" aria-labelledby="dg_10-title dg_10-desc"><title id="dg_10-title">The plan answer loop</title><desc id="dg_10-desc">flow diagram with 5 nodes and 4 edges.</desc><defs><marker id="dg_10-arrow" viewBox="0 0 8 8" refX="8" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-fill" d="M0 0.5L8 4L0 7.5Z"/></marker><marker id="dg_10-arrow-open" viewBox="0 0 8 8" refX="7.4" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path class="pa-arrow-open" d="M0.8 0.8L7.4 4L0.8 7.2"/></marker></defs><g class="pa-edge pa-edge-solid" data-id="edge-0" data-from="spec" data-to="page" data-family="service"><path class="pa-wire" d="M263 126L263 290" fill="none" marker-end="url(#dg_10-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-1" data-from="page" data-to="file" data-family="service"><path class="pa-wire" d="M263 346L263 510" fill="none" marker-end="url(#dg_10-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-2" data-from="file" data-to="check" data-family="service"><path class="pa-wire" d="M263 564L263 636" fill="none" marker-end="url(#dg_10-arrow)"/></g><g class="pa-edge pa-edge-solid" data-id="edge-3" data-from="check" data-to="agent" data-family="service"><path class="pa-wire" d="M263 708L263 872" fill="none" marker-end="url(#dg_10-arrow)"/></g><g class="pa-node pa-kind-io pa-family-service pa-tone-neutral" data-id="spec" tabindex="0" role="graphics-symbol" aria-label="Plan spec: io"><path class="pa-shape pa-shape-parallelogram" d="M192 54L346 54L334 126L180 126Z"/><rect class="pa-tile" x="206.2" y="76" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(211.2 81) scale(0.75)"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></g><text class="pa-type" text-anchor="middle"><tspan x="282" y="75">IO</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="282" y="94.24">Plan spec</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="282" y="111.69">plan.json</tspan></text></g><g class="pa-node pa-kind-step pa-family-service pa-tone-neutral" data-id="page" tabindex="0" role="graphics-symbol" aria-label="Plan page: step"><path class="pa-shape pa-shape-rect" d="M208 290L318 290A2 2 0 0 1 320 292L320 344A2 2 0 0 1 318 346L208 346A2 2 0 0 1 206 344L206 292A2 2 0 0 1 208 290Z"/><text class="pa-label" text-anchor="middle"><tspan x="263" y="314.64">Plan page</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="263" y="332.09">mono or brief</tspan></text></g><g class="pa-node pa-kind-io pa-family-service pa-tone-neutral" data-id="file" tabindex="0" role="graphics-symbol" aria-label="plan-answers.json: io"><path class="pa-shape pa-shape-parallelogram" d="M158 510L380 510L368 564L146 564Z"/><rect class="pa-tile" x="172.6" y="523" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(177.6 528) scale(0.75)"><path d="m16 3 4 4-4 4"/><path d="M20 7H4"/><path d="m8 21-4-4 4-4"/><path d="M4 17h16"/></g><text class="pa-type" text-anchor="middle"><tspan x="282" y="530.26">IO</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="282" y="549.5">plan-answers.json</tspan></text></g><g class="pa-node pa-kind-subprocess pa-family-service pa-tone-neutral" data-id="check" tabindex="0" role="graphics-symbol" aria-label="answers.mjs: subprocess"><path class="pa-shape pa-shape-double-bar-rect" d="M164 636L362 636A2 2 0 0 1 364 638L364 706A2 2 0 0 1 362 708L164 708A2 2 0 0 1 162 706L162 638A2 2 0 0 1 164 636Z"/><path class="pa-decor" d="M170 636L170 708"/><path class="pa-decor" d="M356 636L356 708"/><rect class="pa-tile" x="184.6" y="658" width="28" height="28" rx="7"/><g class="pa-icon pa-icon-lucide" transform="translate(189.6 663) scale(0.75)"><rect width="8" height="8" x="3" y="3" rx="2"/><path d="M7 11v4a2 2 0 0 0 2 2h4"/><rect width="8" height="8" x="13" y="13" rx="2"/></g><text class="pa-type" text-anchor="middle"><tspan x="282" y="657">SUBPROCESS</tspan></text><text class="pa-label" text-anchor="middle"><tspan x="282" y="676.24">answers.mjs</tspan></text><text class="pa-note" text-anchor="middle"><tspan x="282" y="693.69">hash, ids, choices</tspan></text></g><g class="pa-node pa-kind-end pa-family-bare pa-tone-neutral" data-id="agent" tabindex="0" role="graphics-symbol" aria-label="Agent acts: end"><path class="pa-shape pa-shape-stadium" d="M219 872L307 872A20 20 0 0 1 307 912L219 912A20 20 0 0 1 219 872Z"/><text class="pa-label" text-anchor="middle"><tspan x="263" y="896.9">Agent acts</tspan></text></g><g class="pa-edge-label" data-edge="edge-0"><rect class="pa-edge-plate" x="237" y="198" width="52" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="263" y="212.2">build</tspan></text></g><g class="pa-edge-label" data-edge="edge-1"><rect class="pa-edge-plate" x="154" y="418" width="218" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="263" y="432.2">reviewer copies or downloads</tspan></text></g><g class="pa-edge-label" data-edge="edge-3"><rect class="pa-edge-plate" x="208" y="780" width="110" height="20" rx="10"/><text class="pa-edge-text" text-anchor="middle"><tspan x="263" y="794.2">valid summary</tspan></text></g><g class="pa-legend" aria-hidden="true"><rect class="pa-swatch pa-family-service" x="24.4" y="28" width="12" height="12" rx="3"/><rect class="pa-swatch-mark pa-family-service" x="27.4" y="31" width="6" height="6" rx="1.5"/><text class="pa-legend-text" text-anchor="start"><tspan x="42.4" y="37.85">2 io</tspan></text><rect class="pa-swatch pa-family-service" x="84.8" y="28" width="12" height="12" rx="3"/><rect class="pa-swatch-mark pa-family-service" x="87.8" y="31" width="6" height="6" rx="1.5"/><text class="pa-legend-text" text-anchor="start"><tspan x="102.8" y="37.85">1 step</tspan></text><rect class="pa-swatch pa-family-service" x="158.4" y="28" width="12" height="12" rx="3"/><rect class="pa-swatch-mark pa-family-service" x="161.4" y="31" width="6" height="6" rx="1.5"/><text class="pa-legend-text" text-anchor="start"><tspan x="176.4" y="37.85">1 subprocess</tspan></text><rect class="pa-swatch pa-swatch-stadium pa-family-bare" x="271.6" y="30" width="12" height="8" rx="4"/><text class="pa-legend-text" text-anchor="start"><tspan x="289.6" y="37.85">1 end</tspan></text><g class="pa-legend-sample pa-edge-solid"><path class="pa-wire" d="M338.6 34L362.6 34"/></g><text class="pa-legend-text" text-anchor="start"><tspan x="368.6" y="37.85">call</tspan></text></g></svg></div>
 </div>
 <button type="button" class="btn dg-present" data-dg-present aria-haspopup="dialog" aria-label="Present diagram: The plan answer loop">Present</button>
 <dialog class="dg-overlay" data-dg-dialog aria-label="Diagram presentation: The plan answer loop">
@@ -1290,6 +1330,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 </div>
 </dialog>
 <script type="application/json" data-dg-data>{"type":"flow","title":"The plan answer loop","stem":"the-plan-answer-loop","animate":false,"width":419,"height":936,"drawing":[15,30,389,906],"steps":[{"title":"Plan spec","show":["spec"],"focus":["spec"]},{"title":"Plan page","show":["page"],"focus":["page"]},{"title":"plan-answers.json","show":["file"],"focus":["file"]},{"title":"answers.mjs","show":["check"],"focus":["check"]},{"title":"Agent acts","show":["agent"],"focus":["agent"]}],"ids":["spec","page","file","check","agent"],"adjacency":{"spec":{"nodes":["page"],"edges":["edge-0"]},"page":{"nodes":["spec","file"],"edges":["edge-0","edge-1"]},"file":{"nodes":["page","check"],"edges":["edge-1","edge-2"]},"check":{"nodes":["file","agent"],"edges":["edge-2","edge-3"]},"agent":{"nodes":["check"],"edges":["edge-3"]}},"edges":{"edge-0":["spec","page"],"edge-1":["page","file"],"edge-2":["file","check"],"edge-3":["check","agent"]},"parents":{},"boxes":{"spec":[180,54,166,72],"page":[206,290,114,56],"file":[146,510,234,54],"check":[162,636,202,72],"agent":[199,872,128,40]},"frames":[],"autoplay":false,"beats":[{"kind":"step","chapter":0,"title":"Plan spec","edge":null,"reverse":false,"ids":["spec"],"reveal":["spec"],"highlight":[]},{"kind":"step","chapter":0,"title":"Plan page","edge":null,"reverse":false,"ids":["page"],"reveal":["page"],"highlight":[]},{"kind":"step","chapter":0,"title":"plan-answers.json","edge":null,"reverse":false,"ids":["file"],"reveal":["file"],"highlight":[]},{"kind":"step","chapter":0,"title":"answers.mjs","edge":null,"reverse":false,"ids":["check"],"reveal":["check"],"highlight":[]},{"kind":"step","chapter":0,"title":"Agent acts","edge":null,"reverse":false,"ids":["agent"],"reveal":["agent"],"highlight":[]}],"chapters":[{"id":"walkthrough","title":"Walkthrough","start":0,"end":5}],"info":{"spec":{"label":"Plan spec","kind":"io","note":"plan.json"},"page":{"label":"Plan page","kind":"step","note":"mono or brief"},"file":{"label":"plan-answers.json","kind":"io"},"check":{"label":"answers.mjs","kind":"subprocess","note":"hash, ids, choices"},"agent":{"label":"Agent acts","kind":"end"},"edge-0":{"style":"solid","label":"build"},"edge-1":{"style":"solid","label":"reviewer copies or downloads"},"edge-2":{"style":"solid"},"edge-3":{"style":"solid","label":"valid summary"}},"directed":{"spec":["edge-0"],"page":["edge-1"],"file":["edge-2"],"check":["edge-3"]}}</script>
+<p class="dg-cue" data-dg-cue hidden>Scrolls sideways: swipe or scroll the drawing, or press Present to see all of it.</p>
 <figcaption>The page never talks to the network; the file is the only way back.</figcaption>
 </figure>
 </section>
@@ -1378,7 +1419,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 </section>
 </main>
 </div>
-<footer class="pa-footer"><p class="pa-provenance" title="make-explainer · model not reported · effort not reported · agent not reported · 22 Oct 2026">make-explainer · model not reported · effort not reported · agent not reported · 22 Oct 2026</p><p class="pa-theme">Theme: mono</p></footer>
+<footer class="pa-footer"><p class="pa-provenance" title="make-explainer · model not reported · effort not reported · agent not reported · 18 Nov 2026">make-explainer · model not reported · effort not reported · agent not reported · 18 Nov 2026</p><p class="pa-theme">Theme: mono</p></footer>
 <script>
 // Pure helpers for the explainer page. Loaded as a classic script in the page
 // and through node:vm in tests, so: no imports, no DOM access here.
@@ -1947,6 +1988,15 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
   var MAX_ZOOM = 4;
   var MAX_FIT_SCALE = 1.25; // a small diagram is not blown up past this to fill a big stage
   var FIT_MARGIN = 16;
+  // On a phone (a viewport inside viewer.html's 719 px breakpoint) the opening view never draws a 14 px node label
+  // below the 8 px reading floor (legibility.mjs LABEL_PX and MIN_LABEL_PX): a diagram too big for that opens at the
+  // floor (axisFloor places it) and pans; the Fit button still shows the whole drawing. Wider viewports open fitted
+  // whole, whatever the text size (scripts/check.mjs warns when that draws labels under the floor).
+  var PHONE_QUERY = '(max-width: 719px)';
+  var READ_SCALE = 8 / 14;
+  var FLOOR_GAP = 16; // px: at the floor a node in view sits at least this far inside the stage
+  var OUT_PX = 4; // px: a node out of view sits at least this far past the edge (its outline and lift included)
+  var CUE_STEP = 0.75; // a pan cue moves the view this share of the stage
   var FOCUS_PAD = 48;
   var MAX_FOCUS_SCALE = 1.6; // px per diagram unit when a beat zooms in on a few nodes
   var MAX_FOCUS_ZOOM = 2; // and never past this multiple of the fit, unless the fit is tiny: a beat may always reach 100%
@@ -1956,6 +2006,8 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
   var clamp = function (v, lo, hi) { return Math.min(hi, Math.max(lo, v)); };
   var finite = function (v, fallback) { return typeof v === 'number' && isFinite(v) ? v : fallback; };
   var round = function (v) { return Math.round(v * 100) / 100; };
+  var easeOut = function (k) { return 1 - Math.pow(1 - k, 3); }; // Fit, Home, a pan cue: quick to respond
+  var easeInOut = function (k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }; // a story beat: calm at both ends
 
   // Ids are model-provided keys: every id-keyed map has no prototype, so an id
   // like "constructor" is just a key (a plain {} would answer for it).
@@ -1965,6 +2017,29 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     return d;
   };
 
+  var toBox = function (b) { return { x: b[0], y: b[1], w: b[2], h: b[3] }; };
+  // What the floor view places: every box drawn (`all`), the node boxes (no group, no edge or message), the first
+  // group and the first node in the spec's order (data.info), each { x, y, w, h }; null when there is none.
+  function contentOf(boxes, info, fallback) {
+    var ids = Object.keys(info || boxes).filter(function (id) { return boxes[id] && boxes[id].every(function (v) { return isFinite(v); }); });
+    var isGroup = function (id) { return !!info && !!info[id] && info[id].kind === 'group'; };
+    var isNode = function (id) { return !isGroup(id) && !(info && info[id] && info[id].style); };
+    var all = null;
+    Object.keys(boxes).forEach(function (id) {
+      var b = boxes[id];
+      if (!b.every(function (v) { return isFinite(v); })) return;
+      all = all ? { x: Math.min(all.x, b[0]), y: Math.min(all.y, b[1]), r: Math.max(all.r, b[0] + b[2]), b: Math.max(all.b, b[1] + b[3]) } : { x: b[0], y: b[1], r: b[0] + b[2], b: b[1] + b[3] };
+    });
+    var group = ids.filter(isGroup)[0];
+    var first = ids.filter(isNode)[0];
+    return {
+      all: all ? { x: all.x, y: all.y, w: all.r - all.x, h: all.b - all.y } : fallback,
+      nodes: ids.filter(isNode).map(function (id) { return toBox(boxes[id]); }),
+      group: group ? toBox(boxes[group]) : null,
+      first: first ? toBox(boxes[first]) : null,
+    };
+  }
+
   PADiagram.camera = function (stage, svg, data, hooks) {
     hooks = hooks || {};
     var W = Math.max(1, finite(data.width, 1));
@@ -1972,12 +2047,16 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     var boxes = PADiagram.dict(data.boxes);
     var reduceQuery = global.matchMedia ? global.matchMedia('(prefers-reduced-motion: reduce)') : null;
     var reduced = function () { return !!(reduceQuery && reduceQuery.matches); };
+    var phoneQuery = global.matchMedia ? global.matchMedia(PHONE_QUERY) : null;
+    var phone = function () { return !!(phoneQuery && phoneQuery.matches); };
     var overlay = stage.querySelector('[data-pa-legend]');
     var d = data.drawing;
     // What the fit shows: the drawing when the page covers the drawn legend with its own, else the canvas.
     var fitBox = overlay && d && d.length === 4 && d.every(function (v) { return finite(v, NaN) === v; }) && d[2] > 0 && d[3] > 0 ? { x: d[0], y: d[1], w: d[2], h: d[3] } : { x: 0, y: 0, w: W, h: H };
+    var content = contentOf(boxes, data.info, fitBox);
     var cam = { cx: W / 2, cy: H / 2, s: 1 };
     var fitted = true;
+    var whole = false; // the fitted view is the whole drawing (Fit) rather than the opening view
     var tween = 0;
 
     // A stage with no size (hidden, not laid out yet) is treated as the
@@ -2011,11 +2090,50 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       var halfH = (fitBox.h / 2 + FIT_MARGIN) * below;
       return { s: below, dx: 0, dy: Math.max(0, sz.top - (sz.h / 2 - halfH)) };
     }
-    function fitScale(sz) { return fitPlace(sz).s; }
-    function fitCamera() {
+    // ---- the reading floor ------------------------------------------------------------------
+    // On a phone a fit below READ_SCALE opens at READ_SCALE instead. On each axis: when everything drawn fits the stage at that
+    // scale (FLOOR_GAP to spare on both sides) it is centred; else the view centres on the anchor (the first group
+    // when it fits the stage, else the first node), stays within what is drawn, and then moves the least it must so
+    // that no node is cut by the stage edge (each is whole in view, FLOOR_GAP in, or wholly out, behind a pan cue).
+    // Centring and the anchor use the band past `lead` px (the legend overlay's depth on the y axis); the cut test uses
+    // the whole stage length `len`, where a node beside the overlay still shows. Returns the camera centre on the axis.
+    function axisFloor(len, lead, s, extent, anchor, spans) {
+      var band = len - lead;
+      var toFull = lead / (2 * s); // band centre minus this is the stage centre
+      if ((extent[1] - extent[0]) * s + 2 * FLOOR_GAP <= band) return (extent[0] + extent[1]) / 2 - toFull;
+      var half = band / (2 * s);
+      var c = clamp((anchor[0] + anchor[1]) / 2, extent[0] - FLOOR_GAP / s + half, extent[1] + FLOOR_GAP / s - half) - toFull;
+      var start = c - len / (2 * s); // the stage's first diagram unit on this axis
+      var px = spans.map(function (sp) { return [(sp[0] - start) * s, (sp[1] - start) * s]; });
+      var keep = [(anchor[0] - start) * s, (anchor[1] - start) * s];
+      var ok = function (d) {
+        var anchored = keep[1] - keep[0] > band - 2 * FLOOR_GAP || (keep[0] + d >= lead && keep[1] + d <= len);
+        return anchored && px.every(function (p) { var a = p[0] + d, b = p[1] + d; return b <= -OUT_PX || a >= len + OUT_PX || (a >= FLOOR_GAP && b <= len - FLOOR_GAP); });
+      };
+      var shifts = [0];
+      px.forEach(function (p) { shifts.push(FLOOR_GAP - p[0], len - FLOOR_GAP - p[1], -OUT_PX - p[1], len + OUT_PX - p[0]); });
+      shifts.sort(function (a, b) { return Math.abs(a) - Math.abs(b); });
+      for (var i = 0; i < shifts.length; i++) if (ok(shifts[i])) return c - shifts[i] / s;
+      return c;
+    }
+    function readable(sz) {
+      if (!phone() || fitPlace(sz).s >= READ_SCALE) return null;
+      var s = READ_SCALE;
+      var band = sz.h - sz.top;
+      var fitsStage = function (b) { return b.w * s <= sz.w - 2 * FLOOR_GAP && b.h * s <= band - 2 * FLOOR_GAP; };
+      var anchor = content.group && fitsStage(content.group) ? content.group : content.first || content.all;
+      var x = axisFloor(sz.w, 0, s, [content.all.x, content.all.x + content.all.w], [anchor.x, anchor.x + anchor.w], content.nodes.map(function (b) { return [b.x, b.x + b.w]; }));
+      var y = axisFloor(sz.h, sz.top, s, [content.all.y, content.all.y + content.all.h], [anchor.y, anchor.y + anchor.h], content.nodes.map(function (b) { return [b.y, b.y + b.h]; }));
+      return { s: s, cx: x, cy: y };
+    }
+    function fitScale(sz) { var r = readable(sz); return r ? r.s : fitPlace(sz).s; }
+    // The whole drawing, readable or not (the Fit button, double-click, 0, and a beat that frames everything).
+    function wholeCamera() {
       var p = fitPlace(size());
       return { cx: fitBox.x + fitBox.w / 2 + p.dx / p.s, cy: fitBox.y + fitBox.h / 2 - p.dy / p.s, s: p.s };
     }
+    // The opening view: the whole drawing, or on a phone the floor view when that would draw labels under the floor.
+    function fitCamera() { return readable(size()) || wholeCamera(); }
     // Pan and zoom keep the centre on the canvas, widened to take in the fit
     // centre, so the first move after a fit never snaps the view.
     function clampCentre(cx, cy) {
@@ -2029,42 +2147,99 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       var h = sz.h / cam.s;
       svg.setAttribute('viewBox', [cam.cx - w / 2, cam.cy - h / 2, w, h].map(round).join(' '));
       stage.setAttribute('data-zoom', (cam.s / fitScale(sz)).toFixed(3));
+      stage.setAttribute('data-fit-scale', fitPlace(sz).s.toFixed(4)); // the whole-drawing fit, read by scripts/check.mjs
+      showCues(sz);
       if (hooks.onApply) hooks.onApply();
     }
-    function cancelTween() {
+
+    // ---- pan cues -------------------------------------------------------------------------
+    // A button on each stage edge (viewer.html, [data-pa-cue]) shows while a node lies wholly past that edge (one cut
+    // by the edge shows itself); pressing it glides the view CUE_STEP of the stage that way. Its presses never reach
+    // the stage (no drag, no deselect).
+    var cues = {};
+    (stage.querySelectorAll ? Array.prototype.slice.call(stage.querySelectorAll('[data-pa-cue]')) : []).forEach(function (b) {
+      var side = b.getAttribute('data-pa-cue');
+      cues[side] = b;
+      ['pointerdown', 'pointerup', 'dblclick'].forEach(function (t) { b.addEventListener(t, function (e) { e.stopPropagation(); }); });
+      b.addEventListener('click', function (e) { e.stopPropagation(); cueTo(side); });
+    });
+    var CUE_SIDES = {
+      left: function (b, v) { return b.x + b.w <= v.x0; }, right: function (b, v) { return b.x >= v.x1; },
+      top: function (b, v) { return b.y + b.h <= v.y0; }, bottom: function (b, v) { return b.y >= v.y1; },
+    };
+    function showCues(sz) {
+      var v = { x0: cam.cx - sz.w / (2 * cam.s), x1: cam.cx + sz.w / (2 * cam.s), y0: cam.cy - sz.h / (2 * cam.s), y1: cam.cy + sz.h / (2 * cam.s) };
+      Object.keys(cues).forEach(function (side) {
+        var more = !!CUE_SIDES[side] && content.nodes.some(function (b) { return CUE_SIDES[side](b, v); });
+        if (cues[side].hidden === more) cues[side].hidden = !more;
+      });
+    }
+    function cueTo(side) {
+      var sz = size();
+      var dx = side === 'left' ? -1 : side === 'right' ? 1 : 0;
+      var dy = side === 'top' ? -1 : side === 'bottom' ? 1 : 0;
+      fitted = false;
+      var c = clampCentre(cam.cx + dx * CUE_STEP * sz.w / cam.s, cam.cy + dy * CUE_STEP * sz.h / cam.s);
+      moveTo({ cx: c.cx, cy: c.cy, s: cam.s });
+    }
+    // ---- is the camera moving? ------------------------------------------------------------
+    // The story waits for the camera, by its own landing and not by a clock of its own: a frame that
+    // comes late (a busy page) must not let the caption beat the camera. whenStill(fn) runs fn once
+    // the camera is still (at once if it is), when a glide lands, is cancelled by the reader (a pan, a
+    // zoom) or is replaced by a move at once. A glide that replaces another keeps fn waiting.
+    var stillWaiters = [];
+    function flushStill() {
+      var waiting = stillWaiters;
+      stillWaiters = [];
+      waiting.forEach(function (fn) { fn(); });
+    }
+    function stopTween() {
       if (tween && global.cancelAnimationFrame) global.cancelAnimationFrame(tween);
       tween = 0;
     }
-    // Glide to `target` over options.ms (CAMERA_MS by default); at once when
-    // options.instant is set, under reduced motion, or without requestAnimationFrame.
+    function cancelTween() {
+      stopTween();
+      flushStill();
+    }
+    function moving() { return !!tween; }
+    function whenStill(fn) {
+      if (tween) stillWaiters.push(fn); else fn();
+    }
+    // Glide to `target` over options.ms (CAMERA_MS by default), ease-out unless options.ease is 'in-out'
+    // (a story beat: the camera eases in as well as out); at once when options.instant is set, under
+    // reduced motion, or without requestAnimationFrame.
     function moveTo(target, options) {
       options = options || {};
-      cancelTween();
+      stopTween();
       var to = { cx: finite(target.cx, cam.cx), cy: finite(target.cy, cam.cy), s: finite(target.s, cam.s) };
-      if (options.instant || reduced() || !global.requestAnimationFrame) { cam = to; apply(); return; }
+      if (options.instant || reduced() || !global.requestAnimationFrame) { cam = to; apply(); flushStill(); return; }
       var ms = Math.max(1, finite(options.ms, CAMERA_MS));
+      var ease = options.ease === 'in-out' ? easeInOut : easeOut;
       var from = { cx: cam.cx, cy: cam.cy, s: cam.s };
       var t0 = null;
       var tick = function (now) {
         if (t0 === null) t0 = now;
         var k = Math.min(1, (now - t0) / ms);
-        var e = 1 - Math.pow(1 - k, 3); // ease-out
+        var e = ease(k);
         cam = { cx: from.cx + (to.cx - from.cx) * e, cy: from.cy + (to.cy - from.cy) * e, s: from.s * Math.pow(to.s / from.s, e) };
         apply();
         tween = k < 1 ? global.requestAnimationFrame(tick) : 0;
+        if (!tween) flushStill();
       };
       tween = global.requestAnimationFrame(tick);
     }
 
-    function fit() { fitted = true; moveTo(fitCamera()); }
-    // The fit view at once, no glide (first paint, and a resize of a fitted view).
-    function refit() { fitted = true; cam = fitCamera(); apply(); }
+    function fit() { fitted = true; whole = true; moveTo(wholeCamera()); }
+    // Back to the opening view with a glide (leaving Play, clearing Explore): readable, unlike Fit.
+    function home() { fitted = true; whole = false; moveTo(fitCamera()); }
+    // The opening view at once, no glide (first paint, and a resize of an untouched view).
+    function refit() { fitted = true; whole = false; cam = fitCamera(); apply(); }
     function zoomAt(factor, px, py) {
       cancelTween();
       fitted = false;
       var sz = size();
       var fs = fitScale(sz);
-      var ns = clamp(cam.s * factor, fs * MIN_ZOOM, fs * MAX_ZOOM);
+      var ns = clamp(cam.s * factor, Math.min(fs, fitPlace(sz).s) * MIN_ZOOM, fs * MAX_ZOOM);
       var wx = cam.cx + (px - sz.w / 2) / cam.s;
       var wy = cam.cy + (py - sz.h / 2) / cam.s;
       var c = clampCentre(wx - (px - sz.w / 2) / ns, wy - (py - sz.h / 2) / ns);
@@ -2117,22 +2292,31 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       var inside = b[0] >= cam.cx - halfW && b[0] + b[2] <= cam.cx + halfW && b[1] >= cam.cy - halfH && b[1] + b[3] <= cam.cy + halfH;
       if (!inside) { fitted = false; moveTo({ cx: b[0] + b[2] / 2, cy: b[1] + b[3] / 2, s: cam.s }, { instant: true }); }
     }
-    // On a resize a fitted view refits; any other view keeps its camera.
+    // Runs `change` (it opens or closes the side panel, so the stage changes size) and keeps every diagram
+    // point where it was drawn (the stage keeps its left and top edges, so the centre moves with half of the
+    // size change). The view is no longer fitted, so the resize that follows does not refit and rescale the
+    // drawing under the pointer.
+    function holdView(change) {
+      var before = size();
+      change();
+      var after = size();
+      if (before.w !== after.w || before.h !== after.h) panBy((after.w - before.w) / 2, (after.h - before.h) / 2);
+    }
+    // On a resize a fitted view refits (the whole drawing or the opening view, whichever it was); any other view keeps its camera.
     function onResize() {
-      if (fitted) cam = fitCamera();
+      if (fitted) cam = whole ? wholeCamera() : fitCamera();
       apply();
     }
 
     return {
-      size: size, fitScale: fitScale, fitCamera: fitCamera, apply: apply, moveTo: moveTo, cancelTween: cancelTween,
-      fit: fit, refit: refit, zoomAt: zoomAt, zoomBy: zoomBy, panBy: panBy,
+      size: size, fitScale: fitScale, fitCamera: fitCamera, wholeCamera: wholeCamera, apply: apply, moveTo: moveTo, cancelTween: cancelTween, moving: moving, whenStill: whenStill,
+      fit: fit, home: home, refit: refit, zoomAt: zoomAt, zoomBy: zoomBy, panBy: panBy,
       boxOf: boxOf, unionBox: unionBox, cameraFor: cameraFor, ensureVisible: ensureVisible,
       reduced: reduced, reduceQuery: reduceQuery,
       zoom: function () { return cam.s / fitScale(size()); },
       isFitted: function () { return fitted; },
-      unfit: function () { fitted = false; },
-      onResize: onResize,
-      glideMs: function () { return CAMERA_MS; },
+      unfit: function () { fitted = false; whole = false; },
+      onResize: onResize, holdView: holdView,
     };
   };
 })(window);
@@ -2386,8 +2570,10 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 //
 //   var panel = PADiagram.panel({ panel, tip, found }, data, els, trace, { isOff, onPick, onBeat, onClose });
 //
-// panel   aside[data-pa-panel] with data-pa-panel-title, data-pa-panel-close,
-//         data-pa-empty (holding data-pa-tally) and data-pa-panel-body inside it.
+// panel   aside[data-pa-panel] with data-pa-panel-title, data-pa-panel-close and
+//         data-pa-panel-body inside it, and optionally data-pa-empty (holding
+//         data-pa-tally) for a host whose panel stays visible when nothing is
+//         selected. make-diagram's own page hides the panel then, so it has none.
 // tip     [data-pa-tip], positioned inside the stage.
 // found   the row the Find matches go in (buttons that pick a node).
 // isOff() true hides the panel and the tooltip (the story is on).
@@ -2502,7 +2688,12 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       if (!r.directed) bodyEl.appendChild(el('p', 'panel-note', 'ignores arrow direction'));
       var ol = el('ol');
       ol.setAttribute('data-pa-hops', '');
-      r.hops.forEach(function (h) { ol.appendChild(el('li', null, labelOf(h.from) + ' → ' + labelOf(h.to) + edgeText(h.edge))); });
+      // Steps in the order walked; '←' where an undirected route went against the edge's arrow (an edge that leaves
+      // the step's start along its arrow, as a two-way edge does from either end, is not against it).
+      r.hops.forEach(function (h) {
+        var against = !r.directed && (directed[h.from] || []).indexOf(h.edge) < 0;
+        ol.appendChild(el('li', null, labelOf(h.from) + (against ? ' ← ' : ' → ') + labelOf(h.to) + edgeText(h.edge)));
+      });
       bodyEl.appendChild(ol);
     }
 
@@ -2517,19 +2708,19 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     // A click's detail is 0 when a key (Enter, Space) pressed the button: then focus should go back to the node.
     if (closeEl) closeEl.addEventListener('click', function (e) { e.stopPropagation(); if (hooks.onClose) hooks.onClose(e.detail === 0); });
 
-    // Repaint from the trace: a route, a selected edge or node, or the empty
-    // state. Focus inside the panel moves to the close button, or to the title
-    // when Close hides with nothing left to close, so a repaint never drops
-    // focus to the page.
+    // Repaint from the trace: a route, a selected edge or node; with none of
+    // them the panel hides. Focus inside the panel moves to the close button on
+    // a repaint; viewer.js moves it out before the panel hides.
     function paint() {
       if (!panelEl) return;
-      panelEl.hidden = off();
-      if (off() && tip) tip.hidden = true; // the hover tooltip never rides over the Play stage
-      if (!bodyEl || !titleEl) return;
-      var hadFocus = panelEl.contains(doc.activeElement);
       var r = trace.routed();
       var id = trace.selected();
       var something = !!(r || id);
+      // Hidden until something is selected (and always in Play): an empty panel at first paint only takes the stage's room.
+      panelEl.hidden = off() || !something;
+      if (off() && tip) tip.hidden = true; // the hover tooltip never rides over the Play stage
+      if (!bodyEl || !titleEl) return;
+      var hadFocus = panelEl.contains(doc.activeElement);
       empty(bodyEl);
       bodyEl.hidden = !something;
       if (emptyEl) emptyEl.hidden = something;
@@ -2539,7 +2730,6 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       else if (id) paintNode(id);
       else titleEl.textContent = 'Map';
       if (hadFocus && something && closeEl) closeEl.focus();
-      else if (hadFocus && !something && !off() && titleEl) titleEl.focus();
     }
 
     // ---- the tooltip ----------------------------------------------------------------------------
@@ -2595,20 +2785,27 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide (450 ms for a story beat, the
-// camera's own glide for a step beat), then (a hop, motion allowed) the dot,
-// then a hold, and moves on; every duration divides by the speed; reduced
-// motion drops the dot and the glide. Registered as PADiagram.story and
-// composed by viewer.js.
+// dimming. Playing runs each beat as glide (GLIDE_MS, ease in-out), a short
+// rest, then (a hop, motion allowed) the dot, then a hold, and moves on; every
+// duration divides by the speed. While playing, the caption waits for the
+// camera: it changes at the end of the rest, not when the beat starts, and never
+// before the camera reports it has landed (camera.whenStill: a late frame
+// delays the caption, it does not let the caption pass the camera). A step
+// by hand, a pause and reduced motion paint it at once. Reduced motion drops
+// the glide, the rest and the dot: the beat applies at once and the hold is
+// the only timer. Registered as PADiagram.story and composed by viewer.js.
 //
-//   var story = PADiagram.story(stage, svg, data, els, camera, { onStep });
+//   var story = PADiagram.story(stage, svg, data, els, camera, { onStep, onSettle });
 //
 // onStep runs after every change of beat or mode, before the camera moves.
+// onSettle runs when a waiting caption catches up (shown() moved to the beat).
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 450; // the camera's glide to a story (hop or focus) beat
+  var GLIDE_MS = 600; // the camera's glide to a beat (story or step), ease in-out
+  var GLIDE_EASE = 'in-out'; // camera.moveTo's name for it: the camera eases in as well as out
+  var SETTLE_MS = 60; // the camera rests this long after it lands, then the caption changes and the dot sets off
   var DOT_MS = 900; // the dot along a hop's edge
   var HOLD_MS = 1800; // then the caption holds...
   var HOLD_PER_CHAR_MS = 30; // ...longer for a longer caption...
@@ -2631,6 +2828,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     var words = function (el, name) { var v = el.getAttribute(name); return v ? v.split(' ') : []; };
     var presenting = false;
     var stepIndex = 0;
+    var shownIndex = 0; // the beat whose caption is on screen: behind stepIndex while the camera is on its way (playing only)
     var playing = false;
     var speed = 1;
     var loop = !!data.autoplay; // a page that starts by itself keeps going
@@ -2816,20 +3014,22 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 
     // ---- moving between beats -----------------------------------------------------------------
     function targetOf(beat, seen) {
-      if (beat.kind === 'step') return framesEverything(beat) ? camera.fitCamera() : camera.cameraFor(stepFocusBox(beat, seen));
+      // a beat that frames everything shows the whole drawing, even where the opening view sits at the reading floor
+      if (beat.kind === 'step') return framesEverything(beat) ? camera.wholeCamera() : camera.cameraFor(stepFocusBox(beat, seen));
       // a hop also frames its own edge: a sequence message sits below its participants' headers
       return camera.cameraFor(camera.boxOf(beat.edge ? beat.ids.concat(beat.edge) : beat.ids));
     }
-    // A story beat glides GLIDE_MS; a step beat (the older steps[] form) keeps the camera's own pace.
-    function glideFor(beat) { return (beat.kind === 'step' ? camera.glideMs() : GLIDE_MS) / speed; }
-    // Show the beat: glide, then (a hop, motion allowed) the dot, then hold. While
-    // playing, the hold ends in the next beat, the first again on loop, or a pause.
-    function show(beat, seen) {
+    // Every beat, story or step, glides GLIDE_MS over the speed and then rests SETTLE_MS over the speed.
+    function glideMs() { return GLIDE_MS / speed; }
+    function settleMs() { return SETTLE_MS / speed; }
+    // Show the beat: glide, rest, then the caption catches up if it was waiting, then (a hop, motion
+    // allowed) the dot, then hold. Under reduced motion the camera jumps and nothing waits: the hold is
+    // the only timer. While playing, the hold ends in the next beat, the first again on loop, or a pause.
+    function show(beat, seen, waiting) {
       var token = run;
       var instant = camera.reduced();
-      var glide = glideFor(beat);
       camera.unfit();
-      camera.moveTo(targetOf(beat, seen), { ms: glide });
+      camera.moveTo(targetOf(beat, seen), { ms: glideMs(), ease: GLIDE_EASE });
       var hold = function () {
         if (token !== run) return; // a dot frame that outlived its run
         var ms = holdMs(beat);
@@ -2843,8 +3043,20 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
         // only a hold armed while playing is reported: one armed while paused never moves on
         if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
       };
-      later(token, instant ? 0 : glide, function () {
+      var settled = function () {
+        if (waiting) { shownIndex = stepIndex; if (hooks.onSettle) hooks.onSettle(); }
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();
+      };
+      if (instant) { settled(); return; }
+      // The glide timer is a floor, not the signal: a frame that comes late (a busy page) leaves the camera
+      // moving when it fires. The camera says when it has landed (whenStill); a camera still on its way then
+      // gets its own rest after the landing, so the caption never changes under a moving camera.
+      later(token, glideMs() + settleMs(), function () {
+        var late = camera.moving();
+        camera.whenStill(function () {
+          if (token !== run) return; // another beat, a pause or an exit took over while the camera was on its way
+          if (late) later(token, settleMs(), settled); else settled();
+        });
       });
     }
     // onStep runs before the beat paints: the trace (off in Play) drops its own
@@ -2856,11 +3068,14 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       stepIndex = clamp(Math.round(finite(i, 0)), 0, beats.length - 1);
       stage.classList.add('pa-presenting');
       var beat = beats[stepIndex];
+      // Playing, the caption waits for the camera; a step by hand, a pause and reduced motion paint it at once.
+      var waiting = playing && !camera.reduced() && stepIndex !== shownIndex;
+      if (!waiting) shownIndex = stepIndex;
       if (hooks.onStep) hooks.onStep();
       var seen = stepMode ? applyReveal() : null;
       seenNow = seen;
       if (!stepMode) light(beat);
-      show(beat, seen);
+      show(beat, seen, waiting);
     }
     function present(i) { goTo(i || 0); }
     function next() { if (presenting) goTo(stepIndex + 1); }
@@ -2887,13 +3102,14 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     function exit() {
       if (!presenting) return;
       cancelRun();
+      shownIndex = stepIndex;
       presenting = false;
       playing = false;
       stage.classList.remove('pa-presenting', 'pa-playing');
       clearReveal();
       unlight();
       if (hooks.onStep) hooks.onStep();
-      camera.fit();
+      camera.home(); // the readable opening view (Fit, the whole drawing, can be under the reading floor)
     }
     function togglePresent() { if (presenting) exit(); else present(0); }
     // A resize reframes the beat where it stands: the camera glides to the beat's
@@ -2904,7 +3120,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     function reframe() {
       if (!presenting) return;
       camera.unfit();
-      camera.moveTo(targetOf(beats[stepIndex], seenNow), { ms: glideFor(beats[stepIndex]) });
+      camera.moveTo(targetOf(beats[stepIndex], seenNow), { ms: glideMs(), ease: GLIDE_EASE });
     }
 
     // ---- play, pause, speed, loop ---------------------------------------------------------------
@@ -2917,6 +3133,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     function pause() {
       if (!playing) return;
       cancelRun();
+      shownIndex = stepIndex; // a caption that was waiting for the camera lands where the chips already are
       playing = false;
       stage.classList.remove('pa-playing');
       if (hooks.onStep) hooks.onStep();
@@ -2934,6 +3151,8 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       count: function () { return beats.length; },
       current: function () { return beats[stepIndex] || null; },
       chapter: function () { return chapterAt(stepIndex); },
+      shown: function () { return shownIndex; },
+      chapterShown: function () { return chapterAt(shownIndex); },
       isPlaying: function () { return playing; },
       speed: function () { return speed; },
       loop: function () { return loop; },
@@ -3014,7 +3233,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     if (scrub) { scrub.min = '0'; scrub.max = String(Math.max(0, beats.length - 1)); scrub.step = '1'; }
 
     function line(beat, i, n) {
-      var ch = chapters[story.chapter()];
+      var ch = chapters[story.chapterShown()];
       var head = pad2(i + 1) + ' / ' + pad2(n) + (ch ? ' · ' + ch.title.toUpperCase() : '') + ' · ' + beat.title;
       return beat.caption ? head + ' — ' + beat.caption : head;
     }
@@ -3114,14 +3333,17 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       if (caption) caption.hidden = !presenting;
       if (chaptersEl) chaptersEl.hidden = !presenting;
       if (!presenting) return;
-      var beat = story.current();
       var i = story.index();
       var n = story.count();
-      text(part('data-pa-count'), (i + 1) + ' / ' + n);
+      // The caption (count, title, note, line) shows the beat story.shown() reports, which trails the
+      // beat the story is on while the camera is still gliding to it; the controls follow the story.
+      var shown = story.shown();
+      var beat = beats[shown];
+      text(part('data-pa-count'), (shown + 1) + ' / ' + n);
       text(part('data-pa-title'), beat.title);
       var note = part('data-pa-note');
       if (note) { note.textContent = beat.caption || ''; note.hidden = !beat.caption; }
-      text(part('data-pa-line'), line(beat, i, n));
+      text(part('data-pa-line'), line(beat, shown, n));
       disable(part('data-pa-prev'), i === 0);
       disable(part('data-pa-next'), i === n - 1);
       var play = part('data-pa-play');
@@ -3244,8 +3466,8 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
 // root          element full screen is asked for, and that carries pa-fill when the browser refuses (default: the document element).
 // onChange      called with ctl.state() after any change.
 //
-// Keys: Space plays and pauses, arrows step the beats, P enters Play, E leaves
-// it, F is full screen, 0 fits, / focuses Find, Escape closes the panel, else
+// Keys: Space plays and pauses, arrows step the beats, P enters Play and starts
+// it (motion allowed), E leaves it, F is full screen, 0 fits, / focuses Find, Escape closes the panel, else
 // leaves full screen, else leaves Play, else clears.
 // Every state class (pa-dim, pa-on, pa-hl, pa-hidden, pa-active, pa-selected,
 // pa-route, pa-animate, and pa-playing on the stage) is styled by diagramCss()
@@ -3308,8 +3530,8 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
         if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
         transport.paint(); trace.refresh(); panel.paint(); emit();
       },
-      // the transport shows the hold as a progress ring
-      onHold: function (ms) { transport.hold(ms); },
+      // the transport shows the hold as a progress ring, and paints a caption that waited for the camera once it settles
+      onHold: function (ms) { transport.hold(ms); }, onSettle: function () { transport.paint(); },
       onHoldEnd: function () { transport.holdEnd(); },
     });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
@@ -3329,6 +3551,9 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       var tab = root.querySelector('[data-pa-mode="' + mode + '"]');
       if (tab && !tab.disabled) tab.focus();
     }
+
+    // P and the Play tab: enter Play on beat 1 and start it (reduced motion waits for Space, as autoplay does).
+    function playStory() { story.present(0); if (!camera.reduced()) story.play(); }
 
     // ---- animation ----------------------------------------------------------------------
     var animateOn = !!data.animate && !camera.reduced();
@@ -3374,9 +3599,9 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     function pick(id) {
       if (story.isPresenting()) story.exit();
       trace.select(id);
+      panel.paint(); // opens the panel first (it starts hidden), so the camera frames the node in the room that is left
       camera.unfit();
       camera.moveTo(camera.cameraFor(camera.boxOf([id])));
-      panel.paint();
       emit();
     }
     // Drop the selection or route. Closed from the keyboard while focus is in the
@@ -3397,9 +3622,11 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       var inPanel = within(doc.activeElement, options.panel);
       var hadFocus = trace.hasFocus();
       trace.clear();
-      if (keyboard && inPanel && back && back.focus) back.focus();
+      // The panel hides once nothing is selected: focus may not stay inside it (nor go to its title).
+      if (keyboard && inPanel && back && back.focus && !within(back, options.panel)) back.focus();
+      else if (inPanel) keepFocus([options.panel], 'explore');
       else if (hadFocus && target && target.blur) target.blur(); // focusout clears the focus trace
-      panel.paint();
+      camera.holdView(panel.paint); // the panel hiding widens the stage: no jump on Close either
       emit();
     }
 
@@ -3410,7 +3637,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       trace.clear();
       clearFind();
       panel.paint();
-      camera.fit();
+      camera.home(); // the readable opening view, not the whole drawing
       emit();
     }
 
@@ -3506,7 +3733,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       var from = trace.selected() || (trace.routed() && trace.routed().from);
       if (shift && id && from && id !== from && els.nodes[id] && els.nodes[from]) trace.route(from, id);
       else trace.toggle(id);
-      panel.paint();
+      camera.holdView(panel.paint); // the panel opening narrows the stage: keep the drawing under the pointer
       emit();
     }
     stage.addEventListener('dblclick', function () { if (!story.isPresenting()) camera.fit(); });
@@ -3529,7 +3756,8 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     svg.addEventListener('focusin', function (e) {
       var id = trace.idAt(e.target);
       if (!id) return;
-      if (!story.isPresenting()) camera.ensureVisible(id);
+      // Only keyboard focus scrolls a node into view: a pressed node is already under the pointer, so never jump the view.
+      if (!story.isPresenting() && !downAt) camera.ensureVisible(id);
       trace.focus(id);
     });
     svg.addEventListener('focusout', function () { trace.focus(null); });
@@ -3537,7 +3765,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     // ---- keyboard --------------------------------------------------------------------------
     // Space plays and pauses (on the canvas and on every transport control; a
     // button elsewhere keeps Space for itself); arrows, PageUp/PageDown, Home
-    // and End move between beats; P enters Play, E leaves it; F is full screen;
+    // and End move between beats; P enters Play and plays, E leaves it; F is full screen;
     // 0 fits; A toggles the edge animation; / focuses Find; Escape closes the
     // panel, else leaves full screen, else leaves Play, else clears the Find
     // filter, else clears the trace. In Play any key but Space and F (full screen moves no camera) pauses, in a form
@@ -3559,7 +3787,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       else if (k === 'f' || k === 'F') fs.toggle();
       else if (k === '+' || k === '=') camera.zoomBy(KEY_ZOOM);
       else if (k === '-' || k === '_') camera.zoomBy(1 / KEY_ZOOM);
-      else if (k === 'p' || k === 'P') { if (!inPlay) story.present(0); }
+      else if (k === 'p' || k === 'P') { if (!inPlay) playStory(); }
       else if (k === 'e' || k === 'E') story.exit();
       else if (k === 'a' || k === 'A') { if (!camera.reduced()) toggleAnimate(); }
       else if (k === '/' && findEl) findEl.focus();
@@ -3605,7 +3833,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
       svg: svg, stage: stage, state: state,
       fit: camera.fit, zoomBy: camera.zoomBy, panBy: camera.panBy,
       select: pick, closePanel: function () { closeSelection(null, false); }, reset: reset,
-      present: story.present, goTo: story.goTo, next: story.next, prev: story.prev, first: story.first, last: story.last,
+      present: story.present, playStory: playStory, goTo: story.goTo, next: story.next, prev: story.prev, first: story.first, last: story.last,
       nextChapter: story.nextChapter, prevChapter: story.prevChapter, exit: story.exit, togglePresent: story.togglePresent,
       play: story.play, pause: story.pause, togglePlay: story.togglePlay, setSpeed: story.setSpeed, cycleSpeed: story.cycleSpeed,
       setLoop: story.setLoop, toggleLoop: story.toggleLoop,
@@ -3642,6 +3870,7 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     var dialog = figure.querySelector('[data-dg-dialog]');
     var body = dialog.querySelector('[data-dg-body]');
     var presentButton = figure.querySelector('[data-dg-present]');
+    var cue = figure.querySelector('[data-dg-cue]');
     var closeButton = dialog.querySelector('[data-dg-close]');
     var playButton = dialog.querySelector('[data-pa-play]');
     var fullButton = dialog.querySelector('[data-pa-full]');
@@ -3712,9 +3941,11 @@ html[data-simple="on"] .simple-dot, .simple-toggle[aria-pressed="true"] .simple-
     tabStops(false);
 
     // A diagram wider than the column keeps its text size and scrolls inside its slot: then the slot is a
-    // labelled, focusable region (so the arrow keys scroll it, in a deck too).
+    // labelled, focusable region (so the arrow keys scroll it, in a deck too), and a visible line says so (the
+    // scroll bar alone is easy to miss, and a phone shows none).
     function syncRegion() {
       var scrolls = slot.scrollWidth > slot.clientWidth + 1;
+      if (cue) cue.hidden = !scrolls;
       if (scrolls) {
         slot.setAttribute('role', 'region');
         slot.setAttribute('aria-label', slot.getAttribute('data-dg-label') + ' (scrolls sideways)');

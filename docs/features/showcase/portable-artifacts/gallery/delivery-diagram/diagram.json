@@ -23,15 +23,15 @@
     { "id": "courier", "label": "Courier app", "kind": "client", "group": "partners", "emoji": "🛵", "detail": "Shows the courier the pickup and the drop-off, and marks the order delivered." }
   ],
   "edges": [
-    { "id": "tap", "from": "customer", "to": "mobile", "label": "taps place order" },
+    { "id": "tap", "from": "customer", "to": "mobile", "label": "taps order" },
     { "id": "post", "from": "mobile", "to": "gateway", "label": "posts order" },
     { "id": "route", "from": "gateway", "to": "orders", "label": "routes order" },
-    { "id": "charge", "from": "orders", "to": "payments", "label": "requests charge" },
+    { "id": "charge", "from": "orders", "to": "payments", "label": "asks charge" },
     { "id": "card-charge", "from": "payments", "to": "card", "label": "charges card" },
-    { "id": "card-reply", "from": "card", "to": "payments", "label": "returns approval", "style": "dashed" },
-    { "id": "paid", "from": "payments", "to": "orders", "label": "confirms payment", "style": "dashed" },
+    { "id": "card-reply", "from": "card", "to": "payments", "label": "approves", "style": "dashed" },
+    { "id": "paid", "from": "payments", "to": "orders", "label": "confirms", "style": "dashed" },
     { "id": "write", "from": "orders", "to": "db", "label": "writes order" },
-    { "id": "publish", "from": "orders", "to": "queue", "label": "publishes order event", "style": "async" },
+    { "id": "publish", "from": "orders", "to": "queue", "label": "publishes", "style": "async" },
     { "id": "accept", "from": "tablet", "to": "orders", "label": "accepts order" },
     { "id": "offer", "from": "queue", "to": "courier", "label": "offers the job", "style": "async" },
     { "id": "dropoff", "from": "courier", "to": "customer", "label": "drops off order" }
