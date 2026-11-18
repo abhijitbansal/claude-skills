@@ -57,7 +57,7 @@ never prompts and never installs anything on its own.
 node <skill-dir>/scripts/doctor.mjs --json                  # what is missing, with the fix for your OS
 node <skill-dir>/scripts/doctor.mjs --json --for spec.json  # any skill; make-explainer and make-scene add the sister skills the spec needs
 node <skill-dir>/scripts/doctor.mjs --json --for check      # make-dashboard, make-diagram, make-explainer and make-scene: Playwright and a browser, before check.mjs
-node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: kokoro-js, before a voiceover
+node <skill-dir>/scripts/doctor.mjs --json --for voiceover  # make-motion: the voice package, before a voiceover
 node <skill-dir>/scripts/doctor.mjs --json --for cutout     # make-motion: onnxruntime-node, before cutout.mjs
 node <skill-dir>/scripts/doctor.mjs --fix node_modules      # install the named ids (comma-separated)
 ```
@@ -70,8 +70,8 @@ and the command, and asks once. On yes it runs `--fix <ids>`. Anything that
 needs `sudo`, has no automatic fix or fails (for example a sandbox without
 network) comes back to you as the exact command to run yourself; in Claude Code
 prefix it with `!`. On no the agent does what it can without the item, for
-example make-motion still writes and validates `motion.json` and hands you the
-render commands. `--for` takes a spec `.json` in every skill (make-explainer and
+example make-motion still writes `film.json`, runs `make.mjs --outline` and hands you the
+build command. `--for` takes a spec `.json` in every skill (make-explainer and
 make-scene add sister skills from it), `check` (make-dashboard, make-diagram, make-explainer and make-scene), and `voiceover` or `cutout` (make-motion). Unknown or
 misspelled arguments exit 2 and list the accepted ones. `--fix` takes the same
 `--for` the diagnosis used: it resolves ids against that target, so an id the
@@ -96,10 +96,10 @@ install path: each run picked up its skill, ran the doctor, set the host name,
 validated and built a page). The browser check (`check.mjs`) was never run by an
 agent there, and consent was pre-granted in the prompt, so the ask-first step was
 not exercised. An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**:
-dashboard 10/10, motion 5/10 under today's scorer (the summary counted six valid, one of them an edit that left the seed untouched; four more prompts were stopped by the
+dashboard 10/10, motion (make-motion 1) 5/10 under today's scorer (the summary counted six valid, one of them an edit that left the seed untouched; four more prompts were stopped by the
 account's usage limit; the five that ran all built a page)
 ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)).
-A local model through Ollama (gemma4) built a dashboard 10/10 after a SKILL.md fix (a 2026-10-12 rerun gave 7/10 and 6/10) but only 4/10 to 7/10 on motion and 0/8 on explainer (on motion the cause found was the model ending its turn before it wrote the spec);
+A local model through Ollama (gemma4) built a dashboard 10/10 after a SKILL.md fix (a 2026-10-12 rerun gave 7/10 and 6/10) but only 4/10 to 7/10 on motion (make-motion 1) and 0/8 on explainer (on motion the cause found was the model ending its turn before it wrote the spec);
 the eval refuses those two without `--allow-local-models`.
 **Gemini CLI**: its install paths were checked against its documentation on
 2026-10-15 and not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku in Claude Code, median 1.5 validate runs, median 40 s)
@@ -107,18 +107,20 @@ the eval refuses those two without `--allow-local-models`.
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
 and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-install-targets-2026-10-15.md).
 
-### Cheaper model on Copilot and Codex
+### Director and operator
 
-Writing a spec is a small job, so every skill can run on a cheap model. Hosts differ in how you get that:
+Each `SKILL.md` has a `## Director and operator` section, the same text in all five skills. The agent you talk to is the director: it runs the intake, writes the spec, views what was built and decides every `creative` finding. It may hand the one build command, `node <skill-dir>/scripts/make.mjs <spec> --json`, to a small `artifact-builder` operator agent on a cheap model. The operator fixes only `mechanical` findings (a JSON path to change), at most twice, and returns the report. It never writes a spec and never acts on a `creative` finding. The director trusts the report and the output file, not the operator's prose, and takes over when the same `mechanical` finding survives two operator attempts or names no path. With no `artifact-builder` in the host's list of agents, or if it fails to start, the director runs the same command itself.
 
-| Host | Mechanism | File | Deterministic or advisory |
-|---|---|---|---|
-| Copilot CLI | `copilot --agent artifact-builder` runs the whole session on the agent's model | `~/.copilot/agents/artifact-builder.agent.md` (project scope: `.github/agents`) | Deterministic. Verified on Copilot CLI 1.0.98: its log shows `Using model "claude-haiku-5.5" from custom agent "artifact-builder"` |
-| VS Code Copilot Chat | Pick `artifact-builder` in the agent picker | the same `.agent.md` file | Deterministic per docs; not tested here |
-| Copilot CLI or VS Code, skill hand-off (VS Code untested) | The skill's "Cheaper model" section tells the running agent to start `artifact-builder` with a self-contained brief | the same `.agent.md` file | Advisory: the main agent may choose not to |
-| Codex | `~/.codex/agents/artifact-builder.toml` (model `gpt-6-luna`, low reasoning effort), or the `default_subagent_model` key under `[agents]` in Codex config | `~/.codex/agents/artifact-builder.toml` (project scope: `.codex/agents`) | Config-level. Written from the Codex docs, not run live |
-| Claude Code | `model: haiku` and `effort: low` in each `SKILL.md` frontmatter, per Claude Code's skill docs | none (no agent file) | Claude Code feature. The frontmatter path itself (no `--model` flag) has not been measured. `eval/run-eval.mjs --host claude-frontmatter` runs `claude` without `--model` on the account's default model, and whether the frontmatter applies in that harness is unverified (it reads the skill as a plain file); read the model that ran from the session log. Haiku forced with `--model haiku` was measured on every skill (see [`eval/results/INDEX.md`](eval/results/INDEX.md)) |
-| Gemini CLI | nothing | none | none |
+Where the agent file lives, per host:
+
+| Host | File | How the director gets it |
+|---|---|---|
+| Claude Code | `agents/artifact-builder.md` in the plugin (model `haiku`, tools Read, Edit and Bash); `install.mjs claude` writes it to `.claude/agents` | Listed as `<plugin>:artifact-builder`; the skill tells the director to start it with the skill directory and the spec path |
+| Copilot CLI, VS Code Copilot Chat | `~/.copilot/agents/artifact-builder.agent.md` (project scope: `.github/agents`) | The same hand-off from the skill; advisory, the main agent may choose to run the command itself. VS Code is untested |
+| Codex | `~/.codex/agents/artifact-builder.toml` (project scope: `.codex/agents`), or the `default_subagent_model` key under `[agents]` in Codex config | The same hand-off; written from the Codex docs, not run live |
+| Gemini CLI | nothing | The director runs the command itself |
+
+No `SKILL.md` pins a model or an effort in its frontmatter any more.
 
 Install the agent file with one of these (add `--project <dir>` for project scope, and use `codex` or `agents` in place of `copilot` for those hosts):
 
@@ -138,19 +140,17 @@ node <skill-dir>/scripts/doctor.mjs --fix builder_agent
 
 The doctor reports a missing agent file as an optional item, and only where `~/.copilot` or `~/.codex` exists. `--fix builder_agent` runs the skill's own copy of `shared/agents.mjs`, which writes `~/.copilot/agents/artifact-builder.agent.md` and/or `~/.codex/agents/artifact-builder.toml` (user level, outside the project; an existing file is kept, never overwritten). The skill's workflow already tells the agent to ask you before running a doctor fix. Project-level install (`.github/agents`, `.codex/agents`) still needs `install.mjs --project`. A host may need a new session before it lists the new agent.
 
-What was measured, on Copilot CLI 1.0.98, 2026-10-21 (results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)), running `copilot -p "<prompt>" --allow-all-tools --agent artifact-builder`:
+**What was measured, and on which scheme.** No run of the director and operator scheme has a committed summary: the billed eval of it is open, and `eval/run-eval.mjs` has a delegation view for it. The only measurements below were taken on 2026-10-21 on Copilot CLI 1.0.98 under the earlier scheme, where each skill had a "Cheaper model" section and the cheap model wrote the spec itself (the session ran as `copilot -p "<prompt>" --allow-all-tools --agent artifact-builder`, on make-motion 1 for motion). They are kept as dated records ([`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)):
 
 | Run | Valid builds | Model |
 |---|---|---|
-| make-motion, all 10 prompts | 10/10 (validate runs 1-4, median 2; 26-57 s per case) | `claude-haiku-5.5` reported for 9 of 10; the edit case did not set `generatedBy` |
+| make-motion 1, all 10 prompts | 10/10 (validate runs 1-4, median 2; 26-57 s per case) | `claude-haiku-5.5` reported for 9 of 10; the edit case did not set `generatedBy` |
 | dashboard, diagram, explainer, scene (9 runs) | 9/9 | `claude-haiku-5.5` reported for all 9 |
 | Copilot's own logs, all 19 runs | 19 lines `Using model "claude-haiku-5.5" from custom agent "artifact-builder"` | the default would have been `claude-sonnet-5.5` |
 
-The skill hand-off is advisory. In the one live trial (make-explainer on the default model, no retries), the main agent did hand off and the sub-agent ran on `claude-haiku-5.5` and obeyed the loop guard, but the sub-agent hit `Permission denied because no interactive user response was available` on both its tools when reading the skill file. That skill was a `--link` symlink pointing outside the project; the cause was not verified and a copy install was not tried. The main agent said so and built the page itself (validate passed, 34 s). So the hand-off happened and the fallback worked, but the cheap model did not do the work in that run.
+Under that scheme the skill hand-off was advisory. In the one live trial (make-explainer on the default model, no retries), the main agent did hand off and the sub-agent ran on `claude-haiku-5.5` and obeyed the loop guard, but the sub-agent hit `Permission denied because no interactive user response was available` on both its tools when reading the skill file. That skill was a `--link` symlink pointing outside the project; the cause was not verified and a copy install was not tried. The main agent said so and built the page itself (validate passed, 34 s). So the hand-off happened and the fallback worked, but the cheap model did not do the work in that run.
 
 Cost: only that one trial was measured, at 18.7 AI Credits (about $0.19 at 1 credit = $0.01; 432k input tokens, 353k of them cached, 4.2k output tokens). The cost of the smoke and motion runs was not measured. Claude Haiku 5.5 is listed at $0.10 / $0.50 per 1M input / output tokens; the default model's price was not looked up here, so no saving is claimed.
-
-`model: haiku` in make-motion's frontmatter changes the model Claude Code uses for it. The motion gate in the table above measured Copilot's `claude-haiku-5.5`; make-motion on Haiku in Claude Code was measured later with `--model haiku` (the 1.1.0 gates in [`eval/results/INDEX.md`](eval/results/INDEX.md)), and the frontmatter path with no `--model` flag has not been measured.
 
 Not tested: Codex (no account; the files come from the Codex docs), VS Code Copilot Chat, and a copy install for the hand-off trial.
 
@@ -413,9 +413,10 @@ write them unchanged to `plan-answers.json` first. A worked example is
   static SVG, light and dark, with a data table. `interactive: true` also
   builds the dashboard next to the page and links it. Local files only: a
   dashboard with a Postgres or MySQL source is refused.
-- `motion`: an `.mp4` (up to 50 MB), or a make-motion `motion.json` rendered
-  during the build (needs make-motion, ffmpeg and Chromium; set
-  `PA_MOTION_TIMEOUT_MS` for a long render). The video never autoplays.
+- `motion`: an `.mp4` (up to 50 MB), or a make-motion film (version 2, a
+  `film.json`) rendered during the build (needs make-motion, ffmpeg and Chromium; set
+  `PA_MOTION_TIMEOUT_MS` for a long render). A version 1 spec is refused with
+  the validator's own sentence. The video never autoplays.
 - `scene`: an inline make-scene spec, or the path to a `.json` (up to 1 MB), drawn
   as an interactive 3D view in a fixed frame that renders only while visible.
   At most 4 per page. The page's theme wins over the scene's. Decks and print
@@ -445,7 +446,8 @@ slide per page.
 
 ### Choosing a theme
 
-make-explainer and make-motion share these rules:
+make-explainer follows these rules (a make-motion film has a look, not a theme; see
+[section 5](#5-videos-with-make-motion)):
 
 1. A theme you name wins: `--theme poster`, or "use poster" in the prompt.
 2. Otherwise the agent picks one from the prompt and says which and why in one
@@ -486,6 +488,8 @@ preset in `references/examples/`.
 
 ## 5. Videos with make-motion
 
+make-motion 2 reads version 2 films only: a script of shots in one JSON file, `film.json`. A version 1 spec (one with `scenes`) is refused with a pointer to `skills/make-motion/references/migrating.md`, which says what each version 1 feature became and what is not in 2.0. The clips in the gallery and on the site were made with make-motion 1.x.
+
 **Ask:**
 
 > Make a 10-second explainer: "Q3 revenue up 18%" with a counter, then a bar
@@ -493,224 +497,39 @@ preset in `references/examples/`.
 
 **What the agent does:**
 
-1. Asks one intake round (see below), then writes `motion.json` (scenes → elements → keyframes).
-2. `validate.mjs motion.json` until it prints `valid`.
-3. `render.mjs motion.json --contact-sheet` writes `out/contact/<scene>.png`,
-   one tiled, timestamped sheet per scene (up to 11 moments plus a phone-width copy). The agent looks at each one and fixes clipping,
-   overlaps or unreadable text, then runs `check.mjs motion.json` (with the same
-   `--theme` as the render, if any), which reports text or counters outside the safe area
-   (60 px at 1080 on the short side) while they are not moving, overlapping text or counters
-   and a scene that ends with nothing visible (it prints `check: skipped (no browser: …)` and exits 0
-   without a browser). It also warns on stderr, without failing, when the first
-   frame (the video's thumbnail) is blank. Four audits join it: contrast (WCAG AA against
-   the worst pixels behind a text), reading floor (a text stays on screen
-   0.75 x (0.5 + 0.3 x words) seconds), dead stretch (nothing may sit unchanged for more
-   than 3 s outside the final 3 s; `"hold": true` opts an element out) and text floor
-   (under 28 px at 1080 for 0.5 s or more).
-4. Offers `preview.mjs motion.json --open`, a local page with a scrubber,
-   play/pause, scene markers and frame-by-frame arrow keys. It reloads
-   whenever `motion.json` changes, and shows validation errors in the page.
-5. `render.mjs motion.json` writes `out/motion.mp4` (1920×1080, 30 fps,
-   H.264, plus AAC audio when the spec has `audio` tracks or `cues`; with audio it
-   ends by printing `audio: <n> LUFS integrated, true peak <n> dBTP`). Two renders of
-   the same spec and media give identical frames and audio; the MP4 `comment` tag carries
-   the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set.
+1. Asks one intake round (see below), then writes `film.json`: `{ "version": 2, "shots": [...] }`. Each shot has an `id`, a `show` (its kind: `statement`, `number`, `chart` and so on) and usually a `say`, the sentence that narrates it. A shot lasts as long as its narration takes at the mode's pace, plus a short tail.
+2. `make.mjs film.json --outline` checks the film and prints each shot with its start, end and narration, with no browser. The agent fixes every line it prints (`<json.path>: <message>`).
+3. `make.mjs film.json --json` validates the film, reviews every shot in a browser, writes review sheets (one PNG per shot and one strip per cut) and renders the MP4. Findings are `mechanical` (a JSON path and a message: change it and run again) or `creative` (a call for the agent, never a failure). The agent opens each sheet, writes `review.md` and fixes the film until `ok` is true.
+4. Offers `make.mjs film.json --preview --open`, a local page on `127.0.0.1` with a scrubber. It keeps running until you stop it.
+5. The MP4 lands in `out/<name>.mp4` beside the film, and the sheets in `out/<name>.sheets/`. Two renders of the same film and media give the same frames; the MP4's `comment` tag carries the build date, so the files differ by day unless `SOURCE_DATE_EPOCH` is set. Exit 0 is ok, 1 findings or an invalid film, 2 usage or machine trouble, 130 interrupted.
 
-**Other sizes:** set `"size": [1080, 1080]` in the spec for a square social
-clip, or override at render time with `--size 1280x720 --fps 24`. If the
-aspect ratio differs from the spec, the frame is letterboxed in the spec's
-background colour. A root `"format"` (`16:9`, `9:16`, `1:1` or `4:5`) sets the size
-for you, plus a safe area and a caption zone (the lower part of the frame:
-from 78 % of the height down, 72 % for `9:16` and `4:5`); a `size` that disagrees with
-it is an error.
+**Looks and kinds.** A look is the whole style of the film. There are seven (`node <skill-dir>/scripts/make.mjs --list looks`): `desk` (editorial paper collage, the default of `pro`), `pop` (short-form caption collage, the default of `viral`), `cosmos`, `ledger`, `poster`, `keynote` and `marker`, a whiteboard time-lapse in which a hand draws every stroke. A prompt that asks for a whiteboard or a hand-drawn look sets `marker`. A kind is one idea on screen. There are sixteen (`--list kinds` prints each with its fields and one example to copy): `statement`, `number`, `clipping`, `end`, `list`, `quote`, `compare`, `chart`, `media`, `screen`, `map`, `diagram`, `timeline`, `code`, `feed` and `free`. Some looks park a kind (it renders with a note) or exclude it (it is refused, with the looks that have it); the table is in `skills/make-motion/SKILL.md` and `README.md`. `--list` also takes `modes`, `devices`, `moves`, `cuts`, `fields` and `voices`.
 
-**The intake round.** Before it writes a spec the agent asks once, in one message,
-listing each option with its default: format (`16:9`), length (about 10 s), assets
-(none), voiceover (off), sound (none), theme (the one the prompt suggests: `press` for
-dense docs and recaps, `poster` for launches and pitches, otherwise `dusk`), CTA (none) and
-captions (off), and the style (`standard`, or `hand-drawn` and `mixed`, see below).
-Answer all of it in one reply, or say "defaults". An option your prompt already settles
-("a 9:16 clip", "with a voiceover") is not asked again. A run that cannot pause for
-an answer (`claude -p`, `codex exec`, an eval) skips the round and builds with the
-defaults, and its final report carries one line naming what it used:
-`intake: skipped (<reason>); values used: format 16:9, length 10 s, assets none, voiceover off, sound none, theme dusk, CTA none, captions off, platform none, style standard, hand n/a`
+**The intake round.** Before it writes the film the agent asks once, in one message, listing each option with its default: `mode` (`pro`, a calm 16:9 explainer, or `viral`, a fast 9:16 short for Reels, TikTok and Shorts), `look`, `format` (`16:9`, `9:16`, `1:1` or `4:5`), `length` (about 30 s for `pro`, 15 s for `viral`), `assets` (none), `voice` (off), `music` (none), `sound` (none in `pro`) and `ask` (a closing line, none). Answer all of it in one reply, or say "defaults". An option your prompt already settles ("a vertical short", "with a voiceover") is not asked again. A run that cannot pause for an answer (`claude -p`, `codex exec`, an eval) skips the round and builds with the defaults, and its final report carries one line naming what it used:
+`intake: skipped (<reason>); values used: mode pro, look desk, format 16:9, length 30 s, assets none, voice off, music none, sound off, ask none`
 (the values shown are the defaults; a value your prompt settled appears instead).
 
-**The storyboard.** For a clip over 20 s, after the intake round, the agent writes a short
-brief (the title, the length, and one line and one length per scene) and runs
-`storyboard.mjs brief.json --out plan.json`. That writes a make-explainer plan page: a
-summary, a timeline with one event per scene, the beats, a theme decision (`dusk`, `press` or
-`poster`, with a recommendation), an approval of the storyboard, a question for anything to
-change and a verdict. The agent builds the page and sends it to you; it reads your answers
-only through make-explainer's `answers.mjs`, then writes the spec from them. The step is
-skipped, with one line in the final report (`storyboard: skipped (<reason>)`), for a clip of
-20 s or less, when make-explainer is not installed beside make-motion, and under `claude -p`,
-`codex exec`, `copilot -p`, an eval, or any run that cannot pause for an answer (the agent
-passes `--non-interactive`). A skip is never an error: the clip is built directly.
+**The storyboard.** For a film over 20 s, after the intake round, the agent runs `storyboard.mjs film.json --out plan.json`. That writes a make-explainer plan page for you to answer before the film is built. The step is skipped, with one line in the final report (`storyboard: skipped (<reason>)`), for a film of 20 s or less, when make-explainer is not installed beside make-motion, and under `claude -p`, `codex exec`, `copilot -p`, an eval, or any run that cannot pause for an answer (the agent passes `--non-interactive`). A skip is never an error: the film is built directly.
 
-**Groups and blocks.** A `group` holds up to 40 child elements, up to three groups
-deep, and moves them as one. A `block` is a ready-made piece of a scene, written as one
-element with a few params: `title-card`, `lower-third`, `kpi-counter`, `step-flow`,
-`quote-card`, `checklist`, `logo-outro`, `cta-close`, `cta-soft` (a soft ask: save, send,
-follow), `story-beats` (hook, problem, reveal, proof, call to action), `listicle` (a
-numbered list), `before-after-swipe`, `code-typing`, `code-diff`, `terminal-run`,
-`map-highlight`, `flow-map`, `race` (a bar chart race over periods), `comparison-split`,
-`before-after` (two numbers), `notification-stack`, `chat-thread`, `timeline`,
-`testimonial`, `lower-third-tag`, `lower-third-social`, `lower-third-ticker` and
-`text-behind-subject` (big text behind a person: needs a cutout of the photo or clip, which
-`cutout.mjs` makes locally after a one-time install the agent asks about), five that mock a
-product screen (`browser-window`, `form-fields`, `tab-switch`, `button-state` and `side-panel`)
-and five that a hand draws (`sketch-diagram`, `sketch-steps`, `sketch-list`,
-`sketch-compare` and `sketch-callout`, see below): 38 in all.
-A block lays itself out for
-16:9 and 9:16, takes its colours from the theme and keeps clear of the caption zone.
-`node <skill-dir>/scripts/blocks.mjs list` lists them and `show <name>` prints a block's
-params and a ready element to paste.
+**Narration and anchors.** `say` is the narration, written for the ear: short sentences, one idea each, with `*word*` marking the few words that carry the point. An `on` list ties a device (a circle, a highlight, an arrow) to a spoken word: `{ "at": "word:query", "do": "highlight", "target": "region:query" }`. `cut` on a shot names how the film arrives at it (`--list cuts`). `make.mjs film.json --phonemes` prints how each sentence will be read, so a word with two readings (resume and résumé, lead, read) can be respelled in the `say` text.
 
-**Viral mode.** For Reels, TikTok and Shorts: `"mode": "viral"` (the agent writes it when
-you name a platform in the intake round). It sets 9:16 at 1080x1920, a platform safe zone
-(top 290, bottom 675, left 120, right 195 px), captions in a zone lifted above the bottom
-band, a first-scene title shown from frame 0 as the hook, cues placed for you (a `swoosh`
-on each cut, a `pop` on each entrance, a `ding` when a counter lands; write `"cues": []` for
-silence) and a -14 LUFS / -1 dBTP target that the render normalises the mix to (a two-pass
-`loudnorm`; `render.mjs --loudness off` turns it off). `check.mjs` adds warnings,
-never failures: a hook outside 3 to 7 words, text under a platform band, 3 s with no
-change, audio without captions. The safe-zone numbers are tunable defaults taken from
-the platforms' ad specs, and -14 LUFS is a common default that no platform publishes; none
-of this is a guarantee of reach. Start from `references/examples/viral-hook.json`.
+**Audio is opt-in.** The agent adds a `voice`, `music` or `sound` only when you ask for sound ("with a voiceover", "with background music from music.mp3"). A prompt that says nothing about sound renders silent. In `viral` mode the designed cues play unless the film says `"sound": "off"`.
 
-**Hand-drawn style.** A scene with `"style": "sketch"` is drawn on a white board by an
-illustrated hand, one stroke at a time: writing in a handwriting font (Caveat, OFL-1.1),
-boxes, lines and arrows, Lucide icons and scribble fills, or the five sketch blocks. Put
-`style` at the root to draw the whole film, or on single scenes to mix drawn and standard
-ones (a title, a drawn middle, a closing ask). The agent offers it in the intake round, off
-by default, and switches it on by itself when the prompt says whiteboard, hand-drawn or a
-sketch look; it also asks for the hand's skin tone (`light`, `medium`, `tan`, `brown` or
-`dark`). `erase` is a transition in which the hand clears one board for the next. With a
-voiceover, the elements are drawn in the narration's sentences, one element for each
-sentence, and `"drawAt": "sentence:<n>"` pins one to a sentence. A drawn scene refuses what a
-pencil cannot draw (charts, images, video, Lottie, code, counters, keyframes, camera), a
-viral spec takes no drawn scene, and a drawn film has no default length: the drawing decides
-how long a scene lasts, and `validate.mjs` names the length it needs. `check.mjs` is the only
-place that reports a drawing that is too long for its narration sentence. Four starter films
-are in `references/examples/` (`sketch-architecture.json`, `sketch-concept.json`,
-`sketch-steps.json`, `sketch-mixed.json`) and the rules are in `references/sketch.md`.
-There is no drawing sound in this release.
+- **Voiceover.** `"voice": { "name": "af_heart" }` at the root; the narration is made on this machine. The agent asks once to install the voice package (about 227 MB, `doctor --fix kokoro`, measured with `du -sk` after `npm ci --ignore-scripts` in `optional/voice`) and a model of about 93 MB, downloaded once on first use (the five pinned files total 92,886,949 bytes; one pinned commit, each file SHA-256 checked). `make.mjs --list voices` prints the voices without loading the model. The only claim this document makes about the voice is a measured one: on the held-out fixture lines, for the word starts that follow a silence, the predicted start was a median 9 ms from the onset ffmpeg's silence detector found. Nobody has listened to the audio, so the agent says what the run printed and never that it sounds right.
+- **Music.** `"music": { "bed": "pulse", "bpm": 92 }` (a synthesised bed: `pulse`, `drift` or `tape`) or a file you supply, `"music": { "src": "data/music.wav" }`. `beats.mjs data/music.wav` finds the beat grid of a music file with a local detector and writes `data/music.beats.json`; name it in `music.beats` and set `music.snap` so the cuts move onto the beats. It exits 1 with `no steady beat found` when the track has none; `--bpm` forces a tempo when the detector picks the wrong one.
+- **Cues.** `"sound": "on"` turns on the designed cues, synthesised on this machine (`pop`, `click`, `whoosh`, `chime`, `impact`, `riser`, `swoosh`, `drop`, `ding`, `sub`, `paper`, `marker`, `erase`); a `cues` list, `[{ "at": 2.5, "cue": "pop" }]`, places your own. `audio` adds extra sound files, `[{ "src": "ding.wav", "at": 3 }]`.
+- **Captions** are a separate switch, `"captions": true`, off by default. `--subtitles srt` (or `vtt`) writes a subtitle file; no caption file is read.
 
-**Screens, speech, posters and length.** The five product-screen blocks stand alone and are
-placed by coordinates (`blocks.mjs show browser-window` prints the content rectangle the
-others go inside); `references/examples/ui-form-fill.json` fills a form inside a window beside
-a panel. A text takes `"anchor": "left"` so stacked lines share one left edge. For a voiceover,
-`voice.mjs ... --phonemes` prints how Kokoro read each sentence, so a word with two readings
-(résumé, lead, read) can be checked and respelled without listening. `render.mjs motion.json
---poster 4.5` writes one frame (`out/poster.jpg`) without rendering the MP4, with the captions
-hidden; `--no-provenance` leaves the authoring tags out of the MP4. The 120 s limit on a film's
-total length is gone: up to 50 scenes of up to 60 s each, and render time grows with the length
-(use `--workers` and `--quality draft`).
+**More from the same command.**
 
-**Transitions and camera.** A scene's `transition` is a name or `{ "type", "direction",
-"duration" }`: `fade`, `crossfade`, `push`, `slide`, `wipe`, `zoom`, `blur` or `iris`
-(0.1 to 2 s, 0.4 s by default). A scene `camera` takes keyframed `zoom`, `x`, `y` and
-`rotate`, and a seeded `shake`; the same seed always shakes the same way. Examples:
-`references/examples/transitions.json` and `camera-push-in.json`. `gl-ripple` and `gl-cube`
-are two more transition names that a render draws with a WebGL shader in software (the same
-frames on every machine and at any `--workers`); the live preview and `check.mjs` show a
-crossfade and a push in their place, so judge the look from the render or `--contact-sheet`
-(`references/examples/gl-transitions.json`).
+- `make.mjs film.json --poster 4.5` writes one still instead of the MP4 (`--poster-out <file>.jpg` names it).
+- `--workers 4` (or `auto`) captures frames in parallel. `--exact` captures every frame as a PNG. `--sheets-only` writes the review sheets and encodes nothing.
+- **One video per row.** Declare `vars` in the film, `{ "name": { "type": "string", "default": "Ada" } }`, write `{{name}}` where a value goes, put the values in a JSON array of objects, and run `make.mjs film.json --batch rows.json --out "renders/{name}.mp4"`. The `--out` needs `{index}` or a `{var}`.
+- **Footage and pictures.** A `media` shot places a picture or a clip from the project folder (`src`, and for a clip `in`, `out` and `muted`). A `clipping` shot shows a screenshot with highlighted regions. A `cutout` device places a picture with transparency; `cutout.mjs photo.png` makes one locally after a one-time install the agent asks about.
+- `--model`, `--effort` and `--agent` set the provenance stamp; `--no-provenance` (or `"provenance": false` in the film) leaves the authoring tags out of the MP4.
+- Finished films to copy are in `skills/make-motion/references/examples/v2/`. The fields every film and shot take, the report and the exit codes are in `references/schema.md`; how to write for the picture is in `references/story.md`.
 
-**Beats and loudness.** `beats.mjs music.wav --out data/music.beats.json` finds the beat
-grid of a music file with a local detector (no network, no new dependency); name that file
-in the spec's root `beats` and any keyframe `t`, cue or audio `at`, or caption `at` can be
-`"beat:<n>"`. It was measured on synthetic audio only, not on real music; `--bpm` forces a
-tempo when the detector picks the wrong one. `render.mjs --loudness <lufs>` (-30 to -5) and
-`--true-peak <dbtp>` normalise the mix after the encode; without a target nothing changes.
-
-**Grade, Lottie and maps.** An `image` or `video` element takes `"grade"`: a preset (`warm`,
-`cool`, `mono`, `film`) and optional `exposure`, `contrast` and `saturation`. A `lottie`
-element plays a Lottie JSON file from the project folder offline; a file with remote assets
-or expressions is refused. A chart's `data` can be a named atlas (`world-110m`, `world-50m`,
-`us-states-10m`, `us-counties-10m`, bundled, offline), and the `map-highlight` and `flow-map`
-blocks use them.
-
-**Pick in the preview.** In the live preview, clicking an element copies its spec path and
-id (for example `scenes[1].elements[3]  id=title`) and shows a 2 s toast, so you can tell the
-agent exactly which element to change.
-
-**Code.** A `code` element shows highlighted code in 14 languages (highlighted offline
-with shiki), optionally typed out or as a diff; the `code-typing`, `code-diff` and
-`terminal-run` blocks wrap the common cases.
-
-**Faster renders.** `render.mjs --workers 4` (1 to 16, or `auto`) captures frames in
-parallel and gives the same MP4 as one worker. `--quality draft` renders half the size on
-each side with a faster encode, for a quick look. Measured on one Apple M4 Pro (14 logical
-cores) by timing the whole process of
-`env SOURCE_DATE_EPOCH=1793318400 node scripts/render.mjs test/fixtures/benchmark-30s.json --out <file>.mp4 --workers <n>`
-(paths inside `skills/make-motion/`), twice with each worker count: the 30 s, 1080p, 30 fps
-benchmark spec took 30.35 s and 30.53 s with one worker and 13.37 s and 13.57 s with four
-(a 2.28x speedup; all four files had the same SHA-256).
-
-**One video per row.** Declare `vars` in the spec, write `{{name}}` where a value goes, put
-the values in a JSON array of objects, and run
-`render.mjs motion.json --batch rows.json --out "renders/{name}.mp4"`. Every row is checked
-before anything renders; `renders/manifest.json` lists each row's status, file and SHA-256.
-A row that fails while rendering is marked `failed` and the others still render.
-
-**Footage.** A `video` element places an mp4, mov, webm or m4v clip from the project
-folder, with optional `trimStart`, `trimEnd`, `offset`, `mute` and `volume`. Its sound
-joins the mix unless muted. It needs ffmpeg and ffprobe, and the render stays offline.
-
-**Captions.** A root `captions` array adds on-screen words, 2 to 6 at a time, from an
-SRT, VTT or Whisper JSON file in the project folder, or from the sentence timings
-`voice.mjs` writes to `voice/<scene>.json`. Styles: `plain`, `pill`, `karaoke`, `kinetic`,
-`boxed` and `typewriter`. They sit in the caption zone; `check.mjs` reports other text
-held there while a caption shows. Word timing inside a voice sentence is estimated,
-so `karaoke` and `kinetic` follow the voice only roughly.
-
-**Charts in videos** are Vega-Lite specs with inline `data.values`. Animate
-`reveal` from 0 to 1 for a left-to-right wipe.
-
-**Theme.** The agent picks it as in [Choosing a theme](#choosing-a-theme) and
-writes it as the spec's `theme`. A spec without one renders in `dusk`. The
-theme's dark colours and fonts are the defaults; any colour the spec sets
-itself still wins. `render.mjs --theme <name>` fills in only for a spec that
-names none. A `text` with `"role": "title"` uses the theme's display font and,
-with no keyframes of its own, gets the theme's entrance (`dusk` rises, `press`
-inks in, `poster` slams). A scene with `"background": "art"` draws the theme's
-procedural art behind its elements, seeded by the scene id.
-`references/examples/launch-title.json` uses both.
-
-**Polish.** A shape `fill`/`stroke` or a text `color` can name a theme token
-(`surface`, `line`, `accent`, `accentSoft`, `good`, `bad`, `warn`, `text`, `text2`,
-`text3`, `cat1`..`cat6`) instead of a hex, so a theme change recolours it. A rect with
-`"elevated": true` is a card (a lifted fill and a 1 px inner highlight); a line takes
-`"cap": "round"` and `"arrow": "end"`. Charts default to about five ticks per axis, no
-tick marks, no y-axis line, no vertical gridlines, bars with rounded ends and a gap, and
-4 px round lines with ringed points. `"transition": "crossfade"` on a scene (or at the
-root, as the default) fades it in over the previous scene, which stays fully visible beneath, over 0.4 s.
-`"typing": true` on a text types it out at 0.035 s per character with a caret.
-
-**Texture is opt-in.** A root `"texture": { "vignette": true, "grain": 0.08 }` darkens the
-corners and lays static film grain (0 to 0.15) over each scene, the same every render. It
-slows rendering: measured at 1920x1080 on one Apple-silicon Mac, about 17 to 33 ms per frame
-with none, 42 ms with the vignette, 100 ms with grain and 187 ms with both.
-
-**Audio is opt-in.** The agent adds `audio` tracks only when you ask for
-sound ("with background music from music.mp3", "with a voiceover reading
-it"); a prompt that says nothing about sound renders silent, as before.
-A track is a local file next to `motion.json` (mp3, wav, m4a, aac, ogg or
-flac) with `at` (seconds), or `scene` plus `at` so the clip moves with its
-scene, and optional `duration`, `volume`, `fadeIn` and `fadeOut`. ffmpeg
-mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
-(approximately; `M` mutes) and the MP4 timing is exact. Music is always a
-file you supply. For narration the agent writes `say` on a shot of a version 2 film (make-motion 2 speaks it locally) after asking once to install the voice package (doctor --fix kokoro: about 227 MB on macOS from optional/voice's lockfile, plus a 93 MB model downloaded once, pinned and SHA-256 checked).
-`make.mjs --list voices` prints the voices without loading the model. (This section still describes version 1's tracks and cues; the cut-over's document pass rewrites it.) Short UI sounds need no
-file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`,
-`swoosh`, `typing`, `drop`, `ding`, each with `at`, or `scene` plus `at`, and optional `volume`,
-`pan` and `note`; a `typing` cue can instead name a text with `follow`) is synthesised at
-render time, the same bytes every time, and mixed in with any tracks; the preview does not
-play cues. Twelve recorded clicks and hits (Kenney, CC0) ship with the skill as
-`"cue": "kenney:<name>"`: `click`, `tick`, `switch`, `select`, `confirm`, `error`, `open`,
-`close`, `pluck`, `glass`, `thud` and `metal`.
+**Not in 2.0.** Lottie, the nine themes and `--theme`, the 38 blocks, scenes with elements and keyframes, colour grades, a caption file as input, the recorded `kenney:` cues, `"beat:<n>"` times, `voice.mjs` as its own command, and `--contact-sheet`, `--quality`, `--fps`, `--size`, `--loudness` and `--true-peak` (each refused with a hint). `references/migrating.md` says what replaces each one.
 
 ## 6. 3D scenes with make-scene
 
@@ -786,12 +605,12 @@ settings turn off auto-orbit and sway, and tour beats cut instead of fly.
 
 **Favicon.** Each page has an inline SVG favicon in its theme accent: three bars
 for a dashboard, three linked nodes for a diagram, a page with lines for an
-explainer, a play triangle for the make-motion preview, stacked blocks for a 3D scene. Nothing is fetched.
+explainer, stacked blocks for a 3D scene. Nothing is fetched.
 
 **Theme toggle.** A sun, moon or auto icon button cycles Auto, then Light, then
 Dark, and remembers the choice in your browser. It still cycles when the browser
-blocks storage. The make-motion preview has none: it is a dark-only local tool,
-and the video follows the spec's theme.
+blocks storage. The make-motion preview has none: it is a local tool, and a film's
+look sets how the video is drawn.
 
 **Who made it.** Set `generatedBy` in the spec to the model, effort and host that
 wrote it, or override per field at build time with flags:
@@ -802,18 +621,17 @@ wrote it, or override per field at build time with flags:
 
 ```bash
 node <skill-dir>/scripts/build.mjs spec.json --model "Claude Opus 5.5" --effort high --agent "Claude Code"
-node <skill-dir>/scripts/render.mjs motion.json --model "Claude Opus 5.5" --effort high --agent "Claude Code"   # make-motion
+node <skill-dir>/scripts/make.mjs film.json --model "Claude Opus 5.5" --effort high --agent "Claude Code"   # make-motion
 ```
 
-make-motion's `preview.mjs` takes no provenance flags: the preview footer comes
-from the spec's `generatedBy`, and `render.mjs` takes the flags for the MP4.
+On make-motion the flags override the film's `generatedBy`, and `--no-provenance` leaves the authoring tags out of the MP4.
 
 Each field is 1 to 60 characters from `A-Za-z0-9 ._:/()+-`; anything else fails
 validation (exit 1) and never reaches the page. A field the agent does not know is
 left out, and the page reads "not reported": nothing is guessed. The stamp shows as
 a footer line (make-diagram: a line under the title), for example
 `make-explainer · Claude Haiku · low effort · Claude Code · 15 Oct 2026`, and as
-`<meta name="generator">`. The make-motion preview shows it in its footer and the same meta tag, and the
+`<meta name="generator">`. The make-motion preview shows it in its footer, and the
 MP4 gets it in the `comment` tag (and the model in `artist` when it is reported). When `generatedBy`
 is set in the spec, a dashboard refresh keeps the original author; a stamp passed
 only as flags is not kept by a refresh run without them. A dashboard also shows its
@@ -848,8 +666,7 @@ Grotesk and JetBrains Mono; `poster` Big Shoulders Display, Familjen Grotesk
 and Martian Mono; `paper` and `blueprint` Geist and Geist Mono; `ink` Bricolage
 Grotesque headings over Geist; `editorial` Newsreader headings and an Atkinson
 Hyperlegible body; `mono` JetBrains Mono throughout, in regular weight only (no bold face, so bold text is synthesized by the browser); `brief` Newsreader headings,
-an Atkinson Hyperlegible body and Geist Mono. The make-motion preview and video use the spec's theme
-(`dusk` when it names none). Links in running text are underlined; buttons,
+an Atkinson Hyperlegible body and Geist Mono. A make-motion film uses the fonts of its look, bundled with the skill. Links in running text are underlined; buttons,
 navigation and cards are not.
 
 ## 8. Asking for changes
@@ -904,12 +721,12 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
 | `check: skipped (no browser: …)` from any skill's `check.mjs` (make-scene also skips when the browser has no WebGL) | Expected without Playwright or Chromium; the page is still built. A skipped check is not a pass: `--json` carries `"skipped": true`. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
-| `kokoro-js is not installed` | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (voiceover only; or doctor --fix kokoro; npm ci in the skill folder leaves it alone) |
+| `the optional voice package is not installed. Run: …` | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (voiceover only; or doctor --fix kokoro; npm ci in the skill folder leaves it alone) |
 | `onnxruntime-node is not installed` | `npm ci --ignore-scripts --prefix <skill-dir>/optional/cutout` (cutouts only; or doctor --fix cutout; npm ci in the skill folder leaves it alone) |
 | `audio[0].src: ffmpeg cannot decode …` | The file is not a valid audio file. Re-export it as mp3 or wav |
 | `ffmpeg not found` | macOS `brew install ffmpeg`, Windows `winget install Gyan.FFmpeg` (then a new terminal), Linux `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` |
-| `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion) or come from a SQL query (dashboard) |
-| A final counter value or keyframe never shows | Frame *i* samples `t = i/fps`. End keyframes at least one frame before the scene ends |
+| `remote data is not allowed` / `not allowed — external URLs are never fetched` | Charts must carry their data inline (motion: in the film) or come from a SQL query (dashboard) |
+| `this is a version 1 spec; make-motion 2 reads version 2 only. See references/migrating.md` | The file is a make-motion 1 spec (it has `scenes`). Write it again as a version 2 film; `skills/make-motion/references/migrating.md` maps each feature |
 
 ## 11. Checking a new host or model
 
@@ -926,7 +743,7 @@ node plugins/portable-artifacts/eval/run-eval.mjs --skill dashboard --host claud
 It records: spec written, valid, validate retries, build or contact sheet ok,
 the browser check where the skill has one, whether the spec used the feature the prompt asked for,
 and which fields changed on edit prompts. `--set <name>` picks a further prompt set, and
-`--host claude-frontmatter` runs Claude Code without a `--model` flag (the account's default model;
-whether the `SKILL.md` frontmatter applies is unverified, see [`eval/README.md`](eval/README.md)). A local model needs `--allow-local-models` on motion and explainer.
+`--host claude-frontmatter` runs Claude Code without a `--model` flag (the account's default model; no `SKILL.md`
+frontmatter pins a model now, and whether the old frontmatter ever applied there was unverified, see [`eval/README.md`](eval/README.md)). A local model needs `--allow-local-models` on motion and explainer.
 Each run is billed on a billed host: count the prompts first. See [`eval/README.md`](eval/README.md)
 and the version each committed summary covers in [`eval/results/INDEX.md`](eval/results/INDEX.md).

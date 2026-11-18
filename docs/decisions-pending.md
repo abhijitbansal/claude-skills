@@ -199,6 +199,25 @@ The cut-over plan (docs/superpowers/plans/2026-11-16-pa2-cutover.md) deletes the
 - Options for the owner: (a) wait for the remaining kinds and looks, then cut over (the design order); (b) cut over now and list every dropped feature in migrating.md and the CHANGELOG; (c) ship version 2 beside version 1 behind the spec version field for one release.
 - The plan lists 12 smaller decisions with defaults (shiki and atlas packages, optional/cutout, the sketch template, version number timing, site clips).
 
+**Resolved 2026-11-18: (b), cut over now.** Version 1 is deleted on branch worktree-New-Motion (cut-over Tasks 1 to 6), and every dropped feature is named with what replaces it in `skills/make-motion/references/migrating.md` and in the CHANGELOG `[Unreleased]`. Outcomes of the plan's smaller decisions:
+
+- **Decision 2 (shiki and the atlas packages):** kept. All five (`shiki` 4.5.0, `us-atlas` 3.0.1, `world-atlas` 2.0.2, `d3-geo` 3.1.1, `topojson-client` 3.1.0) are imported by version 2, and their licence rows stay.
+- **Decision 3 (`optional/cutout`):** kept, with `scripts/cutout.mjs`, its tests and its doctor target. The `cutout` device takes a picture with transparency. A cut-out clip in a film is not claimed.
+- **Decision 4 (`template/sketch/`):** deleted with version 1, with the vendor script and its test. Caveat now ships from `engine/fonts/`.
+- **Decision 5 (version 2.0.0):** not bumped. The bump happens once, with step 9, before the pull request.
+- **Decision 8 (site and gallery):** a minimum-truth pass only. The version 1 clips stay and are labelled as made with make-motion 1.x. Step 9 replaces the films and re-measures the claims.
+- **Decisions 10 and 11 (old files, voice detection):** the CHANGELOG names the folders to delete and says an old voice install still works.
+
+Still open, default is to leave as is:
+
+- **Decision 1's removed features.** Lottie, themes, the 38 blocks, scenes and keyframes, colour grades, caption files as input, the recorded `kenney:` cues, `"beat:<n>"` times, `voice.mjs` as its own command, the sketch icons, and the flags `--contact-sheet`, `--quality`, `--fps`, `--size`, `--loudness` and `--true-peak`. A user may ask for one again; each is a port, not a fix.
+- **Decision 6.** The folders `scripts/v2`, `test/v2` and `references/examples/v2` keep their names. A rename is a separate, mechanical change with its own guard edits.
+- **Decision 9.** `--list` has eight names; the design also names `captions`. Default: document the eight; add `--list captions` first if wanted.
+- **Decision 13.** CI sets `PA_REQUIRE_BROWSER` beside `PA_REQUIRE_RENDER`; the two version 2 test helpers still read only the first. Default: keep both set; make the helpers read either if one is dropped.
+- **Decision 15.** The doctor's ffmpeg 5.1 note was written for version 1's `--loudness`. Whether 5.1 is the right floor for version 2's mastering options was not checked.
+- **The poster of a marker film.** A `marker` film opens on a nearly empty board, so make-explainer's poster (second 0 of the rendered film) is sparse. Default: leave it; a fuller poster is a follow-up.
+- **The installed-size figure.** The README requirements table gives make-motion as about 58 MB, the doctor's `INSTALL_SIZES` figure, from before the six packages left. A `du -sk node_modules` of a clean install measured 55,304 KiB (cut-over Task 5). Default: re-measure with the doctor's own method and update `INSTALL_SIZES` and the table together.
+
 ## The cosmos look is parked (2026-11-16)
 
 Three independent reviewers said "not yet" for both gate films; the last after both allowed revision rounds. The look is on the branch as experimental (not listed, not documented). Record: docs/superpowers/plans/2026-11-15-pa2-gate-report.md.

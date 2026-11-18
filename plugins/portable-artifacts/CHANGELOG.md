@@ -8,17 +8,65 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ### Behaviour changes to know about
 
+- **make-motion 2 replaces make-motion 1. The skill reads version 2 films only.** A film is a script of shots in
+  `film.json` (`"version": 2`), written for one engine with seven looks and sixteen kinds. One command,
+  `node <skill-dir>/scripts/make.mjs film.json`, validates the film, reviews every shot in a browser, writes review
+  sheets and renders the MP4. `references/migrating.md` in the skill maps each version 1 feature to version 2 or says it
+  is not in 2.0. There is no migrator.
+  - **A version 1 spec is refused**, with the one sentence `this is a version 1 spec; make-motion 2 reads version 2
+    only. See references/migrating.md`. In make-explainer a `motion` section carrying one gets that sentence with the
+    section's path in front.
+  - **The commands changed.** `make.mjs` replaces `render.mjs`, `validate.mjs`, `check.mjs` and `preview.mjs`
+    (`--preview [--open]` is the preview). `--list` takes `kinds`, `looks`, `modes`, `devices`, `moves`, `cuts`,
+    `fields` and `voices`. `beats.mjs`, `storyboard.mjs`, `cutout.mjs` and `doctor.mjs` stay. The doctor has no `check`
+    target (`doctor --for voiceover` and `--for cutout` remain).
+  - **Removed, and what replaces it.** Each is refused or absent, with no replacement of the same shape:
+    Lottie (removed by design); the nine themes and `--theme` (a look replaces a theme); the 38 blocks and `blocks.mjs`
+    (kinds and `--list kinds`); scenes, elements, keyframes, groups, camera keyframes and grades (a script of shots);
+    `--contact-sheet`, `--quality`, `--fps`, `--size`, `--loudness` and `--true-peak` (each refused with a hint);
+    a caption file as input and the six caption styles (captions come from the narration, and `--subtitles srt|vtt`
+    writes a file); the recorded `kenney:<name>` cues (cues are synthesised); `"beat:<n>"` times (`music.beats` and
+    `music.snap`); `voice.mjs` as its own command with `--text-file` and a folder mode (narration is `say`;
+    `--list voices` and `--phonemes` stay); the sketch icons and `sketch-icons.mjs`; `validate.mjs` and `check.mjs` as
+    separate commands.
+  - **Six packages leave make-motion's `package.json`:** `animejs`, `lottie-web`, `vega`, `vega-lite`,
+    `vega-interpreter` and `vega-util`. Nothing in version 2 imports them. make-dashboard keeps its own Vega packages.
+    The Kenney sample files and the version 1 sketch assets are deleted with them.
+  - **The voice install is smaller.** `optional/voice` no longer holds `kokoro-js`, `@huggingface/transformers` or the
+    `sharp` override; it holds `onnxruntime-node` and `phonemizer`. It measures 227 MB installed (`du -sk` of
+    `optional/voice/node_modules` after `npm ci --ignore-scripts`), plus a 93 MB model downloaded on first use (the five
+    pinned files total 92,886,949 bytes). The doctor still names the requirement `kokoro` (`doctor --fix kokoro`) and
+    now detects it by `phonemizer`.
+  - **An old voice install still works.** An install made before this release also holds `kokoro-js` and its
+    neighbours on disk. The doctor counts it as present and nothing breaks. To shrink it, delete
+    `optional/voice/node_modules` and run `doctor --fix kokoro`.
+  - **Old folders you can delete.** `<skill>/.cache/video` (decoded frames of version 1 `video` elements; version 2
+    writes none). The version 1 voice model: the folder `onnx-community/Kokoro-82M-v1.0-ONNX` inside the models folder
+    (`$CLAUDE_PLUGIN_DATA/models` if set, else `portable-artifacts/models` in the OS cache folder, else
+    `<skill>/.cache/models`). Version 2 keeps its model in `<skill>/.cache/models/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped`:
+    keep that one. `<skill>/.cache/cutout` belongs to `cutout.mjs`, which still writes it: keep it too.
+    `doctor --fix cache` deletes `.cache/video` and `.cache/cutout` together.
+  - **make-explainer's `motion` section** takes a version 2 film, renders it with `make.mjs`, passes no `--theme` (a
+    film has a look) and takes its poster from second 0 of the rendered MP4.
+  - **The eval's `motion` set** is eleven version 2 prompts. The `benchmark` and `items` sets are removed. Result files
+    under `eval/results/` were measured on make-motion 1 and are not edited.
+  - **Not carried over.** No figure from the version 1 documents about render time, audio loudness or sync is repeated
+    for version 2: none has been re-measured. The one claim about the voice is this, from the gate record: on the
+    held-out fixture lines, for the word starts that follow a silence, the predicted start was a median 9 ms from the
+    onset ffmpeg's silence detector found. Nobody has listened to the audio.
+  - **Version 1 clips on the site and in the README** were made with make-motion 1.x. They stay, and version 2 reads a
+    different spec.
 - **The voiceover and cutout installs move to `optional/voice` and `optional/cutout`** and are installed by `npm ci
   --ignore-scripts` from committed lockfiles (`doctor --fix kokoro`, `doctor --fix cutout`). An old install in the
   skill's `node_modules` is ignored: run `doctor --fix kokoro` or `--fix cutout` once, and `--fix node_modules` removes
-  the old copy. Install scripts are skipped on purpose: the locked `onnxruntime-node` (1.21.0 under kokoro-js, 1.31.1
+  the old copy. Install scripts are skipped on purpose: the locked `onnxruntime-node` (1.21.0 for the voice, 1.31.1
   for cutouts) has a postinstall that, on Linux x64 only, downloads CUDA libraries (a GitHub release, then NuGet) with no
   hash; the CPU binaries ship inside the npm tarball, which the lockfile's integrity covers, and neither feature uses a
   GPU. The loader also refuses to load when a direct dependency of an optional folder would resolve outside that folder
   (a partial install with an old unlocked copy above it). Each
   folder carries its own `overrides`, which are the ones the skill's `package.json` used to hold for these installs:
   `sharp` 0.35.5 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w; kokoro-js 1.2.1 reaches sharp ^0.34
-  through `@huggingface/transformers` 3.x) and `global-agent` 4.1.3 (global-agent 3.x pulls in roarr and sprintf-js,
+  through `@huggingface/transformers` 3.x; both packages and this override are gone again with make-motion 2, above) and `global-agent` 4.1.3 (global-agent 3.x pulls in roarr and sprintf-js,
   GHSA-hp3w-g68c-fv3c). `npm audit --package-lock-only` in each folder reports 0 vulnerabilities (measured 2026-11-15).
 - **The Kokoro model is pinned to commit `1939ad2` with a SHA-256 per file.** The voice script downloads the four files
   itself and checks each one before every use; a cached file that differs is downloaded again once. Before, kokoro-js

@@ -13,14 +13,14 @@ an account or a particular model:
 | [`make-dashboard`](skills/make-dashboard/) | "Revenue by region and the monthly trend from `data/sales.csv`" | One self-contained `index.html`: KPI tiles + charts (11 kinds, alternate views, a sortable Table, PNG/SVG/CSV export, nine themes with `paper` by default). Every chart expands to show **its SQL, row count and refresh time**. Rerun one command to refresh, or `serve.mjs --watch` for live reload — no LLM involved. |
 | [`make-diagram`](skills/make-diagram/) | "Draw the checkout request path from the browser to the orders DB" | One self-contained HTML diagram (architecture, flowchart, sequence or state) laid out with ELK: zoom, hover tracing, a story player (named chapters of beats with a travelling dot), an Explore panel, full screen and export (`build.mjs --format svg` writes one standalone SVG, no browser). The agent writes a small JSON topology; scripts do the rest. Nodes can carry general icons, software brand marks or `cloud:` icons (60 AWS and 4 Google Cloud, from a CC0 pack; the marks remain their owners' trademarks), and `icons.mjs import` adds the vendor's own icon download. |
 | [`make-explainer`](skills/make-explainer/) | "Recap this branch with a manual test checklist" | One self-contained HTML page or slide deck made of typed sections (verdict, numbers, files changed, timeline, risks, comparisons, diffs, tick-and-remember checklists with steps and expected results (`build.mjs --md` also writes them as a markdown task list), slides, and a plan that explains before it asks, which the reviewer answers on the page and returns as a checked `plan-answers.json` or as the page saved with the answers inside), with make-diagram figures, make-dashboard charts, make-scene 3D scenes and make-motion clips embedded when asked. A script reads the git branch for the facts; the agent writes the prose; a linter rejects filler phrases and leftover placeholders before the page is built, and warns when emoji get dense. Most text sections can carry a plainer `simple` version; a Simple English toggle on the page switches between the two, and `check.mjs` measures both views. |
-| [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | A live preview with a scrubber and a deterministic **1080p MP4**. Silent unless you ask for sound (or pick viral mode, which places cues on cuts and entrances): `audio` tracks (music, voiceover, SFX) and `cues` (pop, click, whoosh, chime, impact, riser, swoosh, typing, drop, ding, synthesised locally in layers; typing clicks follow a typed-out line; or twelve recorded clicks and hits as `kenney:<name>`, about 261 KB bundled) are added only when the prompt asks, and narration is synthesised locally with Kokoro. Theme colour tokens, elevated cards, round-cap and arrow lines, polished chart defaults, scene crossfade and six more transitions (push, slide, wipe, zoom, blur, iris), two WebGL ones drawn in software in a render (`gl-ripple`, `gl-cube`: the preview shows a crossfade and a push), a scene camera (keyframed zoom, pan and roll, seeded shake), colour grades for images and video (warm, cool, mono, film presets, plus exposure, contrast and saturation), an opt-in vignette and film grain, typed-out text, highlighted code (fourteen languages, offline, typed out or as a diff), Lottie animations (a Lottie JSON file played offline, its remote assets and expressions refused), bundled world and US maps for charts (offline), groups that move several elements as one, thirty-eight blocks (title card, lower third, KPI counter, step flow, quote card, checklist, logo outro, closing call to action, soft call to action, five-beat story, numbered list, before and after swipe, code typing, code diff, terminal run, map highlight, flow map, bar chart race, comparison split, before and after numbers, notification stack, chat thread, timeline, testimonial, lower-third tag, lower-third social handle, lower-third ticker, text behind a person, five product-screen mockups: browser window, form fields, tab switch, button state and side panel, and five hand-drawn ones: diagram, steps, list, comparison and call-out) written as a few params each, a local cutout of a person from a photo or clip (`cutout.mjs`: MODNet on onnxruntime-node, installed on demand) for that last block, real video clips (trimmed, decoded once into a frame cache so every frame is exact, their sound in the mix), captions from an SRT, VTT or Whisper file or the voiceover in six styles (plain, pill, karaoke, kinetic, boxed, typewriter), and a viral mode for Reels, TikTok and Shorts (9:16, a platform safe zone, a hook on screen from frame 0, auto-placed cues, a −14 LUFS target the render normalises the mix to, and warnings on pacing, the hook and captions). `render.mjs --loudness <lufs>` normalises any mix with a two-pass loudnorm. `check.mjs` also audits contrast, reading time, dead stretches (`"hold": true` opts an element out) and small text. `render.mjs --workers 4` captures frames in parallel for the same MP4, and `--quality draft` renders half size for a quick look. Typed `vars` with `{{name}}` and `render.mjs --batch rows.json` give one MP4 per row with a manifest. `beats.mjs` finds the beat grid of a music file, and `"beat:<n>"` times a keyframe or a cue to it. "Slow scene 2" changes one field, not the whole video. A scene can be **hand-drawn**: `"style": "sketch"` has an illustrated hand draw it on a white board stroke by stroke (text in a handwriting font, boxes, arrows, icons, scribble fills), in a whole film or among standard scenes, with an `erase` transition and, with a voiceover, each element drawn in its own sentence. Text takes a left `anchor`, the voiceover can print how Kokoro read each sentence (`voice.mjs --phonemes`), `render.mjs --poster <seconds>` writes one frame without rendering the MP4, `--no-provenance` leaves the authoring tags out, and a film has no total length cap. |
+| [`make-motion`](skills/make-motion/) | "8-second clip: Q3 revenue up 18%, then a bar chart of Q1–Q3" | An MP4 drawn from a script of shots (`film.json`, version 2) by one engine, with a local preview page that has a scrubber (`make.mjs film.json --preview`). Seven looks set the style of the whole film: `desk`, `pop`, `cosmos`, `ledger`, `poster`, `keynote` and `marker`, a hand-drawn whiteboard. Sixteen kinds of shot: `statement`, `number`, `clipping`, `end`, `list`, `quote`, `compare`, `chart`, `media`, `screen`, `map`, `diagram`, `timeline`, `code`, `feed` and `free`. `pro` is a calm 16:9 explainer and `viral` is a fast 9:16 short for Reels, TikTok and Shorts. One command validates the film, reviews every shot in a browser, writes review sheets and renders the MP4. Silent unless you ask for sound: narration made on your machine (`say` on a shot), a synthesised music bed or your own music file, and synthesised cues are each added only when the prompt asks. Also `--outline` (the timed script with no browser), `--poster <seconds>` (one still), `--subtitles srt\|vtt` (writes a subtitle file), `--workers`, typed `vars` with `--batch rows.json` (one MP4 per row), `beats.mjs` (the beat grid of a music file), `cutout.mjs` (a person cut out of a photo or clip, MODNet on onnxruntime-node, installed on demand) and `storyboard.mjs` (a plan page to answer before a film over 20 s). "Slow shot 2" changes one field, not the whole film. Two renders of the same film and media give the same frames. It reads version 2 films only: a version 1 spec is refused with a pointer to `references/migrating.md`. |
 | [`make-scene`](skills/make-scene/) | "Show our commits per week per folder as a 3D city, with a tour of the busiest weeks" | One self-contained 3D page drawn with a bundled three.js: your rows become a city, forest, galaxy or terrain, or a make-diagram diagram or one make-dashboard chart is lifted into 3D. Orbit, hover for exact values, an Explore list and a camera tour. The build recommends a world, then lists the alternatives with the one-line command to switch; switching costs no model tokens. `build.mjs --fragment` writes the scene as a block to paste into another page. |
 
-[**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs. The [gallery](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery) has a Theme switch that shows every explainer, deck, diagram and clip in `dusk`, `press` and `poster`.
+[**See them in action**](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#showcase): a real dashboard and video an agent generated from one prompt each, with the prompts and specs. The video was made with make-motion 1.x, and make-motion 2 reads a different spec. The [gallery](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery) has a Theme switch that shows every explainer, deck, diagram and clip in `dusk`, `press` and `poster`; its clips were made with make-motion 1.x.
 
 <p>
   <img src="../../docs/features/img/portable-artifacts/dashboard-light.jpg" alt="A make-dashboard page: four KPI tiles and four charts, each with a Query disclosure" width="49%">
-  <img src="../../docs/features/img/portable-artifacts/motion-q3-revenue.gif" alt="A make-motion render: a +18% counter, then animated revenue bars" width="49%">
+  <img src="../../docs/features/img/portable-artifacts/motion-q3-revenue.gif" alt="A make-motion 1.x render: a +18% counter, then animated revenue bars" width="49%">
 </p>
 
 ## How it works
@@ -38,9 +38,9 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
 - **Small model job** — "write JSON that matches this schema" works on cheap
   hosted models: Claude Haiku's committed runs were all valid (dashboard 14/14,
   diagram 10/10, explainer 8/8, scene 10/10, motion 14/14, 14/14, 16/16 and 12/12 across
-  its gates), on releases before 1.2.0; the validator's
+  its gates, all on make-motion 1), on releases before 1.2.0; the validator's
   did-you-mean errors drive the retry loop. Local models are less reliable: gemma4
-  through Ollama built a dashboard 10/10 once (a rerun gave 7/10 and 6/10) but motion only 4/10 to 7/10 and explainer 0/8,
+  through Ollama built a dashboard 10/10 once (a rerun gave 7/10 and 6/10) but motion (make-motion 1) only 4/10 to 7/10 and explainer 0/8,
   so the eval refuses those two on a local model unless told to. See
   [`eval/results/INDEX.md`](eval/results/INDEX.md).
 - **Targeted edits** — a change is one field in the spec, never regenerated
@@ -57,12 +57,14 @@ prompt ──▶ any agent ──▶ spec.json ──▶ validate ──▶ buil
   field or the `--model`, `--effort` and `--agent` build flags. A field the
   agent does not know reads "not reported"; nothing is guessed. The make-motion
   MP4 carries it in its `comment` tag, and the model in `artist` when it is reported
-  (`render.mjs --no-provenance` or a root `"provenance": false` leaves both out;
+  (`make.mjs --no-provenance` or a root `"provenance": false` leaves both out;
   ffmpeg's own encoder tag stays).
-- **Themed** — every page and video uses one of nine shared themes, and the
-  theme sets the type. make-explainer pages and decks and make-motion clips use
+- **Themed** — every page uses one of nine shared themes, and the
+  theme sets the type. make-explainer pages and decks use
   `dusk` unless you or the prompt pick another; make-dashboard keeps `paper`
-  and make-diagram `blueprint`. See [Themes and art](#themes-and-art).
+  and make-diagram `blueprint`. A make-motion film has a look, not a theme
+  (`desk`, `pop`, `cosmos`, `ledger`, `poster`, `keynote` or `marker`).
+  See [Themes and art](#themes-and-art).
 - **Easy to read** — the explainer opens with a hero and TL;DR card, short
   section `label`s in its contents list and soft text caps that warn (never
   fail) when a title, paragraph or card runs long (`--strict` makes them fail).
@@ -82,14 +84,14 @@ colours. Every skill accepts every theme by name (the spec's `theme` field or
 
 | Theme | Display / body / mono | Look | Suits |
 |---|---|---|---|
-| `dusk` | Funnel Display / Host Grotesk / Commit Mono | aubergine to peach, coral and mint, film grain, tilted cards | anything; the default for make-explainer and make-motion |
+| `dusk` | Funnel Display / Host Grotesk / Commit Mono | aubergine to peach, coral and mint, film grain, tilted cards | anything; the default for make-explainer |
 | `press` | Young Serif / Schibsted Grotesk / JetBrains Mono | bone paper, ink and vermilion, marginal numerals | dense docs, long reads, changelogs, branch recaps |
 | `poster` | Big Shoulders Display / Familjen Grotesk / Martian Mono | near-black, acid lime and orange, condensed caps, halftone | launch decks, pitches, demos, energetic clips |
 | `paper`, `blueprint`, `ink`, `editorial` | Geist and Geist Mono; `ink` has Bricolage Grotesque headings, `editorial` Newsreader headings and an Atkinson Hyperlegible body | the earlier looks | when you name one; `paper` is make-dashboard's default, `blueprint` make-diagram's |
 | `mono` | JetBrains Mono for display, body and mono | terminal and engineering console: in dark mode a near-black page, one cyan accent and cool grey lines; a clean light mode; no art. Regular weight only (no bold face); bold text is synthesized by the browser | technical pages and plans |
 | `brief` | Newsreader / Atkinson Hyperlegible / Geist Mono | executive: warm white page, deep burgundy accent, high contrast, calm; no art | decision briefs and sign-off pages |
 
-**How make-explainer and make-motion pick a theme.** A theme you name wins
+**How make-explainer picks a theme.** A theme you name wins
 (`--theme poster`, or "use poster" in the prompt). Otherwise the agent picks
 one from the prompt and tells you which and why in one line: `press` for dense
 docs, long reads, changelogs and branch recaps, `poster` for launch decks,
@@ -99,17 +101,12 @@ three; if it cannot ask, it uses `dusk`. The older themes are used only when
 you name them. `mono` and `brief` are likewise used only when you name them; they are meant for the `plan` preset (see [USAGE.md](USAGE.md#4-explainers-with-make-explainer)), which defaults to `mono`.
 
 **Art.** `dusk`, `press` and `poster` draw procedural SVG art seeded from the
-title (in make-motion, from the scene id): blobs and orbs with grain in
+title: blobs and orbs with grain in
 `dusk`, halftone and contour lines in `press`, halftone grids and registration
 marks in `poster`. The same seed always gives the same picture, and nothing is
-fetched. It fills the explainer page hero, a deck's title and closing slides,
-and a make-motion scene with `"background": "art"`.
-make-motion also gives a `"role": "title"` text the theme's display font and,
-when it has no keyframes, an entrance per theme: `dusk` rises, `press` inks
-in, `poster` slams.
+fetched. It fills the explainer page hero and a deck's title and closing slides.
 
-**Numbers stay on one line.** A number with its unit or percent sign (`1,204 ms`, `18%`, `$4.2M`) is kept on one line, in a different way per skill. make-explainer wraps each token in a no-wrap span when it renders (the spec text is not changed); its `validate.mjs` warns when a KPI value is longer than 12 characters, and its `check.mjs` fails on a token that wraps or a KPI value that overflows its tile. The one-line values in one `kpis` section are drawn at one size, the one that fits the longest; a wide or long value keeps its own. make-dashboard sets KPI values to no-wrap and sizes them to fit the tile; a value longer than 17 characters may wrap instead of spilling, and make-dashboard has no wrap check. make-motion keeps a token together with a no-break space when it renders a text element, and its `check.mjs` fails on a token that wraps.
-
+**Numbers stay on one line.** A number with its unit or percent sign (`1,204 ms`, `18%`, `$4.2M`) is kept on one line, in a different way per skill. make-explainer wraps each token in a no-wrap span when it renders (the spec text is not changed); its `validate.mjs` warns when a KPI value is longer than 12 characters, and its `check.mjs` fails on a token that wraps or a KPI value that overflows its tile. The one-line values in one `kpis` section are drawn at one size, the one that fits the longest; a wide or long value keeps its own. make-dashboard sets KPI values to no-wrap and sizes them to fit the tile; a value longer than 17 characters may wrap instead of spilling, and make-dashboard has no wrap check.
 **Emoji** are allowed in explainer text. Validation warns, and never fails,
 when a prose string has 3 or more emoji at more than 1 per 40 characters, or a
 section title has more than 3.
@@ -157,7 +154,7 @@ folder (the SKILL.md tells it to; make-dashboard, make-diagram, make-explainer a
 need only `npm ci --omit=dev`).
 
 **`make-explainer` needs `make-diagram` and `make-dashboard` next to it** to
-draw diagrams, charts and card icons (and `make-motion` to render a motion spec;
+draw diagrams, charts and card icons (and `make-motion` to render a motion film, version 2;
 an existing `.mp4` needs nothing). `make-scene` lists both as requirements (the installer pulls them in), but uses `make-diagram` only to lift a
 diagram into 3D and `make-dashboard` only to lift a chart; a plain world needs neither. `make-explainer` needs `make-scene` only for a `scene` section. `npx skills add` does not resolve
 dependencies, so name them:
@@ -236,9 +233,9 @@ Fix it by running `npm ci` in the installed skill folder (or its `doctor.mjs --f
 | Other skills beside it | — | — | make-diagram and make-dashboard (required for diagram and chart sections and for card icons); make-motion only to render a motion spec | — | make-diagram to lift a diagram, make-dashboard to lift a chart; a plain world needs none |
 | `git` on `PATH` | — | — | only for `gather.mjs` | — | — |
 | Chromium for frame capture (once, ≈150 MB) | optional: only `check.mjs` (a full `npm ci` plus a Chromium, as for make-diagram); the build needs no browser | optional: only `check.mjs` (needs a full `npm ci`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) | optional: only `check.mjs` (needs a full `npm ci` plus a Chromium, as for make-diagram); build needs no browser, and `check.mjs` skips cleanly without one |
-| ffmpeg on `PATH` | — | — | only to render a motion spec | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 4.4 for audio tracks, ≥ 5.1 for the loudness limiter stage) | — |
+| ffmpeg on `PATH` | — | — | only to render a motion film | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 5.1 for the limiter stage of the audio mastering; the doctor says so when yours is older) | — |
 | onnxruntime-node (cutouts only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/cutout` (≈300 MB, from that folder's lockfile; install scripts are skipped because onnxruntime-node's downloads GPU libraries without a hash) plus a one-time 25 MB MODNet model download (pinned commit, SHA-256 checked); the agent asks first; `npm ci` in the skill folder leaves it alone | — |
-| kokoro-js (voiceover only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (≈227 MB on macOS, from that folder's lockfile, install scripts skipped) plus a one-time 93 MB Kokoro model download (one pinned commit, each file SHA-256 checked); the agent asks first; `npm ci` in the skill folder leaves it alone | — |
+| onnxruntime-node and phonemizer (voiceover only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (≈227 MB on macOS, from that folder's lockfile, install scripts skipped) plus a one-time 93 MB Kokoro model download (one pinned commit, each file SHA-256 checked); the agent asks first; `npm ci` in the skill folder leaves it alone. An install made before make-motion 2 also holds `kokoro-js` and still works | — |
 
 The installed sizes are the on-disk size of each skill's production dependency tree, measured on macOS in a dev checkout
 (not a fresh install from the plugin cache): `npm ls --omit=dev --all --parseable` in the skill folder, then the size of every
@@ -257,16 +254,16 @@ make-motion skill folder, so it matches the Playwright version `npm ci` installe
 On Windows, open a new terminal after `winget` so `node` and `ffmpeg` are on `PATH`. If
 PowerShell refuses `npx.ps1` (scripts disabled), run `npx.cmd playwright install chromium`.
 
-## Cheaper model on Copilot and Codex
+## Director and operator
 
-These skills write a small JSON spec; a cheap model can do that. Per the hosts' docs, Claude Code reads `model: haiku` from each `SKILL.md` (that path, with no `--model` flag, has not been measured), while Copilot and Codex cannot pin a model from a skill, so the installer also writes a small `artifact-builder` agent file that names the cheap model, and each skill tells the running agent to hand the work to it. Two ways to use it: pick the agent yourself (`copilot --agent artifact-builder`, deterministic) or let the skill hand off (advisory: the main agent may not do it).
+Each `SKILL.md` has a `## Director and operator` section. The agent you talk to is the director: it runs the intake, writes the spec, views what was built and decides every `creative` finding. It may hand the one build command, `make.mjs <spec> --json`, to a small `artifact-builder` operator agent on a cheap model, which fixes only `mechanical` findings and returns the report; the director takes over if the same finding survives two attempts, and runs the command itself when no such agent is listed. No `SKILL.md` pins a model any more. The installer writes the agent file for each host (Claude Code ships it in the plugin; Copilot and Codex get a file at user or project level). The hand-off is advisory: the main agent may run the command itself.
 
 ```bash
 node plugins/portable-artifacts/bin/install.mjs copilot
 node plugins/portable-artifacts/bin/install.mjs copilot --agents-only
 ```
 
-The first line installs the skills and the agent; the second writes only the agent, for skills you installed another way. Installed with `npx skills add` (skill folders only, no `bin/`)? Each skill carries its own writer: when `~/.copilot` or `~/.codex` exists, the skill's doctor reports the missing agent file as an optional item and, once you agree, `node <skill-dir>/scripts/doctor.mjs --fix builder_agent` writes it at user level (an existing file is kept). A host may need a new session before it lists the agent. Measured on Copilot CLI 1.0.98 on 2026-10-21: all 10 motion prompts and 9 runs across the other four skills built a valid page on `claude-haiku-5.5`, and Copilot's own logs confirm the model. Codex files were written from the Codex docs and not run live; the skill handed off once in a single trial, but its sub-agent was denied permission and the main agent finished the work. Adding `model: haiku` to make-motion changes the model Claude Code uses for it. That gate measured Copilot's `claude-haiku-5.5`; make-motion on Haiku in Claude Code was measured later with `--model haiku` (the 1.1.0 gates in [`eval/results/INDEX.md`](eval/results/INDEX.md)), and the frontmatter path itself has not been. `eval/run-eval.mjs --host claude-frontmatter` runs `claude` without `--model`, which uses the account's default model; that harness copies the skill to a plain folder and tells the agent to read it, so whether the `SKILL.md` frontmatter applies there is unverified until a session log shows which model ran. Full table, per-host mechanism and the cost statement: [USAGE.md](USAGE.md#cheaper-model-on-copilot-and-codex); results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md).
+The first line installs the skills and the agent; the second writes only the agent, for skills you installed another way. Installed with `npx skills add` (skill folders only, no `bin/`)? Each skill carries its own writer: when `~/.copilot` or `~/.codex` exists, the skill's doctor reports the missing agent file as an optional item and, once you agree, `node <skill-dir>/scripts/doctor.mjs --fix builder_agent` writes it at user level (an existing file is kept). A host may need a new session before it lists the agent. No run of the director and operator scheme has a committed summary. The 2026-10-21 figures were measured on Copilot CLI 1.0.98 under the earlier "Cheaper model" scheme, where the cheap model wrote the spec itself, and on make-motion 1: all 10 motion prompts and 9 runs across the other four skills built a valid page on `claude-haiku-5.5`, and Copilot's own logs confirm the model. Codex files were written from the Codex docs and not run live; the skill handed off once in a single trial, but its sub-agent was denied permission and the main agent finished the work. Full table, per-host files and the cost statement: [USAGE.md](USAGE.md#director-and-operator); results: [`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md).
 
 ## Usage
 
@@ -290,13 +287,13 @@ Each skill folder also has its own README.
 - **Built pages embed the query results.** Publishing `index.html` publishes
   the data.
 - **No network from specs.** Chart `url`/`data`/`usermeta` keys are rejected at
-  any depth; motion colours can't be `url()`; pages run under a CSP without
+  any depth; a make-motion film can't name a remote URL or a file outside its folder; pages run under a CSP without
   `unsafe-eval`; the renderer aborts any non-local request; local servers bind
   `127.0.0.1` and check the `Host` header.
 
 ## Tested hosts
 
-Every figure here predates 1.2.0, and no run on 1.2.0 or later has a committed summary (which release each summary covers: [`eval/results/INDEX.md`](eval/results/INDEX.md)). Tested live: **Claude Code**, and **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor install path; the browser check and the ask-first consent prompt were not exercised there). A second Copilot CLI 1.0.98 run on 2026-10-21 drove the cheap-model `artifact-builder` agent: motion 10/10 valid builds, and 9/9 across dashboard, diagram, explainer and scene, with Copilot's logs showing `claude-haiku-5.5` for all 19 runs; one skill hand-off trial, where the sub-agent hit a permission denial and the main agent finished the job ([`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)). An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**: dashboard 10/10, motion 5/10 under today's scorer (the summary counted six valid, one of them an edit that left the seed untouched; four more prompts were stopped by the account's usage limit, and the five that ran all built a page) ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)). A local gemma4 through Ollama: dashboard 10/10 on 2026-10-10, not reproduced on 2026-10-12 (7/10 and 6/10 on the same prompts, [`summary-dashboard-v2-2026-10-12.md`](eval/results/summary-dashboard-v2-2026-10-12.md)), motion 4/10 to 7/10, explainer 0/8. **Gemini CLI**: install paths verified against its documentation, not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku in Claude Code, median 1.5 validate runs, median 40 s) ([`summary-scene-2026-10-19.md`](eval/results/summary-scene-2026-10-19.md)).
+Every figure here predates 1.2.0, every motion figure was measured on make-motion 1, and no run on 1.2.0 or later has a committed summary (which release each summary covers: [`eval/results/INDEX.md`](eval/results/INDEX.md)). Tested live: **Claude Code**, and **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor install path; the browser check and the ask-first consent prompt were not exercised there). A second Copilot CLI 1.0.98 run on 2026-10-21 drove the `artifact-builder` agent under the earlier scheme, where the cheap model wrote the spec: motion 10/10 valid builds, and 9/9 across dashboard, diagram, explainer and scene, with Copilot's logs showing `claude-haiku-5.5` for all 19 runs; one skill hand-off trial, where the sub-agent hit a permission denial and the main agent finished the job ([`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)). An earlier live eval on 2026-10-10 ran **Codex CLI 0.145.0**: dashboard 10/10, motion 5/10 under today's scorer (the summary counted six valid, one of them an edit that left the seed untouched; four more prompts were stopped by the account's usage limit, and the five that ran all built a page) ([`summary-full-2026-10-10.md`](eval/results/summary-full-2026-10-10.md)). A local gemma4 through Ollama: dashboard 10/10 on 2026-10-10, not reproduced on 2026-10-12 (7/10 and 6/10 on the same prompts, [`summary-dashboard-v2-2026-10-12.md`](eval/results/summary-dashboard-v2-2026-10-12.md)), motion 4/10 to 7/10, explainer 0/8. **Gemini CLI**: install paths verified against its documentation, not run live. **make-scene**: 10/10 valid builds on the first run (Claude Haiku in Claude Code, median 1.5 validate runs, median 40 s) ([`summary-scene-2026-10-19.md`](eval/results/summary-scene-2026-10-19.md)).
 
 Details:
 [`eval/results/summary-portability-copilot-2026-10-15.md`](eval/results/summary-portability-copilot-2026-10-15.md)
@@ -304,11 +301,10 @@ and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-
 
 ## Cross-host eval
 
-[`eval/`](eval/) runs a fixed set of prompts per skill (the default set has 8 to 14, and there are further sets: 57 motion
-items, explainer features, dashboard chart kinds, a cloud diagram) through `claude` (with or
+[`eval/`](eval/) runs a fixed set of prompts per skill (the default set has 8 to 14, and there are further sets: explainer features, dashboard chart kinds, a cloud diagram) through `claude` (with or
 without `--model`), `codex`, `codex --oss` (Ollama), `gemini` and `copilot`. The full run on
-2026-10-10 covered dashboard and motion on claude, codex, copilot and codex --oss;
-Gemini was skipped. The harness scores spec
+2026-10-10 covered dashboard and motion (make-motion 1) on claude, codex, copilot and codex --oss;
+Gemini was skipped. The motion set is now eleven version 2 prompts, and no run of it has a committed summary. The harness scores spec
 written / valid / validate calls and whether the first one passed / build or render ok / the browser
 check where the skill has one / whether the spec used the feature the prompt asked for / changed paths on edit
 prompts (a rewrite of the seed is flagged). Results summaries live in `eval/results/summary-*.md`, and
@@ -321,13 +317,11 @@ Everything this plugin depends on is open source:
 | Component | Licence |
 |---|---|
 | [DuckDB](https://duckdb.org) (`@duckdb/node-api`) | MIT |
-| [Vega](https://vega.github.io), Vega-Lite, vega-embed, vega-interpreter, vega-util | BSD-3-Clause |
+| [Vega](https://vega.github.io), Vega-Lite, vega-embed, vega-interpreter, vega-util (make-dashboard's charts) | BSD-3-Clause |
 | [three.js](https://threejs.org) 0.186.1 (bundled into make-scene's `template/vendor/scene-runtime.min.js`, with OrbitControls; its notice is in `skills/make-scene/THIRD_PARTY_NOTICES.md`) | MIT |
-| [anime.js](https://animejs.com) v4 | MIT |
-| [shiki](https://shiki.style) 4.5.0 (`shiki`, `@shikijs/core`, `@shikijs/primitive`, `@shikijs/types`, `@shikijs/engine-javascript`, `@shikijs/langs`, `@shikijs/vscode-textmate`) and what it imports in the page (`oniguruma-to-es`, `oniguruma-parser`, `regex`, `regex-recursion`, `regex-utilities`, `hast-util-to-html`, `hast-util-whitespace`, `property-information`, `stringify-entities`, `ccount`, `character-entities-html4`, `character-entities-legacy`, `comma-separated-tokens`, `html-void-elements`, `space-separated-tokens`, `zwitch`) | MIT |
-| [lottie-web](https://github.com/airbnb/lottie-web) 5.13.0 (make-motion's `lottie` element; the page loads only its light SVG build, `build/player/esm/lottie_light.min.js`) | MIT |
-| [world-atlas](https://github.com/topojson/world-atlas) 2.0.2 (Natural Earth TopoJSON; make-motion's bundled world maps; the page fetches only `countries-110m.json` and `countries-50m.json`) | ISC |
-| [us-atlas](https://github.com/topojson/us-atlas) 3.0.1 (US Census TopoJSON; make-motion's bundled US maps; the page fetches only `states-10m.json` and `counties-10m.json`) | ISC |
+| [shiki](https://shiki.style) 4.5.0 (`shiki`, `@shikijs/core`, `@shikijs/primitive`, `@shikijs/types`, `@shikijs/engine-javascript`, `@shikijs/langs`, `@shikijs/vscode-textmate`) and what it imports (make-motion 2 colours code with it in Node, never in the page: `oniguruma-to-es`, `oniguruma-parser`, `regex`, `regex-recursion`, `regex-utilities`, `hast-util-to-html`, `hast-util-whitespace`, `property-information`, `stringify-entities`, `ccount`, `character-entities-html4`, `character-entities-legacy`, `comma-separated-tokens`, `html-void-elements`, `space-separated-tokens`, `zwitch`) | MIT |
+| [world-atlas](https://github.com/topojson/world-atlas) 2.0.2 (Natural Earth TopoJSON; make-motion 2's world maps, read in Node from `countries-110m.json`) | ISC |
+| [us-atlas](https://github.com/topojson/us-atlas) 3.0.1 (US Census TopoJSON; make-motion 2's US maps, read in Node from `states-10m.json`) | ISC |
 | [d3-geo](https://github.com/d3/d3-geo) 3.1.1 (`d3-geo`, with `d3-array` and `internmap`; make-motion 2 projects its maps with it in Node, never in the page) | ISC |
 | [topojson-client](https://github.com/topojson/topojson-client) 3.1.0 (`topojson-client`; make-motion 2 reads the atlases with it in Node, never in the page) | ISC |
 | `commander` 2.20.3 (topojson-client's command-line tools, installed, never run or served) | MIT |
@@ -336,19 +330,17 @@ Everything this plugin depends on is open source:
 | [Playwright](https://playwright.dev) | Apache-2.0 |
 | [Ajv](https://ajv.js.org) | MIT |
 | [ELK](https://github.com/kieler/elkjs) (`elkjs`) | EPL-2.0 |
-| [Lucide](https://lucide.dev) icons (make-diagram's icon catalog; make-motion's hand-drawn style flattens some to polylines) | ISC |
-| [Feather](https://feathericons.com) (the icons Lucide derived from it, used in make-motion's hand-drawn style; the list and licence text are in `skills/make-motion/template/sketch/LICENSES`) | MIT |
+| [Lucide](https://lucide.dev) icons (make-diagram's icon catalog) | ISC |
+| [Feather](https://feathericons.com) (the project some Lucide icons derive from; its notice is in `skills/make-diagram/THIRD_PARTY_NOTICES.md`) | MIT |
 | [gl-transitions](https://github.com/gl-transitions/gl-transitions) (ten fragment shaders ported into make-motion version 2's shader cuts, `engine/cuts/shaders`; the list, authors, pinned commit and licence texts are in `skills/make-motion/THIRD_PARTY_NOTICES.md`) | MIT, BSD-3-Clause |
 | [Simple Icons](https://simpleicons.org) brand marks | CC0-1.0 |
 | [SVG Logos](https://github.com/gilbarbara/logos) (`@iconify-json/logos` 1.2.19; make-diagram's 60 AWS and 4 Google Cloud `cloud:` icons). The marks remain the trademarks of Amazon Web Services and Google; CC0 covers the drawings, not the trademarks | CC0-1.0 |
-| [Caveat](https://github.com/googlefonts/caveat) 700 (`@fontsource/caveat` 5.3.0, latin subset; make-motion's hand-drawn writing) | OFL-1.1 |
+| [Caveat](https://github.com/googlefonts/caveat), Fraunces, Archivo, Nunito and Geist (variable Latin files from `@fontsource-variable/*` 5.3.0, in `skills/make-motion/engine/fonts/`; the `marker` look writes in Caveat; sources and SHA-256 are in `engine/fonts/SOURCES.md`) | OFL-1.1 |
 | Funnel Display, Host Grotesk, Commit Mono, Young Serif, Schibsted Grotesk, JetBrains Mono, Big Shoulders Display, Familjen Grotesk, Martian Mono, Geist, Geist Mono, Newsreader, Bricolage Grotesque, Atkinson Hyperlegible (latin subsets, via Fontsource) | OFL-1.1 |
-| [Kenney](https://kenney.nl) Interface Sounds and Impact Sounds (12 files, bundled as 48 kHz WAV) | CC0-1.0 |
 | ffmpeg (system binary, not vendored) | LGPL/GPL |
-| [Kokoro](https://github.com/hexgrad/kokoro) TTS (`kokoro-js` 1.2.1, installed on demand into `optional/voice` from its lockfile; in make-motion version 2, `normalize` and `toPhonemes` in `scripts/v2/voice/phonemes.mjs` are transcribed from kokoro-js 1.2.1) | Apache-2.0 |
+| [Kokoro](https://github.com/hexgrad/kokoro) TTS (make-motion 2 no longer installs `kokoro-js`; `normalize` and `toPhonemes` in `scripts/v2/voice/phonemes.mjs` are transcribed from kokoro-js 1.2.1) | Apache-2.0 |
 | [MODNet](https://github.com/ZHKKKe/MODNet) portrait matting weights (about 25 MB, downloaded on first use of `cutout.mjs` from Hugging Face `Xenova/modnet`, pinned to one commit and a SHA-256) | Apache-2.0 |
-| Kokoro-82M ONNX weights (about 90 MB, downloaded on first voiceover from Hugging Face onnx-community/Kokoro-82M-v1.0-ONNX, pinned to one commit and a SHA-256 per file) | Apache-2.0 |
-| Kokoro-82M ONNX timestamped weights and the `af_heart` voice file (about 93 MB, downloaded on first version 2 voiceover from Hugging Face onnx-community/Kokoro-82M-v1.0-ONNX-timestamped, pinned to one commit and a SHA-256 per file; word times are read from the model) | Apache-2.0 |
+| Kokoro-82M ONNX timestamped weights and the `af_heart` voice file (about 93 MB, downloaded on first voiceover from Hugging Face onnx-community/Kokoro-82M-v1.0-ONNX-timestamped, pinned to one commit and a SHA-256 per file) | Apache-2.0 |
 | [eSpeak NG](https://github.com/espeak-ng/espeak-ng) through [`phonemizer`](https://www.npmjs.com/package/phonemizer) 1.2.1 (turns narration text into phonemes for the version 2 voiceover; installed on demand into `optional/voice` from its lockfile, never redistributed with this plugin) | GPL-3.0-or-later for eSpeak NG, by our reading of upstream; `phonemizer` itself declares Apache-2.0 |
 | [onnxruntime-node](https://github.com/microsoft/onnxruntime) 1.31.1 (installed on demand into `optional/cutout` from its lockfile, runs MODNet) | MIT |
 

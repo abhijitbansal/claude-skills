@@ -10,7 +10,7 @@
   <a href="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery"><img src="docs/features/img/portable-artifacts/launch-announcement.gif" width="640" alt="A launch announcement clip: the title Lumen 2.0 scales in over the tagline Search that keeps up, a counter runs from 1 to 3 with the suffix x faster under the caption Median query time vs 1.0, three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another, and the end card reads Available today."></a>
 </p>
 
-Made by an agent from this prompt with `/make-motion`: JSON in, MP4 out, offline.
+Made by an agent from this prompt with `/make-motion` 1.x: JSON in, MP4 out, offline. make-motion 2 reads a different JSON file (a script of shots), so this prompt, written for version 1's scenes, would be worded as shots today.
 
 ```text
 Make a 10-second launch announcement, 1920x1080: scene 1 the product name "Lumen 2.0" scales in with the tagline "Search that keeps up"; scene 2 a counter from 1 to 3 with the suffix "x faster" and the caption "Median query time vs 1.0"; scene 3 three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another; end on "Available today".
@@ -27,11 +27,11 @@ node plugins/portable-artifacts/bin/install.mjs codex
 
 The first two lines are Claude Code. The `npx skills` line works in any agent, and the last runs from a clone for `codex`, `copilot`, `gemini` or `agents`. `npx skills` does not install sibling skills for you: `make-explainer` needs `make-diagram` and `make-dashboard` beside it, and `make-scene` needs them to lift a diagram or a chart, so name them as shown.
 
-**What you need:** Node 20 or newer. Opening a built page needs no network, but installing a skill's npm packages does (about 3 MB for `make-explainer` up to about 150 MB for `make-dashboard`, measured in a dev checkout; the installer asks first). `make-motion` also needs ffmpeg and a Chromium (about 150 MB) for frame capture, and an optional voiceover is an on-demand install of about 465 MB plus a 90 MB model. Details: [`plugins/portable-artifacts/README.md`](plugins/portable-artifacts/README.md).
+**What you need:** Node 20 or newer. Opening a built page needs no network, but installing a skill's npm packages does (about 3 MB for `make-explainer` up to about 150 MB for `make-dashboard`, measured in a dev checkout; the installer asks first). `make-motion` also needs ffmpeg and a Chromium (about 150 MB) for frame capture, and an optional voiceover is an on-demand install of about 227 MB plus a 93 MB model. Details: [`plugins/portable-artifacts/README.md`](plugins/portable-artifacts/README.md).
 
 **[Open the live gallery (no install)](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery)**
 
-Tested live on Claude Code and GitHub Copilot CLI 1.0.98; on Copilot, a cheap-model agent built motion 10/10 valid and 9/9 across dashboard, diagram, explainer and scene, all on `claude-haiku-5.5`. Also run on Codex CLI 0.145.0 (dashboard 10/10, motion 5/10 under today's scorer, four more prompts stopped by a usage limit); `make-scene` built 10/10 valid pages on Claude Haiku in Claude Code. Gemini CLI: install paths checked against its documentation only, never run live. Every figure predates 1.2.0; the runs and what each covers are listed in [`eval/results/INDEX.md`](plugins/portable-artifacts/eval/results/INDEX.md).
+Tested live on Claude Code and GitHub Copilot CLI 1.0.98; on Copilot, a cheap-model agent built motion (make-motion 1) 10/10 valid and 9/9 across dashboard, diagram, explainer and scene, all on `claude-haiku-5.5`. Also run on Codex CLI 0.145.0 (dashboard 10/10, motion (make-motion 1) 5/10 under today's scorer, four more prompts stopped by a usage limit); `make-scene` built 10/10 valid pages on Claude Haiku in Claude Code. Gemini CLI: install paths checked against its documentation only, never run live. Every figure predates 1.2.0; the runs and what each covers are listed in [`eval/results/INDEX.md`](plugins/portable-artifacts/eval/results/INDEX.md).
 
 These three came from the same plugin, each linked to its page:
 
@@ -157,7 +157,7 @@ Full reference: [tools/cache-clock/README.md](tools/cache-clock/README.md) ·
 [guide](docs/features/cache-clock.html) ·
 [visual explainer](docs/features/showcase/cache-clock/how-it-works.html) ·
 [architecture diagram](docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html) ·
-[17-second video](docs/features/showcase/cache-clock/video.mp4)
+[17-second video](docs/features/showcase/cache-clock/video.mp4) (made with make-motion 1.x)
 
 ### Other AI tools (Codex, Copilot CLI, Hermes, …)
 
