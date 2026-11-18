@@ -75,11 +75,29 @@ const weightColor = Object.freeze({
   reserve: () => ({ weight: HEAVY }),
 });
 
+// a weight sweep (keynote): an emphasised word's weight ramps from look.sweep.from to look.sweep.to over its spoken time
+// (from `at` to the word's spoken end, `word.end`; the emphasize move's length when the word has no spoken end), the
+// whole word at once, so across an emphasised phrase the words ramp in spoken order. No recolour. Every word is
+// measured at look.sweep.to (reserve), so a lighter word is centred in its room and nothing moves.
+function sweepTracks(look, word, at) {
+  const { from, to } = look.sweep;
+  const { ease } = look.moves.emphasize;
+  const end = Number.isFinite(word.end) && word.end > at ? word.end : at + look.moves.emphasize.dur;
+  return { weight: track([{ t: 0, v: from }, { t: at, v: from }, { t: end, v: to, ease }]) };
+}
+const weightSweep = Object.freeze({
+  ...EMPHASIS_FLAGS['weight-sweep'],
+  wordTracks: (look, word, at) => (word.emphasised ? { ...word.tracks, ...sweepTracks(look, word, at) } : word.tracks),
+  hookTracks: asIs,
+  inkTracks: (look, word, at) => (word.emphasised ? sweepTracks(look, word, at) : {}),
+  reserve: (look) => ({ weight: look.sweep.to }),
+});
+
 // size and width alone (poster): the stack sets the emphasised line large (kinds/stack.mjs) and a one-line stack widens
 // its emphasised word; the words keep their colour and their entrance
 const scale = Object.freeze({ ...EMPHASIS_FLAGS.scale, wordTracks: asIs, hookTracks: asIs, inkTracks: none });
 
-export const EMPHASIS = Object.freeze({ highlight, 'recolor-scale': recolorScale, recolor, glow, 'weight-color': weightColor, scale });
+export const EMPHASIS = Object.freeze({ highlight, 'recolor-scale': recolorScale, recolor, glow, 'weight-color': weightColor, scale, 'weight-sweep': weightSweep });
 
 /** The entry of look.emphasis; throws naming the look, the name and the names the table has (with did-you-mean). */
 export const emphasisOf = (look) => EMPHASIS[emphasisName(look)];

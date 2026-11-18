@@ -66,10 +66,13 @@ test('the stage can load Nunito: fontFaces and facesFor serve it from /engine/fo
   assert.deepEqual(facesFor({ font: { family: FAMILY } }).map((f) => f.family), [FAMILY]);
 });
 
-test('new font bytes stay within the 600 KB budget, with Nunito the only addition since Fraunces and Archivo', () => {
+// keynote's Geist Variable (looks-four Task 9) is the one file added after Nunito; the sum stays exact
+const KEYNOTE_FILE = 'geist-latin-wght-normal.woff2';
+test('new font bytes stay within the 600 KB budget: Fraunces and Archivo, then Nunito, then keynote\'s Geist and nothing else', () => {
   const files = readdirSync(FONTS_DIR).filter((name) => name.endsWith('.woff2'));
   const total = files.reduce((sum, name) => sum + statSync(path.join(FONTS_DIR, name)).size, 0);
   const nunito = statSync(path.join(FONTS_DIR, FILE)).size;
-  assert.equal(total, BYTES_BEFORE_COSMOS + nunito, `files: ${files.join(', ')}`);
+  const geist = statSync(path.join(FONTS_DIR, KEYNOTE_FILE)).size;
+  assert.equal(total, BYTES_BEFORE_COSMOS + nunito + geist, `files: ${files.join(', ')}`);
   assert.ok(total <= BUDGET_BYTES, `${total} bytes against ${BUDGET_BYTES}`);
 });

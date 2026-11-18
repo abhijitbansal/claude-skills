@@ -84,6 +84,24 @@ test('new font files total at most 600 KB', () => {
   assert.ok(totalBytes > 0 && totalBytes <= BUDGET_BYTES, `${totalBytes} bytes`);
 });
 
+// The keynote look's neutral sans (looks-four plan, Task 9): one variable file with a wght axis, registered as
+// "Geist Variable" so it never collides with the static shared "Geist" (engine/page/fonts-shared.mjs).
+const GEIST_FILE = 'geist-latin-wght-normal.woff2';
+const GEIST_FAMILY = 'Geist Variable';
+test('keynote: the Geist Variable file is present, its hash matches its SOURCES row, its licence is there, and the total is within budget', () => {
+  const row = parseSources(FONTS_DIR).find((r) => r.file === GEIST_FILE);
+  assert.ok(row, `a SOURCES row for ${GEIST_FILE}`);
+  assert.equal(row.package, '@fontsource-variable/geist');
+  assert.equal(sha256(path.join(FONTS_DIR, GEIST_FILE)), row.sha256);
+  const licence = readFileSync(path.join(FONTS_DIR, 'LICENSES', 'geist.txt'), 'utf8');
+  assert.ok(licence.includes(LICENCE_MARKER) && licence.includes('Geist'), 'the SIL OFL text for Geist');
+  const totalBytes = fontFiles(FONTS_DIR).reduce((sum, file) => sum + statSync(path.join(FONTS_DIR, file)).size, 0);
+  assert.ok(totalBytes <= BUDGET_BYTES, `${totalBytes} bytes against ${BUDGET_BYTES}`);
+  const entry = FONTS.find((f) => f.family === GEIST_FAMILY);
+  assert.ok(entry, 'a FONTS entry named Geist Variable');
+  assert.deepEqual({ file: entry.file, axes: { ...entry.axes }, wght: entry.reach.wght }, { file: GEIST_FILE, axes: { wght: [100, 900] }, wght: true });
+});
+
 test('FONTS entries are well formed and point at files on disk', () => {
   const families = FONTS.map((f) => f.family);
   assert.equal(new Set(families).size, families.length, 'family names are unique');

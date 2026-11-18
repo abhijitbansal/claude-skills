@@ -193,7 +193,9 @@ function pillNode(shot, ctx, lay, ox, oy, at) {
 function cardChildren(shot, ctx, lay, times) {
   const { look, unit } = ctx;
   const ox = -lay.w / HALF, oy = -lay.h / HALF;
-  const matched = arrivesMatched(shot, ctx);
+  // a look whose quote opens set (kinds.quote.setOnOpen, keynote: ban 5, no translucent unspoken words) sets the
+  // quotation whole on the first frame, as a matched hero is
+  const matched = arrivesMatched(shot, ctx) || look.kinds?.quote?.setOnOpen === true;
   const placed = { x: ox + lay.textX, y: oy + lay.textY, layout: lay.quote.layout, font: lay.quote.font };
   const lines = highlightLines(placed.layout, times.words, ctx.timing);
   const quote = node('text', `${shot.id}.text`, { ...placed, fill: look.palette.ink, role: 'hero', ...(lines === undefined ? {} : { highlightLines: lines }), ...(lay.dropped.length ? { dropped: lay.dropped } : {}) }, {

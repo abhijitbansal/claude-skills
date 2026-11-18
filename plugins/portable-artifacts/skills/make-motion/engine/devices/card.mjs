@@ -145,6 +145,30 @@ function cutCard({ id, box, at, look, unit }, style) {
   return { nodes: [entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, rotate: style.turn ?? CUT_TURN, children: parts })] };
 }
 
+// The elevated card's soft shadow (keynote): one soft-edged rounded rectangle of stacked rings per layer of the style's
+// `layers` ([{ color, alpha, reach, dy }], colour a palette key, reach and dy units), each inset by half its reach and
+// set down by `dy`, so its edge falls off over the reach as a blurred copy's would. Drawn once as fills: no blur filter
+// redrawn every frame (the cosmos review). Exported so every elevated surface (a card, a screen's frame) draws its
+// depth with this one builder (ban 9). `rect` is [x, y, w, h] in the caller's space.
+export function elevatedShadow(id, [x, y, w, h], radius, look, unit, layers) {
+  return layers.map((layer, i) => {
+    const reach = layer.reach * unit, inset = reach / HALF;
+    const rect = [x + inset, y + inset + layer.dy * unit, Math.max(0, w - reach), Math.max(0, h - reach)];
+    return softRoundedRect({ id: `${id}.shadow${i}`, rect, radius: Math.max(0, radius - inset), reach, alpha: layer.alpha, fill: colourOf(look, layer.color) });
+  });
+}
+
+// An elevated card (`edge: 'elevated'`, keynote): its two-layer soft shadow, then the paper (`fill`), a rounded
+// rectangle of `radius` units, square: no tilt, no tape, no edge stroke.
+function elevatedCard({ id, box, at, look, unit }, style) {
+  const [x, y, w, h] = box;
+  const radius = (style.radius ?? DEFAULT_RADIUS) * unit;
+  const local = [-w / HALF, -h / HALF, w, h];
+  const fill = style.fill === undefined ? '#ffffff' : colourOf(look, style.fill);
+  const parts = [...elevatedShadow(id, local, radius, look, unit, style.layers ?? []), node('path', `${id}.paper`, { d: roundedRect(...local, radius), fill })];
+  return { nodes: [entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, children: parts })] };
+}
+
 function buildCard(params) {
   const { id, box, at, look, unit, seed } = checkParams('card', params);
   const [x, y, w, h] = box;
@@ -152,6 +176,7 @@ function buildCard(params) {
   if (style.edge === 'rounded') return roundedCard({ id, box, at, look, unit }, style);
   if (style.edge === 'hairline') return hairlineCard({ id, box, at, look, unit }, style);
   if (style.edge === 'cut') return cutCard({ id, box, at, look, unit }, style);
+  if (style.edge === 'elevated') return elevatedCard({ id, box, at, look, unit }, style);
   const hand = isHand(look), rng = deviceRng(seed, id, 'card');
   const rotate = hand ? spread(rng, TILT) : 0;
   const d = paperOutline(style.edge, [w, h], unit, hand, rng);

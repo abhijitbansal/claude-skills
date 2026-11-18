@@ -124,6 +124,15 @@ for (const font of FONTS) {
   }
 }
 
+// keynote (looks-four Task 9): the weight sweep animates Geist Variable's wght through ctx.font
+test('keynote: Geist Variable at 100 and at 900 draw differently on canvas, and the stage loads it with no page error', async (t) => {
+  if (!stage) return t.skip('no browser');
+  assert.equal(await stage.page.evaluate(() => document.fonts.check('400 20px "Geist Variable"')), true, 'loaded through facesFor');
+  assert.ok(await differs({ family: 'Geist Variable', weight: 100 }, { family: 'Geist Variable', weight: 900 }), '100 against 900');
+  assert.ok(await differs({ family: 'Geist Variable', weight: 300 }, { family: 'Geist Variable', weight: 800 }), 'the sweep\'s 300 against 800');
+  assert.deepEqual(stage.errors, []);
+});
+
 test('ctx.fontStretch takes keywords only: a percentage is ignored, and six keywords give six distinct widths for Archivo', async (t) => {
   if (!stage) return t.skip('no browser');
   const widths = await stage.page.evaluate((keywords) => {

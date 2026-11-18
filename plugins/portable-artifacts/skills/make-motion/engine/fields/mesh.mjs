@@ -24,15 +24,37 @@ const DIAMETER = 2; // diameter in radii
 // A gaussian-ish falloff: [position along the radius, share of the blob alpha].
 const BLOB_STOPS = Object.freeze([[0, 1], [0.2, 0.88], [0.45, 0.55], [0.7, 0.2], [1, 0]]);
 
+const HEX = /^#[0-9a-f]{6}$/i;
+const COLOURS_WHAT = `a list of 1 to ${MAX_BLOBS} palette keys or #rrggbb colours`;
+const isColourList = (v) => Array.isArray(v) && v.length >= 1 && v.length <= MAX_BLOBS && v.every((c) => typeof c === 'string' && c !== '');
+
+// Two optional params (keynote): `colours`, the blobs' colours in place of the palette pool (palette keys or #rrggbb),
+// and `sway`, a multiplier from 0 to 1 on every blob's amplitude. Absent, the plan is exactly what it was before them.
 const RULES = Object.freeze({
   blobs: { min: 1, max: MAX_BLOBS, int: true },
   strength: { min: 0, max: 1 },
+  colours: { check: isColourList, what: COLOURS_WHAT },
+  sway: { min: 0, max: 1 },
 });
 
 const colourPool = ({ paper, accent, accent2, ink2 }) => [
   accent, accent2, ink2,
   mix(accent, paper, MIX_TOWARD_PAPER), mix(accent2, paper, MIX_TOWARD_PAPER), mix(ink2, paper, MIX_TOWARD_PAPER),
 ];
+
+// The colours a `colours` param names, as #rrggbb: each a #rrggbb or a key of the palette.
+function namedColours(colours, palette) {
+  return colours.map((c) => {
+    const hex = HEX.test(c) ? c : palette[c];
+    if (typeof hex !== 'string' || !HEX.test(hex)) {
+      throw new Error(`param "colours" must be ${COLOURS_WHAT}; ${JSON.stringify(c)} is neither (palette: ${Object.keys(palette).join(', ')}) (field "mesh")`);
+    }
+    return hex;
+  });
+}
+
+// A blob with its amplitudes scaled by `sway` (absent: the blob as planned, the same object).
+const swayed = (blob, sway) => (sway === undefined ? blob : { ...blob, ampX: blob.ampX * sway, ampY: blob.ampY * sway });
 
 // Fisher-Yates over a copy, so the first blobs get distinct colours before any repeat.
 function shuffled(rng, list) {
@@ -59,8 +81,8 @@ export function plan(input) {
   const params = resolveParams('mesh', input.params, RULES);
   const rng = layerRng(seed, LAYERS.mesh);
   const drawn = randInt(rng, BLOB_COUNT);
-  const colours = shuffled(rng, colourPool(palette));
-  const blobs = Array.from({ length: params.blobs ?? drawn }, (_, i) => planBlob(rng, { w, h, unit }, colours[i % colours.length]));
+  const colours = shuffled(rng, params.colours === undefined ? colourPool(palette) : namedColours(params.colours, palette));
+  const blobs = Array.from({ length: params.blobs ?? drawn }, (_, i) => swayed(planBlob(rng, { w, h, unit }, colours[i % colours.length]), params.sway));
   return deepFreeze({ field: 'mesh', w, h, unit, background: palette.paper, alpha: params.strength ?? DEFAULT_STRENGTH, blobs });
 }
 

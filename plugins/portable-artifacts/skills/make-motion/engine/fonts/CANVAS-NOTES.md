@@ -118,6 +118,15 @@ weights distinctly.
 Not measured: every FONTS entry carries the `100 900` weight descriptor (`fontFaces`), so a requested weight above
 900 may stop at 900 rather than reach the face's 1000. The look uses 600 to 800, inside both ranges.
 
+## Geist Variable (the `keynote` look)
+
+Added with the `keynote` look: Geist 5.3.0 (`@fontsource-variable/geist`, Latin, upright), one axis, `wght` 100-900,
+registered as the family `Geist Variable` so it never collides with the static shared `Geist` 400 and 600
+(`engine/page/fonts-shared.mjs`). The same check, repeated in the same Chromium **156.0.8078.4**:
+`test/v2/fonts-browser.test.mjs` draws "Rag" at weight 100 and at 900, and at the weight sweep's 300 and 800, through
+`ctx.font`, and each pair draws differently, so canvas reaches the weight axis (`reach.wght` true; no other axis). The
+stage loads it through `facesFor` with no page error or blocked request (the same test).
+
 ## What this means for the looks
 
 - Animate `wght` freely in both faces.
@@ -129,3 +138,4 @@ Not measured: every FONTS entry carries the `100 900` weight descriptor (`fontFa
   animate it through `ctx`, or use the element-CSS route.
 - Never rely on a percentage in `ctx.fontStretch`.
 - Nunito: animate `wght` freely between 200 and 900; it has no other axis.
+- Geist Variable: animate `wght` freely between 100 and 900 (keynote's sweep runs 300 to 800); it has no other axis.

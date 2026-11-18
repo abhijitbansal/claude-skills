@@ -22,6 +22,8 @@ export const EMPHASIS_FLAGS = Object.freeze({
   // small one (kinds/stack.mjs keepRatio); `widens`: a one-line stack's emphasised word steps one width keyword wider on
   // its beat, its line measured at that width. Never a recolour.
   scale: Object.freeze({ together: never, leads: true, widens: true, keepsColour: true }),
+  // a weight sweep from light to heavy over each emphasised word's spoken time (keynote): a pointer, capped at the share
+  'weight-sweep': Object.freeze({ together: never, maxShare: EMPHASIS_SHARE }),
 });
 
 /** The name of look.emphasis when the table has it; throws naming the look, the name and the names the table has. */

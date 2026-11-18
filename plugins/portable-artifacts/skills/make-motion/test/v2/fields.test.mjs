@@ -1,5 +1,6 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/fields/index.mjs';
 import * as paperModule from '../../engine/fields/paper.mjs';
@@ -210,7 +211,7 @@ test('unknown params throw and list the accepted names', () => {
   assert.throws(() => get('paper').plan({ w: 300, h: 300, seed: 1, palette, params: { fibers: 5 } }),
     /unknown param "fibers" for field "paper"; accepted: blotches, blotchAlpha, fibres, fibreAlpha, specks, grainAlpha/);
   assert.throws(() => get('mesh').plan({ w: 300, h: 300, seed: 1, palette, params: { x: 1 } }),
-    /unknown param "x" for field "mesh"; accepted: blobs, strength/);
+    /unknown param "x" for field "mesh"; accepted: blobs, strength, colours, sway/);
   assert.throws(() => get('halftone').plan({ w: 300, h: 300, seed: 1, palette, params: { size: 1 } }),
     /unknown param "size" for field "halftone"; accepted: cell, angle, color, strength/);
 });
@@ -329,6 +330,46 @@ test('mesh blobs sway on a closed path: never beyond their amplitude of the base
       assert.ok(Math.abs(y - b.y) <= b.ampY + 1e-6, `blob ${i} y at t=${t}`);
     });
   }
+});
+
+// keynote (looks-four Task 9): two optional mesh params, `colours` (palette keys or #rrggbb) and `sway` (0 to 1, a
+// multiplier on the amplitude); absent, the plan is today's. The hashes are of plans made on the tree before the params
+// existed (.scratch/n1/mesh-hash.mjs), so the pin is to today's bytes, not to a second run of the new code.
+const sha256Of = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const MESH_TODAY = Object.freeze([
+  [5, undefined, '457b56289803f874563496e7a16c44dc3889db9a2141c47f48a05a52f8432a18'],
+  [21, { blobs: 4, strength: 0.5 }, 'a4a27c25eada0d9bf9e517327429e84d90fb1e49148200e62bd190af1b13607b'],
+]);
+
+test('mesh without colours and sway: the plan is byte-equal to today\'s for a seed', () => {
+  for (const [seed, params, hash] of MESH_TODAY) {
+    assert.equal(sha256Of(get('mesh').plan({ w: 1920, h: 1080, unit: 1, seed, palette, params })), hash, `seed ${seed}`);
+  }
+});
+
+test('mesh with colours: every blob takes one of them (palette keys or #rrggbb)', () => {
+  const wide = { ...palette, wash: '#dfe4ff' };
+  const p = get('mesh').plan({ w: 1920, h: 1080, seed: 9, palette: wide, params: { blobs: 6, colours: ['wash', '#ffe6dc'] } });
+  assert.equal(p.blobs.length, 6);
+  assert.ok(p.blobs.every((b) => ['#dfe4ff', '#ffe6dc'].includes(b.color)), p.blobs.map((b) => b.color).join(', '));
+  assert.deepEqual([...new Set(p.blobs.map((b) => b.color))].sort(), ['#dfe4ff', '#ffe6dc'], 'both are used');
+});
+
+test('mesh colours must be palette keys or #rrggbb, one to eight of them', () => {
+  const plan = (colours) => get('mesh').plan({ w: 300, h: 300, seed: 1, palette, params: { colours } });
+  assert.throws(() => plan(['neon']), /param "colours" must be/);
+  assert.throws(() => plan([]), /param "colours" must be/);
+  assert.throws(() => plan('ink'), /param "colours" must be/);
+  assert.throws(() => get('mesh').plan({ w: 300, h: 300, seed: 1, palette, params: { sway: 2 } }), /param "sway" must be a number in \[0, 1\]/);
+});
+
+test('mesh sway 0 gives the same paint at t = 0 and t = 10; sway 0.5 halves every amplitude', () => {
+  const still = get('mesh').plan({ w: 1920, h: 1080, seed: 3, palette, params: { sway: 0 } });
+  const at = (p, t) => { const main = recordingContext(); get('mesh').paint(main.ctx, p, t); return main.calls; };
+  assert.deepEqual(at(still, 0), at(still, 10));
+  const full = get('mesh').plan({ w: 1920, h: 1080, seed: 3, palette });
+  const half = get('mesh').plan({ w: 1920, h: 1080, seed: 3, palette, params: { sway: 0.5 } });
+  half.blobs.forEach((b, i) => assert.ok(Math.abs(b.ampX - full.blobs[i].ampX / 2) < 1e-9 && Math.abs(b.ampY - full.blobs[i].ampY / 2) < 1e-9, `blob ${i}`));
 });
 
 test('mesh blobs are always moving: positions at t and t + 0.5 differ', () => {

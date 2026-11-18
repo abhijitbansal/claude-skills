@@ -63,6 +63,11 @@ export function withSavedState(ctx, draw) {
 
 function checkParam(field, name, value, rule) {
   const bad = (what) => new Error(`param "${name}" must be ${what}, got ${JSON.stringify(value)} (field "${field}")`);
+  if (rule.check) {
+    // a param no range or choice list describes (mesh colours): `check(value)` is true when it is good, `what` says what it must be
+    if (!rule.check(value)) throw bad(rule.what);
+    return;
+  }
   if (rule.choices) {
     if (!rule.choices.includes(value)) throw bad(`one of: ${rule.choices.join(', ')}`);
     return;
@@ -72,7 +77,7 @@ function checkParam(field, name, value, rule) {
   if (rule.int && !Number.isInteger(value)) throw bad(`an integer in ${range}`);
 }
 
-// rules: { name: { min, max, int? } | { choices } }. Returns a frozen object holding only the params given.
+// rules: { name: { min, max, int? } | { choices } | { check, what } }. Returns a frozen object holding only the params given.
 export function resolveParams(field, params, rules) {
   if (params === undefined || params === null) return Object.freeze({});
   if (typeof params !== 'object' || Array.isArray(params)) throw new Error('params must be an object');

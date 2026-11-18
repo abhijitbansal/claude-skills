@@ -152,7 +152,10 @@ function deskBlock(shot, ctx, data) {
   const { look, canvas, unit, measure } = ctx;
   const span = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
   const min = sizeAt(look, data.fromStep, unit), max = data.max * unit;
-  const opts = { text: setCase(look, 'display', titleOf(shot)), font: fontFor(look, 'display', max, unit), maxWidth: span.w, align: 'left', measure, optical: true };
+  // data.titleWeight (keynote: the wordmark at 800): the closing line set at that weight, measured at it
+  const face = fontFor(look, 'display', max, unit);
+  const titleFont = data.titleWeight === undefined ? face : { ...face, weight: data.titleWeight };
+  const opts = { text: setCase(look, 'display', titleOf(shot)), font: titleFont, maxWidth: span.w, align: 'left', measure, optical: true };
   const title = fitDisplay(opts, { min, max, maxHeight: editorialBounds(ctx).height(data.height), maxLines: look.maxLines.display }, look, unit);
   const size = title.font.size;
   const top = title.layout.lines[0].y - CAP_HEIGHT * size;
@@ -222,7 +225,21 @@ function expandDesk(shot, ctx, data, times) {
   }
   if (card !== null) boxes.mark = card.turned;
   const marks = card === null ? [] : cardNodes(shot, ctx, parts, card, data);
-  return { nodes: [...marks, ...nodes], boxes, hero };
+  return { nodes: [...marks, ...nodes, ...titleSweep(shot, ctx, data, boxes.title)], boxes, hero };
+}
+
+// data.sweep (keynote): the look's band of light crosses the closing line once, after the complete first frame and
+// landed SWEEP_CLEAR seconds before the cut (the gate rulings: one designed motion per shot, held before a cut out).
+const SWEEP_AT = 1; // s: the band's crossing is centred here...
+const SWEEP_HALF = 0.35; // ...lasting twice this (devices/sweep.mjs DURATION 0.7)
+const SWEEP_CLEAR = 1.2; // s between the band's end and the cut
+const SWEEP_PAD = 0.12; // of the title's height, round its box
+function titleSweep(shot, ctx, data, [x, y, w, h]) {
+  if (data.sweep !== true) return [];
+  const { look, unit, timing } = ctx;
+  const at = Math.max(SWEEP_HALF, Math.min(SWEEP_AT, timing.duration - SWEEP_CLEAR - SWEEP_HALF));
+  const pad = SWEEP_PAD * h;
+  return registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: [x - pad, y - pad, w + 2 * pad, h + 2 * pad], at, look, unit, seed: 0 }).nodes;
 }
 
 // ---- pop ----

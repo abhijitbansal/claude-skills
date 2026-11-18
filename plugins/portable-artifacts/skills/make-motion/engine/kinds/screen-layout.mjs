@@ -193,7 +193,9 @@ export function singleLayout(shot, ctx, { picture, zoom }) {
     if (!cutsToCloseUp(look)) {
       const push = pushLayer(ctx, target, zoom.at, { max: nativeZoom(picture, image) });
       const rest = data.pushDim === undefined ? build('focus', `${shot.id}.focus`) : [pushMask(shot, ctx, target, zoom.at)];
-      return { nodes: [screenGroup(shot, ctx, frame, image, undefined, push[0].t), ...rest], boxes, camera: [push] };
+      // data.ring (keynote): the look's circle (the zoom ring) drawn round the region as the camera pushes in
+      const ring = data.ring === true ? registries.devices.get('circle').build({ id: `${shot.id}.ring`, box: target, at: zoom.at, look, unit, seed }).nodes : [];
+      return { nodes: [screenGroup(shot, ctx, frame, image, undefined, push[0].t), ...rest, ...ring], boxes, camera: [push] };
     }
     const focus = build('focus', `${shot.id}.focus`);
     const sweep = registries.devices.get('sweep').supports(look) ? registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: target, at: zoom.at, look, unit, seed }).nodes : [];

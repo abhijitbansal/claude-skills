@@ -8,6 +8,7 @@
 import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { colourOf, roundedRect } from '../devices/shared.mjs';
+import { elevatedShadow } from '../devices/card.mjs';
 import { fontFor, sizeAt, isWide } from './shared.mjs';
 
 // units; from version 1's browser frame block (template/blocks, browser-window): title row 72, address row 88, corner radius 20
@@ -77,6 +78,13 @@ function addressRow(shot, ctx, style, [x, y, w], rowH) {
   return [...nodes, textNode(`${shot.id}.url`, set, pill[0] + TEXT_PAD * unit, pill[1], pill[3], colourOf(look, style.urlText), 'url')];
 }
 
+// An elevated frame (data.elevated, keynote): the look's elevated card shadow (devices/card.mjs elevatedShadow, the one
+// builder every elevated surface uses) under the frame's outer box, rounded as the frame is.
+function elevatedNodes(id, box, radius, ctx) {
+  const { look, unit } = ctx;
+  return elevatedShadow(id, box, radius, look, unit, look.devices.card?.layers ?? []);
+}
+
 // The look's shadow under the frame: its outline again, offset, in the shadow colour (blurred where the look's is).
 function shadowNode(id, d, look, unit) {
   const { dx, dy, blur, alpha, color } = look.shadow;
@@ -108,5 +116,6 @@ export function frameNodes(shot, ctx, { frame, image, data, content }) {
     const sw = SLOT.w * outer[2], sh = SLOT.h * unit;
     chrome.push(node('path', `${shot.id}.slot`, { d: roundedRect(outer[0] + (outer[2] - sw) / HALF, outer[1] + (c.top - sh) / HALF, sw, sh, sh / HALF), fill: colourOf(look, data.dots) }));
   }
-  return [shadowNode(`${shot.id}.frame`, d, look, unit), body, ...chrome, content, line];
+  const depth = data.elevated === true ? elevatedNodes(`${shot.id}.frame`, outer, c.radius, ctx) : [shadowNode(`${shot.id}.frame`, d, look, unit)];
+  return [...depth, body, ...chrome, content, line];
 }

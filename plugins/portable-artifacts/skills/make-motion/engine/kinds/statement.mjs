@@ -257,7 +257,8 @@ function wordTracksFor(words, times, ctx, matched) {
   return words.map((w, i) => {
     const { at, spoken } = times[i];
     const emphasised = spoken !== null && timing.words[spoken].emphasis;
-    const word = { emphasised, matched, start: starts.get(w.word.index), peak: peaks.get(w.word.index) };
+    // `end`: the spoken word's end (a weight sweep ramps to it, emphasis.mjs); the other styles do not read it
+    const word = { emphasised, matched, start: starts.get(w.word.index), peak: peaks.get(w.word.index), end: spoken === null ? undefined : timing.words[spoken].end };
     // a look whose hook opens at full ink (look.hookInk, cosmos): every word in ink from frame 0, the emphasis by the glow
     if (hook && look.hookInk) return style.inkTracks(look, word, at);
     if (hook) {

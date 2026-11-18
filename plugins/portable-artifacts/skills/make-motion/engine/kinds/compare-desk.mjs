@@ -202,6 +202,16 @@ function dimScrim(id, card, look, at, { lifts = false } = {}) {
   return paperScrim({ id: `${id}.scrim`, cover: coverOf(card), at: at + dur, dur, ease, from, opacity, look });
 }
 
+// The unspoken side moved back in depth instead of dimmed (data.recede, keynote: a scale, 0.94): the card group, which
+// stands on its centre (devices/shared.mjs entrance), scaled to `scale` while its side is unspoken and back to 1 when it
+// is spoken, over the look's settle move from the turn. Nothing is translucent (bans 5 and 6).
+function receded(group, look, turn, { scale, lifts }) {
+  const { dur, ease } = look.moves.settle;
+  const [from, to] = lifts ? [scale, 1] : [1, scale];
+  const depth = track([{ t: 0, v: from }, { t: turn, v: from }, { t: turn + dur, v: to, ease }]);
+  return node(group.type, group.id, group.props, { tracks: { ...group.tracks, scale: depth }, children: group.children, depth: group.depth });
+}
+
 // The span the cards take: columns 1 to 12, or on a wide frame from data.fromWide (ledger: column 2, the left margin
 // every other shot of the film keeps, gate-ledger-2 ruling 6).
 const cardSpan = (ctx, data) => editorialSpan(ctx, isWide(ctx.canvas) ? data.fromWide ?? 1 : 1, ctx.look.grid.columns);
@@ -322,6 +332,7 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
     const picture = sidePicture(shot, ctx, data, side.key, room, size);
     // ruled columns: no card, no scrim; both sides read in full, the claimed one in the accent
     if (columns) return columnGroup(card, id, [...picture, ...texts]);
+    if (data.recede !== undefined) return receded(cardGroup(card, id, [...picture, ...texts]), look, turn, { scale: data.recede, lifts: i === 1 });
     const scrim = [dimScrim(id, card, look, turn, { lifts: i === 1 })];
     if (!data.rim) return cardGroup(card, id, [...picture, ...texts, ...scrim]);
     const rim = rimLight(id, card, ctx, data, turn, i === 1);

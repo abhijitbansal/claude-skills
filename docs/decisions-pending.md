@@ -241,3 +241,7 @@ Third review: dashboard ship after fixes; diagram ship after fixes with two desk
 ## pop clipping example fires region-off-frame (2026-11-17)
 
 The new region-off-frame finding (engine/review/regions.mjs) fires on pop's clipping example (81 units off at 16:9, 12.3 at 9:16); desk, cosmos and the reference films are clean. Default: fix pop's close-up framing in the cut-over pass, moving the affected pop frozen entries as an intended change listed in the commit.
+
+## Page modules import only served paths (2026-11-17)
+
+A render caught poster's flat.mjs importing shared/contrast.mjs, a path the page server does not serve; no test guards it. Default: add a test that every module under engine/ reachable from the page imports only paths the v2 server serves, in the cut-over pass.

@@ -57,11 +57,15 @@ function groupingFor(width, ctx) {
   return { maxWords: PILL.maxWords, maxChars: Math.max(1, Math.min(PILL.maxChars, Math.floor(perLine * PILL.fill))) };
 }
 
+// A look that steps the spoken word's weight instead of recolouring it (look.captionWeight, keynote) measures every word
+// at that weight, so a word drawn lighter sits centred in its room and nothing moves (text/layout.mjs reserve).
+const reserveOf = (look) => (look.captionWeight === undefined ? {} : { reserve: { weight: look.captionWeight } });
+
 // One group on one line at `size` px: { layout, font, ink: { up, down, left, right } }.
 function setAt(group, size, ctx) {
   const font = fontFor(ctx.look, 'label', size, ctx.unit);
   const text = setCase(ctx.look, 'label', group.words.map((w) => w.text).join(' '));
-  const layout = spokenLayout(layoutText({ text, font, maxWidth: Number.MAX_SAFE_INTEGER, measure: ctx.measure }), group, text, ctx.captionId);
+  const layout = spokenLayout(layoutText({ text, font, maxWidth: Number.MAX_SAFE_INTEGER, measure: ctx.measure, ...reserveOf(ctx.look) }), group, text, ctx.captionId);
   return { layout, font, ink: runInk(layout.lines[0], font, ctx.measure) };
 }
 
@@ -74,9 +78,19 @@ function setGroup(group, maxWidth, ctx) {
 function spokenFill(look, word) {
   const { ink, accent } = look.palette;
   const [from, to] = [heardStart(word), Math.max(heardStart(word), heardEnd(word))];
+  if (look.captionWeight !== undefined) return spokenWeight(look, word, [from, to]);
   const keys = [{ t: 0, v: ink }, { t: from, v: ink }, { t: from, v: accent }];
   if (!word.emphasis) keys.push({ t: to, v: accent }, { t: to, v: ink });
   return { fill: track(keys) };
+}
+
+// A word's weight (look.captionWeight, keynote): the label weight, the caption weight from when it is heard, and the
+// label weight again when it ends (unless it is emphasised). Ink throughout: no recolour.
+function spokenWeight(look, word, [from, to]) {
+  const [rest, heavy] = [look.fonts.label.weight, look.captionWeight];
+  const keys = [{ t: 0, v: rest }, { t: from, v: rest }, { t: from, v: heavy }];
+  if (!word.emphasis) keys.push({ t: to, v: heavy }, { t: to, v: rest });
+  return { weight: track(keys) };
 }
 
 /** The shot's caption nodes: one pill holding each group in turn. */

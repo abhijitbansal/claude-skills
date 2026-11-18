@@ -70,8 +70,10 @@ const onCard = (look) => (colourOf(look, look.devices.card?.fill ?? 'paper') ===
 
 // The caption text node at (x, y) in `fill`, each word shown as it is spoken (arrivals.mjs revealTimes); it names the
 // credit as left out when the credit was not drawn (the frame review's "dropped" finding).
+// A look whose media caption opens set (kinds.media.setOnOpen, keynote) shows it whole from frame 0: a card holding one
+// word for two seconds read as a blank card (the poster gate's parked failure).
 function captionNode(shot, ctx, caption, [x, y], credit, fill) {
-  const times = revealTimes(caption.layout, ctx.timing);
+  const times = ctx.look.kinds?.media?.setOnOpen === true ? [] : revealTimes(caption.layout, ctx.timing);
   return node('text', `${shot.id}.caption`, {
     x, y, layout: caption.layout, font: caption.font, fill,
     ...(credit && !credit.drawn ? { dropped: ['credit'] } : {}),

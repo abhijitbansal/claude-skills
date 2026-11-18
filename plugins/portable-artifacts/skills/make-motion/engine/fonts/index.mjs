@@ -26,6 +26,8 @@ export const FONTS = deepFreeze([
   { family: 'Archivo', file: 'archivo-latin-standard-normal.woff2', axes: { wght: [100, 900], wdth: [62, 125] }, reach: { ...NO_REACH, wght: true, wdth: true } },
   // the cosmos look's rounded sans: a weight axis only
   { family: 'Nunito', file: 'nunito-latin-wght-normal.woff2', axes: { wght: [200, 1000] }, reach: { ...NO_REACH, wght: true } },
+  // the keynote look's neutral sans: a weight axis only; named apart from the static shared "Geist" (fonts-shared.mjs)
+  { family: 'Geist Variable', file: 'geist-latin-wght-normal.woff2', axes: { wght: [100, 900] }, reach: { ...NO_REACH, wght: true } },
 ]);
 
 // ctx.fontStretch takes these keywords and nothing else (a percentage is ignored), so canvas width moves in these

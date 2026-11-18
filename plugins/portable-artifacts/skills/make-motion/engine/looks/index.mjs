@@ -1,4 +1,4 @@
-// Looks for the v2 engine. Importing this file registers `desk`, `pop`, `cosmos`, `ledger` and `poster` (experimental) in registries.looks
+// Looks for the v2 engine. Importing this file registers `desk`, `pop`, `cosmos`, `ledger`, `poster` and `keynote` (experimental) in registries.looks
 // (once: a second evaluation of this file leaves the registry as it is). Looks are frozen plain data plus pure functions;
 // the grid helpers and applyAccent live here. Pure and DOM-free. The fields a look names (`paper`, `halftone`, `cosmos`)
 // are registered by engine/fields/index.mjs, which whoever draws the look imports.
@@ -19,6 +19,7 @@ import { pop } from './pop.mjs';
 import { cosmos } from './cosmos.mjs';
 import { ledger } from './ledger.mjs';
 import { poster } from './poster.mjs';
+import { keynote } from './keynote.mjs';
 
 /**
  * A move in a look's motion grammar. `dur` is seconds; `dist` is a travel in units; `step` (fps) makes a hand
@@ -400,6 +401,6 @@ if (!looks.names.hidesExperimental) {
 /** Every registered look's name, the experimental ones included (--list looks --all). */
 export const allLookNames = () => registries.looks.names.all();
 
-for (const definition of [desk, pop, cosmos, ledger, poster]) {
+for (const definition of [desk, pop, cosmos, ledger, poster, keynote]) {
   if (!registries.looks.has(definition.name)) registries.looks.add(definition.name, deepFreeze(definition));
 }
