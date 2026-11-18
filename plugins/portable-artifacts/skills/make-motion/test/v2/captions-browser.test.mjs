@@ -12,7 +12,7 @@ import { registries } from '../../engine/registry.mjs';
 import '../../engine/looks/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
-import { canvasSize } from '../../template/formats.mjs';
+import { canvasSize } from '../../engine/formats.mjs';
 import { reviewFilm, safeRectFor } from '../../scripts/v2/review.mjs';
 import { sessionOrNull } from './helpers/session.mjs';
 

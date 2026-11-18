@@ -22,8 +22,11 @@ import { lstatSync } from 'node:fs';
 import path from 'node:path';
 import { narrationStart } from '../../../engine/script/timing.mjs';
 import { parseLoudness } from '../../lib/ffmpeg.mjs';
-import { ceilingFor } from '../../lib/loudness.mjs';
 import { SAMPLE_RATE } from './words.mjs';
+
+const AAC_OVERSHOOT_DB = 0.5; // loudnorm holds the peak at its TP before the AAC encode, which can add about 0.2 dB: aim this far under
+/** The true peak the master is held to (`truePeak` less the AAC encode's overshoot), so the finished file stays at or under `truePeak`. */
+export const ceilingFor = (truePeak) => Math.round((truePeak - AAC_OVERSHOOT_DB) * 100) / 100;
 
 export const LEVELS = Object.freeze({ emphasisDb: 2, asideDb: -3 });
 export const RAMP_SECONDS = 0.02;

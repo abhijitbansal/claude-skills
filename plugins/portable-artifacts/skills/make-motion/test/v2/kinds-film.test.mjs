@@ -12,7 +12,7 @@ import { ease } from '../../engine/time/ease.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { buildFilm, resolveLook, shotTime } from '../../engine/graph/film.mjs';
 import { annotate } from '../../engine/page/bounds.mjs';
-import { safeInsets } from '../../template/formats.mjs';
+import { safeInsets } from '../../engine/formats.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
 import '../../engine/looks/index.mjs';
 import '../../engine/modes/index.mjs';

@@ -17,7 +17,7 @@ const FILL_EASE = 'inOutCubic';
  * rings to it, engine/page/draw.mjs; the contrast review reads the same: engine/review/contrast.mjs).
  */
 export const GLOW_EDGE = 0.55;
-// units: the glow's radius never passes the safe margin (template/formats.mjs SAFE_MARGIN_PX at 1080), so a text kept
+// units: the glow's radius never passes the safe margin (engine/formats.mjs SAFE_MARGIN_PX at 1080), so a text kept
 // inside the safe area keeps its glow inside the frame
 const MAX_RADIUS_UNITS = 60;
 

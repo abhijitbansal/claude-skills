@@ -2,7 +2,7 @@
 // 22050 Hz, in memory): the 31 cases of the second held-out set (shuffle, disco, breakbeat, polka, march, bossa, transient
 // shapes and noise mixes, each drawn from its own seeded stream) and a kick on beats 1 and 3 over weak clicks on every beat.
 // test/beats-heldout2.test.mjs measures the set; test/beats-limits.test.mjs takes its documented misreads from it.
-import { mulberry32 } from '../../template/seeded.mjs';
+import { mulberry32 } from '../../engine/seeded.mjs';
 
 export const SR = 22050;
 const SET_SEED = 31337; // the set's jitter is drawn from this stream, and case i renders from SET_SEED + i

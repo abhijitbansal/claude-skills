@@ -15,7 +15,7 @@ import { resolveAnchor, AnchorError } from '../../../engine/script/anchors.mjs';
 import { resolveLook } from '../../../engine/graph/film.mjs';
 import { resolveShotCut } from '../../../engine/cuts/resolve.mjs';
 import { isHidden } from '../../../engine/kinds/shared.mjs';
-import { canvasSize } from '../../../template/formats.mjs';
+import { canvasSize } from '../../../engine/formats.mjs';
 
 const event = (fields) => Object.freeze(fields);
 

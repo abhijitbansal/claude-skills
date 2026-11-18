@@ -1,8 +1,8 @@
-// The cue voices of version 2 and the cue track. The version 1 synthesisers (scripts/lib/cues.mjs, read-only) voice
-// the cues they already have; sub, paper, marker and the riser are new, pure sample generators seeded from the film
+// The cue voices of version 2 and the cue track. The synthesisers of cue-synth.mjs (read-only, moved here from version 1)
+// voice the cues they already have; sub, paper, marker and the riser are new, pure sample generators seeded from the film
 // seed through engine/seeded.mjs. renderCues lays a cue list (cues.mjs planCues) into one stereo track of the film's
 // length. Nothing here reads a clock or Math.random: the same cues and seed give the same bytes.
-import { CUE_LAYERS, SAMPLE_RATE, cueWav, pinkNoise } from '../../lib/cues.mjs';
+import { CUE_LAYERS, SAMPLE_RATE, cueWav, pinkNoise } from './cue-synth.mjs';
 import { mulberry32 } from '../../../engine/seeded.mjs';
 import { writeWav } from './wav.mjs';
 

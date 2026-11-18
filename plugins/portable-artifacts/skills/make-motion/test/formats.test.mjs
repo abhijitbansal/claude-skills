@@ -8,6 +8,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { FORMATS, SAFE_MARGIN_PX, SAFE_REFERENCE_SIDE, DEFAULT_CAPTION_TOP, safeMargin, safeInsets, captionZone } from '../template/formats.mjs';
+import * as old from '../template/formats.mjs';
+import * as engine from '../engine/formats.mjs';
 import { validateSpec, withDefaults, loadSpec } from '../scripts/lib/spec.mjs';
 import * as checkModule from '../scripts/lib/check-main.mjs';
 import { startServer } from '../scripts/lib/server.mjs';
@@ -45,6 +47,21 @@ test('FORMATS holds the four presets with their sizes and caption tops', () => {
     '4:5': { size: [1080, 1350], captionTop: 0.72 },
   });
   assert.deepEqual([SAFE_MARGIN_PX, SAFE_REFERENCE_SIDE, DEFAULT_CAPTION_TOP], [60, 1080, 0.78]);
+});
+
+// The copy version 2 reads (engine/formats.mjs) holds this file's values, until the cut-over deletes this file and this test.
+test('engine/formats.mjs exports the same values as template/formats.mjs for every name it shares', () => {
+  const shared = Object.keys(engine);
+  assert.deepEqual(shared.sort(), ['FORMATS', 'SAFE_MARGIN_PX', 'SAFE_REFERENCE_SIDE', 'VIRAL_REFERENCE', 'VIRAL_SAFE_ZONE', 'canvasSize', 'safeInsets', 'safeMargin']);
+  for (const name of shared) {
+    if (typeof engine[name] === 'function') continue;
+    assert.deepEqual(engine[name], old[name], name);
+  }
+  for (const size of [[1920, 1080], [1080, 1920], [3840, 2160], [1080, 1350]]) {
+    assert.equal(engine.safeMargin(size), old.safeMargin(size), `safeMargin ${size}`);
+    for (const zone of [null, old.VIRAL_SAFE_ZONE, { top: 10, bottom: 2000, left: 5, right: 5 }]) assert.deepEqual(engine.safeInsets(size, zone), old.safeInsets(size, zone), `safeInsets ${size} ${JSON.stringify(zone)}`);
+  }
+  for (const spec of [{}, { size: [10, 20] }, { format: '9:16' }, { format: '4:5', size: [1, 2] }, { format: 'nope' }]) assert.deepEqual(engine.canvasSize(spec), old.canvasSize(spec), JSON.stringify(spec));
 });
 
 // ---- spec: format sets the size ------------------------------------------------------------------

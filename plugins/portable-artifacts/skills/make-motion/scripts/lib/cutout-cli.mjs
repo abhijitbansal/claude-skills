@@ -6,10 +6,10 @@
 // Pass the original as `src` and this file as `cutout` of a `text-behind-subject` block.
 // Needs `doctor --fix cutout` (onnxruntime-node, on demand); the 25 MB weights download once on first use.
 import { existsSync } from 'node:fs';
-import { UsageError } from './spec.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 import { launchBrowser } from './browser.mjs';
 import { findFfmpeg, findFfprobe } from './ffmpeg.mjs';
-import { probeVideo } from './video.mjs';
+import { probeVideo } from './video-probe.mjs';
 import { wantsHelp, printHelp } from './help.mjs';
 import { USAGE, INSTALL_HINT, parseCutoutArgs, loadOnnx, ensureModel, openCanvasPage, cutoutImage, cutoutVideo, clipFps } from './cutout.mjs';
 

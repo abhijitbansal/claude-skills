@@ -8,7 +8,14 @@ import { prepareCode, ROLES } from '../../scripts/v2/prepare/code.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { CODE_LANGS, resolveLang } from '../../engine/kinds/code-langs.mjs';
 import { diffLines } from '../../engine/kinds/code-diff.mjs';
-import { CODE_LANGS as V1_LANGS, LANG_ALIASES as V1_ALIASES } from '../../template/code-theme.mjs';
+
+// The language list and its aliases as version 1's template/code-theme.mjs held them at 2e505594 (before the cut-over
+// deleted that file), recorded by running it (.scratch/co1/record-before.mjs).
+const V1_LANGS = Object.freeze(['text', 'javascript', 'typescript', 'json', 'bash', 'python', 'diff', 'go', 'rust', 'swift', 'yaml', 'html', 'css', 'markdown']);
+const V1_ALIASES = Object.freeze({
+  js: 'javascript', mjs: 'javascript', jsx: 'javascript', ts: 'typescript', tsx: 'typescript', sh: 'bash', shell: 'bash', zsh: 'bash', py: 'python',
+  golang: 'go', rs: 'rust', yml: 'yaml', htm: 'html', md: 'markdown', txt: 'text', plaintext: 'text', patch: 'diff',
+});
 
 const roles = (line) => line.filter((t) => t.text.trim() !== '').map((t) => [t.text.trim(), t.role]);
 const textOf = (line) => line.map((t) => t.text).join('');
@@ -51,6 +58,7 @@ test('the same film prepares to byte-identical JSON twice, through prepareFilm',
 
 test('every language of the list tokenises a line; aliases resolve; the list and aliases equal version 1\'s', () => {
   assert.deepEqual([...CODE_LANGS], [...V1_LANGS]);
+  assert.equal(Object.keys(V1_ALIASES).length, 17);
   for (const [alias, lang] of Object.entries(V1_ALIASES)) assert.equal(resolveLang(alias), lang, alias);
   assert.equal(resolveLang('pyhton'), null);
   assert.equal(resolveLang('constructor'), null, 'an inherited name is never an alias');

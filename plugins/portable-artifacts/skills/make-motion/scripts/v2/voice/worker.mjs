@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { SayError, parseSay } from '../../../engine/script/say.mjs';
 import { importOptional } from '../../lib/optional.mjs';
 import { optionalInstall } from '../../lib/doctor-hint.mjs';
-import { UsageError } from '../../lib/spec.mjs';
+import { UsageError } from '../../../shared/cli.mjs';
 import { MODEL_INFO, checkVoice, openKokoro, planShotCalls } from './kokoro.mjs';
 import { ensureVoiceModel } from './model.mjs';
 import { SIDECAR_FILE, SIDECAR_VERSION, roundTime, sentencesOf, wavName, writeSidecar } from './sidecar.mjs';

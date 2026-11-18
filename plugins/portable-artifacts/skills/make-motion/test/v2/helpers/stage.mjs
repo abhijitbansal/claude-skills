@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launchBrowser, guardNetwork } from '../../../scripts/lib/browser.mjs';
-import { canvasSize } from '../../../template/formats.mjs';
+import { canvasSize } from '../../../engine/formats.mjs';
 import { buildTimeline } from '../../../engine/script/timing.mjs';
 import { startV2Server } from '../../../scripts/v2/server.mjs';
 

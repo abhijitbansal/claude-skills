@@ -10,7 +10,7 @@ import { registries } from '../registry.mjs';
 import '../fields/index.mjs';
 import { buildFilm, resolveLook, shotTime } from '../graph/film.mjs';
 import { stateKey } from '../graph/sample.mjs';
-import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '/v1/formats.mjs';
+import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../formats.mjs';
 import { drawFrame, resetContext } from './draw.mjs';
 import { annotate } from './bounds.mjs';
 import { applyFont, createMeasure } from './text-style.mjs';

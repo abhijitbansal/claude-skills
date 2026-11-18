@@ -6,7 +6,7 @@ import { launchBrowser, guardNetwork } from '../lib/browser.mjs';
 
 /** The one browser of a run that opens several sessions (a batch: openSession(loaded, { browser })); the caller closes it. */
 export const launchRunBrowser = (options = { ownSignals: true }) => launchBrowser(options);
-import { canvasSize } from '../../template/formats.mjs';
+import { canvasSize } from '../../engine/formats.mjs';
 
 export { canvasSize }; // a film's canvas for scripts/v2 modules that need it outside a session (clips.mjs)
 import { startV2Server } from './server.mjs';

@@ -1,6 +1,6 @@
 // Loopback server for the v2 render page. Binds 127.0.0.1 on a free port, answers only the Host headers of that
 // port, and serves a fixed set of routes: the page, engine modules (this skill's engine/ by an allow-list of
-// extensions), the bundled fonts, one reused version 1 module (formats), /film.json and the files the film names, by index.
+// extensions), the bundled fonts, the one shared module engine/registry.mjs imports, /film.json and the files the film names, by index.
 // A URL path is matched against a strict segment pattern before it is looked at, so `..`, an encoded separator or
 // a backslash is refused outright; no file path is ever built from a request outside the roots below.
 import http from 'node:http';
@@ -21,10 +21,9 @@ const FONT_EXTENSIONS = new Set(['.woff2']);
 const FONT_ROUTE = '/engine/fonts/shared/';
 const ENGINE_ROUTE = '/engine/';
 
-// The only files served from outside engine/: the module engine/registry.mjs imports, and the version 1 formats module.
+// The only file served from outside engine/: the module engine/registry.mjs imports.
 const FIXED_FILES = Object.freeze({
   '/shared/errors.mjs': path.join(SKILL_ROOT, 'shared/errors.mjs'),
-  '/v1/formats.mjs': path.join(SKILL_ROOT, 'template/formats.mjs'),
 });
 
 const MIME = Object.freeze({

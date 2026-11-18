@@ -21,7 +21,7 @@ import { roundTime, sentencesOf } from '../../scripts/v2/voice/sidecar.mjs';
 import { ERROR_MARKER, INSTALL_HINT, classifyError } from '../../scripts/v2/voice/worker.mjs';
 import { VoiceSynthError, synthesiseFilm } from '../../scripts/v2/voice/synth.mjs';
 import { VoiceTextError } from '../../scripts/v2/voice/tokens.mjs';
-import { UsageError } from '../../scripts/lib/spec.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 
 const FPS = 30;
 // The report's keys on every path (make.test.mjs checks the same list through the CLI).

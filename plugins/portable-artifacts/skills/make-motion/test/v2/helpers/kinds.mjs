@@ -7,7 +7,7 @@ import { sampleGraph } from '../../../engine/graph/sample.mjs';
 import { sample } from '../../../engine/time/track.mjs';
 import { buildTimeline } from '../../../engine/script/timing.mjs';
 import { buildFilm, shotContext } from '../../../engine/graph/film.mjs';
-import { FORMATS, safeInsets, VIRAL_SAFE_ZONE } from '../../../template/formats.mjs';
+import { FORMATS, safeInsets, VIRAL_SAFE_ZONE } from '../../../engine/formats.mjs';
 import '../../../engine/looks/index.mjs';
 import '../../../engine/modes/index.mjs';
 import '../../../engine/devices/index.mjs';
@@ -33,7 +33,7 @@ export const measure = (text, font) => {
 // shot.png: a wide screenshot; phone.png: a tall one (a phone screen), for the screen kind's phone frame
 export const IMAGES = new Map([['shot.png', { width: 1600, height: 1000 }], ['phone.png', { width: 600, height: 1200 }]]);
 export const canvasOf = (format) => ({ w: FORMATS[format].size[0], h: FORMATS[format].size[1] });
-// The platform safe zone as the stage passes it (template/formats.mjs safeInsets with the viral zone)...
+// The platform safe zone as the stage passes it (engine/formats.mjs safeInsets with the viral zone)...
 export const platformOf = (canvas) => safeInsets([canvas.w, canvas.h], VIRAL_SAFE_ZONE);
 // ...and the area pop composes in on 9:16: its sides, with pop's band (look revision 2) for the top and bottom. Passed
 // as the stage's insets it gives the same composition (compositionRect applies the band), and tests judge against it.

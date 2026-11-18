@@ -4,7 +4,7 @@
 // (layout.mjs) and writes the PNG. No ffmpeg and no screenshots. writeSheets also returns the film review's findings.
 import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { canvasSize } from '../../template/formats.mjs';
+import { canvasSize } from '../../engine/formats.mjs';
 import { loadFilm } from './pipeline.mjs';
 import { openSession } from './session.mjs';
 import { planSheets } from './plan.mjs';

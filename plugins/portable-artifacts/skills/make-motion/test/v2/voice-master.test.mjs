@@ -15,10 +15,9 @@ import { buildTimeline, narrationStart } from '../../engine/script/timing.mjs';
 import { parseSay } from '../../engine/script/say.mjs';
 import {
   LEVELS, RAMP_SECONDS, VOICE_RATE, TRACK_RATE, AAC_AUDIO, gainStages, shapingFilter, masterArgs, masterVoice, voiceTrackArgs, muxArgs, masterTrack, muxVoice,
-  judgeLevel, measureFile, AUDIO_HINT, MASTER_AIM_LU, mixArgs, recordingInput, encodeArgs, encodeMaster,
+  judgeLevel, measureFile, AUDIO_HINT, MASTER_AIM_LU, mixArgs, recordingInput, encodeArgs, encodeMaster, ceilingFor,
 } from '../../scripts/v2/voice/master.mjs';
 import * as voiceMaster from '../../scripts/v2/voice/master.mjs';
-import { ceilingFor } from '../../scripts/lib/loudness.mjs';
 import { runMake } from '../../scripts/v2/run.mjs';
 import { renderFilm } from '../../scripts/v2/render.mjs';
 import { renderCues } from '../../scripts/v2/sound/synth.mjs';
@@ -80,6 +79,12 @@ const sayTokens = (shot) => parseSay(shot.say).tokens;
 const flatWords = (shot) => shot.sentences.flatMap((s) => s.words);
 
 // ---- gain stages and the shaping filter: film times, no ffmpeg ----
+
+// The case of version 1's test/loudness.test.mjs, which held ceilingFor until it moved here (cut-over plan, Task 1).
+test('ceilingFor aims 0.5 dB under the true peak, so the AAC encode cannot push the file over it, and rounds to hundredths', () => {
+  assert.deepEqual([-1, -1.5, 0, -3, -1.3].map(ceilingFor), [-1.5, -2, -0.5, -3.5, -1.8]);
+  assert.equal(ceilingFor(-1.23456), -1.73, 'two decimals, not float noise');
+});
 
 test('LEVELS lifts emphasis 2 dB and lowers an aside 3 dB, with a 20 ms ramp', () => {
   assert.deepEqual(LEVELS, { emphasisDb: 2, asideDb: -3 });

@@ -15,7 +15,7 @@ import { listEntries } from '../../scripts/v2/list.mjs';
 import '../../engine/looks/index.mjs';
 import { auditFrame } from '../../engine/review/frame.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
-import { safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
+import { safeInsets, VIRAL_SAFE_ZONE } from '../../engine/formats.mjs';
 
 const SLOW = Object.freeze({ name: 'test-slow', summary: 'A test mode.', defaultLook: 'desk', defaultFormat: '1:1', wpm: 60, tail: 2, maxStillSeconds: 6, hookFromFrameZero: false, voiceSpeed: 1.0, emphasisPause: 0, loudness: { lufs: -16, truePeakDb: -1.5, lra: 11 }, cues: false, captions: false });
 const SAY = 'One two three four five six.';

@@ -21,7 +21,7 @@ import { regionMarkIds } from '../../engine/review/regions.mjs';
 import { withLookEmphasis } from '../../engine/kinds/emphasis-fallback.mjs';
 import { stillStretches, shotAtFrame } from '../../engine/review/pacing.mjs';
 import { compositionRect } from '../../engine/kinds/shared.mjs';
-import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../../template/formats.mjs';
+import { canvasSize, safeInsets, VIRAL_SAFE_ZONE } from '../../engine/formats.mjs';
 import { resolveAnchor } from '../../engine/script/anchors.mjs';
 import { aloneAfterFrame } from '../../engine/cuts/index.mjs';
 import { resolveShotCut } from '../../engine/cuts/resolve.mjs';

@@ -15,7 +15,7 @@ import { pill } from '../../engine/captions/pill.mjs';
 import { mix } from '../../engine/fields/color.mjs';
 import { sample } from '../../engine/time/track.mjs';
 import { contrastRatio as contrast } from '../../shared/contrast.mjs';
-import { SAFE_MARGIN_PX } from '../../template/formats.mjs';
+import { SAFE_MARGIN_PX } from '../../engine/formats.mjs';
 import { measure, canvasOf } from './helpers/kinds.mjs';
 
 const cosmos = registries.looks.get('cosmos');

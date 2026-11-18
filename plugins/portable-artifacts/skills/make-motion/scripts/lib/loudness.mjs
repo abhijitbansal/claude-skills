@@ -6,6 +6,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { UsageError } from './spec.mjs';
 import { AUDIO_CODEC, fileInput, sec, parseLoudness } from './ffmpeg.mjs';
+import { ceilingFor } from '../v2/voice/master.mjs';
 
 export const LOUDNESS_MIN = -30; // LUFS, the same range the spec's root `loudness.integrated` accepts
 export const LOUDNESS_MAX = -5;
@@ -13,7 +14,6 @@ export const TRUE_PEAK_MIN = -3; // dBTP, as `loudness.truePeak`
 export const TRUE_PEAK_MAX = 0;
 export const DEFAULT_TRUE_PEAK = -1.5; // a flag or spec that names a LUFS target but no peak
 const LOUDNESS_RANGE_LU = 11; // loudnorm LRA: the loudness range it keeps; a mix inside it takes the one-gain linear mode
-const AAC_OVERSHOOT_DB = 0.5; // loudnorm holds the peak at its TP before the AAC encode, which can add about 0.2 dB: aim this far under
 const LIMITED_RANGE_LU = 50; // loudnorm's largest LRA: once a limiter holds the peaks, the range is not what decides linear mode
 const STDERR_KEEP = 200000; // loudnorm's JSON comes last; a long log keeps its tail
 const MEASURE_KEYS = ['input_i', 'input_tp', 'input_lra', 'input_thresh', 'target_offset'];
@@ -59,8 +59,7 @@ export function resolveTarget({ loudness, truePeak }, specTarget) {
   return { integrated, truePeak: truePeak ?? specTarget?.truePeak ?? DEFAULT_TRUE_PEAK };
 }
 
-/** The true peak loudnorm is told to hold (`truePeak` less the AAC encode's overshoot), so the finished file stays at or under `truePeak`. */
-export const ceilingFor = (truePeak) => Math.round((truePeak - AAC_OVERSHOOT_DB) * 100) / 100;
+export { ceilingFor }; // moved to scripts/v2/voice/master.mjs: version 2 does not import this file
 
 /** The infix of the normalised copy's temp name (`o.partial.loudnorm.mp4`), nine bytes longer than the encode's. */
 export const NORMALIZED_INFIX = '.loudnorm';

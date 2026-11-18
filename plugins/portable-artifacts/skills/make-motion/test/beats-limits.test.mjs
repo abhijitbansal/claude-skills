@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectBeats } from '../scripts/lib/beats.mjs';
-import { mulberry32 } from '../template/seeded.mjs';
+import { mulberry32 } from '../engine/seeded.mjs';
 import { groove, kickOneAndThree } from './helpers/beat-grooves.mjs';
 import { SR, synth, grid, bar } from './helpers/beat-signals.mjs';
 

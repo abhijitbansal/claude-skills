@@ -100,7 +100,7 @@ function afterCutLead(film, index, look, timing) {
 
 /**
  * The ctx a kind's expand(shot, ctx) gets for shot `index`. `assets` maps a src to its picture (anything with a size).
- * `viralInsets` is the platform safe zone for this canvas (template/formats.mjs safeInsets with VIRAL_SAFE_ZONE),
+ * `viralInsets` is the platform safe zone for this canvas (engine/formats.mjs safeInsets with VIRAL_SAFE_ZONE),
  * which a viral look composes inside on 9:16; null leaves every look on the canvas.
  */
 export function shotContext({ film, index, timeline, canvas, measure, assets = new Map(), look = resolveLook(film), viralInsets = null, prepared = {} }) {

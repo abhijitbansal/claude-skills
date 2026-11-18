@@ -37,7 +37,8 @@ export { withDefaults } from '../../template/defaults.mjs';
 export { resolveBeats } from './beat-refs.mjs'; // pure; the file-reading entry is resolveSpecBeats (beats-file.mjs)
 import { expandSpec, EASE_CURVES, COLOR_TOKENS, TYPING_SECONDS_PER_CHAR, ARROW_HEAD_LENGTH, DEFAULT_SHAPE_SIZE, DEFAULT_LINE_STROKE, DEFAULT_FPS, typingLength, typingNeeds, typedText, isTyping } from '../../template/defaults.mjs';
 
-export class UsageError extends Error {}
+import { UsageError } from '../../shared/cli.mjs'; // the one class: version 1 and version 2 throw and catch the same UsageError
+export { UsageError };
 
 // A code element's `code`: room for the largest code-diff expansion (about 8,000 characters with its markers and line
 // breaks), and still far more than a canvas shows above the text floor.

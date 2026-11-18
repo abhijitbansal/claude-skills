@@ -9,13 +9,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { UsageError } from '../scripts/lib/spec.mjs';
+import { UsageError } from '../shared/cli.mjs';
 import { modelsDir } from '../scripts/lib/model-cache.mjs';
 import {
   MODEL_URL, MODEL_SHA256, MODEL_BYTES, MODEL_FILE, MODEL_DIR, INSTALL_HINT, USAGE,
   MAX_FRAMES, parseCutoutArgs, extractArgs, modelSize, ensureModel, loadOnnx, fileKind,
 } from '../scripts/lib/cutout.mjs';
-import { probeVideo, decodeFrames, decodeArgs } from '../scripts/lib/video.mjs';
+import { probeVideo, decodeFrames, decodeArgs } from '../scripts/lib/video-probe.mjs';
 import { findFfmpeg, findFfprobe } from '../scripts/lib/ffmpeg.mjs';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { drawPortrait, alphaAt } from './helpers/portrait.mjs';

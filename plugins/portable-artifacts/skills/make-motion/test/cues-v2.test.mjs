@@ -36,6 +36,16 @@ const seconds = (xs, from, to) => xs.slice(Math.round(from * SAMPLE_RATE), Math.
 
 const STEREO = ['whoosh', 'swoosh', 'riser'];
 
+// The synthesis moved to scripts/v2/sound/cue-synth.mjs, which names its own typing spacing: it holds version 1's value, and
+// version 1's cueWav (which wraps it and adds the recorded samples) gives the same bytes. This goes with the old files.
+test('cue-synth.mjs types at the speed version 1 defines, and version 1 cueWav is its synthesis byte for byte', async () => {
+  const { cueWav: synthesised } = await import('../scripts/v2/sound/cue-synth.mjs');
+  assert.equal(TYPING_SECONDS_PER_CHAR, 0.035);
+  for (const options of [{ cue: 'typing', chars: 40 }, { cue: 'typing', chars: 7 }, { cue: 'pop', note: 'G5', pan: 0.25 }, { cue: 'riser' }]) {
+    assert.ok(synthesised(options).equals(cueWav(options)), JSON.stringify(options));
+  }
+});
+
 test('whoosh, swoosh and riser differ between channels at pan 0; pop, click, chime, impact, typing, drop and ding are identical in both', () => {
   for (const cue of CUE_NAMES) {
     const { left, right } = channels(cueWav({ cue, pan: 0 }));

@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { mulberry32 } from '../../../engine/seeded.mjs';
 import { writeWav, WAV_RATE } from './wav.mjs';
 import { findFfmpeg, findFfprobe, parseLoudness } from '../../lib/ffmpeg.mjs';
-import { pinkNoise } from '../../lib/cues.mjs';
+import { pinkNoise } from './cue-synth.mjs';
 import { detectBeats, SAMPLE_RATE as BEAT_RATE, MAX_ANALYSIS_SECONDS } from '../../lib/beats.mjs';
 import { SpecError, recordingFile } from '../spec.mjs';
 import { MUSIC_FADE_SECONDS, probeRecording, recordingProblem, recordingInput } from '../voice/master.mjs';

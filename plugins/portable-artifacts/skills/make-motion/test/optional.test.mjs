@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { quoteArg } from '../shared/doctor.mjs';
 import { importOptional, optionalEntryUrl } from '../scripts/lib/optional.mjs';
 import { loadKokoro, INSTALL_HINT } from '../scripts/lib/voice.mjs';
-import { UsageError } from '../scripts/lib/spec.mjs';
+import { UsageError } from '../shared/cli.mjs';
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const REAL_VOICE_ENTRY = path.join(SKILL, 'optional/voice/index.mjs');

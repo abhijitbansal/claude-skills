@@ -1,7 +1,7 @@
 // Synthetic drum-like PCM for the beat detector's tests (mono, 22050 Hz, in memory: no ffmpeg, no files). Events are
 // { t, amp, kind } hits on silence: a 1 kHz click of 2, 5 or 20 ms, a pitched kick, or a decaying noise burst (noise, hat, open hat, snare). The noise
 // bursts use a generator seeded per call, so a case is the same samples every run.
-import { mulberry32 } from '../../template/seeded.mjs';
+import { mulberry32 } from '../../engine/seeded.mjs';
 
 export const SR = 22050;
 const HIT_SECONDS = 0.06; // how long a hit is rendered (the longest, the kick, has decayed by then)

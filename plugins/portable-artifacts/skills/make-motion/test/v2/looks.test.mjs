@@ -13,7 +13,7 @@ import '../../engine/modes/index.mjs';
 import '../../engine/kinds/index.mjs'; // the kinds, for the devices they send through their events hook
 import { applyAccent, gridX, gridSpan, unit, validateLook } from '../../engine/looks/index.mjs';
 import { unitOf } from '../../engine/units.mjs';
-import { FORMATS } from '../../template/formats.mjs';
+import { FORMATS } from '../../engine/formats.mjs';
 import { contrastRatio as contrast } from '../../shared/contrast.mjs';
 import { validateFilm, withFilmDefaults } from '../../scripts/v2/spec.mjs';
 

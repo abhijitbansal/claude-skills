@@ -175,7 +175,7 @@ test('stars of one layer never crowd: at every t no two are closer than MIN_STAR
 });
 
 // Text areas a kind reports: the composition area inside the grid margin (96 units), a two-line hero block, and the
-// platform safe zone of a 9:16 viral film (template/formats.mjs VIRAL_SAFE_ZONE: top 290, bottom 675, left 120, right
+// platform safe zone of a 9:16 viral film (engine/formats.mjs VIRAL_SAFE_ZONE: top 290, bottom 675, left 120, right
 // 195 px of 1080x1920). Rectangles are in the bled field's pixels (the canvas sits 6% in).
 const TEXT_AREAS = [
   { size: BLED, rect: { x: 115 + 96, y: 65 + 96, w: 1728, h: 888 } },

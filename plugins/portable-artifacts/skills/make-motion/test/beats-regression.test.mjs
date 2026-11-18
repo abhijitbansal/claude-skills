@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectBeats, soundSpan } from '../scripts/lib/beats.mjs';
-import { mulberry32 } from '../template/seeded.mjs';
+import { mulberry32 } from '../engine/seeded.mjs';
 import { SR, synth, grid, bar, nearestHit } from './helpers/beat-signals.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

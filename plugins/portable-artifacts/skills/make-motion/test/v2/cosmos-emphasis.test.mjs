@@ -14,7 +14,7 @@ import { expandShot, expandIn, filmOf, all, textNode, FILLER } from './helpers/k
 const cosmos = registries.looks.get('cosmos');
 const desk = registries.looks.get('desk');
 const pop = registries.looks.get('pop');
-const SAFE_MARGIN_UNITS = 60; // template/formats.mjs SAFE_MARGIN_PX at 1080
+const SAFE_MARGIN_UNITS = 60; // engine/formats.mjs SAFE_MARGIN_PX at 1080
 
 test('glowFill: the word turns from ink to the accent and its glow rises from 0 to 1 over the emphasize move from when it is spoken', () => {
   const { fill, glow } = glowFill(cosmos, 2);

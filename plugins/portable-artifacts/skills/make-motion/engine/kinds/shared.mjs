@@ -67,7 +67,7 @@ const servesPlatformMode = (look) => look.modes.some((name) => registries.modes.
 /**
  * The rectangle a shot composes in: on 9:16 a look serving a mode with `platformSafeZone` (pop, for viral) keeps inside
  * the platform safe zone ctx.viralInsets
- * (template/formats.mjs safeInsets with VIRAL_SAFE_ZONE, passed in by the caller); every other case uses the canvas.
+ * (engine/formats.mjs safeInsets with VIRAL_SAFE_ZONE, passed in by the caller); every other case uses the canvas.
  * { left, top, w, h, cx, cy, safe } where `safe` says the rectangle is the safe zone.
  */
 export function compositionRect(ctx) {

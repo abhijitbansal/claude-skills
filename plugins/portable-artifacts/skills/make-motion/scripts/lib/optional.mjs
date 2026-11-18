@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { UsageError } from './spec.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 
 export const OPTIONAL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../optional');
 

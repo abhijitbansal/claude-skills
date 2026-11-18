@@ -22,7 +22,7 @@ import { EMBEDDED_VOCAB, VoiceTextError } from '../../scripts/v2/voice/tokens.mj
 import { SAMPLE_RATE } from '../../scripts/v2/voice/words.mjs';
 import { VOICE_MODEL, voiceModelDir } from '../../scripts/v2/voice/model.mjs';
 import { OPTIONAL_ROOT } from '../../scripts/lib/optional.mjs';
-import { UsageError } from '../../scripts/lib/spec.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const FIXTURE_FILM = path.join(HERE, 'fixtures/voice/film-three-shots.json');

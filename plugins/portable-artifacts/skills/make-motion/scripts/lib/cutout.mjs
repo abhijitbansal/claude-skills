@@ -8,13 +8,12 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { UsageError } from './spec.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 import { doctorCommand, optionalInstall } from './doctor-hint.mjs';
 import { modelsDir } from './model-cache.mjs';
 import { importOptional } from './optional.mjs';
-import { VIDEO_EXTENSIONS } from '../../template/media.mjs';
 import { fileInput } from './ffmpeg.mjs';
-import { fileSha256 } from './video.mjs';
+import { VIDEO_EXTENSIONS, fileSha256 } from './video-probe.mjs';
 import { ensurePinnedFile } from './pinned-file.mjs';
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
