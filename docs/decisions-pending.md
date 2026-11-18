@@ -312,3 +312,15 @@ The explainer refresh look passed: review 1 SHIP AFTER FIXES, review 2 SHIP AFTE
 - **F6, F11:** editorial's masthead stops 14 px from the edge at 1280 but runs to the edge at 390; a paper crease stub shows at the left edge (1280 light).
 - **F7, F9, F10:** taste calls: editorial's fleuron reads as clip-art; ink's 390 title art is flat blobs; blueprint's arcs start 15 px below the meta row.
 - **N11, N13 (by choice):** the slashed zero is Atkinson Hyperlegible's own glyph; blueprint's 390 art needs a new composition.
+
+## make-scene look: confirm-review leftovers (2026-11-18)
+
+The make-scene refresh look passed: review 1 NOT YET, review 2 SHIP AFTER FIXES, the confirm review of round 2 SHIP (`.superpowers/sdd/2026-11-16-pa2-run2/gate-scene-1.md` to `-3.md`). Two revision rounds were used, so these stay open. Default for all: leave until the scene look is next touched.
+
+- **Box-face sheen:** flat box faces show no material difference (curved masses do); it needs an environment map. Default: leave; an environment map is a feature for a later release.
+- **Side panel (first reviewed this round):** P1 in dark its edge relies on fill contrast alone, with no border or shadow; P2 no 390 panel shot exists (no URL opens the panel; it is on the manual checklist); P3 the "4" count has no unit; P4 the panel repeats the legend.
+- **Dark colour:** N1 the lifted dashboard's dark front faces are near-black and lose their orange; N2 lifted diagram nodes look duller than the legend and the one-orange glow reads as bloom; N3 dark city docs read khaki and api dusty rose; N7 paper dark web towers separate their faces only modestly.
+- **Terrain:** N4 a faint lilac cast on the right peak in dark, and a soft interior at 390.
+- **Labels:** N5 city row names sit 35 to 100 px from their rows at 390, with no colour cue tying a name to its row; N6 forest, galaxy and terrain caps are at the 11 px floor (MOBILE about 11 px), smaller than the original.
+- **Pre-existing, parked in the rounds:** window speckle on lower tower faces; lift-diagram at 390 drops its group and Event bus labels, and Warehouse touches the legend; 9 px node labels in the lifted diagram; the footer clipped at 390.
+- **Test gap:** one mutation survived round 2: the night fill and sky white changed alone is not caught by any test. Default: add a guard the next time `runtime/look.js` is touched.
