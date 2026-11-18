@@ -11,15 +11,15 @@ const GROUPS = 24;
 const rowsOf = (n) => Array.from({ length: n }, (_, i) => ({ group: `g${i % GROUPS}`, t: `w${String(Math.floor(i / GROUPS)).padStart(4, '0')}`, value: (i * 7) % 50 }));
 const fits = async (world, n) => (await heaviestPage({ title: 'T', world, data: { rows: rowsOf(n) } }, { dir: process.cwd() })).bytes <= MAX_PAGE_BYTES;
 
-test('schema.md prints the measured ceilings: forest about 1,250 (1,248 with 24 groups), the others all 2000', () => {
+test('schema.md prints the measured ceilings: forest about 1,225 (1,224 with 24 groups), the others all 2000', () => {
   assert.match(SCHEMA, /### Row ceilings by world/);
-  assert.match(SCHEMA, /\| forest \| about 1,250 \|.*1,248 rows \(24 groups\)/);
+  assert.match(SCHEMA, /\| forest \| about 1,225 \|.*1,224 rows \(24 groups\)/);
   for (const world of ['city', 'galaxy', 'terrain']) assert.match(SCHEMA, new RegExp(`\\| ${world} \\| 2000 \\|`));
 });
 
-test('forest: 1,248 rows in 24 groups fit the page cap and 1,344 do not', async () => {
-  assert.equal(await fits('forest', 1248), true);
-  assert.equal(await fits('forest', 1344), false);
+test('forest: 1,224 rows in 24 groups fit the page cap and 1,248 do not', async () => {
+  assert.equal(await fits('forest', 1224), true);
+  assert.equal(await fits('forest', 1248), false);
 });
 
 for (const world of ['city', 'galaxy', 'terrain']) {

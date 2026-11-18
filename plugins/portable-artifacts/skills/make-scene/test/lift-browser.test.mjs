@@ -102,7 +102,7 @@ test('under reduced motion the light jumps to the end', async (t) => {
   assert.deepEqual(ctx.problems, []);
 });
 
-test('labels wear the shared type: group labels in caps with the shared tracking, node names plain, all at the theme weight', async (t) => {
+test('labels wear the shared type: every label in caps with the shared tracking, all at the theme weight', async (t) => {
   const ctx = await open(t, 'architecture.diagram.json', { reducedMotion: 'reduce' });
   if (!ctx) return;
   const labels = await ctx.page.evaluate(() => {
@@ -116,15 +116,13 @@ test('labels wear the shared type: group labels in caps with the shared tracking
       }),
     };
   });
-  const caps = labels.items.filter((l) => l.caps);
-  const plain = labels.items.filter((l) => !l.caps);
-  assert.ok(caps.length > 0 && plain.length > 0, `a tier of group labels (${caps.length}) and a tier of node names (${plain.length})`);
-  for (const l of caps) {
+  assert.ok(labels.items.length > 0, 'the diagram has labels');
+  for (const l of labels.items) {
+    assert.equal(l.caps, true, 'no label is left in mixed case');
     assert.equal(l.transform, 'uppercase');
     assert.ok(Math.abs(l.tracking - labels.track) < 0.01, `tracking ${l.tracking}em is the shared ${labels.track}em`);
+    assert.equal(l.weight, labels.weight, 'the weight is the theme --strong-weight');
   }
-  for (const l of plain) assert.equal(l.transform, 'none');
-  for (const l of labels.items) assert.equal(l.weight, labels.weight, 'the weight is the theme --strong-weight');
 });
 
 test('a focus beat has no light', async (t) => {

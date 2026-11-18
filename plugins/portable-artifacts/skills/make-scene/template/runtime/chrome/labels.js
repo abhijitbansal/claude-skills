@@ -3,10 +3,8 @@
 // label. A long label is cut with an ellipsis (Explore lists group and item names only, so a long axis or group label is only ever shown cut). Text only (textContent).
 import { h } from './dom.js';
 import { hiddenByOverlap } from './overlap.js';
-import { labelClasses } from './label-class.js';
+import { EDGE_MARGIN, fontPx, keepInside, labelClasses } from './label-class.js';
 
-const MIN_PX = 10;
-const MAX_PX = 22;
 const PX_PER_SIZE_UNIT = 1.1; // world label size -> font size, at the depth's pixels per unit
 const MOVE_EPSILON = 0.5; // px: smaller moves do not touch the DOM
 const MAX_WIDTH_VW = 0.4; // a label is at most this share of the viewport wide (and of its host)...
@@ -20,8 +18,6 @@ const CAPS_TRACK_EM = 0.07; // the shared --track-caps, used only if the page's 
 const FALLBACK_WEIGHT = '600'; // used for measuring only if the page's --strong-weight cannot be read
 const ELLIPSIS = '…';
 
-const clampPx = (n) => Math.max(MIN_PX, Math.min(MAX_PX, n));
-
 /** createLabels({ host, graph }) -> { el, bind(api), drawTo(ctx, ratio), destroy() } */
 export function createLabels({ host, graph }) {
   const space = graph.env?.sky === 'space';
@@ -30,6 +26,7 @@ export function createLabels({ host, graph }) {
   const entries = labels.map((label, i) => ({
     label,
     caps: classes[i].includes('pa-caps'), // shown upper-cased and tracked by the shared .pa-caps rule
+    centred: classes[i].includes('pa-num'), // a number sits centred on its point (a tick on its gridline), a word sits above it
     el: h('span', { class: classes[i], text: label.text, hidden: true }),
     shown: null, // { x, y, px } as last written; null while hidden
     width100: null, // the text's width at MEASURE_PX
@@ -71,14 +68,18 @@ export function createLabels({ host, graph }) {
 
   function update() {
     const boxes = [];
-    const places = new Map(); // entry index -> { x, y, px }
+    const places = new Map(); // entry index -> { x, y, px }: the box's bottom-centre point
+    const frame = el.clientWidth;
     entries.forEach((entry, index) => {
       const [x, y, z] = entry.label.at;
       const p = api.project(x, y, z);
       if (!p.visible) return;
-      const px = Math.round(clampPx(entry.label.size * p.scale * PX_PER_SIZE_UNIT));
-      places.set(index, { x: p.x, y: p.y, px });
-      boxes.push({ id: index, x: p.x, y: p.y, w: widthAt(entry, px), h: px * LINE_HEIGHT + 2 * PAD_Y, scale: p.scale });
+      const px = Math.round(fontPx(entry.label.size * p.scale * PX_PER_SIZE_UNIT, entry.caps));
+      const w = widthAt(entry, px);
+      const h = px * LINE_HEIGHT + 2 * PAD_Y;
+      const at = { x: keepInside(p.x, w, frame, EDGE_MARGIN - PAD_X), y: entry.centred ? p.y + h / 2 : p.y, px };
+      places.set(index, at);
+      boxes.push({ id: index, x: at.x, y: at.y, w, h, scale: p.scale });
     });
     const hidden = hiddenByOverlap(boxes);
     entries.forEach((entry, index) => {

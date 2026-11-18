@@ -10,6 +10,7 @@ import { assertGraph } from '../scripts/lib/graph.mjs';
 import { buildScene, SceneError, validateSpec } from '../scripts/lib/api.mjs';
 import { loadTheme } from '../shared/theme.mjs';
 import { liftDiagram, diagramLiftCheck, DIAGRAM_MAX_BYTES } from '../scripts/lifts/diagram.mjs';
+import { clearOfTubes, groupLabelAnchor, groupLabelWidth, labelBox } from '../scripts/lifts/diagram-flat.mjs';
 import { installCommand } from '../scripts/lib/siblings.mjs';
 import { build } from '../scripts/build.mjs';
 import { PINNED_ENV, tempDir } from './helpers/scene-fixtures.mjs';
@@ -193,6 +194,33 @@ test('group labels sit at their platform back-left corner, so a nested group nev
     assert.ok(Math.abs(label.at[2] - (z - d / 2)) < 0.5, `${label.text} is at the back edge`);
   });
   assert.ok(Math.hypot(labels[0].at[0] - labels[1].at[0], labels[0].at[2] - labels[1].at[2]) > 1, 'parent and child anchors are apart');
+});
+
+const EXAMPLES = fileURLToPath(new URL('../references/examples/', import.meta.url));
+const GROUP_LABEL_SIZE = 0.5; // diagram-flat.mjs: group labels are the only labels this size
+
+test('a group label stays where it is when nothing crosses it, and moves clear of an edge that does', () => {
+  const platform = { x: 0, z: 0, w: 10, d: 6 };
+  const width = 2;
+  const back = { x: -4, z: -3 + 0.15 };
+  assert.deepEqual(groupLabelAnchor(platform, width, []), back, 'no edge: the back-left corner');
+  const loop = [{ points: [[-6, 0.3, -3.4], [6, 0.3, -3.4]] }]; // a loop round the back of the platform, through the label
+  assert.equal(clearOfTubes(labelBox(back.x, back.z, width), loop), false, 'the back-left corner is crossed');
+  const moved = groupLabelAnchor(platform, width, loop);
+  assert.notDeepEqual(moved, back, 'so the label moves');
+  assert.equal(clearOfTubes(labelBox(moved.x, moved.z, width), loop), true, 'to a spot the edge does not cross');
+  const everywhere = [{ points: [[-6, 0.3, -3.4], [6, 0.3, -3.4]] }, { points: [[-6, 0.3, 3.5], [6, 0.3, 3.5]] }, { points: [[-6, 0.3, -2.4], [6, 0.3, -2.4]] }];
+  assert.deepEqual(groupLabelAnchor(platform, width, everywhere), back, 'a label with no clear spot keeps the corner');
+});
+
+test('no edge of the checkout diagram runs through a group label', async () => {
+  const g = await liftDiagram('story.diagram.json', { dir: EXAMPLES, theme: THEME });
+  const groups = g.labels.filter((l) => l.size === GROUP_LABEL_SIZE);
+  assert.ok(groups.length >= 2, `the diagram has group labels (${groups.length})`);
+  for (const label of groups) {
+    const box = labelBox(label.at[0], label.at[2], groupLabelWidth(label.text, Infinity));
+    assert.equal(clearOfTubes(box, g.tubes), true, `an edge runs through ${label.text}`);
+  }
 });
 
 test('a diagram without stories has no tour', async () => {

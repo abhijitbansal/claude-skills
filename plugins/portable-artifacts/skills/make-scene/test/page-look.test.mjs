@@ -32,6 +32,14 @@ test('the page ships the shared type rules and the labels use them', async () =>
   assert.match(rule(page, '.sc-label.pa-caps'), /color:\s*var\(--text\)/, 'caps labels stay at full text contrast over the canvas');
 });
 
+test('the legend and the toolbar buttons keep a hairline edge that reads over the canvas and on a grey fill', async () => {
+  const page = await html();
+  const host = page.replace(/\/\*[\s\S]*?\*\//g, '').match(/\.pa-scene\s*\{([^{}]*)\}/)?.[1] ?? ''; // the first rule follows a <style> tag, which rule() would take for part of its selector
+  const edge = host.match(/--sc-edge:\s*([^;]+);/)?.[1] ?? '';
+  assert.match(edge, /color-mix\([^)]*var\(--text-3\)[^)]*var\(--line\)/, 'the edge is the line colour pulled towards the text, so it is stronger than --line');
+  for (const control of ['.sc-legend', '.sc-btn']) assert.match(rule(page, control), /border:\s*1px solid var\(--sc-edge\)/, `${control} has its border back`);
+});
+
 test('panels sit on the surface with elevation, their controls one surface step up', async () => {
   const page = await html();
   for (const panel of ['.sc-legend', '.sc-tour']) {

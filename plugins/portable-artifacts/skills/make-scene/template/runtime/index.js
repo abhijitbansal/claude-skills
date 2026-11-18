@@ -152,6 +152,7 @@ function mount(host, graph, opts = {}) {
     let fitted = first.distance;
     camera.position.set(...first.position);
     built.setFit(fitted);
+    built.aim(first.position);
     scene.add(built.root);
     scene.background = built.background;
     scene.fog = built.fog;
@@ -192,6 +193,7 @@ function mount(host, graph, opts = {}) {
       const next = frameOf(graph, fitAspect);
       fitted = next.distance;
       built.setFit(fitted);
+      built.aim(next.position);
       controlsApi.setRange(fitted);
       if (controlsApi.untouched()) {
         camera.position.set(...next.position);

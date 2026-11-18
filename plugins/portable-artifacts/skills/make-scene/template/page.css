@@ -1,6 +1,6 @@
 /* make-scene: the scene host and its chrome. Shared by the page and by embedders (make-explainer);
    every rule is scoped to .pa-scene or a .sc-* class, and colours and fonts come from the page's theme variables. */
-.pa-scene { position: relative; width: 100%; height: 100%; min-height: 280px; overflow: hidden; isolation: isolate; background: var(--page); color: var(--text); font: var(--fs-sm)/1.4 var(--font); }
+.pa-scene { --sc-edge: color-mix(in srgb, var(--text-3) 38%, var(--line)); /* a hairline that still reads over the canvas and on a grey fill */ position: relative; width: 100%; height: 100%; min-height: 280px; overflow: hidden; isolation: isolate; background: var(--page); color: var(--text); font: var(--fs-sm)/1.4 var(--font); }
 .pa-scene.sc-fill { position: fixed; inset: 0; z-index: 2147483000; width: auto; height: auto; }
 .pa-scene button { font: inherit; }
 .sc-stage { position: absolute; inset: 0; background: var(--page); touch-action: none; }
@@ -27,7 +27,7 @@
 :root[data-theme="dark"] .sc-fb-dark { display: block; }
 
 /* Controls */
-.sc-btn { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 4px 10px; cursor: pointer; color: var(--text-2); line-height: 1.3; transition: color .16s ease, background-color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); }
+.sc-btn { background: var(--surface-2); border: 1px solid var(--sc-edge); border-radius: 8px; padding: 4px 10px; cursor: pointer; color: var(--text-2); line-height: 1.3; transition: color .16s ease, background-color .16s ease, transform .16s cubic-bezier(.23,1,.32,1); }
 @media (hover: hover) and (pointer: fine) { .sc-btn:hover:not(:disabled) { color: var(--text); background: var(--accent-soft); } }
 .sc-btn:active:not(:disabled) { transform: scale(0.97); }
 .sc-btn:disabled { opacity: 0.5; cursor: default; }
@@ -39,7 +39,7 @@
 .sc-bottom > * { pointer-events: auto; }
 
 /* Legend */
-.sc-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: min(100%, 520px); max-height: 30%; overflow: auto; padding: 6px 12px; background: var(--surface); border-radius: 10px; box-shadow: var(--elev-1); color: var(--text-2); font-size: var(--fs-xs); line-height: 16px; }
+.sc-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; max-width: min(100%, 520px); max-height: 30%; overflow: auto; padding: 6px 12px; background: var(--surface); border: 1px solid var(--sc-edge); border-radius: 10px; box-shadow: var(--elev-1); color: var(--text-2); font-size: var(--fs-xs); line-height: 16px; }
 .sc-legend[hidden] { display: none; }
 .sc-lg { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; }
 .sc-lg > span { overflow-wrap: anywhere; }
@@ -52,7 +52,7 @@
 
 /* Text labels over the canvas */
 .sc-labels { position: absolute; inset: 0; z-index: 1; overflow: hidden; pointer-events: none; }
-.sc-label { position: absolute; left: 0; top: 0; box-sizing: border-box; max-width: min(40vw, 90%); padding: 2px 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--strong-weight); color: var(--text); text-shadow: 0 0 3px var(--page), 0 0 8px var(--page); will-change: transform; }
+.sc-label { position: absolute; left: 0; top: 0; box-sizing: border-box; max-width: min(40vw, 90%); padding: 1px 6px; line-height: 1.2; /* labels.js lays boxes out with these (LINE_HEIGHT, PAD_X, PAD_Y) */ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: var(--strong-weight); color: var(--text); text-shadow: 0 0 3px var(--page), 0 0 8px var(--page); will-change: transform; }
 .sc-label.pa-caps { color: var(--text); } /* the shared caps style is muted (--text-3); over the canvas a label keeps full text contrast */
 .sc-label[hidden] { display: none; }
 .sc-space .sc-label { color: #f4f1ff; text-shadow: 0 0 4px #04050c, 0 0 9px #04050c; }
