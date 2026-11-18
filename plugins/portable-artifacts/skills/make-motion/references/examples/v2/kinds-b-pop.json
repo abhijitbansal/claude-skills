@@ -126,11 +126,11 @@
       "show": "feed",
       "title": "Studio",
       "items": [
-        { "from": "them", "text": "North nearly tripled." },
+        { "from": "them", "text": "North tripled." },
         { "from": "me", "text": "Print more Dawn." },
         { "from": "them", "text": "Paper comes Friday." }
       ],
-      "say": "North nearly tripled. Print more Dawn. Paper comes Friday."
+      "say": "North tripled. Print more Dawn. Paper comes Friday."
     },
     {
       "id": "close",

@@ -9,7 +9,7 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { colourOf, polyline, landing, isHand } from '../devices/shared.mjs';
+import { colourOf, polyline, landing, isHand, softRoundedRect, roundedRect } from '../devices/shared.mjs';
 import { fontFor, sizeAt, isWide, isEditorial, setCase, cardOf, rectPath } from './shared.mjs';
 import { roomOf } from './arrivals.mjs';
 import { plainTag } from './plain-tag.mjs';
@@ -81,6 +81,18 @@ function labelText(id, layout, font, box, fill, wordFill) {
   return node('text', id, props, wordFill ? { wordTracks: words.map(() => ({ fill: wordFill })) } : {});
 }
 
+// The active step lit as light (data.litRing, cosmos: { color, width, glow, alpha } units): a soft screened halo behind its
+// card and a ring in the accent round it, both on while the step is spoken ([from, to)) and off outside it.
+function litRing(ctx, id, box, [from, to]) {
+  const { look, unit, data } = ctx;
+  const { color, width, glow, alpha } = data.litRing;
+  const radius = (look.devices.card.radius ?? 0) * unit;
+  const colour = colourOf(look, color), on = { opacity: windowed(from, to, 0, 1) };
+  const halo = softRoundedRect({ id: `${id}.lit.halo`, rect: box, radius, reach: glow * unit, alpha, fill: colour, props: { blend: 'screen' }, opts: { tracks: on } });
+  const ring = node('path', `${id}.lit.ring`, { d: roundedRect(box[0], box[1], box[2], box[3], radius), stroke: colour, strokeWidth: width * unit }, { tracks: on });
+  return [halo, ring];
+}
+
 // One node: a card or a sticker holding its label, shown on its time, dimmed or lit as the look says.
 function nodeOf(shot, ctx, fit, k, t) {
   const { look, unit, data } = ctx;
@@ -88,10 +100,11 @@ function nodeOf(shot, ctx, fit, k, t) {
   const box = fit.boxes[k];
   const dimAt = data.current || t.highlight === null || shot.nodes[k].id === shot.highlight ? null : t.highlight;
   const lit = data.current ? t.lit[k] : null;
-  const ink = colourOf(look, data.text), onAccent = data.current ? colourOf(look, data.litText) : ink;
-  const text = labelText(`${id}.label`, fit.nodes[k], fit.nodeFont, box, ink, lit ? windowed(lit[0], lit[1], ink, onAccent) : null);
+  // a litText turns the words over the lit plate; a card look with a `litRing` keeps its words and lights a ring instead
+  const ink = colourOf(look, data.text), onAccent = data.current && data.litText !== undefined ? colourOf(look, data.litText) : ink;
+  const text = labelText(`${id}.label`, fit.nodes[k], fit.nodeFont, box, ink, lit && data.litText !== undefined ? windowed(lit[0], lit[1], ink, onAccent) : null);
   const tracks = { opacity: presence(t.nodes[k], dimAt, data.dim) };
-  if (data.card) return node('group', id, {}, { tracks, children: [cardOf(ctx, `${id}.card`, box, 0), text] });
+  if (data.card) return node('group', id, {}, { tracks, children: [...(lit && data.litRing ? litRing(ctx, id, box, lit) : []), cardOf(ctx, `${id}.card`, box, 0), text] });
   const pad = data.pad * unit;
   const made = registries.devices.get('sticker').build({ id: `${id}.sticker`, box: [box[0] + pad, box[1] + pad, box[2] - HALF * pad, box[3] - HALF * pad], at: 0, look, unit, seed: ctx.seed, children: [text] });
   const [sticker] = made.nodes;

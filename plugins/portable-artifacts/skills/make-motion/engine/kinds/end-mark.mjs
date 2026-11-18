@@ -22,13 +22,17 @@ import { MIN_HERO_RATIO } from '../review/frame.mjs';
 const HALF = 2;
 const ASK_MARGIN = 1.03; // the ask a hair under a third of the title, so rounding never takes it over the hero ratio
 const DESCENDER = 0.25; // em: how far the display face's descenders reach under the baseline
+const ASCENDER_OVER_CAP = 0.15; // em: how far a line's word boxes reach above its cap line
 
 // The title fitted between `min` and the kind's max across the span.
 function fitTitle(ctx, data, title, place, min) {
   const { look, unit, measure } = ctx;
   const max = data.max * unit;
   const opts = { text: setCase(look, 'display', title), font: fontFor(look, 'display', max, unit), maxWidth: place.w, align: place.align, measure, optical: true };
-  return fitDisplay(opts, { min: Math.min(min, max), max, maxHeight: editorialBounds(ctx).height(data.wordmark.titleHeight), maxLines: look.maxLines.display }, look, unit);
+  // `titleHeightTall`: on a tall frame the line takes more of the band (Nunito is wide: at the hero floor a closing line is
+  // three or four lines of a column 726 px across, which a 0.42 share of the band could not hold, so the ask and the mark went)
+  const share = !isWide(ctx.canvas) && data.wordmark.titleHeightTall !== undefined ? data.wordmark.titleHeightTall : data.wordmark.titleHeight;
+  return fitDisplay(opts, { min: Math.min(min, max), max, maxHeight: editorialBounds(ctx).height(share), maxLines: look.maxLines.display }, look, unit);
 }
 
 // The block's three texts laid out (title, ask or null, mark or null) on the place, and what was left out. The ask and
@@ -69,7 +73,9 @@ function placeOf(ctx) {
   const { look } = ctx;
   const bounds = editorialBounds(ctx);
   if (isWide(ctx.canvas)) return { ...besideSun(look, ctx), align: 'left', top: bounds.top };
-  return { ...editorialSpan(ctx, 1, look.grid.columns), align: 'center', top: bounds.top };
+  // a block taller than the band's share (titleHeightTall) would centre up into the sun: it starts under the disc
+  const sun = sunAnchor(look, ctx);
+  return { ...editorialSpan(ctx, 1, look.grid.columns), align: 'center', top: bounds.top, under: sun.cy + look.sun.disc * sun.r };
 }
 
 /** The wordmark end card: { nodes, boxes, hero }. */
@@ -79,23 +85,29 @@ export function expandWordmark(shot, ctx, data, times, title) {
   const place = placeOf(ctx);
   const set = layouts(shot, ctx, data, title, place);
   const at = stack(set, data, ctx);
-  const top = Math.max(place.top, editorialBounds(ctx).at(wm.centre) - at.height / HALF);
+  // the word boxes reach up past the cap line by the ascender's overshoot, so the line starts that far under the disc too
+  const clearOfDisc = place.under === undefined ? -Infinity : place.under + ASCENDER_OVER_CAP * set.title.font.size;
+  const top = Math.max(place.top, clearOfDisc, editorialBounds(ctx).at(wm.centre) - at.height / HALF);
   const x = place.x, hero = heroId(shot, 'title');
+  // `setOnOpen` (cosmos): the closing line, the ask and the mark are all on screen from frame 0 (no half-entered words);
+  // the sun still lights as the mark arrives
+  const open = wm.setOnOpen === true;
   const titleNode = node('text', hero, {
     x, y: top + at.titleY, layout: set.title.layout, font: set.title.font, fill: look.palette.ink, role: 'hero', ...(set.dropped.length ? { dropped: set.dropped } : {}),
-  }, { wordTracks: times.title.map((w) => enterTracks(look, unit, w.at)) });
+  }, open ? {} : { wordTracks: times.title.map((w) => enterTracks(look, unit, w.at)) });
   const markAt = (set.ask === null ? undefined : times.ask) ?? times.title.at(-1)?.at ?? 0;
+  const enter = (at, rest) => (open ? {} : enterTracks(look, unit, at, rest));
   const nodes = [titleNode];
   const words = wordBoxes(set.title.layout, x, top + at.titleY);
   const boxes = { title: unionBox(words), ...Object.fromEntries(words.map((box, i) => [`word:${i}`, box])) };
   if (set.ask !== null) {
     const y = top + at.askY;
-    nodes.push(node('text', `${shot.id}.ask`, { x, y, layout: set.ask.layout, font: set.ask.font, fill: look.palette.ink2, role: 'ask' }, { tracks: enterTracks(look, unit, times.ask, { y }) }));
+    nodes.push(node('text', `${shot.id}.ask`, { x, y, layout: set.ask.layout, font: set.ask.font, fill: look.palette.ink2, role: 'ask' }, { tracks: enter(times.ask, { y }) }));
     boxes.ask = unionBox(wordBoxes(set.ask.layout, x, y));
   }
   if (set.mark !== null) {
     const markY = top + at.markY;
-    nodes.push(node('text', `${shot.id}.mark.text`, { x, y: markY, layout: set.mark.layout, font: set.mark.font, fill: look.palette.ink, role: 'mark' }, { tracks: enterTracks(look, unit, markAt, { y: markY }) }));
+    nodes.push(node('text', `${shot.id}.mark.text`, { x, y: markY, layout: set.mark.layout, font: set.mark.font, fill: look.palette.ink, role: 'mark' }, { tracks: enter(markAt, { y: markY }) }));
     boxes.mark = [x + at.ink.left, markY + set.mark.layout.lines[0].y - at.ink.up, at.ink.right - at.ink.left, at.ink.up + at.ink.down];
   }
   const sun = sunNodes(`${shot.id}.sun`, look, { ...sunAnchor(look, ctx), strength: wm.sun.strength, at: markAt });

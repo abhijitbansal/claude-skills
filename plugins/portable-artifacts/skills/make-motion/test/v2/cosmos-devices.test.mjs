@@ -63,7 +63,7 @@ test('cosmos styles the card, tag, highlight, circle, underline and arrow, and n
   for (const name of ['card', 'tag', 'highlight', 'circle', 'underline', 'arrow']) {
     assert.equal(registries.devices.get(name).supports(cosmos), true, name);
   }
-  assert.deepEqual({ ...cosmos.devices.card, ground: { ...cosmos.devices.card.ground } }, { edge: 'rounded', radius: 28, fill: '#2e2770', ground: { color: 'ink2', alpha: 0.3, blur: 64, dy: 28 } });
+  assert.deepEqual({ ...cosmos.devices.card, ground: { ...cosmos.devices.card.ground } }, { edge: 'rounded', radius: 28, sheen: false, fill: '#2e2770', ground: { color: 'ink2', alpha: 0.3, blur: 64, dy: 28 } });
   assert.equal(cosmos.devices.tag.shape, 'pill');
   assert.equal(cosmos.devices.highlight.shape, 'pill');
   for (const mark of ['circle', 'underline', 'arrow']) assert.equal(cosmos.devices[mark].cap, 'round', mark);
@@ -92,26 +92,19 @@ test('rounded card: an exact rounded rectangle of the look radius, square (no ti
   assert.equal(shadow.children[0].props.d, roundedRect(-300 - half + s.dx, -60 - half + s.dy, 600 + s.blur, 120 + s.blur, 28 + half));
 });
 
-test('rounded card: a faint lighter soft sheen whose edge stays inside the card, and a 1-unit lighter edge stroke', () => {
+// (c6: cosmos's cards are one tone: `sheen: false`; a look that does not say so keeps the soft lighter top, shown on desk-like
+// data below)
+test('rounded card: one tone (no sheen), and a 1-unit lighter edge stroke', () => {
   const unit = 2;
   const { nodes: [group] } = build('card', cosmos, { unit, box: [100, 100, 800, 300] });
-  const [px, py, pw, ph] = bboxOf(part([group], 'paper').props.d);
-  const sheen = part([group], 'sheen');
-  assert.equal(sheen.type, 'group');
-  assert.equal(ringsOf(sheen).length, SOFT_RINGS);
-  assert.ok(stacked(sheen) > 0 && stacked(sheen) <= 0.6, `soft and faint: ${stacked(sheen)}`);
-  assert.ok(reachOf(sheen) > 0, 'a soft edge');
-  const [sx, sy, sw, sh] = outer(sheen);
-  assert.ok(sx >= px - 1e-9 && sy >= py - 1e-9 && sx + sw <= px + pw + 1e-9 && sy + sh <= py + ph + 1e-9, 'the soft edge stays inside the card');
-  const sheenFill = ringsOf(sheen)[0].props.fill;
-  assert.ok(contrast(sheenFill, '#000000') > contrast('#2e2770', '#000000'), 'the sheen is lighter than the card');
+  assert.equal(group.children.some((n) => n.id === 'd.sheen'), false, 'no sheen');
   const edge = part([group], 'edge');
   assert.equal(edge.props.d, part([group], 'paper').props.d);
   assert.equal(edge.props.fill, undefined);
   assert.equal(edge.props.strokeWidth, 1 * unit);
-  assert.ok(contrast(edge.props.stroke, '#000000') > contrast(sheenFill, '#000000'), 'the edge is lighter still');
+  assert.ok(contrast(edge.props.stroke, '#000000') > contrast('#2e2770', '#000000'), 'the edge is lighter than the card');
   const order = group.children.map((n) => n.id);
-  assert.deepEqual(order, ['d.ground', 'd.shadow', 'd.paper', 'd.sheen', 'd.edge']);
+  assert.deepEqual(order, ['d.ground', 'd.shadow', 'd.paper', 'd.edge']);
   // the ground glow: the card's outline set down, screened, with a soft ink2 light (depth from light)
   const ground = part([group], 'ground');
   assert.equal(ground.props.d, part([group], 'paper').props.d);
@@ -120,11 +113,8 @@ test('rounded card: a faint lighter soft sheen whose edge stays inside the card,
   assert.ok(ground.props.y > 0 && ground.props.glow.alpha <= 0.3, 'set down, faint');
 });
 
-test('ink on the rounded card holds 4.5:1 against the card at its sheen', () => {
-  const { nodes: [group] } = build('card', cosmos);
-  const sheen = part([group], 'sheen');
-  const brightest = mix('#2e2770', ringsOf(sheen)[0].props.fill, stacked(sheen));
-  for (const key of ['ink', 'ink2']) assert.ok(contrast(cosmos.palette[key], brightest) >= 4.5, `${key}: ${contrast(cosmos.palette[key], brightest).toFixed(2)}`);
+test('ink on the rounded card holds 4.5:1 against the card', () => {
+  for (const key of ['ink', 'ink2']) assert.ok(contrast(cosmos.palette[key], '#2e2770') >= 4.5, `${key}: ${contrast(cosmos.palette[key], '#2e2770').toFixed(2)}`);
 });
 
 test('no cosmos device asks the draw layer for a blur filter (about 7 ms a frame each): the rounded card\'s shadow is stacked rings too', () => {

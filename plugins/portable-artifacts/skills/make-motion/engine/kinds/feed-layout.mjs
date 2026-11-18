@@ -269,7 +269,10 @@ function slugRoom(shot, ctx, data, room) {
 function litTrack(look, lit, k, times) {
   const on = colourOf(look, lit.spoken), off = colourOf(look, lit.other);
   const { dur, ease } = look.moves.emphasize;
-  const keys = k === 0 ? [{ t: 0, v: on }] : [{ t: 0, v: off }, { t: times[k], v: off }, { t: times[k] + dur, v: on, ease }];
+  // with no narration the messages are spaced evenly over a short shot, closer than one move: the message lights over the
+  // time it has before the next one's
+  const rise = times[k + 1] === undefined ? dur : Math.min(dur, Math.max(0, times[k + 1] - times[k]));
+  const keys = k === 0 ? [{ t: 0, v: on }] : [{ t: 0, v: off }, { t: times[k], v: off }, { t: times[k] + rise, v: on, ease }];
   if (times[k + 1] !== undefined) keys.push({ t: times[k + 1], v: on }, { t: times[k + 1] + dur, v: off, ease });
   return track(keys, { space: look.colorSpace });
 }

@@ -40,7 +40,9 @@ export const cosmos = {
   grid: { columns: 12, margin: 96, gutter: 24 },
   // on 9:16 the composition band, as shares of the height, inside the platform sides (pop's band: the platform safe
   // zone's own bottom would leave the lower half of a vertical frame empty)
-  band: { top: 0.15, bottom: 0.75 },
+  // (gate review c5: 8 of 9 tall shots left their bottom 25 to 45 percent bare; the band's foot, at 0.75, was 1440 px, and
+  // the caption pill stands on it, so a captioned shot's content ended near 1316. The foot is now 0.84, 1613 px)
+  band: { top: 0.15, bottom: 0.84 },
   // the slug (kinds/slug.mjs) is a square rounded chip: no turn, its kicker on one line up to five columns
   slug: { turn: 0, maxColumns: 5 },
   tracking,
@@ -118,7 +120,8 @@ export const cosmos = {
     arrow: { color: 'ink', width: 8, cap: 'round' },
     // a rounded panel a step lighter and bluer than the violet field, with a faint inner sheen and a lighter edge
     // with a faint ground glow of ink2 light behind it (`ground`: alpha, blur and dy units): depth from light
-    card: { edge: 'rounded', radius: 28, fill: '#2e2770', ground: { color: 'ink2', alpha: 0.3, blur: 64, dy: 28 } },
+    // (c6) `sheen: false`: one tone (the lighter top was the "tone step" across the map sheet and the code panel)
+    card: { edge: 'rounded', radius: 28, sheen: false, fill: '#2e2770', ground: { color: 'ink2', alpha: 0.3, blur: 64, dy: 28 } },
     // a lavender pill: gold is for the frame's one focal element, never chrome
     tag: { shape: 'pill', fill: 'ink2', text: 'deep' },
     // a picture keyed in the card's colour, so it sits on its rounded card with no white frame
@@ -162,7 +165,9 @@ export const cosmos = {
       // a real end card (end-mark.mjs): the line centred, the ask `askGap` em under its descenders, the mark a wordmark in
       // the display weight at `markShare` of the title with no outline, the sun on its anchor; the shot's tail at least
       // `tail` s after the last word (engine/script/timing.mjs) so the finished card holds
-      wordmark: { tail: 2.8, titleHeight: 0.42, markShare: 0.32, askGap: 0.35, gap: 0.55, centre: 0.5, sun: { strength: 0.8 } } },
+      // (c6) `setOnOpen`: the line, the ask and the mark are all set on frame 0; `titleHeightTall`: on a tall frame the line may
+    // take 0.6 of the band (at the hero floor Nunito sets a closing line in three or four lines, which 0.42 could not hold)
+    wordmark: { setOnOpen: true, titleHeightTall: 0.6, tail: 2.8, titleHeight: 0.42, markShare: 0.32, askGap: 0.35, gap: 0.55, centre: 0.5, sun: { strength: 0.8 } } },
     // list: as desk's, with a dot rail in place of figures (list-desk.mjs dotRail): a dot per item in a `column` units
     // wide at the span's left, `radius` units, on a rail `line` units wide; the current item's dot lit in the accent; the
     // items shown from frame 0 in ink2 and lit while current (`previews`), no slug badge (`slug` false), light travelling
@@ -215,11 +220,14 @@ export const cosmos = {
     // pins lit in the accent, place names in the label face, the places keyed on a tall frame in lavender discs
     map: { wholeTall: true, card: true, land: '#4d4296', borders: '#2e2770', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleAbove: true, titleFit: true, titleHeight: 0.3, titleStepsWide: [5], titleTo: 5, titleSteps: [5], listGap: 10, gap: 40, keyFill: 'ink2', keyText: 'deep' },
     // diagram: rounded nodes, lavender arrows, edge labels on a deep plate
-    diagram: { openNodes: 8, fullColumn: 'room', card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 28, gap: 48, margin: 10, platePad: 8, plate: 'deep', arrow: 'ink2', arrowWidth: 4, head: 22, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: false, advance: 0.55 },
+    // (c6) `current` + `litRing`: the step being spoken is ringed in the accent with a screened glow (the motif: light marks the
+    // active item); the arrows are 8 units with 34-unit heads, so they read on a phone tile
+    diagram: { openNodes: 8, fullColumn: 'room', card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 28, gap: 48, margin: 10, platePad: 8, plate: 'deep', arrow: 'ink2', arrowWidth: 8, head: 34, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: true, litRing: { color: 'accent', width: 6, glow: 28, alpha: 0.5 }, advance: 0.55 },
     // timeline: a lavender line with its ticks, every event set from frame 0 and the spoken one lit
     // `whenSizes`: dates at 140 units, between the scale's 136 and 232 (136 is under three times the events' 46, and 232
     // does not fit a column on 16:9: measured with the fake measure, 14.5 units of overlap)
-    timeline: { previews: true, whatFace: 'text', whenSteps: [5, 4], whenSizes: [140], whatSteps: [2], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 28, lineX: 12, textGap: 48, partGap: 12, line: 'ink2', lineWidth: 4, tick: 18, titleSteps: [5, 4], titleGap: 48, advance: 0.55 },
+    // (c6) `discs`: each event sits on a 14-unit disc node (not a hairline tick), gold with a screened halo while it is spoken
+    timeline: { discs: { radius: 14, glow: { reach: 26, alpha: 0.5, color: 'accent' } }, previews: true, whatFace: 'text', whenSteps: [5, 4], whenSizes: [168, 160], whatSizes: [56, 52], whatSteps: [2], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 28, lineX: 12, textGap: 48, partGap: 12, line: 'ink2', lineWidth: 4, tick: 18, titleSteps: [5, 4], titleGap: 48, advance: 0.55 },
     // code: on the rounded panel, the tokens in the blue and pink shapes and the lavender, the lit line on a violet band
     code: { heroInset: 10, cardWide: true, setOnOpen: true, font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.4, pad: 48, steps: [2, 3], card: true, roles: { plain: 'ink', keyword: 'shape2', string: 'shape', number: 'shape2', comment: 'ink2', name: 'ink', punct: 'ink2' }, highlight: { band: '#352d6e', multiply: false }, removed: 'shape', added: 'shape2', strike: 4, prompt: 'ink2', heroAdvance: 0.5 },
     // feed: rounded bubbles in two violets, the app's disc in a shape colour, every message set from frame 0, the spoken

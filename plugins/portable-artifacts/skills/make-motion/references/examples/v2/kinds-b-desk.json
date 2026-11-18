@@ -132,12 +132,12 @@
       "show": "feed",
       "title": "Studio",
       "items": [
-        { "from": "them", "text": "North nearly tripled." },
+        { "from": "them", "text": "North tripled." },
         { "from": "me", "text": "Then we print more of Dawn." },
         { "from": "them", "text": "The paper arrives on Friday." },
         { "from": "me", "text": "I will tell the North." }
       ],
-      "say": "North nearly tripled. Then we print more of Dawn. The paper arrives on Friday. I will tell the North."
+      "say": "North tripled. Then we print more of Dawn. The paper arrives on Friday. I will tell the North."
     },
     {
       "id": "close",

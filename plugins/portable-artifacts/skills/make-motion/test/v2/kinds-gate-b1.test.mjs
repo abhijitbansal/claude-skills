@@ -330,7 +330,7 @@ test('desk 16:9: the second-wave kinds keep the one left margin of the statement
 test('desk: no second-wave kind sets the author\'s words in the grotesk text face (timeline, chat, map labels, scatter label)', () => {
   const look = registries.looks.get('desk');
   const grotesk = look.fonts.text.family;
-  const shots = [TIMELINE(MONTHS), REACH, SCATTER, { id: 'chat', show: 'feed', title: 'Studio', items: [{ from: 'them', text: 'North orders nearly tripled.' }, { from: 'me', text: 'Then we print more of Dawn.' }], say: 'North orders nearly tripled. Then we print more of Dawn.' }];
+  const shots = [TIMELINE(MONTHS), REACH, SCATTER, { id: 'chat', show: 'feed', title: 'Studio', items: [{ from: 'them', text: 'North orders tripled.' }, { from: 'me', text: 'Then we print more of Dawn.' }], say: 'North orders tripled. Then we print more of Dawn.' }];
   for (const format of FORMATS) {
     for (const shot of shots) {
       const out = expandFilm(filmOf([shot], 'desk', format), 0);
@@ -419,8 +419,8 @@ for (const format of FORMATS) {
 // The 0.8 s first beat of this gate was overruled by the transitions revision, round 2 (lead ruling 4: narration timing
 // wins over "no empty first beat" for later items): the first item is up from frame 0, the reply arrives when spoken.
 test('first beat: a feed shows its first item from frame 0 and the reply when its sentence is spoken', () => {
-  const chat = { id: 'chat', show: 'feed', title: 'Studio', items: [{ from: 'them', text: 'North nearly tripled this quarter.' }, { from: 'me', text: 'Then we print more of Dawn.' }, { from: 'them', text: 'Paper comes Friday.' }],
-    say: 'North nearly tripled this quarter, and that is a lot of prints. Then we print more of Dawn. Paper comes Friday.' };
+  const chat = { id: 'chat', show: 'feed', title: 'Studio', items: [{ from: 'them', text: 'North tripled this quarter.' }, { from: 'me', text: 'Then we print more of Dawn.' }, { from: 'them', text: 'Paper comes Friday.' }],
+    say: 'North tripled this quarter, and that is a lot of prints. Then we print more of Dawn. Paper comes Friday.' };
   for (const look of LOOKS) {
     const out = expandFilm(filmOf([chat], look, '16:9'), 0);
     const [first, second] = registries.kinds.get('feed').arrivals(chat, out.timing);

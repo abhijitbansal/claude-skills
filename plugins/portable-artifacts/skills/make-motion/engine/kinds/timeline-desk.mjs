@@ -5,7 +5,8 @@
 // highlighted event is ink again once all have arrived. Pure and DOM-free.
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { colourOf, polyline } from '../devices/shared.mjs';
+import { colourOf, polyline, softRoundedRect } from '../devices/shared.mjs';
+import { circlePath } from '../devices/sun.mjs';
 import { isWide } from './shared.mjs';
 import { arrivalTrack } from './arrivals.mjs';
 import { dateValues, spreadPositions } from './timeline-dates.mjs';
@@ -69,6 +70,23 @@ function placesOf(ctx, area, fit, n, values) {
   });
 }
 
+// data.discs (cosmos: { radius, line, glow: { reach, alpha, color } } units): an event's tick is a disc node on the line, in
+// the line's colour and gold (a second disc fading in over it) while the event is spoken, with a screened halo on while it
+// is spoken (the motif: light marks the active item), over the look's emphasize move like the words' colour.
+function discNode(shot, ctx, k, [x, y], times) {
+  const { look, unit, data } = ctx;
+  const { radius, glow } = data.discs;
+  const r = radius * unit, accent = colourOf(look, glow.color), off = colourOf(look, data.line);
+  const { dur, ease } = look.moves.emphasize;
+  const at = (v, w) => (k === 0 ? [{ t: 0, v }] : [{ t: 0, v: w }, { t: times[k], v: w }, { t: times[k] + dur, v, ease }]);
+  const after = (v, w) => (times[k + 1] === undefined ? [] : [{ t: times[k + 1], v }, { t: times[k + 1] + dur, v: w, ease }]);
+  const glowTrack = track([...at(1, 0), ...after(1, 0)]);
+  const halo = softRoundedRect({ id: `${shot.id}.disc${k}.halo`, rect: [-r, -r, HALF * r, HALF * r], pill: true, reach: glow.reach * unit, alpha: glow.alpha, fill: accent, props: { blend: 'screen' }, opts: { tracks: { opacity: glowTrack } } });
+  const body = node('path', `${shot.id}.disc${k}.body`, { d: circlePath(r), fill: off });
+  const lit = node('path', `${shot.id}.disc${k}.lit`, { d: circlePath(r), fill: accent }, { tracks: { opacity: glowTrack } });
+  return node('group', `${shot.id}.disc${k}`, { x, y }, { children: [halo, body, lit] });
+}
+
 /** The desk timeline's nodes and boxes in `area` from the fitted sizes `fit` and arrival times. */
 export function deskTimeline(shot, ctx, area, fit, times) {
   const { look, unit, data } = ctx;
@@ -84,6 +102,7 @@ export function deskTimeline(shot, ctx, area, fit, times) {
   const line = node('path', `${shot.id}.line`, { d: polyline(ends), stroke: rule, strokeWidth: width, lineCap: 'round' });
   const marks = places.map((p, k) => {
     const [x, y] = p.tick;
+    if (data.discs) return discNode(shot, ctx, k, p.tick, times);
     return node('path', `${shot.id}.tick${k}`, { d: wide ? polyline([[x, y - tick], [x, y + tick]]) : polyline([[x - tick, y], [x + tick, y]]), stroke: rule, strokeWidth: width, lineCap: 'round' });
   });
   // data.previews (ledger, gate-ledger-2 ruling 3): every event set from frame 0 in ink2, the one being spoken in ink

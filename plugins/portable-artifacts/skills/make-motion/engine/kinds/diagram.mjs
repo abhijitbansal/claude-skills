@@ -26,15 +26,19 @@ const HALF = 2;
 /** When the nodes, edges and the highlight arrive, and when each node is lit ([from, to)), in shot seconds. `open`
  *  (look data openNodes, poster): the first `open` nodes are on from frame 0, and an edge between two of them too. */
 export function arrivals(shot, timing, open = 1) {
-  const nodes = namedTimes(shot.nodes.map((n) => n.label), timing).map((t, k) => (k < open ? 0 : t));
+  // `spoken`: when each node's label is said; the nodes that open on frame 0 are still lit when they are spoken
+  const spoken = namedTimes(shot.nodes.map((n) => n.label), timing);
+  const nodes = spoken.map((t, k) => (k < open ? 0 : t));
   const at = new Map(shot.nodes.map((n, k) => [n.id, nodes[k]]));
   const edgeAt = (ends) => (open > 1 && ends <= 0 ? 0 : landBy(ends + EDGE_LAG, timing));
   const edges = (shot.edges ?? []).map((e) => edgeAt(Math.max(at.get(e.from) ?? 0, at.get(e.to) ?? 0)));
   const built = Math.max(...nodes, ...edges);
   const highlight = shot.highlight === undefined ? null : Math.min(latestLanding(timing), Math.max(built, at.get(shot.highlight) ?? 0));
-  const lit = nodes.map((from, k) => {
+  const lit = spoken.map((said, k) => {
+    // a node that is on from frame 0 is lit from its first spoken moment, not from frame 0 (the first is lit on 0)
+    const from = k === 0 ? nodes[k] : said;
     if (shot.highlight === shot.nodes[k].id && highlight !== null) return [from, Infinity];
-    const next = Math.min(...nodes.filter((t, j) => j !== k && t > from), highlight ?? Infinity);
+    const next = Math.min(...spoken.filter((t, j) => j !== k && t > said), highlight ?? Infinity);
     return [from, next];
   });
   return { nodes, edges, highlight, lit };

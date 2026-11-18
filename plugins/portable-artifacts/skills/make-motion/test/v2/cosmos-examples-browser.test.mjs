@@ -17,13 +17,11 @@ const FPS = 30;
 // with desk and pop, so its copy stays; what cosmos cannot show is said.
 // - list: cosmos sets no list slug and marks items with a dot rail, so the example's title and its steps numbering are
 //   not drawn (review C C1: said, never silent);
-// - end and quote at 9:16: the narrow safe zone cannot hold the hero three times cosmos's 52-unit secondary floor, so the
-//   end leaves out its ask and the quote its attribution (kinds/secondary.mjs, the frame review's dropped rule).
+// (end and quote at 9:16 were listed here for a dropped ask and attribution; the band's foot at 0.84 and the end's
+// titleHeightTall hold both, so they now come back with none)
 const KNOWN = Object.freeze({
   'list 16:9': ['creative kind shots[0].title', 'creative kind shots[0].style'],
   'list 9:16': ['creative kind shots[0].title', 'creative kind shots[0].style'],
-  'end 9:16': ['creative dropped shots[0].say'],
-  'quote 9:16': ['creative dropped shots[0].say'],
 });
 const COMBOS = Object.freeze([
   { mode: 'pro', format: '16:9' },

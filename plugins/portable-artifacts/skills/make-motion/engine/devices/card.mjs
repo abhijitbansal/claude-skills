@@ -103,7 +103,8 @@ function roundedCard({ id, box, at, look, unit }, style) {
     ...groundGlow(id, d, fill, look, unit, style.ground),
     softShadow(id, [w, h], radius, look, unit),
     node('path', `${id}.paper`, { d, fill }),
-    softRoundedRect({ id: `${id}.sheen`, rect: sheenRect, radius: Math.max(0, radius - reach), reach, alpha: SHEEN.alpha, fill: lighten(fill, SHEEN.lighter) }),
+    // `sheen: false` (cosmos): one tone, no lighter top that reads as a horizontal step across a map or a code panel
+    ...(style.sheen === false ? [] : [softRoundedRect({ id: `${id}.sheen`, rect: sheenRect, radius: Math.max(0, radius - reach), reach, alpha: SHEEN.alpha, fill: lighten(fill, SHEEN.lighter) })]),
     node('path', `${id}.edge`, { d, stroke: lighten(fill, EDGE.lighter), strokeWidth: EDGE.width * unit }),
   ];
   return { nodes: [entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, children: parts })] };

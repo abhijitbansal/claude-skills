@@ -245,3 +245,7 @@ The new region-off-frame finding (engine/review/regions.mjs) fires on pop's clip
 ## Page modules import only served paths (2026-11-17)
 
 A render caught poster's flat.mjs importing shared/contrast.mjs, a path the page server does not serve; no test guards it. Default: add a test that every module under engine/ reachable from the page imports only paths the v2 server serves, in the cut-over pass.
+
+## cosmos second-wave kinds: leftovers (2026-11-18)
+
+The new cosmos kinds passed their look review (ship after fixes on both films). Open, default: fix in the release polish pass: the viral giants source line now sits at 1613 px, below the 1245 px platform line where app chrome may cover it (raise the band or shorten the rows); feed messages do not pop in and carry no sender structure; the list does not use the disc motif; the map's land contrast, label size, Antarctica strip and tall crop; code wraps one statement and its highlight boxes differ in size; the screen zoom leaves sliced pieces and a grey wash; the 16:9 timeline band does not fill; cosmos cuts are hard; the measured tall fill for eight shots. The tall photo keeps its sun only through the film's focus field, and its stair-stepped edges come from the 960x540 test photo, not the engine. Reports: .superpowers/sdd/2026-11-16-pa2-run2/gate-cosmos-b-1.md, c5-report.md, c6-report.md.

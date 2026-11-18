@@ -134,13 +134,26 @@ function annotationNodes(shot, ctx, data, { plot, plotArea, size }) {
   return built.nodes;
 }
 
+// With titleFloor 'smallest' the claim is held at three times the smallest text, which is the source line while there is
+// one. With no source the labels are the smallest text, and labels set large for a phone (labelScale) put that floor over
+// the claim's own maximum (cosmos at 16:9: 78 units of labels, a floor of 241 against a 168 maximum, a crash). Then the
+// labels are set no larger than the claim can keep three times over, and never under the secondary floor.
+function withTitleRoom(style, shot, ctx, data) {
+  if (data.titleFloor !== 'smallest' || shot.source !== undefined) return style;
+  const { look, unit } = ctx;
+  const most = Math.floor((data.titleMax * unit) / ((data.titleMargin ?? 1) * MIN_HERO_RATIO));
+  if (style.font.size <= most) return style;
+  return { ...style, font: fontFor(look, 'label', Math.max(secondaryFloor(look, unit), most), unit) };
+}
+
 /** The desk chart: { nodes, boxes } with the chart group carrying the hero id. */
 export function expandDeskChart(shot, ctx, data, hero) {
   const { look, canvas, unit } = ctx;
   // a look may keep reference lines for some chart types only (data.refsTypes, ledger: line and area, whose axis needs
   // labelling; bars and columns carry their values)
   const base = chartStyle(ctx, data);
-  const style = data.refsTypes === undefined ? base : { ...base, refs: data.refsTypes.includes(shot.type) };
+  const sized = data.refsTypes === undefined ? base : { ...base, refs: data.refsTypes.includes(shot.type) };
+  const style = withTitleRoom(sized, shot, ctx, data);
   const { font, gap } = style;
   const caption = captionTop(ctx);
   const wide = isWide(canvas);
