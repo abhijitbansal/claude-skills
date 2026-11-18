@@ -30,7 +30,12 @@ const EPS = 1e-6;
 
 const keyed = (keys) => track(keys.length === 0 ? [{ t: 0, v: 0 }] : keys);
 // 0 until `start`, rising to 1 at `end` (linear: the tip leads it), 1 from frame 0 for a stroke with no length of time
-const progress = (start, end) => (end <= start + EPS ? track([{ t: 0, v: 1 }]) : track([{ t: 0, v: 0 }, { t: start, v: 0 }, { t: end, v: 1 }]));
+// A stroke begun before frame 0 (a drawFirst look's first: start < 0) is already part-drawn on frame 0.
+function progress(start, end) {
+  if (end <= start + EPS || end <= 0) return track([{ t: 0, v: 1 }]);
+  if (start < 0) return track([{ t: 0, v: -start / (end - start) }, { t: end, v: 1 }]);
+  return track([{ t: 0, v: 0 }, { t: start, v: 0 }, { t: end, v: 1 }]);
+}
 
 // A stroked polyline's wobbled copy (a node the hand draws), the same for a seed and id.
 function wobbled(n, look, seed, unit) {

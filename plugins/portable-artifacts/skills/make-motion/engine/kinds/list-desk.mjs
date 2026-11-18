@@ -216,7 +216,8 @@ export function expandDeskList(shot, ctx, given, times, hero) {
   const items = itemsOf(shot).map((item) => ({ ...item, text: setCase(look, 'display', item.text) }));
   const dots = data.dots;
   // a look with a dot rail marks every item with its dot, so no figures
-  const numbered = isNumbered(shot) && !dots;
+  // (data.numbered, marker: every list is written with its numbers, gate-marker-1 ruling 7)
+  const numbered = (isNumbered(shot) || data.numbered === true) && !dots;
   const staged = shot.title === undefined ? shot : { ...shot, kicker: shot.title };
   // a look with a narrow tall margin starts the items further in on a tall frame (data.fromTall, ledger), so the figures
   // hanging before them keep inside the safe area

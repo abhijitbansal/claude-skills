@@ -238,4 +238,8 @@ export function cutoutLayout(shot, ctx) {
 
 // The shot's fit: its own, else on a tall frame the look's `fitTall` (look.kinds.media; poster's cut-out, which fills the
 // band with the picture over its caption), else bleed.
-export const isBleed = (shot, ctx) => (shot.fit ?? (ctx !== undefined && !isWide(ctx.canvas) ? ctx.data?.fitTall : undefined) ?? 'bleed') === 'bleed';
+// `fitWide` is the same for a wide frame (marker: the picture is a card on the board at both formats, never full bleed).
+export const isBleed = (shot, ctx) => {
+  const own = ctx === undefined ? undefined : isWide(ctx.canvas) ? ctx.data?.fitWide : ctx.data?.fitTall;
+  return (shot.fit ?? own ?? 'bleed') === 'bleed';
+};

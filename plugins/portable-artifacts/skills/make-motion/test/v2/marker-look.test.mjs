@@ -142,12 +142,16 @@ test('a marker shot is drawn, never faded: no text or path node has a part-way o
   }
 });
 
-test('frame 0 of a marker statement holds a complete first element: its text is revealed whole at t = 0', () => {
-  const out = expandShot({ id: 's', show: 'statement', say: 'Numbers need *sources* on the board.' }, NAME, '16:9');
+// m4 (gate-marker-1 ruling 1, replacing "frame 0 holds a complete first element"): nothing is set on frame 0; the first line is
+// already being written (part-drawn), every later line has not begun
+test('frame 0 of a marker statement has its first line begun, not whole, and the lines after it unwritten', () => {
+  const out = expandShot({ id: 's', show: 'statement', say: 'Numbers need *sources* on the board, written where everyone can see them.' }, NAME, '16:9');
   const layered = handLayer(out.nodes, out.timing, out.ctx);
   const lines = layered.filter((n) => n.type === 'text');
-  assert.ok(lines.length >= 1);
-  for (const n of lines) assert.equal(n.tracks.reveal.points[0].v, 1, `${n.id}: the reveal is 1 on frame 0`);
+  assert.ok(lines.length >= 2);
+  const first = lines[0].tracks.reveal.points[0].v;
+  assert.ok(first > 0 && first < 1, `${lines[0].id}: the first line is part-written on frame 0 (${first})`);
+  for (const n of lines.slice(1)) assert.equal(n.tracks.reveal.points[0].v, 0, `${n.id}: not begun on frame 0`);
 });
 
 test('written words are never ghosted or held back: the end kind\'s word opacity steps are dropped, every written line is whole from its reveal', () => {

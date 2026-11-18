@@ -26,6 +26,7 @@ const NATURAL_SPEED = Object.freeze({ write: 1100, line: 2000, fill: 2600 });
 const NATURAL_SHARE = 0.85; // a natural speed stays this share of the cap at most, so a calm stroke is never on the threshold
 const FLOOR_SLACK = 0.999; // the floor sits a hair under the cap: rounding must never put a planned stroke over it
 const DEFAULT_CAP = 2600;
+const HEAD_START = 0.12; // s: a drawFirst look's first stroke is begun this long before frame 0 (the pen is down on frame 0)
 const DRAW_TAIL = 0.3; // s: a shot's hold the hand may draw into at most (the finished board still holds this long)
 const POLYLINE = /^\s*M[\s\d.,eE+-]*(?:[LZ][\s\d.,eE+-]*)*$/;
 const NUMBER = /-?\d*\.?\d+(?:e[+-]?\d+)?/gi;
@@ -140,7 +141,13 @@ function durations(strokes, avail, unit, cap) {
 // The latest each run (in drawing order) may end so that every later run still fits at the speed cap by `hardEnd`: a run that
 // lengthens into the hold must not starve the sentences after it.
 function latestEnds(runs, unit, cap, hardEnd) {
-  const cost = runs.map((run) => (run.length === 0 ? 0 : TRAVEL_MIN + sum(travelsOf(run, unit, null)) + sum(run.map((s) => floorOf(s, unit, cap)))));
+  // each run's cost counts the sweep in from where the run before it ends (a run's first stroke is not always near it)
+  const cost = runs.map((run, k) => {
+    if (run.length === 0) return 0;
+    const prior = runs.slice(0, k).findLast((r) => r.length > 0);
+    const lead = prior ? Math.max(TRAVEL_MIN, distance(prior.at(-1).points.at(-1), run[0].points[0]) / (TRAVEL_SPEED * unit)) : TRAVEL_MIN;
+    return lead + sum(travelsOf(run, unit, null)) + sum(run.map((s) => floorOf(s, unit, cap)));
+  });
   const ends = Array(runs.length).fill(hardEnd);
   for (let k = runs.length - 2; k >= 0; k--) ends[k] = Math.min(hardEnd, ends[k + 1] - cost[k + 1]);
   return ends;
@@ -186,12 +193,16 @@ function timeWindow(strokes, [opens, to], unit, before, { cap, hardEnd }) {
 export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {}) {
   const all = elementsOf(nodes, unit);
   if (all.length === 0) return { plan: [], set: [] };
+  // look.hand.drawFirst (marker, gate-marker-1 ruling 1): the hand draws every element, furniture included, none is whole on
+  // frame 0: the first stroke is already under way when the shot opens (HEAD_START before it) and the hand is on it
+  const drawFirst = look?.hand?.drawFirst === true;
   // frame furniture (a slug, a kicker, a caption: pinned to the frame) is on the board from frame 0, never drawn by the hand
-  const furniture = all.filter((e) => isFurniture(e.node));
-  const elements = all.filter((e) => !isFurniture(e.node));
+  const furniture = drawFirst ? [] : all.filter((e) => isFurniture(e.node));
+  const elements = drawFirst ? all : all.filter((e) => !isFurniture(e.node));
   const standing = furniture.flatMap((e) => e.strokes.map((s, k) => ({ ...s, id: `${e.node.id}#${k}`, node: e.node.id, sentence: 0, start: 0, end: 0, speed: 0 })));
   if (elements.length === 0) return { plan: Object.freeze(standing.map((s) => Object.freeze(s))), set: [] };
-  const sentences = windowsOf(timing);
+  const spoken = windowsOf(timing);
+  const sentences = drawFirst ? [[-HEAD_START, spoken[0][1]], ...spoken.slice(1)] : spoken;
   // an element that names its own window (props.window, [from, to] shot seconds: an underline drawn as its word is
   // spoken) gets one after the sentences'; windows are timed in order of their start
   const windows = [...sentences, ...elements.flatMap((e) => (isWindow(e.node.props.window) ? [windowFor(e.node.props.window, timing)] : []))];
@@ -202,7 +213,7 @@ export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {
   });
   // the first element on the board is the first that does not name a time of its own: a ring drawn on its word is not on
   // the board when the shot opens
-  const lead = elements.findIndex((e) => !isWindow(e.node.props.window));
+  const lead = drawFirst ? -1 : elements.findIndex((e) => !isWindow(e.node.props.window));
   const first = [...standing, ...(lead < 0 ? [] : tagged[lead].map((s) => ({ ...s, start: 0, end: 0, speed: 0 })))];
   const later = tagged.filter((_, i) => i !== lead).flat();
   // with look.hand.restAtStart the hand comes in from its rest point to the first stroke after the first element
@@ -213,10 +224,16 @@ export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {
   const set = [];
   const runs = order.map((w) => later.filter((s) => s.sentence === w));
   const latest = latestEnds(runs, unit, cap, hardEnd);
+  // a run is stretched to its window's end but never past where the next run opens (a mark with a window of its own opens
+  // inside a sentence: the hand must be free for it then)
+  const opensAfter = (k) => {
+    const next = runs.findIndex((r, i) => i > k && r.length > 0);
+    return next < 0 ? Infinity : windows[order[next]][0];
+  };
   const timed = order.reduce((done, w, k) => {
     const mine = runs[k];
     if (mine.length === 0) return done;
-    const run = timeWindow(mine, windows[w], unit, origin && done.length === first.length ? origin : done.at(-1), { cap, hardEnd: latest[k] });
+    const run = timeWindow(mine, windows[w].map((v, i) => (i === 1 ? Math.min(v, Math.max(windows[w][0], opensAfter(k))) : v)), unit, origin && done.length === first.length ? origin : done.at(-1), { cap, hardEnd: latest[k] });
     set.push(...run.skipped.map((s) => ({ node: s.node, at: run.opens })));
     return [...done, ...run.timed];
   }, first);

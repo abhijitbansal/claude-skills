@@ -70,12 +70,28 @@ function revealed(n, p, canvas) {
   return share <= 0 ? null : Object.freeze({ ...n, reveal: Math.min(n.reveal, share) });
 }
 
-// The hand on the front of the pass that leads at p, at the middle of its band.
-function handOn(hand, p, canvas) {
-  if (!hand) return [];
-  const k = Array.from({ length: ERASE.passes }, (_, i) => i).findLast((i) => passAt(i, p) > 0 && passAt(i, p) < OVERSHOOT) ?? 0;
+// The hand rides the front of the pass that leads at p, at the middle of its band. It never jumps (gate-marker-1 ruling 3): it
+// leaves where the outgoing board had it (over the first HAND_IN of the cut) and arrives where the incoming board has it (over
+// the last of it, from HAND_OUT), so the first stroke of the next board is begun under it.
+const HAND_IN = 0.12;
+const HAND_OUT = 0.8;
+const smooth = (v) => v * v * (3 - 2 * v);
+const lerp = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
+const TURN = 0.2; // p: the hand takes this long to go from the end of one pass to the start of the next (never in one frame)
+const frontOf = (k, p, canvas) => {
   const [top, bottom] = bandOf(k, canvas);
-  return [Object.freeze({ ...hand, x: Math.min(canvas.w, passAt(k, p) * canvas.w), y: (top + bottom) / 2 })];
+  return [Math.min(canvas.w, passAt(k, p) * canvas.w), (top + bottom) / 2];
+};
+function wipeFront(p, canvas) {
+  const k = Array.from({ length: ERASE.passes }, (_, i) => i).findLast((i) => passAt(i, p) > 0) ?? 0;
+  return k === 0 ? frontOf(0, p, canvas) : lerp(frontOf(k - 1, p, canvas), frontOf(k, p, canvas), smooth(clamp01((p - k * ERASE.lag) / TURN)));
+}
+function handOn(hand, was, p, canvas) {
+  if (!hand) return [];
+  const front = wipeFront(p, canvas);
+  const start = was ? lerp([was.x, was.y], front, smooth(clamp01(p / HAND_IN))) : front;
+  const [x, y] = lerp(start, [hand.x, hand.y], smooth(clamp01((p - HAND_OUT) / (1 - HAND_OUT))));
+  return [Object.freeze({ ...hand, x, y })];
 }
 
 function eraseBlend({ from, to, p, canvas, look }) {
@@ -87,7 +103,7 @@ function eraseBlend({ from, to, p, canvas, look }) {
     ...from.filter((n) => !(n.depth > 0) && n.id !== HAND_ID),
     ...wiped(p, canvas, look, seed),
     ...ahead.map((n) => revealed(n, p, canvas)).filter(Boolean),
-    ...handOn(to.find((n) => n.id === HAND_ID), p, canvas),
+    ...handOn(to.find((n) => n.id === HAND_ID), from.find((n) => n.id === HAND_ID), p, canvas),
   ];
 }
 

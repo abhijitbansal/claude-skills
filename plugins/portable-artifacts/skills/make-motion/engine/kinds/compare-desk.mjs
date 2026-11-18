@@ -82,7 +82,8 @@ function fitSides(shot, ctx, data, width, height) {
   const values = valueSet(shot, ctx, data, width);
   const hasPoints = SIDES.some((k) => pointsText(shot[k], { dash: !data.plainPoints }) !== null);
   // with points, never so small that the points (at step 1 at the least) fall under a third of it
-  const floor = Math.max(sizeAt(look, data.titleFromStep, unit), hasPoints ? MIN_HERO_RATIO * sizeAt(look, 1, unit) : 0);
+  // (data.valueHero, marker: the value is the hero, so the title may sit under three times the points' floor)
+  const floor = Math.max(sizeAt(look, data.titleFromStep, unit), hasPoints && data.valueHero !== true ? MIN_HERO_RATIO * sizeAt(look, 1, unit) : 0);
   const fits = (set) => set.every((s) => s.title.lines.length <= data.titleLines && s.title.width <= width + EPSILON && s.height <= height + EPSILON);
   // breaks by sense: the largest size with no title line of one word, else the largest that fits at all
   const noLone = (set) => set.every((s) => s.title.lines.length < HALF || s.title.lines.every((line) => line.words.length > 1));
@@ -292,6 +293,28 @@ function betweenMarks(shot, ctx, data, [a, b], turn) {
   return registries.devices.get('arrow').build({ id: `${shot.id}.arrow`, box: b, at: turn + look.moves.draw.dur, look, unit, seed, from }).nodes;
 }
 
+// ---- bars (look data `bars: { gap, width }`, marker: gate-marker-1 ruling 6: the gap is drawn, not only stated) ----
+
+const NUMBER_IN = /\d[\d,]*(?:\.\d+)?/;
+
+// Each side's value as a share of the larger, or null unless both sides' values are positive numbers.
+function barShares(shot) {
+  const values = SIDES.map((k) => Number(String(shot[k].value).match(NUMBER_IN)?.[0].replace(/,/g, '')));
+  if (!values.every((v) => Number.isFinite(v) && v > 0)) return null;
+  const most = Math.max(...values);
+  return values.map((v) => v / most);
+}
+
+// One side's bar in its card's centred space: a stroke along the card's foot from the content's left edge, as long as the
+// side's share of the content width, so the two bars are the two values at one true scale.
+function barNode(shot, ctx, data, side, { w, h, share }) {
+  const { unit, look } = ctx;
+  const pad = data.pad * unit, width = data.bars.width * unit;
+  const [x, y] = [-w / HALF + pad, h / HALF - pad - width / HALF];
+  const props = { d: polyline([[x, y], [x + (w - HALF * pad) * share, y]]), stroke: colourOf(look, data.bars.color ?? 'accent'), strokeWidth: width, lineCap: 'round' };
+  return node('path', `${shot.id}.${side.key}.bar`, props);
+}
+
 /** The desk compare: { nodes, boxes, group } with the group (both cards) carrying the hero id. */
 export function expandDeskCompare(shot, ctx, data, turn, hero) {
   // a look that draws scale (cosmos): two discs in the true ratio when both values are numbers (compare-discs.mjs)
@@ -313,9 +336,11 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
     : (wide ? canvas.h - HALF * margin - lost : (canvas.h - HALF * margin - gap - lost) / HALF) - HALF * pad;
   const room = pictureRoom(shot, ctx, data, cardW - HALF * pad, avail);
   const top = room === null ? 0 : room.h + room.gap;
-  const set = fitSides(shot, ctx, data, cardW - HALF * pad, avail - top);
+  const shares = data.bars && hasValues(shot) ? barShares(shot) : null;
+  const barRow = shares === null ? 0 : (data.bars.gap + data.bars.width) * unit;
+  const set = fitSides(shot, ctx, data, cardW - HALF * pad, avail - top - barRow);
   // a look may give the cards at least `fill` of the height they could take (cosmos), the copy centred in them
-  const content = Math.max(...set.sides.map((s) => s.height)) + top + HALF * pad;
+  const content = Math.max(...set.sides.map((s) => s.height)) + top + barRow + HALF * pad;
   const height = Math.max(content, data.fill ? data.fill * (avail + HALF * pad) : 0);
   const inset = room === null ? (height - content) / HALF : 0;
   const boxes = cardBoxes(ctx, data, height, below);
@@ -328,7 +353,7 @@ export function expandDeskCompare(shot, ctx, data, turn, hero) {
     const ink = columns ? columnInk(look, shot, side.key) : look.palette.ink;
     // stacked ruled columns (tall) hold their copy to the frame's top and foot, the rule between: no card fills the gap
     const offset = columns && !wide ? i * HALF * inset : inset;
-    const texts = sideTexts(shot, ctx, data, side, { ...size, at, top: top + offset, valueFill, ink });
+    const texts = [...sideTexts(shot, ctx, data, side, { ...size, at, top: top + offset, valueFill, ink }), ...(shares === null ? [] : [barNode(shot, ctx, data, side, { ...size, share: shares[i] })])];
     const picture = sidePicture(shot, ctx, data, side.key, room, size);
     // ruled columns: no card, no scrim; both sides read in full, the claimed one in the accent
     if (columns) return columnGroup(card, id, [...picture, ...texts]);

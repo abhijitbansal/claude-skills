@@ -71,16 +71,23 @@ export const marker = {
   cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop', 'erase'],
   cutPalette: ['cut', 'erase'],
+  // gate-marker-1 ruling 5: a film that names no cut changes board by the erase or a pan (the next board slides in), in turn;
+  // never a hard cut, and never one into a picture
+  cutPick: { cuts: ['erase', 'slide'], every: 1 },
   keyline: 6,
   shadow: { dx: 0, dy: 0, blur: 0, alpha: 0, color: '#1b1b1f' },
   // the drawing hand (engine/hand): the tip rests low on the right, outside the grid; `angle` hangs the hand 55 degrees
   // below the line it writes so no outline point is above the tip (the spike's covered-text finding); `wobble` bends
   // every stroke; `width` is the marker's line per stroke kind; `erase`: three passes, the smear stays 0.4 s
   hand: {
-    rest: 0.3, restAtStart: { wide: false, tall: true }, maxSpeed: 2600, angle: 55, scale: 1, shape: 'hand',
+    // drawFirst (gate-marker-1 ruling 1): the hand draws every element, none is set on frame 0; frame 0 is the pen down with
+    // the first stroke begun, so the hand never starts at rest
+    rest: 0.3, restAtStart: false, drawFirst: true, maxSpeed: 2600, angle: 55, scale: 0.9, shape: 'hand',
     wobble: { amp: 2.4, wave: 46, step: 7 },
     width: { line: MARK_WIDTH, write: 6, fill: 5 },
-    restAt: { wide: [0.95, 0.92], tall: [0.9, 0.94] },
+    // m4 (gate-marker-1 ruling 3): the whole hand is on the board at rest, never cropped in a corner (marker-m4.test.mjs)
+    // mid-height on the right: clear of the close's badge (low right) and of the writing, which keeps to the left (ruling 8)
+    restAt: { wide: [0.872, 0.68], tall: [0.72, 0.66] },
     erase: { passes: 3, smear: 0.4 },
     colours: { skin: '#eec39d', shade: '#d9a680', outline: 'ink', barrel: '#2b2e33', cap: 'accent', nib: 'ink' },
   },
@@ -130,16 +137,29 @@ export const marker = {
   kinds: {
     // a tall board is written down the page: lines 2 high apart and the block allowed 85 percent of the band (m2, ban 2:
     // marker-tall.test.mjs measures the fill in the page with Caveat)
-    statement: { toWide: 11, linesWide: 2, tallLineHeight: 2, tallHeight: 0.85 },
-    end: { ...desk.kinds.end, tallLineHeight: 2, tallHeight: 0.8 },
-    diagram: desk.kinds.diagram,
+    // tail (m4): the hand draws the badge, the kicker and the hero line itself now, so the shot holds long enough after the last
+    // word for the pen to finish (script/timing.mjs shotPace; the speed cap is untouched)
+    // (m4 ruling 7: the tall lines 1.5 apart, not 2: a board's lines read loose at 2)
+    statement: { toWide: 11, linesWide: 2, tallLineHeight: 1.75, tallHeight: 0.85, tail: 1.6 },
+    // m4 (ruling 8): the ask (the url) and the mark at step 2 (60, the look's secondary minimum) at the least, never the 44 of
+    // step 1, and a tail like statement's so the hand finishes the badge and the url
+    end: { ...desk.kinds.end, tallLineHeight: 1.5, tallHeight: 0.8, askSteps: [2], markSteps: [2], tail: 1.6 },
+    // m4 (ruling 9): bigger boxes (more room round each label: the labels stay at a third of the title) and a heavier arrow, so
+    // the chain reads at phone size and uses the board's width
+    diagram: { ...desk.kinds.diagram, pad: 80, arrowWidth: 7, head: 34 },
     ...Object.fromEntries(PARKED_FROM_DESK.map((kind) => [kind, { ...desk.kinds[kind], experimental: true }])),
-    media: desk.kinds.media,
+    // gate-marker-1 ruling 4: the picture is a card on the board (the pinned print, its keyline in ink, the caption beside it
+    // or under it) at both formats, never full bleed: the board and its frame stay visible round it
+    media: { ...desk.kinds.media, fitWide: 'cutout', fitTall: 'cutout' },
     // the hand writes each step's figure before its item (m3), so it ends an item at its right end, not hanging over it
-    list: { ...desk.kinds.list, bulletFirst: true },
+    // numbered (m4, ruling 7): the list is written with its numbers, a hand-drawn structure, not three plain lines
+    list: { ...desk.kinds.list, bulletFirst: true, numbered: true },
     // the arrow (or vs) is drawn between the cards, before the second card's copy (m3): the hand ends it on the second
     // card's top edge and must not then hang over that card's finished title
-    compare: { ...desk.kinds.compare, betweenFirst: true },
+    // gate-marker-1 ruling 6: the value is the hero (valueMax 240, the title at most a third of it, step 2 at the least),
+    // the vs has room (gap 9 gutters: its mark is 144 wide), a point is plain (no dash that reads as a minus), and the gap
+    // is drawn: a bar under each value at the true scale of the two (compare-desk.mjs bars)
+    compare: { ...desk.kinds.compare, betweenFirst: true, plainPoints: true, gap: 10, valueMax: 240, valueTitle: 0.33, valueHero: true, titleFromStep: 2, bars: { gap: 0.4, width: 18 }, tail: 1.6 },
     // the label is written under the digits' ink box (0.22 em under the baseline: the review's measure), not in it (m3)
     number: { underGap: 90, experimental: true },
     clipping: {},
@@ -147,14 +167,14 @@ export const marker = {
     // the claim up to step 5 (240): three times the labels at step 2 is 180 (desk's cap of 180 left no room)
     chart: { ...desk.kinds.chart, titleMax: 240, labelScale: 1, experimental: true, experimentalTypes: ['race'] },
     // the quotation up to 240 on every column, its attribution at step 2 (60, secondary.min) so the quotation stays three times it
-    quote: { ...desk.kinds.quote, toWide: 12, pad: 40, max: 240, attrSteps: [2] },
+    quote: { ...desk.kinds.quote, toWide: 12, pad: 40, max: 240, attrSteps: [2], tail: 2.2 },
     // dates at step 5 or 4: three times the events' text at the 60 minimum
     timeline: { ...desk.kinds.timeline, whenSteps: [5, 4], experimental: true },
     // the key's numbers in ink on the board (a paper number on a plate the hand does not fill)
     // m3: at 16:9 the title runs across the top in one line (titleAbove, ledger's data) and the map takes the board under it,
     // so the title never stacks against the map's frame; at step 5 (240) it stays over three times the place names (step 4,
     // 150, was 2.5 times the smallest text and the review's hero rule refused it)
-    map: { ...desk.kinds.map, keyText: 'ink', keyFill: 'paper', pin: 'accent', titleAbove: true, titleStepsWide: [5] },
+    map: { ...desk.kinds.map, keyText: 'ink', keyFill: 'paper', pin: 'accent', titleAbove: true, titleStepsWide: [5], tail: 1.6 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {

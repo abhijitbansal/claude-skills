@@ -137,13 +137,34 @@ export function diagramLayout(shot, ctx, t) {
   const nodes = shot.nodes.map((_, k) => nodeOf(shot, ctx, fit, k, t));
   const marked = dropped.length === 0 ? nodes : [markDropped(nodes[0], dropped), ...nodes.slice(1)];
   const edges = routes.map((r, j) => edgeOf(shot, ctx, r, j, t.edges[j]));
-  const labels = plates.flatMap((p, j) => (p ? [edgeLabelOf(shot, ctx, fit, p, j, t.edges[j])] : []));
+  const labelAt = plates.map((p, j) => (p ? edgeLabelOf(shot, ctx, fit, p, j, t.edges[j]) : null));
+  const labels = labelAt.filter(Boolean);
   const boxes = {
     ...Object.fromEntries(shot.nodes.map((n, k) => [`node:${n.id}`, fit.boxes[k]])),
     ...Object.fromEntries(routes.map((r, j) => [`edge:${j}`, boxOfPoints([r.from, r.to, ...(r.control ? [r.control] : [])])])),
     ...Object.fromEntries(plates.flatMap((p, j) => (p ? [[`label:${j}`, p]] : []))),
   };
-  return { nodes: [...edges, ...marked, ...labels, ...title.nodes], boxes, fit, layout };
+  // a drawing hand (look.hand) draws in the order the nodes come: the story's, not the painter's (storyOrder)
+  const ordered = ctx.look.hand ? storyOrder(shot, { title: title.nodes, boxes: marked, edges, labels: labelAt }) : [...edges, ...marked, ...labels, ...title.nodes];
+  return { nodes: ordered, boxes, fit, layout };
+}
+
+// The order a hand draws a diagram in (gate-marker-1 ruling 2): the title, then each box with its label, and an arrow (with its
+// label) right after the box it leaves, so the hand ends it on the empty place of the next box (it never hangs over a finished
+// label while it waits) and the box is drawn where the arrow points.
+function storyOrder(shot, { title, boxes, edges, labels }) {
+  const index = new Map(shot.nodes.map((n, k) => [n.id, k]));
+  const drawn = new Set();
+  const out = [...title];
+  shot.nodes.forEach((_, k) => {
+    out.push(boxes[k]);
+    drawn.add(k);
+    (shot.edges ?? []).forEach((e, j) => {
+      if (!drawn.has(index.get(e.from)) || out.includes(edges[j])) return;
+      out.push(edges[j], ...(labels[j] ? [labels[j]] : []));
+    });
+  });
+  return out;
 }
 
 // The first node's label carries the edge labels left out (the frame review's "left out its ..." finding).

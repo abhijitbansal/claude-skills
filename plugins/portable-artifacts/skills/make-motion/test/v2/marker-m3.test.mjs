@@ -29,7 +29,9 @@ for (const format of ['16:9', '9:16']) {
     // an item of two lines has a stroke for each: the order of nodes is what is judged
     const order = first.map((s) => s.node).filter((id, i, all) => id !== all[i - 1]);
     assert.deepEqual(order, ['how.figure0', 'how.item0', 'how.figure1', 'how.item1', 'how.figure2', 'how.item2']);
-    assert.equal(first[0].end, 0, 'the first figure is on the board on frame 0');
+    // m4 (gate-marker-1 ruling 1): the hand writes it, so it is begun on frame 0, not whole
+    assert.ok(plan[0].start < 0 && plan[0].end > 0, `a stroke ("${plan[0].node}") is begun on frame 0`);
+    assert.ok(first[0].start >= plan[0].start, 'the first figure is not earlier than that');
   });
 }
 
@@ -101,8 +103,9 @@ test('a put ground that is not the first element appears set when its sentence o
   assert.ok(Math.abs(set[0].at - out.timing.sentences[1].start) < 1e-6, 'put on when its sentence opens');
 });
 
-test('marker media at 16:9: the caption box is a ground in the board colour kept over the picture, whole on frame 0, with the text written into it', () => {
-  const { nodes, timing, ctx } = expandShot({ ...example('media'), src: 'shot.png' }, 'marker', '16:9'); // the helper's loaded picture
+// (m4: marker's media default is now a picture card, fitWide/fitTall 'cutout'; the bleed fit, which this ground serves, is named)
+test('marker media at 16:9 (fit bleed): the caption box is a ground in the board colour kept over the picture, put on at once, with the text written into it', () => {
+  const { nodes, timing, ctx } = expandShot({ ...example('media'), src: 'shot.png', fit: 'bleed' }, 'marker', '16:9'); // the helper's loaded picture
   const out = handPlan(nodes, timing, ctx);
   const ground = out.nodes.find((n) => n.id === 'catch.card.paper');
   assert.ok(ground, 'the card plate is kept');
@@ -177,14 +180,15 @@ test('an on-event mark in a hand look names the time it is drawn in (its draw tr
   assert.equal(desk?.props.window, undefined);
 });
 
-test('a mark with a window of its own is never the first element (the first element is whole on frame 0)', () => {
+test('a mark with a window of its own is never the first element (the first element is begun on frame 0)', () => {
   const FONT = { family: 'Caveat', size: 96, weight: 700, width: 'normal' };
   const out = expandShot({ id: 'b', show: 'free', say: 'Write this word and then ring the picture near the end of it all.', nodes: [
     { type: 'path', id: 'ring', props: { d: 'M100 500L400 500L400 700L100 700Z', stroke: '#d1321f', strokeWidth: 7, window: [1.5, 2.5] } },
     { type: 'text', id: 'word', props: { text: 'Hello', font: FONT, maxWidth: 900, x: 160, y: 300, fill: '#1b1b1f' } },
   ] }, 'marker', '16:9');
   const { plan } = handPlan(out.nodes, out.timing, out.ctx);
-  assert.equal(plan.find((s) => s.node === 'word').end, 0, 'the word is the first element, whole on frame 0');
+  const word = plan.find((s) => s.node === 'word');
+  assert.ok(word.start < 0 && word.end > 0, 'the word is the first element, begun on frame 0');
   assert.ok(plan.find((s) => s.node === 'ring').start > 0, 'the ring is drawn later');
 });
 

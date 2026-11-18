@@ -112,7 +112,7 @@ const inside = ([px, py], [x, y, w, h]) => px >= x && px <= x + w && py >= y && 
 const flat = (nodes) => nodes.flatMap((n) => [n, ...flat(n.children ?? [])]);
 
 for (const kind of SHIPPED) {
-  test(`marker ${kind} at 9:16 with real glyphs: on frame 0 the hand rests clear of every finished text`, async (t) => {
+  test(`marker ${kind} at 9:16 with real glyphs: on frame 0 (m4: the pen is down on the first stroke) the hand covers no finished text`, async (t) => {
     const open = await opened(t, kind);
     if (!open) return;
     const frame0 = await open.session.page.evaluate(() => window.__snapshot(0));
@@ -121,7 +121,7 @@ for (const kind of SHIPPED) {
     const unit = CANVAS.w / 1080;
     const r = ((hand.rotate ?? 0) * Math.PI) / 180;
     const outline = handOutline(look, unit).map(([x, y]) => [hand.x + x * Math.cos(r) - y * Math.sin(r), hand.y + x * Math.sin(r) + y * Math.cos(r)]);
-    const boxes = flat(frame0).filter((n) => n.type === 'text' && n.layout && (n.reveal ?? 1) > 0 && (n.opacity ?? 1) > 0 && !FURNITURE.test(n.id)).flatMap((n) => n.layout.lines.map((line) => {
+    const boxes = flat(frame0).filter((n) => n.type === 'text' && n.layout && (n.reveal ?? 1) >= 1 && (n.opacity ?? 1) > 0 && !FURNITURE.test(n.id)).flatMap((n) => n.layout.lines.map((line) => {
       const size = n.layout.size ?? n.props.font.size;
       return { id: n.id, box: [n.x + line.x, n.y + line.y - INK_UP * size, line.width, (INK_UP + INK_DOWN) * size] };
     }));

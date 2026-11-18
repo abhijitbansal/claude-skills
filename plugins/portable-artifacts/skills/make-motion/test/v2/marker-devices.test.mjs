@@ -143,12 +143,13 @@ test('a look that does not style drawn keeps its marks: desk\'s underline is sti
 
 // The registered statement example (a kicker on a slug tag, two written lines, one underline) under the stroke plan.
 for (const format of ['16:9', '9:16']) {
-  test(`the stroke plan of the statement example (${format}): frame furniture stands from frame 0, the underline gets time to draw and no stroke is faster than the hand's limit`, () => {
+  test(`the stroke plan of the statement example (${format}): the badge and kicker are drawn, the underline gets time to draw and no stroke is faster than the hand's limit`, () => {
     const out = expandShot(registries.kinds.get('statement').example, NAME, format);
     const { plan } = handPlan(out.nodes, out.timing, out.ctx);
     const furniture = plan.filter((s) => /slug|kicker/.test(s.node));
     assert.ok(furniture.length >= 2, 'the slug plate and the kicker');
-    assert.ok(furniture.every((s) => s.start === 0 && s.end === 0), 'drawn by nobody: on the board from frame 0');
+    // m4 (gate-marker-1 ruling 1): the badge and the kicker are drawn by the hand like every element, none is set on frame 0
+    assert.ok(furniture.every((s) => s.end > 0 && s.end > s.start), 'drawn by the hand, over time');
     const underline = plan.find((s) => s.node.includes('.ul'));
     assert.ok(underline && underline.end > underline.start, 'the underline takes time to draw');
     assert.ok(underline.start >= 0 && underline.end <= out.timing.duration, 'inside the shot');
