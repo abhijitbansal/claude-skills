@@ -105,7 +105,7 @@ test('accent2 is ink2, not a copy of the accent hex; the only accent stroke colo
   for (const [name, style] of Object.entries(devices)) {
     if (style.color !== undefined) assert.ok(Object.hasOwn(palette, style.color), `${name}.color is a palette key, not a hex`);
   }
-  assert.ok(Object.values(hand.colours).every((c) => Object.hasOwn(palette, c) || !/^#[0-9a-f]{6}$/i.test(c) || ['#eec39d', '#d9a680', '#2b2e33'].includes(c)), 'hand colours: palette keys or the three skin and barrel tones');
+  assert.ok(Object.values(hand.colours).every((c) => Object.hasOwn(palette, c) || !/^#[0-9a-f]{6}$/i.test(c) || ['#eec39d', '#d9a680', '#2b2e33', '#d8d4c8', '#4a4a52'].includes(c)), 'hand colours: palette keys or the skin, barrel and eraser tones (m5 added the eraser and its felt)');
 });
 
 test('the hand: the look carries its data and a statement shot\'s nodes come back with the hand group laid over them', () => {

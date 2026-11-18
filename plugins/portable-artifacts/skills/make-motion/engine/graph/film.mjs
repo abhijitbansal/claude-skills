@@ -90,6 +90,14 @@ function preparedOf(shot, kind, prepared) {
 // Does a shot count among the film's numbered shots? Its kind says so: `numbered` true, or a function of the shot.
 const isNumbered = (kind, shot) => (typeof kind.numbered === 'function' ? kind.numbered(shot) === true : kind.numbered === true);
 
+// The seconds the cut that opens shot `index` holds the board clear before the hand writes (look.hand.afterCut, marker):
+// the cut's own window, clamped to the shot as expandOne clamps it. 0 for the first shot, a hard cut and any look without a hand.
+function afterCutLead(film, index, look, timing) {
+  if (look.hand?.afterCut !== true || index === 0) return 0;
+  const cut = resolveShotCut(film, index, { look });
+  return cut === null ? 0 : Math.min(cut.dur, timing.duration);
+}
+
 /**
  * The ctx a kind's expand(shot, ctx) gets for shot `index`. `assets` maps a src to its picture (anything with a size).
  * `viralInsets` is the platform safe zone for this canvas (template/formats.mjs safeInsets with VIRAL_SAFE_ZONE),
@@ -100,6 +108,8 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
   const timing = timeline.shots[index];
   const kind = registries.kinds.get(shot.show);
   return {
+    // how long the cut that opens this shot holds the board clear before the hand writes (look.hand.afterCut: marker), 0 for any other look
+    lead: afterCutLead(film, index, look, timing),
     // the shot's prepared data (scripts/v2/prepare, sent with the film), for a kind that declares `prepared: true`
     ...preparedOf(shot, kind, prepared),
     look,
@@ -286,7 +296,10 @@ export function buildFilm({ film: given, timeline, measure, assets = new Map(), 
         from: { shot: index - 1, background: prev.background, sampled: from, t: prev.start + prev.duration },
       };
     }
-    const args = { from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, background: shot.background, direction: shot.cut.direction };
+    // `landing`: the incoming shot as the cut ends, for a cut that carries the one hand from the outgoing pose to where the
+    // incoming board's writing starts (cuts/hands.mjs); only a look with a hand has one
+    const landing = look.hand ? sampleShot(index, shot.cutDur) : undefined;
+    const args = { from, to: sampleShot(index, local), p: local / shot.cutDur, canvas, look, background: shot.background, direction: shot.cut.direction, ...(landing ? { landing } : {}) };
     // the smear, when the resolved cut asks for it (the shot's, the root cut's or the look's cutStyle), inside the window
     if (shot.cut.smear && args.p > 0 && args.p < 1) return smearedFrame(shot, args, 1 / (timeline.fps * shot.cutDur));
     return { background: shot.background, sampled: shot.cut.entry.apply(args) };

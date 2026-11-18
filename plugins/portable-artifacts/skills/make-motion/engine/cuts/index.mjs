@@ -19,6 +19,7 @@ import { ENTRY_EDGE, entryVector } from './edges.mjs';
 import { LAYER_CUTS } from './layers.mjs';
 import { SHADER_CUTS } from './shaders/index.mjs';
 import { erase } from './erase.mjs';
+import { handOf, withoutHand, incomingHand, leaving as handLeaving } from './hands.mjs';
 
 const HALF = 2;
 const SLIDE = Object.freeze({ dur: 0.4, ease: 'inOutCubic' });
@@ -115,18 +116,26 @@ export const edgeTravel = (curve, direction, canvas) => (q0, q1) => Math.abs(cur
 
 // Only the shot slides: the shared background stays (see backgroundNode()), so the cut happens over one surface. The
 // incoming shot comes in from edge `direction` and pushes the outgoing one out by the opposite edge.
-function slideParts({ from, to, p, canvas, direction }) {
+// A drawing hand is never carried by the pan (m5, gate-marker-2 ruling 2): there is one hand at every frame. The outgoing hand
+// leaves by the right edge over the first part of the pan, the incoming board's hand comes in from it over the last part, to where
+// the board's first stroke is (cuts/hands.mjs); both are drawn over the boards. A frame without a hand is as it was.
+const PAN_HAND_OUT = 0.4;
+const PAN_HAND_IN = 0.6;
+
+function slideParts({ from, to, p, canvas, direction, landing }) {
   const curve = ease(SLIDE.ease);
   const [ux, uy] = EDGES[direction];
   const outgoing = new Map(from.map((n) => [n.id, n]));
   const shared = backgroundIds(from, to);
-  const leaving = from.filter((n) => !shared.has(n.id)), arriving = to.filter((n) => !shared.has(n.id));
+  const leaving = withoutHand(from).filter((n) => !shared.has(n.id)), arriving = withoutHand(to).filter((n) => !shared.has(n.id));
   const still = to.filter((n) => shared.has(n.id)).map((n) => backgroundNode(outgoing.get(n.id), n, curve(p)));
   const moving = (q) => {
     const eq = curve(q);
     return [...shifted(leaving, -ux * eq * canvas.w, -uy * eq * canvas.h), ...shifted(arriving, ...edgeOffset(direction, eq, canvas))];
   };
-  return { still, moving, travel: edgeTravel(curve, direction, canvas), vector: [ux, uy], over: [] };
+  const out = handOf(from);
+  const over = [...(out && p < PAN_HAND_OUT ? [handLeaving(out, p / PAN_HAND_OUT, canvas)] : []), ...incomingHand({ to, landing, p, canvas, from: PAN_HAND_IN, until: 1 })];
+  return { still, moving, travel: edgeTravel(curve, direction, canvas), vector: [ux, uy], over };
 }
 
 // The punch zooms the incoming shot about the centre of the canvas. A fixed node stays put, as it does under the camera,

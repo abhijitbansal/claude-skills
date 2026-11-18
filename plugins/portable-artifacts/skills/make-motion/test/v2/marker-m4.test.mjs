@@ -56,9 +56,10 @@ for (const format of FORMATS) {
     const first = (prefix) => order.findIndex((id) => id.startsWith(prefix));
     const last = (prefix) => order.findLastIndex((id) => id.startsWith(prefix));
     for (let k = 0; k < 4; k++) assert.ok(last('flow.title') < first(`flow.node${k}.`), `the title heads node ${k}`);
+    // replaced by m5 ruling 4 (marker-m5.test.mjs checks the full order): the arrow is drawn once both its boxes exist
     for (let k = 0; k < 3; k++) {
-      assert.ok(last(`flow.node${k}.`) < first(`flow.edge${k}.`), `box ${k} (with its label) is drawn before the arrow ${k} that leaves it`);
-      assert.ok(last(`flow.edge${k}.`) < first(`flow.node${k + 1}.`), `the arrow ${k} ends on the empty place of box ${k + 1}, which is drawn after it`);
+      assert.ok(last(`flow.node${k}.card`) < first(`flow.edge${k}.`), `box ${k} is drawn before the arrow ${k} that leaves it`);
+      assert.ok(last(`flow.node${k + 1}.card`) < first(`flow.edge${k}.`), `the arrow ${k} is drawn after the box ${k + 1} it points at`);
     }
   });
 }
@@ -157,9 +158,16 @@ test('erase: the hand leaves where the outgoing board left it and arrives where 
   const gap = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   assert.ok(gap(at(0.0001), from[0]) < 0.05 * canvas.w, 'at the first frame of the wipe the hand is where it was');
   assert.ok(gap(at(0.9999), to[0]) < 0.05 * canvas.w, 'at the last frame of the wipe the hand is where the incoming board has it');
+  // m5 (gate-marker-2 ruling 1): the hand leaves by the right edge and a hand with an eraser comes back; a step between two hands
+  // out of frame is no jump (marker-m5.test.mjs samples the real films), and a frame between them holds no hand
   let worst = 0, prev = at(0.0001);
-  for (let p = 0.01; p < 1; p += 0.01) { const now = at(p); worst = Math.max(worst, gap(prev, now)); prev = now; }
-  assert.ok(worst < 0.2 * canvas.w, `no step of the hand across the wipe is wider than a fifth of the board (${Math.round(worst)} px)`);
+  for (let p = 0.01; p < 1; p += 0.01) {
+    const now = at(p);
+    if (!now) { prev = undefined; continue; }
+    if (prev && !(now.x > canvas.w && prev.x > canvas.w)) worst = Math.max(worst, gap(prev, now));
+    prev = now;
+  }
+  assert.ok(worst < 0.2 * canvas.w, `no visible step of the hand across the wipe is wider than a fifth of the board (${Math.round(worst)} px)`);
 });
 
 // ---- ruling 3: at rest the hand sits on the board, fully visible (never cropped in a corner) ----
@@ -201,8 +209,9 @@ for (const format of FORMATS) {
 
   test(`marker compare at ${format}: the vs has at least 36 units of clear space round it`, () => {
     const { nodes, boxes } = expandShot(structuredClone(GAP), 'marker', format);
-    const [v, s] = [byId(nodes, 'gap.vs.v'), byId(nodes, 'gap.vs.s')].map(boxOfD);
-    const mark = [Math.min(v[0], s[0]), Math.min(v[1], s[1]), Math.max(v[2], s[2]), Math.max(v[3], s[3])];
+    // replaced by m5 ruling 6: the vs is a text in the look's face (gap.vs), its box the layout's
+    const vs = byId(nodes, 'gap.vs');
+    const mark = [vs.props.x, vs.props.y, vs.props.x + vs.props.layout.width, vs.props.y + vs.props.layout.height];
     const [a, b] = [boxes.left, boxes.right];
     const wide = format === '16:9';
     const clear = wide ? Math.min(mark[0] - (a[0] + a[2]), b[0] - mark[2]) : Math.min(mark[1] - (a[1] + a[3]), b[1] - mark[3]);
@@ -211,9 +220,10 @@ for (const format of FORMATS) {
 
   test(`marker compare at ${format}: no point starts with a dash`, () => {
     const { nodes } = expandShot(structuredClone(GAP), 'marker', format);
+    // replaced by m5 ruling 6: the points follow the title on its own line, so no node holds a point starting a line
     for (const side of ['left', 'right']) {
-      const [first] = byId(nodes, `gap.${side}.points`).props.layout.lines[0].words;
-      assert.ok(!/^[-–—]/.test(first.text ?? first.word ?? String(first)), `${side} points start with "${first.text ?? first.word ?? first}"`);
+      const words = byId(nodes, `gap.${side}.title`).props.layout.lines.flatMap((l) => l.words).map((w) => w.text);
+      assert.ok(words.every((w) => !/^[-–—]/.test(w)), `${side}: ${words.join(' ')}`);
     }
   });
 

@@ -157,11 +157,13 @@ function latestEnds(runs, unit, cap, hardEnd) {
 // that cannot be drawn by then at the speed cap runs on into the shot's hold (up to `hardEnd`), a run that cannot be drawn
 // even then sets its lesser strokes (hatch fills, decorative marks), longest first, and draws the rest. Each stroke carries the
 // drawing speed it ends up with (units a second); `skipped` holds the strokes the hand leaves to appear set.
-function timeWindow(strokes, [opens, to], unit, before, { cap, hardEnd }) {
+function timeWindow(strokes, [opens, to], unit, before, { cap, hardEnd, noSet = false }) {
   const from = Math.max(opens, before?.end ?? opens);
   const limit = Math.max(to, hardEnd);
   const floorEnd = (run) => from + sum(travelsOf(run, unit, before)) + sum(run.map((s) => floorOf(s, unit, cap)));
-  const lesser = strokes.filter((s) => s.lesser && !s.put).sort((a, b) => b.total - a.total);
+  // look.hand.noSet (marker, gate-marker-2: nothing is on the board without the pen): no stroke is ever set at once for want of
+  // time; a run that does not fit is the hand-speed finding
+  const lesser = noSet ? [] : strokes.filter((s) => s.lesser && !s.put).sort((a, b) => b.total - a.total);
   // a ground is put on when its sentence opens, whatever the time: the hand writes onto it
   const skipped = strokes.filter((s) => s.put);
   let kept = strokes.filter((s) => !s.put);
@@ -190,7 +192,7 @@ function timeWindow(strokes, [opens, to], unit, before, { cap, hardEnd }) {
  * seconds, and set is [{ node, at }] (decorative strokes with no time to draw, put on at once when their sentence opens).
  * `opts.unit` is px per unit (default 1). The first element is complete at 0.
  */
-export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {}) {
+export function strokePlanned(nodes, timing, look, { unit = 1, rest = null, lead: cutEnd = 0 } = {}) {
   const all = elementsOf(nodes, unit);
   if (all.length === 0) return { plan: [], set: [] };
   // look.hand.drawFirst (marker, gate-marker-1 ruling 1): the hand draws every element, furniture included, none is whole on
@@ -201,11 +203,15 @@ export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {
   const elements = drawFirst ? all : all.filter((e) => !isFurniture(e.node));
   const standing = furniture.flatMap((e) => e.strokes.map((s, k) => ({ ...s, id: `${e.node.id}#${k}`, node: e.node.id, sentence: 0, start: 0, end: 0, speed: 0 })));
   if (elements.length === 0) return { plan: Object.freeze(standing.map((s) => Object.freeze(s))), set: [] };
-  const spoken = windowsOf(timing);
-  const sentences = drawFirst ? [[-HEAD_START, spoken[0][1]], ...spoken.slice(1)] : spoken;
+  // `lead` (m5, gate-marker-2 rulings 1 and 2): the seconds the cut that opens the shot holds the board clear. Nothing is written
+  // before it: every window opens at `lead` at the earliest, and a shot after a cut has no HEAD_START (its pen goes down as the
+  // cut ends, the hand arriving on the cut's own frames)
+  const held = ([from, to]) => [Math.max(from, cutEnd), Math.max(to, cutEnd)];
+  const spoken = windowsOf(timing).map(held);
+  const sentences = drawFirst ? [[cutEnd > 0 ? cutEnd : -HEAD_START, spoken[0][1]], ...spoken.slice(1)] : spoken;
   // an element that names its own window (props.window, [from, to] shot seconds: an underline drawn as its word is
   // spoken) gets one after the sentences'; windows are timed in order of their start
-  const windows = [...sentences, ...elements.flatMap((e) => (isWindow(e.node.props.window) ? [windowFor(e.node.props.window, timing)] : []))];
+  const windows = [...sentences, ...elements.flatMap((e) => (isWindow(e.node.props.window) ? [held(windowFor(e.node.props.window, timing))] : []))];
   let own = sentences.length;
   const tagged = elements.map((e, i) => {
     const mine = isWindow(e.node.props.window) ? own++ : sentenceOf(e, i, elements.length, sentences.length);
@@ -220,7 +226,9 @@ export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {
   const origin = rest ? { points: [rest], end: 0, rest: true } : null;
   const order = windows.map((win, w) => w).sort((x, y) => windows[x][0] - windows[y][0] || x - y);
   const cap = look?.hand?.maxSpeed ?? DEFAULT_CAP;
-  const hardEnd = Math.max(latestLanding(timing), timing.duration - DRAW_TAIL);
+  // look.hand.clearBy (marker, gate-marker-2 ruling 5): the last stroke ends this long before the shot does, so the hand has left
+  // the finished writing for its rest point on the shot's last frame (the cut starts from that frame)
+  const hardEnd = Math.max(latestLanding(timing), timing.duration - (look?.hand?.clearBy ?? DRAW_TAIL));
   const set = [];
   const runs = order.map((w) => later.filter((s) => s.sentence === w));
   const latest = latestEnds(runs, unit, cap, hardEnd);
@@ -233,7 +241,7 @@ export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {
   const timed = order.reduce((done, w, k) => {
     const mine = runs[k];
     if (mine.length === 0) return done;
-    const run = timeWindow(mine, windows[w].map((v, i) => (i === 1 ? Math.min(v, Math.max(windows[w][0], opensAfter(k))) : v)), unit, origin && done.length === first.length ? origin : done.at(-1), { cap, hardEnd: latest[k] });
+    const run = timeWindow(mine, windows[w].map((v, i) => (i === 1 ? Math.min(v, Math.max(windows[w][0], opensAfter(k))) : v)), unit, origin && done.length === first.length ? origin : done.at(-1), { cap, hardEnd: latest[k], noSet: look?.hand?.noSet === true });
     set.push(...run.skipped.map((s) => ({ node: s.node, at: run.opens })));
     return [...done, ...run.timed];
   }, first);

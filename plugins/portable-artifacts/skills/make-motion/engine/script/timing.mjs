@@ -160,6 +160,16 @@ function timedShot(shot, pace, words, index) {
 function shotPace(film, shot, pace) {
   const looks = registries.looks;
   const look = looks && typeof film.look === 'string' && looks.has(film.look) ? looks.get(film.look) : null;
+  const base = kindPace(look, shot, pace);
+  // look.hand.afterCut (marker, gate-marker-2): the shot opens with its cut's window, in which the hand writes nothing, so the hold
+  // after the last word grows by that window and the board has the drawing time it would have had without the cut
+  if (look?.hand?.afterCut !== true) return base;
+  const index = film.shots.indexOf(shot);
+  const lead = index > 0 ? resolveShotCut(film, index, { look }).dur : 0;
+  return lead > 0 ? { ...base, tail: base.tail + lead } : base;
+}
+
+function kindPace(look, shot, pace) {
   const floor = shot.show === 'end' ? look?.kinds?.end?.wordmark?.tail : undefined;
   if (Number.isFinite(floor) && shot.mark !== undefined && floor > pace.tail) return { ...pace, tail: floor };
   // a kind's own tail floor in look data (look.kinds.<kind>.tail, ledger: gate-ledger-2 ruling 2, the accent and the

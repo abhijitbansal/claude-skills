@@ -87,8 +87,51 @@ export function handOutline(look, unit) {
   return outer.map(([x, y]) => [x * k, y * k]);
 }
 
-/** The hand's path nodes, the marker's tip at the origin, in px for `unit`; each with role 'hand'. */
-export function handNodes(look, unit) {
+// ---- the eraser (m5, gate-marker-2 ruling 1): the same hand holding a felt board eraser instead of the marker ----
+const ERASER_HAND = 1.25; // the hand is drawn this much larger over the eraser: a board eraser is held in the whole palm
+const ERASER_CORNER = 0.16; // of the short side: the eraser's rounded corners
+const FELT_SHARE = 0.2; // of the short side: the felt strip along its lower edge
+const ERASER_HAND_AT = Object.freeze([0.08, -0.22]); // the body's centre, as shares of the eraser's [long, short] sides from its centre
+const BODY_CENTRE = Object.freeze([430, 20]); // the body's centre in drawing units
+const HAND_PART_IDS = Object.freeze(['body', 'pocket', 'crease0', 'crease1', 'crease2', 'index', 'indexEdge', 'thumb', 'thumbEdge', 'thumbCrease']);
+const CORNER_STEPS = 6;
+
+// A rounded rectangle about the origin as a closed point list.
+function roundedBox(w, h, r) {
+  const corners = [[w / 2 - r, h / 2 - r, 0], [-w / 2 + r, h / 2 - r, 90], [-w / 2 + r, -h / 2 + r, 180], [w / 2 - r, -h / 2 + r, 270]];
+  const points = corners.flatMap(([cx, cy, from]) => Array.from({ length: CORNER_STEPS + 1 }, (_, i) => {
+    const a = ((from + (90 * i) / CORNER_STEPS) * Math.PI) / 180;
+    return [cx + r * Math.cos(a), cy + r * Math.sin(a)];
+  }));
+  return [...points, [...points[0]]];
+}
+
+function eraserNodes(look, unit, [long, short]) {
+  const colours = look.hand.colours;
+  const k = HAND_SCALE * (look.hand.scale ?? 1) * unit * ERASER_HAND;
+  const [ax, ay] = [ERASER_HAND_AT[0] * long, ERASER_HAND_AT[1] * short];
+  const r = ERASER_CORNER * short;
+  const stroke = (width) => ({ stroke: colourOf(look, colours.outline), strokeWidth: width, lineCap: 'round' });
+  const felt = roundedBox(long, short * FELT_SHARE, r * 0.5).map(([x, y]) => [x, y + short * (0.5 - FELT_SHARE / 2)]);
+  const eraser = [
+    node('path', 'hand.eraser', { d: polyline(roundedBox(long, short, r)), role: 'hand', fill: colourOf(look, colours.eraser ?? colours.barrel), ...stroke(OUTLINE * k) }),
+    node('path', 'hand.felt', { d: polyline(felt), role: 'hand', fill: colourOf(look, colours.felt ?? colours.outline), ...stroke(CREASE * k) }),
+  ];
+  const hand = parts('hand').filter((p) => HAND_PART_IDS.includes(p.id)).map((p) => node('path', `hand.${p.id}`, {
+    d: polyline(p.points.map(([x, y]) => [(x - BODY_CENTRE[0]) * k + ax, (y - BODY_CENTRE[1]) * k + ay])),
+    role: 'hand',
+    ...(p.fill ? { fill: colourOf(look, colours[p.fill]) } : {}),
+    ...(p.stroke ? { ...stroke(p.width * k) } : {}),
+  }));
+  return [...eraser, ...hand];
+}
+
+/**
+ * The hand's path nodes, the marker's tip at the origin, in px for `unit`; each with role 'hand'. `tool` { tool: 'eraser',
+ * size: [long, short] px }: the hand holds a board eraser of that size, centred on the origin, instead of the marker.
+ */
+export function handNodes(look, unit, tool = null) {
+  if (tool?.tool === 'eraser') return eraserNodes(look, unit, tool.size);
   const k = HAND_SCALE * (look.hand.scale ?? 1) * unit;
   const colours = look.hand.colours;
   return parts(look.hand.shape).map((p) => node('path', `hand.${p.id}`, {

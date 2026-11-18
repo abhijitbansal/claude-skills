@@ -230,7 +230,8 @@ function expandDesk(shot, ctx, data, times) {
   if (card !== null) boxes.mark = card.turned;
   const marks = card === null ? [] : cardNodes(shot, ctx, parts, card, data);
   // the band under the closing line (gate-keynote-2 ruling 5: over it the band greyed the dark glyphs mid-word)
-  return { nodes: [...titleSweep(shot, ctx, data, boxes.title), ...marks, ...nodes], boxes, hero };
+  // data.markLast (marker, gate-marker-2 ruling 3): the mark is the last thing on the board, drawn by the pen after the headline and the ask
+  return { nodes: data.markLast === true ? [...titleSweep(shot, ctx, data, boxes.title), ...nodes, ...marks] : [...titleSweep(shot, ctx, data, boxes.title), ...marks, ...nodes], boxes, hero };
 }
 
 // data.sweep (keynote): the look's band of light crosses the closing line once, after the complete first frame and

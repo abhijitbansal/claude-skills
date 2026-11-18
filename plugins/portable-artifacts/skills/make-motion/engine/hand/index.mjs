@@ -13,7 +13,7 @@ import { unitOf } from '../units.mjs';
 import { wobble } from './geometry.mjs';
 import { strokePlan, strokePlanned, polylinePoints } from './strokes.mjs';
 import { arrivalTrack } from '../kinds/arrivals.mjs';
-import { handPose, restPoint, startsAtRest } from './pose.mjs';
+import { handPose, restPoint, startsAtRest, angleAt } from './pose.mjs';
 import { handNodes, handOutline } from './shape.mjs';
 import { flattenForHand } from './flatten.mjs';
 
@@ -23,6 +23,8 @@ export { handNodes } from './shape.mjs';
 
 const FPS = 30;
 const COVER_SECONDS = 0.3;
+const TEXT_UP = 0.74; // em above the baseline a written line's ink reaches (capitals) and below it (descenders): the board's text boxes
+const TEXT_DOWN = 0.22;
 // a word's entrance, and the colour a word not yet spoken is given (the ghost grey of a recolour look): what is written is
 // written in the marker's own colour from the first stroke, never a grey that lights
 const WORD_ENTRANCE = Object.freeze(['opacity', 'x', 'y', 'scale', 'ghost', 'fill']);
@@ -77,25 +79,70 @@ function drawnNode(n, strokes) {
 }
 
 // x and y tracks of the hand at every frame of the shot, a run of equal values kept to its ends (a still hand stays still).
-function poseTracks(plan, look, ctx, duration) {
-  const xs = [], ys = [];
+function poseTracks(plan, look, ctx, duration, rest) {
+  const xs = [], ys = [], turns = [];
   const frames = Math.ceil(duration * FPS);
   for (let f = 0; f <= frames; f++) {
     const t = Math.min(duration, f / FPS);
-    const pose = handPose(plan, t, look, { canvas: ctx.canvas, unit: ctx.unit });
-    for (const [keys, v] of [[xs, pose.x], [ys, pose.y]]) {
+    const pose = handPose(plan, t, look, { canvas: ctx.canvas, unit: ctx.unit, rest });
+    for (const [keys, v] of [[xs, pose.x], [ys, pose.y], [turns, pose.angle]]) {
       if (keys.length >= 2 && keys.at(-1).v === v && keys.at(-2).v === v) keys.at(-1).t = t;
       else keys.push({ t, v });
     }
   }
-  return { x: keyed(xs), y: keyed(ys) };
+  return { x: keyed(xs), y: keyed(ys), rotate: keyed(turns) };
+}
+
+// ---- where the hand rests (m5, gate-marker-2 ruling 5) ----
+
+const REST_CLEAR = 30; // units the resting hand keeps from everything on the board, not only from touching it
+const padded = ([x, y, w, h], by) => [x - by, y - by, w + 2 * by, h + 2 * by];
+const boxOfPoints = (points) => {
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
+};
+
+// The boxes of what stands on the board when the shot ends: each written line's ink and each drawn polyline's extent.
+function boardBoxes(nodes, unit) {
+  return nodes.flatMap((n) => {
+    if (n.type === 'text' && n.props.layout && n.props.font) {
+      const size = n.props.font.size;
+      return n.props.layout.lines.map((line) => [(n.props.x ?? 0) + line.x, (n.props.y ?? 0) + line.y - TEXT_UP * size, line.width, (TEXT_UP + TEXT_DOWN) * size]);
+    }
+    const points = n.type === 'path' ? polylinePoints(n.props.d) : null;
+    if (points === null || n.props.put === true) return [];
+    const [x, y, w, h] = boxOfPoints(points);
+    return [[x + (n.props.x ?? 0), y + (n.props.y ?? 0), w, h]];
+  }).filter((box) => box.every(Number.isFinite) && box[2] * box[3] > 4 * unit * unit);
+}
+
+/**
+ * The point the hand rests at in this shot, in px: look.hand.restAt for the format, else the first of look.hand.restAlt (a list of
+ * canvas shares per format) where the whole hand lies clear of everything on the board and inside the frame, else the one it
+ * overlaps least. The hand at rest never hangs over finished writing.
+ */
+export function chooseRest(nodes, look, canvas, unit) {
+  const primary = restPoint(look, canvas);
+  const alt = look.hand.restAlt?.[canvas.w >= canvas.h ? 'wide' : 'tall'] ?? [];
+  if (alt.length === 0) return primary;
+  const boxes = boardBoxes(nodes, unit);
+  const outline = handOutline(look, unit);
+  const score = ([x, y]) => {
+    const r = (angleAt(look, y, canvas, unit) * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
+    const poly = outline.map(([ox, oy]) => [x + ox * c - oy * s, y + ox * s + oy * c]);
+    const off = poly.some(([px, py]) => px < 0 || py < 0 || px > canvas.w || py > canvas.h) ? 1 : 0;
+    return off * boxes.length + boxes.filter((box) => overlaps(poly, padded(box, REST_CLEAR * unit))).length;
+  };
+  const tries = [primary, ...alt.map(([fx, fy]) => [fx * canvas.w, fy * canvas.h])];
+  return tries.reduce((best, p) => (score(p) < score(best) ? p : best), tries[0]);
 }
 
 /** The hand's plan for a shot's nodes, as handLayer draws them (groups lifted, curves and fills made strokes, polylines wobbled). */
 export function handPlan(shotNodes, timing, ctx) {
   const unit = ctx.unit ?? unitOf(ctx.canvas);
   const nodes = flattenForHand(shotNodes, ctx.look, unit).map((n) => (n.type === 'path' ? wobbled(n, ctx.look, ctx.seed ?? 0, unit) : n));
-  return { nodes, ...strokePlanned(nodes, timing, ctx.look, { unit, rest: ctx.look.hand && startsAtRest(ctx.look, ctx.canvas) ? restPoint(ctx.look, ctx.canvas) : null }) };
+  const rest = chooseRest(nodes, ctx.look, ctx.canvas, unit);
+  return { nodes, rest, ...strokePlanned(nodes, timing, ctx.look, { unit, lead: ctx.lead ?? 0, rest: ctx.look.hand && startsAtRest(ctx.look, ctx.canvas) ? rest : null }) };
 }
 
 // A node the hand has no time to draw, put on at once when its sentence opens: a stepped opacity (0 then 1, never part-way).
@@ -112,11 +159,11 @@ function setNode(n, at) {
 export function handLayer(shotNodes, timing, ctx) {
   const look = ctx.look;
   if (!look?.hand) return shotNodes;
-  const { nodes, plan, set } = handPlan(shotNodes, timing, ctx);
+  const { nodes, plan, set, rest } = handPlan(shotNodes, timing, ctx);
   const setAt = new Map(set.map((s) => [s.node, s.at]));
   const drawn = nodes.flatMap((n) => (setAt.has(n.id) ? [setNode(n, setAt.get(n.id))] : drawnNode(n, plan.filter((s) => s.node === n.id))));
   const hand = node('group', 'hand', { role: 'hand', rotate: look.hand.angle ?? 0 }, {
-    tracks: poseTracks(plan, look, { ...ctx, unit: ctx.unit ?? unitOf(ctx.canvas) }, timing.duration),
+    tracks: poseTracks(plan, look, { ...ctx, unit: ctx.unit ?? unitOf(ctx.canvas) }, timing.duration, rest),
     children: handNodes(look, ctx.unit ?? unitOf(ctx.canvas)),
   });
   return [...drawn, hand];
@@ -164,7 +211,7 @@ function strokeEdgeFindings(plan, canvas, unit) {
  * The plan's findings: { kind, rule, node, message, t }. `texts`: [{ id, box: [x, y, w, h], done }] the ink box of every
  * text the hand writes or that stands on the board, and the shot second it is finished. `opts`: { canvas, unit, duration }.
  */
-export function handFindings(plan, look, texts, { canvas, unit = 1, duration }) {
+export function handFindings(plan, look, texts, { canvas, unit = 1, duration, rest = null }) {
   const fast = plan.filter((s) => s.speed > look.hand.maxSpeed);
   const out = fast.length === 0 ? [] : [{ kind: 'creative', rule: 'hand-speed', node: fast[0].node, t: fast[0].start,
     message: `too much to draw in this sentence (${Math.round(fast[0].speed)} units a second, the most is ${look.hand.maxSpeed}): cut an element or lengthen the line` }];
@@ -174,7 +221,7 @@ export function handFindings(plan, look, texts, { canvas, unit = 1, duration }) 
   let edge = null;
   for (let f = 0; f <= Math.ceil(duration * FPS); f++) {
     const t = Math.min(duration, f / FPS);
-    const poly = outlineAt(outline, handPose(plan, t, look, { canvas, unit }));
+    const poly = outlineAt(outline, handPose(plan, t, look, { canvas, unit, rest }));
     if (edge === null && poly.some(([x, y]) => x < 0 || y < 0)) edge = t;
     for (const text of texts) {
       const marked = marking.get(text.id).some(([from, to]) => t >= from - EPS && t <= to);

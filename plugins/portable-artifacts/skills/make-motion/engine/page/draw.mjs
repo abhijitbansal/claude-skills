@@ -248,7 +248,8 @@ function clipToReveal(ctx, n) {
 }
 
 // props.blend on any node: how it and its children composite onto what is already drawn. Default source-over.
-const BLEND_MODES = Object.freeze(['multiply', 'screen', 'overlay', 'lighter']);
+// destination-out (m5, the erase cut): inside a props.layer group, a node with it takes its own shape out of what the layer holds
+const BLEND_MODES = Object.freeze(['multiply', 'screen', 'overlay', 'lighter', 'destination-out']);
 
 function applyBlend(ctx, n) {
   const { blend } = n.props;

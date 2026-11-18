@@ -4,6 +4,7 @@
 // strokes it holds, then travels in one eased move; with no stroke for more than look.hand.rest seconds it goes to the
 // look's rest point (look.hand.restAt, shares of the canvas per format), clear of the writing. Pure and DOM-free.
 import { pointAt } from './geometry.mjs';
+import { handOutline } from './shape.mjs';
 
 const HOLD = 0.15; // s the tip stays on a stroke's end before it leaves for the rest point
 const TRAVEL_MIN = 0.12; // s: the shortest move
@@ -16,6 +17,41 @@ const lerp = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k];
 export function restPoint(look, canvas) {
   const [fx, fy] = canvas.w >= canvas.h ? look.hand.restAt.wide : look.hand.restAt.tall;
   return [fx * canvas.w, fy * canvas.h];
+}
+
+// ---- the angle (m5, gate-marker-2 ruling 5: the hand is never cropped by the bottom edge) ----
+
+const BISECT_STEPS = 14;
+const BOTTOM_SLACK = 8; // units kept between the lowest point of the hand and the frame's bottom
+const outlines = new WeakMap(); // look.hand -> Map(unit -> the hand's outline in px)
+
+// How far below the tip the hand's outline reaches when turned `angle` degrees, in px for `unit`.
+function reachBelow(look, unit, angle) {
+  if (!outlines.has(look.hand)) outlines.set(look.hand, new Map());
+  const known = outlines.get(look.hand);
+  if (!known.has(unit)) known.set(unit, handOutline(look, unit));
+  const r = (angle * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
+  return Math.max(...known.get(unit).map(([x, y]) => x * s + y * c));
+}
+
+/**
+ * The angle the hand is turned at with its tip at height `y`: look.hand.angle, turned toward look.hand.minAngle just far enough
+ * that no point of the hand is below the frame (the hand lies flatter at the bottom of the board). look.hand.angle when the look
+ * names no minAngle. Continuous in y.
+ */
+export function angleAt(look, y, canvas, unit) {
+  const top = look.hand.angle ?? 0, floor = look.hand.minAngle;
+  if (floor === undefined || floor >= top) return top;
+  const room = canvas.h - y - BOTTOM_SLACK * unit;
+  if (room >= reachBelow(look, unit, top)) return top;
+  if (room <= reachBelow(look, unit, floor)) return floor;
+  // the reach grows with the angle: the flattest angle that still has the room, found by halving
+  let [lo, hi] = [floor, top];
+  for (let i = 0; i < BISECT_STEPS; i++) {
+    const mid = (lo + hi) / 2;
+    if (reachBelow(look, unit, mid) <= room) lo = mid; else hi = mid;
+  }
+  return lo;
 }
 
 export const REST_SPEED = 6000; // units a second the hand sweeps to or from its rest point (strokes.mjs times the sweep in the same)
@@ -61,17 +97,16 @@ function inGap(prev, next, t, look, rest, unit) {
  * The hand at `t` (shot seconds) by `plan` (strokePlan's): { x, y, angle, down, resting } in canvas px; `down`: the tip
  * is on a stroke; `resting`: at the rest point. `opts`: { canvas, unit }. Pure: the same plan and t give the same pose.
  */
-export function handPose(plan, t, look, { canvas, unit = 1 }) {
-  const angle = look.hand.angle ?? 0;
+export function handPose(plan, t, look, { canvas, unit = 1, rest: chosen = null }) {
   const drawing = plan.find((s) => s.end > s.start && t >= s.start && t <= s.end);
   if (drawing) {
     const [x, y] = pointAt(drawing, (t - drawing.start) / (drawing.end - drawing.start));
-    return { x, y, angle, down: true, resting: false };
+    return { x, y, angle: angleAt(look, y, canvas, unit), down: true, resting: false };
   }
   // look.hand.restAtStart: the first element is on the board when the shot opens, but the hand is not on it: it starts at
   // its rest point, clear of the finished writing (a tall frame's first line is its last, and the tip would sit on it)
   const prev = plan.findLast((s) => s.end <= t && !(s.end <= 0 && startsAtRest(look, canvas)));
   const next = plan.find((s) => s.start > t);
-  const { at, resting } = inGap(prev, next, t, look, restPoint(look, canvas), unit);
-  return { x: at[0], y: at[1], angle, down: false, resting };
+  const { at, resting } = inGap(prev, next, t, look, chosen ?? restPoint(look, canvas), unit);
+  return { x: at[0], y: at[1], angle: angleAt(look, at[1], canvas, unit), down: false, resting };
 }

@@ -308,7 +308,7 @@ test('a layer group composites as one picture at its opacity: its children do no
 test('an unknown blend names the node and the accepted modes', async (t) => {
   const film = { fps: FPS, shots: [{ id: 's', show: 'free', hold: 1, nodes: [box('b', { blend: 'dodge' })] }] };
   const a = await stageFor(t, film); if (!a) return;
-  await assert.rejects(a.page.evaluate(() => window.__seek(0)), /node "b": blend must be one of multiply, screen, overlay, lighter, got "dodge"/);
+  await assert.rejects(a.page.evaluate(() => window.__seek(0)), /node "b": blend must be one of multiply, screen, overlay, lighter, destination-out, got "dodge"/); // m5: the erase cut's removal blend joined the list
 });
 
 const BAD_LAYOUT = { size: 20, width: 10, height: 10, overflow: false, lines: [{ x: 0, y: 16, width: 10, words: [{ text: 'a', index: 0, x: 0, width: 10 }] }] };

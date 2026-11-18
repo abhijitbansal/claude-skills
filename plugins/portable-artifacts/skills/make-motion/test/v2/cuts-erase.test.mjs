@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/kinds/index.mjs';
 import { allLookNames } from '../../engine/looks/index.mjs';
-import { ERASE, passAt } from '../../engine/cuts/erase.mjs';
+import { ERASE, eraseGeometry } from '../../engine/cuts/erase.mjs';
 import { KNOWN_CUES, cueSamples } from '../../scripts/v2/sound/synth.mjs';
 import { fakeSampled } from './helpers/kinds.mjs';
 import { handLook } from './helpers/hand-look.mjs';
@@ -32,17 +32,21 @@ test('at progress 0 the frame is the outgoing shot, at 1 the incoming', () => {
   assert.equal(cut.apply({ from, to, p: 1, canvas: CANVAS, look }), to);
 });
 
-test('between, three overlapping passes wipe left to right, the top one first, in opaque paper and a mixed smear', () => {
+// replaced by m5 (gate-marker-2 ruling 1): the passes are soft-edged masks on a layer holding the old ink, never paper painted over the board
+test('between, the old ink is on a layer of its own and an even number of passes remove it, the first from the right, none painted over the board', () => {
   const cut = registries.cuts.get('erase');
   const { from, to } = frames();
-  const mid = cut.apply({ from, to, p: 0.5, canvas: CANVAS, look });
-  const wipes = mid.filter((n) => n.id.startsWith('erase.wipe'));
-  assert.equal(wipes.length, 2, 'at half way the top two passes have started and the third is about to');
-  assert.ok(passAt(0, 0.5) > passAt(1, 0.5) && passAt(1, 0.5) > passAt(2, 0.5), 'the top pass leads');
-  assert.ok(mid.filter((n) => n.id.startsWith('erase.')).every((n) => n.opacity === 1), 'nothing translucent');
-  assert.equal(wipes[0].props.fill, look.palette.paper);
-  assert.ok(mid.some((n) => n.id === 'old'), 'the outgoing board is still there where it is not wiped');
-  assert.ok(passAt(2, 1) >= 1, 'the last pass reaches the right edge by the end');
+  const geo = eraseGeometry(CANVAS);
+  assert.ok(geo.count >= 4 && geo.count % 2 === 0, 'an even number of passes: the last ends where the first began');
+  const mid = cut.apply({ from, to, p: 0.3, canvas: CANVAS, look });
+  const layer = mid.find((n) => n.id === 'erase.old');
+  assert.equal(layer.props.layer, true);
+  assert.ok(layer.children.some((n) => n.id === 'old'), 'the outgoing board is on the layer, where it is not wiped');
+  const masks = layer.children.filter((n) => n.props.blend === 'destination-out');
+  assert.ok(masks.length > 0 && masks.every((n) => n.opacity > 0 && n.opacity <= 1));
+  assert.ok(masks.some((n) => n.id.startsWith('erase.pass0.body')) && !masks.some((n) => n.id.startsWith(`erase.pass${geo.count - 1}.`)), 'the top pass leads');
+  assert.ok(mid.every((n) => n.props.fill !== look.palette.paper), 'no paper rectangle over the board');
+  assert.ok(ERASE.passes[1] > ERASE.passes[0]);
 });
 
 test('every look names a sound for erase: null in desk, pop and cosmos, the erase cue in the hand look', () => {

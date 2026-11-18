@@ -61,8 +61,8 @@
       "id": "print",
       "show": "media",
       "src": "photo.png",
-      "caption": "Dawn Ridge, the best seller",
-      "say": "Dawn Ridge is the best seller."
+      "caption": "Dawn Ridge",
+      "say": "This print is Dawn Ridge."
     },
     {
       "id": "gap",
@@ -87,10 +87,10 @@
       "id": "learned",
       "show": "list",
       "title": "What we learned",
-      "say": "The North buys most. Dawn Ridge sells best. Every order is printed, packed, shipped.",
+      "say": "The North buys most. The West buys least. Every order is printed, packed, shipped.",
       "items": [
         "The North buys most",
-        "Dawn Ridge sells best",
+        "The West buys least",
         "Every order is printed, packed, shipped"
       ]
     },

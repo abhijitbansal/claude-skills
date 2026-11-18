@@ -64,9 +64,12 @@ function sidesAt(shot, ctx, data, { size, width, values }) {
   // the points in the display serif (look review 2: the grotesque was a face used nowhere else)
   const pointFont = fontFor(look, 'display', pointSize(look, data, { hero, title: size }, unit), unit);
   return SIDES.map((k, i) => {
-    const title = layoutText({ text: setCase(look, 'display', shot[k].title), font: titleFont, maxWidth: width, measure });
     const text = pointsText(shot[k], { dash: !data.plainPoints });
-    const points = text === null ? null : layoutText({ text, font: pointFont, maxWidth: width, measure });
+    // data.inlinePoints (marker, gate-marker-2 ruling 6): the points follow the title on its own line ("North orders"), so the
+    // label is one line, not two that read as separate labels, and it is the label of the bar drawn under it
+    const inline = data.inlinePoints === true && text !== null && shot.mode !== 'before-after';
+    const title = layoutText({ text: setCase(look, 'display', inline ? `${shot[k].title} ${text}` : shot[k].title), font: titleFont, maxWidth: width, measure });
+    const points = text === null || inline ? null : layoutText({ text, font: pointFont, maxWidth: width, measure });
     const valueH = values ? CAP_HEIGHT * values.size + data.valueGap * values.size : 0;
     const titleH = CAP_HEIGHT * size + title.lines.at(-1).y - title.lines[0].y;
     const pointsH = points === null ? 0 : data.titleGap * size + CAP_HEIGHT * pointFont.size + points.lines.at(-1).y - points.lines[0].y;
@@ -250,6 +253,17 @@ function versusMark(id, ctx, [cx, cy], at) {
   ];
 }
 
+// The vs as handwriting (look data `vs: 'text'`, marker: gate-marker-2 ruling 6): "vs" set in the look's own face, centred on
+// (cx, cy), in the accent; the hand writes it like any word (a drawn V and S in a thin stroke read as another typeface).
+const VS_TEXT_STEP = 3;
+const NO_WRAP = 1e6;
+function versusText(id, ctx, [cx, cy]) {
+  const { look, unit, measure } = ctx;
+  const font = fontFor(look, 'display', sizeAt(look, VS_TEXT_STEP, unit), unit);
+  const layout = layoutText({ text: VS_WORD, font, maxWidth: NO_WRAP, measure });
+  return [node('text', `${id}.vs`, { x: cx - layout.width / HALF, y: cy - layout.height / HALF, layout, font, fill: colourOf(look, 'accent') })];
+}
+
 // A value's fill while its side is spoken (look data `valueAccent`, cosmos): the accent on the left card until the
 // turn and on the right one after it, else ink, over the draw move (under the scrim an accent read as olive).
 function spokenFill(look, turn, lifts) {
@@ -286,6 +300,7 @@ function betweenMarks(shot, ctx, data, [a, b], turn) {
   const wide = isWide(canvas);
   if (shot.mode !== 'before-after') {
     const centre = wide ? [(a[0] + a[2] + b[0]) / HALF, a[1] + a[3] / HALF] : [a[0] + a[2] / HALF, (a[1] + a[3] + b[1]) / HALF];
+    if (data.vs === 'text') return versusText(shot.id, ctx, centre);
     return data.vs === 'pill' ? versusPill(shot.id, ctx, centre, turn) : versusMark(shot.id, ctx, centre, turn);
   }
   const inset = look.grid.gutter * unit;

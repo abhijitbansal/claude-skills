@@ -128,7 +128,8 @@ export function diagramLayout(shot, ctx, t) {
   const room = roomOf(ctx);
   const title = titleOf(shot, ctx, room);
   const top = room.y + title.h + (title.h > 0 ? ctx.data.titleGap * ctx.unit : 0);
-  const area = { x: room.x, y: top, w: room.w, h: room.y + room.h - top };
+  // data.bottomRoom (marker, gate-marker-2 ruling 5): units kept clear under the last box, so the drawing hand never leaves the frame
+  const area = { x: room.x, y: top, w: room.w, h: room.y + room.h - top - (ctx.data.bottomRoom ?? 0) * ctx.unit };
   const layout = shot.layout ?? (isWide(ctx.canvas) ? 'row' : 'column');
   const fit = fitDiagram(shot, { look: ctx.look, data: ctx.data, area, unit: ctx.unit, measure: ctx.measure, layout, steps: ctx.data.steps, floorStep: floorStep(ctx.canvas), maxSize: title.maxSize });
   const routes = edgeRoutes(shot, fit.boxes, ctx.data.margin * ctx.unit);
@@ -149,20 +150,23 @@ export function diagramLayout(shot, ctx, t) {
   return { nodes: ordered, boxes, fit, layout };
 }
 
-// The order a hand draws a diagram in (gate-marker-1 ruling 2): the title, then each box with its label, and an arrow (with its
-// label) right after the box it leaves, so the hand ends it on the empty place of the next box (it never hangs over a finished
-// label while it waits) and the box is drawn where the arrow points.
+// The order a hand draws a diagram in (gate-marker-2 ruling 4, which replaces the round 1 order): the title, then each box, then
+// the arrows that now join two boxes that exist (with their labels), then the box's own label: a label is written inside its box
+// after the box is drawn, an arrow is drawn only once both its boxes exist, and the hand ends it on the empty box it points at
+// (the label is not written yet), so it never hangs over a finished label while it waits.
 function storyOrder(shot, { title, boxes, edges, labels }) {
   const index = new Map(shot.nodes.map((n, k) => [n.id, k]));
   const drawn = new Set();
   const out = [...title];
   shot.nodes.forEach((_, k) => {
-    out.push(boxes[k]);
+    const [box, ...text] = boxes[k].children; // the card first, then the label's text (nodeOf)
+    out.push(box);
     drawn.add(k);
     (shot.edges ?? []).forEach((e, j) => {
-      if (!drawn.has(index.get(e.from)) || out.includes(edges[j])) return;
+      if (!drawn.has(index.get(e.from)) || !drawn.has(index.get(e.to)) || out.includes(edges[j])) return;
       out.push(edges[j], ...(labels[j] ? [labels[j]] : []));
     });
+    out.push(...text);
   });
   return out;
 }
