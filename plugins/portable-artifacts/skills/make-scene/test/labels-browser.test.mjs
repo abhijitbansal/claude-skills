@@ -68,20 +68,40 @@ test('caps do not make the city rows hide each other on a phone: api, web and do
   assert.deepEqual(shown, ['api', 'web', 'docs']);
 });
 
-test('the tick numbers of a lifted chart sit centred on their gridlines', async (t) => {
-  const page = await open(t, 'lift-dashboard.scene.json', { width: 1280, height: 800 });
-  if (!page) return;
-  const ticks = await page.evaluate(() => {
-    const graph = JSON.parse(document.querySelector('[data-pa-scene] script[type="application/json"]').textContent);
-    const canvas = document.querySelector('canvas').getBoundingClientRect();
-    const els = [...document.querySelectorAll('.sc-label')];
-    return graph.labels.map((l, i) => ({ l, i })).filter(({ l }) => /^\d+$/.test(l.text)).map(({ l, i }) => {
-      const p = window.PAScene.__scene.project(...l.at);
-      const r = els[i].getBoundingClientRect();
-      return { text: l.text, shown: !els[i].hidden, off: r.top + r.height / 2 - (canvas.top + p.y) };
+// The tick numbers of a lifted chart sit at their gridlines' heights: the label's centre is on the gridline (extended to the
+// label's own x), measured in the DOM against the projected ends of the gridline itself, not against the label's own anchor.
+for (const width of [390, 1280]) {
+  test(`the tick numbers of a lifted chart sit on their gridlines, on a ${width} px screen`, async (t) => {
+    const page = await open(t, 'lift-dashboard.scene.json', { width, height: 800 });
+    if (!page) return;
+    const ticks = await page.evaluate(() => {
+      const graph = JSON.parse(document.querySelector('[data-pa-scene] script[type="application/json"]').textContent);
+      const canvas = document.querySelector('canvas').getBoundingClientRect();
+      const els = [...document.querySelectorAll('.sc-label')];
+      const scene = window.PAScene.__scene;
+      return graph.labels.map((l, i) => ({ l, i })).filter(({ l }) => /^\d+$/.test(l.text)).map(({ l, i }) => {
+        const r = els[i].getBoundingClientRect();
+        const left = scene.project(-6, l.at[1], l.at[2]); // the gridline runs from x = -6 to x = 6 along the back wall
+        const right = scene.project(6, l.at[1], l.at[2]);
+        const x = r.left + r.width / 2 - canvas.left;
+        const lineY = canvas.top + left.y + ((x - left.x) / (right.x - left.x)) * (right.y - left.y);
+        return { text: l.text, shown: !els[i].hidden, off: r.top + r.height / 2 - lineY };
+      });
     });
+    const shown = ticks.filter((tick) => tick.shown);
+    assert.ok(shown.length >= 3, `the chart shows its ticks (${shown.length})`);
+    for (const tick of shown) assert.ok(Math.abs(tick.off) <= TOLERANCE, `tick ${tick.text} is ${tick.off.toFixed(1)} px off its gridline`);
   });
-  const shown = ticks.filter((tick) => tick.shown);
-  assert.ok(shown.length >= 3, `the chart shows its ticks (${shown.length})`);
-  for (const tick of shown) assert.ok(Math.abs(tick.off) <= TOLERANCE, `tick ${tick.text} is ${tick.off.toFixed(1)} px off its gridline`);
-});
+}
+
+// No label is drawn under 11 px, in any world, on a phone: caps and tracking at a small size read badly there.
+const MIN_RENDERED_PX = 11;
+for (const scene of ['city', 'forest', 'galaxy', 'terrain', 'lift-dashboard', 'lift-diagram']) {
+  test(`every label shown in ${scene} is at least ${MIN_RENDERED_PX} px as rendered, on a 390 px screen`, async (t) => {
+    const page = await open(t, `${scene}.scene.json`, { width: 390, height: 800 });
+    if (!page) return;
+    const sizes = await page.evaluate(() => [...document.querySelectorAll('.sc-label:not([hidden])')].map((el) => ({ text: el.textContent, px: parseFloat(getComputedStyle(el).fontSize) })));
+    assert.ok(sizes.length > 0, `${scene} shows labels`);
+    for (const s of sizes) assert.ok(s.px >= MIN_RENDERED_PX, `${s.text} is ${s.px} px`);
+  });
+}

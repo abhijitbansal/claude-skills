@@ -156,6 +156,12 @@ test('caps are set a share smaller than lower case, within the same floor and ce
   assert.equal(fontPx(4, true), MIN_PX, 'and nothing goes under the floor');
 });
 
+test('no label is ever set under 11 px, caps or not, whatever its size and depth ask for', () => {
+  for (const raw of [0, 1, 4, 9, 11, 12, 13.5, 14]) {
+    for (const caps of [false, true]) assert.ok(fontPx(raw, caps) >= 11, `fontPx(${raw}, ${caps}) = ${fontPx(raw, caps)}`);
+  }
+});
+
 test('a label whose anchor is in the frame is kept clear of both edges; one sliding in from off screen is not moved', () => {
   assert.equal(keepInside(200, 100, 390, 10), 200, 'a label clear of the edges stays put');
   assert.equal(keepInside(350, 100, 390, 10), 390 - 10 - 50, 'a box that would pass the right margin is pulled back to it');

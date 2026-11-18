@@ -6,7 +6,7 @@ const NUMERIC = /^[\p{Sc}+\-−]?\d[\d.,:/\-\s]*[%kKMBT]?$/u;
 /** The clear space, in px, between a label's box and the edge of the frame. */
 export const EDGE_MARGIN = 16;
 
-export const MIN_PX = 10;
+export const MIN_PX = 11; // no label, caps or not, is set smaller than this: a phone must still read it
 export const MAX_PX = 22;
 /** Caps with tracking are about a third wider than lower case at the same size, so they are set this much smaller (never under MIN_PX), and labels do not start to hide each other. */
 export const CAPS_SIZE_SHARE = 0.8;

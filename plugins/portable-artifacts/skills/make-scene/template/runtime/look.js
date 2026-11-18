@@ -15,17 +15,19 @@ export const MIN_FACE_RATIO = 2.5;
 const SUN = { base: '#fff4e0', tint: 'page', share: 0.12 }; // a warm key that still follows the theme a little
 const MOON = '#8fa6e8';
 const RIM_COOL = '#6fb4ff'; // a rim a clear step off the warm key...
-const RIM_WARM = '#ff9d6e'; // ...and a warm one against the cool moon
+// ...and, against the cool moon, a rim of the theme's own light (its window glow, mostly): it matches the lit windows, so it never
+// clashes with a tower's colour the way a fixed warm one did on blue towers.
+const RIM_GLOW = { base: '#fff6ec', tint: 'glow', share: 0.5 };
 
 /**
  * One set per sky. `key` is the sun (or moon), `fill` the sky-and-ground hemisphere, `ambient` a floor so nothing goes
  * black; `rim` is a second light from the opposite flank in a different hue, in every dark set, that edges the masses.
  */
 export const LIGHT_SETS = {
-  day: { key: 3.8, fill: 1.2, ambient: 0.05, keyColour: SUN, rim: null },
-  dim: { key: 3.0, fill: 1.0, ambient: 0.05, keyColour: SUN, rim: { intensity: 2.6, colour: RIM_COOL } },
-  night: { key: 4.2, fill: 1.2, ambient: 0.05, keyColour: MOON, rim: { intensity: 2.2, colour: RIM_WARM } },
-  space: { key: 3.4, fill: 0.7, ambient: 0.04, keyColour: SUN, rim: { intensity: 3.0, colour: RIM_COOL } },
+  day: { key: 3.8, fill: 1.2, skyWhite: 0.55, ambient: 0.05, keyColour: SUN, rim: null },
+  dim: { key: 2.5, fill: 0.8, skyWhite: 0.2, ambient: 0.05, keyColour: SUN, rim: { intensity: 2.0, colour: RIM_COOL } },
+  night: { key: 3.6, fill: 0.6, skyWhite: 0.2, ambient: 0.05, keyColour: MOON, rim: { intensity: 1.8, colour: RIM_GLOW } },
+  space: { key: 3.4, fill: 0.7, skyWhite: 0.7, ambient: 0.04, keyColour: SUN, rim: { intensity: 3.0, colour: RIM_COOL } },
 };
 
 /**
@@ -36,11 +38,12 @@ export const LIGHT_SETS = {
  * Both are unit vectors, as { key, rim }.
  */
 export const KEY_FRAME = { right: 1, toward: 0.12, up: 1.1 };
-export const RIM_FRAME = { right: -0.85, toward: -0.45, up: 0.45 };
+export const RIM_FRAME = { right: -0.7, toward: -0.7, up: 0.2 };
 
 /**
- * The edge light on boxes, in dark sets only: a thin band of the rim colour along every edge of a box. A flat wall has no
- * silhouette for a rim light to catch, so a tower seen from the front would show none; this gives it the edge. `strength`
+ * The edge light on boxes, in dark sets only: a thin band of the rim colour along the edges that make a box's outline (an edge
+ * with a face the camera cannot see on its far side; never the edge between two faces it sees, never the foot). A flat wall has
+ * no silhouette for a rim light to catch, so a tower seen from the front would show none; this gives it the edge. `strength`
  * is its brightness, `widthShare` its width as a share of the scene's diagonal (never under `minWidth`, never more than
  * `maxShare` of a box's own smallest side); a box thinner than `minSide` (a gridline) is not edged at all.
  */
@@ -52,7 +55,7 @@ export const EDGE = { strength: 1.1, widthShare: 0.005, minWidth: 0.025, maxShar
  * the surface looks at the camera. A directional rim light alone leaves a lit crescent only on one flank; this edges the
  * whole outline, whichever way the viewer has turned the scene.
  */
-export const FRESNEL = { strength: 0.6, power: 3 };
+export const FRESNEL = { strength: 0.6, power: 3, groundPower: 7 };
 
 export function lightDirections(from) {
   const flat = Math.hypot(from[0], from[2]);
@@ -88,6 +91,9 @@ export const MATERIAL_ROLES = {
   water: { roughness: 0.2, metalness: 0.1 },
 };
 
+/** At night the sea is this share of its day colour, so it sits a step below the land and the land is the focal point. */
+export const WATER_DARK_LEVEL = 0.5;
+
 /**
  * Fog colour is the page, so far things dissolve into it (set by retint). Its range follows the scene: it starts a
  * little behind the fitted camera distance (past the middle of the masses, so a bar's colour is never lifted) and ends
@@ -111,6 +117,38 @@ export const POOL = {
   light: { colour: { base: '#fff3d0', tint: 'glow', share: 0.12 }, opacity: 0.85 },
   dark: { colour: { base: '#ff9a6a', tint: 'glow', share: 0.5 }, opacity: 0.34 },
 };
+
+/**
+ * The contact glow of a lifted chart or diagram: a soft disc under each mass that stands on the floor or a platform, so a bar or
+ * a node sits on its ground instead of hovering. `reach` times the footprint's half-width, plus `margin`, is the disc's radius;
+ * `floorTolerance` is how far from the floor a bar's foot may be and still count as standing on it.
+ */
+export const CONTACT = { reach: 1.7, margin: 0.15, floorTolerance: 0.02, light: { colour: 'shadow', opacity: 0.3 }, dark: { colour: POOL.dark.colour, opacity: 0.4 } };
+
+/**
+ * { colour, opacity } of a contact disc for the page's mode. By night it is the pool's warm glow, a spill of light round the foot;
+ * by day a pale glow would vanish on a pale page, so it is the theme's shadow colour, a soft shadow at the foot.
+ */
+export const contactStyle = (isDark) => CONTACT[isDark ? 'dark' : 'light'];
+
+/**
+ * Where the contact discs go, as [{ x, y, z, r }] (y is the foot of the mass): a lifted chart's bars that stand on the floor, a
+ * lifted diagram's nodes (the lowest slab of each), and nothing in any other graph: a city and a forest have their pool.
+ */
+export function contactFootings(graph) {
+  if (graph.kind !== 'chart' && graph.kind !== 'diagram') return [];
+  const lowest = new Map(); // item index -> the foot of its lowest instance
+  for (const batch of graph.batches ?? []) {
+    if (batch.shape === 'ring') continue;
+    for (const [x, y, z, sx, sy, sz, item] of batch.instances) {
+      if (!(item >= 0)) continue; // a floor, a gridline, a platform: not a mass
+      const foot = y - sy / 2;
+      if (!lowest.has(item) || foot < lowest.get(item).y) lowest.set(item, { x, y: foot, z, r: (Math.max(sx, sz) / 2) * CONTACT.reach + CONTACT.margin });
+    }
+  }
+  const feet = [...lowest.values()];
+  return graph.kind === 'chart' ? feet.filter((f) => Math.abs(f.y) <= CONTACT.floorTolerance) : feet;
+}
 
 /** { colour, opacity } of the pool for a graph's sky and the page's mode; opacity 0 where the pool is not drawn. */
 export function poolStyle(env, isDark) {

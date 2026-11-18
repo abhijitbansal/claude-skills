@@ -7,7 +7,7 @@ import {
   RingGeometry, SphereGeometry, TubeGeometry, Vector3,
 } from 'three';
 import { resolveColour } from './colour.js';
-import { EDGE, FRESNEL, LIGHT_SETS, MATERIAL_ROLES, POOL, SKY_SPACE, fogRange, lightDirections, lightSetName, poolStyle } from './look.js';
+import { EDGE, FRESNEL, LIGHT_SETS, MATERIAL_ROLES, POOL, SKY_SPACE, WATER_DARK_LEVEL, contactFootings, contactStyle, fogRange, lightDirections, lightSetName, poolStyle } from './look.js';
 import { createTravel } from './travel.js';
 
 const UPSAMPLE = 5; // terrain: data cells sit every 5th vertex (Task 5 convention)
@@ -29,6 +29,7 @@ const LIGHT_MIN_RADIUS = 0.16; // the travelling light: a sphere this big (or a 
 const LIGHT_DIAG_SHARE = 0.005;
 const LIGHT_HALO = 2.4; // ...inside a soft halo this many times wider
 const LIGHT_HALO_OPACITY = 0.3;
+const CONTACT_LIFT = 0.012; // a contact disc floats this far above the surface it lights, so the two never fight over a pixel
 const GROUND_REACH = 1.5; // the ground disc reaches this far past the scene's half-diagonal (plus GROUND_EXTRA)...
 const GROUND_EXTRA = 2;
 const GROUND_FADE_START = 0.5; // ...and is fully solid out to this share of its radius, fading to nothing at the rim
@@ -139,9 +140,11 @@ function patchWindows(material, density) {
   };
 }
 
-// Edge light on a unit box (an instanced mass): a band of `edge.colour` along every edge of every face, `edge.width` wide
-// (never more than EDGE.maxShare of the box's own smallest side), `edge.strength` bright; strength 0 draws nothing. Adds to
-// the lit colour after the lights, so it chains after any other patch on the material (the windows).
+// Edge light on a unit box (an instanced mass): a band of `edge.colour` along the edges that make the box's outline, `edge.width`
+// wide (never more than EDGE.maxShare of the box's own smallest side), `edge.strength` bright; strength 0 draws nothing. An edge
+// is on the outline when the face across it turns away from the camera (a lit crescent a light behind the box would leave); the
+// edge between two faces the camera sees, and the one the box stands on, are not. Adds to the lit colour after the lights, so it
+// chains after any other patch on the material (the windows).
 function patchEdges(material, edge) {
   const previous = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
@@ -150,27 +153,40 @@ function patchEdges(material, edge) {
     shader.uniforms.uEdgeStrength = edge.strength;
     shader.uniforms.uEdgeWidth = edge.width;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vEdgeQ;\nvarying vec3 vEdgeS;\nvarying vec3 vEdgeN;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vEdgeQ;\nvarying vec3 vEdgeS;\nvarying vec3 vEdgeN;\nvarying vec3 vEdgeAx0;\nvarying vec3 vEdgeAx1;\nvarying vec3 vEdgeAx2;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vEdgeS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
         vEdgeQ = position * vEdgeS;
-        vEdgeN = normal;`);
+        vEdgeN = normal;
+        mat4 edgeView = modelViewMatrix * instanceMatrix;
+        vEdgeAx0 = normalize(edgeView[0].xyz);
+        vEdgeAx1 = normalize(edgeView[1].xyz);
+        vEdgeAx2 = normalize(edgeView[2].xyz);`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform vec3 uEdgeColour;\nuniform float uEdgeStrength;\nuniform float uEdgeWidth;\nvarying vec3 vEdgeQ;\nvarying vec3 vEdgeS;\nvarying vec3 vEdgeN;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uEdgeColour;\nuniform float uEdgeStrength;\nuniform float uEdgeWidth;\nvarying vec3 vEdgeQ;\nvarying vec3 vEdgeS;\nvarying vec3 vEdgeN;\nvarying vec3 vEdgeAx0;\nvarying vec3 vEdgeAx1;\nvarying vec3 vEdgeAx2;')
       .replace('#include <opaque_fragment>', `{
           vec3 an = abs(vEdgeN);
           vec3 inset = 0.5 * vEdgeS - abs(vEdgeQ);
-          float nearest = an.x > 0.5 ? min(inset.y, inset.z) : (an.y > 0.5 ? min(inset.x, inset.z) : min(inset.x, inset.y));
+          int face = an.x > 0.5 ? 0 : (an.y > 0.5 ? 1 : 2);
+          int first = face == 0 ? 1 : 0;
+          int second = face == 2 ? 1 : 2;
+          int across = inset[first] < inset[second] ? first : second;
+          float nearest = inset[across];
+          float sgn = vEdgeQ[across] >= 0.0 ? 1.0 : -1.0;
+          vec3 axis = across == 0 ? vEdgeAx0 : (across == 1 ? vEdgeAx1 : vEdgeAx2);
+          float outline = 1.0 - smoothstep(-0.05, 0.15, dot(sgn * axis, normalize(vViewPosition)));
+          outline *= (across == 1 && sgn < 0.0) ? 0.0 : 1.0;
           float side = min(vEdgeS.x, min(vEdgeS.y, vEdgeS.z));
           float width = min(uEdgeWidth, ${EDGE.maxShare.toFixed(2)} * side);
-          outgoingLight += uEdgeColour * uEdgeStrength * step(${EDGE.minSide.toFixed(2)}, side) * (1.0 - smoothstep(0.0, width, nearest));
+          outgoingLight += uEdgeColour * uEdgeStrength * outline * step(${EDGE.minSide.toFixed(2)}, side) * (1.0 - smoothstep(0.0, width, nearest));
         }
         #include <opaque_fragment>`);
   };
 }
 
-// Fresnel rim on a curved surface: `rim.colour` towards the silhouette, `(1 - facing) ^ FRESNEL.power` times `rim.strength`.
-function patchFresnel(material, rim) {
+// Fresnel rim on a curved surface: `rim.colour` towards the silhouette, `(1 - facing) ^ power` times `rim.strength`.
+function patchFresnel(material, rim, power = FRESNEL.power) {
+  rim.power = power; // read back by the look tests
   const previous = material.onBeforeCompile;
   material.onBeforeCompile = (shader, renderer) => {
     previous?.call(material, shader, renderer);
@@ -178,10 +194,10 @@ function patchFresnel(material, rim) {
     shader.uniforms.uRimStrength = rim.strength;
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nuniform vec3 uRimColour;\nuniform float uRimStrength;')
-      .replace('#include <opaque_fragment>', `outgoingLight += uRimColour * uRimStrength * pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), ${FRESNEL.power.toFixed(1)});
+      .replace('#include <opaque_fragment>', `outgoingLight += uRimColour * uRimStrength * pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), ${power.toFixed(1)});
         #include <opaque_fragment>`);
   };
-  material.customProgramCacheKey = () => 'fresnel';
+  material.customProgramCacheKey = () => `fresnel${power}`;
 }
 
 /** A standard material for one of look.js's roles (the role is kept on userData so a test can read it back). */
@@ -287,7 +303,7 @@ export function buildObjects(graph, palette) {
     const page = colourOf('page');
     const surface = colourOf('surface');
     sceneBackground.copy(env.sky === SKY_SPACE ? colourOf({ base: SPACE_BASE, tint: 'page', share: SPACE_PAGE_SHARE }) : page);
-    hemi.color.copy(page).lerp(new Color(0xffffff), env.sky === SKY_SPACE ? 0.7 : 0.55);
+    hemi.color.copy(page).lerp(new Color(0xffffff), light.skyWhite);
     hemi.groundColor.copy(surface).multiplyScalar(0.55);
     hemi.intensity = light.fill;
     sun.color.copy(colourOf(light.keyColour));
@@ -321,6 +337,25 @@ export function buildObjects(graph, palette) {
       const style = poolStyle(env, p.dark);
       pool.material.color.copy(colourOf(style.colour));
       pool.material.opacity = style.opacity;
+    });
+  }
+
+  // Contact glow of a lifted chart or diagram: a soft disc under each bar or node (look.js CONTACT).
+  const footings = contactFootings(graph);
+  if (footings.length > 0) {
+    const material = track(new MeshBasicMaterial({ fog: false }));
+    patchEdgeFade(material, 1, 0);
+    const discs = new InstancedMesh(track(new CircleGeometry(1, 40).rotateX(-Math.PI / 2)), material, footings.length);
+    track(discs);
+    footings.forEach((f, k) => discs.setMatrixAt(k, new Matrix4().compose(new Vector3(f.x, f.y + CONTACT_LIFT, f.z), NO_ROTATION, new Vector3(f.r, 1, f.r))));
+    discs.name = 'contact';
+    discs.renderOrder = -0.4;
+    discs.frustumCulled = false;
+    root.add(discs);
+    tints.push((p) => {
+      const style = contactStyle(p.dark);
+      material.color.copy(colourOf(style.colour));
+      material.opacity = style.opacity;
     });
   }
 
@@ -479,7 +514,7 @@ export function buildObjects(graph, palette) {
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     const material = roleMaterial('ground', { vertexColors: true });
-    patchFresnel(material, rimFor(material, FRESNEL.strength));
+    patchFresnel(material, rimFor(material, FRESNEL.strength), FRESNEL.groundPower); // land is mostly seen from above: only its outline takes the rim
     const mesh = new Mesh(track(geometry, material), material);
     mesh.userData = { kind: 'surface', surface };
     root.add(mesh);
@@ -506,7 +541,7 @@ export function buildObjects(graph, palette) {
     water.position.y = env.water.y * lead.size[2];
     water.renderOrder = -1;
     root.add(water);
-    tints.push(() => water.material.color.copy(colourOf(WATER_BASE)));
+    tints.push((p) => water.material.color.copy(colourOf(WATER_BASE)).multiplyScalar(p.dark ? WATER_DARK_LEVEL : 1));
   }
 
   // Stars: a seeded shell, so one graph always gives the same sky

@@ -5,18 +5,22 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { Color, Vector3 } from 'three';
 import { loadTheme } from '../shared/theme.mjs';
-import { TOKEN_VARS } from '../template/runtime/colour.js';
-import { LIGHT_SETS, MATERIAL_ROLES, MIN_FACE_RATIO, MIN_KEY_FILL_RATIO, fogRange, lightDirections, lightSetName, poolStyle } from '../template/runtime/look.js';
+import { TOKEN_VARS, resolveColour } from '../template/runtime/colour.js';
+import { CONTACT, FRESNEL, LIGHT_SETS, MATERIAL_ROLES, MIN_FACE_RATIO, MIN_KEY_FILL_RATIO, WATER_DARK_LEVEL, contactFootings, fogRange, lightDirections, lightSetName, poolStyle } from '../template/runtime/look.js';
 import { buildObjects } from '../template/runtime/render.js';
 import { buildScene } from '../scripts/lib/api.mjs';
+import { emptyGraph, finalizeGraph } from '../scripts/lib/graph.mjs';
 import { citySpec } from './helpers/scene-fixtures.mjs';
 
 const theme = loadTheme('dusk');
 const VAR_TOKEN = Object.fromEntries(Object.entries(TOKEN_VARS).map(([token, cssVar]) => [cssVar, token]));
-const palette = (dark) => ({ dark, readVar: (cssVar) => theme[dark ? 'dark' : 'light'][VAR_TOKEN[cssVar]] });
+const paletteOf = (themeData, dark) => ({ dark, readVar: (cssVar) => themeData[dark ? 'dark' : 'light'][VAR_TOKEN[cssVar]] });
+const palette = (dark) => paletteOf(theme, dark);
+/** A colour reference of a light set (a hex or a { base, tint, share }) as the scene resolves it in a theme and mode. */
+const resolved = (ref, themeData, dark) => new Color(resolveColour(ref, paletteOf(themeData, dark).readVar));
 
-async function graphOf(overrides) {
-  return (await buildScene(citySpec(overrides), { dir: process.cwd(), theme })).graph;
+async function graphOf(overrides, themeData = theme) {
+  return (await buildScene(citySpec(overrides), { dir: process.cwd(), theme: themeData })).graph;
 }
 
 const GALAXY = { world: 'galaxy', links: [{ from: 'api', to: 'web', value: 5 }] };
@@ -69,7 +73,7 @@ function visibleFaces(from) {
   return faces;
 }
 
-const FACE_FLOOR = { light: 0.5, dark: 0.3 }; // the dimmest visible face still gets this much linear light, so its colour stays readable
+const FACE_FLOOR = { light: 0.5, dark: 0.1 }; // the dimmest visible face still gets this much linear light, so its colour stays readable (dark: low, because the shaded wall must differ in value, not only in hue)
 
 test('one light set per sky: space, night, dim and day', () => {
   assert.deepEqual(Object.keys(LIGHT_SETS).sort(), ['day', 'dim', 'night', 'space']);
@@ -81,7 +85,6 @@ test('one light set per sky: space, night, dim and day', () => {
   assert.equal(lightSetName({ sky: 'theme' }, false), 'day');
 });
 
-const hueOf = (hex) => new Color(hex).getHSL({}).h * 360;
 const hueGap = (a, b) => Math.min(Math.abs(a - b), 360 - Math.abs(a - b));
 
 test('every set has a key and a fill in a clear ratio; every dark set has a rim in a hue off the key, and the day has none', () => {
@@ -92,8 +95,21 @@ test('every set has a key and a fill in a clear ratio; every dark set has a rim 
       continue;
     }
     assert.ok(set.rim && set.rim.intensity >= 1, `${name} has a rim light`);
-    const keyHex = typeof set.keyColour === 'string' ? set.keyColour : '#fff4e0'; // the sun is a warm white
-    assert.ok(hueGap(hueOf(set.rim.colour), hueOf(keyHex)) >= 60, `${name}: the rim hue (${set.rim.colour}) is a clear step off the key (${keyHex})`);
+    const [rim, key] = [resolved(set.rim.colour, theme, true), resolved(set.keyColour, theme, true)];
+    assert.ok(hueGap(rim.getHSL({}).h * 360, key.getHSL({}).h * 360) >= 60, `${name}: the rim hue is a clear step off the key`);
+  }
+});
+
+test('the rim of a lit-window city is the theme\'s own light, so it matches the windows and clashes with no tower colour', () => {
+  assert.equal(LIGHT_SETS.night.rim.colour.tint, 'glow', 'built from the theme glow');
+  assert.ok(LIGHT_SETS.night.rim.colour.share >= 0.5, 'mostly the glow');
+  for (const name of ['dusk', 'paper', 'poster']) {
+    const themeData = loadTheme(name);
+    const rim = resolved(LIGHT_SETS.night.rim.colour, themeData, true);
+    const hsl = rim.getHSL({});
+    assert.ok(hsl.l >= 0.55, `${name}: the rim is a light (lightness ${hsl.l.toFixed(2)}), not a dark colour that fights a tower`);
+    const glow = resolved('glow', themeData, true);
+    assert.ok(hueGap(hsl.h * 360, glow.getHSL({}).h * 360) <= 45 || glow.getHSL({}).s < 0.25, `${name}: the rim keeps the hue of the windows' glow`);
   }
 });
 
@@ -131,7 +147,7 @@ test('the key and the rim stand relative to the camera: the key on its right, th
     const side = (v) => v[0] * right[0] + v[2] * right[2];
     assert.ok(side(key) > 0.5, `${name}: the key rakes from the viewer's right (${side(key).toFixed(2)})`);
     assert.ok(side(rim) < -0.5, `${name}: the rim comes from the viewer's left (${side(rim).toFixed(2)})`);
-    assert.ok(key[1] > 0.4 && rim[1] > 0.2, `${name}: both stand above the floor`);
+    assert.ok(key[1] > 0.4 && rim[1] > 0.15, `${name}: both stand above the floor`);
   }
 });
 
@@ -152,6 +168,63 @@ for (const dark of [false, true]) {
   });
 }
 
+// The two walls a camera sees differ in value, not only in hue: the one turned from the key gets a third of the light of the one
+// turned to it (the top is excluded: it is lit by design, and the tests above cover it).
+const WALL_RATIO = { light: 2.5, dark: 3 };
+
+for (const name of ['dusk', 'paper', 'poster']) {
+  for (const dark of [false, true]) {
+    test(`${name}, ${dark ? 'dark' : 'light'}: the shaded wall gets a clear fraction of the light the lit wall gets`, async () => {
+      const themeData = loadTheme(name);
+      const graph = await graphOf({}, themeData);
+      const built = buildObjects(graph, paletteOf(themeData, dark));
+      const from = CAMERAS.default;
+      built.aim(from.map((c, i) => c * 10 + graph.camera.target[i]));
+      const walls = visibleFaces(from).filter(([face]) => face !== 'top').map(([face, n]) => [face, irradiance(built.root, n).total]);
+      assert.equal(walls.length, 2, 'the default camera sees two walls');
+      const ratio = Math.max(...walls.map((w) => w[1])) / Math.min(...walls.map((w) => w[1]));
+      const need = WALL_RATIO[dark ? 'dark' : 'light'];
+      assert.ok(ratio >= need, `${JSON.stringify(walls.map(([f, v]) => [f, +v.toFixed(2)]))}: ${ratio.toFixed(2)}:1, under ${need}:1`);
+      built.dispose();
+    });
+  }
+}
+
+test('in dark the rim light does not flood level ground: an upward face gets at most 15% of its light from the rim', async () => {
+  for (const world of [{ world: 'terrain' }, {}]) {
+    const built = buildObjects(await graphOf(world), palette(true));
+    const seen = irradiance(built.root, [0, 1, 0]);
+    assert.ok(seen.rim <= 0.15 * seen.total, `${JSON.stringify(world)}: the rim gives level ground ${(seen.rim / seen.total * 100).toFixed(0)}% of its light`);
+    built.dispose();
+  }
+});
+
+test('at night the sea is a step darker than the land, so the land is what the eye goes to', async () => {
+  const built = buildObjects(await graphOf({ world: 'terrain' }), palette(true));
+  const water = built.root.children.find((o) => o.material?.userData.role === 'water');
+  const land = built.root.children.find((o) => o.userData.kind === 'surface');
+  assert.ok(water && land, 'the terrain has a sea and a surface');
+  const colours = land.geometry.getAttribute('color');
+  const meanLand = Array.from({ length: colours.count }, (_, i) => luminance({ r: colours.getX(i), g: colours.getY(i), b: colours.getZ(i) })).reduce((a, b) => a + b, 0) / colours.count;
+  assert.ok(luminance(water.material.color) <= 0.35 * meanLand, `the sea (${luminance(water.material.color).toFixed(3)}) is not clearly darker than the land (${meanLand.toFixed(3)})`);
+  assert.ok(WATER_DARK_LEVEL < 1);
+  built.dispose();
+});
+
+test('land takes the rim colour only along its outline: level ground seen from the default camera gets almost none', async () => {
+  const graph = await graphOf({ world: 'terrain' });
+  const built = buildObjects(graph, palette(true));
+  const land = built.root.children.find((o) => o.userData.kind === 'surface');
+  const rim = land.material.userData.rim;
+  const from = CAMERAS.default;
+  const facing = from[1] / Math.hypot(...from); // the cosine between an upward normal and the line to the camera
+  const flat = rim.strength.value * (1 - facing) ** rim.power;
+  assert.ok(flat <= 0.02, `level ground gets ${flat.toFixed(3)} of the rim colour added`);
+  const edge = rim.strength.value * (1 - 0.05) ** rim.power;
+  assert.ok(edge >= 0.3, `and the outline (facing 0.05) gets ${edge.toFixed(2)}, enough to show`);
+  built.dispose();
+});
+
 test('in every dark world the rim edges the left limb of a rounded mass, where the key does not reach', async () => {
   for (const world of [{}, { world: 'forest' }, GALAXY, { world: 'terrain' }]) {
     const graph = await graphOf(world);
@@ -161,7 +234,7 @@ test('in every dark world the rim edges the left limb of a rounded mass, where t
       const flat = Math.hypot(from[0], from[2]);
       const left = [-from[2] / flat, 0, from[0] / flat]; // the surface normal on the viewer's left limb of a sphere or trunk
       const seen = irradiance(built.root, left);
-      assert.ok(seen.rim >= 0.6,`${JSON.stringify(world)} ${name}: the rim gives the left limb only ${seen.rim.toFixed(2)}`);
+      assert.ok(seen.rim >= 0.5, `${JSON.stringify(world)} ${name}: the rim gives the left limb only ${seen.rim.toFixed(2)}`);
       assert.ok(seen.key < 0.3 * seen.rim, `${JSON.stringify(world)} ${name}: the key (${seen.key.toFixed(2)}) already lights the limb the rim edges`);
     }
     built.dispose();
@@ -174,7 +247,7 @@ test('in dark the boxes carry an edge band in the rim colour; in light they carr
   const edged = [];
   built.root.traverse((o) => { if (o.isInstancedMesh && o.geometry.type === 'BoxGeometry') edged.push(o.material.userData.rim); });
   assert.ok(edged.length > 0 && edged.every(Boolean), 'every city box batch has an edge band');
-  const rim = new Color(LIGHT_SETS.night.rim.colour);
+  const rim = resolved(LIGHT_SETS.night.rim.colour, theme, true);
   for (const e of edged) {
     assert.ok(e.strength.value >= 0.5, `the band is strong enough to see (${e.strength.value})`);
     assert.ok(e.width.value >= 0.025, 'and wide enough to show');
@@ -194,7 +267,7 @@ test('in dark every curved surface carries a fresnel rim in the rim colour; in l
     });
     assert.ok(curved.length > 0, `${JSON.stringify(world)} has curved surfaces`);
     const set = LIGHT_SETS[world.world === 'forest' || world.world === 'terrain' ? 'dim' : 'space'];
-    const rim = new Color(set.rim.colour);
+    const rim = resolved(set.rim.colour, theme, true);
     for (const m of curved) {
       const r = m.userData.rim;
       assert.ok(r, `${JSON.stringify(world)}: a ${m.userData.role} surface has no rim`);
@@ -285,4 +358,63 @@ test('masses stand in a pool of light on the ground, in light and in dark where 
   assert.equal(named(forest.root, 'pool').material.opacity, 0, 'a forest at night has no windows to light a pool');
   assert.equal(poolStyle({ nightLights: false }, true).opacity, 0);
   forest.dispose();
+});
+
+// ---- the contact glow of a lifted chart or diagram ---------------------------------------------------------------
+
+function liftedGraph(kind, instances) {
+  const g = emptyGraph(kind, { title: 'lifted' });
+  g.groups = [{ name: 'g', colour: 'cat1' }];
+  g.items = instances.filter((i) => i[6] >= 0).map((_, n) => ({ id: `i${n}`, label: `n${n}`, group: 0, value: n, display: `${n}` }));
+  g.batches = [{ id: 'b0', shape: 'box', colour: 'cat1', emissive: null, flat: false, instances }];
+  return finalizeGraph(g);
+}
+
+const FLOOR = [0, -0.05, 0, 14, 0.1, 8, -1]; // the floor slab: not a mass
+const BAR = [-3, 1, 0, 1, 2, 1, 0]; // stands on the floor
+const BAR_ON_BAR = [-3, 3, 0, 1, 2, 1, 1]; // a stacked segment: stands on the bar below, not on the floor
+
+test('a lifted chart puts a contact disc under each bar that stands on the floor, and under no floor, rule or stacked segment', () => {
+  const feet = contactFootings(liftedGraph('chart', [FLOOR, BAR, BAR_ON_BAR]));
+  assert.equal(feet.length, 1);
+  assert.deepEqual([feet[0].x, feet[0].y, feet[0].z], [-3, 0, 0]);
+  assert.ok(feet[0].r >= 0.5 * CONTACT.reach, 'the disc reaches clear past the foot of the bar');
+});
+
+test('a lifted diagram puts one contact disc under each node, however many slabs it is stacked from', () => {
+  const slabs = [0, 1, 2].map((k) => [2, 0.1 + 0.15 * k, 1, 2, 0.1, 1, 4]); // one item, three slabs
+  const feet = contactFootings(liftedGraph('diagram', [[0, 0.1, 0, 2, 0.2, 1, 3], ...slabs]));
+  assert.equal(feet.length, 2);
+  assert.ok(feet.some((f) => f.x === 2 && Math.abs(f.y - 0.05) < 1e-9), 'under the lowest slab');
+});
+
+test('a city and a forest draw no per-mass contact discs: they have their pool', async () => {
+  assert.deepEqual(contactFootings(await graphOf({})), []);
+  assert.deepEqual(contactFootings(await graphOf({ world: 'forest' })), []);
+});
+
+for (const dark of [false, true]) {
+  test(`${dark ? 'dark' : 'light'}: the scene draws the contact discs of a lifted chart, strong enough to see`, () => {
+    const graph = liftedGraph('chart', [FLOOR, BAR, [3, 0.5, 0, 1, 1, 1, 1]]);
+    const built = buildObjects(graph, palette(dark));
+    const discs = named(built.root, 'contact');
+    assert.ok(discs, 'a contact mesh');
+    assert.equal(discs.count, 2);
+    const c = discs.material.color;
+    const b = built.background;
+    const apart = Math.abs(c.r - b.r) + Math.abs(c.g - b.g) + Math.abs(c.b - b.b);
+    assert.ok(discs.material.opacity * apart >= 0.12, `a disc of opacity ${discs.material.opacity} and colour ${apart.toFixed(2)} off the page does not show`);
+    assert.ok(discs.material.transparent && !discs.material.depthWrite, 'it blends and never hides what is behind it');
+    built.dispose();
+  });
+}
+
+test('a graph with no lifted masses has no contact mesh', async () => {
+  const built = buildObjects(await graphOf({}), palette(true));
+  assert.equal(named(built.root, 'contact'), undefined);
+  built.dispose();
+});
+
+test('every named look constant this file reads exists', () => {
+  assert.ok(FRESNEL.groundPower > FRESNEL.power, 'land has a tighter rim than a rounded mass');
 });
