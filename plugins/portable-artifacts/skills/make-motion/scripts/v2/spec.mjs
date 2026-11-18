@@ -75,6 +75,9 @@ const ROOT_SCHEMA = {
   },
 };
 
+/** The root fields a film may have (references/schema.md lists the same names; bin/test/make-motion-docs.test.mjs holds them equal). */
+export const ROOT_FIELDS = Object.freeze(Object.keys(ROOT_SCHEMA.properties));
+
 const ON_ITEM_SCHEMA = {
   type: 'object',
   additionalProperties: false,

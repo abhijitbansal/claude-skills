@@ -73,7 +73,7 @@ Fill `<reason>` with why you could not ask. `voice`, `music` and `sound` togethe
 
 Run every step yourself, in this same turn, with your shell or file tools. Do not end your reply after showing or describing the JSON: keep going until `make.mjs` has printed its report and the output file exists.
 
-1. Write `film.json` in the project: `{ "version": 2, "shots": [...] }` with the `mode`, `look` and `format` the intake settled. Start from a shot's example (see Looking things up) or a finished film in `<skill-dir>/references/examples/v2/`. Actually create the file: describing it or announcing a patch is not enough. Confirm the file exists before running anything. If your file tool fails, say so and give the user the JSON and the path; do not work around it with a shell script. The root fields, the fields every shot takes and the report are in `<skill-dir>/references/schema.md`. How to write for the picture is in `<skill-dir>/references/story.md`. A version 1 spec (one with `scenes`) is refused at validation; `<skill-dir>/references/migrating.md` says how to move it. These last two files are written later in the cut-over, so until then read the schema and examples only.
+1. Write `film.json` in the project: `{ "version": 2, "shots": [...] }` with the `mode`, `look` and `format` the intake settled. Start from a shot's example (see Looking things up) or a finished film in `<skill-dir>/references/examples/v2/`. Actually create the file: describing it or announcing a patch is not enough. Confirm the file exists before running anything. If your file tool fails, say so and give the user the JSON and the path; do not work around it with a shell script. The root fields, the fields every shot takes and the report are in `<skill-dir>/references/schema.md`. How to write for the picture is in `<skill-dir>/references/story.md`. A version 1 spec (one with `scenes`) is refused at validation; `<skill-dir>/references/migrating.md` says how to move it.
 2. Outline: `node <skill-dir>/scripts/make.mjs film.json --outline` checks the film and prints each shot with its start, end and narration, with times estimated from the word counts. It needs only Node: no voice is made and no browser starts. Fix every line it prints (`<json.path>: <message>`).
 3. Storyboard (only for a film over 20 s): `node <skill-dir>/scripts/storyboard.mjs film.json --out plan.json` writes a make-explainer `plan` page for the user to answer, and prints its path and the command that builds it. Pass `--non-interactive` when you cannot ask (the cases in the intake). If it prints `storyboard: skipped (<reason>)` it wrote nothing: build the film directly and repeat that line in your final report.
 4. Preview (only when a person is there to stop it): `node <skill-dir>/scripts/make.mjs film.json --preview` serves a page on localhost with a scrubber and keeps running until you stop it; `--open` also opens it. Never start it in a run that cannot be stopped (the eval, `claude -p`).
@@ -93,14 +93,28 @@ Sharing: the MP4 is one file you can send as is; the preview page is for this ma
 ## Narration and anchors
 
 - `say` is the narration of a shot, and it sets the shot's length: its words at the mode's pace, plus a short tail. A shot with no narration takes `hold` (seconds). A shot takes `say` or `hold`, never both.
-- Write for the ear: short sentences, one idea each. A list, a timeline or a feed shows one item per sentence, in order. Mark the words that carry the point with stars (`*came from*`), but only a few: a line where most words are starred gets a `creative` finding.
+- Write for the ear: short sentences, one idea each. A list, a timeline or a feed shows one item per sentence, in order. Mark the words that carry the point with stars (`*came from*`), but only a few.
 - An anchor ties an event to a spoken word: `"on": [{ "at": "word:query", "do": "highlight", "target": "region:query" }]`. `at` names a word of this shot's narration as `word:<word>`, `do` is a device (`--list devices`) and `target` is a region of the shot or one of its parts. An anchor that falls outside its shot is a `mechanical` finding.
 - `cut` on a shot names how the film arrives at it (`"cut"`, `"slide"`, `"crossfade"`, `"punch"`, `"match"` and the rest of `--list cuts`); each cut lists the looks whose palette has it. In `viral` a picture may sit still for 3 s, in `pro` for 6 s (`--list modes`).
 - `music` is `{ "bed": "pulse", "bpm": 92 }` or a file (step 10). `"sound": "on"` turns on the designed cues; a `cues` list, `[{ "at": 2.5, "cue": "pop" }]`, places your own. `audio` adds extra sound files, `[{ "src": "ding.wav", "at": 3 }]`. All of it stays off unless asked for.
 
 ## Looking things up
 
-Look here before you invent a field. `node <skill-dir>/scripts/make.mjs --list kinds` prints every kind of shot with its fields and one example to copy; `--list looks`, `modes`, `devices`, `moves`, `cuts`, `fields` and `voices` print the rest. `--all` adds the experimental looks and the parked kinds. The kinds are `statement`, `number`, `clipping`, `end`, `list`, `quote`, `compare`, `chart`, `media`, `screen`, `map`, `diagram`, `timeline`, `code`, `feed` and `free` (raw nodes, for what the others do not cover). Finished films to start from, in `<skill-dir>/references/examples/v2/`: `gate-desk.json` (pro, `desk`), `gate-pop.json` (viral, `pop`), `gate-marker.json` (the whiteboard look), `voiced-desk.json` (a voice), `sound-desk.json` (a music bed and cues), `kinds-b-desk.json` (a map and code) and `batch-welcome.json` (`vars`).
+Look here before you invent a field. `node <skill-dir>/scripts/make.mjs --list kinds` prints every kind of shot with its fields and one example to copy; `--list looks`, `modes`, `devices`, `moves`, `cuts`, `fields` and `voices` print the rest. `--all` adds the experimental looks and the parked kinds. The sixteen kinds are `statement`, `number`, `clipping`, `end`, `list`, `quote`, `compare`, `chart`, `media`, `screen`, `map`, `diagram`, `timeline`, `code`, `feed` and `free`. `free` takes raw nodes, for what the others do not cover.
+
+Each look serves the modes it names, and some kinds are not drawn in some looks. A parked kind renders with a note and the report's `kinds` lists it. An excluded kind is refused with the looks that have it. This table is checked against the code:
+
+| Look | Modes | Parked kinds | Excluded kinds |
+|---|---|---|---|
+| `desk` | pro | none | none |
+| `pop` | viral | none | none |
+| `cosmos` | pro, viral | none | none |
+| `ledger` | pro | `number` | none |
+| `poster` | pro, viral | `number`, `feed` | none |
+| `keynote` | pro | `number`, `clipping` | none |
+| `marker` | pro | `number`, `feed`, `chart`, `timeline`, `free` | `screen`, `code` |
+
+The `pop` look has no `ripple` cut. Finished films to start from, in `<skill-dir>/references/examples/v2/`: `gate-desk.json` (pro, `desk`), `gate-pop.json` (viral, `pop`), `gate-marker.json` (the whiteboard look), `voiced-desk.json` (a voice), `sound-desk.json` (a music bed and cues), `kinds-b-desk.json` (a map and code) and `batch-welcome.json` (`vars`).
 
 ## Rules
 

@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, chmodSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -64,6 +64,12 @@ const shotA = { id: 'a', show: 'statement', say: 'Hi.' };
 const film = (extra = {}, shots = [shotA]) => ({ version: 2, shots, ...extra });
 
 // --- binding tests from the brief ---
+
+test('the file the version 1 refusal names exists', () => {
+  const message = validateFilm({ scenes: [] }, { specDir: tmpdir() }).errors[0].message;
+  const named = message.match(/See (references\/[a-z-]+\.md)/)[1];
+  assert.ok(existsSync(path.join(import.meta.dirname, '../..', named)), `${named} exists in the skill folder`);
+});
 
 test('a version 1 spec gets one clear error', () => {
   const r = check({ scenes: [] });
