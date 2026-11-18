@@ -160,13 +160,13 @@ function npmArgsFor(extraArgs) {
   return fs.readFileSync(log, 'utf8').trim();
 }
 
-test('a copied install runs npm ci --omit=dev', () => {
-  assert.match(npmArgsFor([]), /^ci --omit=dev\b/);
+test('a copied install runs npm ci --ignore-scripts --omit=dev', () => {
+  assert.match(npmArgsFor([]), /^ci --ignore-scripts --omit=dev\b/);
 });
 
-test('a --link install runs npm ci without --omit=dev (it would wipe the checkout dev deps)', () => {
+test('a --link install runs npm ci --ignore-scripts without --omit=dev (it would wipe the checkout dev deps)', () => {
   const args = npmArgsFor(['--link']);
-  assert.match(args, /^ci\b/);
+  assert.match(args, /^ci --ignore-scripts\b/);
   assert.doesNotMatch(args, /--omit/);
 });
 

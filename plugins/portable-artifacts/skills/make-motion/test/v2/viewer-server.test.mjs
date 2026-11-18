@@ -104,6 +104,23 @@ test('an invalid edit bumps the version and carries the validator\'s lines; a va
   assert.equal((await get('/preview/audio')).status, 404);
 });
 
+test('/preview/state never carries an absolute path: the film\'s folder becomes ".", any other path is reduced to its file name', async () => {
+  const inside = path.join(dir, 'shots', 'photo.png');
+  const home = ['', 'Users', 'someone', 'secret', 'key.png'].join('/');
+  viewer.fail([
+    `the film could not be built: ENOENT: no such file or directory, open '${inside}'`,
+    `EACCES: permission denied, open '${home}' (also C:\\Users\\someone\\secret\\key.png)`,
+    'shots[0].hold: must be > 0 (a/b, and/or 1/2)',
+  ]);
+  const { errors } = JSON.parse((await get('/preview/state')).body);
+  assert.deepEqual(errors, [
+    "the film could not be built: ENOENT: no such file or directory, open './shots/photo.png'",
+    "EACCES: permission denied, open 'key.png' (also key.png)",
+    'shots[0].hold: must be > 0 (a/b, and/or 1/2)',
+  ]);
+  for (const line of errors) assert.ok(!line.includes(dir) && !line.includes('someone'), line);
+});
+
 test('--preview goes with no other mode flag, and --open needs --preview', () => {
   assert.deepEqual([parseMakeArgs(['f.json', '--preview']).preview, parseMakeArgs(['f.json', '--preview', '--open']).open], [true, true]);
   assert.equal(parseMakeArgs(['f.json']).open, false);

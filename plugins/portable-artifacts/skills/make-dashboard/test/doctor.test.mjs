@@ -77,7 +77,9 @@ test('a build missing its vendored chart libraries prints the npm ci command', (
   for (const e of fs.readdirSync(path.join(SKILL, 'node_modules'))) {
     if (e !== 'vega-embed') fs.symlinkSync(path.join(SKILL, 'node_modules', e), path.join(dir, 'node_modules', e));
   }
+  // The package is there (the preflight resolves each dependency) and its build output is not: the build's own check names the fix.
   fs.mkdirSync(path.join(dir, 'node_modules', 'vega-embed'));
+  fs.writeFileSync(path.join(dir, 'node_modules', 'vega-embed', 'package.json'), '{}');
   const proj = tmp('doctor-proj-');
   fs.cpSync(path.join(SKILL, 'test/fixtures/data'), path.join(proj, 'data'), { recursive: true });
   const spec = path.join(proj, 'dashboard.json');

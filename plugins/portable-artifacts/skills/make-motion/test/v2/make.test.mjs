@@ -4,7 +4,7 @@
 import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -569,6 +569,72 @@ test('an uncaught exception or a stray rejection winds the run down and the repo
     assert.equal(report.ok, false);
   }
   assert.ok(await until(() => [...headlessPids()].every((pid) => before.has(pid)), 10_000), 'a headless browser is still running');
+});
+
+// A hook that throws once, shortly after `stream` prints a line matching `pattern`: the crash lands after the stage of
+// the run that matters has started (the page is up, the first frame is rendering), not in a race with the start.
+function crashAfter(name, stream, pattern) {
+  const hook = path.join(dir, `crash-after-${name}.mjs`);
+  writeFileSync(hook, [
+    'let armed = true;',
+    `const write = process.${stream}.write.bind(process.${stream});`,
+    `process.${stream}.write = (chunk, ...rest) => {`,
+    `  if (armed && ${pattern}.test(String(chunk))) { armed = false; setTimeout(() => { throw new Error('boom ${name}'); }, 150); }`,
+    '  return write(chunk, ...rest);',
+    '};',
+    '',
+  ].join('\n'));
+  return { NODE_OPTIONS: `--import=${pathToFileURL(hook).href}` };
+}
+
+test('an uncaught exception while a preview is up is exit 2 with the error printed, one JSON error object after the URL line under --json', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const env = crashAfter('preview', 'stdout', '/127\\.0\\.0\\.1/');
+  const text = make([filmPath('held'), '--preview'], env);
+  assert.equal(text.status, 2, `text: ${text.stdout}\n${text.stderr}`);
+  assert.match(text.stderr, /boom preview/);
+  const json = make([filmPath('held'), '--preview', '--json'], env);
+  assert.equal(json.status, 2, `json: ${json.stdout}\n${json.stderr}`);
+  const lines = json.stdout.trim().split('\n').map((l) => JSON.parse(l));
+  assert.equal(lines.length, 2, json.stdout);
+  assert.equal(lines[0].ok, true);
+  assert.equal(lines[1].ok, false);
+  assert.equal(lines[1].error.message, 'boom preview');
+});
+
+test('an uncaught exception while a batch renders is exit 2 with the error, not the exit code of whatever rows were left', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  writeFileSync(path.join(dir, 'crash-rows.json'), '[{}, {}]');
+  const env = crashAfter('batch', 'stderr', '/render \\d+\\/\\d+ frames/');
+  const args = [filmPath('meshLong'), '--batch', path.join(dir, 'crash-rows.json'), '--out', path.join(dir, 'out-crash-batch', '{index}.mp4')];
+  const text = make(args, env);
+  assert.equal(text.status, 2, `text: ${text.stdout}\n${text.stderr}`);
+  assert.match(text.stderr, /boom batch/);
+  const json = make([...args, '--json'], env);
+  assert.equal(json.status, 2, `json: ${json.stdout}\n${json.stderr}`);
+  const report = JSON.parse(json.stdout);
+  assert.equal(report.ok, false);
+  assert.equal(report.error.message, 'boom batch');
+});
+
+test('Ctrl-C while the first preview build is still working is exit 130 "interrupted", not machine trouble', async (t) => {
+  if (!await needs(t, { ffmpeg: true })) return;
+  const stalled = path.join(dir, 'stalled-ffprobe.sh');
+  writeFileSync(stalled, '#!/bin/sh\nexec sleep 120\n', { mode: 0o755 }); // the clip is probed first: the build waits here
+  copyFileSync(path.resolve(HERE, '../../../references/examples/v2/media-clip.mp4'), path.join(dir, 'clip.mp4'));
+  writeFileSync(filmPath('clip'), JSON.stringify({ version: 2, fps: FPS, look: 'desk', shots: [{ id: 'reel', show: 'media', src: 'clip.mp4', hold: 1 }] }));
+  const child = spawn(process.execPath, [MAKE, filmPath('clip'), '--preview', '--json'], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FFPROBE_PATH: stalled } });
+  t.after(() => child.kill('SIGKILL'));
+  let stderr = '', stdout = '';
+  child.stderr.on('data', (chunk) => { stderr += chunk; });
+  child.stdout.on('data', (chunk) => { stdout += chunk; });
+  assert.ok(await until(() => /timeline ok/.test(stderr), 60_000), `the build never reached the clips: ${stderr}`);
+  await new Promise((resolve) => setTimeout(resolve, 1000)); // inside the stalled probe
+  const closed = new Promise((resolve) => child.on('close', (code) => resolve(code)));
+  child.kill('SIGINT');
+  const code = await Promise.race([closed, new Promise((resolve) => setTimeout(() => resolve('still running'), 20_000))]);
+  assert.equal(code, 130, `${stdout}\n${stderr}`);
+  assert.equal(JSON.parse(stdout).error.message, 'interrupted');
 });
 
 test('a stalled ffmpeg does not hold the first interrupt', async (t) => {

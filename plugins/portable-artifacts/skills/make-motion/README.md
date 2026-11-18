@@ -1,6 +1,6 @@
 # make-motion
 
-**A script of shots, checked, previewed and rendered to an MP4.** Short animated explainers, drawn by one engine from a JSON film file, on your machine, with no network at render time. Any agent that can run shell commands can drive it.
+**A script of shots, checked, previewed and rendered to an MP4.** Short animated explainers, drawn by one engine from a JSON film file, on your machine. Renders are offline, with one exception: the first voiced render fetches the pinned voice model once (93 MB, each file checked against a SHA-256). Any agent that can run shell commands can drive it.
 
 - **One file, `film.json`.** A list of shots. Each shot shows one thing (a statement, a number, a chart, a map, code, a screenshot) over the sentences that narrate it. Nobody writes a position, a size or a keyframe.
 - **One command.** `node scripts/make.mjs film.json` validates the film, builds its timeline, reviews every shot in a browser, writes review sheets and renders the MP4.

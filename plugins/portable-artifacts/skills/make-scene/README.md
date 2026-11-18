@@ -30,7 +30,7 @@ with any agent that can run shell commands. Nothing leaves your machine.
 ## Quick start
 
 ```bash
-cd make-scene && npm ci --omit=dev && cd -        # one-time
+cd make-scene && npm ci --ignore-scripts --omit=dev && cd -        # one-time
 node make-scene/scripts/doctor.mjs                # optional: what is missing, and how to fix it
 node make-scene/scripts/validate.mjs make-scene/references/examples/city.scene.json
 node make-scene/scripts/build.mjs    make-scene/references/examples/city.scene.json --out city.html
@@ -50,7 +50,7 @@ warnings (a link a city does not draw, a blank title) without failing.
 
 ## Requirements
 
-- Node.js >= 20 and a one-time `npm ci --omit=dev` inside this folder (Ajv;
+- Node.js >= 20 and a one-time `npm ci --ignore-scripts --omit=dev` inside this folder (Ajv;
   fonts and the three.js runtime bundle are committed files).
 - Lifting a diagram needs make-diagram installed beside this skill; lifting a
   chart needs make-dashboard. Plain worlds need neither.
@@ -94,7 +94,7 @@ dark.
 ## Tests
 
 ```bash
-npm ci && npm test      # the browser tests skip when no browser is installed (npx playwright install chromium)
+npm ci --ignore-scripts && npm test      # the browser tests skip when no browser is installed (npx playwright install chromium)
 ```
 
 Licences of everything bundled: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

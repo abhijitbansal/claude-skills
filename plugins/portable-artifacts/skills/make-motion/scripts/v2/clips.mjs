@@ -1,8 +1,9 @@
 // Video clips a film names (the media kind's `src` of a clip, engine/kinds/media-clip.mjs). Each file is found inside the
-// film's folder after its links are followed, probed by ffprobe before anything decodes it (an allow-list of containers,
-// one video stream of an accepted codec, at most one audio stream of an accepted codec, nothing else), and decoded once
-// by ffmpeg into PNG frames at the film's fps over the range its shots use. Every ffmpeg and ffprobe call opens the file
-// through the file protocol and the clip demuxers only (clipInput). The server serves those frames by index
+// film's folder after its links are followed, probed by ffprobe before ffmpeg decodes it (an allow-list of containers,
+// one video stream of an accepted codec, at most one audio stream of an accepted codec, no cover art, nothing else), and
+// decoded once by ffmpeg into PNG frames at the film's fps over the range its shots use. Every ffmpeg and ffprobe call
+// opens the file through the file protocol, the clip demuxers and the accepted decoders only (clipInput): ffprobe's own
+// analysis opens a decoder per stream, and one off the list is refused there, so it never runs on the file's bytes. The server serves those frames by index
 // (/clip/<k>/<n>); a shot's sound is cut from the clip to the shot's length and mixed under the voice unless `muted`.
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -29,10 +30,19 @@ const RUN_TIMEOUT_MS = 300_000;
 const PROBE_TIMEOUT_MS = 10_000;
 const MAX_BUFFER = 1024 * 1024;
 const SILENCE_PEAK = 10; // of 32767: a clip's sound that never reaches about -70 dBFS is silence, and is left out
-const FFMPEG_HINT = 'install ffmpeg with its ffprobe (they come together), or set FFMPEG_PATH and FFPROBE_PATH';
+const WHITELIST_REFUSAL = /Codec \([^)]*\) not on whitelist/; // what libavcodec logs when a decoder is off the codec whitelist (a format off its own list says "Format … not on whitelist")
+const FFMPEG_HINT ='install ffmpeg with its ffprobe (they come together), or set FFMPEG_PATH and FFPROBE_PATH';
 
-/** A clip as an ffmpeg or ffprobe input: the file protocol only, and the clip demuxers only. */
-export const clipInput = (file) => ['-protocol_whitelist', 'file', '-format_whitelist', CLIP_DEMUXERS.join(','), '-i', file];
+/**
+ * The decoders a clip may be read with (ffmpeg's decoder names, which are not always the codec's: mp3 is decoded by
+ * "mp3float", AV1 by "libdav1d"): the ones ffmpeg picks for the accepted codecs. ffprobe opens a decoder for every stream
+ * while it analyses a file, so this list is what keeps a decoder outside it from running on a clip's bytes at all.
+ */
+export const CLIP_DECODERS = Object.freeze(['h264', 'hevc', 'vp8', 'libvpx', 'vp9', 'libvpx-vp9', 'av1', 'libdav1d', 'libaom-av1', 'mpeg4', 'prores',
+  'aac', 'aac_fixed', 'mp3', 'mp3float', 'opus', 'libopus', 'vorbis', 'libvorbis', 'flac', 'alac', 'pcm_s16le', 'pcm_s24le']);
+
+/** A clip as an ffmpeg or ffprobe input: the file protocol only, the clip demuxers only, and the accepted decoders only. */
+export const clipInput = (file) => ['-protocol_whitelist', 'file', '-format_whitelist', CLIP_DEMUXERS.join(','), '-codec_whitelist', CLIP_DECODERS.join(','), '-i', file];
 
 function run(binary, args, { signal, timeout = RUN_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
@@ -54,26 +64,29 @@ const lastLine = (text) => text.trim().split('\n').at(-1) ?? '';
 
 /**
  * What ffprobe reads of a clip: { format, duration, width, height, codec, audio, audioCodec, streams: [{ type, codec,
- * attachedPic }] }, or { format: null, error } when it does not open (a format off the list, a file that is not a clip).
+ * index, attachedPic }], videoIndex }, or { format: null, error } when it does not open (a format off the list, a file that
+ * is not a clip), with `codecRefused` when ffprobe stopped at a stream whose decoder is not on the list.
  */
 export async function probeClip({ file, ffprobe, signal }) {
   const binary = ffprobe ?? (await tools()).ffprobe;
   const args = ['-v', 'error', '-show_entries', 'format=format_name,duration:stream=index,codec_type,codec_name,width,height:stream_disposition=attached_pic', '-of', 'json', ...clipInput(file)];
   const result = await run(binary, args, { signal, timeout: PROBE_TIMEOUT_MS });
   if (result.killed) throw Object.assign(new Error(`ffprobe did not finish reading ${path.basename(file)}`), { hint: FFMPEG_HINT });
-  if (result.code !== 0) return { format: null, error: lastLine(result.stderr).replace(`${file}: `, '') || `ffprobe exited ${result.code}` };
+  if (result.code !== 0) return { format: null, error: lastLine(result.stderr).replace(`${file}: `, '') || `ffprobe exited ${result.code}`, codecRefused: WHITELIST_REFUSAL.test(result.stderr) };
   const parsed = JSON.parse(result.stdout);
-  const streams = (parsed.streams ?? []).map((s) => ({ type: s.codec_type, codec: s.codec_name, width: s.width, height: s.height, attachedPic: s.disposition?.attached_pic === 1 }));
+  const streams = (parsed.streams ?? []).map((s) => ({ index: s.index, type: s.codec_type, codec: s.codec_name, width: s.width, height: s.height, attachedPic: s.disposition?.attached_pic === 1 }));
   const video = streams.find((s) => s.type === 'video' && !s.attachedPic);
   const audio = streams.find((s) => s.type === 'audio');
-  return { format: parsed.format?.format_name ?? null, duration: Number(parsed.format?.duration), width: video?.width, height: video?.height, codec: video?.codec, audio: audio !== undefined, audioCodec: audio?.codec, streams };
+  return { format: parsed.format?.format_name ?? null, duration: Number(parsed.format?.duration), width: video?.width, height: video?.height, codec: video?.codec, audio: audio !== undefined, audioCodec: audio?.codec, streams, videoIndex: video?.index };
 }
 
 /** Why a probed clip cannot be used, or null. The message follows the clip's src. */
 export function clipProblem(probe) {
+  if (probe.codecRefused === true) return `has a stream whose codec is not one of the accepted codecs (video: ${VIDEO_CODECS.join(', ')}; sound: ${AUDIO_CODECS.join(', ')}); a clip holds one video stream and at most one audio stream, and cover art is a video stream`;
   if (probe.error !== undefined) return `cannot be read as a clip (${probe.error}); a clip must be ${CONTAINERS_LABEL}, a format not on the list of clip containers is refused`;
   if (!CLIP_FORMATS.has(probe.format)) return `is in the "${probe.format}" format, not on the list of clip containers (${CONTAINERS_LABEL})`;
-  const videos = probe.streams.filter((s) => s.type === 'video' && !s.attachedPic);
+  if (probe.streams.some((s) => s.attachedPic)) return 'has an attached picture (cover art); a clip holds one video stream and at most one audio stream';
+  const videos = probe.streams.filter((s) => s.type === 'video');
   if (videos.length !== 1) return videos.length === 0 ? 'has no video stream' : `has ${videos.length} video streams; a clip must have one`;
   if (!VIDEO_CODECS.includes(probe.codec)) return `has ${probe.codec} video, which is not one of: ${VIDEO_CODECS.join(', ')}`;
   const audios = probe.streams.filter((s) => s.type === 'audio');
@@ -119,9 +132,10 @@ function usedRange(entry, duration) {
   return [from, to];
 }
 
-async function decode({ ffmpeg, file, from, to, fps, size, dir, signal }) {
+// `stream`: the index of the probed video stream, mapped by that index (never "the first video", which could be a picture).
+async function decode({ ffmpeg, file, stream, from, to, fps, size, dir, signal }) {
   mkdirSync(dir, { recursive: true });
-  const args = ['-nostdin', '-v', 'error', '-y', '-ss', String(from), '-t', String(to - from), ...clipInput(file), '-map', '0:v:0', '-an', '-sn', '-dn',
+  const args = ['-nostdin', '-v', 'error', '-y', '-ss', String(from), '-t', String(to - from), ...clipInput(file), '-map', `0:${stream}`, '-an', '-sn', '-dn',
     '-vf', `fps=${fps},scale=${size[0]}:${size[1]}:flags=bicubic,format=rgb24`, '-start_number', '1', '-f', 'image2', '-c:v', 'png', path.join(dir, CLIP_FRAME_PATTERN)];
   const result = await run(ffmpeg, args, { signal });
   if (result.code !== 0) throw Object.assign(new Error(`ffmpeg could not decode the clip ${path.basename(file)}: ${lastLine(result.stderr)}`), { hint: FFMPEG_HINT });
@@ -183,7 +197,7 @@ function pruneCache(cacheDir, keep, maxBytes) {
 // The clip's frames for this decode, from the cache when an entry with the same key is whole, else decoded into a
 // temporary folder and moved into place. The key holds the file's content hash, the range, the fps, the size, the
 // ffmpeg version and CACHE_VERSION, so a changed clip or new trims never reuse frames.
-async function cachedDecode({ ffmpeg, version, file, from, to, fps, size, cacheDir, maxBytes, signal }) {
+async function cachedDecode({ ffmpeg, version, file, stream, from, to, fps, size, cacheDir, maxBytes, signal }) {
   const key = createHash('sha256').update(JSON.stringify({ v: CACHE_VERSION, sha256: await fileHash(file), from, to, fps, size, version })).digest('hex');
   const dir = path.join(cacheDir, key);
   const hit = readDone(dir, key);
@@ -195,7 +209,7 @@ async function cachedDecode({ ffmpeg, version, file, from, to, fps, size, cacheD
   }
   const tmp = path.join(cacheDir, `.partial-${key}-${process.pid}`);
   rmSync(tmp, { recursive: true, force: true });
-  const count = await decode({ ffmpeg, file, from, to, fps, size, dir: tmp, signal });
+  const count = await decode({ ffmpeg, file, stream, from, to, fps, size, dir: tmp, signal });
   writeFileSync(path.join(tmp, DONE), JSON.stringify({ key, count }));
   rmSync(dir, { recursive: true, force: true });
   renameSync(tmp, dir);
@@ -228,7 +242,7 @@ export async function prepareClips({ film, specDir, timeline, cacheDir, canvas, 
     if (problem !== null) throw filmError(entry.uses[0].index, 'src', `${JSON.stringify(entry.src)} ${problem}`);
     const [from, to] = usedRange(entry, probe.duration);
     const size = decodedSize(probe, canvas);
-    const { dir, count, cached } = await cachedDecode({ ffmpeg, version, file, from, to, fps: timeline.fps, size, cacheDir, maxBytes: maxCacheBytes, signal });
+    const { dir, count, cached } = await cachedDecode({ ffmpeg, version, file, stream: probe.videoIndex, from, to, fps: timeline.fps, size, cacheDir, maxBytes: maxCacheBytes, signal });
     clips.push({ src: entry.src, file, dir, count, width: size[0], height: size[1], from, fps: timeline.fps, audio: probe.audio, duration: probe.duration, cached });
   }
   return clips;

@@ -135,7 +135,7 @@ The endpoint contract is in
 
 Then ask for a dashboard, a diagram, an explainer, a 3D scene or a video, or call the skill directly:
 `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …` or `/make-scene …`. On first use the agent runs the
-skill's doctor and, once you agree, installs the dependencies (`npm ci` inside the skill folder; `npm ci --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene).
+skill's doctor and, once you agree, installs the dependencies (`npm ci --ignore-scripts` inside the skill folder; `npm ci --ignore-scripts --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene).
 
 ### Any agent, with `npx skills`
 
@@ -149,9 +149,9 @@ npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram m
 ```
 
 It copies the folders but doesn't install their dependencies, so on first use
-the agent runs the skill's doctor and, once you agree, `npm ci` inside the skill
+the agent runs the skill's doctor and, once you agree, `npm ci --ignore-scripts` inside the skill
 folder (the SKILL.md tells it to; make-dashboard, make-diagram, make-explainer and make-scene
-need only `npm ci --omit=dev`).
+need only `npm ci --ignore-scripts --omit=dev`).
 
 **`make-explainer` needs `make-diagram` and `make-dashboard` next to it** to
 draw diagrams, charts and card icons (and `make-motion` to render a motion film, version 2;
@@ -191,13 +191,13 @@ node claude-skills/plugins/portable-artifacts/bin/install.mjs copilot --project 
 
 Flags: `--skills make-motion` (just one), `--link` (symlink to this checkout
 so `git pull` updates it), `--force` (replace an existing install),
-`--no-deps` (skip `npm ci`). Asking for `--skills make-explainer` installs its
+`--no-deps` (skip `npm ci --ignore-scripts`). Asking for `--skills make-explainer` installs its
 required skills too.
 
 **Any other agent** that can read files and run shell commands: copy a skill
 folder into your project **together with its `shared/` folder** (it sits inside
-the skill folder, so copy the folder whole), run `npm ci` inside it
-(`npm ci --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene; copy
+the skill folder, so copy the folder whole), run `npm ci --ignore-scripts` inside it
+(`npm ci --ignore-scripts --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene; copy
 `make-diagram` and `make-dashboard` too if you use make-explainer), and add one line to your
 `AGENTS.md` (or `.github/copilot-instructions.md`):
 
@@ -208,7 +208,7 @@ To build a dashboard, a diagram, an explainer page, a 3D scene or an animated vi
 ### Requirements
 
 Not sure what is missing? Run `node <skill-dir>/scripts/doctor.mjs --json` (it
-needs only Node, so it works before `npm ci`). It lists each missing item with
+needs only Node, so it works before `npm ci --ignore-scripts`). It lists each missing item with
 its size and the fix for your OS; add `--for` with a spec `.json` (every skill;
 make-explainer and make-scene add sister skills from it), `check` (make-dashboard, make-diagram, make-explainer and make-scene: the check browser),
 `voiceover` or `cutout` (make-motion), and `--fix <ids>`
@@ -220,30 +220,30 @@ anything.
 **Stale plugin copies.** The Claude plugin keeps every installed version in `~/.claude/plugins/cache/`, and `~/.claude/plugins/installed_plugins.json` says which one is current. A build or render started from an older folder prints one line on stderr and carries on:
 
 ```
-warning: this script runs from <old copy>, not the installed copy <installed copy>; run npm ci in <installed copy>/skills/<skill> (or node <installed copy>/skills/<skill>/scripts/doctor.mjs --fix node_modules), then use that copy
+warning: this script runs from <old copy>, not the installed copy <installed copy>; run npm ci --ignore-scripts in <installed copy>/skills/<skill> (or node <installed copy>/skills/<skill>/scripts/doctor.mjs --fix node_modules), then use that copy
 ```
 
-Fix it by running `npm ci` in the installed skill folder (or its `doctor.mjs --fix node_modules`) and using that folder's scripts. A repo checkout, an `npx skills add` install, or a missing `installed_plugins.json` draws no warning.
+Fix it by running `npm ci --ignore-scripts` in the installed skill folder (or its `doctor.mjs --fix node_modules`) and using that folder's scripts. A repo checkout, an `npx skills add` install, or a missing `installed_plugins.json` draws no warning.
 
 | | make-dashboard | make-diagram | make-explainer | make-motion | make-scene |
 |---|---|---|---|---|---|
 | Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `npm ci` in the skill folder (once; `--omit=dev` is enough for make-dashboard, make-diagram, make-explainer and make-scene) | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `npm ci --ignore-scripts` in the skill folder (once; `--omit=dev` is enough for make-dashboard, make-diagram, make-explainer and make-scene) | ✓ | ✓ | ✓ | ✓ | ✓ |
 | Installed size (`node_modules` after that install; Chromium and on-demand installs are extra) | ≈150 MB | ≈11 MB | ≈3 MB | ≈58 MB | ≈3 MB |
 | Other skills beside it | — | — | make-diagram and make-dashboard (required for diagram and chart sections and for card icons); make-motion only to render a motion spec | — | make-diagram to lift a diagram, make-dashboard to lift a chart; a plain world needs none |
 | `git` on `PATH` | — | — | only for `gather.mjs` | — | — |
-| Chromium for frame capture (once, ≈150 MB) | optional: only `check.mjs` (a full `npm ci` plus a Chromium, as for make-diagram); the build needs no browser | optional: only `check.mjs` (needs a full `npm ci`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) | optional: only `check.mjs` (needs a full `npm ci` plus a Chromium, as for make-diagram); build needs no browser, and `check.mjs` skips cleanly without one |
+| Chromium for frame capture (once, ≈150 MB) | optional: only `check.mjs` (a full `npm ci --ignore-scripts` plus a Chromium, as for make-diagram); the build needs no browser | optional: only `check.mjs` (needs a full `npm ci --ignore-scripts`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) | optional: only `check.mjs` (needs a full `npm ci --ignore-scripts` plus a Chromium, as for make-diagram); build needs no browser, and `check.mjs` skips cleanly without one |
 | ffmpeg on `PATH` | — | — | only to render a motion film | `brew install ffmpeg` / `winget install Gyan.FFmpeg` / `sudo apt-get install ffmpeg`, or set `FFMPEG_PATH` (≥ 5.1 for the limiter stage of the audio mastering; the doctor says so when yours is older) | — |
-| onnxruntime-node (cutouts only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/cutout` (≈300 MB, from that folder's lockfile; install scripts are skipped because onnxruntime-node's downloads GPU libraries without a hash) plus a one-time 25 MB MODNet model download (pinned commit, SHA-256 checked); the agent asks first; `npm ci` in the skill folder leaves it alone | — |
-| onnxruntime-node and phonemizer (voiceover only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (≈227 MB on macOS, from that folder's lockfile, install scripts skipped) plus a one-time 93 MB Kokoro model download (one pinned commit, each file SHA-256 checked); the agent asks first; `npm ci` in the skill folder leaves it alone. An install made before make-motion 2 also holds `kokoro-js` and still works | — |
+| onnxruntime-node (cutouts only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/cutout` (≈300 MB, from that folder's lockfile; install scripts are skipped because onnxruntime-node's downloads GPU libraries without a hash) plus a one-time 25 MB MODNet model download (pinned commit, SHA-256 checked); the agent asks first; `npm ci --ignore-scripts` in the skill folder leaves it alone | — |
+| onnxruntime-node and phonemizer (voiceover only, on demand) | — | — | — | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (≈227 MB on macOS, from that folder's lockfile, install scripts skipped) plus a one-time 93 MB Kokoro model download (one pinned commit, each file SHA-256 checked); the agent asks first; `npm ci --ignore-scripts` in the skill folder leaves it alone. An install made before make-motion 2 also holds `kokoro-js` and still works | — |
 
 The installed sizes are the on-disk size of each skill's production dependency tree, measured on macOS in a dev checkout
 (not a fresh install from the plugin cache): `npm ls --omit=dev --all --parseable` in the skill folder, then the size of every
 package it lists. make-motion's figure is its whole tree, because Playwright is a regular dependency there. The doctor shows
-the same figures at its consent prompt. To check one on your machine, run `npm ci --omit=dev` in the skill folder and then `du -sh node_modules`.
+the same figures at its consent prompt. To check one on your machine, run `npm ci --ignore-scripts --omit=dev` in the skill folder and then `du -sh node_modules`.
 
 Install make-motion's tools per OS (run the Chromium download inside the
-make-motion skill folder, so it matches the Playwright version `npm ci` installed):
+make-motion skill folder, so it matches the Playwright version `npm ci --ignore-scripts` installed):
 
 | | macOS (Homebrew) | Windows (PowerShell) | Linux (Debian/Ubuntu) |
 |---|---|---|---|

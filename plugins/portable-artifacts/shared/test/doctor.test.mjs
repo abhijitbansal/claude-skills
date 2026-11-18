@@ -99,7 +99,7 @@ test('node_modules installed before an overrides pin existed counts as missing u
   assert.equal(stale.ok, false, 'the stale install must go red, node_modules is a required requirement');
   assert.equal(stale.missing[0].id, 'node_modules');
   assert.match(stale.missing[0].why, /reinstall to get the patched fast-uri pinned in package\.json "overrides"/);
-  assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+  assert.equal(stale.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-motion');
   files['/s/make-motion/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
   assert.deepEqual(await diagnose([nodeModules()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
 });
@@ -112,7 +112,7 @@ test('node_modules fix on an existing install says what npm ci removes and which
   const readFile = (p) => { if (!(p in stale)) throw new Error('ENOENT'); return stale[p]; };
   const note = async (opts, over = {}) => (await diagnose([nodeModules(opts)], ctx({ exists, readFile, skillDir: '/s/x', ...over }))).missing[0].notes;
   assert.match(await note({ restore: ['dev_deps'] }), /removes the dev packages; restore with --fix dev_deps$/);
-  assert.match(await note({}), /removes the dev packages; restore the dev packages with npm ci --prefix \/s\/x \(this skill's doctor has no --fix id/);
+  assert.match(await note({}), /removes the dev packages; restore the dev packages with npm ci --ignore-scripts --prefix \/s\/x \(this skill's doctor has no --fix id/);
   assert.equal(await note({ omitDev: false }), undefined, 'nothing removed, nothing to disclose');
   assert.equal((await diagnose([nodeModules({ restore: ['dev_deps'] })], ctx({ exists: () => false, skillDir: '/s/x' }))).missing[0].notes, undefined, 'a first install removes nothing');
 });
@@ -129,7 +129,7 @@ test('sister skill: a node_modules that predates a pin in the sister package.jso
   const stale = await diagnose([sisterSkill('make-diagram')], ctx(base));
   assert.equal(stale.ok, false);
   assert.match(stale.missing[0].why, /make-diagram is installed but its dependencies predate the patched fast-uri/);
-  assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix ' + dir);
+  assert.equal(stale.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix ' + dir);
   assert.match(stale.missing[0].notes, /removes its dev packages/);
   files[dir + '/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
   assert.deepEqual(await diagnose([sisterSkill('make-diagram')], ctx(base)), { ok: true, missing: [] });
@@ -139,9 +139,9 @@ test('sister skill: a node_modules that predates a pin in the sister package.jso
 
 test('nodeModules: omitDev false drops --omit=dev; present dir is fine', async () => {
   const a = await diagnose([nodeModules({ omitDev: false })], ctx());
-  assert.equal(a.missing[0].fix.auto, 'npm ci --prefix /s/make-motion');
+  assert.equal(a.missing[0].fix.auto, 'npm ci --ignore-scripts --prefix /s/make-motion');
   const b = await diagnose([nodeModules()], ctx());
-  assert.equal(b.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+  assert.equal(b.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-motion');
   const c = await diagnose([nodeModules()], ctx({ exists: (p) => p === '/s/make-motion/node_modules' }));
   assert.equal(c.ok, true);
 });
@@ -152,7 +152,7 @@ test('sister skill: present when sibling dir has SKILL.md; fix chains npm ci, pr
   const here = await diagnose([sisterSkill('make-diagram')], ctx({ ...base, exists: (p) => p === '/p/.agents/skills/make-diagram/SKILL.md' || p === '/p/.agents/skills/make-diagram/node_modules' }));
   assert.equal(here.ok, true);
   const { missing } = await diagnose([sisterSkill('make-diagram')], ctx(base));
-  assert.match(missing[0].fix.auto, / && npm ci --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram$/);
+  assert.match(missing[0].fix.auto, / && npm ci --ignore-scripts --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram$/);
   assert.doesNotMatch(missing[0].fix.auto, / -g/);
   assert.match(missing[0].notes, /skills-lock\.json/);
 });
@@ -299,16 +299,16 @@ test('win32: one quoted command line, empty args, spaced path stays one argument
   const rec = [];
   const run = (c, a, o) => { rec.push({ c, a, shell: o.shell }); return { status: 0 }; };
   await runFixes(['node_modules'], [nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\Users\\John Doe\\skills\\x' }), run);
-  assert.deepEqual(rec, [{ c: 'npm ci --omit=dev --prefix "C:\\Users\\John Doe\\skills\\x"', a: [], shell: true }]);
+  assert.deepEqual(rec, [{ c: 'npm ci --ignore-scripts --omit=dev --prefix "C:\\Users\\John Doe\\skills\\x"', a: [], shell: true }]);
   rec.length = 0;
   await runFixes(['node_modules'], [nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\a&b\\100%\\x' }), run);
-  assert.equal(rec[0].c, 'npm ci --omit=dev --prefix "C:\\a&b\\100"^%"\\x"');
+  assert.equal(rec[0].c, 'npm ci --ignore-scripts --omit=dev --prefix "C:\\a&b\\100"^%"\\x"');
 });
 
 test('non-win32: argv arrays, no shell, spaces untouched', async () => {
   const rec = [];
   await runFixes(['node_modules'], [nodeModules()], ctx({ skillDir: '/a b/x' }), (c, a, o) => { rec.push({ c, a, shell: o.shell }); return { status: 0 }; });
-  assert.deepEqual(rec, [{ c: 'npm', a: ['ci', '--omit=dev', '--prefix', '/a b/x'], shell: false }]);
+  assert.deepEqual(rec, [{ c: 'npm', a: ['ci', '--ignore-scripts', '--omit=dev', '--prefix', '/a b/x'], shell: false }]);
 });
 
 test('runFixes: requirement order, deduped; unknown ids last', async () => {
@@ -493,7 +493,7 @@ test('N5: chromium failure says to install playwright (dev_deps) first', async (
 test('N6: installed elsewhere names where it landed and what to do', async () => {
   const exists = (p) => p === '/p/.claude/skills/make-diagram/SKILL.md';
   const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h', exists }), () => ({ status: 0 }));
-  assert.match(res[0].manual, /wrote it to \/p\/\.claude\/skills\/make-diagram; move that folder to \/p\/\.agents\/skills\/make-diagram, then run: npm ci --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram \(that step was skipped\)/);
+  assert.match(res[0].manual, /wrote it to \/p\/\.claude\/skills\/make-diagram; move that folder to \/p\/\.agents\/skills\/make-diagram, then run: npm ci --ignore-scripts --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram \(that step was skipped\)/);
   const text = await runMain(['--fix', 'make-diagram'], { ...mainOpts(), requirementsFor: () => [sisterSkill('make-diagram')] }, { ctx: ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }) });
   assert.match(text.out, /^installed elsewhere: make-diagram — /);
 });
@@ -543,11 +543,11 @@ test('N11: spawn errors surface in the result', async () => {
 
 test('N12: display quoting is shell-safe per platform', async () => {
   const mac = await diagnose([nodeModules()], ctx({ skillDir: "/Users/o'neil/a&b $HOME/x" }));
-  assert.equal(mac.missing[0].fix.auto, "npm ci --omit=dev --prefix '/Users/o'\\''neil/a&b $HOME/x'");
+  assert.equal(mac.missing[0].fix.auto, "npm ci --ignore-scripts --omit=dev --prefix '/Users/o'\\''neil/a&b $HOME/x'");
   const win = await diagnose([nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\John Doe\\x\\' }));
-  assert.equal(win.missing[0].fix.auto, 'npm ci --omit=dev --prefix "C:\\John Doe\\x\\\\"');
+  assert.equal(win.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix "C:\\John Doe\\x\\\\"');
   const plain = await diagnose([nodeModules()], ctx());
-  assert.equal(plain.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+  assert.equal(plain.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-motion');
 });
 
 // --- fix round 3 ---
@@ -601,7 +601,7 @@ test('sister skill: SKILL.md present but node_modules missing fixes with npm ci 
   const { ok, missing } = await diagnose([sisterSkill('make-diagram')], ctx(base));
   assert.equal(ok, false);
   assert.equal(missing[0].why, 'make-diagram is installed but its dependencies are not');
-  assert.equal(missing[0].fix.auto, 'npm ci --omit=dev --prefix /p/.agents/skills/make-diagram');
+  assert.equal(missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /p/.agents/skills/make-diagram');
   assert.doesNotMatch(missing[0].fix.auto, /npx/);
   assert.match(missing[0].notes, /npm ci/);
   const calls = [];
@@ -629,7 +629,7 @@ test('dev_deps: present when node_modules/playwright exists; fix is a full npm c
   const { missing } = await diagnose([devDeps()], ctx());
   assert.equal(missing[0].id, 'dev_deps');
   assert.equal(missing[0].required, false);
-  assert.equal(missing[0].fix.auto, 'npm ci --prefix /s/make-motion');
+  assert.equal(missing[0].fix.auto, 'npm ci --ignore-scripts --prefix /s/make-motion');
   assert.match(missing[0].notes, /dev dependencies/);
 });
 
@@ -1014,7 +1014,7 @@ test('--fix kokoro,cutout runs one npm ci per folder, after node_modules', async
   const reqs = [cutout(), kokoro(), nodeModules()];
   const res = await runFixes(['kokoro', 'cutout', 'node_modules'], reqs, ctx({ platform: 'linux', exists: () => ran.length > 0 }), (c, a) => { ran.push([c, ...a].join(' ')); return { status: 0 }; });
   assert.deepEqual(res.map((r) => r.ok), [true, true, true]);
-  assert.deepEqual(ran, ['npm ci --omit=dev --prefix /s/make-motion', `npm ci --ignore-scripts --prefix ${VOICE}`, `npm ci --ignore-scripts --prefix ${CUT}`]);
+  assert.deepEqual(ran, ['npm ci --ignore-scripts --omit=dev --prefix /s/make-motion', `npm ci --ignore-scripts --prefix ${VOICE}`, `npm ci --ignore-scripts --prefix ${CUT}`]);
 });
 
 test('the make-motion node_modules reinstall names no optional install', async () => {
@@ -1074,18 +1074,18 @@ test('G-66: a node_modules that is truly absent is still "missing", and carries 
 test('G-66: keep dev packages when node_modules/playwright exists, at the skill and at a sister skill', async () => {
   const readFile = reader(STALE_FILES('/s/make-diagram'));
   const dev = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: () => true, readFile }))).missing[0];
-  assert.equal(dev.fix.auto, 'npm ci --prefix /s/make-diagram', 'no --omit=dev: it would delete the playwright that check.mjs uses');
+  assert.equal(dev.fix.auto, 'npm ci --ignore-scripts --prefix /s/make-diagram', 'no --omit=dev: it would delete the playwright that check.mjs uses');
   assert.doesNotMatch(dev.notes ?? '', /removes the dev packages/);
   const prod = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: noPlaywright, readFile }))).missing[0];
-  assert.equal(prod.fix.auto, 'npm ci --omit=dev --prefix /s/make-diagram');
+  assert.equal(prod.fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-diagram');
   const fresh = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram' }))).missing[0];
-  assert.equal(fresh.fix.auto, 'npm ci --omit=dev --prefix /s/make-diagram', 'a first install stays production-only');
+  assert.equal(fresh.fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-diagram', 'a first install stays production-only');
 
   const dir = '/p/.agents/skills/make-diagram';
   const sisterFiles = reader(STALE_FILES(dir));
   const base = { skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h', readFile: sisterFiles };
   const withDev = (await diagnose([sisterSkill('make-diagram')], ctx({ ...base, exists: () => true }))).missing[0];
-  assert.equal(withDev.fix.auto, `npm ci --prefix ${dir}`);
+  assert.equal(withDev.fix.auto, `npm ci --ignore-scripts --prefix ${dir}`);
   assert.match(withDev.notes, /keeps its dev packages/);
   assert.deepEqual(withDev.stale, ['fast-uri']);
   assert.match(withDev.why, /predate the patched fast-uri/);
@@ -1096,7 +1096,7 @@ test('G-66: keep dev packages when node_modules/playwright exists, at the skill 
 test('G-66: an explicit --fix node_modules on a dev checkout does not strip playwright either', async () => {
   const ran = [];
   await runFixes(['node_modules'], [nodeModules()], ctx({ exists: () => true }), (c, a) => { ran.push([c, ...a].join(' ')); return { status: 0 }; });
-  assert.deepEqual(ran, ['npm ci --prefix /s/make-motion']);
+  assert.deepEqual(ran, ['npm ci --ignore-scripts --prefix /s/make-motion']);
 });
 
 // --- PA-11: sizes are per skill and measured ---

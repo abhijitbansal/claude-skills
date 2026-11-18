@@ -18,7 +18,7 @@ import '../../engine/kinds/index.mjs';
 import '../../scripts/v2/list.mjs';
 import { startV2Server } from '../../scripts/v2/server.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
-import { clipInput, CLIP_DEMUXERS } from '../../scripts/v2/clips.mjs';
+import { clipInput, CLIP_DEMUXERS, CLIP_DECODERS } from '../../scripts/v2/clips.mjs';
 import { launchBrowser, guardNetwork } from '../../scripts/lib/browser.mjs';
 import { browserAvailable } from './helpers/session.mjs';
 
@@ -98,11 +98,12 @@ test('every field of a film that names a file refuses a URL, whatever the scheme
 
 // ---- 4. every ffmpeg input that opens a user file goes through a whitelisting builder ----
 
-test('clipInput opens a clip through the file protocol only and the plain clip containers only', () => {
+test('clipInput opens a clip through the file protocol only, the plain clip containers only and the accepted decoders only', () => {
   const args = clipInput('/film/c.mp4');
   assert.deepEqual(args.slice(0, 2), ['-protocol_whitelist', 'file'], 'no pipe, no http, no concat protocol');
   assert.deepEqual(args.slice(2, 4), ['-format_whitelist', CLIP_DEMUXERS.join(',')]);
-  assert.deepEqual(args.slice(4), ['-i', '/film/c.mp4'], 'the file comes last, behind both whitelists');
+  assert.deepEqual(args.slice(4, 6), ['-codec_whitelist', CLIP_DECODERS.join(',')], 'no decoder outside the allow-list runs, ffprobe\'s analysis included');
+  assert.deepEqual(args.slice(6), ['-i', '/film/c.mp4'], 'the file comes last, behind all three whitelists');
   assert.deepEqual([...CLIP_DEMUXERS], ['mov', 'mp4', 'm4a', 'matroska', 'webm']);
   for (const refused of ['hls', 'dash', 'concat', 'image2', 'lavfi', 'rtsp', 'sdp', 'tcp']) assert.ok(!CLIP_DEMUXERS.includes(refused), refused);
 });

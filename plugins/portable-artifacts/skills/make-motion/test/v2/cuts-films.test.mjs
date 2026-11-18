@@ -21,7 +21,7 @@ test('both cut films validate', () => {
 });
 
 // `ripple` is parked in pop (gate-cuts-3: it drew no rings) and cuts-desk.json does not name it, so no film shows it
-// `erase` is the drawing hand's cut, in no shipped look's cuts: references/examples/v2/hand-spike.json shows it (looks-four
+// `erase` is the drawing hand's cut, in no shipped look's cuts: test/v2/fixtures/hand-spike.json shows it (looks-four
 // Task 2)
 const SHOWN_BY_NO_FILM = ['ripple', 'erase'];
 

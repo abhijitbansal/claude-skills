@@ -53,6 +53,18 @@ test('every references/ path and scripts/ file the five documents name exists', 
   for (const doc of DOCS) assert.deepEqual(brokenLinks(read(doc)), [], doc);
 });
 
+// Every film under references/examples/v2 is one a user can render from an install: it validates against the shipped looks.
+// (hand-spike.json used the test-only look "hand-test", so it exited 1 there: it lives in test/v2/fixtures now.)
+test('every example film validates with the shipped looks, so it renders from an install', () => {
+  const folder = path.join(MOTION, 'references/examples/v2');
+  const films = fs.readdirSync(folder).filter((f) => f.endsWith('.json'));
+  assert.ok(films.length >= 20, 'the examples are there');
+  for (const name of films) {
+    const result = validateFilm(JSON.parse(fs.readFileSync(path.join(folder, name), 'utf8')), { specDir: folder });
+    assert.deepEqual(result.errors, [], name);
+  }
+});
+
 test('SKILL.md links the three reference files, and each exists', () => {
   const md = read('SKILL.md');
   for (const ref of ['references/schema.md', 'references/story.md', 'references/migrating.md']) {
@@ -285,6 +297,43 @@ test('every --flag the five documents name is one a script defines', () => {
 
 test('guardrail: a flag no script defines is caught', () => {
   assert.deepEqual(unknownFlags('run make.mjs --render-fast and --json', knownFlags()), ['--render-fast']);
+});
+
+// ---- what needs what ---------------------------------------------------------------------------------------------------
+
+// Lines of `md` that call --outline a Node-only step: it needs the skill's npm packages (make.mjs checks for them first).
+export function nodeOnlyOutline(md) {
+  return md.split('\n').filter((line) => /outline/i.test(line) && /\bNode only\b|needs only Node/i.test(line));
+}
+
+test('no document calls --outline "Node only": it needs the skill\'s installed npm packages, not a browser or ffmpeg', () => {
+  for (const doc of DOCS) assert.deepEqual(nodeOnlyOutline(read(doc)), [], doc);
+  const skill = read('SKILL.md');
+  assert.match(skill, /outline[^\n]*npm packages|npm packages[^\n]*outline/i, 'SKILL.md says what the outline needs');
+});
+
+test('guardrail: a line that calls the outline Node only is caught', () => {
+  assert.equal(nodeOnlyOutline('run the outline (Node only)\nit needs only Node: --outline\nthe doctor needs only Node').length, 2);
+});
+
+// Lines that claim no network at render time without saying the voice model is the exception.
+export function unqualifiedNoNetwork(md) {
+  return md.split('\n').filter((line) => /no network|offline/i.test(line) && !/voice model|\b93 MB\b/i.test(line) && /render/i.test(line));
+}
+
+test('the first voiced render fetches the pinned voice model once (93 MB, SHA-256 checked); no document says "no network at render time" without that', () => {
+  for (const doc of ['SKILL.md', 'README.md']) {
+    const md = read(doc);
+    assert.deepEqual(unqualifiedNoNetwork(md), [], doc);
+    assert.match(md, /voice model[^\n]*\b93 MB\b|\b93 MB\b[^\n]*voice model/, `${doc} names the one download and its size`);
+    assert.match(md, /SHA-256/, `${doc} says the download is checked`);
+  }
+  assert.match(read('README.md'), /offline/i, 'README says renders are otherwise offline');
+});
+
+test('guardrail: an unqualified "no network at render time" is caught', () => {
+  assert.equal(unqualifiedNoNetwork('on your machine, with no network at render time.').length, 1);
+  assert.equal(unqualifiedNoNetwork('no network at render time except the voice model, once.').length, 0);
 });
 
 test('every install command in the skill folder documents carries --ignore-scripts', () => {

@@ -50,6 +50,20 @@ test('make.mjs --json in a copy with no node_modules prints one JSON error objec
   assert.doesNotMatch(r.stderr + r.stdout, /ERR_MODULE_NOT_FOUND|Cannot find package|at \w+ \(/);
 });
 
+test('make.mjs in a copy whose node_modules holds only playwright (an aborted npm ci) prints the doctor command and exits 2, with no stack', () => {
+  const copy = bareCopy();
+  cpSync(path.join(root, 'package.json'), path.join(copy, 'package.json'));
+  mkdirSync(path.join(copy, 'node_modules', 'playwright'), { recursive: true });
+  writeFileSync(path.join(copy, 'node_modules', 'playwright', 'package.json'), '{}');
+  for (const args of [['film.json'], ['film.json', '--json']]) {
+    const r = run(copy, 'make.mjs', args);
+    assert.equal(r.status, 2, r.stdout + r.stderr);
+    assert.ok((r.stderr + r.stdout).includes(FIX(copy)), r.stderr + r.stdout);
+    assert.match(r.stderr + r.stdout, /node_modules in .* lacks ajv/);
+    assert.doesNotMatch(r.stderr + r.stdout, /ERR_MODULE_NOT_FOUND|Cannot find package|at \w+ \(/);
+  }
+});
+
 test('with node_modules present the entry scripts run as before', () => {
   const r = spawnSync(process.execPath, [path.join(root, 'scripts/make.mjs'), '--list', 'looks'], { encoding: 'utf8' });
   assert.equal(r.status, 0, r.stdout + r.stderr);

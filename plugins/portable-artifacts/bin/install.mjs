@@ -131,7 +131,7 @@ function installSkill(skill, dstRoot, { link, force, deps }) {
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const where = link ? src : dst;
     // A linked install runs inside the source checkout: --omit=dev there would delete the developer's dev deps.
-    const args = ['ci', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund'];
+    const args = ['ci', '--ignore-scripts', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund'];
     const r = spawnSync(npm, args, { cwd: where, stdio: 'inherit' });
     if (r.status !== 0) {
       fs.rmSync(dst, { recursive: true, force: true }); // a link is removed, never its target

@@ -29,7 +29,7 @@ any agent that can run shell commands. Nothing leaves your machine.
 ## Quick start
 
 ```bash
-cd make-diagram && npm ci --omit=dev && cd -        # one-time
+cd make-diagram && npm ci --ignore-scripts --omit=dev && cd -        # one-time
 node make-diagram/scripts/doctor.mjs                # optional: what is missing, and how to fix it
 node make-diagram/scripts/validate.mjs make-diagram/references/examples/architecture.diagram.json
 node make-diagram/scripts/build.mjs    make-diagram/references/examples/architecture.diagram.json --out checkout.html --model "Claude Sonnet" --agent "Claude Code"
@@ -45,14 +45,14 @@ in a git repo, else `~/.agent/diagrams/`; `PA_OUTPUT_DIR` or `--out` change it.
 
 ## Requirements
 
-- Node.js ≥ 20 and a one-time `npm ci --omit=dev` inside this folder (ELK and
+- Node.js ≥ 20 and a one-time `npm ci --ignore-scripts --omit=dev` inside this folder (ELK and
   Ajv; fonts, icon catalogs and metrics are committed files).
 - **No Chromium or other browser is needed to validate or build.** Only
   `scripts/check.mjs` (a headless page check at 1440 and 390 px) and the
   browser tests use one. `check.mjs` needs Playwright (a dev dependency, so a
-  full `npm ci`, not `--omit=dev`) plus a Chromium or Chrome; without either
+  full `npm ci --ignore-scripts`, not `--omit=dev`) plus a Chromium or Chrome; without either
   it skips cleanly and says so (`PA_NO_BROWSER=1` forces the skip). To enable
-  it: `node scripts/doctor.mjs --for check --fix dev_deps,chromium`, or `npm ci && npx playwright install chromium` inside this folder.
+  it: `node scripts/doctor.mjs --for check --fix dev_deps,chromium`, or `npm ci --ignore-scripts && npx playwright install chromium` inside this folder.
 
 ## Spec warnings, legibility, SVG, rebuilding
 
@@ -125,7 +125,7 @@ name that exists in that file fails, with an error naming it.
 ## Tests
 
 ```bash
-npm ci && npm test      # the viewer tests skip when no browser is installed (npx playwright install chromium)
+npm ci --ignore-scripts && npm test      # the viewer tests skip when no browser is installed (npx playwright install chromium)
 ```
 
 Licences of everything bundled: [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md).

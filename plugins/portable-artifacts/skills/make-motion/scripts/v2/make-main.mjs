@@ -82,9 +82,18 @@ function crashed(result, fatal) {
   return { ...result, report: { ...result.report, ok: false, error: describeError(fatal) }, exitCode: EXIT_MACHINE };
 }
 
-// --batch: one line per row (or the refusals), or the batch report under --json.
-async function executeBatch(options, controller) {
+// A crash that ended a run which has no report of its own to carry it (--batch, --preview): the error, on its own line or
+// as one JSON object, and exit 2.
+function reportCrash(options, fatal) {
+  if (options.json) say(JSON.stringify(errorReport(describeError(fatal))));
+  else log(`make: ${describeError(fatal).message}`);
+  process.exitCode = EXIT_MACHINE;
+}
+
+// --batch: one line per row (or the refusals), or the batch report under --json. A crash while it ran is its error instead.
+async function executeBatch(options, controller, guarded) {
   const { report, exitCode } = await runBatch(options, { signal: controller.signal, log, runRow: runMake });
+  if (guarded.fatal) return reportCrash(options, guarded.fatal);
   if (options.json) say(JSON.stringify(report));
   else {
     for (const e of report.errors) log(`make: ${e}`);
@@ -95,9 +104,11 @@ async function executeBatch(options, controller) {
 }
 
 // --preview: the URL line (or { ok, preview: { url } } under --json) once the page is up, then served until SIGINT or
-// SIGTERM, which ends it cleanly (exit 0). A film that does not validate at the start is exit 1 with its lines.
-async function executePreview(options, controller) {
+// SIGTERM, which ends it cleanly (exit 0). A film that does not validate at the start is exit 1 with its lines. A crash
+// that stopped it is exit 2 with the error, whatever stage it was in.
+async function executePreview(options, controller, guarded) {
   const result = await runPreview(options, { signal: controller.signal, log, say });
+  if (guarded.fatal) return reportCrash(options, guarded.fatal);
   if (result.findings) {
     if (options.json) say(JSON.stringify({ ok: false, findings: result.findings }));
     else for (const line of result.findings) log(`make: ${line}`);
@@ -110,8 +121,8 @@ async function executePreview(options, controller) {
 }
 
 async function execute(options, controller, guarded) {
-  if (options.batch) return executeBatch(options, controller);
-  if (options.preview) return executePreview(options, controller);
+  if (options.batch) return executeBatch(options, controller, guarded);
+  if (options.preview) return executePreview(options, controller, guarded);
   let result = await runMake(options, { signal: controller.signal, log });
   if (guarded.fatal) result = crashed(result, guarded.fatal);
   printResult(options, result);

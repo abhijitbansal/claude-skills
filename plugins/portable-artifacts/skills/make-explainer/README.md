@@ -60,7 +60,7 @@ unless you opt in with `--image-api` (see below).
 ## Quick start
 
 ```bash
-cd make-explainer && npm ci --omit=dev && cd -        # one-time
+cd make-explainer && npm ci --ignore-scripts --omit=dev && cd -        # one-time
 node make-explainer/scripts/doctor.mjs                # optional: what is missing, and how to fix it
 node make-explainer/scripts/gather.mjs git --out facts.json
 node make-explainer/scripts/scaffold.mjs recap --facts facts.json --out explainer.json
@@ -81,12 +81,12 @@ page, so keep the two together.
 
 ## Requirements
 
-- Node.js ≥ 20 and a one-time `npm ci --omit=dev` inside this folder (Ajv only).
+- Node.js ≥ 20 and a one-time `npm ci --ignore-scripts --omit=dev` inside this folder (Ajv only).
 - `gather.mjs` needs `git` on `PATH`.
 - Without `node_modules`, `validate.mjs` and `build.mjs` print one line naming the doctor command (`doctor.mjs --fix node_modules`) and exit 2.
 - `doctor.mjs` exits 0 when nothing *required* is missing (an optional browser is still listed), 1 when a required item is missing or a `--fix` failed, 2 on a usage error. Those codes are kept as they are.
 - Diagram and chart sections need the **`make-diagram`** and **`make-dashboard`**
-  skills in folders next to this one, each with its own `npm ci --omit=dev`.
+  skills in folders next to this one, each with its own `npm ci --ignore-scripts --omit=dev`.
   `bin/install.mjs` installs them for you (this skill's `package.json` lists
   them under `portableArtifacts.requires`). `npx skills add` does not resolve
   that list, so name all three:
@@ -100,7 +100,7 @@ page, so keep the two together.
 - No browser is needed to validate or build. Only `scripts/check.mjs` (an optional
   headless check of the built page at 1280, 390 and 1800 px) and this skill's browser
   tests use one. Playwright is a dev dependency, so `check.mjs` needs a full
-  `npm ci` plus a Chromium or Chrome (`npx playwright install chromium`); without
+  `npm ci --ignore-scripts` plus a Chromium or Chrome (`npx playwright install chromium`); without
   either it skips cleanly and says so, naming the doctor command
   (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`).
 
@@ -127,5 +127,5 @@ page, so keep the two together.
 
 ## Tests
 
-`npm ci` (the full install, with Playwright) then `npm test`. The browser tests
+`npm ci --ignore-scripts` (the full install, with Playwright) then `npm test`. The browser tests
 skip cleanly when no Chromium is installed.

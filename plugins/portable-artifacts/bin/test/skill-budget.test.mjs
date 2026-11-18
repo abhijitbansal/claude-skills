@@ -18,11 +18,13 @@ const read = (skill, ...rest) => fs.readFileSync(path.join(SKILLS, skill, ...(re
 // about 3 percent. The Director and operator section (director-operator Task 7) replaced the Cheaper model block with
 // about 700 more bytes in each skill; the three page skills and the dashboard were re-measured (`wc -c`: 14,656,
 // 15,472, 22,041 and 12,078 bytes) and given about 3 percent headroom. make-motion fit its old budget (20,696 bytes).
+// make-motion's budget is raised to 20,900 bytes for the cut-over review's doc fixes (the outline needs the npm packages,
+// and the one render-time download is the voice model): it measured 20,888 bytes (`wc -c`); before the fixes it was 20,696.
 const BUDGETS = {
   'make-dashboard': { bytes: 15100, lines: 145 },
   'make-diagram': { bytes: 15950, lines: 145 },
   'make-explainer': { bytes: 22700, lines: 150 },
-  'make-motion': { bytes: 20700, lines: 129 },
+  'make-motion': { bytes: 20900, lines: 129 },
   'make-scene': { bytes: 12450, lines: 110 },
 };
 const SKILL_NAMES = fs.readdirSync(SKILLS).filter((d) => fs.existsSync(path.join(SKILLS, d, 'SKILL.md'))).sort();

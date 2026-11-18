@@ -150,7 +150,7 @@ export function nodeVersion(min = 20) {
 function reinstallNote({ omitDev, restore, dir }) {
   if (!omitDev) return undefined;
   const ids = restore.map((id) => `--fix ${id}`);
-  const back = ids.length > 0 ? `restore with ${ids.join(' and ')}` : `restore the dev packages with npm ci --prefix ${dir} (this skill's doctor has no --fix id for them)`;
+  const back = ids.length > 0 ? `restore with ${ids.join(' and ')}` : `restore the dev packages with npm ci --ignore-scripts --prefix ${dir} (this skill's doctor has no --fix id for them)`;
   return `npm ci reinstalls node_modules from the lockfile and removes the dev packages; ${back}`;
 }
 
@@ -172,7 +172,7 @@ export function nodeModules({ omitDev = true, restore = [], size } = {}) {
       const installed = ctx.exists(modules);
       // An install that already has playwright (a dev checkout, a --link install) keeps its dev packages: --omit=dev would delete it.
       const dropDev = omitDev && !(installed && ctx.exists(pp(ctx).join(modules, 'playwright')));
-      const argv = ['npm', 'ci', ...(dropDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
+      const argv = ['npm', 'ci', '--ignore-scripts', ...(dropDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
       const out = { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
       const stale = installed ? staleOverrides(ctx, 'own') : [];
       if (stale.length > 0) out.stale = stale;
@@ -195,7 +195,7 @@ export function devDeps({ size = '≈20–120 MB more than node_modules alone, d
     size,
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'playwright')),
     fix: (ctx) => {
-      const argv = ['npm', 'ci', '--prefix', ctx.skillDir];
+      const argv = ['npm', 'ci', '--ignore-scripts', '--prefix', ctx.skillDir];
       return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: `reinstalls node_modules with the dev dependencies included; size measured on macOS, approximate` };
     },
     needsSudo: () => false,
@@ -282,7 +282,7 @@ export function sisterSkill(name, { size } = {}) {
   const present = (ctx) => skillPresent(ctx) && depsPresent(ctx);
   // Like nodeModules: a sister that already has playwright keeps its dev packages.
   const keepsDev = (ctx) => ctx.exists(modulesDir(ctx)) && ctx.exists(pp(ctx).join(modulesDir(ctx), 'playwright'));
-  const installStep = (ctx) => ['npm', 'ci', ...(keepsDev(ctx) ? [] : ['--omit=dev']), '--prefix', sisterDir(ctx)];
+  const installStep = (ctx) => ['npm', 'ci', '--ignore-scripts', ...(keepsDev(ctx) ? [] : ['--omit=dev']), '--prefix', sisterDir(ctx)];
   return {
     id: name,
     rank: RANK.sister,

@@ -25,10 +25,10 @@ plugin is, read the [README](README.md). For every spec field, see each skill's
 | GitHub Copilot CLI / VS Code | `node <repo>/plugins/portable-artifacts/bin/install.mjs copilot` (add `--project .` for `.github/skills`) | `/make-dashboard …`, `/make-diagram …`, `/make-explainer …`, `/make-motion …`, `/make-scene …` |
 | Gemini CLI | `node <repo>/plugins/portable-artifacts/bin/install.mjs gemini` | `/make-dashboard …` (a TOML command that activates the skill) |
 | Any agent `npx skills` supports | `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene` (pick agents interactively, or pass `-a claude-code codex github-copilot -y`). It does not resolve dependencies: to get just the explainer, name its two required skills too, `--skill make-explainer make-diagram make-dashboard` | That agent's skill invocation |
-| Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram`, `skills/make-explainer`, `skills/make-motion` and/or `skills/make-scene` into your project (**make-explainer needs make-diagram and make-dashboard beside it; make-scene needs them only to lift a diagram or a chart**) **with each skill's `shared/` folder**, run `npm ci` in each (`npm ci --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram, an explainer, a 3D scene or a video |
+| Any other agent | Copy `skills/make-dashboard`, `skills/make-diagram`, `skills/make-explainer`, `skills/make-motion` and/or `skills/make-scene` into your project (**make-explainer needs make-diagram and make-dashboard beside it; make-scene needs them only to lift a diagram or a chart**) **with each skill's `shared/` folder**, run `npm ci --ignore-scripts` in each (`npm ci --ignore-scripts --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene), and point `AGENTS.md` at their `SKILL.md` | Ask for a dashboard, a diagram, an explainer, a 3D scene or a video |
 
 `<repo>` is a clone of `https://github.com/abhijitbansal/claude-skills`. The
-installer runs `npm ci` for you. Pass `--link` to symlink to the clone (then
+installer runs `npm ci --ignore-scripts` for you. Pass `--link` to symlink to the clone (then
 `git pull` updates the skills), `--skills make-motion` to install just one, or
 `--force` to replace an existing install. A skill's required skills come with it:
 `--skills make-explainer` (or `make-scene`) also installs make-diagram and make-dashboard (the
@@ -36,7 +36,7 @@ installer runs `npm ci` for you. Pass `--link` to symlink to the clone (then
 optional for the explainer and is only installed if you name it.
 
 The repo-wide `adapters/install.sh codex|copilot` symlinks *every* skill in
-this repo, these five included. Only `install.mjs` also runs `npm ci`, supports
+this repo, these five included. Only `install.mjs` also runs `npm ci --ignore-scripts`, supports
 project scope and writes the Gemini commands.
 
 For **make-motion**, also run the one-time `npx playwright install chromium`
@@ -50,7 +50,7 @@ the [README requirements](README.md#requirements).
 
 Every skill has a `scripts/doctor.mjs` that checks what the skill needs and
 prints the fix for each thing that is missing. It needs only Node, so it runs
-before `npm ci` and reports a missing `node_modules` instead of crashing. It
+before `npm ci --ignore-scripts` and reports a missing `node_modules` instead of crashing. It
 never prompts and never installs anything on its own.
 
 ```bash
@@ -85,7 +85,7 @@ own `chromium`. `--fix` exits 1 when any requested id is refused, skipped,
 failed, still missing afterwards or installed elsewhere, optional ids included.
 On Windows the text output labels command lines `(cmd.exe)`.
 
-If a build prints `warning: this script runs from …, not the installed copy …`, it was started from an old folder under `~/.claude/plugins/cache/` while `~/.claude/plugins/installed_plugins.json` points at a newer one. Run `npm ci` in the installed skill folder it names (or its `doctor.mjs --fix node_modules`) and use that folder's scripts.
+If a build prints `warning: this script runs from …, not the installed copy …`, it was started from an old folder under `~/.claude/plugins/cache/` while `~/.claude/plugins/installed_plugins.json` points at a newer one. Run `npm ci --ignore-scripts` in the installed skill folder it names (or its `doctor.mjs --fix node_modules`) and use that folder's scripts.
 
 ### Tested hosts
 
@@ -260,7 +260,7 @@ your project folder):
    console errors, text that leaves its box, a node under the legend
    overlay, labels that draw below the legibility floor at fit, and a story that cannot
    reach its last beat. `--shots <dir>` also writes one PNG per width (390, 1280) and colour scheme;
-   open them and look before you report. It needs Playwright and a browser (a full `npm ci` plus
+   open them and look before you report. It needs Playwright and a browser (a full `npm ci --ignore-scripts` plus
    `npx playwright install chromium` in the skill folder). Without them it
    prints `check: skipped` with the doctor command to run
    (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`) and exits 0.
@@ -349,7 +349,7 @@ your project folder):
    a KPI value wider than its tile, a checklist whose ticks are not saved, or a diagram Present overlay that
    will not close on Esc. A page with a Simple English toggle is measured again with the toggle
    pressed, and those problems say "(simple)". `--shots <dir>` writes one PNG per width (390, 1280)
-   and colour scheme to open and look at. It needs Playwright and a browser (a full `npm ci` plus
+   and colour scheme to open and look at. It needs Playwright and a browser (a full `npm ci --ignore-scripts` plus
    `npx playwright install chromium` in the skill folder); without them it prints
    `check: skipped` with the doctor command to run
    (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`) and exits 0.
@@ -699,7 +699,7 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 
 | Symptom | Fix |
 |---|---|
-| `Cannot find package 'ajv'` (or duckdb, playwright) | Run `node <skill-dir>/scripts/doctor.mjs --json`, or `npm ci` inside the skill folder (`npm ci --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene) |
+| `Cannot find package 'ajv'` (or duckdb, playwright) | Run `node <skill-dir>/scripts/doctor.mjs --json`, or `npm ci --ignore-scripts` inside the skill folder (`npm ci --ignore-scripts --omit=dev` for make-dashboard, make-diagram, make-explainer and make-scene) |
 | `node` exits with code 139 / `SecItemCopyMatching failed -50` when an agent runs the scripts inside the Codex sandbox | `NODE_USE_SYSTEM_CA` is set (often via `launchctl setenv`); unset it for that session (`env -u NODE_USE_SYSTEM_CA codex …`) — Node 24 reads the keychain at startup and the sandbox denies it |
 | `run: node …/scripts/setup.mjs` | A sqlite, postgres or mysql source needs its DuckDB extension. Run that command once, online |
 | `sources.x.path: resolves outside the spec folder` | Move the data under the spec's folder, or add `--allow-outside` yourself |
@@ -715,11 +715,11 @@ explains the spec, then prints the exact `validate`, `build` / `render` and
 | `sections[0].text: warning: 4 emoji in 25 characters of prose; keep it under 1 per 40 → cut some, say it in words` (or `title has 4 emoji; keep it to 3`) | A soft warning; the build still runs. Keep an emoji or two and say the rest in words |
 | `slide has 7 points; the limit is 6 — split this section into two slides` | In a deck each section is one slide: at most 6 points, 8 table rows, 12 code lines and 80 words. Split it |
 | `make-diagram skill not found next to make-explainer (looked in …); install it with: npx --yes skills@1.7.2 add … -y` (or make-dashboard, make-scene, make-motion) | The embedded diagram, chart, icon or motion spec needs that sibling skill in the folder next to `make-explainer`. Run the printed command, or `node plugins/portable-artifacts/bin/install.mjs <host> --skills make-explainer` |
-| `… is installed but its dependencies are missing` | Run `npm ci --omit=dev` inside the named sibling skill's folder |
+| `… is installed but its dependencies are missing` | Run `npm ci --ignore-scripts --omit=dev` inside the named sibling skill's folder |
 | `dashboard: source "x" is postgres, a network source; explainer charts read local files only` | A build never uses the network. Export the query to CSV or Parquet and point a file source at it |
 | `gather.mjs` prints `… is not a git repository` or `base "x" does not exist` (with the branches that do) | Pass `--repo <folder inside the repository>` and a real `--base <branch>` |
 | `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser` | Install both (see the README requirements), or render the clip first and use `video` with the `.mp4` |
-| `check: skipped (no browser: …)` from any skill's `check.mjs` (make-scene also skips when the browser has no WebGL) | Expected without Playwright or Chromium; the page is still built. A skipped check is not a pass: `--json` carries `"skipped": true`. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci` then `npx playwright install chromium` inside the skill folder |
+| `check: skipped (no browser: …)` from any skill's `check.mjs` (make-scene also skips when the browser has no WebGL) | Expected without Playwright or Chromium; the page is still built. A skipped check is not a pass: `--json` carries `"skipped": true`. To run the check, use the command the skip line prints (`doctor.mjs --for check --fix dev_deps` or `--fix chromium`), or `npm ci --ignore-scripts` then `npx playwright install chromium` inside the skill folder |
 | `npx playwright install chromium` hint on render | Install Chromium once inside the skill folder (Linux: `npx playwright install --with-deps chromium`), or install Google Chrome for the fallback |
 | `the optional voice package is not installed. Run: …` | `npm ci --ignore-scripts --prefix <skill-dir>/optional/voice` (voiceover only; or doctor --fix kokoro; npm ci in the skill folder leaves it alone) |
 | `onnxruntime-node is not installed` | `npm ci --ignore-scripts --prefix <skill-dir>/optional/cutout` (cutouts only; or doctor --fix cutout; npm ci in the skill folder leaves it alone) |

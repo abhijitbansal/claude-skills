@@ -18,6 +18,7 @@ const OPENERS = Object.freeze({ darwin: 'open', win32: 'explorer.exe' });
 const EXIT_OK = 0;
 const EXIT_NOT_OK = 1;
 const EXIT_MACHINE = 2;
+const EXIT_INTERRUPTED = 130;
 
 /** Starts the platform's default browser on `url` (a loopback preview URL only), detached, the URL one argument. */
 export function openUrl(url) {
@@ -90,6 +91,8 @@ export async function runPreview(options, io = {}) {
     try {
       first = await buildOnce(options, work, { ...io, log });
     } catch (err) {
+      // A stop (or a crash, which make-main.mjs reports itself) that landed in the first build is an interruption, not machine trouble.
+      if (io.signal?.aborted) return { exitCode: EXIT_INTERRUPTED, error: 'interrupted' };
       return { exitCode: EXIT_MACHINE, error: err.message };
     }
     if (first.errors) return { exitCode: EXIT_NOT_OK, findings: first.errors };
