@@ -3,7 +3,7 @@
 // Hard and rhythmic. Each shot sits on one flat ground (paper, red, blue or ink) chosen by its index and the seed so no
 // two neighbours match (engine/looks/grounds.mjs), and every colour a kind draws comes from the pairing table `on` for
 // that ground: ink on blue and red on blue are banned. Plain data plus one pure function; index.mjs freezes and
-// registers it. Experimental until its gate (looks-four plan, Task 8).
+// registers it. Listed after its gate (looks-four plan, Task 8: ship after fixes), with number and feed parked in it.
 const DISPLAY_TRACKING = -0.02; // em: display type is tracked in
 const ROLES = ['display', 'text', 'label'];
 // margin 72, not the plan's 64 (16:9) and 56 (9:16 pro): a stack line's layout box starts its ink's side bearing left of
@@ -26,7 +26,6 @@ function tracking(sizeUnits, role = 'display') {
 
 export const poster = {
   name: 'poster',
-  experimental: true,
   summary: 'Kinetic type and cut paper: one flat ground a shot (paper, red, blue or black), heavy condensed capitals that fill the frame, cut-paper bars and circles. Modes viral and pro.',
   modes: ['pro', 'viral'],
   // the platform safe zone in a platform mode only (viral): in pro a 9:16 frame keeps its margins (kinds/shared.mjs)
@@ -60,7 +59,9 @@ export const poster = {
   maxLines: { display: 3, text: 3 },
   wordsPerLine: { text: 12 },
   secondary: { min: 52 },
-  field: { field: 'flat', params: { margin: GRID.margin, gutter: GRID.gutter, marginTall: GRID_TALL.margin, gutterTall: GRID_TALL.gutter, alpha: HAIRLINES } },
+  // register 0: the field's cut-paper shapes are flush, no ink copy offset past them (gate-poster-3: a corner disc's copy
+  // read as a dark curl, a shadow)
+  field: { field: 'flat', params: { margin: GRID.margin, gutter: GRID.gutter, marginTall: GRID_TALL.margin, gutterTall: GRID_TALL.gutter, alpha: HAIRLINES, register: 0 } },
   composition: 'stack',
   // the stack (pop's family, kinds/stack.mjs): two sizes, the larger ratio times the smaller; a hook a word a line when
   // larger, within `hook` of the height (0.65: the hook, never turned, fills by size); a tall stack grown until it fills
@@ -114,19 +115,23 @@ export const poster = {
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
   cutPalette: ['cut', 'cover', 'iris', 'wipe', 'punch', 'slide'],
   // a cover is a hard sheet of the next ground (the bar that wipes is the cut paper): no smear
-  // gate-poster-2 ruling 7: `snap`, the sheet jumps any offset at which a word would be sliced (at its edge or the frame's)
-  // and the last `tail` of the frame before home, where its chrome stacked against the outgoing chrome (cuts/cover.mjs)
-  cutStyle: { cover: { smear: false, snap: { tail: 0.1 } } },
+  // the lead's ruling on gate-poster-3 (ruling 7 revised: no word half sliced on a HELD frame; a sheet that moves every
+  // frame holds none): `ease` 'inOutQuad', a steady curve, so the sheet moves every frame (the snap made both covers
+  // stall, then pop)
+  cutStyle: { cover: { smear: false, ease: 'inOutQuad' } },
   // gate-poster-1 ruling 6: where a film names no cut, every third shot opens on the cover (engine/cuts/resolve.mjs
   // pickedCut): the next shot's ground sheet slides over the last, a cut-paper wipe in the look's own grounds
-  cutPick: { cut: 'cover', every: 3, directions: ['up', 'left'] },
+  // the lead's ruling on gate-poster-3: `plates`, a plain cut instead where the sheet would cross the outgoing shot's
+  // plate of its own colour (the cream sheet over the cream code card)
+  cutPick: { cut: 'cover', every: 3, directions: ['up', 'left'], plates: true },
   keyline: 8,
   // nothing casts a shadow: paper is flat
   shadow: { dx: 0, dy: 0, blur: 0, alpha: 0, color: '#141414' },
   // Styling for the devices this look draws. Colours are palette keys, read on the shot's ground; sizes are units. No
   // sticker (declined) and no sweep (no light in this look).
   devices: {
-    card: { edge: 'cut', fill: 'ink', turn: 2 },
+    // misregister 0: the card is flush, the paper alone (gate-poster-3: the red copy past each chip read as a shadow)
+    card: { edge: 'cut', fill: 'ink', turn: 2, misregister: 0 },
     tag: { fill: 'ink', text: 'inkText' },
     numeral: { color: 'ink' },
     arrow: { color: 'ink', width: BAR, cap: 'butt' },
@@ -182,7 +187,9 @@ export const poster = {
     // (`spreadTall`); the points stay at the side tag's step 2 at most (step 3 set a third size beside the tag)
     // gate-poster-2 ruling 6: `pointThird`, the points a third of the title (at least secondary.min); `titleCap` 560 units:
     // on a wide frame a short title grows past the stack's 400-unit cap, so a side fills its frame
-    compare: { beatAt: 0.75, pointThird: true, titleCap: 560, payoff: 'accent', grounds: ['paper', 'ink'], swapTall: true, spreadTall: true, pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32, stackTall: true, sideGap: 64, dim: 1, valueTall: 0.3 },
+    // gate-poster-3 (16:9 swap): `block`, the look's cut card (devices.card: the ink, turned, flush) fills the room beside
+    // a side's points on a wide frame (the quadrant beside the BEFORE list stood empty): black on paper, paper on ink
+    compare: { block: true, beatAt: 0.75, pointThird: true, titleCap: 560, payoff: 'accent', grounds: ['paper', 'ink'], swapTall: true, spreadTall: true, pointGap: 32, pointSteps: [1, 2], picture: 0.3, pictureGap: 32, stackTall: true, sideGap: 64, dim: 1, valueTall: 0.3 },
     // the claim as the tag, bars as flat cut paper, the numeral the only accent, the other marks the opaque `dim`; the
     // finished chart held 1.2 s before the cut and every point of a line labelled (the ledger gate's rulings)
     // gate-poster-1 ruling 2, for a column or bar chart: `heroTop` (kinds/chart-hero.mjs) sets the highlighted value as
@@ -200,7 +207,11 @@ export const poster = {
     // gate-poster-2 ruling 3 (kinetic type): `beatAt`, the hero changes ground on the spoken word this share of the way
     // through the narration (kinds/strike.mjs; chart 0.9, diagram 0.6, compare 0.75 of each side's words; code [0.3,
     // 0.85], on and off), placed where each kind's own motion leaves its longest hold
-    chart: { beatAt: 0.9, heroThird: true, heroLabel: true, heroTop: true, grounds: ['paper', 'ink'], heroColumn: 0.46, heroGap: 64, titleStep: 3, numeralShareTall: 0.12, sourceLines: 2, growFrom: 0.06, tight: true, together: true, startFinal: true, settle: 1.2, pointLabels: true, pointFace: 'text', tagSteps: [2, 3], tagGap: 32, numeralMax: 360, numeralShare: 0.3, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, dimTo: 'ink', refs: false, minPlot: 0.4, point: 14 },
+    // gate-poster-3 (16:9 tests): `labelFace` 'display', the labels, values and source in the display face's condensed
+    // capitals (they were the mixed-case label face, off the voice); narrower, they fit their bands larger, so the hero,
+    // three times them, is set at poster scale; `heroColumn` 0.38 (was 0.46): the plot's wider bands let the labels, and so
+    // the hero, grow, and the hero spans most of its narrower column (the left column stood half empty)
+    chart: { labelFace: 'display', beatAt: 0.9, heroThird: true, heroLabel: true, heroTop: true, grounds: ['paper', 'ink'], heroColumn: 0.38, heroGap: 64, titleStep: 3, numeralShareTall: 0.12, sourceLines: 2, growFrom: 0.06, tight: true, together: true, startFinal: true, settle: 1.2, pointLabels: true, pointFace: 'text', tagSteps: [2, 3], tagGap: 32, numeralMax: 360, numeralShare: 0.3, numeralWidth: 0.6, holeShare: 0.5, numeralGap: 24, labelStep: 1, gap: 18, line: 10, ref: 2, axis: 4, dim: 0.3, dimTo: 'ink', refs: false, minPlot: 0.4, point: 14 },
     // at 9:16 the route to the region panel draws once the panel is in (linkAfter), and a panel crop of 80 percent of the
     // picture's width or more takes all of it (wholeWidth): words were cut at its edge
     screen: { linkAfter: true, wholeWidth: 0.8, fill: 'ink', line: 'ink', lineWidth: 10, dots: 'rule', pill: 'cardPlate', text: 'inkText', urlText: 'cardPlateText', wideShare: 0.8, gap: 44 },
@@ -224,7 +235,9 @@ export const poster = {
     // the messages are the hero in the display capitals (`face`), as large as the band holds
     // gate-poster-2 rulings 3 and 6: `roomOnOpen`, every message's plate is on from frame 0 and a later message's words
     // step in on their spoken words, in place (the 9:16 chat's lower half was empty for 2 s, then still for 2.3 s)
-    feed: { roomOnOpen: true, titleSlug: true, titleGap: 48, face: 'display', steps: [2, 3, 4], maxLines: 4, pad: 26, gap: 24, share: 0.82, radius: 0, bold: 900, me: { fill: 'ink', text: 'inkText' }, them: { fill: 'accent', text: 'accentText' }, card: { fill: 'ink', text: 'inkText' }, discs: ['ink'], discText: 'inkText', dots: 'ink', title: 'ink', line: 'ink', lineWidth: 6, shadow: false },
+    // parked (gate-poster-3, the controller's decision in the gate record): the tall reply card stood blank 1.3 to 2.2 s
+    // at the final gate, the one 9:16 shot that failed; poster is listed without it
+    feed: { experimental: true, roomOnOpen: true, titleSlug: true, titleGap: 48, face: 'display', steps: [2, 3, 4], maxLines: 4, pad: 26, gap: 24, share: 0.82, radius: 0, bold: 900, me: { fill: 'ink', text: 'inkText' }, them: { fill: 'accent', text: 'accentText' }, card: { fill: 'ink', text: 'inkText' }, discs: ['ink'], discText: 'inkText', dots: 'ink', title: 'ink', line: 'ink', lineWidth: 6, shadow: false },
     // fitTall: at 9:16 the picture is a cut-out filling the band over its caption in the ground's ink (a bleed's caption
     // card in ink was lost on the ink ground and left the band's lower part to a dark picture)
     media: { fitTall: 'cutout', treatment: 'halftone', push: 1.06, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 28, toWide: 7, toTall: 12, besideFrom: 8, gap: 40 },

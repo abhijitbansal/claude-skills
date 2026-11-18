@@ -70,7 +70,8 @@ import { poster } from './poster.mjs';
  * @property {Record<string, { direction?: string, duration?: number, smear?: boolean, smearAxes?: string[] }>} [cutStyle]
  *   the look's defaults per cut, each checked against that cut's options (engine/cuts/resolve.mjs resolveCut reads them
  *   after the shot's and the film's root cut); `smear: true` makes a smearable cut draw its motion smear, and
- *   `smearAxes` (look data, no film option) limits it to moves along those axes (engine/cuts/smear.mjs smearsAlong)
+ *   `smearAxes` (look data, no film option) limits it to moves along those axes (engine/cuts/smear.mjs smearsAlong);
+ *   `ease` (look data, the cover only) the curve its sheet travels on (engine/cuts/cover.mjs)
  * @property {{ line?: { color: string, width: number, alpha: number }, shadow?: { color: string, width: number,
  *   alpha: number, steps: number } }} [coverEdge]  the leading edge of a cover cut's sheet (engine/cuts/cover.mjs):
  *   palette colour names, widths in pixels
@@ -196,7 +197,7 @@ function movesErrors(name, moves, names) {
     .map((key) => `look "${name}": moves.${key} must be a move { ease, dur } or null, got ${JSON.stringify(moves[key]) ?? 'undefined'}`);
 }
 
-const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear', 'smearAxes', 'snap']);
+const CUT_STYLE_KEYS = Object.freeze(['direction', 'duration', 'smear', 'smearAxes', 'ease']);
 const PALETTE_SHAPE = 'cutPalette must be a non-empty list of its cuts holding "cut"';
 
 // The errors of a look's cut set (`cuts`: registered cut names) and its palette (a non-empty subset holding "cut").

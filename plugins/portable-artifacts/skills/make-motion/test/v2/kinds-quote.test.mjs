@@ -69,7 +69,7 @@ test('quote: the marks are the kind\'s own, added once: marks the author typed a
 test('quote: a look with no data for the kind refuses it; expand says so', () => {
   const desk = registries.looks.get('desk');
   if (!registries.looks.has('test-no-quote')) registries.looks.add('test-no-quote', { ...desk, name: 'test-no-quote', kinds: {} });
-  assert.deepEqual(errorsOf(EXAMPLE(), 'pro', { look: 'test-no-quote' }), [{ path: 'shots[0].show', message: 'kind "quote" is not supported by look "test-no-quote"; the looks that support it: desk, pop, cosmos, ledger' }]);
+  assert.deepEqual(errorsOf(EXAMPLE(), 'pro', { look: 'test-no-quote' }), [{ path: 'shots[0].show', message: 'kind "quote" is not supported by look "test-no-quote"; the looks that support it: desk, pop, cosmos, ledger, poster' }]);
   assert.throws(() => expandIn(filmOf([EXAMPLE()], 'test-no-quote')), /look "test-no-quote" has no data for kind "quote"/);
 });
 

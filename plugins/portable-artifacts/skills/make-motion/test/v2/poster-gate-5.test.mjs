@@ -12,7 +12,7 @@ import { snapshotOf, drawnLeaves } from './helpers/bar.mjs';
 import { buildTimeline } from '../../engine/script/timing.mjs';
 import { prepareFilm } from '../../scripts/v2/prepare/index.mjs';
 import { stackArea } from '../../engine/kinds/stack.mjs';
-import { snappedOffset } from '../../engine/cuts/cover.mjs';
+import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 
 const unionOf = (boxes) => {
   const x = Math.min(...boxes.map((b) => b[0])), y = Math.min(...boxes.map((b) => b[1]));
@@ -184,60 +184,86 @@ for (const [name, id] of [[WIDE, 'idea'], [WIDE, 'close'], [TALL, 'hook'], [TALL
   });
 }
 
-// ---- ruling 7: wipes ----
-// A held frame is any frame of the film at 30 fps (each is on screen for a frame time, and a contact sheet shows it). On
-// a frame inside a cover (the sheet `cover.backdrop` is drawn) no text box may straddle the sheet's leading edge or the
-// frame's edge, and the sheet never stops short of home by less than TAIL of the frame (there its chrome stacks against
-// the outgoing chrome).
-const TAIL = 0.1;
-function coverFrames(name) {
+// ---- ruling 7: wipes (revised by the lead on gate-poster-3) ----
+// Ruling 7's intent: no word half sliced on a HELD frame. The snap that jumped such offsets made both 16:9 covers stall,
+// then pop (gate-poster-3). The lead's ruling: a sheet that moves every frame holds no frame, so the cover moves on a
+// steady ease (cutStyle.cover.ease) and no snap. Each frame of a cover window (the sheet `cover.backdrop` drawn, off
+// home) moves the sheet, and no step is over STEP_RATIO times the mean step from off-frame to home.
+const STEP_RATIO = 2.5;
+const STILL = 0.5; // px: a step this small is no move
+function coverWindows(name) {
   const b = gate(name);
+  const canvas = { w: b.film.format === '16:9' ? 1920 : 1080, h: b.film.format === '16:9' ? 1080 : 1920 };
   const total = b.durations.reduce((s, d) => s + d, 0);
-  return Array.from({ length: Math.floor(total * FPS) }, (_, f) => f / FPS).map((t) => ({ t, leaves: drawnLeaves(snapshotOf(b.built.frameAt(t).sampled)) }))
-    .map((f) => ({ ...f, sheet: f.leaves.find((l) => l.node.id === 'cover.backdrop') })).filter((f) => f.sheet !== undefined);
+  const frames = Array.from({ length: Math.floor(total * FPS) }, (_, f) => f / FPS).map((t) => ({ t, sheet: leavesAt(b, t).find((l) => l.node.id === 'cover.backdrop') }))
+    .filter((f) => f.sheet !== undefined).map(({ t, sheet }) => {
+      const axis = Math.abs(sheet.box[0]) > Math.abs(sheet.box[1]) ? 0 : 1;
+      return { t, axis, L: axis === 0 ? canvas.w : canvas.h, offset: Math.abs(sheet.box[axis]) };
+    }).filter((f) => f.offset > STILL);
+  // consecutive frames one frame apart are one window
+  return frames.reduce((windows, f) => {
+    const last = windows.at(-1);
+    return last && Math.abs(f.t - last.at(-1).t - 1 / FPS) < 1e-6 ? [...windows.slice(0, -1), [...last, f]] : [...windows, [f]];
+  }, []);
 }
+const leavesAt = (b, t) => drawnLeaves(snapshotOf(b.built.frameAt(t).sampled));
 for (const name of [WIDE, TALL]) {
-  test(`poster ${name}: no frame of a cover slices a word at the sheet's edge or the frame's edge, nor stops the sheet just short of home`, () => {
-    const b = gate(name);
-    const canvas = { w: b.film.format === '16:9' ? 1920 : 1080, h: b.film.format === '16:9' ? 1080 : 1920 };
-    const frames = coverFrames(name);
-    assert.ok(frames.length > 0, 'the film has a cover');
-    const bad = frames.flatMap(({ t, leaves, sheet }) => {
-      const [sx, sy] = sheet.box;
-      const axis = Math.abs(sx) > Math.abs(sy) ? 0 : 1;
-      const L = axis === 0 ? canvas.w : canvas.h;
-      const offset = axis === 0 ? sx : sy;
-      const edges = [offset > 0 ? offset : L + offset, 0, L].filter((e) => e > 0.5 && e < L - 0.5 || e === 0 || e === L);
-      const sliced = leaves.filter((l) => l.node.type === 'text').filter((l) => edges.some((e) => l.box[axis] < e - 0.5 && l.box[axis] + l.box[axis + 2] > e + 0.5));
-      const short = Math.abs(offset) > 0.5 && Math.abs(offset) < TAIL * L;
-      return [...sliced.map((l) => `@${t.toFixed(2)} ${l.node.id}`), ...(short ? [`@${t.toFixed(2)} sheet ${offset.toFixed(0)} px from home`] : [])];
+  test(`poster ${name}: every cover's sheet moves every frame of its window and no step exceeds 2.5x the mean`, () => {
+    const windows = coverWindows(name);
+    assert.ok(windows.length > 0, 'the film has a cover');
+    const bad = windows.flatMap((w) => {
+      const path = [...w.map((f) => f.offset), 0];
+      const steps = path.slice(1).map((o, k) => Math.abs(path[k] - o));
+      const mean = steps.reduce((s, x) => s + x, 0) / steps.length;
+      const still = steps.flatMap((s, k) => (s < STILL ? [`@${w[k].t.toFixed(2)} still`] : []));
+      const jump = steps.flatMap((s, k) => (s > STEP_RATIO * mean ? [`@${w[k].t.toFixed(2)} step ${(s / mean).toFixed(2)}x the mean`] : []));
+      return [...still, ...jump];
     });
-    assert.deepEqual(bad.slice(0, 8), []);
+    assert.deepEqual(bad, []);
   });
 }
 
-// a sampled text whose layout box is [x, y, w, h] (only what the snap reads)
-const sampledText = (id, [x, y, w, h]) => ({ type: 'text', id, x, y, rotate: 0, scale: 1, scaleX: 1, scaleY: 1, opacity: 1, children: [], props: { layout: { width: w, height: h } } });
-test('poster cover snap: where every offset of the travel would slice a word, the sheet jumps (start or home), never slices', () => {
-  const canvas = { w: 1080, h: 1920 };
-  // outgoing words down the whole height: every place of the sheet's edge cuts one
-  const from = Array.from({ length: 10 }, (_, k) => sampledText(`o${k}`, [0, 5 + k * 190, 800, 200])); // 5 to 1915 px, overlapping
-  const at = snappedOffset({ from, to: [], canvas, direction: 'up', snap: { tail: 0.1 } });
-  const offsets = Array.from({ length: 13 }, (_, k) => at(k / 12)[1]);
-  const cut = offsets.filter((o) => from.some((t) => o > t.y + 0.5 && o < t.y + t.props.layout.height - 0.5));
-  assert.deepEqual(cut, [], `offsets ${offsets.map((o) => o.toFixed(0))}`);
+// gate-poster-3 (cut bar->close): "a gentler ease so the red sheet crosses the frame over the whole cover". The ruling's
+// 2.5x bounds a jump; the steady ease also keeps the peak step within STEADY of the mean (the default cover curve,
+// inOutCubic, peaks near 2.5x)
+const STEADY = 2;
+test('poster 16:9: the bar to close cover travels on a steady ease, its largest step at most 2x the mean', () => {
+  const b = gate(WIDE);
+  const close = b.durations.slice(0, indexIn(b, 'close')).reduce((s, d) => s + d, 0);
+  const w = coverWindows(WIDE).find((win) => Math.abs(win[0].t - close) < 2 / FPS);
+  assert.ok(w, 'the close opens on a cover');
+  const path = [...w.map((f) => f.offset), 0];
+  const steps = path.slice(1).map((o, k) => Math.abs(path[k] - o));
+  const ratio = Math.max(...steps) / (steps.reduce((s, x) => s + x, 0) / steps.length);
+  assert.ok(ratio <= STEADY, `largest step ${ratio.toFixed(2)}x the mean`);
 });
 
-test('poster cover snap: a word whose ink overhangs its tight layout box (display line height 0.9) is not sliced either', () => {
-  const canvas = { w: 1080, h: 1920 };
-  // a 100 px display line with a tight layout box, 1030 to 1080, baseline 1070; capitals reach a cap height (about 0.72
-  // em) over the baseline, to 998, above the box
-  const word = { ...sampledText('w', [0, 1030, 800, 50]), props: { layout: { width: 800, height: 50, lines: [{ y: 40 }] }, font: { size: 100 } } };
-  const at = snappedOffset({ from: [word], to: [], canvas, direction: 'up', snap: { tail: 0.1 } });
-  const raw = 1010; // an eased offset over the layout box, inside the ink
-  const o = at(1 - raw / canvas.h)[1];
-  assert.ok(!(o > 1070 - 0.72 * 100 + 0.5 && o < 1070 - 0.5), `offset ${o.toFixed(1)} cuts the capitals (ink 998 to 1070)`);
+// The lead's ruling on gate-poster-3 (the cream sheet over the cream code card): where the picked cover's sheet would
+// cross a large opaque area of its own colour, the look picks a plain cut instead. A large area: an opaque path at least
+// LARGE of the frame in the incoming ground's colour on the outgoing shot's last frame.
+const LARGE = 0.1;
+function sameColourArea(b, i) {
+  const start = b.durations.slice(0, i).reduce((s, d) => s + d, 0);
+  const incoming = b.built.backgrounds[i].toLowerCase();
+  const canvas = b.film.format === '16:9' ? 1920 * 1080 : 1080 * 1920;
+  return leavesAt(b, start - 1 / FPS).filter((l) => l.node.type === 'path' && l.node.id !== 'ground' && l.opacity >= 1 && (l.node.props.fill ?? '').toLowerCase() === incoming)
+    .reduce((s, l) => s + l.box[2] * l.box[3], 0) / canvas;
+}
+test('poster 16:9: the picked cover into swap is a plain cut, its sheet would cross the code card of its own colour', () => {
+  const b = gate(WIDE);
+  const i = indexIn(b, 'swap');
+  assert.equal(i % registries.looks.get(LOOK).cutPick.every, 0, 'the look picks the cover for this shot');
+  assert.ok(sameColourArea(b, i) >= LARGE, `the code card covers ${(sameColourArea(b, i) * 100).toFixed(0)} percent in the incoming colour`);
+  assert.equal(resolveShotCut({ ...b.film, look: LOOK }, i).name, 'cut');
 });
+for (const name of [WIDE, TALL]) {
+  test(`poster ${name}: every cover the look still picks crosses no large area of its own colour`, () => {
+    const b = gate(name);
+    const covers = b.film.shots.map((_, i) => i).filter((i) => i > 0 && resolveShotCut({ ...b.film, look: LOOK }, i).name === 'cover');
+    assert.ok(covers.length > 0, 'a cover is still picked');
+    assert.deepEqual(covers.filter((i) => sameColourArea(b, i) >= LARGE).map((i) => b.film.shots[i].id), []);
+  });
+}
 
 test('poster: a film of four free shots shows every ground once before any repeats (look.groundsFresh)', () => {
   const look = registries.looks.get(LOOK);

@@ -1,7 +1,9 @@
 // The "flat" field (poster): one flat ground (the palette's paper, which engine/looks/grounds.mjs sets to the shot's
 // ground), the twelve column edges as hairlines in the palette's rule colour (the ground's second permitted colour) at
 // `alpha`, and at most two cut-paper shapes from the seed: a bar across the frame and a circle off a corner, each in
-// the palette's accent with a misregistered copy in its ink set MISREGISTER units down and right under it. The shapes
+// the palette's accent (its ink where the accent is the darkest of ground, ink and accent: a dark disc off a corner read
+// as a hole or a shadow, gate-poster-3) with a misregistered copy in its ink set `register` units (default MISREGISTER)
+// down and right under it, none at 0 (flush). The shapes
 // keep clear of `clear` (the text area, [x, y, w, h] in canvas pixels, given by the film: engine/graph/film.mjs), or of
 // the margins when it is absent; a shape with too little room is left out. It is still (animated: false), so a held
 // frame is reused. plan() is pure data; paint() draws it once into a cached offscreen canvas and blits that after.
@@ -9,6 +11,7 @@ import { registries } from '../registry.mjs';
 import { checkInput, checkPaint, blitCached, deepFreeze, resolveParams, TAU } from './shared.mjs';
 import { mulberry32 } from '../seeded.mjs';
 import { canvasSide, columnEdges } from './grid.mjs';
+import { luminance } from './color.mjs';
 
 const HAIRLINE = 1; // units
 const HALF = 2;
@@ -25,8 +28,17 @@ const RULES = Object.freeze({
   marginTall: { min: 0, max: MAX_UNITS },
   gutterTall: { min: 0, max: MAX_UNITS },
   alpha: { min: 0, max: 1 },
+  register: { min: 0, max: MAX_UNITS },
 });
-const NEEDED = Object.freeze(Object.keys(RULES));
+const OPTIONAL = Object.freeze(['register']);
+const NEEDED = Object.freeze(Object.keys(RULES).filter((name) => !OPTIONAL.includes(name)));
+
+// The shapes' colour: the accent, or the ink where the accent is the darkest of the ground, the ink and the accent.
+function shapeFill(palette) {
+  const lum = (hex) => luminance(hex);
+  const darkest = Math.min(lum(palette.paper), lum(palette.ink));
+  return lum(palette.accent) < darkest ? palette.ink : palette.accent;
+}
 
 // The text area in canvas pixels: `clear` when given (four finite numbers), else the margins inset.
 function clearRect(clear, cw, ch, margin) {
@@ -76,7 +88,7 @@ export function plan(input) {
   const shapes = [barShape(rng, clear, cw, ch, unit, [x0, y0, w]), circleShape(rng, clear, cw, ch, unit, [x0, y0])].filter(Boolean);
   return deepFreeze({
     field: 'flat', w, h, unit, tint: palette.paper, rule: palette.rule, alpha: params.alpha, width: HAIRLINE * unit,
-    lines: columnEdges(cw, margin, gutter).map((x) => x0 + x), shapes, fill: palette.accent, copy: palette.ink, offset: MISREGISTER * unit,
+    lines: columnEdges(cw, margin, gutter).map((x) => x0 + x), shapes, fill: shapeFill(palette), copy: palette.ink, offset: (params.register ?? MISREGISTER) * unit,
   });
 }
 
@@ -98,8 +110,10 @@ function buildFlat(c, p) {
   for (const x of p.lines) c.fillRect(Math.round(x - p.width / HALF), 0, Math.max(1, Math.round(p.width)), p.h);
   c.globalAlpha = 1;
   for (const s of p.shapes) {
-    c.fillStyle = p.copy;
-    drawShape(c, s, p.offset);
+    if (p.offset > 0) {
+      c.fillStyle = p.copy;
+      drawShape(c, s, p.offset);
+    }
     c.fillStyle = p.fill;
     drawShape(c, s, 0);
   }

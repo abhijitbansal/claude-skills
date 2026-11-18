@@ -6,6 +6,8 @@ import { registries } from '../registry.mjs';
 import { didYouMean } from '../../shared/errors.mjs';
 import { DIRECTION_MEANING, takesEdges } from './edges.mjs';
 import { SMEAR_AXES } from './smear.mjs';
+import { ease } from '../time/ease.mjs';
+import { hasGrounds, groundKeys, lookOnGround } from '../looks/grounds.mjs';
 import './index.mjs';
 
 /** The cut a shot gets when neither it nor the film names one. */
@@ -79,14 +81,16 @@ function smearAxesProblem(value, name, entry, cuts) {
   return entry.smearable !== true ? `the "${name}" cut takes no smear; the cuts that do: ${smearableNames(cuts).join(', ')}` : null;
 }
 
-// a look's cutStyle only, the cover (engine/cuts/cover.mjs snappedOffset): { tail }, the share of the frame the sheet jumps
-// before home
-const SNAP_TAIL_MAX = 0.5;
-function snapProblem(value, name) {
-  if (name !== 'cover') return `the "${name}" cut takes no snap; only the cover does`;
-  const ok = value !== null && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).every((k) => k === 'tail')
-    && (value.tail === undefined || (Number.isFinite(value.tail) && value.tail >= 0 && value.tail < SNAP_TAIL_MAX));
-  return ok ? null : `must be { tail } with tail a number from 0 to under ${SNAP_TAIL_MAX}, got ${shown(value)}`;
+// a look's cutStyle only, the cover (engine/cuts/cover.mjs): the name of the curve its sheet travels on (time/ease.mjs)
+function easeProblem(value, name) {
+  if (name !== 'cover') return `the "${name}" cut takes no ease; only the cover does`;
+  if (typeof value !== 'string') return `must be the name of an ease, got ${shown(value)}`;
+  try {
+    ease(value);
+    return null;
+  } catch (err) {
+    return err.message;
+  }
 }
 
 /**
@@ -106,7 +110,7 @@ export function cutOptionProblems(options, name, { keys = CUT_KEYS, cuts = regis
     ['duration', (v) => durationProblem(v, entry)],
     ['smear', (v) => smearProblem(v, name, entry, cuts)],
     ['smearAxes', (v) => smearAxesProblem(v, name, entry, cuts)],
-    ['snap', (v) => snapProblem(v, name)],
+    ['ease', (v) => easeProblem(v, name)],
   ];
   // a key outside `keys` is reported once, as unknown (smearAxes in a film's cut object), not checked as well
   const known = checks.filter(([key]) => keys.includes(key) && options[key] !== undefined)
@@ -138,19 +142,34 @@ export function filmLook(film, { modes = registries.modes, looks = registries.lo
 export function resolveShotCut(film, index, { look = filmLook(film), shotDuration, cuts = registries.cuts } = {}) {
   if (index === 0) return null;
   const own = film.shots[index].cut;
-  const value = own === undefined && film.cut === undefined ? pickedCut(look, index) : own;
+  const value = own === undefined && film.cut === undefined ? pickedCut(film, look, index) : own;
   return resolveCut(value, { look, rootCut: film.cut, shotDuration, cuts });
 }
 
 // The cut the look picks for shot `index` when neither the shot nor the film names one: look.cutPick = { cut, every,
-// directions? } (poster, gate-poster-1 ruling 6: its cut-paper wipe, the next ground's sheet sliding over the last)
-// opens every `every`-th shot, its direction taken in turn; undefined (the hard cut) for the others and in a look
-// without it.
-function pickedCut(look, index) {
+// directions?, plates? } (poster, gate-poster-1 ruling 6: its cut-paper wipe, the next ground's sheet sliding over the
+// last) opens every `every`-th shot, its direction taken in turn; undefined (the hard cut) for the others, in a look
+// without it, and with `plates` where the sheet would cross a plate of its own colour (sheetUnseen).
+function pickedCut(film, look, index) {
   const pick = look?.cutPick;
   if (!pick || index % pick.every !== 0) return undefined;
+  if (pick.plates === true && sheetUnseen(film, look, index)) return undefined;
   const turn = index / pick.every - 1;
   return pick.directions ? { type: pick.cut, direction: pick.directions[turn % pick.directions.length] } : pick.cut;
+}
+
+const DEFAULT_SEED = 1; // as engine/graph/film.mjs: the seed of a film that names none
+
+// look.cutPick.plates (poster, the lead's ruling on gate-poster-3: the cream sheet crossed the cream code card unseen,
+// then popped): is the outgoing shot's plate (its kind's look data `fill`, a palette key: the code card) the incoming
+// shot's ground colour? Then the sheet would cross a large area of its own colour, and the look cuts plainly instead.
+function sheetUnseen(film, look, index) {
+  if (!hasGrounds(look)) return false;
+  const fill = look.kinds?.[film.shots[index - 1]?.show]?.fill;
+  if (typeof fill !== 'string') return false;
+  const keys = groundKeys(look, index + 1, film.seed ?? DEFAULT_SEED, film.shots.map((s) => s?.show));
+  const plate = lookOnGround(look, keys[index - 1]).palette[fill];
+  return typeof plate === 'string' && plate.toLowerCase() === look.palette[keys[index]].toLowerCase();
 }
 
 /**

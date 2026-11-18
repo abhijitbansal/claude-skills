@@ -37,7 +37,10 @@ lookContract(NAME, {
   secondaryMin: 52,
   kinds: registries.kinds.names(),
   // number: at 9:16 in viral its digits overflow poster's numeral floor (poster.mjs); parked in poster alone
-  parked: { number: true },
+  // feed: the tall reply card blank 1.3 to 2.2 s at the final gate (gate-poster-3); parked in poster alone
+  parked: { number: true, feed: true },
+  // listed after its gate (looks-four Task 8): 16:9 ship after fixes, 9:16 ship after fixes with feed parked (gate record)
+  listed: true,
 });
 
 const tenShots = () => Array.from({ length: 10 }, (_, i) => ({ id: `s${i}`, show: 'statement', text: `Shot number ${i + 1} here`, hold: 1 }));

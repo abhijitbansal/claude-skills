@@ -129,15 +129,17 @@ const MISREGISTER = 3; // units: the misregistered copy's offset, down and right
 const COPY_KEYS = Object.freeze(['accent', 'accent2', 'rule', 'paper']); // the copy's colour: the first that is not the card's
 
 // A cut-paper card (`edge: 'cut'`, poster): a flat rectangle in `fill` (default the ink), turned `turn` degrees, no
-// shadow, over one misregistered copy MISREGISTER units down and right in the other flat colour (`copy`, else the first
-// of COPY_KEYS whose colour differs from the card's), which shows past the paper's lower right edge.
+// shadow, over one misregistered copy `misregister` units (default MISREGISTER) down and right in the other flat colour
+// (`copy`, else the first of COPY_KEYS whose colour differs from the card's), which shows past the paper's lower right
+// edge; `misregister: 0` sets the card flush, the paper alone (poster: gate-poster-3, the offset read as a shadow).
 function cutCard({ id, box, at, look, unit }, style) {
   const [x, y, w, h] = box;
   const d = polyline([[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]], true);
   const fill = colourOf(look, style.fill ?? 'ink');
-  const copy = colourOf(look, style.copy ?? COPY_KEYS.find((key) => colourOf(look, key).toLowerCase() !== fill.toLowerCase()) ?? 'paper');
+  const offset = (style.misregister ?? MISREGISTER) * unit;
+  const copy = () => colourOf(look, style.copy ?? COPY_KEYS.find((key) => colourOf(look, key).toLowerCase() !== fill.toLowerCase()) ?? 'paper');
   const parts = [
-    node('path', `${id}.misregister`, { d, fill: copy, x: MISREGISTER * unit, y: MISREGISTER * unit }),
+    ...(offset > 0 ? [node('path', `${id}.misregister`, { d, fill: copy(), x: offset, y: offset })] : []),
     node('path', `${id}.paper`, { d, fill }),
   ];
   return { nodes: [entrance({ id, at, look, unit, cx: x + w / HALF, cy: y + h / HALF, rotate: style.turn ?? CUT_TURN, children: parts })] };

@@ -198,9 +198,9 @@ test('--list cuts: each cut with its family, directions, default length, whether
   assert.deepEqual([match.directions, match.smear], [null, false]);
   const text = formatList('cuts', listEntries('cuts'));
   // a direction is the way the next shot moves (lead ruling 1, round 2), and the list says so in those words
-  assert.match(text, /^slide {2}.+\n {2}node, moves left \(default\), right, up or down \(the way the next shot moves on screen: "left" moves leftward and enters by the right edge, "up" moves upward and enters by the bottom edge\); 0\.4 s; takes smear; in the palette of desk, pop\n {2}example: \{"type":"slide","direction":"right"\}$/m);
+  assert.match(text, /^slide {2}.+\n {2}node, moves left \(default\), right, up or down \(the way the next shot moves on screen: "left" moves leftward and enters by the right edge, "up" moves upward and enters by the bottom edge\); 0\.4 s; takes smear; in the palette of desk, pop, poster\n {2}example: \{"type":"slide","direction":"right"\}$/m);
   assert.match(text, /^iris {2}.+\n {2}layer, in \(default\), out; 0\.4 s; no smear/m);
-  assert.match(text, /^cut {2}.+\n {2}node, no direction; no window; no smear; in the palette of desk, pop, cosmos, ledger\n {2}example: "cut"$/m);
+  assert.match(text, /^cut {2}.+\n {2}node, no direction; no window; no smear; in the palette of desk, pop, cosmos, ledger, poster\n {2}example: "cut"$/m);
 });
 
 test('--list cuts: every registered cut has an example that validates in desk (erase in the hand look, its only look)', () => {

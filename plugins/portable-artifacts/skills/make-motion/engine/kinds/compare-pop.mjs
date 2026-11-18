@@ -11,7 +11,7 @@ import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { landing, colourOf } from '../devices/shared.mjs';
 import { layoutText } from '../text/layout.mjs';
-import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, fitInBox, numeralLayout, isWide } from './shared.mjs';
+import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, shownFrom, stepUnder, fitInBox, numeralLayout, isWide, cardOf } from './shared.mjs';
 import { STACK, composeStack, stackNodes, stackArea, restack, beatPad } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { SIDES, valueText, hasValues, pointsText } from './compare-text.mjs';
@@ -64,6 +64,19 @@ function pictureNodes(shot, key, ctx, data, { fit, placed, at }) {
   }).nodes;
 }
 
+// data.block (poster, gate-poster-3: the quadrant beside the 16:9 BEFORE list stood empty): on a wide frame the look's
+// cut-paper card (the card device, as the diagram's chips) fills the room right of the points, `pointGap` clear of them,
+// from their cap line to their foot, when that room is at least BLOCK_MIN of the stack width; without the card's
+// entrance, so it is whole whenever its side shows (the side opens set). No text, so no third size and no new pairing.
+const BLOCK_MIN = 0.25;
+function blockBeside(id, ctx, data, { area, left, top, bottom }) {
+  if (data.block !== true || !isWide(ctx.canvas)) return [];
+  const x = left + data.pointGap * ctx.unit, w = area.left + area.w - x, h = bottom - top;
+  if (w < BLOCK_MIN * area.w || h <= 0) return [];
+  const card = cardOf(ctx, `${id}.block`, [x, top, w, h], 0);
+  return [node('group', card.id, card.props, { children: card.children })];
+}
+
 // One side in `area` (the stack area, or its part on a tall frame): its wrapper's children (the picture, the tag, the
 // stack, the points) and its box.
 function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinity, turn, both }) {
@@ -96,6 +109,10 @@ function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinit
     if (tag !== undefined && Math.abs(tag / side.final.font.size - 1) <= TAG_AGREE) break;
     side = laid({ ...tagged, kickerSize: side.final.font.size });
   }
+  // a tag left over its points (agreed within TAG_AGREE, above) breaks the hero rule by that much (gate-poster-3: AFTER
+  // at 2.98 times under A SCRIPT): set once more at the points' size, a tag no larger than the last, so the stack is no
+  // smaller and the points no smaller than the tag
+  if (data.pointThird === true && side.final !== null && side.staged.kickerSize > side.final.font.size) side = laid({ ...tagged, kickerSize: side.final.font.size });
   const { staged, placed, final } = side;
   const font = final?.font ?? null, points = final?.layout ?? null;
   const hero = `${staged.id}.title`;
@@ -118,7 +135,9 @@ function sideParts(shot, key, k, ctx, data, { at, value, area, maxSize = Infinit
   if (points !== null) {
     const y = under + data.pointGap * unit + CAP_HEIGHT * font.size - points.lines[0].y;
     children.push(node('text', `${staged.id}.points`, { x: area.left, y, layout: points, font, fill: look.palette.ink2, role: 'body' }));
+    const top = y + points.lines[0].y - CAP_HEIGHT * font.size;
     under = y + points.lines.at(-1).y + WORD_DESCENT * font.size;
+    children.push(...blockBeside(staged.id, ctx, data, { area, left: area.left + points.width, top, bottom: under }));
   }
   // the whole side, its tag (or first line) to its lowest ink: the turn bar keeps clear of it; `foot`: the lowest text
   // layout box's bottom (descent included), which a spread side keeps inside the band (spreadAreas)

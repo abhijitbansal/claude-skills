@@ -97,7 +97,7 @@ test('list: one item, a misspelt style, an unknown key in an item and an unknown
 test('list: a look with no data for the kind refuses it, naming the looks that have it; expand says the same', () => {
   const desk = registries.looks.get('desk');
   if (!registries.looks.has('test-no-list')) registries.looks.add('test-no-list', { ...desk, name: 'test-no-list', kinds: { end: desk.kinds.end } });
-  assert.deepEqual(errorsOf(EXAMPLE(), 'pro', { look: 'test-no-list' }), [{ path: 'shots[0].show', message: 'kind "list" is not supported by look "test-no-list"; the looks that support it: desk, pop, cosmos, ledger' }]);
+  assert.deepEqual(errorsOf(EXAMPLE(), 'pro', { look: 'test-no-list' }), [{ path: 'shots[0].show', message: 'kind "list" is not supported by look "test-no-list"; the looks that support it: desk, pop, cosmos, ledger, poster' }]);
   assert.throws(() => expandIn(filmOf([EXAMPLE()], 'test-no-list')), /look "test-no-list" has no data for kind "list"/);
 });
 

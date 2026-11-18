@@ -6,7 +6,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { registries } from '../../engine/registry.mjs';
 import '../../engine/kinds/index.mjs';
-import { groundKeys, shotLook, GROUND_ID } from '../../engine/looks/grounds.mjs';
+import '../../engine/fields/index.mjs';
+import { groundKeys, shotLook, lookOnGround, GROUND_ID } from '../../engine/looks/grounds.mjs';
+import { relativeLuminance } from '../../shared/contrast.mjs';
 import { emphasisOf } from '../../engine/kinds/emphasis.mjs';
 import { filmFor, all } from './helpers/kinds.mjs';
 import { pathBox } from './helpers/boxes.mjs';
@@ -15,21 +17,47 @@ const NAME = 'poster';
 const look = () => registries.looks.get(NAME);
 const MISREGISTER = 3; // units
 
-test('a cut card has no shadow and carries one misregistered copy offset past its paper, in another flat colour', () => {
-  const l = shotLook(look(), 0, 1);
-  const out = registries.devices.get('card').build({ id: 'c', box: [100, 100, 400, 300], at: 0, look: l, unit: 1, seed: 1 });
-  const group = out.nodes[0];
-  const parts = group.children;
-  assert.ok(!parts.some((n) => n.id.endsWith('.shadow')), 'no shadow');
+// gate-poster-3 (flow): the red copy offset past each chip's lower right edge read as a drop shadow, which the brief bans;
+// poster's cut card is flush (devices.card.misregister 0): the paper alone, turned, no shadow and no offset copy
+test('a poster cut card is flush: no shadow and no offset copy, only its paper, square and turned', () => {
+  for (const index of [0, 1, 2, 3]) {
+    const l = shotLook(look(), index, 1);
+    const out = registries.devices.get('card').build({ id: 'c', box: [100, 100, 400, 300], at: 0, look: l, unit: 1, seed: 1 });
+    const group = out.nodes[0];
+    const parts = group.children;
+    assert.deepEqual(parts.map((n) => n.id), ['c.paper'], `shot ${index}: the paper alone, got ${parts.map((n) => n.id).join(', ')}`);
+    const [, , w, h] = pathBox(parts[0].props.d);
+    assert.deepEqual([w, h], [400, 300], 'the paper is the box, square');
+    assert.ok(Math.abs(group.props.rotate) > 0, 'the card is turned');
+  }
+});
+
+test('a cut card in a look that names no misregister keeps one copy offset 3 units past its paper, in another colour', () => {
+  const base = shotLook(look(), 0, 1);
+  const { misregister, ...card } = base.devices.card;
+  const l = { ...base, devices: { ...base.devices, card } };
+  const parts = registries.devices.get('card').build({ id: 'c', box: [100, 100, 400, 300], at: 0, look: l, unit: 1, seed: 1 }).nodes[0].children;
   const copies = parts.filter((n) => n.id.endsWith('.misregister'));
-  assert.equal(copies.length, 1, 'one misregistered copy');
   const paper = parts.find((n) => n.id === 'c.paper');
+  assert.equal(copies.length, 1, 'one misregistered copy');
   assert.notEqual(copies[0].props.fill, paper.props.fill, 'the copy is another colour');
   assert.ok(parts.indexOf(copies[0]) < parts.indexOf(paper), 'the copy lies under the paper');
   assert.deepEqual([copies[0].props.x, copies[0].props.y], [MISREGISTER, MISREGISTER], 'offset 3 units');
-  const [, , w, h] = pathBox(paper.props.d);
-  assert.deepEqual([w, h], [400, 300], 'the paper is the box, square');
-  assert.ok(Math.abs(group.props.rotate) > 0, 'the card is turned');
+});
+
+// gate-poster-3 (cut shot->swap, cut bar->close): a corner shape of the flat field read as a dark curl, a shadow or a
+// hole: its ink copy offset past it, and on the red ground the disc itself in the black. Flush (field params.register
+// 0) and never the darkest colour on its frame.
+test('the flat field\'s cut-paper shapes are flush and never the darkest colour of their frame, on every ground', () => {
+  const flat = registries.fields.get('flat');
+  for (const key of look().grounds) {
+    const palette = lookOnGround(look(), key).palette;
+    const plan = flat.plan({ w: 2150, h: 1210, unit: 1, seed: 3, palette, params: { ...look().field.params, clear: [600, 400, 900, 400] } });
+    assert.ok(plan.shapes.length > 0, `${key}: shapes to judge`);
+    assert.equal(plan.offset, 0, `${key}: no offset copy`);
+    const lums = [palette.paper, palette.ink, palette.accent].map(relativeLuminance);
+    assert.ok(relativeLuminance(plan.fill) > Math.min(...lums), `${key}: the shapes ${plan.fill} are the darkest of ${[palette.paper, palette.ink, palette.accent].join(', ')}`);
+  }
 });
 
 test('the cover sheet takes the incoming shot\'s ground colour', () => {

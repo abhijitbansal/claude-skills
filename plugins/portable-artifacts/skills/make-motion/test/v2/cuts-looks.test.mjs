@@ -71,7 +71,14 @@ test('validateLook refuses a cutStyle direction or duration the cut does not acc
   assert.throws(() => validateLook(withCuts({ cutStyle: { match: { direction: 'up' } } })), /cutStyle\.match\.direction: the "match" cut takes no direction/);
   assert.throws(() => validateLook(withCuts({ cutStyle: { slide: { duration: 3 } } })), /cutStyle\.slide\.duration: must be a number of seconds from 0\.1 to 2/);
   assert.throws(() => validateLook(withCuts({ cutStyle: { cut: { duration: 0.5 } } })), /cutStyle\.cut\.duration: a hard cut has no duration/);
-  assert.throws(() => validateLook(withCuts({ cutStyle: { slide: { ease: 'linear' } } })), /cutStyle\.slide\.ease: unknown option/);
+  // `ease` is a look's cover option (the lead's ruling on gate-poster-3: poster's steady cover); any other cut refuses it
+  assert.throws(() => validateLook(withCuts({ cutStyle: { slide: { ease: 'linear' } } })), /cutStyle\.slide\.ease: the "slide" cut takes no ease; only the cover does/);
+});
+
+test('validateLook takes a cover ease that parses and refuses one that does not', () => {
+  assert.doesNotThrow(() => validateLook(withCuts({ cutStyle: { cover: { ease: 'inOutQuad' } } })));
+  assert.throws(() => validateLook(withCuts({ cutStyle: { cover: { ease: 'wobble' } } })), /cutStyle\.cover\.ease: unknown ease/);
+  assert.throws(() => validateLook(withCuts({ cutStyle: { cover: { ease: 3 } } })), /cutStyle\.cover\.ease: must be the name of an ease, got 3/);
 });
 
 test('validateLook refuses smear: true on a cut that cannot smear', () => {
@@ -91,7 +98,8 @@ test('resolveCut reads cutStyle: a look\'s slide with no option takes the look\'
 test('--list cuts names, per cut, the looks whose palette holds it', () => {
   const entries = listEntries('cuts');
   // ledger listed after its gate (looks-four Task 5): its palette is cut, match, fade and wipe
-  assert.deepEqual(entries.find((e) => e.name === 'cut').palettes, [...LOOKS, 'ledger']);
-  assert.deepEqual(entries.find((e) => e.name === 'punch').palettes, ['pop']);
+  // poster listed after its gate (looks-four Task 8): its palette is cut, cover, iris, wipe, punch and slide
+  assert.deepEqual(entries.find((e) => e.name === 'cut').palettes, [...LOOKS, 'ledger', 'poster']);
+  assert.deepEqual(entries.find((e) => e.name === 'punch').palettes, ['pop', 'poster']);
   assert.deepEqual(entries.find((e) => e.name === 'match').palettes, ['desk', 'cosmos', 'ledger']);
 });

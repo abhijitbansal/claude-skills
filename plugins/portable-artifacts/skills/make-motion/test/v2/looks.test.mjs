@@ -32,8 +32,8 @@ const ACCENT_SAMPLE = '#ff6600';
 const lookNames = () => registries.looks.names();
 const closeTo = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`);
 
-test('desk, pop, cosmos and ledger are the listed looks, in showreel order (cosmos un-parked after the final gate review, ledger listed after its gate)', () => {
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger']);
+test('desk, pop, cosmos, ledger and poster are the listed looks, in showreel order (cosmos un-parked after the final gate review, ledger and poster listed after their gates)', () => {
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
   assert.equal(registries.looks.get('desk').name, 'desk');
   assert.equal(registries.looks.get('pop').name, 'pop');
@@ -139,6 +139,15 @@ test('every field a look names is registered and accepts the look params', () =>
   }
 });
 
+// A move that may take no time: a hard arrival (slam) or a hard emphasis step that scales nothing.
+const zeroAllowed = (key, move) => move.dur === 0 && (key === 'slam' || (key === 'emphasize' && move.scale === 1));
+
+test('the zero-duration exception refuses a timeless entrance and an emphasis that scales', () => {
+  assert.equal(zeroAllowed('emphasize', { ease: 'linear', dur: 0, scale: 1 }), true);
+  assert.equal(zeroAllowed('emphasize', { ease: 'linear', dur: 0, scale: 1.2 }), false);
+  assert.equal(zeroAllowed('enter', { ease: 'linear', dur: 0 }), false);
+});
+
 test('every move names a curve that parses and has the keys the grammar needs', () => {
   for (const name of lookNames()) {
     const { moves } = registries.looks.get(name);
@@ -148,8 +157,9 @@ test('every move names a curve that parses and has the keys the grammar needs', 
     for (const [key, move] of Object.entries(moves)) {
       if (move === null) continue; // a named move the look does not use
       assert.equal(typeof ease(move.ease), 'function', `${name}.${key}`);
-      // desk's slam is a hard arrival: dur 0
-      assert.ok(move.dur > 0 || (key === 'slam' && move.dur === 0), `${name}.${key} has a duration`);
+      // desk's slam is a hard arrival: dur 0; poster's emphasis is a hard step on the word that scales nothing (scale 1,
+      // dur 0: "nothing pulses", looks-four plan), listed after its gate
+      assert.ok(move.dur > 0 || zeroAllowed(key, move), `${name}.${key} has a duration`);
     }
   }
   assert.throws(() => ease('wobble'), /unknown ease/);
@@ -332,7 +342,7 @@ test('mode values are the brief values', () => {
 test('registering twice is harmless: a second evaluation of the index does not throw', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?again'));
   await assert.doesNotReject(() => import('../../engine/modes/index.mjs?again'));
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger']);
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
 });
 
@@ -380,7 +390,7 @@ test('the validator reads each look cuts: every registered cut in either look (d
 
 test('an unknown look still lists the real ones', () => {
   const r = validate({ version: 2, look: 'dsk', shots: shots(undefined) });
-  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos, ledger)' }]);
+  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos, ledger, poster)' }]);
 });
 
 test('every look names its composition: desk is editorial, pop is a stack', () => {

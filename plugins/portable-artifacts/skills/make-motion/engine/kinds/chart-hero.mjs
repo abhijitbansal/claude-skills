@@ -34,7 +34,7 @@ function thirdSize(shot, ctx, data, { text, room, plotW }) {
   if (data.heroThird !== true || text === null) return null;
   const items = chartData(shot).items ?? [];
   const decimals = valueDecimals(items.map((i) => i.value));
-  const one = fontFor(ctx.look, 'label', 1, ctx.unit);
+  const one = fontFor(ctx.look, data.labelFace ?? 'label', 1, ctx.unit);
   const band = (plotW / Math.max(1, items.length)) * LABEL_SHARE;
   const widest = Math.max(...items.flatMap((it) => [labelWidth(ctx, one, it.key), labelWidth(ctx, one, valueText(it.value, decimals, shot.unit), true)]));
   const fits = widest > 0 ? band / widest : Infinity;
@@ -78,9 +78,19 @@ function footSource(shot, ctx, style, data, { left, width, bottom }) {
   return label(ctx, { ...opts, y: bottom - layout.height + layout.lines[0].y });
 }
 
+// data.labelFace (poster, gate-poster-3: the labels and source were a mixed-case regular-width sans, off the voice): the
+// category and value labels and the source in that font role, set in capitals as the display face is, so they are
+// measured, fitted and drawn in the condensed caps. -> the context the labels are measured and drawn in.
+function labelContext(ctx, data) {
+  if (data.labelFace === undefined) return ctx;
+  const caps = data.labelFace === 'display' ? ctx.look.caps.display : ctx.look.caps.label;
+  return { ...ctx, look: { ...ctx.look, caps: { ...ctx.look.caps, label: caps } } };
+}
+
 /** The poster chart: { nodes, boxes } with the plot's group carrying the hero id. `heroValue`: the highlighted value's
  *  text, or null. */
-export function expandHeroChart(shot, ctx, data, hero, heroValue) {
+export function expandHeroChart(shot, outer, data, hero, heroValue) {
+  const ctx = labelContext(outer, data);
   const { unit } = ctx;
   const base = chartStyle(ctx, data);
   const area = stackArea(ctx);
@@ -91,7 +101,7 @@ export function expandHeroChart(shot, ctx, data, hero, heroValue) {
   const third = heroValue === null ? null : thirdSize(shot, ctx, data, {
     text: heroValue, room: numeralRoom(ctx, { ...data, numeralShare: share }, heroValue, { width: column, height: bottom - area.top }), plotW: wide ? area.w - column - data.heroGap * unit : area.w,
   });
-  const style = third === null ? base : { ...base, font: fontFor(ctx.look, 'label', third, unit) };
+  const style = third === null ? base : { ...base, font: fontFor(ctx.look, data.labelFace ?? 'label', third, unit) };
   const labelSize = style.font.size;
   const numeral = heroNumeral(shot, ctx, { ...data, numeralShare: share }, heroValue, { left: area.left, top: area.top, width: column, height: bottom - area.top, labelSize });
   const titleTop = numeral === null ? area.top : numeral.bottom + data.numeralGap * unit;
