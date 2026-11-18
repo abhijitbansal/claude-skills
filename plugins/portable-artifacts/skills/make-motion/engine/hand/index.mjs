@@ -11,8 +11,9 @@ import { track } from '../time/track.mjs';
 import { deviceRng, polyline } from '../devices/shared.mjs';
 import { unitOf } from '../units.mjs';
 import { wobble } from './geometry.mjs';
-import { strokePlan, polylinePoints } from './strokes.mjs';
-import { handPose } from './pose.mjs';
+import { strokePlan, strokePlanned, polylinePoints } from './strokes.mjs';
+import { arrivalTrack } from '../kinds/arrivals.mjs';
+import { handPose, restPoint, startsAtRest } from './pose.mjs';
 import { handNodes, handOutline } from './shape.mjs';
 import { flattenForHand } from './flatten.mjs';
 
@@ -89,7 +90,14 @@ function poseTracks(plan, look, ctx, duration) {
 export function handPlan(shotNodes, timing, ctx) {
   const unit = ctx.unit ?? unitOf(ctx.canvas);
   const nodes = flattenForHand(shotNodes, ctx.look, unit).map((n) => (n.type === 'path' ? wobbled(n, ctx.look, ctx.seed ?? 0, unit) : n));
-  return { nodes, plan: strokePlan(nodes, timing, ctx.look, { unit }) };
+  return { nodes, ...strokePlanned(nodes, timing, ctx.look, { unit, rest: ctx.look.hand && startsAtRest(ctx.look, ctx.canvas) ? restPoint(ctx.look, ctx.canvas) : null }) };
+}
+
+// A node the hand has no time to draw, put on at once when its sentence opens: a stepped opacity (0 then 1, never part-way).
+function setNode(n, at) {
+  const rest = Object.fromEntries(Object.entries(n.tracks).filter(([name]) => name !== 'draw' && name !== 'opacity'));
+  const wordTracks = n.type === 'text' ? writtenWords(n.wordTracks, false) : n.wordTracks;
+  return node(n.type, n.id, n.props, { tracks: { ...rest, opacity: arrivalTrack(at) }, children: n.children, wordTracks, step: n.step, depth: n.depth });
 }
 
 /**
@@ -99,8 +107,9 @@ export function handPlan(shotNodes, timing, ctx) {
 export function handLayer(shotNodes, timing, ctx) {
   const look = ctx.look;
   if (!look?.hand) return shotNodes;
-  const { nodes, plan } = handPlan(shotNodes, timing, ctx);
-  const drawn = nodes.flatMap((n) => drawnNode(n, plan.filter((s) => s.node === n.id)));
+  const { nodes, plan, set } = handPlan(shotNodes, timing, ctx);
+  const setAt = new Map(set.map((s) => [s.node, s.at]));
+  const drawn = nodes.flatMap((n) => (setAt.has(n.id) ? [setNode(n, setAt.get(n.id))] : drawnNode(n, plan.filter((s) => s.node === n.id))));
   const hand = node('group', 'hand', { role: 'hand', rotate: look.hand.angle ?? 0 }, {
     tracks: poseTracks(plan, look, { ...ctx, unit: ctx.unit ?? unitOf(ctx.canvas) }, timing.duration),
     children: handNodes(look, ctx.unit ?? unitOf(ctx.canvas)),
@@ -135,6 +144,17 @@ function outlineAt(outline, pose) {
   return outline.map(([x, y]) => [pose.x + x * c - y * s, pose.y + x * s + y * c]);
 }
 
+// A stroke the hand draws must lie inside the frame (EDGE_SLACK units for the wobble): one finding per node that does not.
+const EDGE_SLACK = 6;
+function strokeEdgeFindings(plan, canvas, unit) {
+  const slack = EDGE_SLACK * unit;
+  const outside = ([x, y]) => x < -slack || y < -slack || x > canvas.w + slack || y > canvas.h + slack;
+  const nodes = new Map();
+  for (const s of plan) if (!nodes.has(s.node) && s.points.some(outside)) nodes.set(s.node, s.start);
+  return [...nodes].map(([node, t]) => ({ kind: 'mechanical', rule: 'stroke-edge', node, t,
+    message: `"${node}" is drawn past the edge of the frame: keep every stroke inside it` }));
+}
+
 /**
  * The plan's findings: { kind, rule, node, message, t }. `texts`: [{ id, box: [x, y, w, h], done }] the ink box of every
  * text the hand writes or that stands on the board, and the shot second it is finished. `opts`: { canvas, unit, duration }.
@@ -160,6 +180,7 @@ export function handFindings(plan, look, texts, { canvas, unit = 1, duration }) 
   for (const [id, { worst, at }] of covered) {
     if (worst > COVER_SECONDS) out.push({ kind: 'mechanical', rule: 'covered', node: id, t: at, message: `the hand rests over the finished text "${id}" for ${worst.toFixed(2)} s; the most is ${COVER_SECONDS} s` });
   }
+  out.push(...strokeEdgeFindings(plan, canvas, unit));
   if (edge !== null) out.push({ kind: 'mechanical', rule: 'hand-edge', node: 'hand', t: edge, message: 'the hand crosses the top or left edge of the frame; it may leave only through the bottom or right edge' });
   return out;
 }

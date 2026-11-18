@@ -40,6 +40,17 @@ test('screen and code are excluded: refused with the looks that support them; ev
   assert.ok(supportsKind(look(), 'statement') && supportsKind(look(), 'free'));
 });
 
+// m2: the kinds whose registered example reviews clean at both formats once the hand has its per-element speed model
+// (marker-examples-browser.test.mjs runs each of them); the rest stay parked with the measured reason in marker.mjs
+const SHIPPED_KINDS = Object.freeze(['statement', 'end', 'quote', 'diagram']);
+const STILL_PARKED = Object.freeze(['number', 'list', 'compare', 'chart', 'timeline', 'feed', 'media', 'map', 'clipping', 'free']);
+
+test('marker ships exactly the kinds that review clean; the others are parked in it alone', () => {
+  const names = registries.kinds.names().filter((k) => supportsKind(look(), k));
+  assert.deepEqual(names.filter((k) => !isParkedKind(look(), k)).sort(), [...SHIPPED_KINDS].sort());
+  assert.deepEqual(names.filter((k) => isParkedKind(look(), k)).sort(), [...STILL_PARKED].sort());
+});
+
 test('race is the one parked chart type, once the chart kind is there', () => {
   if (!supportsKind(look(), 'chart')) return;
   assert.deepEqual([...look().kinds.chart.experimentalTypes], ['race']);

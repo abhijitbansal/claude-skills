@@ -32,12 +32,13 @@ async function inPage([film, inkUp, inkDown, pictures]) {
     if (!ctx.look.hand) return [];
     const kind = regs.kinds.get(shot.show);
     const raw = kind.expand(shot, kindContext(film, kind, ctx)).nodes;
-    const { nodes, plan } = handPlan(raw, timeline.shots[index], ctx);
+    const { nodes, plan, set } = handPlan(raw, timeline.shots[index], ctx);
     const writes = plan.filter((s) => s.kind === 'write');
+    const setAt = new Map(set.map((s) => [s.node, s.at]));
     const texts = nodes.filter((n) => n.type === 'text' && n.props.layout).flatMap((n) => n.props.layout.lines.map((line, k) => {
       const size = n.props.font.size;
       const stroke = writes.find((s) => s.node === n.id && s.line === k) ?? writes.find((s) => s.node === n.id);
-      return { id: n.id, box: [n.props.x + line.x, n.props.y + line.y - inkUp * size, line.width, (inkUp + inkDown) * size], done: stroke ? stroke.end : 0 };
+      return { id: n.id, box: [n.props.x + line.x, n.props.y + line.y - inkUp * size, line.width, (inkUp + inkDown) * size], done: stroke ? stroke.end : (setAt.get(n.id) ?? 0) };
     }));
     return handFindings(plan, ctx.look, texts, { canvas, unit: ctx.unit, duration: timeline.shots[index].duration }).map((f) => ({ ...f, shot: shot.id, index }));
   });

@@ -4,15 +4,29 @@
 // hatched over its box (`fill`). An element starts on the first word of its sentence and its strokes share the time to
 // that sentence's end (the last landed LANDED_BEFORE_END before the shot ends); the hand travels between strokes in one
 // eased move. The first element is complete on the shot's first frame: the time-lapse joins after it is drawn.
+// Timing is a per-element speed model (m2): a stroke's time comes from its own length and kind (a word at handwriting
+// speed, a rule faster, a hatch fastest), stretched to fill its sentence or compressed toward the speed cap; a run that does
+// not fit runs on into the shot's hold (DRAW_TAIL), never starving the sentences after it; and when even that is short the
+// hand sets its lesser strokes (hatches, decorative marks, figures) and draws the heroes. The hand-speed finding is judged on
+// what is left, so it is as strict as before.
 // Pure and DOM-free.
 import { makeStroke, boxHatch } from './geometry.mjs';
 import { latestLanding } from '../kinds/arrivals.mjs';
+import { REST_SPEED } from './pose.mjs';
 
 const WRITE_MID = 0.37; // em above the baseline: the middle of a line's lower-case letters, where the tip writes
+const REST_TRAVEL_MIN = 0.12; // s: the shortest sweep in from the rest point (pose.mjs TRAVEL_MIN)
 const TRAVEL_MIN = 0.05; // s: the shortest move between two strokes (a board of many short strokes, a chart's labels, must fit its sentence)
-const TRAVEL_SPEED = 2400; // units a second the hand travels between strokes at most (so no frame jumps far)
+const TRAVEL_SPEED = 3600; // units a second the hand sweeps between strokes (an eased move peaks near 1.5 times this: no frame jumps far)
 const FALLBACK_START = 0.2; // s: an unnarrated shot draws from here
 const HATCH_GAP = 26; // units between the lines of a fill's hatch (the hand draws it fast: a wider gap is a shorter stroke)
+// The per-element speed model: units a second each kind of stroke is drawn at when the sentence allows (a word at handwriting
+// speed, a bar or a rule faster, a hatch fastest), never above the look's hand.maxSpeed; the cap is the finding's threshold.
+const NATURAL_SPEED = Object.freeze({ write: 1100, line: 2000, fill: 2600 });
+const NATURAL_SHARE = 0.85; // a natural speed stays this share of the cap at most, so a calm stroke is never on the threshold
+const FLOOR_SLACK = 0.999; // the floor sits a hair under the cap: rounding must never put a planned stroke over it
+const DEFAULT_CAP = 2600;
+const DRAW_TAIL = 0.3; // s: a shot's hold the hand may draw into at most (the finished board still holds this long)
 const POLYLINE = /^\s*M[\s\d.,eE+-]*(?:[LZ][\s\d.,eE+-]*)*$/;
 const NUMBER = /-?\d*\.?\d+(?:e[+-]?\d+)?/gi;
 
@@ -32,6 +46,12 @@ const boxOf = (points) => {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
 };
 
+// A figure: a one-line text of a glyph or two in a label size (a value, a tick, a bullet). The hand may set it when it has no
+// time to write it; a word of meaning, or anything set larger, is never a figure.
+const FIGURE_EM = 1.6; // a figure is at most this many em wide
+const FIGURE_MAX_SIZE = 72; // units: the largest a figure is set (the look's secondary minimum is 60)
+const isFigure = (n, line, unit) => n.props.layout.lines.length === 1 && n.props.font.size / unit <= FIGURE_MAX_SIZE && line.width <= FIGURE_EM * n.props.font.size;
+
 // The strokes of one node without times: [] for a node the hand does not draw.
 function nodeStrokes(n, unit) {
   const { x = 0, y = 0 } = n.props;
@@ -39,17 +59,17 @@ function nodeStrokes(n, unit) {
     const size = n.props.font.size;
     return n.props.layout.lines.map((line, k) => {
       const mid = y + line.y - WRITE_MID * size;
-      return makeStroke([[x + line.x, mid], [x + line.x + line.width, mid]], { kind: 'write', line: k });
+      return makeStroke([[x + line.x, mid], [x + line.x + line.width, mid]], { kind: 'write', line: k, lesser: isFigure(n, line, unit) });
     });
   }
   if (n.type !== 'path') return [];
   const points = polylinePoints(n.props.d);
   if (points === null) return [];
-  if (n.props.stroke) return [makeStroke(offset(points, x, y), { kind: 'line' })];
+  if (n.props.stroke) return [makeStroke(offset(points, x, y), { kind: n.props.hatch === true ? 'fill' : 'line', lesser: n.props.decor === true })];
   if (!n.props.fill) return [];
   const [bx, by, bw, bh] = boxOf(offset(points, x, y));
   const hatch = boxHatch(bx + bw / 2, by + bh / 2, bw, bh, HATCH_GAP * unit, unit);
-  return hatch.length < 2 ? [] : [makeStroke(hatch, { kind: 'fill' })];
+  return hatch.length < 2 ? [] : [makeStroke(hatch, { kind: 'fill', lesser: true })];
 }
 
 /** The elements of a shot: each top-level node the hand draws, with its strokes, in draw order. */
@@ -87,40 +107,87 @@ const sentenceOf = (element, i, count, sentences) => {
 };
 
 const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+const sum = (values) => values.reduce((a, b) => a + b, 0);
+const EPS = 1e-9;
 
-// One sentence's strokes timed in [from, to], after `before` (the stroke drawn last, or null): the travel to each first
-// (one eased move each, long enough not to jump), the rest shared by length. Each stroke carries the drawing speed the
-// window asks of it (units a second).
-function timeWindow(strokes, [opens, to], unit, before) {
+// The travel to each stroke of a run drawn after `before` (the stroke drawn last, or null): one move each, long enough not to jump.
+const travelsOf = (strokes, unit, before) => strokes.map((s, i) => {
+  const prior = i === 0 ? before : strokes[i - 1];
+  if (!prior) return 0;
+  // from the rest point (hand.restAtStart) the hand sweeps in at pose.mjs's rest speed, at least its shortest move
+  return Math.max(prior.rest ? REST_TRAVEL_MIN : TRAVEL_MIN, distance(prior.points.at(-1), s.points[0]) / ((prior.rest ? REST_SPEED : TRAVEL_SPEED) * unit));
+});
+
+// What each stroke needs, in seconds: at the floor (the speed cap) and at its kind's natural speed (never above the cap).
+const floorOf = (s, unit, cap) => s.total / unit / (cap * FLOOR_SLACK);
+const needOf = (s, unit, cap) => Math.max(floorOf(s, unit, cap), s.total / unit / Math.min(cap * NATURAL_SHARE, NATURAL_SPEED[s.kind] ?? cap));
+
+// The seconds each stroke takes in `avail`: at natural speeds stretched to fill it; compressed toward the floor when short;
+// shared by length (past the cap: the hand-speed finding) when even the floor does not fit.
+function durations(strokes, avail, unit, cap) {
+  const floor = strokes.map((s) => floorOf(s, unit, cap));
+  const need = strokes.map((s) => needOf(s, unit, cap));
+  const [needSum, floorSum] = [sum(need), sum(floor)];
+  if (needSum <= EPS) return strokes.map(() => 0);
+  if (avail >= needSum) return need.map((n) => (n * avail) / needSum);
+  if (avail >= floorSum) return need.map((n, i) => floor[i] + ((avail - floorSum) / (needSum - floorSum)) * (n - floor[i]));
+  const length = sum(strokes.map((s) => s.total));
+  return strokes.map((s) => (length > 0 ? (s.total / length) * Math.max(0, avail) : 0));
+}
+
+// The latest each run (in drawing order) may end so that every later run still fits at the speed cap by `hardEnd`: a run that
+// lengthens into the hold must not starve the sentences after it.
+function latestEnds(runs, unit, cap, hardEnd) {
+  const cost = runs.map((run) => (run.length === 0 ? 0 : TRAVEL_MIN + sum(travelsOf(run, unit, null)) + sum(run.map((s) => floorOf(s, unit, cap)))));
+  const ends = Array(runs.length).fill(hardEnd);
+  for (let k = runs.length - 2; k >= 0; k--) ends[k] = Math.min(hardEnd, ends[k + 1] - cost[k + 1]);
+  return ends;
+}
+
+// One sentence's strokes timed after `before`, each by its own length and kind (see durations). The window ends at `to`; a run
+// that cannot be drawn by then at the speed cap runs on into the shot's hold (up to `hardEnd`), a run that cannot be drawn
+// even then sets its lesser strokes (hatch fills, decorative marks), longest first, and draws the rest. Each stroke carries the
+// drawing speed it ends up with (units a second); `skipped` holds the strokes the hand leaves to appear set.
+function timeWindow(strokes, [opens, to], unit, before, { cap, hardEnd }) {
   const from = Math.max(opens, before?.end ?? opens);
-  const travels = strokes.map((s, i) => {
-    const prior = i === 0 ? before : strokes[i - 1];
-    return prior ? Math.max(TRAVEL_MIN, distance(prior.points.at(-1), s.points[0]) / (TRAVEL_SPEED * unit)) : 0;
-  });
-  const length = strokes.reduce((sum, s) => sum + s.total, 0);
-  const drawing = Math.max(0, to - from - travels.reduce((a, b) => a + b, 0));
-  const speed = drawing > 0 ? length / unit / drawing : Infinity;
+  const limit = Math.max(to, hardEnd);
+  const floorEnd = (run) => from + sum(travelsOf(run, unit, before)) + sum(run.map((s) => floorOf(s, unit, cap)));
+  const lesser = strokes.filter((s) => s.lesser).sort((a, b) => b.total - a.total);
+  let kept = strokes;
+  const skipped = [];
+  while (floorEnd(kept) > limit + EPS && lesser.length > 0) {
+    const drop = lesser.shift();
+    skipped.push(drop);
+    kept = kept.filter((s) => s !== drop);
+  }
+  const travels = travelsOf(kept, unit, before);
+  const natural = from + sum(travels) + sum(kept.map((s) => needOf(s, unit, cap)));
+  const end = floorEnd(kept) <= to + EPS ? to : Math.min(limit, natural);
+  const spans = durations(kept, end - from - sum(travels), unit, cap);
   let t = from;
-  return strokes.map((s, i) => {
+  const timed = kept.map((s, i) => {
     const start = t + travels[i];
-    const end = start + (length > 0 ? (s.total / length) * drawing : 0);
-    t = end;
-    return { ...s, start, end, speed };
+    t = start + spans[i];
+    const speed = spans[i] > 0 ? s.total / unit / spans[i] : (s.total > 0 ? Infinity : 0);
+    return { ...s, start, end: t, speed };
   });
+  return { timed, skipped, opens };
 }
 
 /**
- * The shot's stroke plan: [{ id, node, points, lengths, total, start, end, kind: 'line' | 'write' | 'fill', speed }] in
- * draw order, times in shot seconds. `opts.unit` is px per unit (default 1). The first element is complete at 0.
+ * The shot's stroke plan and the elements it leaves to appear set: { plan, set } where plan is
+ * [{ id, node, points, lengths, total, start, end, kind: 'line' | 'write' | 'fill', speed }] in draw order, times in shot
+ * seconds, and set is [{ node, at }] (decorative strokes with no time to draw, put on at once when their sentence opens).
+ * `opts.unit` is px per unit (default 1). The first element is complete at 0.
  */
-export function strokePlan(nodes, timing, look, { unit = 1 } = {}) {
+export function strokePlanned(nodes, timing, look, { unit = 1, rest = null } = {}) {
   const all = elementsOf(nodes, unit);
-  if (all.length === 0) return [];
+  if (all.length === 0) return { plan: [], set: [] };
   // frame furniture (a slug, a kicker, a caption: pinned to the frame) is on the board from frame 0, never drawn by the hand
   const furniture = all.filter((e) => isFurniture(e.node));
   const elements = all.filter((e) => !isFurniture(e.node));
   const standing = furniture.flatMap((e) => e.strokes.map((s, k) => ({ ...s, id: `${e.node.id}#${k}`, node: e.node.id, sentence: 0, start: 0, end: 0, speed: 0 })));
-  if (elements.length === 0) return Object.freeze(standing.map((s) => Object.freeze(s)));
+  if (elements.length === 0) return { plan: Object.freeze(standing.map((s) => Object.freeze(s))), set: [] };
   const sentences = windowsOf(timing);
   // an element that names its own window (props.window, [from, to] shot seconds: an underline drawn as its word is
   // spoken) gets one after the sentences'; windows are timed in order of their start
@@ -131,11 +198,24 @@ export function strokePlan(nodes, timing, look, { unit = 1 } = {}) {
     return e.strokes.map((s, k) => ({ ...s, id: `${e.node.id}#${k}`, node: e.node.id, sentence: mine }));
   });
   const first = [...standing, ...tagged[0].map((s) => ({ ...s, start: 0, end: 0, speed: 0 }))];
-  const rest = tagged.slice(1).flat();
+  const later = tagged.slice(1).flat();
+  // with look.hand.restAtStart the hand comes in from its rest point to the first stroke after the first element
+  const origin = rest ? { points: [rest], end: 0, rest: true } : null;
   const order = windows.map((win, w) => w).sort((x, y) => windows[x][0] - windows[y][0] || x - y);
-  const timed = order.reduce((done, w) => {
-    const mine = rest.filter((s) => s.sentence === w);
-    return mine.length === 0 ? done : [...done, ...timeWindow(mine, windows[w], unit, done.at(-1))];
+  const cap = look?.hand?.maxSpeed ?? DEFAULT_CAP;
+  const hardEnd = Math.max(latestLanding(timing), timing.duration - DRAW_TAIL);
+  const set = [];
+  const runs = order.map((w) => later.filter((s) => s.sentence === w));
+  const latest = latestEnds(runs, unit, cap, hardEnd);
+  const timed = order.reduce((done, w, k) => {
+    const mine = runs[k];
+    if (mine.length === 0) return done;
+    const run = timeWindow(mine, windows[w], unit, origin && done.length === first.length ? origin : done.at(-1), { cap, hardEnd: latest[k] });
+    set.push(...run.skipped.map((s) => ({ node: s.node, at: run.opens })));
+    return [...done, ...run.timed];
   }, first);
-  return Object.freeze(timed.map((s) => Object.freeze(s)));
+  return { plan: Object.freeze(timed.map((s) => Object.freeze(s))), set };
 }
+
+/** The shot's stroke plan alone (see strokePlanned). */
+export const strokePlan = (nodes, timing, look, opts) => strokePlanned(nodes, timing, look, opts).plan;

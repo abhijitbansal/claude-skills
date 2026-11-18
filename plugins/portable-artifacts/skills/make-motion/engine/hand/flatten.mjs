@@ -110,7 +110,7 @@ function hatchOf(n, points, fill, look, unit) {
   const zig = boxHatch(x + w / 2, y + h / 2, w, h, HATCH_GAP * unit, unit);
   if (zig.length < 2) return [];
   const place = { ...(n.props.x === undefined ? {} : { x: n.props.x }), ...(n.props.y === undefined ? {} : { y: n.props.y }) };
-  return [node('path', `${n.id}.hatch`, { d: polyline(zig), stroke: fill, strokeWidth: look.hand.width.fill * unit, lineCap: 'round', ...place }, { depth: n.depth })];
+  return [node('path', `${n.id}.hatch`, { d: polyline(zig), stroke: fill, strokeWidth: look.hand.width.fill * unit, lineCap: 'round', decor: true, hatch: true, ...place }, { depth: n.depth })];
 }
 
 // One path as the hand's nodes: its outline and, for a rectangle filled in a colour that is not the board's, a hatch.

@@ -12,7 +12,7 @@ const GRID_TALL = Object.freeze({ columns: 12, margin: 80, gutter: 20 });
 const SHEEN = 0.5; // the board's sheen strength (fields/board.mjs)
 const STROKE = 'linear'; // every move is a stroke at a constant speed: nothing eases, nothing overshoots
 const MARK_WIDTH = 7; // units: the marker's line
-const PARKED_FROM_DESK = Object.freeze(['list', 'compare', 'diagram', 'feed']);
+const PARKED_FROM_DESK = Object.freeze(['list', 'compare', 'feed', 'media']);
 
 // tracking(sizeUnits, role = 'display') -> em: handwriting is not tracked
 function tracking(sizeUnits, role = 'display') {
@@ -76,7 +76,7 @@ export const marker = {
   // below the line it writes so no outline point is above the tip (the spike's covered-text finding); `wobble` bends
   // every stroke; `width` is the marker's line per stroke kind; `erase`: three passes, the smear stays 0.4 s
   hand: {
-    rest: 0.3, maxSpeed: 2600, angle: 55, scale: 1, shape: 'hand',
+    rest: 0.3, restAtStart: { wide: false, tall: true }, maxSpeed: 2600, angle: 55, scale: 1, shape: 'hand',
     wobble: { amp: 2.4, wave: 46, step: 7 },
     width: { line: MARK_WIDTH, write: 6, fill: 5 },
     restAt: { wide: [0.95, 0.92], tall: [0.9, 0.94] },
@@ -108,19 +108,32 @@ export const marker = {
   // support it). Kinds that read data start from desk's (the same editorial composition, margins and steps).
   // PARKED in marker alone (experimental: true: they validate and render here, and are not listed), each measured on its
   // registered example by scripts/v2/review.mjs (the hand's findings are in the review, scripts/v2/review-hand.mjs); the
-  // shortest path to finish each is in docs/decisions-pending.md:
-  //   chart (race parked in it as well, a board can only change ranks by erasing): drawn bars, hatch fills and the axis look
-  //     right on the sheets (.scratch/m1/out/kinds-wide.sheets/chart.png) but the example needs about 40 short strokes and
-  //     their travels in one sentence: hand-speed (no time left to draw: the labels need a drawn-at-once form)
-  //   list, quote, compare, number, feed, map, clipping, free: hand-speed (3000 to 140000 units a second against the 2600
-  //     limit: one sentence holds more elements than the hand can draw; feed and map worst: speech bubbles and outlines),
-  //     and the hand rests over finished items (list, compare) until it leaves for its rest point
-  //   diagram: 16:9 clean, 9:16 hand-speed 3424
-  //   timeline: at 16:9 three dates at three times the 60 minimum do not fit side by side
+  // shortest path to finish each is named below (docs/decisions-pending.md has no entries for them yet). m2: the hand's
+  // per-element speed model made quote and diagram review clean; the numbers below are from .scratch/m1/sweep.mjs after the
+  // model and the tall compositions, the sheets from .scratch/m2/out:
+  //   media: review clean at both formats, but on the sheets the drawn caption box is empty (the hand drops the board-coloured
+  //     plate), so the picture's own text shows through the caption at both formats: it needs a plate put on at once
+  //   map: review clean at both formats; at 16:9 the map is small and pushed right and the title "Where we ship" is stacked in
+  //     three short lines that meet the map's frame
+  //   clipping: review clean at both formats; at 16:9 the pinned print shows two misaligned drawn frames, at 9:16 the
+  //     red ring is on the print from the first sampled frame, before it is spoken (not diagnosed)
+  //   free: review clean at 16:9; the example's bar runs off the right of a 9:16 frame (the new stroke-edge audit,
+  //     engine/hand/index.mjs, finds it); free is author-placed, so the example needs its own tall layout
+  //   chart (race parked in it as well, a board can only change ranks by erasing): hand-speed at both formats (16:9: no
+  //     time left, 9:16: 10948 units a second against 2600); about 20 strokes in two sentences, chart-draw gives no
+  //     element a lesser (set at once) form, so the hand cannot spare any of them
+  //   feed: hand-speed at both formats (16:9 5243, 9:16 8892): speech bubbles are many strokes in one sentence each
+  //   list: covered at both formats (the hand rests over the finished item for 1.4 s at 16:9, 4.5 s at 9:16): the bullet
+  //     figure sits left of its item, so the hand writing it hangs over the item's text
+  //   number: 16:9 covered (0.37 s over the digits, the most is 0.3 s); 9:16 clean
+  //   compare: 16:9 clean; 9:16 covered (0.37 s over "swap.right.title")
+  //   timeline: 16:9 three dates at three times the 60 minimum do not fit side by side (kind rule); 9:16 clean
   kinds: {
-    statement: { toWide: 11, linesWide: 2 },
-    end: desk.kinds.end,
-    media: desk.kinds.media,
+    // a tall board is written down the page: lines 2 high apart and the block allowed 85 percent of the band (m2, ban 2:
+    // marker-tall.test.mjs measures the fill in the page with Caveat)
+    statement: { toWide: 11, linesWide: 2, tallLineHeight: 2, tallHeight: 0.85 },
+    end: { ...desk.kinds.end, tallLineHeight: 2, tallHeight: 0.8 },
+    diagram: desk.kinds.diagram,
     ...Object.fromEntries(PARKED_FROM_DESK.map((kind) => [kind, { ...desk.kinds[kind], experimental: true }])),
     number: { experimental: true },
     clipping: { experimental: true },
@@ -128,7 +141,7 @@ export const marker = {
     // the claim up to step 5 (240): three times the labels at step 2 is 180 (desk's cap of 180 left no room)
     chart: { ...desk.kinds.chart, titleMax: 240, labelScale: 1, experimental: true, experimentalTypes: ['race'] },
     // the quotation up to 240 on every column, its attribution at step 2 (60, secondary.min) so the quotation stays three times it
-    quote: { ...desk.kinds.quote, toWide: 12, pad: 40, max: 240, attrSteps: [2], experimental: true },
+    quote: { ...desk.kinds.quote, toWide: 12, pad: 40, max: 240, attrSteps: [2] },
     // dates at step 5 or 4: three times the events' text at the 60 minimum
     timeline: { ...desk.kinds.timeline, whenSteps: [5, 4], experimental: true },
     // the key's numbers in ink on the board (a paper number on a plate the hand does not fill)

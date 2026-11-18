@@ -89,7 +89,8 @@ function fitEditorial(text, ctx, to, tradeFloor, clear) {
   // on a tall frame with a sun the block keeps out of its bright light: never higher than belowSun
   const top = !wide && sunny ? Math.max(bounds.top, belowSun(look, ctx)) : -Infinity;
   const min = sizeAt(look, DESK.fromStep, unit), max = DESK.max * unit;
-  const font = fontFor(look, 'display', max, unit);
+  // a look may set a tall frame's lines further apart (data.tallLineHeight, marker: a board written down the page)
+  const font = !wide && data.tallLineHeight ? { ...fontFor(look, 'display', max, unit), lineHeight: data.tallLineHeight } : fontFor(look, 'display', max, unit);
   // a claim that hangs under its tag on a wide frame (kinds.statement.hang, ledger) is fitted where it will stand: its
   // ink from the slug's clearance down to the bottom margin. Fitted centred, a larger block met the tag and was refused,
   // so the claim stayed at the desk height share and left the lower third of the frame empty (gate-ledger-3 F4).

@@ -154,10 +154,13 @@ function deskBlock(shot, ctx, data) {
   const span = editorialSpan(ctx, FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
   const min = sizeAt(look, data.fromStep, unit), max = data.max * unit;
   // data.titleWeight (keynote: the wordmark at 800): the closing line set at that weight, measured at it
-  const face = fontFor(look, 'display', max, unit);
+  // a look may set a tall frame's closing line further apart and taller (data.tallLineHeight, data.tallHeight: marker's board
+  // written down the page)
+  const tall = !isWide(canvas);
+  const face = tall && data.tallLineHeight ? { ...fontFor(look, 'display', max, unit), lineHeight: data.tallLineHeight } : fontFor(look, 'display', max, unit);
   const titleFont = data.titleWeight === undefined ? face : { ...face, weight: data.titleWeight };
   const opts = { text: setCase(look, 'display', titleOf(shot)), font: titleFont, maxWidth: span.w, align: 'left', measure, optical: true };
-  const title = fitDisplay(opts, { min, max, maxHeight: editorialBounds(ctx).height(data.height), maxLines: look.maxLines.display }, look, unit);
+  const title = fitDisplay(opts, { min, max, maxHeight: editorialBounds(ctx).height(tall && data.tallHeight ? data.tallHeight : data.height), maxLines: look.maxLines.display }, look, unit);
   const size = title.font.size;
   const top = title.layout.lines[0].y - CAP_HEIGHT * size;
   const last = title.layout.lines.at(-1).y;
