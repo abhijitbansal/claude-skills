@@ -60,6 +60,17 @@ function shotAsset(shot, kind, assets) {
   };
 }
 
+// ctx.filmPicture(show): the first picture a shot of kind `show` shows in the film ({ src, width, height }), or null
+// when the film has none loaded: the product an end card can show again (look.kinds.end.product, keynote)
+function filmPicture(film, assets) {
+  return (show) => {
+    const shot = film.shots.find((s) => s?.show === show && typeof s.src === 'string' && assets.has(s.src));
+    if (shot === undefined) return null;
+    const image = assets.get(shot.src);
+    return { src: shot.src, width: image.width, height: image.height };
+  };
+}
+
 // { prepared } for a shot whose kind declares `prepared: true`: its entry in the film's prepared data (by shot id), which
 // must be there; {} for any other kind. A missing entry is an error naming the shot, never an empty frame.
 function preparedOf(shot, kind, prepared) {
@@ -97,6 +108,7 @@ export function shotContext({ film, index, timeline, canvas, measure, assets = n
     viralInsets,
     captions: captionsOn(film, registries.modes.get(film.mode ?? DEFAULT_MODE)), // whether the film shows captions
     asset: shotAsset(shot, kind, assets),
+    filmPicture: filmPicture(film, assets),
     // the shot's 1-based place among the film's numbered shots (kinds with `numbered: true`): what a slug shows
     // (a kind's `numbered` may be a function of the shot: a compare counts only when it shows a slug)
     ordinal: film.shots.slice(0, index + 1).filter((s) => registries.kinds.has(s.show) && isNumbered(registries.kinds.get(s.show), s)).length,

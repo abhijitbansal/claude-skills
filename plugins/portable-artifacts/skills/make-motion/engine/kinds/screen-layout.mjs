@@ -5,7 +5,7 @@
 import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
-import { landing } from '../devices/shared.mjs';
+import { landing, roundedRect } from '../devices/shared.mjs';
 import { moveOf } from '../moves/index.mjs';
 import { REGION_PREFIX, isWide, compositionRect, captionTop, cutsToCloseUp, regionOf, paperScrim, fitDisplay, fontFor, setCase, sizeAt, CAP_HEIGHT, WORD_DESCENT } from './shared.mjs';
 import { colourOf } from '../devices/shared.mjs';
@@ -61,10 +61,14 @@ function fadingChrome(shot, children, from) {
 
 // The screen group: the frame and its screenshot, whole from frame 0 (hidden from `hideAt` on, when a close-up replaces
 // it); its chrome texts fade from `fadeAt` on (a push).
-function screenGroup(shot, ctx, frame, image, hideAt, fadeAt) {
+// `lift` ({ from, to } s): the whole screen fades out over that span, as its region lifts off it as a card (regionCard)
+// (its chrome texts gone before the lift starts: the growing card would otherwise cover a text still on)
+function screenGroup(shot, ctx, frame, image, hideAt, fadeAt, lift) {
   const content = node('image', `${shot.id}.screen.image`, { src: shot.src, w: image[2], h: image[3], x: image[0], y: image[1] });
-  const children = fadingChrome(shot, frameNodes(shot, ctx, { frame, image, data: ctx.data, content }), fadeAt);
-  const tracks = hideAt === undefined ? {} : { opacity: track([{ t: 0, v: 1 }, { t: hideAt, v: 1 }, { t: hideAt, v: 0 }]) };
+  const chromeAt = lift === undefined ? fadeAt : Math.max(0, lift.from - CHROME_FADE);
+  const children = fadingChrome(shot, frameNodes(shot, ctx, { frame, image, data: ctx.data, content }), chromeAt);
+  const tracks = hideAt !== undefined ? { opacity: track([{ t: 0, v: 1 }, { t: hideAt, v: 1 }, { t: hideAt, v: 0 }]) }
+    : lift !== undefined ? { opacity: track([{ t: 0, v: 1 }, { t: lift.from, v: 1 }, { t: lift.to, v: 0, ease: ctx.look.moves.exit.ease }]) } : {};
   return node('group', `${shot.id}.screen`, {}, { tracks, children });
 }
 
@@ -194,6 +198,12 @@ export function tallHeroLayout(shot, ctx, { picture, zoom }) {
   // so the dashboard's detail reads at phone size; without it the ring is drawn round the region on the card
   if (data.pushPad !== undefined) {
     const card = regionCard(shot, ctx, { picture, region: shot.regions[zoom.region], from: target, image, at: zoom.at });
+    // data.lift (gate-keynote-2 ruling 4): the screen fades out under the lifting card instead of dimming under a veil
+    // (the veil washed the screenshot's colours out, and the screen's sliced text showed beside the card)
+    if (data.lift !== undefined) {
+      const lifted = screenGroup(untitled, ctx, frame, image, undefined, undefined, liftSpan(ctx, zoom.at));
+      return { nodes: [lifted, ...card.nodes, headline], boxes: { ...boxes, regionCard: card.box }, camera: [] };
+    }
     return { nodes: [screen, ...focus, ...card.nodes, headline], boxes: { ...boxes, regionCard: card.box }, camera: [] };
   }
   const ring = registries.devices.get('circle').build({ id: `${shot.id}.ring`, box: target, at: zoom.at, look, unit, seed }).nodes;
@@ -204,6 +214,7 @@ export function tallHeroLayout(shot, ctx, { picture, zoom }) {
 // ---- the region card (look.kinds.screen.pushPad on a tall frame) ----
 
 const SWEEP_AFTER = 0.5; // s after the landing the band of light is centred on
+const SWEEP_GROW = 0.12; // of the region card's height: the band's box past the card on every side
 
 /**
  * The region as its own elevated card: the picture cropped to the region whole, as wide as the frame inside pushPad (the
@@ -215,26 +226,68 @@ function regionCard(shot, ctx, { picture, region, from, image, at }) {
   const { look, unit, seed, canvas, data, timing } = ctx;
   const [fx, fy, fw, fh] = region;
   const crop = [fx * picture.width, fy * picture.height, fw * picture.width, fh * picture.height];
-  const w = canvas.w - HALF * data.pushPad * unit, h = (w * crop[3]) / crop[2];
-  const [cx, cy] = [canvas.w / HALF, image[1] + image[3] / HALF];
+  const wide = data.lift !== undefined && isWide(canvas) ? liftedSize(ctx, crop) : null;
+  const w = wide ? wide.w : canvas.w - HALF * data.pushPad * unit, h = wide ? wide.h : (w * crop[3]) / crop[2];
+  const [cx, cy] = wide ? [canvas.w / HALF, canvas.h / HALF] : [canvas.w / HALF, image[1] + image[3] / HALF];
   const local = [-w / HALF, -h / HALF, w, h];
   const settle = moveOf(look, 'settle');
   const start = Math.max(0, at - settle.dur);
+  // with data.lift the card is on over the region's place while the screen fades round it (liftSpan)
+  const on = data.lift !== undefined ? liftSpan(ctx, at).from : start;
   const drift = (t) => driftAt(look, timing, unit, t);
   const [x0, y0] = [from[0] + from[2] / HALF, from[1] + from[3] / HALF];
   const tracks = {
-    opacity: track([{ t: 0, v: 0 }, { t: start, v: 0 }, { t: start, v: 1 }]),
+    opacity: track([{ t: 0, v: 0 }, { t: on, v: 0 }, { t: on, v: 1 }]),
     scale: landing(at, settle, from[2] / w, 1),
     x: track([{ t: 0, v: x0 }, { t: start, v: x0 }, { t: at, v: cx + drift(at), ease: settle.ease }, { t: Math.max(at, timing.duration), v: cx + drift(Math.max(at, timing.duration)) }]),
     y: landing(at, settle, y0, cy),
   };
+  // a wide lift: the picture whole on a white elevated card padded to the card's width (liftedSize); tall: the picture is
+  // the card
+  const picturePart = wide
+    ? [node('path', `${shot.id}.region.paper`, { d: roundedRect(...local, (look.devices.card?.radius ?? 0) * unit), fill: colourOf(look, data.fill ?? 'card') }),
+      node('image', `${shot.id}.region.image`, { src: shot.src, w: wide.iw, h: wide.ih, x: -wide.iw / HALF, y: -wide.ih / HALF, clip: crop })]
+    : [node('image', `${shot.id}.region.image`, { src: shot.src, w, h, x: local[0], y: local[1], clip: crop })];
+  // the band of light under the card (gate-keynote-2 ruling 5: over the picture it greyed the dashboard's type and striped
+  // its bars), crossing the ground round it: a box grown by SWEEP_GROW of the card's height on every side
+  const grow = SWEEP_GROW * h;
+  const sweep = registries.devices.get('sweep').supports(look) ? registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: [local[0] - grow, local[1] - grow, w + HALF * grow, h + HALF * grow], at: at + SWEEP_AFTER, look, unit, seed }).nodes : [];
   const children = [
-    ...elevatedShadow(`${shot.id}.region`, local, 0, look, unit, look.devices.card?.layers ?? []),
-    node('image', `${shot.id}.region.image`, { src: shot.src, w, h, x: local[0], y: local[1], clip: crop }),
+    ...sweep,
+    ...elevatedShadow(`${shot.id}.region`, local, wide ? (look.devices.card?.radius ?? 0) * unit : 0, look, unit, look.devices.card?.layers ?? []),
+    ...picturePart,
     ...registries.devices.get('circle').build({ id: `${shot.id}.ring`, box: local, at, look, unit, seed }).nodes,
-    ...(registries.devices.get('sweep').supports(look) ? registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: local, at: at + SWEEP_AFTER, look, unit, seed }).nodes : []),
   ];
   return { nodes: [node('group', `${shot.id}.region`, { x: cx, y: cy }, { tracks, children })], box: [cx - w / HALF, cy - h / HALF, w, h] };
+}
+
+// The lifted card's size on a wide frame (look.kinds.screen.lift { share, pad }: gate-keynote-2 ruling 4): the region's
+// picture whole and as large as fits inside the title-safe inset (pushPad) less the card's own pad, on a card at least
+// `share` of the frame wide (the whole browser card is too tall to land that wide), padded on its sides to that width.
+function liftedSize(ctx, crop) {
+  const { canvas, unit, data } = ctx;
+  const safe = data.pushPad * unit, pad = data.lift.pad * unit;
+  const aspect = crop[2] / crop[3];
+  const ih = Math.min(canvas.h - HALF * (safe + pad), (canvas.w - HALF * (safe + pad)) / aspect), iw = ih * aspect;
+  return { iw, ih, w: Math.min(canvas.w - HALF * safe, Math.max(data.lift.share * canvas.w, iw + HALF * pad)), h: ih + HALF * pad };
+}
+
+// The span the screen fades out over before its region lifts off it: LIFT_FADE seconds ending where the card starts to
+// grow, the card already on over the region's own place, so the rest of the screen drops away round the region and
+// nothing of it shows beside the growing card (gate-keynote-2 ruling 4: the 9:16 sheet showed sliced text beside it)
+const LIFT_FADE = 0.4;
+function liftSpan(ctx, at) {
+  const settle = moveOf(ctx.look, 'settle');
+  const to = Math.max(0, at - settle.dur);
+  return { from: Math.max(0, to - LIFT_FADE), to };
+}
+
+// A wide screen whose region lifts off as its own card (look.kinds.screen.lift): the screen whole and centred, its
+// chrome on, then fading out as the region card grows out of the region's place to the frame's centre; no push, no veil.
+function liftLayout(shot, ctx, { picture, zoom, frame, image, boxes, target }) {
+  const card = regionCard(shot, ctx, { picture, region: shot.regions[zoom.region], from: target, image, at: zoom.at });
+  const screen = screenGroup(shot, ctx, frame, image, undefined, undefined, liftSpan(ctx, zoom.at));
+  return { nodes: [screen, ...card.nodes], boxes: { ...boxes, regionCard: card.box }, camera: [] };
 }
 
 // The zoom at which the drawn picture shows one picture pixel per frame pixel: a push past it is a soft upscale.
@@ -269,6 +322,7 @@ export function zoomReach(shot, ctx, picture, region) {
     return { wanted, cap: NATIVE };
   }
   if (cutsToCloseUp(look)) return null;
+  if (data.lift !== undefined && data.pushPad !== undefined && isWide(canvas)) return null; // a lifted card: no push (liftLayout)
   const shared = isWide(canvas) ? { ...room, x: room.x + (room.w * (1 - data.wideShare)) / HALF, w: room.w * data.wideShare } : room;
   const image = fitFramed(frame, unit, picture, data.pushPad === undefined ? shared : pushSpace(shared, canvas, data.pushPad * unit));
   return { wanted: pushZoom(ctx, regionBox(image, region)), cap: nativeZoom(picture, image) };
@@ -290,12 +344,14 @@ export function singleLayout(shot, ctx, { picture, zoom }) {
   const room = roomOf(ctx);
   const frame = frameFor(shot, picture);
   const shared = isWide(canvas) ? { ...room, x: room.x + (room.w * (1 - data.wideShare)) / HALF, w: room.w * data.wideShare } : room;
-  const space = zoom && data.pushPad !== undefined ? pushSpace(shared, canvas, data.pushPad * unit) : shared;
+  // a lifted region (data.lift) needs no push room: the screen keeps the whole shared space
+  const space = zoom && data.pushPad !== undefined && !(data.lift !== undefined && isWide(canvas)) ? pushSpace(shared, canvas, data.pushPad * unit) : shared;
   const image = fitFramed(frame, unit, picture, space);
   const regions = regionBoxes(shot, image);
   const boxes = { screen: outerOf(frame, unit, image), image, ...regions };
   if (!zoom) return { nodes: [screenGroup(shot, ctx, frame, image)], boxes, camera: [] };
   const target = regions[`${REGION_PREFIX}${zoom.region}`];
+  if (data.lift !== undefined && data.pushPad !== undefined && isWide(canvas)) return liftLayout(shot, ctx, { picture, zoom, frame, image, boxes, target });
   // a moving camera pushes in with the rest dimmed; a locked one on a tall frame (a phone that fills it: a cut to a
   // close-up of a strip would empty the frame) dims the rest and sweeps light across the region; on a wide frame it cuts
   if (!cutsToCloseUp(look) || !isWide(canvas)) {

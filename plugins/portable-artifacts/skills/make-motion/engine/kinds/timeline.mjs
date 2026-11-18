@@ -15,6 +15,7 @@ import { roomOf, editorialLeft } from './arrivals.mjs';
 import { eventTimes, eventRoom, fitEvents, floorStep } from './timeline-fit.mjs';
 import { deskTimeline } from './timeline-desk.mjs';
 import { popTimeline } from './timeline-pop.mjs';
+import { focusTimeline } from './timeline-focus.mjs';
 import { plainTag } from './plain-tag.mjs';
 import { unmarked } from './shared.mjs';
 
@@ -56,6 +57,8 @@ function expandTimeline(shot, ctx) {
   const data = kindData(look, KIND);
   const c = { ...ctx, data };
   const room = roomOf(ctx);
+  // data.focusWide (keynote at 16:9, gate-keynote-2 ruling 2): the full-width focus timeline, its own small title
+  if (isEditorial(look) && isWide(canvas) && data.focusWide !== undefined) return focusExpand(shot, ctx, c, room);
   const title = titleOf(shot, c, room);
   const top = room.y + title.h + (title.h > 0 ? data.titleGap * unit : 0);
   const area = { x: room.x, y: top, w: room.w, h: room.y + room.h - top };
@@ -67,6 +70,21 @@ function expandTimeline(shot, ctx) {
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'events' });
   return {
     nodes: placeDevices([fieldNode(shot, ctx), ...laid.nodes, ...title.nodes], devices),
+    camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],
+    boxes, hero: laid.hero, background: look.palette.paper,
+  };
+}
+
+function focusExpand(shot, ctx, c, room) {
+  const { look, timing, unit, canvas } = ctx;
+  // the full width inside the grid's margins (the editorial room starts a column in)
+  const margin = look.grid.margin * unit;
+  const full = { ...room, x: margin, w: canvas.w - HALF * margin };
+  const laid = focusTimeline(shot, c, full, eventTimes(shot, timing));
+  const boxes = { events: unionBox(Object.values(laid.boxes)), ...laid.boxes };
+  const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'events' });
+  return {
+    nodes: placeDevices([fieldNode(shot, ctx), ...laid.nodes], devices),
     camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],
     boxes, hero: laid.hero, background: look.palette.paper,
   };

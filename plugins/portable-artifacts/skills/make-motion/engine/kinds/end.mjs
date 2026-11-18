@@ -22,6 +22,7 @@ import { defaultCamera, driftReach } from './camera.mjs';
 import { plainTag } from './plain-tag.mjs';
 import { SLUG } from './slug.mjs';
 import { expandWordmark } from './end-mark.mjs';
+import { expandProduct } from './end-product.mjs';
 import { STACK, stackArea, composeStack, stackNodes, restack } from './stack.mjs';
 import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { HERO_MARGIN } from './secondary.mjs';
@@ -225,7 +226,8 @@ function expandDesk(shot, ctx, data, times) {
   }
   if (card !== null) boxes.mark = card.turned;
   const marks = card === null ? [] : cardNodes(shot, ctx, parts, card, data);
-  return { nodes: [...marks, ...nodes, ...titleSweep(shot, ctx, data, boxes.title)], boxes, hero };
+  // the band under the closing line (gate-keynote-2 ruling 5: over it the band greyed the dark glyphs mid-word)
+  return { nodes: [...titleSweep(shot, ctx, data, boxes.title), ...marks, ...nodes], boxes, hero };
 }
 
 // data.sweep (keynote): the look's band of light crosses the closing line once, after the complete first frame and
@@ -240,6 +242,12 @@ function titleSweep(shot, ctx, data, [x, y, w, h]) {
   const at = Math.max(SWEEP_HALF, Math.min(SWEEP_AT, timing.duration - SWEEP_CLEAR - SWEEP_HALF));
   const pad = SWEEP_PAD * h;
   return registries.devices.get('sweep').build({ id: `${shot.id}.sweep`, box: [x - pad, y - pad, w + 2 * pad, h + 2 * pad], at, look, unit, seed: 0 }).nodes;
+}
+
+// The product card (end-product.mjs) with the look's band of light over the closing line
+function productParts(shot, ctx, data, times, picture) {
+  const parts = expandProduct(shot, ctx, data, times, titleOf(shot), picture, heroId(shot, 'title'));
+  return { ...parts, nodes: [...titleSweep(shot, ctx, data, parts.boxes.title), ...parts.nodes] };
 }
 
 // ---- pop ----
@@ -310,8 +318,12 @@ function expandEnd(shot, ctx) {
   const times = endTimes(shot, timing, cutReveal(shot, ctx));
   // a look may make the end a centred wordmark card (look.kinds.end.wordmark, cosmos: end-mark.mjs) when there is a mark
   const wordmark = isEditorial(look) && data.wordmark && shot.mark !== undefined && shot.src === undefined;
-  const parts = wordmark ? expandWordmark(shot, ctx, data, times, titleOf(shot))
-    : isEditorial(look) ? expandDesk(shot, ctx, data, times) : expandPop(shot, ctx, data, times);
+  // a look may close on the film's product again (look.kinds.end.product, keynote: gate-keynote-2 ruling 3): the first
+  // picture a shot of kind `product.show` shows, beside or under the closing line; a film with none keeps the desk card
+  const product = isEditorial(look) && data.product !== undefined && shot.src === undefined ? ctx.filmPicture?.(data.product.show) ?? null : null;
+  const parts = product !== null ? productParts(shot, ctx, data, times, product)
+    : wordmark ? expandWordmark(shot, ctx, data, times, titleOf(shot))
+      : isEditorial(look) ? expandDesk(shot, ctx, data, times) : expandPop(shot, ctx, data, times);
   const behind = Object.fromEntries(Object.keys(parts.boxes).filter((k) => k === 'title' || k.startsWith('word:')).map((k) => [k, parts.hero]));
   const devices = onDevices(shot, ctx, { boxes: parts.boxes, defaultTarget: 'title', behind });
   return {

@@ -97,7 +97,10 @@ function tryAt(shot, env, size) {
   // a look may run a column's boxes across the label room (data.fullColumn, ledger: gate-ledger-1 ruling 5, a narrow
   // centre column left 40% of a tall frame empty either side), each label centred in its box
   const labelled = Math.max(...sets.nodes.map((l) => l.width)) + HALF * pad;
-  const across = layout === 'column' && data.fullColumn === true ? Math.max(labelled, max + HALF * pad) : labelled;
+  // (data.fullColumn 'room', keynote: gate-keynote-2 ruling 6: the boxes as wide as the room, so the column starts on the
+  // headline's left edge, where a narrower centred column sat on another axis)
+  const room = layout === 'column' && data.fullColumn === 'room';
+  const across = room ? area.w : layout === 'column' && data.fullColumn === true ? Math.max(labelled, max + HALF * pad) : labelled;
   const box = [across, Math.max(...sets.nodes.map((l) => l.height)) + HALF * pad];
   // an edge label sits on its arrow where the gap holds it and moves off it (beside the nodes) where it does not
   // (labelPlates), so no gap is widened for a label and seven short nodes still fit a row or a column

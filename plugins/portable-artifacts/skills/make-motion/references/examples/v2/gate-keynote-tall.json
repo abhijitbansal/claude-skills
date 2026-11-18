@@ -66,12 +66,12 @@
     {
       "id": "inside",
       "show": "list",
-      "title": "On the page",
-      "say": "Orders by month. Orders by region. The query behind each chart.",
+      "title": "What it counts",
+      "say": "Paid orders only. Grouped by region. With its query shown.",
       "items": [
-        "Orders by month",
-        "Orders by region",
-        "The query behind each chart"
+        "Paid orders only",
+        "Grouped by region",
+        "With its query shown"
       ]
     },
     {

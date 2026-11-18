@@ -83,11 +83,15 @@ export const keynote = {
   camera: { drift: 18, style: 'desk' },
   cuts: ['cut', 'slide', 'cover', 'punch', 'match', 'crossfade', 'fade', 'wipe', 'iris', 'zoom', 'blur', 'ripple', 'cube',
     'page-curl', 'directional-warp', 'cross-warp', 'cross-zoom', 'wind', 'window-slices', 'polka-dots', 'glitch-memories', 'pixelize', 'water-drop'],
-  cutPalette: ['cut', 'match', 'crossfade', 'zoom', 'blur', 'cross-zoom'],
+  // `fade` and `wipe` added for the type cuts (gate-keynote-2 ruling 8: a dip through the ground, the plan's mask reveal)
+  cutPalette: ['cut', 'match', 'crossfade', 'zoom', 'blur', 'cross-zoom', 'fade', 'wipe'],
   cutStyle: { crossfade: { duration: 0.5 } },
   // the cut the engine opens every shot with when the film names none (cuts/resolve.mjs pickedCut), taken in turn: a
   // crossfade, then a blur dissolve, then a zoom dissolve; never a hard cut (gate-keynote-1 ruling 4: every cut was hard)
-  cutPick: { cuts: ['crossfade', 'blur', 'crossfade', 'zoom'], every: 1 },
+  // gate-keynote-2 ruling 8: between two shots with no picture (two headlines) a dip through the ground or a wipe, taken
+  // in turn (`typeCuts`): a crossfade there laid one headline over the other for a few muddy frames. On a tall frame a
+  // titled screen sets its title as the headline (kinds.screen.tallHero), so it is no picture shot there
+  cutPick: { cuts: ['crossfade', 'blur', 'crossfade', 'zoom'], every: 1, typeCuts: ['fade', 'wipe'], pictureKinds: { wide: ['screen', 'media', 'clipping'], tall: ['media', 'clipping'] } },
   keyline: 8,
   // nothing casts a hard shadow: depth is the elevated card's own soft two-layer shadow (devices/card.mjs elevated)
   shadow: { dx: 0, dy: 0, blur: 0, alpha: 0, color: '#4a5068' },
@@ -134,9 +138,14 @@ export const keynote = {
     clipping: { experimental: true, card: true, turn: 0 },
     free: {},
     // the wordmark at 800 (`titleWeight`) with the band of light crossing it once (`sweep`), the ask under it
-    end: { titleWeight: 800, sweep: true, fromStep: 4, max: 264, toWide: 11, toTall: 11, height: 0.56, centre: 0.5, askGap: 0.42, askSteps: [2, 3], markSteps: [1, 2], turn: 0, askFace: 'text', markTag: true },
+    // gate-keynote-2 ruling 3 (`product`, kinds/end-product.mjs): the film's first screen picture again on an elevated
+    // card, in columns `cardFrom` to 12 beside the closing line (columns 1 to `textTo`) at 16:9 and under it at 9:16; the
+    // wordmark tag over the line and the ask under it on its left edge (the pill floated mid-right on a bare frame)
+    end: { product: { show: 'screen', textTo: 6, cardFrom: 7, fromStep: 3, heightWide: 0.62, heightTall: 0.34, tagGap: 32, gap: 96, pad: 16 }, titleWeight: 800, sweep: true, fromStep: 4, max: 264, toWide: 11, toTall: 11, height: 0.56, centre: 0.5, askGap: 0.42, askSteps: [2, 3], markSteps: [1, 2], turn: 0, askFace: 'text', markTag: true },
     // on a tall frame the items from column 3, so the figures hang inside the narrow tall margin (ledger's fix)
-    list: { previews: true, fromStep: 3, max: 152, toWide: 11, fromTall: 3, toTall: 12, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2] },
+    // gate-keynote-2 ruling 7: a list with no figures from column 1 on a tall frame (`fromTallPlain`), the left inset
+    // every other shot has (from column 3 it sat twice as far in); a numbered one keeps column 3 for its figures
+    list: { previews: true, fromStep: 3, max: 152, toWide: 11, fromTall: 3, fromTallPlain: 1, toTall: 12, maxLines: 3, gap: 0.75, noteGap: 0.3, smallSteps: [1, 2] },
     // quote: plain type, no card, the attribution in ink2; it differs from a statement by its centred block (`centred`),
     // its narrower measure (to column 10 wide, 2 to 11 tall) and its size (step 4, 152, against the statement's 264; a
     // tall frame lets it grow to 208, `maxTall`, so it fills the height)
@@ -149,7 +158,7 @@ export const keynote = {
     // `growFrom` 0.12 (gate-keynote-1 ruling 3, poster's switch): every bar is on frame 0 at an eighth of its length and
     // grows after (the sheets opened on a bare claim); `tight`: the longest bar reaches the plot's end, so bars and values
     // fill the free width (the 16:9 sheet left about 30 percent of it empty)
-    chart: { growFrom: 0.12, tight: true, valuesSet: true, settle: 1.2, pointLabels: true, fillFollowsLine: true, startFinal: true, claimLast: true, rowDrop: 0.75, pointLift: 0.6, pointNudge: 1, plotHeight: 0.2, titleToWide: 11, titleFromTall: 1, titleToTall: 12, titleMax: 152, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 1, sourceStep: 1, sourceFace: 'text', gap: 14, line: 5, ref: 1, axis: 2, dim: 0.3, refs: false, direct: true, dimTo: 'dim', minPlot: 0.4, point: 10, annotation: { face: 'label', leader: 'joined', barLeader: 'none' } },
+    chart: { growFrom: 0.12, tight: true, valuesSet: true, settle: 1.2, pointLabels: true, fillFollowsLine: true, startFinal: true, claimLast: true, rowDrop: 0.75, pointLift: 0.6, pointNudge: 1, plotHeight: 0.2, titleToWide: 11, titleFromTall: 1, titleToTall: 12, titleMax: 152, titleLines: 3, titleGap: 56, labelStep: 2, labelScale: 1, sourceStep: 1, sourceFace: 'text', gap: 14, line: 5, ref: 1, axis: 2, dim: 0.3, refs: false, direct: true, dimTo: 'dim', minPlot: 0.4, point: 10, annotation: { face: 'label', leader: 'joined', barLeader: 'none', columnLeader: 'none', columnGap: 14 } },
     // screen: the framed screenshot on the elevated card's shadow (`elevated`), the camera pushing in with the rest under
     // the focus scrim, and the zoom ring drawn round the region (`ring`): no paper mask (desk's pushDim left a wide region
     // a thin strip floating on an empty frame on the first sheets)
@@ -171,18 +180,29 @@ export const keynote = {
     // blank pills); at 9:16 the region lifts off the card as its own card that wide (regionCard: shown whole on the card,
     // the dashboard's detail did not read at phone size); `sweep`: the band of light crosses the screen once after the
     // push lands (it crossed only the end card, where it read as grey on black type)
-    screen: { pushPad: 60, sweep: true, pushFrame: 'card', tallHero: true, heroMax: 264, heroLines: 3, heroShare: 0.4, cropRegion: true, linkAfter: true, wholeWidth: 0.8, elevated: true, ring: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
+    // gate-keynote-2 ruling 4: `lift` { share, pad }: the region lifts off as its own white card at least `share` of a
+    // wide frame (the whole browser card cannot land at 80 percent: too tall), the picture `pad` units inside its edge,
+    // and on both formats the screen fades out under the lifting card instead of dimming under the focus veil (the veil
+    // washed the screenshot's colours out; at 9:16 its sliced text showed beside the card)
+    screen: { lift: { share: 0.8, pad: 24 }, pushPad: 60, sweep: true, pushFrame: 'card', tallHero: true, heroMax: 264, heroLines: 3, heroShare: 0.4, cropRegion: true, linkAfter: true, wholeWidth: 0.8, elevated: true, ring: true, fill: 'card', line: 'rule', lineWidth: 1, dots: 'rule', pill: 'paper', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
     // map: at 16:9 the title over a map the full width (`titleAbove`, ledger's switch: beside it the map was too narrow to
     // hold a third place name, a creative finding on the first render)
     map: { titleAbove: true, titleStepsWide: [4, 3], sourceFace: 'text', sourceStep: 1, sourcePrefix: true, sourceAt: 'title', card: true, land: '#dfe1e8', borders: 'card', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleTo: 5, titleSteps: [5, 4, 3], listGap: 10, gap: 40, keyFill: 'ink', keyText: 'card' },
     // diagram: the first three nodes and their edges on from frame 0 (`openNodes`; the first sheet opened on one node)
     // `pad` 56 (n2 ruling 3): larger elevated boxes, so a row of three spans more of a wide frame (at 28 the row took 14
     // percent of the height, measured with real glyphs)
-    diagram: { openNodes: 3, card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 56, gap: 48, margin: 10, platePad: 8, plate: 'paper', arrow: 'ink2', arrowWidth: 3, head: 20, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: false, advance: 0.55 },
+    // gate-keynote-2 ruling 6: every node and edge on from frame 0 (`openNodes` 8, more than a diagram has: the column's
+    // room set, no connector caught half drawn, the last card on long before the cut) and a tall column's cards across
+    // the room from the headline's left edge (`fullColumn`, ledger's switch: centred, the column sat off the headline)
+    diagram: { openNodes: 8, fullColumn: 'room', card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 56, gap: 48, margin: 10, platePad: 8, plate: 'paper', arrow: 'ink2', arrowWidth: 3, head: 20, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: false, advance: 0.55 },
     // open (n2 ruling 3): at 16:9 the events leave 32 percent of the height empty under them (measured with real
     // glyphs); the hero rule holds each event's words to a third of its date and a 264 date does not fit its column, so
     // no data value fills it: a taller keynote timeline composition is open work
-    timeline: { underTitle: true, previews: true, whatFace: 'text', whenSteps: [5, 4], whatSteps: [2], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 20, lineX: 12, textGap: 48, partGap: 12, line: 'ink2', lineWidth: 2, tick: 18, titleSteps: [5, 4], titleGap: 40, advance: 0.55 },
+    // gate-keynote-2 ruling 2 (`focusWide`, 16:9 only, kinds/timeline-focus.mjs): the line across the full width with the
+    // dates over their ticks at step 4 (152, about three times the 52 px events the sheet could not read at phone size),
+    // the spoken event's words under it as large (at most `lines` lines, down to `minStep`), and the title small (step 2)
+    // over it, so the events are the hero while they are spoken (the title held 70 percent of the frame)
+    timeline: { focusWide: { step: 4, minStep: 3, lines: 2, titleStep: 2, gap: 48, lineGap: 40 }, underTitle: true, previews: true, whatFace: 'text', whenSteps: [5, 4], whatSteps: [2], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 20, lineX: 12, textGap: 48, partGap: 12, line: 'ink2', lineWidth: 2, tick: 18, titleSteps: [5, 4], titleGap: 40, advance: 0.55 },
     // code: every line on frame 0 (`setOnOpen`; the first sheet typed it in from one word) and the title the hero over a
     // full-width card at 16:9 too (`heroWide`, poster's switch: a narrow card left the sides of the frame empty)
     // (at most `heroWideRows` 6 rows under the hero at 16:9: a ten-row listing did not fit under it, a creative finding;

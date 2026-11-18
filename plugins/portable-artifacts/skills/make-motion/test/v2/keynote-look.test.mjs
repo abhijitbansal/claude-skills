@@ -99,8 +99,9 @@ test('the camera style is the continuous desk drift, 18 units', () => {
   assert.deepEqual({ ...look().camera }, { drift: 18, style: 'desk' });
 });
 
-test('cutPalette is the six named cuts; a crossfade takes 0.5 s; every colour change mixes in OKLab', () => {
-  assert.deepEqual([...look().cutPalette], ['cut', 'match', 'crossfade', 'zoom', 'blur', 'cross-zoom']);
+// n4: the plan's six cuts plus the dip and the wipe gate-keynote-2 ruling 8 takes between two type shots
+test('cutPalette is the six named cuts plus the type cuts; a crossfade takes 0.5 s; every colour change mixes in OKLab', () => {
+  assert.deepEqual([...look().cutPalette], ['cut', 'match', 'crossfade', 'zoom', 'blur', 'cross-zoom', 'fade', 'wipe']);
   assert.equal(look().cutStyle.crossfade.duration, 0.5);
   assert.equal(look().colorSpace, 'oklab');
 });

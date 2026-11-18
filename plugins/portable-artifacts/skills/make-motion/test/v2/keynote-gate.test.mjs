@@ -87,10 +87,13 @@ test('gate 9:16 screen: the ring is exactly round the region card', () => {
 
 // ---- ruling 2: the 16:9 screen ----
 
-test('gate 16:9 screen: after the push the card is centred across the frame', () => {
+// n4 (gate-keynote-2 ruling 4) changed the three 16:9 screen tests below: the region now lifts off as its own card and
+// the screen fades out under it, so the card centred is the lifted card, the chrome is at full ink until the lift, and
+// the ring is round the lifted card
+test('gate 16:9 screen: after the lift the region card is centred across the frame', () => {
   const film = built(shotOf(WIDE, 'dash'), '16:9');
   const end = drawnLeaves(film.sampleShot(0, film.duration));
-  const card = union(end.filter((l) => (l.node.id.startsWith('dash.frame') && !l.node.id.includes('.shadow')) || l.node.id === 'dash.screen.image').map((l) => l.box));
+  const card = union(end.filter((l) => l.node.id.startsWith('dash.region') && !l.node.id.includes('.shadow')).map((l) => l.box));
   const [left, right] = [card[0], CANVAS['16:9'].w - card[0] - card[2]];
   // the resting drift carries on after the landing (camera.mjs: a full drift across the shot), which moves the card up
   // to a drift off the centre: the margins then differ by up to two drifts
@@ -98,11 +101,14 @@ test('gate 16:9 screen: after the push the card is centred across the frame', ()
   assert.ok(Math.abs(left - right) <= 2 * drift + 2, `margins ${Math.round(left)} and ${Math.round(right)} px`);
 });
 
-test('gate 16:9 screen: the title and url stay at full ink inside the title-safe box through the shot', () => {
+test('gate 16:9 screen: the title and url stay at full ink inside the title-safe box until the lift', () => {
   const film = built(shotOf(WIDE, 'dash'), '16:9');
   const safe = safeBox('16:9');
+  // the chrome fades out over the quarter second before the lift (screen-layout.mjs CHROME_FADE)
+  const lift = framesOf(film.duration).find((t) => drawnLeaves(film.sampleShot(0, t)).some((l) => l.node.id.startsWith('dash.region')));
   for (const t of framesOf(film.duration)) {
     const leaves = drawnLeaves(film.sampleShot(0, t));
+    if (t >= lift - 0.25 - 1 / FPS) break; // `lift` is the first frame on or after the card's start
     for (const id of ['dash.title', 'dash.url']) {
       const l = leaves.find((x) => x.node.id === id);
       assert.ok(l && l.opacity === 1, `at ${t.toFixed(2)} s ${id} is not at full ink`);
@@ -111,13 +117,11 @@ test('gate 16:9 screen: the title and url stay at full ink inside the title-safe
   }
 });
 
-test('gate 16:9 screen: the ring is a box exactly round the region, drawn from its top left corner both ways', () => {
+test('gate 16:9 screen: the ring is a box exactly round the lifted card, drawn from its top left corner both ways', () => {
   const shot = shotOf(WIDE, 'dash');
   const film = built(shot, '16:9');
   const end = drawnLeaves(film.sampleShot(0, film.duration));
-  const image = end.find((l) => l.node.id === 'dash.screen.image').box;
-  const [fx, fy, fw, fh] = shot.regions.region;
-  const region = [image[0] + fx * image[2], image[1] + fy * image[3], fw * image[2], fh * image[3]];
+  const region = end.find((l) => l.node.id === 'dash.region.paper').box;
   const ring = end.filter((l) => l.node.id.startsWith('dash.ring'));
   const box = union(ring.map((l) => l.box));
   assert.ok(sameBox(box, region), `ring ${box.map(Math.round)} round region ${region.map(Math.round)}`);
@@ -185,7 +189,8 @@ test('gate 9:16 chart: the tallest column fills the free height under the claim'
 for (const film of [WIDE, TALL]) {
   test(`gate ${film.format}: the engine picks soft cuts, never a hard cut and never three alike in a row`, () => {
     const names = film.shots.slice(1).map((_, i) => resolveShotCut(filmOf(film.shots, 'keynote', film.format, { mode: 'pro' }), i + 1, { look: look() })?.name ?? 'cut');
-    assert.ok(names.every((n) => ['crossfade', 'blur', 'zoom', 'cross-zoom', 'match'].includes(n)), `cuts: ${names.join(', ')}`);
+    // n4 (gate-keynote-2 ruling 8) added the dip and the wipe the look takes between two type shots
+    assert.ok(names.every((n) => ['crossfade', 'blur', 'zoom', 'cross-zoom', 'match', 'fade', 'wipe'].includes(n)), `cuts: ${names.join(', ')}`);
     assert.ok(names.every((n, i) => i < 2 || !(n === names[i - 1] && n === names[i - 2])), `three alike in a row: ${names.join(', ')}`);
   });
 }

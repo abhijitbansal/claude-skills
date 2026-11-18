@@ -37,15 +37,21 @@
       "say": "The dashboard counts every paid order, region by region."
     },
     {
-      "id": "inside",
-      "show": "list",
-      "title": "On the page",
-      "say": "Orders by month. Orders by region. The query behind each chart.",
-      "items": [
-        "Orders by month",
-        "Orders by region",
-        "The query behind each chart"
-      ]
+      "id": "month",
+      "show": "screen",
+      "src": "dashboard.png",
+      "title": "Orders by month",
+      "url": "ridgelineprints.shop/orders",
+      "regions": {
+        "month": [
+          0.02,
+          0.226,
+          0.46,
+          0.476
+        ]
+      },
+      "zoom": "month",
+      "say": "Month by month, December was the busiest."
     },
     {
       "id": "regions",
@@ -73,6 +79,44 @@
       ],
       "highlight": "North",
       "source": "Ridgeline Prints dashboard: paid orders to date"
+    },
+    {
+      "id": "flow",
+      "show": "diagram",
+      "title": "One order",
+      "nodes": [
+        {
+          "id": "order",
+          "label": "Order"
+        },
+        {
+          "id": "print",
+          "label": "Print"
+        },
+        {
+          "id": "pack",
+          "label": "Pack"
+        },
+        {
+          "id": "ship",
+          "label": "Ship"
+        }
+      ],
+      "edges": [
+        {
+          "from": "order",
+          "to": "print"
+        },
+        {
+          "from": "print",
+          "to": "pack"
+        },
+        {
+          "from": "pack",
+          "to": "ship"
+        }
+      ],
+      "say": "Each order goes to print, then to pack, then to ship."
     },
     {
       "id": "year",

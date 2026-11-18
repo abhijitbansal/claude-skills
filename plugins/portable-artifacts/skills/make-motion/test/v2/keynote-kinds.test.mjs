@@ -124,24 +124,28 @@ const PUSHED = 1.2; // the smallest push (kinds/camera.mjs PUSH.min)
 // n2 ruling 1: at 16:9 the push frames the whole card (look.kinds.screen.pushFrame), so no row of the screen is sliced at
 // the frame's top or bottom (the n1 sheet: the dimmed rows above the ring cut at the top); the card stays in the frame
 // through the whole shot, the push still a push (at least PUSH.min)
-test('keynote screen at 16:9: the card inside the title-safe box until the push, the whole card inside the frame through it, the ring round the region', () => {
-  const { built, ctx, canvas } = keynoteFilm('screen', exampleOf('screen'), '16:9');
+// gate-keynote-2 ruling 4 (the n4 change to this test): the region lifts off as its own card (look.kinds.screen.lift)
+// instead of a push; the screen card and the lifted card each stay inside the title-safe box, the ring round the lifted
+// card, which lands at least PUSHED times the screen card's width
+const liftedOf = (leaves) => leaves.filter((l) => l.node.id.startsWith('report.region') && !l.node.id.includes('.shadow'));
+test('keynote screen at 16:9: the card inside the title-safe box, the lifted region card inside it through the lift, the ring round the lifted card', () => {
+  const { built, ctx } = keynoteFilm('screen', exampleOf('screen'), '16:9');
   const safe = [ctx.safe.left, ctx.safe.top, ctx.safe.right - ctx.safe.left, ctx.safe.bottom - ctx.safe.top];
-  const frame = [0, 0, canvas.w, canvas.h];
-  let pushed = false;
+  let lifted = false;
   for (const t of framesOf(built.duration)) {
     const leaves = drawnLeaves(built.sampleShot(0, t));
-    const ring = leaves.filter((l) => l.node.id.startsWith('report.ring'));
-    if (ring.length > 0) {
-      pushed = true;
-      assert.ok(insideBox(union(ring.map((l) => l.box)), frame), `at ${t.toFixed(2)} s the ring leaves the frame`);
-    }
-    const card = union(cardOf(leaves).map((l) => l.box));
-    assert.ok(insideBox(card, pushed ? frame : safe, 2), `at ${t.toFixed(2)} s the card ${card.map(Math.round)} leaves the ${pushed ? 'frame' : 'title-safe box'}`);
+    const card = cardOf(leaves);
+    if (card.length > 0) assert.ok(insideBox(union(card.map((l) => l.box)), safe, 2), `at ${t.toFixed(2)} s the card leaves the title-safe box`);
+    const region = liftedOf(leaves);
+    if (region.length === 0) continue;
+    lifted = true;
+    assert.ok(insideBox(union(region.map((l) => l.box)), safe, LOOK.keyline), `at ${t.toFixed(2)} s the lifted card ${union(region.map((l) => l.box)).map(Math.round)} leaves the title-safe box`);
   }
-  assert.ok(pushed, 'the ring is drawn');
-  const [first, last] = [0, built.duration].map((t) => union(cardOf(drawnLeaves(built.sampleShot(0, t))).map((l) => l.box)));
-  assert.ok(last[2] >= PUSHED * first[2] - 1, `the push takes the card from ${Math.round(first[2])} to ${Math.round(last[2])} px wide (at least ${PUSHED}x)`);
+  assert.ok(lifted, 'the region lifts');
+  const first = union(cardOf(drawnLeaves(built.sampleShot(0, 0))).map((l) => l.box));
+  const end = drawnLeaves(built.sampleShot(0, built.duration));
+  const last = union(liftedOf(end).filter((l) => !l.node.id.startsWith('report.ring')).map((l) => l.box));
+  assert.ok(last[2] >= PUSHED * first[2] - 1, `the lift takes the card from ${Math.round(first[2])} to ${Math.round(last[2])} px wide (at least ${PUSHED}x)`);
 });
 
 // n2 ruling 1: at 9:16 no picture of the screen is cropped inside the region's own width (the n1 sheet: the region panel
@@ -184,14 +188,15 @@ test('keynote screen: the frame stands on the elevated card\'s two soft shadow l
   assert.equal(hero.props.font.weight, 800);
 });
 
+// n4 change (ruling 4): the ring is drawn round the lifted card, so its box contains the region's picture on that card
 test('keynote screen: the zoom ring\'s box contains the region\'s box', () => {
-  const { nodes, boxes } = expandShot(exampleOf('screen'), LOOK, '16:9');
-  const region = boxes['region:total'];
-  const ring = flat(nodes).filter((n) => n.id.startsWith('report.ring') && typeof n.props.d === 'string');
-  assert.ok(ring.length > 0, 'a ring path');
-  const points = ring.flatMap((n) => pathPoints(n.props.d).map(([x, y]) => [x + (n.props.x ?? 0), y + (n.props.y ?? 0)]));
-  const box = union(points.map(([x, y]) => [x, y, 0, 0]));
-  assert.ok(insideBox(region, box, 0.5), `ring ${box.map(Math.round)} round region ${region.map(Math.round)}`);
+  const { built } = keynoteFilm('screen', exampleOf('screen'), '16:9');
+  const end = drawnLeaves(built.sampleShot(0, built.duration));
+  const region = end.find((l) => l.node.id === 'report.region.image');
+  const ring = end.filter((l) => l.node.id.startsWith('report.ring'));
+  assert.ok(region && ring.length > 0, 'a lifted region and a ring');
+  const box = union(ring.map((l) => l.box));
+  assert.ok(insideBox(region.box, box, 0.5), `ring ${box.map(Math.round)} round region ${region.box.map(Math.round)}`);
 });
 
 // The compare: the unspoken card moved back in depth (scaled to 0.94), never dimmed, and never drawn over the front one.

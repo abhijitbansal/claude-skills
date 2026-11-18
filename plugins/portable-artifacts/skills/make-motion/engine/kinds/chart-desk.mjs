@@ -119,12 +119,17 @@ function annotationNodes(shot, ctx, data, { plot, plotArea, size }) {
   const anchor = bar ? [x1 - inset, (y0 + y1) / HALF]
     : shot.type === 'column' ? [(x0 + x1) / HALF, y0 + inset] : [(x0 + x1) / HALF, (y0 + y1) / HALF];
   const at = plot.times?.highlightAt ?? 0;
-  const box = [plotArea.x, plotArea.y, plotArea.w, plotArea.h];
+  // with columnGap the note's box reaches that far over the plot, so a note over the tallest column is not pushed down
+  const over = shot.type === 'column' && data.annotation.columnGap !== undefined ? data.annotation.columnGap * ctx.unit : 0;
+  const box = [plotArea.x, plotArea.y - over, plotArea.w, plotArea.h + over];
   // a bar's note stands where its value would: the chart's gap past the bar's end
-  const gap = bar ? data.gap + ANCHOR_INSET : NOTE_GAP;
+  // (data.annotation.columnGap and columnLeader, keynote: gate-keynote-2 ruling 9: on a column the note at the values'
+  // gap with no leader; at NOTE_GAP it was pushed down onto the column's top with a tick under it)
+  const column = shot.type === 'column';
+  const gap = bar ? data.gap + ANCHOR_INSET : column && data.annotation.columnGap !== undefined ? data.annotation.columnGap : NOTE_GAP;
   // the leader's style (the label device's `leader`): data.annotation.barLeader for a bar, data.annotation.leader for any
   // other mark (ledger: none on a bar, where a tick read as a minus sign; joined to a column, never drawn ahead of its note)
-  const leader = bar ? data.annotation.barLeader : data.annotation.leader;
+  const leader = bar ? data.annotation.barLeader : column && data.annotation.columnLeader !== undefined ? data.annotation.columnLeader : data.annotation.leader;
   const built = registries.devices.get('label').build({ id: `${shot.id}.annotation`, box, at, look: ctx.look, unit: ctx.unit, seed: ctx.seed, measure: ctx.measure, text: plot.highlight.text, anchor, size, gap, side: bar ? 'right' : 'above', face: data.annotation.face ?? 'label', ...(leader === undefined ? {} : { leader }) });
   return built.nodes;
 }

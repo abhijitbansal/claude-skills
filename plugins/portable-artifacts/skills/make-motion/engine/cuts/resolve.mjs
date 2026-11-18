@@ -155,6 +155,16 @@ function pickedCut(film, look, index) {
   if (!pick || index % pick.every !== 0) return undefined;
   if (pick.plates === true && sheetUnseen(film, look, index)) return undefined;
   const turn = index / pick.every - 1;
+  // `typeCuts` (keynote, gate-keynote-2 ruling 8): between two shots neither of whose kinds is in `pictureKinds` (two
+  // headlines), a cut that never shows both at once (a dip through the ground, a wipe), taken in turn among such cuts
+  // `pictureKinds` is a list, or { wide, tall } by the film's format (keynote: a tall screen sets its title as a headline)
+  const tall = typeof film.format === 'string' && film.format.split(':').map(Number).reduce((w, h) => h > w);
+  const pictures = Array.isArray(pick.pictureKinds) ? pick.pictureKinds : pick.pictureKinds?.[tall ? 'tall' : 'wide'] ?? [];
+  const isTypeCut = (i) => Array.isArray(pick.typeCuts) && ![film.shots[i - 1]?.show, film.shots[i]?.show].some((s) => pictures.includes(s));
+  if (isTypeCut(index)) {
+    const before = Array.from({ length: index - 1 }, (_, k) => k + 1).filter((i) => i % pick.every === 0 && isTypeCut(i)).length;
+    return pick.typeCuts[before % pick.typeCuts.length];
+  }
   // `cuts` (keynote, gate-keynote-1 ruling 4): a list of cuts taken in turn instead of the one `cut`, so no two soft cuts
   // in a row are the same where the list alternates
   const name = Array.isArray(pick.cuts) ? pick.cuts[turn % pick.cuts.length] : pick.cut;

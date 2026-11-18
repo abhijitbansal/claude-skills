@@ -220,7 +220,10 @@ export function expandDeskList(shot, ctx, given, times, hero) {
   const staged = shot.title === undefined ? shot : { ...shot, kicker: shot.title };
   // a look with a narrow tall margin starts the items further in on a tall frame (data.fromTall, ledger), so the figures
   // hanging before them keep inside the safe area
-  const grid = editorialSpan(ctx, isWide(canvas) ? FIRST_COLUMN : data.fromTall ?? FIRST_COLUMN, isWide(canvas) ? data.toWide : data.toTall);
+  // (data.fromTallPlain, keynote: gate-keynote-2 ruling 7: a list with no figures starts there instead, on the inset the
+  // other shots keep; from fromTall it sat twice as far in with nothing hanging before it)
+  const tallFrom = !numbered && data.fromTallPlain !== undefined ? data.fromTallPlain : data.fromTall ?? FIRST_COLUMN;
+  const grid = editorialSpan(ctx, isWide(canvas) ? FIRST_COLUMN : tallFrom, isWide(canvas) ? data.toWide : data.toTall);
   const span = dots ? { x: grid.x + dots.column * unit, w: grid.w - dots.column * unit } : grid;
   // a look may drop the slug for lists (look.kinds.list.slug false, cosmos: the badge floated, unexplained)
   const slugged = data.slug !== false;
