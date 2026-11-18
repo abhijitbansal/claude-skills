@@ -49,9 +49,11 @@
 .slide-close .slide-title { margin-inline: auto; }
 /* the verdict is set in the heading's face (a theme's body face is a different, wider cut on some themes) */
 .slide-close .lead { font-family: var(--font-display); }
-/* a classic closing card feathers into the art the same way as the title card; so does the footer strip under it */
+/* a classic closing card feathers into the art the same way as the title card. The colophon under it has no band of its
+   own: the art fades into the slide's ground above it, so the line sits on plain ground like a footer, not on a label */
 :root[data-flavor="classic"] .slide-has-art:not(.slide-cover) .slide-inner { border-radius: 32px; box-shadow: 0 0 64px 64px var(--page); }
-:root[data-flavor="classic"] .slide-has-art:not(.slide-cover) .pa-footer { box-shadow: 0 0 28px 20px var(--page); }
+:root[data-flavor="classic"] .slide-has-art:not(.slide-cover) .pa-footer { background: none; }
+:root[data-flavor="classic"] .slide-has-art:not(.slide-cover) .slide-art { -webkit-mask-image: linear-gradient(#000 calc(100% - 13.5rem), transparent calc(100% - 8.5rem)); mask-image: linear-gradient(#000 calc(100% - 13.5rem), transparent calc(100% - 8.5rem)); }
 
 /* the colophon: one quiet line on the last slide (colophon.mjs) */
 .slide .pa-footer { margin: var(--sp-4) auto 0; padding-top: 0; border-top: 0; }

@@ -111,16 +111,12 @@ test('a classic title card is solid page under the text with a feathered halo, n
   assert.ok(!/--scrim/.test(card), 'not the translucent scrim');
 });
 
-test('a classic closing card and its footer feather the same way', () => {
-  const css = read('deck-art.css');
-  const card = rule(css, `${CLASSIC} .slide-has-art:not(.slide-cover) .slide-inner`);
-  const foot = rule(css, `${CLASSIC} .slide-has-art:not(.slide-cover) .pa-footer`);
-  for (const [name, decl] of [['card', card], ['footer', foot]]) {
-    const h = halo(decl);
-    assert.ok(h, `${name}: a feathered halo`);
-    assert.ok(h.spread >= h.blur * 0.7, `${name}: opaque at the edge`);
-    if (name === 'card') assert.ok(h.spread >= h.blur, 'the card: no outline of the box shows against the art');
-  }
+// The footer has no band of its own any more (look gate round 2, N3): see test/deck-polish.test.mjs.
+test('a classic closing card feathers into the art', () => {
+  const card = rule(read('deck-art.css'), `${CLASSIC} .slide-has-art:not(.slide-cover) .slide-inner`);
+  const h = halo(card);
+  assert.ok(h, 'a feathered halo');
+  assert.ok(h.spread >= h.blur, 'no outline of the box shows against the art');
 });
 
 test('the title slide chips are the page\'s unboxed caps labels on a classic deck', () => {

@@ -56,6 +56,10 @@
   @keyframes deck-rise { from { opacity: 0; transform: translateY(12px); } }
 }
 
+/* the colophon on a flavored closing slide: a strip as wide as its one line, centred (the flavor sheet makes the footer
+   a full-width flex row that pushes its text to the left), not a wide strip half empty */
+:root[data-flavor] .slide-has-art:not(.slide-cover) .pa-footer { width: fit-content; max-width: 100%; margin-inline: auto; padding: 6px 16px; justify-content: center; }
+
 /* ---- dusk: soft gradients, a frosted card over rounded art, the tilted accent card, outlined numerals --- */
 /* the glows are surface tinted by a hue, so every ink keeps its contrast on them (see slides-browser.test.mjs) */
 :root[data-flavor="dusk"] .slide:not(.slide-has-art) { background: radial-gradient(70% 80% at 100% 0%, color-mix(in srgb, var(--glow) 10%, var(--surface)), transparent 70%), radial-gradient(60% 70% at 0% 100%, color-mix(in srgb, var(--good) 8%, var(--surface)), transparent 70%); }
@@ -67,6 +71,9 @@
 /* the subtitle is the tilted accent card: the fill turns, the text stays straight */
 :root[data-flavor="dusk"] .slide-cover .subtitle { position: relative; isolation: isolate; width: fit-content; max-width: 30ch; margin-top: var(--sp-6); padding: var(--sp-4) var(--sp-5); color: var(--card-fg); font-weight: 700; line-height: 1.3; }
 :root[data-flavor="dusk"] .slide-cover .subtitle::before { content: ""; position: absolute; inset: 0; z-index: -1; background: var(--card-bg); border-radius: var(--r-card) var(--r-card) var(--r-card) 4px; transform: rotate(-1.6deg); box-shadow: 7px 9px 0 var(--text); }
+/* the title slide's chips are the page's unboxed caps labels, as on the other themes */
+:root[data-flavor="dusk"] .slide-cover .meta { gap: 6px 22px; }
+:root[data-flavor="dusk"] .slide-cover .meta div { padding: 0; border: 0; border-radius: 0; background: none; }
 :root[data-flavor="dusk"] .slide-has-art:not(.slide-cover) .slide-inner { border-radius: var(--r-big) var(--r-big) var(--r-big) 10px; box-shadow: 0 30px 60px -36px color-mix(in srgb, var(--text) 60%, transparent); }
 :root[data-flavor="dusk"] .slide-has-art:not(.slide-cover) .pa-footer { border-radius: 999px; border-top: 0; }
 :root[data-flavor="dusk"] .deck-controls .btn, :root[data-flavor="dusk"] .key { border-radius: 999px; }
@@ -79,7 +86,7 @@
 :root[data-flavor="press"] .slide-cover .slide-inner { margin: auto auto 0 0; border-top: 6px solid var(--text); }
 :root[data-flavor="press"] .slide-cover .meta div { border-left: var(--rule-w) solid var(--text); }
 :root[data-flavor="press"] .slide-has-art:not(.slide-cover) .slide-inner { border: 2px solid var(--text); box-shadow: 8px 8px 0 var(--accent); }
-:root[data-flavor="press"] .slide-has-art:not(.slide-cover) .pa-footer { border: 0; }
+:root[data-flavor="press"] .slide-has-art:not(.slide-cover) .pa-footer { border: 1px solid var(--text); }
 @media (min-width: 760px) {
   :root[data-flavor="press"] .slide:not(.slide-has-art) .slide-inner { padding-left: 6.5rem; }
   :root[data-flavor="press"] .slide:not(.slide-has-art) > .slide-inner::before { position: absolute; left: 0; top: var(--sp-5); margin: 0; font-size: 3.8rem; }
@@ -112,7 +119,7 @@
 :root[data-flavor="poster"] .slide-cover h1 { max-width: 11em; font-size: clamp(3rem, 1rem + 5.8vw, 7rem); line-height: 0.96; }
 :root[data-flavor="poster"] .slide-cover :is(.subtitle, .meta div, .meta dt, .meta dd) { color: inherit; background: none; border-color: currentColor; }
 :root[data-flavor="poster"] .slide-has-art:not(.slide-cover) .slide-inner { border: 1px solid var(--text); box-shadow: 8px 8px 0 var(--glow); }
-:root[data-flavor="poster"] .slide-has-art:not(.slide-cover) .pa-footer { border: 1px solid var(--text); border-top-width: 0; }
+:root[data-flavor="poster"] .slide-has-art:not(.slide-cover) .pa-footer { border: 1px solid var(--text); }
 :root[data-flavor="poster"] .deck-progress > span { background: var(--glow); }
 :root[data-flavor="poster"] .deck-count { font-family: var(--mono); }
 /* flavors.css pins the poster mono to 13px for the page; a slide gives it the projection scale */
