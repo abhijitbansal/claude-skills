@@ -230,7 +230,7 @@ Fix it by running `npm ci --ignore-scripts` in the installed skill folder (or it
 |---|---|---|---|---|---|
 | Node.js ≥ 20 | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `npm ci --ignore-scripts` in the skill folder (once; `--omit=dev` is enough for make-dashboard, make-diagram, make-explainer and make-scene) | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Installed size (`node_modules` after that install; Chromium and on-demand installs are extra) | ≈150 MB | ≈11 MB | ≈3 MB | ≈58 MB | ≈3 MB |
+| Installed size (`node_modules` after that install; Chromium and on-demand installs are extra) | ≈150 MB | ≈11 MB | ≈3 MB | ≈57 MB | ≈3 MB |
 | Other skills beside it | — | — | make-diagram and make-dashboard (required for diagram and chart sections and for card icons); make-motion only to render a motion spec | — | make-diagram to lift a diagram, make-dashboard to lift a chart; a plain world needs none |
 | `git` on `PATH` | — | — | only for `gather.mjs` | — | — |
 | Chromium for frame capture (once, ≈150 MB) | optional: only `check.mjs` (a full `npm ci --ignore-scripts` plus a Chromium, as for make-diagram); the build needs no browser | optional: only `check.mjs` (needs a full `npm ci --ignore-scripts`, not `--omit=dev`, plus `npx playwright install chromium` in the skill folder); build needs no browser, and `check.mjs` skips cleanly without one | none to build; only a motion section that renders a spec needs make-motion's Chromium | `npx playwright install chromium` inside the skill folder (Linux: `--with-deps`; falls back to installed Google Chrome) | optional: only `check.mjs` (needs a full `npm ci --ignore-scripts` plus a Chromium, as for make-diagram); build needs no browser, and `check.mjs` skips cleanly without one |
@@ -242,6 +242,14 @@ The installed sizes are the on-disk size of each skill's production dependency t
 (not a fresh install from the plugin cache): `npm ls --omit=dev --all --parseable` in the skill folder, then the size of every
 package it lists. make-motion's figure is its whole tree, because Playwright is a regular dependency there. The doctor shows
 the same figures at its consent prompt. To check one on your machine, run `npm ci --ignore-scripts --omit=dev` in the skill folder and then `du -sh node_modules`.
+
+Re-measured on 2026-11-18 on macOS from a copy holding only each skill's `package.json` and `package-lock.json`
+(`npm ci --ignore-scripts --omit=dev`, make-motion without `--omit=dev`), then `du -sk node_modules`: make-dashboard 146084 KiB,
+make-diagram 10728, make-explainer 2844, make-motion 55304, make-scene 2844 (the `npm ls` sum above gave 146036, 10724, 2840, 55276
+and 2840). In MB (KiB x 1024 / 1,000,000) every figure in the table holds; make-motion's 56.6 MB is the ≈57 MB the table and the doctor
+give. The voice package's ≈227 MB is `du -sk` over the 23 packages of `optional/voice/package-lock.json`
+in an existing install (221676 KiB), not a fresh install; that install also holds the older `kokoro-js` tree, which is why the
+whole folder is larger.
 
 Install make-motion's tools per OS (run the Chromium download inside the
 make-motion skill folder, so it matches the Playwright version `npm ci --ignore-scripts` installed):

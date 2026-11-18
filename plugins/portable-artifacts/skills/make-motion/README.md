@@ -107,7 +107,7 @@ Two renders of the same film and media give the same frames. The MP4's `comment`
 
 Node.js 20 or later, ffmpeg, and Chromium (a one-time download by Playwright) or Google Chrome. ffmpeg is found through `$FFMPEG_PATH`, then `PATH`; it is never bundled. The limiter stage of the mastering needs ffmpeg 5.1 or later, and the doctor says so when yours is older.
 
-Installed size, measured with `du -sk node_modules` after `npm ci --ignore-scripts` in a clean copy of this folder: 55304 KiB (about 57 MB). The voice package in `optional/voice` is about 227 MB installed, measured with `du -sk` after `npm ci --ignore-scripts`, plus a model of about 93 MB (the five pinned files total 92,886,949 bytes) on first use. Both are installed by `doctor.mjs --fix` after it tells you the size and you say yes. The doctor reports the size of the browser and of the cut-out package before it installs them.
+Installed size, measured with `du -sk node_modules` after `npm ci --ignore-scripts` in a clean copy of this folder: 55304 KiB (about 57 MB). The voice package in `optional/voice` is about 227 MB installed, measured with `du -sk` over the 23 packages of its lockfile in an existing install (221676 KiB), plus a model of about 93 MB (the five pinned files total 92,886,949 bytes) on first use. Both are installed by `doctor.mjs --fix` after it tells you the size and you say yes. The doctor reports the size of the browser and of the cut-out package before it installs them.
 
 The dependencies are pinned by the lockfile:
 

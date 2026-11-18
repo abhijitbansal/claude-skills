@@ -23,7 +23,7 @@ export const INSTALL_SIZES = {
   'make-explainer': '≈3 MB',
   'make-diagram': '≈11 MB',
   'make-dashboard': '≈150 MB',
-  'make-motion': '≈58 MB',
+  'make-motion': '≈57 MB',
   'make-scene': '≈3 MB',
 };
 const UNKNOWN_SIZE = '≈3–150 MB, depending on the skill';

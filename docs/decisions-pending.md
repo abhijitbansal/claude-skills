@@ -216,7 +216,7 @@ Still open, default is to leave as is:
 - **Decision 13.** CI sets `PA_REQUIRE_BROWSER` beside `PA_REQUIRE_RENDER`; the two version 2 test helpers still read only the first. Default: keep both set; make the helpers read either if one is dropped.
 - **Decision 15.** The doctor's ffmpeg 5.1 note was written for version 1's `--loudness`. Whether 5.1 is the right floor for version 2's mastering options was not checked.
 - **The poster of a marker film.** A `marker` film opens on a nearly empty board, so make-explainer's poster (second 0 of the rendered film) is sparse. Default: leave it; a fuller poster is a follow-up.
-- **The installed-size figure.** The README requirements table gives make-motion as about 58 MB, the doctor's `INSTALL_SIZES` figure, from before the six packages left. A `du -sk node_modules` of a clean install measured 55,304 KiB (cut-over Task 5). Default: re-measure with the doctor's own method and update `INSTALL_SIZES` and the table together.
+- **The installed-size figure.** The README requirements table gives make-motion as about 58 MB, the doctor's `INSTALL_SIZES` figure, from before the six packages left. A `du -sk node_modules` of a clean install measured 55,304 KiB (cut-over Task 5). Default: re-measure with the doctor's own method and update `INSTALL_SIZES` and the table together. **Resolved 2026-11-18 (release Task 6):** re-measured 55,304 KiB (56.6 MB) from a clean copy; `INSTALL_SIZES` and the table now say ≈57 MB.
 
 ## The cosmos look is parked (2026-11-16)
 

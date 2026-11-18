@@ -1106,7 +1106,7 @@ test('PA-11: node_modules and sister sizes come from a per-skill table, not one 
   assert.equal(await size('make-explainer'), '≈3 MB');
   assert.equal(await size('make-diagram'), '≈11 MB');
   assert.equal(await size('make-dashboard'), '≈150 MB');
-  assert.equal(await size('make-motion'), '≈58 MB');
+  assert.equal(await size('make-motion'), '≈57 MB');
   assert.equal(await size('make-scene'), '≈3 MB');
   assert.match(await size('make-future'), /depending on the skill/, 'an unknown skill gets an honest range');
   const own = (await diagnose([nodeModules({ size: '≈1 MB' })], ctx())).missing[0].size;
