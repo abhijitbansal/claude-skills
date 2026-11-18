@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseSession, readSession, firstBuildValid } from '../session.mjs';
 import * as F from './helpers/stream-fixtures.mjs';
 
@@ -125,6 +126,49 @@ test('a failing make run is still read: an error-prefixed result, array content 
     F.toolResult({ id: 'e', content: `${F.report(true)}\n[stderr] {not a report}` }),
   ];
   assert.deepEqual(stepOf(parse(events), 'make').map((x) => x.ok), [false, false, null, false, true]);
+});
+
+// A REAL stream: the Task 9 pilot (statement-hook, Claude Code 2.1.327, claude-director). Image bytes and long text are
+// trimmed, every event and field is kept. Expected values are read from that stream by hand, not from the parser.
+test('the real pilot stream: agent as listed, subagent steps attributed by parent id, both models, cost, no hooks', () => {
+  const text = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'helpers', 'real-stream-pilot-2026-11-18.jsonl'), 'utf8');
+  const s = parseSession(text, { specName: SPEC_NAME });
+  assert.equal(s.readable, true);
+  assert.equal(s.directorModel, 'claude-opus-5-5');
+  assert.equal(s.operatorModel, 'claude-haiku-5-5');
+  assert.deepEqual(s.agentsListed, ['artifact-builder', 'claude', 'Explore', 'general-purpose', 'Plan', 'statusline-setup']);
+  assert.equal(s.delegated, true);
+  assert.equal(s.agent, 'artifact-builder');
+  assert.equal(s.requestedModel, null);
+  assert.deepEqual(s.plugins, ['cc-plugin-agents-md', 'cc-plugin-telemetry', 'cc-plugin-privacy', 'cc-plugin-plugin-authoring']);
+  assert.deepEqual(s.hooksFired, []);
+  assert.equal(s.settingSources, null, 'this version does not list setting sources in the init event');
+  assert.deepEqual(s.steps.map((x) => [x.what, x.by, x.ok]), [
+    ['spec', 'director', true], ['make', 'operator', true], ['view', 'director', true], ['view', 'director', true], ['view', 'director', true],
+  ]);
+  assert.equal(s.firstBuildValid, true);
+  assert.equal(s.costUsd, 0.39786671);
+  assert.equal(s.capped, false);
+});
+
+// Captured in the Task 9 pilot: the director ran `make.mjs --list kinds` and `make.mjs film.json --outline` (text, not
+// reports) before handing the build over. They are looks at the film, not builds, so they are not make steps and the
+// first build is the operator's run.
+test('make.mjs --list and --outline are not builds: first build valid is the first real build report', () => {
+  const events = [
+    F.init(),
+    F.toolUse({ id: 'l', name: 'Bash', input: { command: 'node skills/make-motion/scripts/make.mjs --list kinds' } }),
+    F.toolResult({ id: 'l', content: 'kinds (16)\nfree  Raw scene nodes' }),
+    F.toolUse({ id: 'o', name: 'Bash', input: { command: 'node skills/make-motion/scripts/make.mjs film.json --outline' } }),
+    F.toolResult({ id: 'o', content: 'make: validate ok (0.004 s)\nhook  statement  0.00–3.90s' }),
+    F.toolUse({ id: 'oj', name: 'Bash', input: { command: 'node skills/make-motion/scripts/make.mjs film.json --outline --json' } }),
+    F.toolResult({ id: 'oj', content: F.report(true) }),
+    F.toolUse({ id: 'm', name: 'Bash', input: { command: F.MAKE }, parent: 'agent-1' }),
+    F.toolResult({ id: 'm', content: F.report(false), parent: 'agent-1' }),
+  ];
+  const s = parse(events);
+  assert.deepEqual(stepOf(s, 'make').map((x) => [x.by, x.ok]), [['operator', false]]);
+  assert.equal(firstBuildValid(s.steps), false);
 });
 
 test('a command that only mentions make.mjs is not a make step', () => {

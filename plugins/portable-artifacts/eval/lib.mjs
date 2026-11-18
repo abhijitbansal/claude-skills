@@ -214,7 +214,11 @@ export function readSpecModel(specPath) {
 // `abortIf: { afterMs, done }`: at afterMs, if done() is still false the host's whole process group is killed and
 // the result says `aborted: true` (run-eval uses it to stop a local model that has written no spec and run no
 // validate by then, instead of waiting out the full timeout).
-export function run(argv, { cwd, env, timeoutMs = 0, logFile, abortIf } = {}) {
+// Environment variables that choose a model. `--setting-sources project` does not remove them, so a host that must
+// run as the account default (claude-director, decision 14) does not inherit them.
+export const MODEL_ENV_VARS = ['CLAUDE_CODE_SUBAGENT_MODEL', 'ANTHROPIC_MODEL'];
+
+export function run(argv, { cwd, env, timeoutMs = 0, logFile, abortIf, dropEnv = [] } = {}) {
   return new Promise((resolve) => {
     const started = Date.now();
     // detached = own process group, so a timeout also kills grandchildren
@@ -222,6 +226,7 @@ export function run(argv, { cwd, env, timeoutMs = 0, logFile, abortIf } = {}) {
     // NODE_USE_SYSTEM_CA makes Node 24 read the macOS keychain at startup; the codex
     // sandbox denies that and every node process SIGSEGVs. The eval is offline.
     const { NODE_USE_SYSTEM_CA: _drop, ...baseEnv } = process.env;
+    for (const k of dropEnv) delete baseEnv[k];
     const child = spawn(argv[0], argv.slice(1), {
       cwd, env: { ...baseEnv, ...env }, stdio: ['ignore', 'pipe', 'pipe'], detached: true,
     });

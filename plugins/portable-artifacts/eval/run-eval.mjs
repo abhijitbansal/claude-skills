@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { SKILLS, LOCAL_MODEL_GATED_SKILLS, buildPrompt, expandCmd, loadPrompts, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
+import { SKILLS, LOCAL_MODEL_GATED_SKILLS, buildPrompt, expandCmd, loadPrompts, MODEL_ENV_VARS, run, scoreRun, summarize, prepareWorkdir } from './lib.mjs';
 import { readSession } from './session.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -130,6 +130,7 @@ for (const p of prompts) {
   const r = await run(argv, {
     cwd: work,
     env: { EVAL_LOG: evalLog, PA_OUTPUT_DIR: path.join(work, 'out') }, // PA_OUTPUT_DIR keeps the default output inside the workdir
+    dropEnv: host.agentFile ? MODEL_ENV_VARS : [],
     timeoutMs: Number(opts.timeout) * 1000,
     logFile: path.join(caseDir, 'transcript.txt'),
     abortIf: abortNoSpecSec > 0 ? { afterMs: abortNoSpecSec * 1000, done: madeProgress } : undefined,

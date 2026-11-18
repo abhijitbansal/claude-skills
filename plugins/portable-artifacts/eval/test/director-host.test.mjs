@@ -221,14 +221,14 @@ function fakeClaudeBin(streamText) {
   fs.writeFileSync(path.join(bin, 'claude'), `#!${process.execPath}
 const fs = require('fs');
 if (process.argv[2] === '--version') { console.log('9.9.9 (fake)'); process.exit(0); }
-fs.appendFileSync(${JSON.stringify(marker)}, JSON.stringify({ argv: process.argv.slice(2), agentFile: fs.existsSync('.claude/agents/artifact-builder.md') }) + '\\n');
+fs.appendFileSync(${JSON.stringify(marker)}, JSON.stringify({ argv: process.argv.slice(2), agentFile: fs.existsSync('.claude/agents/artifact-builder.md'), subagentModel: process.env.CLAUDE_CODE_SUBAGENT_MODEL ?? null, anthropicModel: process.env.ANTHROPIC_MODEL ?? null }) + '\\n');
 process.stdout.write(fs.readFileSync(${JSON.stringify(fixture)}, 'utf8'));
 `, { mode: 0o755 });
   return { bin, marker };
 }
 
-const evalWith = (bin, args) => spawnSync(process.execPath, [path.join(evalDir, 'run-eval.mjs'), '--skill', 'dashboard', ...args], {
-  encoding: 'utf8', env: { ...process.env, PATH: bin }, timeout: 60000,
+const evalWith = (bin, args, extraEnv = {}) => spawnSync(process.execPath, [path.join(evalDir, 'run-eval.mjs'), '--skill', 'dashboard', ...args], {
+  encoding: 'utf8', env: { ...process.env, ...extraEnv, PATH: bin }, timeout: 60000,
 });
 
 test('run-eval: --budget on a host without budgetArgs is a usage error before any host runs', () => {
@@ -298,6 +298,37 @@ test('run-eval: a claude-director case passes the cap and the stream flags, find
   const summary = fs.readFileSync(path.join(dir, 'summary.md'), 'utf8');
   assert.match(summary, /\| operator model \| director model \|/);
   assert.match(summary, /Delegated 1\/1/);
+});
+
+// Pilot finding (Task 9): the owner's shell exports CLAUDE_CODE_SUBAGENT_MODEL=sonnet, which `--setting-sources project`
+// does not remove and which overrides the operator's model. Decision 14 asks for isolation, so the director host drops
+// the variables that pick a model; the plain `claude` host keeps passing the environment through unchanged.
+const MODEL_ENV = { CLAUDE_CODE_SUBAGENT_MODEL: 'sonnet', ANTHROPIC_MODEL: 'some-model' };
+const skipWithoutDashboard = (t) => {
+  if (fs.existsSync(path.join(skillsRoot, 'make-dashboard', 'node_modules'))) return false;
+  if (process.env.CI) assert.fail('make-dashboard has no node_modules; CI installs it');
+  t.skip('make-dashboard has no node_modules here');
+  return true;
+};
+
+test('run-eval: the claude-director host does not inherit the variables that pick a model', (t) => {
+  if (skipWithoutDashboard(t)) return;
+  const { bin, marker } = fakeClaudeBin(F.lines(F.delegatedSession({ spec: '/work/dashboard.json' })));
+  const r = evalWith(bin, ['--host', 'claude-director', '--only', 'rev-by-region', '--budget', '2', '--out', tmp()], MODEL_ENV);
+  assert.equal(r.status, 0, r.stderr);
+  const call = JSON.parse(fs.readFileSync(marker, 'utf8').trim());
+  assert.equal(call.subagentModel, null, 'CLAUDE_CODE_SUBAGENT_MODEL would override the agent file and the evidence');
+  assert.equal(call.anthropicModel, null, 'ANTHROPIC_MODEL would move the director off the account default');
+});
+
+test('run-eval: the plain claude host still passes its environment through', (t) => {
+  if (skipWithoutDashboard(t)) return;
+  const { bin, marker } = fakeClaudeBin('plain text, not a stream\n');
+  const r = evalWith(bin, ['--host', 'claude', '--only', 'rev-by-region', '--out', tmp()], MODEL_ENV);
+  assert.equal(r.status, 0, r.stderr);
+  const call = JSON.parse(fs.readFileSync(marker, 'utf8').trim());
+  assert.equal(call.subagentModel, 'sonnet');
+  assert.equal(call.anthropicModel, 'some-model');
 });
 
 test('run-eval: a claude host case records no session and its summary keeps the old shape', (t) => {

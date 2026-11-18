@@ -12,7 +12,9 @@ const DELEGATING_TOOLS = new Set(['Agent', 'Task']);
 const SPEC_WRITERS = new Set(['Write', 'Edit', 'MultiEdit']);
 const SPEC_NAME = /^(dashboard|diagram|explainer|scene|film)\.json$/;
 const MAKE_COMMAND = /(?:^|[\s;&|(])node\s+[^;&|\n]*\bmake\.mjs\b/;
-const VIEW_FILE = /\.(png|jpe?g|webp|gif|html?)$/i;
+// make.mjs modes that only look (the kinds list, the shot outline) and build nothing: not a make step.
+const MAKE_LOOK_ONLY = /\s--(?:list|outline)\b/;
+const VIEW_FILE =/\.(png|jpe?g|webp|gif|html?)$/i;
 
 /** `ok` of the first make step, or null when there was none (or its result was not a report). */
 export function firstBuildValid(steps) {
@@ -110,7 +112,7 @@ export function parseSession(text, { specName } = {}) {
       delegations.push({ id: c.id, agent: c.input.subagent_type ?? null, requestedModel: c.input.model ?? null });
     } else if (SPEC_WRITERS.has(c.name) && file && isSpec(file)) {
       steps.push({ what: 'spec', by: c.by, ok: toolOk, path: file });
-    } else if (c.name === 'Bash' && typeof c.input.command === 'string' && MAKE_COMMAND.test(c.input.command)) {
+    } else if (c.name === 'Bash' && typeof c.input.command === 'string' && MAKE_COMMAND.test(c.input.command) && !MAKE_LOOK_ONLY.test(c.input.command)) {
       steps.push({ what: 'make', by: c.by, ok: res ? (reportIn(res.text)?.ok ?? null) : null });
     } else if (c.name === 'Read' && VIEW_FILE.test(file) && !file.split(path.sep).includes('skills')) {
       steps.push({ what: 'view', by: c.by, ok: toolOk, path: file });

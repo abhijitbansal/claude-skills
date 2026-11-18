@@ -79,11 +79,17 @@ setting sources and hooks the stream lists, cost and cap. These columns follow `
 `Session setup (read from the stream)` line (setting sources, plugins, hooks that fired). A `make.mjs` run adds a
 `{ "command": "make" }` line to `.eval-log.jsonl`; `validate runs` and `first try` ignore those lines.
 
-Status of the parser: the stream shapes it reads (an `init` event listing model, agents and plugins; `tool_use` and
-`tool_result` blocks; `parent_tool_use_id` on a subagent's events; the `result` event) are written from the plan and
-tested on hand-written, synthetic streams only (`test/helpers/stream-fixtures.mjs`). No real stream has been captured
-yet: the first billed case replaces the fixtures and the parser is corrected against it. Until then the setting
-sources, hook names and the `error_max_budget_usd` cap marker are expectations, not observations.
+Status of the parser: most tests use hand-written, synthetic streams (`test/helpers/stream-fixtures.mjs`). One test
+reads a real stream, the Task 9 pilot (`test/helpers/real-stream-pilot-2026-11-18.jsonl`, Claude Code 2.1.327, image bytes
+and long text trimmed). From it: the `init` event lists `model`, `agents` (names, the workdir file as `artifact-builder`
+with no plugin prefix) and `plugins` (objects, here four `builtin` ones), and no setting sources; the delegating call is
+named `Agent` while the `init` tool list says `Task`; a subagent's events carry `parent_tool_use_id` and its assistant
+messages carry `message.model`; the `result` event carries `total_cost_usd`. Still expectations, not observations: hook
+event names (no hook fired in the pilot) and the `error_max_budget_usd` cap marker. A `make.mjs --list` or `--outline`
+call looks at the film and builds nothing, so it is not a make step.
+
+The harness drops `CLAUDE_CODE_SUBAGENT_MODEL` and `ANTHROPIC_MODEL` from the environment of a `claude-director`
+case (`--setting-sources project` does not remove them, and the first would override the operator's model).
 
 `--set <name>` runs the prompts in `prompts/<skill>-<name>.json` instead of
 the default `prompts/<skill>.json` (which stays as it is, so committed
