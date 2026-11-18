@@ -45,7 +45,7 @@ const HOPS = {
 
 // Loads the modules on a bare window and mounts a story over fakes. Timers and
 // animation frames are recorded, never run: a test fires the one it wants.
-function load(data, hooks) {
+function load(data, hooks, { reduced = false } = {}) {
   const timers = [];
   const frames = [];
   const moves = [];
@@ -65,7 +65,7 @@ function load(data, hooks) {
   const els = { nodes: Object.create(null), groups: Object.create(null), edges: Object.create(null), labels: Object.create(null), lifelines: [], frames: [], notes: [] };
   for (const id of Object.keys(data.edges)) els.edges[id] = edge;
   const camera = {
-    reduced: () => false, unfit() {}, fit() {}, home() {}, glideMs: () => 300,
+    reduced: () => reduced, unfit() {}, fit() {}, home() {},
     fitCamera: () => ({ cx: 0, cy: 0, s: 1 }), wholeCamera: () => ({ cx: 0, cy: 0, s: 1 }), cameraFor: () => ({ cx: 0, cy: 0, s: 1 }), boxOf: () => null, unionBox: (a, b) => a || b,
     moveTo: (target, options) => { moves.push(options || {}); },
   };
@@ -73,21 +73,21 @@ function load(data, hooks) {
   return { story, moves, timers, frames, dot };
 }
 
-test('a step beat glides at the camera default (300 ms) and a story beat at 450 ms; both divide by the speed', () => {
-  const steps = load(STEPS);
-  steps.story.present(0);
-  assert.deepEqual(steps.moves.at(-1), { ms: 300 }, 'the camera is asked for its own pace');
-  assert.equal(steps.timers.at(-1).ms, 300, 'and the beat waits that long before its hold');
-  steps.story.setSpeed(2);
-  steps.story.goTo(1);
-  assert.deepEqual([steps.moves.at(-1), steps.timers.at(-1).ms], [{ ms: 150 }, 150]);
+// The beat's named timings (story.js GLIDE_MS, SETTLE_MS): a step beat and a story beat glide alike, in-out; the beat then rests SETTLE_MS before the caption, the dot and the hold.
+const GLIDE = 600;
+const SETTLE = 60;
+const EASE = 'in-out';
 
-  const hops = load(HOPS);
-  hops.story.present(0);
-  assert.deepEqual([hops.moves.at(-1), hops.timers.at(-1).ms], [{ ms: 450 }, 450]);
-  hops.story.setSpeed(2);
-  hops.story.goTo(1);
-  assert.deepEqual([hops.moves.at(-1), hops.timers.at(-1).ms], [{ ms: 225 }, 225]);
+test('a step beat and a story beat both glide GLIDE_MS, ease in-out, then rest SETTLE_MS; every one divides by the speed', () => {
+  for (const [name, data] of [['step', STEPS], ['story', HOPS]]) {
+    for (const speed of [0.5, 1, 1.5, 2]) {
+      const h = load(data);
+      h.story.setSpeed(speed);
+      h.story.present(0);
+      assert.deepEqual(h.moves.at(-1), { ms: GLIDE / speed, ease: EASE }, `${name} at ${speed}x: the camera glide`);
+      assert.equal(h.timers.at(-1).ms, (GLIDE + SETTLE) / speed, `${name} at ${speed}x: the glide timer waits for the glide plus the rest`);
+    }
+  }
 });
 
 // The ms the hold timer is armed with for one step beat (no dot, so one fired timer reaches the hold).
@@ -157,14 +157,14 @@ test('reframe keeps the running beat: the camera glides to the same target again
   story.reframe();
   assert.equal(timers.length, before, 'no new timer: the beat under way keeps its clock');
   assert.equal(moves.length, 2, 'one more camera move');
-  assert.deepEqual(moves.at(-1), { ms: 450 }, 'a story beat re-glides at its own pace (a jump would cut the entry glide short)');
+  assert.deepEqual(moves.at(-1), { ms: GLIDE, ease: EASE }, 'a story beat re-glides at its own pace (a jump would cut the entry glide short)');
   assert.equal(story.isPlaying(), true);
   assert.equal(story.index(), 0);
   const steps = load(STEPS);
   steps.story.setSpeed(2);
   steps.story.present(1);
   steps.story.reframe();
-  assert.deepEqual(steps.moves.at(-1), { ms: 150 }, 'a step beat re-glides at the camera pace over the speed');
+  assert.deepEqual(steps.moves.at(-1), { ms: GLIDE / 2, ease: EASE }, 'a step beat re-glides at the beat pace over the speed');
   const idle = load(HOPS);
   idle.story.reframe();
   assert.deepEqual(idle.moves, [], 'outside Play there is nothing to reframe');
@@ -302,7 +302,7 @@ test('setSpeed mid-hold fires nothing; the next beat reports the new ms', () => 
   assert.deepEqual(calls, [], 'the hold under way keeps its clock');
   timers.at(-1).fn(); // expiry into beat 1
   assert.deepEqual(calls, [['end']]);
-  assert.equal(timers.at(-1).ms, 150, 'beat 1 glides at the new speed');
+  assert.equal(timers.at(-1).ms, (GLIDE + SETTLE) / 2, 'beat 1 glides at the new speed');
   timers.at(-1).fn();
   assert.deepEqual(calls, [['end'], ['hold', 1650]]);
 });
@@ -339,4 +339,87 @@ test('a throwing onHold still leaves the hold timer armed', () => {
   const before = h.timers.length;
   assert.throws(() => h.timers.at(-1).fn(), /hook/);
   assert.equal(h.timers.length, before + 1, 'the timer was armed before the hook ran');
+});
+
+// ---- the caption waits for the camera (Task 5b) ------------------------------------------------
+// story.shown() is the beat whose caption the transport paints; story.index() is the beat the story is on.
+
+const STEPS4 = { ...STEPS, beats: ['One', 'Two', 'Three', 'Four'].map((title) => beat('step', { title, ids: ['a'], reveal: ['a'] })), chapters: [{ id: 'walkthrough', title: 'Walkthrough', start: 0, end: 4 }] };
+
+function captionHarness(data, options) {
+  const order = [];
+  const h = load(data, { onStep: () => order.push('step'), onSettle: () => order.push('settle') }, options);
+  return { ...h, order };
+}
+
+test('while playing, the caption changes after the camera move ends: the camera moves first, the caption waits for the glide and its rest', () => {
+  const { story, timers, moves, order } = captionHarness(STEPS4);
+  story.play();
+  timers.at(-1).fn(); // beat 0: glide over, the hold is armed
+  timers.at(-1).fn(); // the hold expires into beat 1: the camera sets off
+  assert.equal(story.index(), 1, 'the story is on beat 1');
+  assert.equal(story.shown(), 0, 'but the caption still shows beat 0');
+  const glideTimer = timers.at(-1);
+  assert.ok(glideTimer.ms > moves.at(-1).ms, `the caption waits ${glideTimer.ms} ms, longer than the ${moves.at(-1).ms} ms camera move`);
+  assert.deepEqual(order.slice(-1), ['step'], 'only the chips repaint at the start of the beat, no settle yet');
+  glideTimer.fn();
+  assert.equal(story.shown(), 1, 'the caption follows once the camera has settled');
+  assert.deepEqual(order.slice(-2), ['step', 'settle'], 'the settle hook tells the transport to repaint the caption');
+});
+
+test('a step, a pause and an exit do not make the caption wait: it follows at once', () => {
+  const manual = captionHarness(STEPS4);
+  manual.story.present(0);
+  manual.story.goTo(1);
+  assert.equal(manual.story.shown(), 1, 'a manual step (not playing) paints the caption at once');
+  assert.equal(manual.order.includes('settle'), false);
+
+  const paused = captionHarness(STEPS4);
+  paused.story.play();
+  paused.timers.at(-1).fn();
+  paused.timers.at(-1).fn(); // expiry into beat 1: the caption lags
+  assert.equal(paused.story.shown(), 0);
+  paused.story.pause();
+  assert.equal(paused.story.shown(), 1, 'pausing mid-glide lands the caption on the beat the chips show');
+  assert.equal(paused.story.chapterShown(), paused.story.chapter());
+
+  const left = captionHarness(STEPS4);
+  left.story.play();
+  left.timers.at(-1).fn();
+  left.timers.at(-1).fn();
+  left.story.exit();
+  assert.equal(left.story.shown(), left.story.index());
+});
+
+test('a new beat that starts while the caption is waiting keeps waiting for its own camera; scrubbing while playing is a manual step', () => {
+  const h = captionHarness(STEPS4);
+  h.story.play();
+  h.timers.at(-1).fn();
+  h.timers.at(-1).fn(); // beat 1, caption still on 0
+  h.story.next(); // Next while playing: the same run of the player
+  assert.equal(h.story.index(), 2);
+  assert.equal(h.story.shown(), 0, 'the caption has not jumped past a camera that is still on its way');
+  h.timers.at(-1).fn();
+  assert.equal(h.story.shown(), 2);
+});
+
+test('reduced motion: a beat applies at once; the hold is the only timer; no glide wait, no dot, no settle', () => {
+  const h = captionHarness(HOPS, { reduced: true });
+  h.story.play();
+  assert.equal(h.timers.length, 1, 'one timer: the hold');
+  assert.equal(h.timers[0].ms, 1800, 'and it is the hold, 1800 ms for a caption-less beat');
+  assert.equal(h.frames.length, 0, 'no dot frame');
+  h.timers[0].fn(); // the hold expires into beat 1
+  assert.equal(h.story.index(), 1);
+  assert.equal(h.story.shown(), 1, 'the caption is on the new beat in the same call');
+  assert.equal(h.timers.length, 2, 'again only the hold');
+  assert.equal(h.order.includes('settle'), false, 'there is nothing to settle');
+});
+
+test('reduced motion: stepping by hand with the story paused arms no timer beyond the hold either', () => {
+  const h = captionHarness(HOPS, { reduced: true });
+  h.story.present(0);
+  assert.deepEqual(h.timers.map((t) => t.ms), [1800], 'present() arms the hold and nothing else');
+  h.story.goTo(1);
+  assert.deepEqual(h.timers.map((t) => t.ms), [1800, 1800]);
 });

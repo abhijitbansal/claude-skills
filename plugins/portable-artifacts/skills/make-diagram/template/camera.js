@@ -38,6 +38,8 @@
   var clamp = function (v, lo, hi) { return Math.min(hi, Math.max(lo, v)); };
   var finite = function (v, fallback) { return typeof v === 'number' && isFinite(v) ? v : fallback; };
   var round = function (v) { return Math.round(v * 100) / 100; };
+  var easeOut = function (k) { return 1 - Math.pow(1 - k, 3); }; // Fit, Home, a pan cue: quick to respond
+  var easeInOut = function (k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }; // a story beat: calm at both ends
 
   // Ids are model-provided keys: every id-keyed map has no prototype, so an id
   // like "constructor" is just a key (a plain {} would answer for it).
@@ -216,20 +218,22 @@
       if (tween && global.cancelAnimationFrame) global.cancelAnimationFrame(tween);
       tween = 0;
     }
-    // Glide to `target` over options.ms (CAMERA_MS by default); at once when
-    // options.instant is set, under reduced motion, or without requestAnimationFrame.
+    // Glide to `target` over options.ms (CAMERA_MS by default), ease-out unless options.ease is 'in-out'
+    // (a story beat: the camera eases in as well as out); at once when options.instant is set, under
+    // reduced motion, or without requestAnimationFrame.
     function moveTo(target, options) {
       options = options || {};
       cancelTween();
       var to = { cx: finite(target.cx, cam.cx), cy: finite(target.cy, cam.cy), s: finite(target.s, cam.s) };
       if (options.instant || reduced() || !global.requestAnimationFrame) { cam = to; apply(); return; }
       var ms = Math.max(1, finite(options.ms, CAMERA_MS));
+      var ease = options.ease === 'in-out' ? easeInOut : easeOut;
       var from = { cx: cam.cx, cy: cam.cy, s: cam.s };
       var t0 = null;
       var tick = function (now) {
         if (t0 === null) t0 = now;
         var k = Math.min(1, (now - t0) / ms);
-        var e = 1 - Math.pow(1 - k, 3); // ease-out
+        var e = ease(k);
         cam = { cx: from.cx + (to.cx - from.cx) * e, cy: from.cy + (to.cy - from.cy) * e, s: from.s * Math.pow(to.s / from.s, e) };
         apply();
         tween = k < 1 ? global.requestAnimationFrame(tick) : 0;
@@ -325,7 +329,6 @@
       isFitted: function () { return fitted; },
       unfit: function () { fitted = false; whole = false; },
       onResize: onResize, holdView: holdView,
-      glideMs: function () { return CAMERA_MS; },
     };
   };
 })(window);

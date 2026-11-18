@@ -127,8 +127,14 @@ const toneRules = Object.entries(TONES).flatMap(([tone, variable]) => [
 // elements still measure), emphasise what a step highlights, a trace follows,
 // a beat travels (pa-active) or Explore selected or routed. Every lit edge is
 // thicker as well as recoloured.
+// In Play (the stage carries .pa-presenting) the rest of the diagram dims less than in Explore's trace and
+// fades over PLAY_FADE: a beat changes the picture gently, where a hover on a node should answer at once.
+const PLAY_DIM_OPACITY = '.4';
+const PLAY_FADE = '.35s';
+const EXPLORE_FADE = '.2s';
 const state = [
   '.pa-dim{opacity:.25}',
+  `.pa-presenting .pa-dim{opacity:${PLAY_DIM_OPACITY}}`,
   '.pa-hidden{opacity:0;visibility:hidden}',
   '.pa-hl .pa-shape,.pa-on .pa-shape{stroke:var(--accent);stroke-width:2}',
   '.pa-hl > .pa-group-box{stroke:var(--accent);stroke-width:2}',
@@ -156,7 +162,8 @@ const animation = [
   '.pa-animate .pa-edge.pa-edge-solid .pa-wire{stroke-dasharray:6 6}',
   '.pa-animate .pa-edge .pa-wire{animation:pa-flow 1.2s linear infinite}',
   '@keyframes pa-flow{to{stroke-dashoffset:calc(var(--pa-period) * -1)}}',
-  '.pa-node,.pa-edge,.pa-edge-label,.pa-group,.pa-lifeline,.pa-frame,.pa-seq-note{transition:opacity .2s cubic-bezier(.23,1,.32,1),visibility .2s}',
+  `.pa-node,.pa-edge,.pa-edge-label,.pa-group,.pa-lifeline,.pa-frame,.pa-seq-note{transition:opacity ${EXPLORE_FADE} cubic-bezier(.23,1,.32,1),visibility ${EXPLORE_FADE}}`,
+  `.pa-presenting .pa-node,.pa-presenting .pa-edge,.pa-presenting .pa-edge-label,.pa-presenting .pa-group,.pa-presenting .pa-lifeline,.pa-presenting .pa-frame,.pa-presenting .pa-seq-note{transition:opacity ${PLAY_FADE} ease,visibility ${PLAY_FADE}}`,
   '}',
 ];
 

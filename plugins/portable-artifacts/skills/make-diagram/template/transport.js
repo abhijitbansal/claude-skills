@@ -66,7 +66,7 @@
     if (scrub) { scrub.min = '0'; scrub.max = String(Math.max(0, beats.length - 1)); scrub.step = '1'; }
 
     function line(beat, i, n) {
-      var ch = chapters[story.chapter()];
+      var ch = chapters[story.chapterShown()];
       var head = pad2(i + 1) + ' / ' + pad2(n) + (ch ? ' · ' + ch.title.toUpperCase() : '') + ' · ' + beat.title;
       return beat.caption ? head + ' — ' + beat.caption : head;
     }
@@ -166,14 +166,17 @@
       if (caption) caption.hidden = !presenting;
       if (chaptersEl) chaptersEl.hidden = !presenting;
       if (!presenting) return;
-      var beat = story.current();
       var i = story.index();
       var n = story.count();
-      text(part('data-pa-count'), (i + 1) + ' / ' + n);
+      // The caption (count, title, note, line) shows the beat story.shown() reports, which trails the
+      // beat the story is on while the camera is still gliding to it; the controls follow the story.
+      var shown = story.shown();
+      var beat = beats[shown];
+      text(part('data-pa-count'), (shown + 1) + ' / ' + n);
       text(part('data-pa-title'), beat.title);
       var note = part('data-pa-note');
       if (note) { note.textContent = beat.caption || ''; note.hidden = !beat.caption; }
-      text(part('data-pa-line'), line(beat, i, n));
+      text(part('data-pa-line'), line(beat, shown, n));
       disable(part('data-pa-prev'), i === 0);
       disable(part('data-pa-next'), i === n - 1);
       var play = part('data-pa-play');

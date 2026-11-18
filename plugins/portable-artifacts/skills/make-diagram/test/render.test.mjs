@@ -481,3 +481,15 @@ test('renderSvg needs a theme', async () => {
   const geometry = await layoutDiagram(spec, theme);
   assert.throws(() => renderSvg(geometry, spec), /needs \{ theme \}/);
 });
+
+// ---- the player's own state rules (Task 5b) ---------------------------------------------------
+
+test('in Play the dim is softer and the fade slower than in Explore, and every transition sits inside the reduced-motion guard', () => {
+  const css = diagramCss();
+  assert.match(css, /\.pa-dim\{opacity:\.25\}/, 'the Explore trace keeps its quick, strong dim');
+  assert.match(css, /\.pa-presenting \.pa-dim\{opacity:\.4\}/, 'a beat dims the rest to .4');
+  const motion = css.match(/@media \(prefers-reduced-motion: no-preference\)\{[^]*?\n\}/)?.[0];
+  assert.match(motion, /\.pa-presenting [^{]*\{transition:opacity \.35s/, 'and fades it over .35 s');
+  assert.match(motion, /\.pa-node,\.pa-edge[^{]*\{transition:opacity \.2s/, 'Explore keeps its .2 s fade');
+  assert.ok(!css.replace(motion, '').includes('transition'), 'no transition outside the guard');
+});

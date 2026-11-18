@@ -880,3 +880,75 @@ test('with reduced motion the Play story tab and P open beat 1 and wait for Spac
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// ---- a calmer player (Task 5b) ---------------------------------------------------------------
+
+// Runs in the page before its scripts: every frame, notes each CSS transition that is running.
+const SAMPLE_TRANSITIONS = () => {
+  window.__transitions = [];
+  const tick = () => {
+    for (const a of document.getAnimations()) {
+      if (a instanceof CSSTransition) window.__transitions.push(`${a.transitionProperty} on ${a.effect.target.id || a.effect.target.getAttribute('class')}`);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+};
+
+// Plays the story, then steps forward and back by hand, so beats start in both ways.
+async function playSomeBeats(page) {
+  await page.keyboard.press('p');
+  if (!(await playing(page))) await page.keyboard.press('Space'); // reduced motion waits for Space
+  await waitCount(page, '2 / 9');
+  for (const key of ['ArrowRight', 'ArrowRight', 'ArrowLeft']) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(450);
+  }
+  await page.keyboard.press('Space');
+}
+
+test('with prefers-reduced-motion: reduce no element has a running transition during a beat (the same run with motion allowed does)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const reduced = await openPage(built('story').url, { reducedMotion: 'reduce', init: SAMPLE_TRANSITIONS });
+  await playSomeBeats(reduced.page);
+  assert.deepEqual([...new Set(await reduced.page.evaluate(() => window.__transitions))], [], 'nothing transitions under reduce');
+  assert.deepEqual(reduced.problems, []);
+  await reduced.context.close();
+
+  const moving = await openPage(built('story').url, { init: SAMPLE_TRANSITIONS });
+  await playSomeBeats(moving.page);
+  assert.ok((await moving.page.evaluate(() => window.__transitions.length)) > 0, 'the sampler does see the fades when motion is allowed');
+  await moving.context.close();
+});
+
+test('while playing, the caption line changes only after the camera has stopped, and the camera moved first (2x, real DOM)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.evaluate(() => {
+    window.__frames = [];
+    const t0 = performance.now();
+    const tick = () => {
+      window.__frames.push({ t: performance.now() - t0, vb: document.querySelector('#pa-stage svg').getAttribute('viewBox'), line: document.querySelector('[data-pa-line]').textContent });
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.keyboard.press('p');
+  await page.click('[data-pa-speed]');
+  await page.click('[data-pa-speed]'); // 1.5x, then 2x
+  assert.equal(await page.textContent('[data-pa-speed]'), '2×');
+  await waitCount(page, '4 / 9');
+  await page.waitForTimeout(600); // the caption of beat 4 lands after its camera
+  const frames = await page.evaluate(() => window.__frames);
+  await page.keyboard.press('Space');
+  const moved = (i) => frames[i].vb !== frames[i - 1].vb;
+  const changes = frames.map((f, i) => i).filter((i) => i > 0 && frames[i].line !== frames[i - 1].line && frames[i - 1].line !== '');
+  assert.ok(changes.length >= 2, `saw ${changes.length} caption changes`);
+  for (const i of changes) {
+    const lastMove = [...frames.keys()].filter((j) => j > 0 && j < i && moved(j)).at(-1);
+    assert.ok(lastMove !== undefined && frames[i].t - frames[lastMove].t < 1000, 'the camera moved for this beat before its caption');
+    for (let k = i; k < Math.min(frames.length, i + 6); k++) assert.equal(moved(k), false, `the camera was still moving at the frame the caption changed (frame ${k - i} after)`);
+  }
+  assert.deepEqual(problems, []);
+  await context.close();
+});
