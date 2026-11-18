@@ -105,6 +105,48 @@ test('the fallback surfaces of the old paper copy pass every contrast check', ()
   assert.deepEqual(checkTheme(filled), []);
 });
 
+// Each entry says whether the build can carry on. 'fallback': the token is missing and the build uses a named
+// substitute (a warning). 'error': anything else (the build must refuse).
+test('checkTheme marks every missing-with-fallback entry of an old theme kind "fallback", and reports nothing else', () => {
+  const found = checkTheme(oldTokenSet());
+  assert.equal(found.length, 6, JSON.stringify(found));
+  for (const e of found) assert.equal(e.kind, 'fallback', e.path);
+});
+
+test('checkTheme marks a missing token with no fallback kind "error" (text has no fallback)', () => {
+  const theme = oldTokenSet();
+  delete theme.light.text;
+  const entry = checkTheme(theme).find((e) => e.path === 'light.text');
+  assert.ok(entry, 'light.text is reported');
+  assert.equal(entry.kind, 'error');
+});
+
+test('checkTheme marks a surface step with no surface to mix from kind "error", not "fallback"', () => {
+  const theme = oldTokenSet();
+  delete theme.dark.surface;
+  const found = checkTheme(theme);
+  assert.equal(found.find((e) => e.path === 'dark.surface').kind, 'error');
+  assert.equal(found.find((e) => e.path === 'dark.surface2').kind, 'error', 'no fallback can be made without a surface');
+});
+
+test('checkTheme marks a failed contrast pair kind "error"', () => {
+  const bad = structuredClone(loadTheme('paper'));
+  bad.light.text3 = '#cccccc';
+  const entry = checkTheme(bad).find((e) => e.path === 'light.text3');
+  assert.ok(entry, 'light.text3 is reported');
+  assert.equal(entry.kind, 'error');
+});
+
+test('an old theme is contrast-checked against the surfaces the build will use: a pale text3 still fails', () => {
+  const theme = oldTokenSet();
+  theme.light.text3 = '#cccccc';
+  const found = checkTheme(theme);
+  const entry = found.find((e) => e.path === 'light.text3' && /against surface2; needs 4\.5:1/.test(e.message));
+  assert.ok(entry, JSON.stringify(found));
+  assert.equal(entry.kind, 'error');
+  assert.equal(found.filter((e) => e.kind === 'fallback').length, 6, 'the six fallback entries are still there');
+});
+
 test('withTokenFallbacks leaves a complete token set unchanged', () => {
   const paper = loadTheme('paper');
   for (const mode of MODES) assert.deepEqual(withTokenFallbacks(paper[mode]), paper[mode]);

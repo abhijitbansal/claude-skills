@@ -147,12 +147,16 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
     out is omitted). A missing `surface2` and `surface3` become `surface` mixed 3% and 6% toward `text`, the same rule
     in light and dark; a missing `shadow` becomes `#000000`, the plain black the elevation scale used before it had a
     shadow colour. The test checks that the fallback surfaces of the old `paper` copy pass every `checkTheme` contrast
-    rule. `checkTheme` reports `surface2`, `surface3` and `shadow` as missing in both modes, and its `shadow` message
-    names the `#000000` fallback; its entries carry no severity field, so all three are reported the same way.
-    make-dashboard turns every `checkTheme` entry into a build error (`skills/make-dashboard/scripts/lib/pipeline.mjs`,
-    read, not run), so there such a theme is refused until it sets the three tokens (the other skills were not checked). Add the
-    three tokens to such a theme (copy `paper.json`'s and adjust) to choose the look; make-scene reads `shadow` for the
-    contact shadow in light mode. How a page built from the fallbacks renders in a browser was not checked.
+    rule. `checkTheme` reports `surface2`, `surface3` and `shadow` as missing in both modes and names the fallback in
+    each message, and every entry carries a `kind`: `fallback` for those three (the build can carry on) and `error` for
+    anything else. The contrast checks run on the tokens the build will use, so an old theme whose fallback surfaces
+    make a text colour or the accent too faint still fails. **make-dashboard warns rather than refuses:** it builds
+    such a theme with exit 0 and prints one `warning:` line per missing token (in `warnings` under `--json`), and fails
+    only on `error` entries (a failed contrast pair, or a missing token that has no fallback, such as `text`). It is the
+    only skill that gates on `checkTheme`; the `checkTheme` functions in make-diagram's and make-scene's `spec.mjs` only
+    check the theme name. Add the three tokens to such a theme (copy `paper.json`'s and adjust) to choose the look and
+    clear the warnings; make-scene reads `shadow` for the contact shadow in light mode. How a page built from the
+    fallbacks renders in a browser was not checked.
 - **make-dashboard `kpis[].trend`.** `{ "query": "<a declared query>", "field": "<column>" }` draws a small line of that
   column beside the KPI. It names a query the spec already declares, never SQL text; an unknown query fails validation.
   A KPI without `trend` is drawn as before.

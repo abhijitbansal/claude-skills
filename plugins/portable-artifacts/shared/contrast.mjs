@@ -85,14 +85,27 @@ function surfaceOrder(t, mode, errors) {
   }
 }
 
+/**
+ * What is wrong with `theme`: [{ path, message, kind }]. `kind` says whether a build can carry on:
+ * 'fallback' is a token the theme leaves out that themeCss fills in (surface2, surface3, shadow; the message names the
+ * substitute), so a caller may warn and build; 'error' is everything else (a missing token with no fallback, a failed
+ * contrast pair, a surface out of order) and must stop the build. The contrast checks run on the tokens themeCss will
+ * write, so an old theme is judged by the surface steps it will actually get.
+ */
 export function checkTheme(theme) {
   const errors = [];
   for (const mode of ['light', 'dark']) {
-    const t = theme[mode];
-    const missing = [...TEXT, ...BACKGROUNDS, ...UI].filter((k) => typeof t?.[k] !== 'string' || !HEX.test(t[k]));
+    const raw = theme[mode];
+    const t = withTokenFallbacks(raw ?? {});
+    const missing = [...TEXT, ...BACKGROUNDS, ...UI].filter((k) => typeof t[k] !== 'string' || !HEX.test(t[k]));
     for (const k of missing) errors.push({ path: `${mode}.${k}`, message: `missing; needs a #rrggbb colour` });
+    ['surface2', 'surface3'].forEach((k, i) => {
+      if (isSet(raw?.[k]) || missing.includes(k)) return;
+      const share = `${Math.round(SURFACE_STEP_MIX[i] * 100)}%`;
+      errors.push({ kind: 'fallback', path: `${mode}.${k}`, message: `missing; needs a #rrggbb colour; themeCss uses ${t[k]} (surface mixed ${share} toward text) instead` });
+    });
     // shadow is not a contrast input, so a missing one is reported without skipping the checks below
-    if (!isSet(t.shadow)) errors.push({ path: `${mode}.shadow`, message: `missing; themeCss uses ${FALLBACK_SHADOW} (plain black elevation shadow) instead` });
+    if (!isSet(raw?.shadow)) errors.push({ kind: 'fallback', path: `${mode}.shadow`, message: `missing; themeCss uses ${FALLBACK_SHADOW} (plain black elevation shadow) instead` });
     if (missing.length) continue;
     for (const k of TEXT) {
       for (const bg of BACKGROUNDS) {
@@ -125,5 +138,5 @@ export function checkTheme(theme) {
     }
     if (ramp[6] < 3) errors.push({ path: `${mode}.seq7`, message: `${t.seq7} is ${fmt(ramp[6])} against surface; needs 3:1` });
   }
-  return errors;
+  return errors.map((e) => ({ kind: 'error', ...e }));
 }

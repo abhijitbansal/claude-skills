@@ -324,3 +324,7 @@ The make-scene refresh look passed: review 1 NOT YET, review 2 SHIP AFTER FIXES,
 - **Labels:** N5 city row names sit 35 to 100 px from their rows at 390, with no colour cue tying a name to its row; N6 forest, galaxy and terrain caps are at the 11 px floor (MOBILE about 11 px), smaller than the original.
 - **Pre-existing, parked in the rounds:** window speckle on lower tower faces; lift-diagram at 390 drops its group and Event bus labels, and Warehouse touches the legend; 9 px node labels in the lifted diagram; the footer clipped at 390.
 - **Test gap:** one mutation survived round 2: the night fill and sky white changed alone is not caught by any test. Default: add a guard the next time `runtime/look.js` is touched.
+
+## Old-token themes in make-dashboard: warn, not refuse (2026-11-18)
+
+A theme written outside the repo before the refresh lacks `surface2`, `surface3` and `shadow`. Since 5b0485db those tokens fall back (a small mix of `surface` toward `text`; `#000000`) and `checkTheme` names each missing one. make-dashboard used to fail the build on any `checkTheme` entry, so it refused such a theme although it now renders. Chosen default: a missing token that has a fallback is a warning and the build succeeds; a failed contrast pair still fails the build. Option not taken: keep refusing, so the theme's author must add the three tokens. Say if you want the stricter rule.
