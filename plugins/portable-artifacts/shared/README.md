@@ -55,7 +55,7 @@ A new `skills/<name>/` touches more than its own folder. Nothing generates this 
 
 1. `skills/<name>/SKILL.md` with the frontmatter rules, `package.json` (with the same `overrides` pins as the others: `doctor.mjs` reads them) and `package-lock.json`, `scripts/doctor.mjs` and `scripts/lib/requirements.mjs`.
 2. `node bin/sync-shared.mjs` so the new skill gets its `shared/` copy (the tests below fail until it exists).
-3. Folder-driven tests need no edit: `bin/test/frontmatter.test.mjs`, `portability.test.mjs` and `delegation.test.mjs` read `skills/` and will hold the new skill to the same rules (the Cheaper model section, no host-only tool names, valid frontmatter).
+3. Folder-driven tests need no edit: `bin/test/frontmatter.test.mjs`, `portability.test.mjs` and `delegation.test.mjs` read `skills/` and will hold the new skill to the same rules (the Director and operator section, no host-only tool names, valid frontmatter).
 4. Hard-coded lists to extend: `shared/icons.mjs` (`SKILLS` and its icon), `skills/make-explainer/scripts/lib/requirements.mjs` (`SECTION_SISTERS`, only if explainer embeds the new skill), `eval/lib.mjs` and `eval/test/lib.test.mjs`, the template paths in `bin/test/style-lint.test.mjs`, `tests/pytest/test_portable_artifacts_page.py`.
 5. CI in `.github/workflows/test.yml`: the skill's entry in the test matrix (and shard count) and the `npm ci` loop.
 6. Docs and manifests: the plugin's `.claude-plugin/plugin.json`, `README.md`, `USAGE.md` and `CHANGELOG.md`, the root `README.md` and `USAGE.md`, the pages under `docs/`, and the counts that `python3 scripts/sweep_counts.py --write` rewrites.

@@ -15,13 +15,15 @@ const read = (skill, ...rest) => fs.readFileSync(path.join(SKILLS, skill, ...(re
 // tables, the voiceover notes and the storyboard step moved to references/, and 50,154 bytes and 183 lines when the
 // version 1 file stood. The version 2 rewrite (cut-over Task 2) was 19,495 bytes and 111 lines. Task 5's final pass
 // (the looks table, the sixteen kinds) measured 20,059 bytes and 125 lines (`wc -c -l`), and the budget is that plus
-// about 3 percent.
+// about 3 percent. The Director and operator section (director-operator Task 7) replaced the Cheaper model block with
+// about 700 more bytes in each skill; the three page skills and the dashboard were re-measured (`wc -c`: 14,656,
+// 15,472, 22,041 and 12,078 bytes) and given about 3 percent headroom. make-motion fit its old budget (20,696 bytes).
 const BUDGETS = {
-  'make-dashboard': { bytes: 14000, lines: 145 },
-  'make-diagram': { bytes: 15200, lines: 145 },
-  'make-explainer': { bytes: 21800, lines: 150 },
+  'make-dashboard': { bytes: 15100, lines: 145 },
+  'make-diagram': { bytes: 15950, lines: 145 },
+  'make-explainer': { bytes: 22700, lines: 150 },
   'make-motion': { bytes: 20700, lines: 129 },
-  'make-scene': { bytes: 11700, lines: 110 },
+  'make-scene': { bytes: 12450, lines: 110 },
 };
 const SKILL_NAMES = fs.readdirSync(SKILLS).filter((d) => fs.existsSync(path.join(SKILLS, d, 'SKILL.md'))).sort();
 
@@ -55,13 +57,13 @@ test('guardrail proof: a document one byte or one line over is named, one at the
 
 // The version 2 SKILL.md points at the three reference files that hold the field tables and the writing guide, and each
 // exists (cut-over Task 5; the validator's version 1 refusal names migrating.md too).
-test('make-motion SKILL.md points at the three reference files of version 2, each exists, and it keeps the Cheaper model heading', () => {
+test('make-motion SKILL.md points at the three reference files of version 2, each exists, and it carries the Director and operator heading', () => {
   const md = read('make-motion');
   for (const ref of ['references/schema.md', 'references/story.md', 'references/migrating.md']) {
     assert.ok(md.includes(ref), `SKILL.md points at ${ref}`);
     assert.ok(fs.existsSync(path.join(SKILLS, 'make-motion', ref)), `${ref} exists`);
   }
-  assert.match(md, /^## Cheaper model$/m);
+  assert.match(md, /^## Director and operator$/m);
   for (const gone of ['references/storyboard.md', 'references/voiceover.md', 'references/block-tables.md', 'blocks.mjs', 'render.mjs', 'validate.mjs', 'check.mjs', 'preview.mjs', 'voice.mjs']) {
     assert.ok(!md.includes(gone), `SKILL.md no longer names the version 1 file ${gone}`);
   }

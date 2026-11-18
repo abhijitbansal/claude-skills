@@ -117,12 +117,14 @@ test('the Audio is opt-in paragraph still says never add audio, and points at th
   assert.ok(para.includes('Intake (one round)'), 'the ask-one-question sentence points at the intake');
 });
 
-test('the opening paragraph sends the agent to the intake before Cheaper model, and the intake says when to skip it', () => {
+test('the opening paragraph sends the agent to the intake before Director and operator, and the intake says when to skip it', () => {
   const md = read('SKILL.md');
   const pointer = md.indexOf('Intake (one round)');
-  assert.ok(pointer > -1 && pointer < md.indexOf('\n## Cheaper model\n'), 'pointer before ## Cheaper model');
+  assert.ok(pointer > -1 && pointer < md.indexOf('\n## Director and operator\n'), 'pointer before ## Director and operator');
   assert.ok(md.slice(0, md.indexOf('\n## ')).includes('Intake (one round)'), 'pointer is in the opening text');
-  assert.ok(md.slice(0, md.indexOf('\n## ')).includes('hand-off brief'), 'answers go in the hand-off brief');
+  const opening = md.slice(0, md.indexOf('\n## '));
+  assert.ok(opening.includes('the answers go into the film'), 'the director puts the answers in the film');
+  assert.ok(opening.includes('hand-off brief carries only paths'), 'the operator brief carries paths only');
   assert.match(intakeSection(md), /already settles every option that matters, skip the round/);
 });
 

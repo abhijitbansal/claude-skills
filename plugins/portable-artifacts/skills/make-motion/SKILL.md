@@ -2,32 +2,30 @@
 name: make-motion
 description: Use when the user wants a short explainer video, animated and rendered to MP4 from a script of shots (statements, numbers, lists, quotes, comparisons, charts, maps, timelines, diagrams, code, screenshots, and photos or clips with highlights), in one of several looks from editorial to a hand-drawn whiteboard, as a widescreen film or a vertical short for Reels, TikTok and Shorts, silent or with a local voiceover, a music bed and sound cues, previewed locally. Spec-driven and offline. Not for a static page or diagram (make-explainer, make-diagram) or a recording of a running app.
 argument-hint: what to make, e.g. an 8s clip with Q3 revenue up 18% then a bar chart of Q1-Q3
-model: haiku
-effort: low
 ---
 
 # make-motion
 
 You write one JSON file, `film.json`: a script of shots. Each shot shows one thing (a `statement`, a `number`, a `chart`, a `map` and so on) over the sentences that narrate it. One command, `node <skill-dir>/scripts/make.mjs film.json --json`, checks the film, writes review sheets and renders the MP4. You never write animation code, and you never edit generated output.
 
-Run every command from the project folder (where `film.json` lives), using the full path to the scripts. File paths in the film resolve relative to the film file. If the request is empty, ask what the film should say, how long it should be, and the format. Before writing a film, or handing the work to another agent, run the Intake (one round) section below, and put its answers in the hand-off brief.
+Run every command from the project folder (where `film.json` lives), using the full path to the scripts. File paths in the film resolve relative to the film file. If the request is empty, ask what the film should say, how long it should be, and the format. Before writing a film, run the Intake (one round) section below; the answers go into the film, and the hand-off brief carries only paths.
 
 **Audio is opt-in.** Add a `voice`, `music` or `sound` only when the prompt asks for sound (music, soundtrack, voiceover, narration, "read it aloud", a sound effect, a click or a whoosh) or the user confirms when you ask. Never add audio to a prompt that does not mention it. A music or voice file the user names, in the prompt or in the intake round, counts as asking for that track. When the prompt is about sound but unclear (for example "make it feel polished" with an mp3 in the folder), put it in the intake round (see Intake (one round)) rather than asking separately. In `viral` mode the designed sound cues play unless the film says `"sound": "off"`: write that line when the prompt asks for a silent film.
 
-## Cheaper model
+## Director and operator
 
-Skip this section if you are running in Claude Code (it already runs this skill on the model named in the frontmatter), or if `artifact-builder` is not in your list of available agents. Otherwise, if you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
+You are the director: you run the intake, write the spec, view what was built and decide every `creative` finding. A cheaper operator agent only runs the one command and fixes `mechanical` findings.
 
-Give it a self-contained brief. It has no memory of this conversation, so the brief must say:
+The command is `node <skill-dir>/scripts/make.mjs <spec> --json` (add `--out <path>` to name the output). It checks the spec, builds, checks the result and prints one report: `ok`, `output`, `stages`, `findings`. A `mechanical` finding names a JSON path to change and makes `ok` false. A `creative` finding is a call for you and never a failure.
 
-1. What to build, and every fact and choice from this conversation that affects it (data, names, wording, theme, what the user asked for and what they ruled out).
-2. This skill directory: the full path of the folder that holds this SKILL.md.
-3. The spec path: where it should write the JSON spec.
-4. Optionally, an output folder for the build (it passes this to the build script as `--out`).
+Hand off with the first rung that works, unless you are already artifact-builder (then run the command, fix only `mechanical` findings, as your own instructions say, and do not hand off again):
 
-Relay only the output path it returns. Do not repeat its work.
+1. Write the spec first. If `artifact-builder` is in your list of available agents (a plugin may list it as `<plugin>:artifact-builder`), start that agent with three things: this skill directory (the full path of the folder that holds this SKILL.md), the spec path (the file already exists) and, optionally, the output path. It has no memory of this conversation and needs nothing else. Do not choose a model for it: its own file names one.
+2. No such agent, or it fails or cannot start: run the same command yourself.
 
-If the `artifact-builder` agent is not installed, or you cannot start another agent, continue with the steps below yourself.
+Trust the report and the output file, never the operator's prose. You take over (fix it yourself and rerun) when the same `mechanical` finding survives two operator attempts, or when its path is empty (the operator may change nothing).
+
+Before you report, view what was built: the files listed under `sheets` in the report (make-motion), or the page through `node <skill-dir>/shared/shot.mjs <output>` when that file exists, then open each PNG it prints. Fix what you see and decide each `creative` finding.
 
 ## Before the first build
 
@@ -37,7 +35,7 @@ If it reports anything missing, tell the user in one message: each item, why it 
 
 ## Intake (one round)
 
-Before writing the film, ask once. Send one message that lists every option below with its default, so the user can answer in one reply, or say "defaults". Ask before any hand-off to `artifact-builder` and put the answers in its brief. Leave out an option the prompt already settles ("a vertical short", "with a voiceover") and say what you took from it. If the prompt already settles every option that matters, skip the round and build. Then build; do not ask again.
+Before writing the film, ask once. Send one message that lists every option below with its default, so the user can answer in one reply, or say "defaults". Ask before you write the film, and put the answers in the film. Leave out an option the prompt already settles ("a vertical short", "with a voiceover") and say what you took from it. If the prompt already settles every option that matters, skip the round and build. Then build; do not ask again.
 
 - **mode**: `pro` (default), a calm 16:9 explainer, or `viral` for a fast vertical short for Reels, TikTok and Shorts (`"mode": "viral"`: 9:16, the first shot reads from frame 0). A platform in the prompt sets `viral`.
 - **look**: how it is drawn. Default: the mode's own, `desk` for `pro` and `pop` for `viral`. Write the name as the film's `look`. The looks, with a line on each:
