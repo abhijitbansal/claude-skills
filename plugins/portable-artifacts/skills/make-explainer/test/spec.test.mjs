@@ -307,7 +307,7 @@ test('chart: inline data needs kind and at least one row', async () => {
 
 test('motion needs video or spec', async () => {
   assert.deepEqual(await errorsOf(doc([{ type: 'motion' }])), [
-    { path: 'sections[0]', message: 'a motion section needs video (an .mp4 path) or spec (a motion.json path); add one' },
+    { path: 'sections[0]', message: 'a motion section needs video (an .mp4 path) or spec (a make-motion film.json path); add one' },
   ]);
   assert.deepEqual(await errorsOf(doc([{ type: 'motion', spec: 'motion.json' }])), []);
 });

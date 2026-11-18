@@ -2,7 +2,7 @@
 // same bytes twice; SKILL.md names them and its description says "hand-drawn" on one line.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -92,11 +92,19 @@ test('the description is one line and contains "hand-drawn"', () => {
   assert.ok(value.length > 40, 'the text is on the same line');
   assert.ok(!/^\s/.test(frontmatter[at + 1]), 'the next line is another key, not a continuation');
   assert.match(value, /hand-drawn/);
-  assert.match(value, /animated explainer video/, 'the old trigger meaning stays (PA-50 dropped "short")');
+  // Version 2's description (cut-over Task 2): the words a user types still route here.
+  assert.match(value, /explainer video/, 'the trigger meaning stays');
+  for (const word of ['MP4', 'Reels', 'TikTok', 'Shorts', 'voiceover', 'whiteboard']) assert.ok(value.includes(word), `routes on ${word}`);
+  assert.ok(value.length >= 41 && value.length <= 1024, `${value.length} characters`);
 });
 
-test('SKILL.md names every starter file and points at references/sketch.md', () => {
-  for (const name of FILMS) assert.ok(SKILL_MD.includes(`references/examples/${name}.json`), `${name} named`);
-  assert.ok(SKILL_MD.includes('references/sketch.md'));
-  assert.match(SKILL_MD, /\n## Hand-drawn style\n/);
+// The version 2 SKILL.md has no sketch scenes or starters: the whiteboard is the `marker` look, with its own finished films
+// under references/examples/v2/. This case pinned the version 1 SKILL.md's starter list and Hand-drawn style section.
+test('SKILL.md names the whiteboard look and a finished film in it, and promises no sketch scenes', () => {
+  assert.match(SKILL_MD, /`marker`: whiteboard time-lapse/);
+  assert.ok(SKILL_MD.includes('references/examples/v2/') && SKILL_MD.includes('`gate-marker.json`'));
+  assert.ok(existsSync(path.join(root, 'references/examples/v2/gate-marker.json')), 'the film it names exists');
+  assert.ok(!SKILL_MD.includes('references/sketch.md'));
+  assert.ok(!/\n## Hand-drawn style\n/.test(SKILL_MD));
+  for (const name of FILMS) assert.ok(!SKILL_MD.includes(`${name}.json`), `${name} is not named`);
 });

@@ -39,7 +39,7 @@
       "label": "Motion",
       "video": "clip.mp4",
       "poster": "clip-poster.png",
-      "caption": "Drawn from clip.motion.json, which names the paper theme. Space and the arrow keys belong to the player while it has focus."
+      "caption": "A clip rendered by make-motion. Space and the arrow keys belong to the player while it has focus."
     },
     {
       "type": "steps",

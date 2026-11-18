@@ -117,7 +117,7 @@ test('the validate log skips the make lines make.mjs writes: validate runs and f
 // --- summarize ---
 
 const base = { specExists: true, finalValid: true, validateRuns: 1, outputOk: true, seconds: 3, errors: [], model: '-' };
-const session = (events) => parseSession(F.lines(events), { specName: 'motion.json' });
+const session = (events) => parseSession(F.lines(events), { specName: 'film.json' });
 const cellsOf = (md, id) => md.split('\n').find((l) => l.startsWith(`| ${id} |`)).split('|').map((c) => c.trim());
 const headerOf = (md) => md.split('\n').find((l) => l.startsWith('| id |')).split('|').map((c) => c.trim());
 

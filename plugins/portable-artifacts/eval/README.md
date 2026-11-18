@@ -13,9 +13,8 @@ what the host left behind.
 (cd ../skills/make-motion && npm ci && npx playwright install chromium)
 
 node run-eval.mjs --skill dashboard --host claude --limit 3
-node run-eval.mjs --skill motion --host codex --only q3-counter,edit-existing
-node run-eval.mjs --skill motion --host claude --model haiku --set benchmark
-node run-eval.mjs --skill motion --host claude --model haiku --set benchmark --only chart-race,map-regions
+node run-eval.mjs --skill motion --host codex --only number-kpi,edit-existing
+node run-eval.mjs --skill motion --host claude --model haiku --only chart-bar,vars-batch
 node run-eval.mjs --skill diagram --host claude --only checkout-path,edit-existing
 node run-eval.mjs --skill explainer --host claude --model haiku --only recap-from-repo,edit-existing
 node run-eval.mjs --skill scene --host claude --model haiku --only city-inline,edit-switch-forest
@@ -89,8 +88,8 @@ sources, hook names and the `error_max_budget_usd` cap marker are expectations, 
 `--set <name>` runs the prompts in `prompts/<skill>-<name>.json` instead of
 the default `prompts/<skill>.json` (which stays as it is, so committed
 summaries remain comparable). An unknown set exits 2 with
-`unknown --set "x"; available for motion: benchmark, items`. `--only` and
-`--limit` apply after `--set`. The sets are: motion `benchmark` and `items` (see "Motion sets" below),
+`unknown --set "x"; available for dashboard: kinds`. `--only` and
+`--limit` apply after `--set`. Motion has no set (see "Motion sets" below). The sets are:
 explainer `features` (Simple English, a plan round trip, embeds by file, an edit, `kpis`, `cards`, `image`, `details`
 and `diff` sections), dashboard `kinds` (the six chart kinds the default set does not name) and diagram `cloud` (AWS icons).
 
@@ -121,7 +120,7 @@ of which model ran. (The harness rebuilds each page from the spec without
    folder as `.eval-log.jsonl`. The per-call error messages are not in it yet: the validators write only the count,
    so a retry loop can be seen (how many calls, which one was the first valid) but not read.
 3. Scores the result. The harness reruns `validate` and the output step
-   (`build` for dashboards, diagrams, explainers and scenes, `render --contact-sheet` for motion) itself,
+   (`build` for dashboards, diagrams, explainers and scenes, `make.mjs --sheets-only` for motion) itself,
    so a host whose sandbox blocked commands is still scored on its spec.
 
 | Metric | Meaning |
@@ -129,9 +128,9 @@ of which model ran. (The harness rebuilds each page from the spec without
 | spec | the host wrote the spec file |
 | valid | the harness's final `validate` passes |
 | validate runs | how many times the host ran `validate`. 1 is a single call; 0 means the host never ran it (the harness still validates the spec itself), which is not the same as valid on the first call |
-| output | the build or contact sheet succeeded |
-| check | `scripts/check.mjs … --json` passed (`✓`), failed (`✗`), or did not apply (`-`: skipped without a browser, the output step failed, or the skill has no check). Motion's check reads the spec; diagram, explainer and scene check the page the build wrote (`out/<skill>.html`); dashboard has none here. It runs only after `output` succeeded, and its output is kept as `check.log`. The totals line reads `check ok n/m` over the rows whose check ran. A check that opens a browser runs one prompt at a time, like everything else here. |
-| feature | the spec uses what the prompt asked for: the prompt's `expect` list (`key`, `key=value` or `key^=prefix`, matched on any object in the spec; `block=title-card`, `kind=area`, `type=diff`; `a|b` is met by either, for a thing the spec can say two ways, like a transition given as a bare name or as an object with a `type`) is all found. `kind=` counts the typed chart kind only, so a chart written as raw Vega-Lite reads as missing. `-` when the prompt lists none. It never changes `valid`, so a summary from before this column is still comparable. The totals line reads `feature used n/m`; a miss names what was not found |
+| output | the build or the review sheets succeeded |
+| check | `scripts/check.mjs … --json` passed (`✓`), failed (`✗`), or did not apply (`-`: skipped without a browser, the output step failed, or the skill has no check). Diagram, explainer and scene check the page the build wrote (`out/<skill>.html`); dashboard has none here; motion has no separate check, its column is the `ok` of the `make.mjs` report of the output step. It runs only after `output` succeeded, and its output is kept as `check.log`. The totals line reads `check ok n/m` over the rows whose check ran. A check that opens a browser runs one prompt at a time, like everything else here. |
+| feature | the spec uses what the prompt asked for: the prompt's `expect` list (`key`, `key=value` or `key^=prefix`, matched on any object in the spec; `show=statement`, `kind=area`, `type=diff`; `a|b` is met by either, for a thing the spec can say two ways, like a transition given as a bare name or as an object with a `type`) is all found. `kind=` counts the typed chart kind only, so a chart written as raw Vega-Lite reads as missing. `-` when the prompt lists none. It never changes `valid`, so a summary from before this column is still comparable. The totals line reads `feature used n/m`; a miss names what was not found |
 | first try | `✓` when the host's first `validate` call passed, `✗` when it needed more, `-` when it never ran one |
 | changed | for edit prompts: the leaf JSON paths that differ from the seed (a targeted edit changes only a few). A prompt with `maxChanged` is flagged `edit too broad` in the notes when more paths changed than that (a rewrite of the seed is not an edit). It never changes `valid`: the paths are counted by array index, so one node inserted mid-array shifts every later one. The limits sit above what committed summaries show a correct edit changing |
 
@@ -155,36 +154,26 @@ tour, for the rename). The pass bar for a billed run is 90% valid.
 
 ## Motion sets
 
-- `prompts/motion.json` (no `--set`): the original ten prompts.
-- `--set benchmark`: twelve prompts, two per category (product launch, PR
-  walkthrough, data viz, captioned social, docs to video, templated batch),
-  each naming a 10 to 30 second duration and tagged with a `category`. Some ask for
-  capabilities a later release adds, so a spec that cannot express them is a
-  real miss, not a harness fault.
-- `--set items`: 57 prompts, one per field or block added since the first release, each with an `expect` list for the
-  feature-used column. It covers all 38 blocks, including the ten added in 1.2.0 (five product-screen mockups,
-  five hand-drawn), none of which has a committed result. A test checks that every block has a prompt that expects it, and that
-  each expectation is met by a spec the skill ships. `item-beats` is a 6-second clip with a closing line on beat 8:
-  the first version (10 seconds, last change at 3 seconds) could not pass `check.mjs`, which fails a dead stretch,
-  more than 3 seconds in which nothing on screen changes, outside the final 3 seconds.
+`prompts/motion.json` (no `--set`; the version 1 `benchmark` and `items` sets are gone) holds eleven prompts for
+make-motion 2. The agent writes `film.json`, a script of shots; the harness checks it with `make.mjs --outline --json`
+and builds the review sheets with `make.mjs --sheets-only --json --out <work>/out/film.mp4`, and the `check` column
+reads the `ok` of that report (the review runs inside `make.mjs`; there is no separate check command). The ids are
+`statement-hook`, `number-kpi`, `clipping-highlight`, `list-steps`, `quote-card`, `compare-two`, `chart-bar`,
+`viral-vertical`, `voiced-pro`, `edit-existing` (from `fixtures/seeds/motion.json`) and `vars-batch`. Each names what a
+correct film must contain, and an `expect` list feeds the feature-used column (`show=<kind>`, `mode=viral`,
+`vars`, and so on). A test checks that every expectation is met by a film in
+`skills/make-motion/references/examples/v2/`. These prompts have not been run on any host; nothing is recorded for them.
 
-The benchmark prompts read files from `fixtures/data/`, which every run copies to
-`./data/`:
+The motion prompts read two files from `fixtures/data/`, which every run copies to `./data/`:
 
 | File | Content |
 |---|---|
-| `captions.srt` | 6 cues, 24 words, English |
-| `captions.vtt` | the same cues as WebVTT |
-| `badge.lottie.json` | a 2 s Lottie shape animation (a disc pops in, a ring sweeps round, a tick draws), 512x512 at 30 fps; a copy of make-motion's `references/examples/data/badge.lottie.json` |
-| `clip.mp4` | 2 s, 320x180, SMPTE bars, silent (committed, a few KB) |
-| `music.wav` | 10 s mono 8 kHz click track at 120 BPM: a 20 ms 1 kHz burst every 0.5 s on silence, so beat detection has onsets |
-| `rows.json` | 3 rows of `{ "name", "city", "count" }` for the templated-batch prompts |
-| `portrait.jpg`, `portrait-cutout.png` | a drawn portrait (1280x720) and its cutout, an RGBA PNG made by make-motion's `cutout.mjs`; copies of `references/examples/blocks/portrait.jpg` and `portrait-cutout.png`. The `text-behind-subject` prompt names both, so the eval installs nothing |
+| `rows.json` | 3 rows of `{ "name", "city", "count" }` for the `vars-batch` prompt |
+| `portrait.jpg` | a drawn portrait (1280x720) for the `clipping-highlight` prompt |
 
-`music.wav` is `writeWav` from the make-motion test helpers with
-`{ seconds: 10, sampleRate: 8000, clickBpm: 120 }`, and `clip.mp4` is
-`makeTestVideo` with `{ source: 'smptebars' }`; both were generated once and
-committed. A test checks `music.wav` byte for byte against the helper.
+`music.wav` (a 10 s, 120 BPM click track) stays because make-motion's `beats` tests read it; `captions.srt`, `captions.vtt`,
+`badge.lottie.json` and `portrait-cutout.png` stay until the cut-over's delete removes the version 1 tests that read them. No motion
+prompt names them.
 
 ## Other fixtures
 

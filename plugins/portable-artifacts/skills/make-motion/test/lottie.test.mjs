@@ -604,7 +604,10 @@ test('the docs name the element: schema.md and SKILL.md describe lottie, the lic
   const pa = readFileSync(path.join(root, '../../README.md'), 'utf8');
   assert.match(schema, /\| `lottie` \|/);
   assert.match(readme, /\| `lottie` \|/);
-  for (const text of [schema, skill]) for (const word of ['lottie', 'offset', 'speed', 'expressions']) assert.ok(text.includes(word), word);
+  for (const word of ['lottie', 'offset', 'speed', 'expressions']) assert.ok(schema.includes(word), word);
+  // The version 2 SKILL.md has no Lottie element, so it must not promise one: this case pinned the version 1 SKILL.md's
+  // lottie bullet and now pins its absence.
+  assert.ok(!/lottie/i.test(skill), 'SKILL.md promises no Lottie');
   assert.match(pa, /\| \[lottie-web\]\(https:\/\/github\.com\/airbnb\/lottie-web\) 5\.13\.0 .*\| MIT \|/);
   assert.match(pa, /make-motion.*Lottie/);
 });

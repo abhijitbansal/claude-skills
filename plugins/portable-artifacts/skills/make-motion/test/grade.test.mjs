@@ -425,11 +425,13 @@ test('graded-photo.json renders byte-identical twice', async (t) => {
   await assertRendersIdentically(t, EXAMPLE, SMALL);
 });
 
-test('the docs name the field: schema.md has the grade row and SKILL.md the image and video bullets', () => {
+// The version 2 SKILL.md has no picture grade (a look's treatment replaces it), so it must not promise one: this half of
+// the case pinned the version 1 SKILL.md's image and video bullets and now pins their absence.
+test('the docs name the field: schema.md has the grade row, and the version 2 SKILL.md promises no grade', () => {
   const schema = readSchema(root);
   const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
   assert.match(schema, /`grade`/);
-  for (const text of [schema, skill]) {
-    for (const word of ['warm', 'cool', 'mono', 'film', 'exposure', 'contrast', 'saturation']) assert.ok(text.includes(word), word);
-  }
+  for (const word of ['warm', 'cool', 'mono', 'film', 'exposure', 'contrast', 'saturation']) assert.ok(schema.includes(word), word);
+  assert.ok(!/`grade`|\bgrade:/.test(skill), 'SKILL.md names no grade field');
+  for (const word of ['exposure', 'saturation']) assert.ok(!skill.includes(word), `SKILL.md has no ${word} control`);
 });

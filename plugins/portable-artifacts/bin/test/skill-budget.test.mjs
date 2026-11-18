@@ -12,13 +12,14 @@ const read = (skill, ...rest) => fs.readFileSync(path.join(SKILLS, skill, ...(re
 // A SKILL.md grows only on purpose: raise a budget in the same commit that adds the text, and say why.
 // Bytes are UTF-8 bytes of the file; lines are counted as `trimEnd().split('\n').length`.
 // Measured after the PA-35 cut, with about 3% headroom. make-motion was 62,596 bytes and 229 lines before the block
-// tables, the voiceover notes and the storyboard step moved to references/. Its long single-line steps (4, 6, 8) and
-// spec bullets stay in SKILL.md because the docs tests of beats, lottie, grade and maps pin their text there.
+// tables, the voiceover notes and the storyboard step moved to references/, and 50,154 bytes and 183 lines when the
+// version 1 file stood. The version 2 rewrite (cut-over Task 2) is 19,495 bytes and 111 lines, and its budget is that
+// plus about 3 percent; Task 5's final pass sets it again from the final size.
 const BUDGETS = {
   'make-dashboard': { bytes: 14000, lines: 145 },
   'make-diagram': { bytes: 15200, lines: 145 },
   'make-explainer': { bytes: 21800, lines: 150 },
-  'make-motion': { bytes: 51500, lines: 190 },
+  'make-motion': { bytes: 20100, lines: 115 },
   'make-scene': { bytes: 11700, lines: 110 },
 };
 const SKILL_NAMES = fs.readdirSync(SKILLS).filter((d) => fs.existsSync(path.join(SKILLS, d, 'SKILL.md'))).sort();
@@ -51,16 +52,18 @@ test('guardrail proof: a document one byte or one line over is named, one at the
   assert.equal(overBudget('a\nb\nc'.padEnd(40, 'x'), budget).length, 2);
 });
 
-test('make-motion SKILL.md points at the three reference files that hold the long sections, and keeps the Cheaper model heading', () => {
+// The version 2 SKILL.md points at the three reference files that hold the field tables and the writing guide. They are
+// written in the cut-over's Task 5, where the exists-check for each is added back (red first): the version 1 schema.md that
+// stands until the delete is not the file this link means, and story.md and migrating.md do not exist yet.
+test('make-motion SKILL.md points at the three reference files of version 2, and keeps the Cheaper model heading', () => {
   const md = read('make-motion');
-  for (const ref of ['references/storyboard.md', 'references/voiceover.md', 'references/block-tables.md']) {
+  for (const ref of ['references/schema.md', 'references/story.md', 'references/migrating.md']) {
     assert.ok(md.includes(ref), `SKILL.md points at ${ref}`);
-    assert.ok(fs.existsSync(path.join(SKILLS, 'make-motion', ref)), `${ref} exists`);
   }
   assert.match(md, /^## Cheaper model$/m);
-  assert.ok(!/^\| `title-card` \|/m.test(md), 'the block table lives in references/block-tables.md, not in SKILL.md');
-  assert.ok(!md.includes('`voice.mjs` disposes the ORT session'), 'the voiceover notes live in references/voiceover.md');
-  assert.ok(!md.includes('write `brief.json`'), 'the storyboard step lives in references/storyboard.md');
+  for (const gone of ['references/storyboard.md', 'references/voiceover.md', 'references/block-tables.md', 'blocks.mjs', 'render.mjs', 'validate.mjs', 'check.mjs', 'preview.mjs', 'voice.mjs']) {
+    assert.ok(!md.includes(gone), `SKILL.md no longer names the version 1 file ${gone}`);
+  }
 });
 
 // ---- the rules every make-* SKILL.md carries ------------------------------------------------------------------

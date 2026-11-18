@@ -115,7 +115,7 @@ Use it when the user wants a plan, proposal or design reviewed and answered: wha
 - `diagram`: a make-diagram spec, inline or a `.json` path.
 - `chart`: inline `data` rows plus `kind`, `x`, `y`; or a `dashboard` path and `chart` id.
 - `scene`: a make-scene 3D scene, inline or a `.json` path; at most 4 per page; the page theme wins; decks and print show its data table.
-- `motion`: a `.mp4` `video`, or a make-motion `spec` rendered at build.
+- `motion`: a `.mp4` `video`, or a make-motion film (version 2, `spec`) rendered at build.
 - `image`: a local `src` with required `alt`.
 - `decision`, `approval`, `question`, `review`, `verdict`: plan mode (see above and `sections.md`).
 

@@ -56,15 +56,15 @@ test('make-explainer: a section over its length cap is a creative finding, and w
 
 test("make-explainer: a motion section whose film does not validate gives a mechanical finding under the section's path", async () => {
   const dir = tmpDir();
-  fs.writeFileSync(path.join(dir, 'bad.json'), JSON.stringify({ size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [{ id: 'a', type: 'text', text: 'x', x: 0, y: 0, fontSize: 'big' }] }] }));
+  fs.writeFileSync(path.join(dir, 'bad.json'), JSON.stringify({ version: 2, shots: [{ id: 'a', show: 'statement', kicker: 5, say: 'x' }] }));
   const spec = path.join(dir, 'film.explainer.json');
   fs.writeFileSync(spec, JSON.stringify({ title: 'Doc', generatedBy: { model: 'm', effort: 'low', agent: 'a' }, sections: [{ type: 'text', text: 'x' }, { type: 'motion', spec: 'bad.json' }] }));
   const r = await run([spec, '--no-check', '--out', path.join(dir, 'page.html')]);
   const report = oneObject(r.stdout);
   assert.equal(r.status, 1);
   assert.equal(report.output, null, 'no render happened');
-  assert.deepEqual(report.findings.map((f) => [f.kind, f.path]), [['mechanical', 'sections[1].spec.scenes[0].elements[0].fontSize']]);
-  assert.match(report.findings[0].message, /must be number \(in bad\.json\)/);
+  assert.deepEqual(report.findings.map((f) => [f.kind, f.path]), [['mechanical', 'sections[1].spec.shots[0].kicker']]);
+  assert.match(report.findings[0].message, /must be string \(in bad\.json\)/);
 });
 
 test('make-explainer: the concept example passes the real check in a browser', { timeout: 180000 }, async (t) => {

@@ -432,9 +432,11 @@ test('docs: schema.md names the atlases and both blocks, SKILL.md and both READM
   for (const name of ATLAS_NAMES) assert.ok(schema.includes(name), `schema.md names ${name}`);
   for (const name of ['map-highlight', 'flow-map']) {
     assert.match(schema, new RegExp(`\\| \`${name}\` \\|`), `schema.md block table: ${name}`);
-    assert.ok(skill.includes(name), `SKILL.md: ${name}`);
     assert.ok(readme.includes(name), `README.md: ${name}`);
+    assert.ok(!skill.includes(name), `SKILL.md no longer names the version 1 block ${name}`);
   }
+  // The version 2 SKILL.md lists maps as the `map` kind (what the blocks became), which --list kinds prints.
+  assert.match(skill, /`map`/, 'SKILL.md lists the map kind');
   assert.ok(pa.includes('map highlight, flow map'), '<pa>/README.md lists the two blocks by name, as it lists the others');
   // The count as the README says it in words, derived so that adding a block does not break this test for an unrelated reason.
   const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];

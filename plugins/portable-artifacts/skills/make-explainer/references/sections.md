@@ -101,12 +101,12 @@ Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md
 
 ## Motion
 
-`motion`: `video` (an `.mp4`, at most 50 MB) and/or `spec` (a make-motion `motion.json` path); `poster`, `caption`. At least one of `video` and `spec` is required.
+`motion`: `video` (an `.mp4`, at most 50 MB) and/or `spec` (a make-motion film, version 2: a `.json` path); `poster`, `caption`. At least one of `video` and `spec` is required.
 
 - With `video` the file is copied to `<slug>.assets/`. With only `spec`, make-motion renders it during the build (needs ffmpeg and Chromium; it can take minutes, bounded by `PA_MOTION_TIMEOUT_MS`).
 - If both are given the video is shown and the spec is ignored, with a warning.
-- A `spec` without its own `theme` is drawn with the page theme. A rendered video uses the theme's dark variant whatever the page mode.
-- `poster` (png, jpg or webp) is inlined; a rendered video gets a frame as its poster. The video never autoplays, and print shows the poster.
+- A film is drawn in its own look (`look` in the film, or its mode's default), whatever the page theme. A version 1 spec is refused at validation with make-motion's own sentence under the section's `spec` path.
+- `poster` (png, jpg or webp) is inlined; a rendered video gets its first frame as its poster (a film that opens on an empty board, such as the `marker` look, gives a sparse poster: name a `poster` for a fuller one). The video never autoplays, and print shows the poster.
 - Needs the `make-motion` skill next to this one only when `spec` is used.
 
 ## Which section for what

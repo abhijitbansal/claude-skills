@@ -176,6 +176,7 @@ function installApi({ fps, draw, post, source, measure, frameState, keys, setGra
 async function init() {
   const { film, timeline, assets: srcs, alpha = [], clips = [], prepared = {} } = await fetchJson('/film.json');
   if (timeline.shots.length === 0) throw new Error('the film has no shots');
+  window.__prepared = prepared; // what the film was built from (maps): the hand review rebuilds shots from it (scripts/v2/review-hand.mjs)
   const [w, h] = canvasSize(film);
   const canvas = { w, h };
   const element = document.getElementById('stage');

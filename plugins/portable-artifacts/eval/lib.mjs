@@ -17,13 +17,15 @@ export const SKILLS = {
   },
   motion: {
     dir: 'make-motion',
-    spec: 'motion.json',
-    // Contact sheet into <work>/out; success = at least one PNG.
-    outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/render.mjs'), spec, '--contact-sheet', '--out', path.join(work, 'out')],
-    artifacts: ['out'],
-    // Visual check on the spec once the contact sheet built; prints {"ok":true,"skipped":true} without a browser.
-    // checkCmd(skill, spec, work): motion's check reads the spec, the other three read the page the build wrote.
-    checkCmd: (skill, spec) => [path.join(skill, 'scripts/check.mjs'), spec, '--json'],
+    spec: 'film.json',
+    // make-motion 2 has one command. The validate step is its --outline (the film is checked, the page is not opened);
+    // the output step writes the review sheets only, beside <work>/out/film.mp4; success = at least one PNG in
+    // <work>/out/film.sheets.
+    validateCmd: (skill, spec) => [path.join(skill, 'scripts/make.mjs'), spec, '--outline', '--json'],
+    outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/make.mjs'), spec, '--sheets-only', '--json', '--out', path.join(work, 'out/film.mp4')],
+    artifacts: ['out/film.sheets'],
+    // No separate check: the review runs inside make.mjs, and the check column reads the `ok` of its report.
+    checkFromOutput: true,
   },
   diagram: {
     dir: 'make-diagram',
@@ -359,6 +361,11 @@ export function diffPaths(a, b, base = '') {
   return out;
 }
 
+// A make.mjs report has findings, not errors: its mechanical findings are what stops a film (scripts/make.mjs --json).
+const mechanicalFindings = (findings) => (Array.isArray(findings) ? findings : [])
+  .filter((f) => f?.kind === 'mechanical')
+  .map((f) => ({ path: f.path ?? '', message: f.message ?? '' }));
+
 // Score one finished host run in `work`. The harness re-runs validate and the
 // output step itself, so a host that couldn't run commands is still scored.
 // `expect`: spec features the prompt asked for (see featureUsed); `maxChanged`: for an edit prompt, the most leaf
@@ -392,11 +399,12 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, expect = []
     score.missingFeatures = used.missing;
   }
   const env = { EVAL_LOG: '' };
-  const v = await run(['node', path.join(skillDir, 'scripts/validate.mjs'), specPath, '--json'], { cwd: work, env });
+  const validateCmd = skillCfg.validateCmd?.(skillDir, specPath, work) ?? [path.join(skillDir, 'scripts/validate.mjs'), specPath, '--json'];
+  const v = await run(['node', ...validateCmd], { cwd: work, env });
   try {
     const parsed = JSON.parse(v.out.trim().split('\n').pop());
     score.finalValid = parsed.ok === true;
-    score.errors = parsed.errors ?? [];
+    score.errors = parsed.errors ?? mechanicalFindings(parsed.findings);
   } catch {
     score.errors = [{ path: '(validate)', message: v.out.slice(0, 500) }];
   }
@@ -422,6 +430,7 @@ export async function scoreRun({ work, skillCfg, skillDir, seedSpec, expect = []
     if (!fs.existsSync(p)) return false;
     return fs.statSync(p).isDirectory() ? fs.readdirSync(p, { recursive: true }).some((f) => String(f).endsWith('.png')) : true;
   });
+  if (score.outputOk && skillCfg.checkFromOutput) score.checkOk = readCheckResult(o);
   if (score.outputOk && skillCfg.checkCmd) {
     const c = await run(['node', ...skillCfg.checkCmd(skillDir, specPath, work)], {
       cwd: work, env, timeoutMs: outputTimeoutMs, logFile: path.join(work, 'check.log'),

@@ -1,5 +1,5 @@
 // What a motion section points at: an MP4 and an optional poster picture, or a
-// motion.json for make-motion to render. All are files in the spec folder (the
+// make-motion film (version 2, a .json file) for make-motion to render. All are files in the spec folder (the
 // same path rules as every other file reference). Shared by the validation
 // check and the renderer.
 import fs from 'node:fs';
@@ -52,7 +52,7 @@ export function readPoster(ref, dir) {
   return { uri: dataUri(img) };
 }
 
-/** spec: -> { abs, dir, spec, file } for a motion.json holding one JSON object, else { error }. `dir` is the folder the motion spec's own files resolve against. */
+/** spec: -> { abs, dir, spec, file } for a film file holding one JSON object, else { error }. `dir` is the folder the film's own files resolve against. */
 export function readMotionSpec(ref, dir) {
   const r = resolveRef(dir, ref, { exts: SPEC_EXTS });
   if (r.error) return { error: r.error };
@@ -66,7 +66,7 @@ export function readMotionSpec(ref, dir) {
   } catch (e) {
     return { error: `${JSON.stringify(ref)} is not valid JSON: ${e.message}` };
   }
-  if (!isObject(spec)) return { error: `${JSON.stringify(ref)} must hold one JSON object (a make-motion spec)` };
+  if (!isObject(spec)) return { error: `${JSON.stringify(ref)} must hold one JSON object (a make-motion film)` };
   return { abs: r.abs, dir: path.dirname(r.abs), spec, file: ref };
 }
 

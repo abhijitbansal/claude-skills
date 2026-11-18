@@ -1,7 +1,7 @@
 // motion section: a <video> with controls, never autoplaying, whose file sits next to the page in
 // <slug>.assets/. The video is either a user's MP4 (copied) or rendered by make-motion from a
-// motion.json (held in memory until the build writes it). The poster is the user's picture or, for a
-// rendered video, a frame of it, and is inlined as a data: URI: the page's CSP lets a page load
+// film (version 2; held in memory until the build writes it). The poster is the user's picture or, for a
+// rendered video, its first frame, and is inlined as a data: URI: the page's CSP lets a page load
 // images from data: only, and a small picture is not worth widening it. prepare() settles the files;
 // render() reads the result. The css ships once (page()).
 import fs from 'node:fs';
@@ -31,7 +31,7 @@ export async function prepare(section, ctx, i) {
     source = { from: valid('video', readVideo(section.video, ctx.dir)).abs };
   } else {
     const motion = valid('spec', readMotionSpec(section.spec, ctx.dir));
-    rendered = await renderMotion(motion.abs, motion.spec, ctx.env, { pageTheme: ctx.theme.name });
+    rendered = await renderMotion(motion.abs, ctx.env);
     source = { content: rendered.video };
   }
   let poster;

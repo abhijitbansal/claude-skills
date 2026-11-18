@@ -549,19 +549,24 @@ test('summarize has a "model reported" column and names the agent', () => {
   assert.match(md, /artifact-builder/);
 });
 
-// --- --set prompt sets, the check column, the motion benchmark and its fixtures (Task 3) ---
+// --- --set prompt sets, the check column and the fixtures (Task 3) ---
 
 const promptsDir = path.join(evalDir, 'prompts');
 
 test('loadPrompts: no set reads prompts/<skill>.json, a set reads prompts/<skill>-<set>.json', () => {
   assert.deepEqual(loadPrompts(promptsDir, 'motion'), readJson('prompts', 'motion.json'));
-  assert.deepEqual(loadPrompts(promptsDir, 'motion', 'benchmark'), readJson('prompts', 'motion-benchmark.json'));
-  assert.deepEqual(loadPrompts(promptsDir, 'motion', 'items'), readJson('prompts', 'motion-items.json'));
+  assert.deepEqual(loadPrompts(promptsDir, 'dashboard', 'kinds'), readJson('prompts', 'dashboard-kinds.json'));
+});
+
+test('motion has one prompt set, the version 2 one, and no --set', () => {
+  assert.deepEqual(fs.readdirSync(promptsDir).filter((f) => f.startsWith('motion')), ['motion.json']);
+  assert.throws(() => loadPrompts(promptsDir, 'motion', 'benchmark'), { message: 'unknown --set "benchmark"; available for motion: (none)' });
+  assert.throws(() => loadPrompts(promptsDir, 'motion', 'items'), { message: 'unknown --set "items"; available for motion: (none)' });
 });
 
 test('loadPrompts: an unknown set names the sets that exist, and a set is never joined into a path', () => {
-  assert.throws(() => loadPrompts(promptsDir, 'motion', 'x'), { message: 'unknown --set "x"; available for motion: benchmark, items' });
-  assert.throws(() => loadPrompts(promptsDir, 'motion', '../motion'), { message: 'unknown --set "../motion"; available for motion: benchmark, items' });
+  assert.throws(() => loadPrompts(promptsDir, 'motion', 'x'), { message: 'unknown --set "x"; available for motion: (none)' });
+  assert.throws(() => loadPrompts(promptsDir, 'motion', '../motion'), { message: 'unknown --set "../motion"; available for motion: (none)' });
   assert.throws(() => loadPrompts(promptsDir, 'scene', 'benchmark'), { message: 'unknown --set "benchmark"; available for scene: (none)' });
   assert.throws(() => loadPrompts(promptsDir, 'dashboard', 'benchmark'), { message: 'unknown --set "benchmark"; available for dashboard: kinds' });
   assert.throws(() => loadPrompts(promptsDir, 'explainer', 'x'), { message: 'unknown --set "x"; available for explainer: features' });
@@ -570,12 +575,16 @@ test('loadPrompts: an unknown set names the sets that exist, and a set is never 
 });
 
 test('run-eval: an unknown --set exits 2 listing the sets before any host runs; a known set gets past that check', () => {
-  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'motion', '--set', 'nope']);
+  const { r, hostLaunched } = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'dashboard', '--set', 'nope']);
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /unknown --set "nope"; available for motion: benchmark, items/);
+  assert.match(r.stderr, /unknown --set "nope"; available for dashboard: kinds/);
   assert.match(r.stderr, /\[--set name\]/);
   assert.equal(hostLaunched, false, 'no host executable may be launched');
-  const known = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'motion', '--set', 'benchmark']);
+  const motion = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'motion', '--set', 'benchmark']);
+  assert.equal(motion.r.status, 2);
+  assert.match(motion.r.stderr, /unknown --set "benchmark"; available for motion: \(none\)/, 'the version 1 benchmark and items sets are gone');
+  assert.equal(motion.hostLaunched, false);
+  const known = runEvalWithFakeHosts(['--host', 'claude', '--skill', 'dashboard', '--set', 'kinds']);
   assert.equal(known.r.status, 2);
   assert.match(known.r.stderr, /host "claude" not available/);
 });
@@ -618,12 +627,23 @@ test('scoreRun: checkOk is null without a checkCmd and when the output step did 
   assert.equal(s.checkOk, null);
 });
 
-test('SKILLS checkCmd: motion checks the spec; diagram, explainer and scene check the page the build wrote; dashboard has none', () => {
-  assert.deepEqual(SKILLS.motion.checkCmd('/s', '/w/motion.json', '/w'), [path.join('/s', 'scripts/check.mjs'), '/w/motion.json', '--json']);
+test('SKILLS motion runs make-motion 2: film.json, one make.mjs command for the output, no check command', () => {
+  const motion = SKILLS.motion;
+  assert.equal(motion.dir, 'make-motion');
+  assert.equal(motion.spec, 'film.json');
+  assert.deepEqual(motion.outputCmd('/s', '/w/film.json', '/w'), [path.join('/s', 'scripts/make.mjs'), '/w/film.json', '--sheets-only', '--json', '--out', path.join('/w', 'out/film.mp4')]);
+  assert.deepEqual(motion.artifacts, ['out/film.sheets']);
+  assert.equal(motion.checkCmd, undefined, 'the review runs inside make.mjs: there is no separate check');
+  assert.equal(motion.checkFromOutput, true, 'the check column reads the report of the output step');
+  assert.deepEqual(motion.validateCmd('/s', '/w/film.json', '/w'), [path.join('/s', 'scripts/make.mjs'), '/w/film.json', '--outline', '--json']);
+  assert.equal(SKILLS.motion.outputCmd('/s', '/w/film.json', '/w').some((a) => /render\.mjs|check\.mjs|contact-sheet/.test(a)), false);
+});
+
+test('SKILLS checkCmd: diagram, explainer and scene check the page the build wrote; dashboard and motion have none', () => {
   assert.deepEqual(SKILLS.diagram.checkCmd('/s', '/w/diagram.json', '/w'), [path.join('/s', 'scripts/check.mjs'), '/w/out/diagram.html', '--json']);
   assert.deepEqual(SKILLS.explainer.checkCmd('/s', '/w/explainer.json', '/w'), [path.join('/s', 'scripts/check.mjs'), '/w/out/explainer.html', '--json']);
   assert.deepEqual(SKILLS.scene.checkCmd('/s', '/w/scene.json', '/w'), [path.join('/s', 'scripts/check.mjs'), '/w/out/scene.html', '--json']);
-  assert.deepEqual(Object.keys(SKILLS).filter((k) => SKILLS[k].checkCmd).sort(), ['diagram', 'explainer', 'motion', 'scene']);
+  assert.deepEqual(Object.keys(SKILLS).filter((k) => SKILLS[k].checkCmd).sort(), ['diagram', 'explainer', 'scene']);
   // the page each check opens is the artifact the output step is scored on
   for (const name of ['diagram', 'explainer', 'scene']) {
     const page = SKILLS[name].checkCmd('/s', `/w/${SKILLS[name].spec}`, '/w')[1];
@@ -644,6 +664,74 @@ test('scoreRun hands checkCmd the workdir, so a check that needs the built page 
   assert.equal((await scoreRun({ work, skillCfg: pageCfg, skillDir: skill })).checkOk, true);
 });
 
+// A skill whose one script is a make.mjs: --outline checks the film (exit 1 and findings when it does not validate),
+// the output run writes film.sheets/a.png and prints the report, whose `ok` the check column reads.
+function fakeMakeSkill({ outputOk = true } = {}) {
+  const skill = tmp();
+  fs.mkdirSync(path.join(skill, 'scripts'));
+  fs.writeFileSync(path.join(skill, 'scripts/make.mjs'), `
+    import fs from 'node:fs';
+    const args = process.argv.slice(2);
+    const film = JSON.parse(fs.readFileSync(args[0], 'utf8'));
+    process.stderr.write('make: validate started\\n');
+    await new Promise((resolve) => setTimeout(resolve, 100)); // the progress lines come first, as in the real make.mjs
+    const bad = film.shots === undefined;
+    const findings = bad ? [{ kind: 'mechanical', path: 'shots', message: 'required (array)' }] : [];
+    if (args.includes('--outline') || bad) {
+      process.stdout.write(JSON.stringify({ ok: !bad, findings }) + '\\n');
+      process.exit(bad ? 1 : 0);
+    }
+    const out = args[args.indexOf('--out') + 1];
+    const sheets = out.replace(/\\.mp4$/, '.sheets');
+    fs.mkdirSync(sheets, { recursive: true });
+    fs.writeFileSync(sheets + '/a.png', 'x');
+    process.stdout.write(JSON.stringify({ ok: ${outputOk}, findings: ${outputOk ? '[]' : '[{ kind: "mechanical", path: "shots[0]", message: "overflows" }]'} }) + '\\n');
+    process.exit(${outputOk ? 0 : 1});
+  `);
+  return skill;
+}
+const makeCfg = {
+  ...SKILLS.motion,
+  outputCmd: (skill, spec, work) => [path.join(skill, 'scripts/make.mjs'), spec, '--sheets-only', '--json', '--out', path.join(work, 'out/film.mp4')],
+  validateCmd: (skill, spec) => [path.join(skill, 'scripts/make.mjs'), spec, '--outline', '--json'],
+};
+const scoreMake = async (film, skillCfg = makeCfg, skill = fakeMakeSkill()) => {
+  const work = tmp();
+  fs.writeFileSync(path.join(work, 'film.json'), JSON.stringify(film));
+  return scoreRun({ work, skillCfg, skillDir: skill });
+};
+
+test('scoreRun validates a make.mjs skill with its validateCmd, scores the sheets, and reads the check from the output report', async () => {
+  const good = await scoreMake({ version: 2, shots: [] });
+  assert.deepEqual([good.specExists, good.finalValid, good.outputOk, good.checkOk], [true, true, true, true]);
+  const failing = await scoreMake({ version: 2, shots: [] }, makeCfg, fakeMakeSkill({ outputOk: false }));
+  assert.deepEqual([failing.finalValid, failing.outputOk, failing.checkOk], [true, false, null], 'a failed output step has no check');
+});
+
+test('scoreRun: a make.mjs skill whose report is ok:false but whose sheets exist has checkOk false', async () => {
+  // exit 0 with ok:false is still a failed check; the exit code alone does not decide
+  const skill = fakeMakeSkill();
+  fs.appendFileSync(path.join(skill, 'scripts/make.mjs'), '\n');
+  const { outputOk, checkOk } = await scoreMake({ version: 2, shots: [] }, { ...makeCfg, outputCmd: (s, spec, work) => [path.join(s, 'scripts/lies.mjs'), path.join(work, 'out/film.sheets')] }, (() => {
+    fs.writeFileSync(path.join(skill, 'scripts/lies.mjs'), `
+      import fs from 'node:fs';
+      fs.mkdirSync(process.argv[2], { recursive: true });
+      fs.writeFileSync(process.argv[2] + '/a.png', 'x');
+      process.stdout.write('{"ok":false,"findings":[]}\\n');
+    `);
+    return skill;
+  })());
+  assert.equal(outputOk, true);
+  assert.equal(checkOk, false);
+});
+
+test('scoreRun: a make.mjs skill that finds a mechanical problem is invalid, with its findings as the errors', async () => {
+  const bad = await scoreMake({ version: 2 });
+  assert.equal(bad.finalValid, false);
+  assert.deepEqual(bad.errors, [{ path: 'shots', message: 'required (array)' }]);
+  assert.equal(bad.outputOk, false);
+});
+
 test('summarize has a check column: ✓ passed, ✗ failed, - skipped or not run', () => {
   const base = { specExists: true, finalValid: true, validateRuns: 1, outputOk: true, seconds: 3, errors: [] };
   const md = summarize([{ id: 'a', ...base, checkOk: true }, { id: 'b', ...base, checkOk: false }, { id: 'c', ...base, checkOk: null }, { id: 'd', ...base }], { host: 'claude', skill: 'motion' });
@@ -656,85 +744,53 @@ test('summarize has a check column: ✓ passed, ✗ failed, - skipped or not run
   assert.doesNotMatch(none, /check ok/, 'the totals line only mentions the check when some row ran one');
 });
 
-const BENCHMARK_ORDER = [
-  ['product-launch', ['launch-teaser', 'launch-feature-trio']],
-  ['pr-walkthrough', ['pr-walkthrough', 'pr-code-diff']],
-  ['data-viz', ['chart-race', 'map-regions']],
-  ['captioned-social', ['captioned-social', 'captioned-vertical']],
-  ['docs-to-video', ['docs-steps', 'docs-faq']],
-  ['templated-batch', ['batch-welcome', 'batch-kpi-cards']],
-];
+// The keys run-eval reads from a prompt entry: id and prompt always; seed and repo (prepareWorkdir), expect and maxChanged when set.
+const PROMPT_KEYS = ['id', 'prompt', 'seed', 'repo', 'expect', 'maxChanged'];
+const MOTION_IDS = ['statement-hook', 'number-kpi', 'clipping-highlight', 'list-steps', 'quote-card', 'compare-two', 'chart-bar', 'viral-vertical', 'voiced-pro', 'edit-existing', 'vars-batch'];
 
-test('the motion benchmark file has 12 prompts, unique ids, two per category tag', () => {
-  const prompts = readJson('prompts', 'motion-benchmark.json');
-  assert.equal(prompts.length, 12);
-  assert.equal(new Set(prompts.map((p) => p.id)).size, 12);
-  assert.deepEqual(prompts.map((p) => [p.category, p.id]), BENCHMARK_ORDER.flatMap(([c, ids]) => ids.map((id) => [c, id])));
-  for (const [category] of BENCHMARK_ORDER) assert.equal(prompts.filter((p) => p.category === category).length, 2, category);
+test('motion.json holds the eleven version 2 prompts, in order, with unique ids and only the keys run-eval reads', () => {
+  const prompts = readJson('prompts', 'motion.json');
+  assert.deepEqual(prompts.map((p) => p.id), MOTION_IDS);
   for (const p of prompts) {
-    assert.deepEqual(Object.keys(p).sort(), ['category', 'id', 'prompt'], `${p.id}: only id, category, prompt`);
-    const seconds = [...p.prompt.matchAll(/(\d+)[- ]second/g)].map((m) => Number(m[1]));
-    assert.equal(seconds.length, 1, `${p.id} names exactly one duration`);
-    assert.ok(seconds[0] >= 10 && seconds[0] <= 30, `${p.id} duration ${seconds[0]} s is within 10-30`);
-  }
-});
-
-test('the motion benchmark prompts carry the wording and fixtures the plan pins', () => {
-  const by = Object.fromEntries(readJson('prompts', 'motion-benchmark.json').map((p) => [p.id, p.prompt]));
-  assert.match(by['pr-walkthrough'], /as monospace text lines starting with \+ and -/);
-  assert.match(by['pr-code-diff'], /a code-diff block/);
-  assert.match(by['captioned-social'], /16:9/);
-  assert.match(by['captioned-social'], /data\/captions\.srt/);
-  assert.match(by['captioned-social'], /plain captions/);
-  assert.match(by['captioned-vertical'], /9:16/);
-  assert.match(by['captioned-vertical'], /data\/captions\.vtt/);
-  assert.match(by['captioned-vertical'], /karaoke captions/);
-  assert.match(by['captioned-vertical'], /data\/music\.wav/);
-  assert.match(by['batch-welcome'], /name and city/);
-  assert.match(by['batch-welcome'], /so it can be rendered per row of data\/rows\.json/);
-  for (const [id, text] of Object.entries(by)) {
-    for (const [, file] of text.matchAll(/\bdata\/([\w-]+\.\w+)/g)) assert.ok(fs.existsSync(path.join(evalDir, 'fixtures/data', file)), `${id} names data/${file}`);
-  }
-});
-
-// The keys run-eval reads from a prompt entry: id and prompt always; category (benchmark), seed and repo (prepareWorkdir) when set.
-const PROMPT_KEYS = ['id', 'prompt', 'category', 'seed', 'repo', 'expect', 'maxChanged'];
-
-test('motion-items.json holds prompt entries with unique ids (tasks append to it) and the default motion.json is untouched', () => {
-  const items = readJson('prompts', 'motion-items.json');
-  assert.ok(Array.isArray(items));
-  for (const p of items) {
-    assert.equal(typeof p.id, 'string', JSON.stringify(p));
-    assert.ok(p.id.length > 0, 'an id is never empty');
     assert.equal(typeof p.prompt, 'string', `${p.id}: prompt is a string`);
-    assert.ok(p.prompt.trim().length > 0, `${p.id}: prompt is not empty`);
-    const unknown = Object.keys(p).filter((k) => !PROMPT_KEYS.includes(k));
-    assert.deepEqual(unknown, [], `${p.id}: keys are ${PROMPT_KEYS.join(', ')}`);
+    assert.ok(p.prompt.trim().length > 20, `${p.id}: prompt is not empty`);
+    assert.deepEqual(Object.keys(p).filter((k) => !PROMPT_KEYS.includes(k)), [], `${p.id}: keys are ${PROMPT_KEYS.join(', ')}`);
+    for (const [, file] of p.prompt.matchAll(/\bdata\/([\w-]+\.\w+)/g)) assert.ok(fs.existsSync(path.join(evalDir, 'fixtures/data', file)), `${p.id} names data/${file}`);
+    assert.doesNotMatch(p.prompt, /scene|motion\.json|theme|block|keyframe|lottie|contact sheet/i, `${p.id} names nothing version 2 lacks`);
   }
-  assert.equal(new Set(items.map((p) => p.id)).size, items.length, 'ids are unique');
-  const ids = readJson('prompts', 'motion.json').map((p) => p.id);
-  assert.equal(ids.length, 10);
-  assert.equal(ids[0], 'q3-counter');
-  assert.equal(ids[9], 'edit-existing');
+});
+
+test('the motion seed is a valid version 2 film', async () => {
+  const seed = readJson('fixtures', 'seeds', 'motion.json');
+  assert.equal(seed.version, 2);
+  const make = (name) => import(`../../skills/make-motion/scripts/v2/${name}.mjs`);
+  await make('list');
+  const { validateFilm } = await make('spec');
+  assert.deepEqual(validateFilm(seed, { specDir: evalDir }).errors, []);
+  assert.equal(readJson('prompts', 'motion.json').find((p) => p.id === 'edit-existing').seed, 'seeds/motion.json');
+});
+
+test('the vars-batch prompt can be rendered per row: data/rows.json has the variables it names', () => {
+  const prompt = readJson('prompts', 'motion.json').find((p) => p.id === 'vars-batch').prompt;
+  const rows = readJson('fixtures', 'data', 'rows.json');
+  for (const name of ['name', 'city', 'count']) {
+    assert.match(prompt, new RegExp(`\\b${name}\\b`));
+    assert.ok(rows.every((r) => name in r), `rows have ${name}`);
+  }
+  assert.match(prompt, /data\/rows\.json/);
 });
 
 const dataFile = (name) => path.join(evalDir, 'fixtures/data', name);
-const words = (text) => text.split(/\s+/).filter(Boolean).length;
 
-test('captions.srt has 6 cues and 24 words, and captions.vtt carries the same text under a WEBVTT header', () => {
-  const srt = fs.readFileSync(dataFile('captions.srt'), 'utf8');
-  const vtt = fs.readFileSync(dataFile('captions.vtt'), 'utf8');
-  const blocks = (text) => text.trim().split(/\r?\n\r?\n/);
-  const cueText = (block) => block.split(/\r?\n/).filter((l) => !/^\d+$/.test(l) && !l.includes('-->')).join(' ');
-  const srtBlocks = blocks(srt);
-  assert.equal(srtBlocks.length, 6);
-  assert.ok(srtBlocks.every((b) => /^\d+\n\d\d:\d\d:\d\d,\d{3} --> \d\d:\d\d:\d\d,\d{3}\n\S/.test(b)));
-  assert.equal(words(srtBlocks.map(cueText).join(' ')), 24);
-  assert.match(vtt, /^WEBVTT\n/);
-  const vttCues = blocks(vtt).slice(1);
-  assert.equal(vttCues.length, 6);
-  assert.ok(vttCues.every((b) => /\d\d:\d\d:\d\d\.\d{3} --> \d\d:\d\d:\d\d\.\d{3}/.test(b)));
-  assert.deepEqual(vttCues.map(cueText), srtBlocks.map(cueText));
+// make-motion's own tests still read five of the files no motion prompt names (music.wav: the kept beats tests; captions,
+// badge.lottie.json and portrait-cutout.png: version 1 tests that the delete in Task 3 removes with them, and these files
+// with them). clip.mp4 had no reader once its byte check went, so it is gone.
+test('every data fixture a motion prompt names exists, and clip.mp4, which nothing reads any more, is gone', () => {
+  const named = new Set(readJson('prompts', 'motion.json').flatMap((p) => [...p.prompt.matchAll(/\bdata\/([\w-]+\.\w+)/g)].map((m) => m[1])));
+  assert.deepEqual([...named].sort(), ['portrait.jpg', 'rows.json']);
+  for (const file of named) assert.ok(fs.existsSync(dataFile(file)), file);
+  assert.equal(fs.existsSync(dataFile('clip.mp4')), false);
+  for (const kept of ['music.wav', 'captions.srt', 'captions.vtt', 'badge.lottie.json', 'portrait-cutout.png']) assert.ok(fs.existsSync(dataFile(kept)), `${kept} is still read by a make-motion test`);
 });
 
 test('rows.json has 3 rows of name, city and count', () => {
@@ -746,29 +802,6 @@ test('rows.json has 3 rows of name, city and count', () => {
     assert.equal(typeof row.city, 'string');
     assert.equal(typeof row.count, 'number');
   }
-});
-
-test('music.wav is exactly writeWav({ clickBpm: 120 }): 10 s mono 8 kHz, a 20 ms 1 kHz burst every 0.5 s', async () => {
-  const { wavBuffer } = await import('../../skills/make-motion/test/helpers/wav.mjs');
-  const file = fs.readFileSync(dataFile('music.wav'));
-  assert.deepEqual(file, wavBuffer({ seconds: 10, sampleRate: 8000, clickBpm: 120 }));
-  assert.equal(file.readUInt16LE(22), 1);
-  assert.equal(file.readUInt32LE(24), 8000);
-  assert.equal(file.length, 44 + 10 * 8000 * 2);
-});
-
-test('clip.mp4 is a small committed H.264 file: 2 s, 320x180, no audio', (t) => {
-  const file = dataFile('clip.mp4');
-  const bytes = fs.readFileSync(file);
-  assert.equal(bytes.subarray(4, 8).toString('latin1'), 'ftyp');
-  assert.ok(bytes.length < 100 * 1024, `${bytes.length} bytes is under 100 KB`);
-  const probe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,codec_name,width,height:format=duration', '-of', 'json', file], { encoding: 'utf8' });
-  if (probe.error || probe.status !== 0) { t.skip('ffprobe unavailable'); return; }
-  const info = JSON.parse(probe.stdout);
-  assert.deepEqual(info.streams.map((s) => s.codec_type), ['video']);
-  assert.equal(info.streams[0].codec_name, 'h264');
-  assert.equal(`${info.streams[0].width}x${info.streams[0].height}`, '320x180');
-  assert.ok(Math.abs(Number(info.format.duration) - 2) < 0.15, `duration ${info.format.duration}`);
 });
 
 // --- PA-55: relative fixture dates, feature-used scoring, edit size limit, validate log, host allowlist ---
@@ -1051,16 +1084,18 @@ const promptsExpecting = (skill, token) => allPrompts(skill).filter((p) => p.exp
 const uncovered = (skill, tokens) => tokens.filter((t) => promptsExpecting(skill, t).length === 0);
 
 // What the code defines, read from the code and not from docs: a rename or a new entry turns these tests red.
-const { BLOCK_NAMES } = await import('../../skills/make-motion/template/blocks/index.mjs');
+await import('../../skills/make-motion/scripts/v2/list.mjs'); // registers the kinds, looks and modes
+const { registries } = await import('../../skills/make-motion/engine/registry.mjs');
 const { TYPES: SECTION_TYPES } = await import('../../skills/make-explainer/scripts/lib/schema.mjs');
 const { KIND_NAMES } = await import('../../skills/make-dashboard/scripts/lib/kinds.mjs');
 
 // Sections no prompt can ask for: the explainer eval copies neither make-motion nor make-scene (see SKILLS.explainer).
 const EXPLAINER_EXEMPT = ['motion', 'scene'];
 
-test('every make-motion block has a prompt that expects it', () => {
-  assert.ok(BLOCK_NAMES.length >= 38, `${BLOCK_NAMES.length} blocks`);
-  assert.deepEqual(uncovered('motion', BLOCK_NAMES.map((b) => `block=${b}`)), []);
+test('the motion prompts ask for eight kinds between them, and each is a kind make-motion registers', () => {
+  const wanted = ['statement', 'number', 'clipping', 'list', 'quote', 'compare', 'chart', 'end'];
+  assert.deepEqual(uncovered('motion', wanted.map((k) => `show=${k}`)), []);
+  for (const k of wanted) assert.ok(registries.kinds.names().includes(k), `${k} is a registered kind`);
 });
 
 test('every make-explainer section type except motion and scene has a prompt that expects it', () => {
@@ -1093,7 +1128,9 @@ test('every expectation parses, names something real, and no prompt id repeats w
     for (const p of prompts) {
       for (const token of p.expect ?? []) {
         for (const { key, value } of parseAlternatives(token)) {
-          if (key === 'block') assert.ok(BLOCK_NAMES.includes(value), `${p.id}: ${token} is a block`);
+          if (skill === 'motion' && key === 'show') assert.ok(registries.kinds.names().includes(value), `${p.id}: ${token} is a kind`);
+          // `mode` is the film's mode (pro, viral) and also a compare shot's own field (versus, before-after)
+          if (skill === 'motion' && key === 'mode') assert.ok([...registries.modes.names(), 'versus', 'before-after'].includes(value), `${p.id}: ${token} is a mode`);
           if (skill === 'explainer' && key === 'type') assert.ok(SECTION_TYPES.includes(value), `${p.id}: ${token} is a section type`);
           if (skill === 'dashboard' && key === 'kind') assert.ok(KIND_NAMES.includes(value), `${p.id}: ${token} is a chart kind`);
         }
@@ -1105,36 +1142,25 @@ test('every expectation parses, names something real, and no prompt id repeats w
   }
 });
 
-test('every motion expectation is met by a spec the skill ships, and a bare spec meets none (the predicate can fail)', () => {
-  const examples = path.join(skillsDir, 'make-motion/references/examples');
-  const specs = [...fs.readdirSync(examples).filter((f) => f.endsWith('.json')).map((f) => path.join(examples, f)),
-    ...fs.readdirSync(path.join(examples, 'blocks')).filter((f) => f.endsWith('.json')).map((f) => path.join(examples, 'blocks', f))]
-    .map((f) => JSON.parse(fs.readFileSync(f, 'utf8')));
+test('every motion expectation is met by a film the skill ships, and a bare film meets none (the predicate can fail)', () => {
+  const examples = path.join(skillsDir, 'make-motion/references/examples/v2');
+  const films = fs.readdirSync(examples).filter((f) => f.endsWith('.json')).map((f) => JSON.parse(fs.readFileSync(path.join(examples, f), 'utf8')));
   const tokens = new Set(allPrompts('motion').flatMap((p) => p.expect ?? []));
-  assert.ok(tokens.size > 40, `${tokens.size} distinct expectations`);
+  assert.ok(tokens.size >= 12, `${tokens.size} distinct expectations`);
   for (const token of tokens) {
-    assert.ok(specs.some((s) => featureUsed(s, [token]).ok), `no shipped example uses ${token}`);
-    assert.equal(featureUsed({ scenes: [{ id: 'a', duration: 3, elements: [] }] }, [token]).ok, false, `a bare spec must not meet ${token}`);
+    assert.ok(films.some((s) => featureUsed(s, [token]).ok), `no shipped example uses ${token}`);
+    assert.equal(featureUsed({ version: 2, shots: [{ id: 'a', hold: 3 }] }, [token]).ok, false, `a bare film must not meet ${token}`);
   }
 });
 
-test('every motion item prompt names a feature to expect (the feature-used check)', () => {
-  const items = readJson('prompts', 'motion-items.json');
-  assert.deepEqual(items.filter((p) => !p.expect?.length).map((p) => p.id), []);
-});
-
-test('item-beats leaves no dead stretch: a clip no longer than its last beat plus a closing line, not seven idle seconds', () => {
-  const prompt = readJson('prompts', 'motion-items.json').find((p) => p.id === 'item-beats').prompt;
-  assert.match(prompt, /Make a 6-second clip/);
-  assert.match(prompt, /beats 2, 4 and 6/);
-  assert.match(prompt, /closing line .* beat 8 and stays until the end/);
-  assert.doesNotMatch(prompt, /10-second/);
+test('every motion prompt except the edit one names a feature to expect (the feature-used check)', () => {
+  assert.deepEqual(readJson('prompts', 'motion.json').filter((p) => !p.expect?.length && !p.seed).map((p) => p.id), []);
 });
 
 // Limits sit above what committed summaries show a correct edit changing (dashboard edit-existing: 3 to 4 paths, scene
 // tour: 1, forest: 2) and far below the 16-path rewrite one local model produced.
 test('seeded edit prompts carry a path limit generous enough for the edit asked and far below a rewrite', () => {
-  for (const [skill, id, limit] of [['dashboard', 'edit-existing', 10], ['dashboard', 'edit-kind', 8], ['explainer', 'edit-existing', 6], ['explainer', 'edit-add-risk', 4], ['diagram', 'edit-existing', 8], ['scene', 'edit-add-tour', 4], ['scene', 'edit-switch-forest', 6]]) {
+  for (const [skill, id, limit] of [['motion', 'edit-existing', 4], ['dashboard', 'edit-existing', 10], ['dashboard', 'edit-kind', 8], ['explainer', 'edit-existing', 6], ['explainer', 'edit-add-risk', 4], ['diagram', 'edit-existing', 8], ['scene', 'edit-add-tour', 4], ['scene', 'edit-switch-forest', 6]]) {
     assert.equal(allPrompts(skill).find((p) => p.id === id).maxChanged, limit, `${skill}/${id}`);
   }
 });

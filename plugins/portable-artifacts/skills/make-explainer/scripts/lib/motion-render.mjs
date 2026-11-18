@@ -1,5 +1,5 @@
-// Rendering a motion.json to an MP4 by running make-motion's own CLI as a child
-// process (importing its render.mjs would run it). The output goes to a
+// Rendering a make-motion film (version 2) to an MP4 by running make-motion's own CLI (scripts/make.mjs --json) as a
+// child process (importing it would run it). The output goes to a
 // temporary folder that is gone before this returns, so a build that fails
 // later leaves nothing behind; the page build writes the bytes next to the page.
 // Every child has a time limit that holds: SIGTERM first (make-motion cleans up
@@ -20,7 +20,7 @@ export const KILL_GRACE_MS = 5000;
 const POSTER_TIMEOUT_MS = 30 * 1000;
 const POSTER_GRACE_MS = 2000;
 const POSTER_WIDTH = 960;
-const POSTER_POINT = 0.85; // the point of a scene make-motion's contact sheet shows
+const POSTER_SECONDS = 0; // the poster is the film's first frame: one render serves both the video and the still
 const KEPT_OUTPUT_BYTES = 64 * 1024; // the end of each stream is kept, the rest is dropped
 const TAIL_LINES = 6;
 const TAIL_LINE_CHARS = 200;
@@ -133,14 +133,44 @@ export function runChild(command, args, { cwd, env, timeoutMs, graceMs = KILL_GR
   });
 }
 
+// make-motion 2's `--json` report is the one object on stdout (the progress lines go to stderr). A report that was
+// cut off or never printed is not parsed: the failure then shows the end of the output instead.
+function reportOf(stdout) {
+  try {
+    const report = JSON.parse(String(stdout ?? ''));
+    return report !== null && typeof report === 'object' && !Array.isArray(report) ? report : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const stripDot = (text) => String(text).replace(/\.$/, '');
+
+// The failure a report tells: its error ("message. hint") when the run could not go on, else its mechanical findings.
+function reportFailure(report, status) {
+  const { message, hint } = report.error ?? {};
+  if (typeof message === 'string' && message !== '') {
+    const said = typeof hint === 'string' && hint !== '' ? `${stripDot(message)}. ${hint}` : message;
+    return NEEDS.test(said) ? `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser. ${said}` : `make-motion failed (exit ${status}): ${said}`;
+  }
+  const found = (Array.isArray(report.findings) ? report.findings : []).filter((f) => f?.kind === 'mechanical');
+  if (found.length === 0) return undefined;
+  const shown = found.slice(0, TAIL_LINES).map((f) => `  ${cut(`${f.path}: ${f.message}`)}`);
+  const more = found.length > TAIL_LINES ? [`  … and ${found.length - TAIL_LINES} more`] : [];
+  return `make-motion found ${found.length} ${found.length === 1 ? 'problem' : 'problems'} in the film (exit ${status}):\n${[...shown, ...more].join('\n')}`;
+}
+
 /**
- * The message for a child process result that did not succeed: what is missing
- * (with make-motion's own install hint) when it cannot run here, else the end of its output.
+ * The message for a child process result that did not succeed: what its --json report says (its error with the
+ * install hint when ffmpeg or the browser is missing, else its mechanical findings), else the end of its output.
  */
 export function renderFailure({ status, signal, error, timedOut, stderr, stdout }, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   if (timedOut) return `make-motion did not finish within ${timeoutMs} ms; shorten the video or raise ${TIMEOUT_ENV}`;
   if (error) return `make-motion could not start: ${error.message}`;
   if (signal) return `make-motion was stopped by ${signal}`;
+  const report = reportOf(stdout);
+  const told = report === undefined ? undefined : reportFailure(report, status);
+  if (told !== undefined) return told;
   const err = lines(stderr);
   const missing = err.find((l) => NEEDS.test(l));
   if (missing) return `make-motion cannot render this spec: it needs ffmpeg and a Chromium browser. ${missing}`;
@@ -148,9 +178,9 @@ export function renderFailure({ status, signal, error, timedOut, stderr, stdout 
   return `make-motion failed (exit ${status}); the end of its output:\n${tail.length > 0 ? tail.join('\n') : '  (no output)'}`;
 }
 
-/** The make-motion CLI arguments: a spec that names no theme is drawn with the page's. */
-export function motionArgs(specAbs, outFile, spec, pageTheme) {
-  return [specAbs, '--out', outFile, ...(spec.theme === undefined && pageTheme !== undefined ? ['--theme', pageTheme] : [])];
+/** The make-motion CLI arguments: the film, where to write the MP4, and the JSON report. No theme: a film has a look of its own. */
+export function motionArgs(specAbs, outFile) {
+  return [specAbs, '--out', outFile, '--json'];
 }
 
 /** A still from the rendered video, for the poster. Best effort: no poster is not an error, and not a hang. */
@@ -176,29 +206,29 @@ export function childEnv(env) {
 }
 
 /**
- * Render `specAbs` (a validated motion.json) -> { video: Buffer, poster?: Buffer }. `pageTheme` is the theme
- * of the page the video is for. `script` is make-motion's CLI (tests point it at a stand-in). Throws SectionErrors
- * (at `spec`) when make-motion cannot render it here, writes no video or the video is over `maxBytes`, SiblingError
- * when it is not installed.
+ * Render `specAbs` (a validated make-motion film, version 2) -> { video: Buffer, poster?: Buffer }; the poster is
+ * the first frame (second 0). `script` is make-motion's CLI (tests point it at a stand-in). Throws SectionErrors
+ * (at `spec`) when make-motion cannot render it here (any non-zero exit, with the report's words), writes no video or
+ * the video is over `maxBytes`, SiblingError when it is not installed.
  */
-export async function renderMotion(specAbs, spec, env = process.env, { maxBytes = VIDEO_MAX_BYTES, pageTheme, script = path.join(siblingDir('make-motion'), 'scripts/render.mjs') } = {}) {
+export async function renderMotion(specAbs, env = process.env, { maxBytes = VIDEO_MAX_BYTES, script = path.join(siblingDir('make-motion'), 'scripts/make.mjs') } = {}) {
   if (!fs.existsSync(script)) {
-    throw new SiblingError(`make-motion/scripts/render.mjs not found in ${siblingDir('make-motion')}; ${MISSING_HINT(['make-motion'])} ${doctorHint('make-motion')}`, installCommand(['make-motion']));
+    throw new SiblingError(`make-motion/scripts/make.mjs not found in ${siblingDir('make-motion')}; ${MISSING_HINT(['make-motion'])} ${doctorHint('make-motion')}`, installCommand(['make-motion']));
   }
   const timeoutMs = timeoutOf(env);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'explainer-motion-render-'));
   try {
     const file = path.join(tmp, 'video.mp4');
-    const r = await runChild(process.execPath, [script, ...motionArgs(specAbs, file, spec, pageTheme)], { cwd: tmp, env: childEnv(env), timeoutMs });
+    const r = await runChild(process.execPath, [script, ...motionArgs(specAbs, file)], { cwd: tmp, env: childEnv(env), timeoutMs });
     if (r.error || r.timedOut || r.status !== 0) throw new SectionErrors([{ path: 'spec', message: renderFailure(r, { timeoutMs }) }]);
     if (!fs.existsSync(file)) {
-      throw new SectionErrors([{ path: 'spec', message: 'make-motion finished without writing the video; run its scripts/render.mjs by hand to see why' }]);
+      throw new SectionErrors([{ path: 'spec', message: 'make-motion finished without writing the video; run its scripts/make.mjs by hand to see why' }]);
     }
     const size = fs.statSync(file).size;
     if (size > maxBytes) {
       throw new SectionErrors([{ path: 'spec', message: `rendered video is ${(size / MB).toFixed(1)} MB; the limit is ${maxBytes / MB} MB — shorten it or lower the size in the spec` }]);
     }
-    return { video: fs.readFileSync(file), poster: await posterFrame(file, tmp, (spec.scenes?.[0]?.duration ?? 0) * POSTER_POINT, { env }) };
+    return { video: fs.readFileSync(file), poster: await posterFrame(file, tmp, POSTER_SECONDS, { env }) };
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

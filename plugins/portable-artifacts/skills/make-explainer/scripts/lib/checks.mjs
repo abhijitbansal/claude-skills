@@ -211,8 +211,9 @@ function interactiveClash(section, at, dir, spec) {
 }
 
 // motion: the video and poster are usable files in the spec folder; a spec (used when there is no
-// video) must pass make-motion's own validation, with its errors re-pathed under the section's `spec`
-// field. make-motion is only loaded for a spec that will be rendered. Nothing is rendered here.
+// video) is a make-motion film (version 2) and must pass make-motion's own validation, with its errors
+// re-pathed under the section's `spec` field (a version 1 spec gets the validator's own refusal).
+// make-motion is only loaded for a spec that will be rendered. Nothing is rendered here.
 registerCheck('motion', async ({ section, path: at, dir }) => {
   const errors = [];
   const warnings = [];
@@ -238,10 +239,13 @@ async function motionSpecErrors(ref, at, dir) {
   if (source.error) return [{ path: where, message: source.error }];
   let api;
   try {
-    api = await loadSibling('make-motion', 'scripts/lib/spec.mjs');
+    // list.mjs first: its imports register the kinds, looks, modes, cuts and fields that spec.mjs judges a film against
+    // (as scripts/make.mjs does); without it every shot is an unknown kind.
+    await loadSibling('make-motion', 'scripts/v2/list.mjs');
+    api = await loadSibling('make-motion', 'scripts/v2/spec.mjs');
   } catch (e) {
     if (!(e instanceof SiblingError)) throw e;
     return [{ path: where, message: e.message }];
   }
-  return reportMotionErrors(api.validateSpec(source.spec, { dir: source.dir }).errors, where, source.file);
+  return reportMotionErrors(api.validateFilm(source.spec, { specDir: source.dir }).errors, where, source.file);
 }

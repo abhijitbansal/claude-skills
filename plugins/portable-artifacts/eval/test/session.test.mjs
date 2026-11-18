@@ -10,7 +10,7 @@ import * as F from './helpers/stream-fixtures.mjs';
 
 const made = [];
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
-const SPEC_NAME = 'motion.json';
+const SPEC_NAME = 'film.json';
 const parse = (events, opts = { specName: SPEC_NAME }) => parseSession(F.lines(events), opts);
 const stepOf = (s, what) => s.steps.filter((x) => x.what === what);
 
@@ -225,5 +225,11 @@ test('two operator models are both kept, joined, so a mixed run is not hidden', 
 test('without a spec name any skill spec file name counts; with one only that file does', () => {
   const events = [F.init(), F.toolUse({ id: 'a', name: 'Write', input: { file_path: '/w/diagram.json', content: '{}' } })];
   assert.equal(stepOf(parseSession(F.lines(events)), 'spec').length, 1);
-  assert.equal(stepOf(parseSession(F.lines(events), { specName: 'motion.json' }), 'spec').length, 0);
+  assert.equal(stepOf(parseSession(F.lines(events), { specName: 'film.json' }), 'spec').length, 0);
+});
+
+test('without a spec name, film.json is make-motion\'s spec file and the version 1 motion.json is not', () => {
+  const wrote = (file) => [F.init(), F.toolUse({ id: 'a', name: 'Write', input: { file_path: file, content: '{}' } })];
+  assert.equal(stepOf(parseSession(F.lines(wrote('/w/film.json'))), 'spec').length, 1);
+  assert.equal(stepOf(parseSession(F.lines(wrote('/w/motion.json'))), 'spec').length, 0);
 });

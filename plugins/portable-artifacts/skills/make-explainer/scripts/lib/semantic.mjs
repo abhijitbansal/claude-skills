@@ -228,7 +228,7 @@ function checkSection(s, i, errors, state) {
     case 'chart': checkChart(s, at, errors); break;
     case 'motion':
       if (s.video === undefined && s.spec === undefined) {
-        errors.push({ path: at, message: 'a motion section needs video (an .mp4 path) or spec (a motion.json path); add one' });
+        errors.push({ path: at, message: 'a motion section needs video (an .mp4 path) or spec (a make-motion film.json path); add one' });
       }
       break;
     case 'decision': checkDecision(s, at, errors); break;

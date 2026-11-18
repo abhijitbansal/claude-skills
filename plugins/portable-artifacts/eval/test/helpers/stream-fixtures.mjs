@@ -41,8 +41,8 @@ export const report = (ok, extra = {}) => JSON.stringify({ ok, output: ok ? '/wo
 
 export const lines = (events) => `${events.map((e) => JSON.stringify(e)).join('\n')}\n`;
 
-export const SPEC = '/work/motion.json';
-export const MAKE = 'node skills/make-motion/scripts/make.mjs motion.json --json';
+export const SPEC = '/work/film.json';
+export const MAKE = 'node skills/make-motion/scripts/make.mjs film.json --json';
 
 // The director writes the spec, delegates, the operator runs make.mjs once and the director views the sheet.
 export function delegatedSession({ requestedModel, makeOk = true, operatorModel = OPERATOR_MODEL, spec = SPEC } = {}) {

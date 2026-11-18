@@ -10,7 +10,7 @@ import path from 'node:path';
 
 const DELEGATING_TOOLS = new Set(['Agent', 'Task']);
 const SPEC_WRITERS = new Set(['Write', 'Edit', 'MultiEdit']);
-const SPEC_NAME = /^(dashboard|diagram|explainer|scene|motion)\.json$/;
+const SPEC_NAME = /^(dashboard|diagram|explainer|scene|film)\.json$/;
 const MAKE_COMMAND = /(?:^|[\s;&|(])node\s+[^;&|\n]*\bmake\.mjs\b/;
 const VIEW_FILE = /\.(png|jpe?g|webp|gif|html?)$/i;
 

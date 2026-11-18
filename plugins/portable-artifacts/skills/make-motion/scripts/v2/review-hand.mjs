@@ -21,8 +21,9 @@ async function inPage([film, inkUp, inkDown, pictures]) {
   const { createMeasure } = await import('/engine/page/text-style.mjs');
   const { handPlan, handFindings } = await import('/engine/hand/index.mjs');
   const timeline = buildTimeline(film, { fps: film.fps });
-  // what the stage built the film from: the loaded pictures' sizes and the film's prepared data (maps)
-  const { prepared = {} } = await (await fetch('/film.json')).json();
+  // what the stage built the film from: the loaded pictures' sizes and the film's prepared data (maps), which the stage
+  // kept from its own load of the film (engine/page/stage.mjs window.__prepared), so this makes no request of its own
+  const prepared = window.__prepared ?? {};
   const assets = new Map(Object.entries(pictures).map(([src, [width, height]]) => [src, { width, height }]));
   const measure = createMeasure(document.createElement('canvas').getContext('2d'));
   const stage = document.getElementById('stage');

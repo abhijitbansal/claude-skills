@@ -52,7 +52,7 @@ unless you opt in with `--image-api` (see below).
   chart as static SVG with a data table; a `scene` section embeds a make-scene
   3D scene (orbit it, hover for exact values) that starts only when scrolled
   into view, and shows a data table in decks and print; a `motion` section
-  plays an MP4 or renders a make-motion spec.
+  plays an MP4 or renders a make-motion film (version 2).
 
 > Agents: the instructions you follow are in [`SKILL.md`](SKILL.md). This
 > README is for people.
@@ -95,7 +95,7 @@ page, so keep the two together.
   one asks for it. Without them a spec with no diagram, chart, scene or icon still builds; with one
   missing, validate prints that exact command.
 - `motion` sections that point at an existing `.mp4` need nothing more. Rendering
-  a make-motion `spec` also needs the optional **`make-motion`** skill beside it,
+  a make-motion film (`spec`) also needs the optional **`make-motion`** skill beside it,
   ffmpeg and Chromium; `PA_MOTION_TIMEOUT_MS` bounds the render.
 - No browser is needed to validate or build. Only `scripts/check.mjs` (an optional
   headless check of the built page at 1280, 390 and 1800 px) and this skill's browser
