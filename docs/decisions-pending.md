@@ -249,3 +249,21 @@ A render caught poster's flat.mjs importing shared/contrast.mjs, a path the page
 ## cosmos second-wave kinds: leftovers (2026-11-18)
 
 The new cosmos kinds passed their look review (ship after fixes on both films). Open, default: fix in the release polish pass: the viral giants source line now sits at 1613 px, below the 1245 px platform line where app chrome may cover it (raise the band or shorten the rows); feed messages do not pop in and carry no sender structure; the list does not use the disc motif; the map's land contrast, label size, Antarctica strip and tall crop; code wraps one statement and its highlight boxes differ in size; the screen zoom leaves sliced pieces and a grey wash; the 16:9 timeline band does not fill; cosmos cuts are hard; the measured tall fill for eight shots. The tall photo keeps its sun only through the film's focus field, and its stair-stepped edges come from the 960x540 test photo, not the engine. Reports: .superpowers/sdd/2026-11-16-pa2-run2/gate-cosmos-b-1.md, c5-report.md, c6-report.md.
+
+## Kinds parked in the four new looks (2026-11-18)
+
+ledger, poster, keynote and marker are listed. Each parks the kinds below: they validate and render in that look, and the look does not list them (`experimental: true` on the kind in `engine/looks/<look>.mjs`). Default: leave them parked. The shortest path to finish each is given; every path ends the same way: drop `experimental`, add the kind to that look's gate films, review once, record it in the gate report.
+
+- **ledger, number.** On 9:16 the desk number composition leaves 76 percent of the height empty (the 35 percent rule). Path: a tall number composition for ledger (figure, label and delta spread down the band).
+- **keynote, number.** Same cause: 75 percent of the height empty on 9:16 (`keynote-kinds.test.mjs`). Path: the same tall number composition as ledger, with keynote's data.
+- **poster, number.** On 9:16 in viral the digits do not fit at poster's numeral floor and the suffix leaves the platform safe zone. Path: a ruling on the bleeding numeral against ban 10, then a tall composition that keeps the suffix inside the safe zone.
+- **poster, feed.** The tall reply card stood blank 1.3 to 2.2 s in the final gate review, the one 9:16 shot that failed. Path: put the reply plate and its first words on screen from the start of the shot, then re-review the 9:16 chat.
+- **keynote, clipping.** On 9:16 the author caption enters ghosted on frame 0, the push runs past the picture's top into an empty paper band, and the caption card sits over a bar label inside the ringed region (ban 10). Path: a keynote clipping composition that fixes those three.
+- **marker, feed.** The hand speed is 5243 units a second at 16:9 and 8892 at 9:16 against the 2600 cap: speech bubbles are many strokes in one sentence each. Path: fewer strokes per bubble (a plain box or a rule), or one bubble per sentence of narration.
+- **marker, chart.** Race is parked in it as well, since a board can only change ranks by erasing. Hand speed is over the cap at both formats (9:16: 10948 units a second against 2600; 16:9: no time left): about 20 strokes in two sentences, and chart-draw gives no element a lesser form the hand can set at once. Path: give chart-draw a lesser "set at once" form for the elements the story does not need drawn, so the hand spends its time on the rest.
+- **marker, number.** The review is clean, but at 9:16 the settled board uses 35 percent of the height where `marker-tall.test.mjs` wants 65. Path: a tall number composition (the same one as ledger and keynote can be the start).
+- **marker, timeline.** At 16:9 three dates at three times the 60-unit minimum do not fit side by side. 9:16 is clean. Path: a stacked or two-row 16:9 layout for marker.
+- **marker, free.** The review is clean at 16:9. The example's bar runs off the right of a 9:16 frame (the stroke-edge audit finds it), and free is author-placed. Path: give the example its own tall layout.
+- **marker, screen and code** are excluded, not parked: a film asking for one is refused with the looks that support it. No path planned.
+
+Records: the four look sections of `docs/superpowers/plans/2026-11-15-pa2-gate-report.md` and the comments in `engine/looks/<look>.mjs`.

@@ -41,6 +41,12 @@ and with Geist the four total 279648 bytes (273 KiB, measured with `stat`); with
 (346 KiB, measured with `stat`: 279648 + 74932), against the 600 KB budget (`test/v2/fonts.test.mjs`, `test/v2/cosmos-fonts.test.mjs`). The smaller `wght`-only and
 `wdth`-only variants of Fraunces and Archivo exist but would give up `opsz`, `SOFT` and `wdth`.
 
+## Final byte total (2026-11-18)
+
+Five files, sizes from `ls -l` on each file: Fraunces 121016, Archivo 90104, Nunito 39128, Geist 29400, Caveat 74932.
+Sum 354580 bytes (346 KiB). The budget in `test/v2/fonts.test.mjs` and `test/v2/cosmos-fonts.test.mjs` is
+`600 * 1024` = 614400 bytes, so 259820 bytes are left. This matches the total recorded above.
+
 ## Verify
 
 `shasum -a 256 <file>` for each file above. To refetch: `npm pack @fontsource-variable/<name>@5.3.0` and take

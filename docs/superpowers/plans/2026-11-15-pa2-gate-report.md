@@ -256,3 +256,21 @@ Gate films: references/examples/v2/gate-marker.json (16:9 pro, 6 kinds) and gate
 - Review 1: both NOT YET. Fails: every shot's first element was already on the board (from the plan ruling "frame 0 opens with the first element written"), the diagram drew arrows before boxes, the photo went full bleed, hard cuts into it. RULING REVISED (replaces that plan ruling): in marker the hand draws every element, titles, hero lines, kickers and badges included; frame 0 shows the pen down with the first stroke begun; boards change by erase or pan. Revision 1: drawFirst, story order, a pinned picture card, erase and pan cuts, compare bars to scale.
 - Review 2: both NOT YET; all ten cuts failed (the erase a hard band uncovering unwritten text, two hands in pans, a badge undrawn). Revision 2: a felt eraser removing an ink layer so the board keeps its tone and frame, one hand in pans, badges drawn last.
 - Review 3: both SHIP AFTER FIXES with no sheet failing: listed. Render: 16:9 926 frames, 43.3 ms per frame, 3.6 MB; 9:16 1001 frames, 41.7 ms per frame, 3.3 MB (make --json, controller); about 0.72x desk (earlier measure). Fix items: the eraser wipes the pinned photo like ink; the resting pen touches a final ? or full stop; the hand turns flat over text in learned and close; the URL and stamp too small at phone size; the tall photo crop halves the sun; all wipes identical; finished boards held under 1 s. Copy fixes after the review: the list claims only the North against the West it shows; compare gets the kicker Orders by region. Kinds parked in marker: chart (race as ruled), feed, number, timeline, free; screen and code excluded. Reports: .superpowers/sdd/2026-11-16-pa2-run2/gate-marker-1.md to -3.md.
+
+## Close-out (2026-11-18)
+
+Suite count, measured by the lead: the whole version 2 suite on the looks-complete tree (commit eef319b7) ran once with the real voice model: 4256 tests, 4256 pass, 0 fail, 0 todo (`.scratch/controller-v2-suite-2.tap`). I did not rerun it. The browser sweeps are the per-look renders recorded in the sections above, each by the controller or implementer named there.
+
+Listed looks (read from `test/v2/look-experimental.test.mjs` and `test/v2/looks.test.mjs`): desk, pop, cosmos, ledger, poster, keynote, marker.
+
+Status per look. Parked kinds are read from the `experimental: true` entries in `engine/looks/*.mjs`.
+
+- desk: SHIPPED. Gate closed on the owner's decision after one targeted fix pass and no fourth review (see "Owner's decision"). No parked kinds. Open items are in `docs/decisions-pending.md`.
+- pop: SHIPPED. Same gate and decision as desk. No parked kinds. The `ripple` cut is parked in it (`engine/looks/pop.mjs` line 66), after two revision rounds (see "Transitions" in `docs/decisions-pending.md`).
+- cosmos: SHIPPED. 4 reviews (3, then review 4 after the owner asked to finish it). No parked kinds. Second-wave kinds passed their look review.
+- ledger: SHIPPED. 3 reviews, both films ship after fixes in review 3. Parked kind: number (`ledger.mjs` line 134: no tall number composition).
+- poster: SHIPPED. 3 reviews, 16:9 ship after fixes; 9:16 had one failing shot (the chat) in review 3 and the controller parked feed. Parked kinds: number, feed (`poster.mjs` lines 174 and 240).
+- keynote: SHIPPED. 3 reviews, both films ship after fixes in review 3. Parked kinds: number, clipping (`keynote.mjs` lines 136 and 140).
+- marker: SHIPPED. 3 reviews, both films ship after fixes in review 3. Parked kinds: chart (race type too), feed, number, timeline, free (`marker.mjs` lines 168, 189, 192, 194 and 198). Excluded kinds: screen, code (no composition entry).
+
+Fix items still open for each look sit in its section above and in `docs/decisions-pending.md`. Nobody has listened to the sound of the gate films (the plan says so).
