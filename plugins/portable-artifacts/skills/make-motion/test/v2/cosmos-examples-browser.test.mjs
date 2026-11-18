@@ -39,7 +39,7 @@ function stripedPng(w, h) {
     return Buffer.concat([len, body, crc]);
   };
   const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
-  const rows = Array.from({ length: h }, (_, y) => Buffer.concat([Buffer.from([0]), ...Array.from({ length: w }, () => Buffer.from(Math.floor(y / 10) % 2 ? [40, 90, 200] : [235, 240, 245]))]));
+  const rows = Array.from({ length: h }, (_, y) => Buffer.concat([Buffer.from([0]), Buffer.alloc(w * 3).fill(Buffer.from(Math.floor(y / 10) % 2 ? [40, 90, 200] : [235, 240, 245]))]));
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(Buffer.concat(rows))), chunk('IEND', Buffer.alloc(0))]);
 }
 
@@ -47,7 +47,7 @@ let specDir;
 before(() => {
   specDir = mkdtempSync(path.join(tmpdir(), 'mm-v2-cosmos-examples-'));
   mkdirSync(path.join(specDir, 'assets'));
-  writeFileSync(path.join(specDir, 'assets', 'screenshot.png'), stripedPng(640, 400));
+  writeFileSync(path.join(specDir, 'assets', 'screenshot.png'), stripedPng(1600, 1000)); // wide enough for the screen kind's whole zoom (a 640 px picture gives the resolution finding)
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
 

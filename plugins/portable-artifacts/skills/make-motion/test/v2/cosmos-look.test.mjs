@@ -188,7 +188,10 @@ test('its field is registered and plans with its params at 16:9 and 9:16', () =>
 test('every move parses and has the grammar keys; tracking answers each role and refuses others', () => {
   const l = look();
   assert.deepEqual(Object.keys(l.moves), ['enter', 'exit', 'emphasize', 'draw', 'count', 'rise', 'wipe', 'slam', 'pop', 'settle']);
-  for (const key of ['rise', 'wipe', 'slam', 'pop', 'settle']) assert.equal(l.moves[key], null, `${key}: not used by the parked look`);
+  for (const key of ['rise', 'wipe', 'slam']) assert.equal(l.moves[key], null, `${key}: not used by the look`);
+  // the second-wave kinds ask for two of the named moves: the screen's card pops in, a part settles into place (looks phase)
+  assert.deepEqual({ ...l.moves.pop }, { ease: 'outBack', dur: 0.55, scale: 0.92 });
+  assert.deepEqual({ ...l.moves.settle }, { ease: 'inOutCubic', dur: 0.6 });
   for (const [key, move] of Object.entries(l.moves).filter(([, m]) => m !== null)) {
     assert.equal(typeof ease(move.ease), 'function', key);
     assert.ok(move.dur > 0, key);

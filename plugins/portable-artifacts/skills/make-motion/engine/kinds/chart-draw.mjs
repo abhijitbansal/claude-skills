@@ -57,6 +57,7 @@ export function chartStyle(ctx, data) {
     // `startFinal` (ledger): columns and bars grow in their final colours, never ink before the dim grey
     startFinal: data.startFinal === true,
     growFrom: data.growFrom ?? 0,
+    growEase: data.growEase,
     tight: data.tight === true,
     together: data.together === true,
     // `valuesSet` (keynote, n2 ruling 4): a mark's value label appears at full ink once its mark has grown, never faint
@@ -132,7 +133,9 @@ function markNodes(shot, ctx, style, { k, n, x, y, across, length, horizontal, t
   const win = growWindow(k, n, times.growEnd, style.together);
   // `growFrom` (poster, gate-poster-1 ruling 2): a mark grows from this share of its length, so the shot opens on every
   // bar's base; 0 (from nothing) in every other look
-  const grow = landing(win.end, { ease: look.moves.enter.ease, dur: win.dur }, style.growFrom, 1, style.step);
+  // `growEase` (cosmos, gate review 4: the bars overshot by 8 percent): a data mark grows on this ease, one that never
+  // passes its end; else the look's enter ease
+  const grow = landing(win.end, { ease: style.growEase ?? look.moves.enter.ease, dur: win.dur }, style.growFrom, 1, style.step);
   const d = style.round > 0 ? roundPath(across, length, horizontal, style.round) : markPath(across, length, horizontal);
   const scale = horizontal ? { scaleX: grow } : { scaleY: grow };
   const dimmed = hl >= 0 && k !== hl;

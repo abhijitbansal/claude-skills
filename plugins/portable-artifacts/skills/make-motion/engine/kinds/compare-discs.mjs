@@ -144,8 +144,15 @@ function headNode(shot, head, { left, top }, ctx, turn) {
 
 // The smaller disc at (cx, cy) radius r: the look's Earth mark when it stands at the dot floor (its size), else a dot of
 // the same blue with its ring.
+// `plain` (cosmos, gate review 4: the ringed dot read as a radio button and doubled the dot's apparent size in a
+// to-scale drawing): the disc alone, in the Earth's blue, no ring.
+const ringSpan = (d, unit) => (d.plain === true ? 0 : (d.ring.gap + d.ring.width) * unit);
 function dotNodes(id, ctx, { cx, cy, r }) {
   const { look, unit, data } = ctx;
+  if (data.discs.plain === true) {
+    const fill = colourOf(look, look.earth?.color ?? 'ink');
+    return [node('group', `${id}.earth`, { x: cx, y: cy }, { children: [node('path', `${id}.earth.dot`, { d: circlePath(r), fill })] })];
+  }
   if (look.earth && Math.abs(r - look.earth.r * unit) < 1e-6) return earthNodes(`${id}.earth`, look, { cx, cy, unit });
   const ring = data.discs.ring;
   return [
@@ -172,7 +179,7 @@ function wideLayout(shot, ctx, sz, size, keys) {
   const span = editorialSpan(ctx, 1, look.grid.columns), bounds = editorialBounds(ctx);
   const rb = size.big / HALF, rs = size.small / HALF;
   const big = { cx: span.x + d.wide.edge * span.w + rb, cy: bounds.at(MID), r: rb };
-  const gap = d.gap * unit, dotR = rs + (d.ring.gap + d.ring.width) * unit;
+  const gap = d.gap * unit, dotR = rs + ringSpan(d, unit);
   const axis = span.x + HALF * dotR + gap;
   const room = arcRight(big, bounds.top, bounds.bottom, clearOf(ctx, sz, rb)) - axis;
   const small = groupSet(shot, keys.small, ctx, sz, { maxWidth: room, align: 'left' });
@@ -195,7 +202,7 @@ function tallLayout(shot, ctx, sz, size, keys) {
   const d = ctx.data.discs;
   const span = editorialSpan(ctx, 1, look.grid.columns), bounds = editorialBounds(ctx);
   const rb = size.big / HALF, rs = size.small / HALF;
-  const gap = d.gap * unit, dotR = rs + (d.ring.gap + d.ring.width) * unit;
+  const gap = d.gap * unit, dotR = rs + ringSpan(d, unit);
   const small = groupSet(shot, keys.small, ctx, sz, { maxWidth: span.w, align: 'center' });
   const head = headSet(shot, size.ratio, keys, ctx, sz, span.w, 'center');
   const bigSet = groupSet(shot, keys.big, ctx, sz, { maxWidth: span.w, align: 'center', named: !d.subject });

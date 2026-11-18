@@ -112,7 +112,9 @@ const groupBox = (nodes, side) => {
 
 // gate round 3: the sun grows in at the turn (its `rise` group moves; the body itself has no placeholder state), Earth
 // is the Earth mark; the reveal and the axis are tested in cosmos-gate3.test.mjs
-test('sizes: the large disc is the same sun, gold whenever it is on screen, with a bloom; Earth a dot with a ring', () => {
+// gate review 4 (looks phase): the compare's Earth is a plain disc (kinds.compare.discs.plain): the ring stays on the
+// number's line and the quote, where Earth is a marker (cosmos-review4.test.mjs)
+test('sizes: the large disc is the same sun, gold whenever it is on screen, with a bloom; Earth a plain disc', () => {
   for (const expand of [wide, tall]) {
     const out = expand(SIZES);
     const body = byId(out.nodes, 'z.right.sun');
@@ -122,7 +124,7 @@ test('sizes: the large disc is the same sun, gold whenever it is on screen, with
     assert.deepEqual(body.tracks ?? {}, {}, 'no placeholder state: gold whenever it shows');
     assert.ok(byId(out.nodes, 'z.right.sun.bloom'), 'a bloom past the limb');
     const dot = byId(out.nodes, 'z.left.earth.dot'), ring = byId(out.nodes, 'z.left.earth.ring');
-    assert.ok(dot && ring && ring.props.stroke, 'Earth: a dot with a ring round it');
+    assert.ok(dot && !ring, 'Earth: a disc with no ring round it');
   }
 });
 

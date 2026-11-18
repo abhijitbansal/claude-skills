@@ -183,6 +183,9 @@ for (const look of LOOKS) {
 }
 
 test('a look with no media data does not support it', () => {
-  assert.deepEqual(media.validate({ id: 'm', show: 'media', src: 'shot.png' }, { look: registries.looks.get('cosmos') }).map((p) => p.path), ['show']);
+  // every listed look has media data now (cosmos got it in the looks phase): cosmos's own data without its media entry
+  const cosmos = registries.looks.get('cosmos');
+  const without = { ...cosmos, kinds: Object.fromEntries(Object.entries(cosmos.kinds).filter(([kind]) => kind !== 'media')) };
+  assert.deepEqual(media.validate({ id: 'm', show: 'media', src: 'shot.png' }, { look: without }).map((p) => p.path), ['show']);
   assert.ok(filmOf([example()]));
 });

@@ -103,7 +103,10 @@ export function geometryOf(shot, ctx, data, room) {
   const need = measureOf(shot, ctx.prepared, heroed);
   const gap = data.pad * unit;
   // data.heroMax (units, poster): the hero no larger, so the code under it has the height to fill the width
-  const maxHero = heroed ? Math.min(heroSize(heroed.text, ctx, room.w), (data.heroMax ?? Infinity) * unit) : 0;
+  // data.heroInset (units, cosmos): the hero set this far in from each side of the room, so the camera's drift (and the
+  // overhang of a glyph) never takes it out of the safe area late in the shot
+  const inset = (data.heroInset ?? 0) * unit;
+  const maxHero = heroed ? Math.min(heroSize(heroed.text, ctx, room.w - 2 * inset), (data.heroMax ?? Infinity) * unit) : 0;
   const probe = heroed ? heroSet(heroed, ctx, maxHero) : null;
   const cardRoom = probe ? { ...room, y: room.y + probe.h + gap, h: room.h - probe.h - gap } : room;
   const fit = fitCode(need, { look: ctx.look, data, unit, inner: innerOf(cardRoom, data, unit) });
@@ -123,7 +126,7 @@ export function geometryOf(shot, ctx, data, room) {
   const top = room.y + (room.h - block) / HALF; // the block centred in the room
   const panel = [room.x + (room.w - w) / HALF, top + (probe ? probe.h + gap : 0), w, h];
   const inner = { x: panel[0] + pad, y: panel[1] + pad, w: w - HALF * pad, h: h - HALF * pad };
-  const hero = probe ? { ...probe, x: room.x + probe.left, y: top } : null;
+  const hero = probe ? { ...probe, x: room.x + inset + probe.left, y: top } : null;
   // cols: the columns the panel holds; a line longer than that at the reading floor drops its runs past it (the review
   // says which line to cut), never shrinking under the floor nor spilling out of the panel
   return { fit: { ...fit, size }, font, advance, rowH, inner, panel, measure, x: inner.x, cols: Math.floor(inner.w / advance + COL_EPSILON), rowLimit, top: (k) => inner.y + k * rowH, titleRow: shot.title !== undefined && hero?.field !== 'title', hero };

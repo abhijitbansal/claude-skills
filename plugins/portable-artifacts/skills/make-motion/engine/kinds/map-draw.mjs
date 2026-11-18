@@ -10,7 +10,8 @@ import { node } from '../graph/node.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { gridSpan } from '../looks/index.mjs';
 import { colourOf, at2, pathPoints, styleOf } from '../devices/shared.mjs';
-import { fontFor, sizeAt, isWide, isEditorial, setCase, overlaps, cardOf, tagBox } from './shared.mjs';
+import { fontFor, sizeAt, isWide, isEditorial, setCase, overlaps, cardOf, tagBox, fitDisplay } from './shared.mjs';
+import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { arrivalTrack, roomOf, EDITORIAL_WIDE_COLUMN } from './arrivals.mjs';
 import { secondarySize, SOURCE_PREFIX } from './secondary.mjs';
 
@@ -18,6 +19,7 @@ const HALF = 2;
 const PIN = 11; // units: a pin's radius
 const NO_WRAP = 1e6;
 const STICKER_PAD = 18; // units: the sticker device's own default pad (engine/devices/sticker.mjs)
+const TITLE_LINES = 3; // a fitted title (data.titleFit) takes at most this many lines
 
 // The look's reading floor for the map's words, its second step on every format: a place name at the wide frame's first
 // step did not read on the phone tile (gate-kinds-b-1).
@@ -29,8 +31,20 @@ const text = (ctx, role, size, words, maxWidth) => {
 };
 
 // The desk title: the largest of `steps` that holds it in three lines at three times the labels; null without a title.
+// A look whose scale has no step between three times the labels and its largest (data.titleFit, cosmos: 136 against
+// labels of 46) fits the title to any size from three times the labels up to its largest step, in at most three lines
+// and `titleHeight` of the room's height, so the hero rule holds without the title taking the whole frame.
+function fittedTitle(shot, ctx, steps, width) {
+  const { look, unit, measure } = ctx;
+  const max = sizeAt(look, Math.max(...steps), unit);
+  const opts = { text: setCase(look, 'display', shot.title), font: fontFor(look, 'display', max, unit), maxWidth: width, align: 'left', measure };
+  const set = fitDisplay(opts, { min: MIN_HERO_RATIO * floorSize(ctx), max, maxHeight: roomOf(ctx).h * ctx.data.titleHeight, maxLines: TITLE_LINES }, look, unit);
+  return { font: set.font, layout: set.layout };
+}
+
 function deskTitle(shot, ctx, steps, width) {
   if (shot.title === undefined) return null;
+  if (ctx.data.titleFit === true) return fittedTitle(shot, ctx, steps, width);
   const sets = [...steps].sort((a, b) => b - a).map((step) => text(ctx, 'display', sizeAt(ctx.look, step, ctx.unit), shot.title, width));
   return sets.find((s) => s.layout.lines.length <= 3 && s.layout.width <= width) ?? sets.at(-1);
 }
@@ -282,7 +296,11 @@ function titleNodes(shot, ctx, x, y, width) {
   if (isEditorial(ctx.look)) {
     // a look may name the steps a wide frame's title takes (data.titleStepsWide, ledger: one line across the top)
     const steps = isWide(ctx.canvas) && ctx.data.titleStepsWide !== undefined ? ctx.data.titleStepsWide : ctx.data.titleSteps;
-    const set = deskTitle(shot, ctx, steps, width);
+    // a fitted title (cosmos) is inset by the camera's drift each side, so it never leaves the safe area late in the
+    // shot (it was set flush on the room's edge; the real-glyph sweep caught the W of "Where" 5 px out)
+    const inset = ctx.data.titleFit === true ? ctx.look.camera.drift * ctx.unit : 0;
+    const set = deskTitle(shot, ctx, steps, width - 2 * inset);
+    x += inset;
     return { nodes: [node('text', `${shot.id}.title`, { x, y, layout: set.layout, font: set.font, fill: ctx.look.palette.ink, role: 'hero' })], h: set.layout.height };
   }
   const box = tagBox(ctx, `${shot.id}.title`, shot.title, x, y);

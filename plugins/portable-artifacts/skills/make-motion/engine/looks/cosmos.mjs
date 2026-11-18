@@ -92,8 +92,9 @@ export const cosmos = {
     emphasize: { ease: PLAIN, dur: 0.4 },
     draw: { ease: PLAIN, dur: 0.6 },
     count: { ease: PLAIN, dur: 0.9 },
-    // the second-wave named moves (engine/moves): the parked look does not use them
-    rise: null, wipe: null, slam: null, pop: null, settle: null,
+    // the second-wave named moves (engine/moves): the look uses the two its second-wave kinds ask for, the screen's card
+    // (`pop`, the enter spring) and a part settling into place (`settle`, a plain ease: the data never overshoots)
+    rise: null, wipe: null, slam: null, pop: { ease: SMOOTH, dur: 0.55, scale: 0.92 }, settle: { ease: PLAIN, dur: 0.6 },
   },
   wordStagger: 0,
   // the resting camera: a slow linear drift across each shot (the 'desk' camera style), no shake
@@ -124,6 +125,10 @@ export const cosmos = {
     cutout: { keylineColor: '#2e2770' },
     // what recedes goes under a scrim of the deep navy: a field-coloured scrim
     focus: { dim: 0.6, scrim: 'deep' },
+    // a route (the map kind) is light crossing the sky: a gold line with round caps; a place or part name in ink on a
+    // lavender leader ending in a dot
+    route: { color: 'accent', width: 4, cap: 'round' },
+    label: { text: 'ink', line: 'ink2', width: 2, dot: 6 },
   },
   // The caption style (registries.captions, engine/captions/pill.mjs): the spoken words on one line in a pill at the
   // bottom of the grid, each word in the accent while it is spoken.
@@ -149,7 +154,8 @@ export const cosmos = {
     // down to scale step `fromStep` (a three-digit figure in the 9:16 safe zone); `affix` 'baseline': a unit sits on the
     // figure's baseline (never an exponent); `countAlign` 'right': a count grows leftward from the unit; `fromFirst`: a
     // count opens on its first non-zero step
-    number: { sky: { labelStep: 3, labelGap: 48, above: 56, line: { width: 4, gap: 28 }, light: 30, fit: 0.86, out: 0.35 }, glow: true, besideGap: 64, fromStep: 4, affix: 'baseline', countAlign: 'right', fromFirst: true },
+    // (gate review 4, glow only on light) `glow` false: the figure carries none; the light is the sun and the line
+    number: { sky: { labelStep: 3, labelGap: 48, above: 56, line: { width: 4, gap: 28 }, light: 30, fit: 0.86, out: 0.35 }, glow: false, besideGap: 64, fromStep: 4, affix: 'baseline', countAlign: 'right', fromFirst: true },
     // end: as desk's, square (`turn` 0), and a slow `ring` round the mark's chip (end.mjs ringNodes: `gap` and `width`
     // units, drawing on over `dur` s); from step 3 so the closing line fits the narrow 9:16 safe zone
     end: { fromStep: 3, max: 280, toWide: 11, toTall: 12, height: 0.56, centre: 0.5, askGap: 0.42, askSteps: [2, 3], markSteps: [1, 2], turn: 0, ring: { gap: 14, width: 3, dur: 1.6 },
@@ -180,7 +186,8 @@ export const cosmos = {
     // (gate round 3) the discs staged as a reveal: the smaller side from the first frame, the sun growing in from the
     // edge over `reveal` s at the turn, the headline's words lighting `stagger` s apart; the headline names its subject
     // (`subject`), `groupGap` em of the headline between the groups
-    compare: { discs: { minDot: 28, fill: 0.8, wide: { edge: 0.66 }, tall: { edge: 0.62 }, gap: 12, groupGap: 0.3, valueStep: 3, ratioStep: 4, ring: { gap: 14, width: 4 }, minRatio: 2, maxRatio: 1e9, more: 'more than', bigCap: 20, subject: true, reveal: 1.2, stagger: 0.12 }, vs: 'pill', valueAccent: true, plainPoints: true, fill: 0.62, rim: { alpha: 0.45, blur: 34 }, gap: 6, centre: 0.46, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointStep: 2, pointScale: 1, picture: 0.4, pictureGap: 32 },
+    // (gate review 4) `plain`: the smaller disc is the Earth's blue alone, no ring: a measured body, drawn to scale
+    compare: { discs: { plain: true, minDot: 28, fill: 0.8, wide: { edge: 0.66 }, tall: { edge: 0.62 }, gap: 12, groupGap: 0.3, valueStep: 3, ratioStep: 4, ring: { gap: 14, width: 4 }, minRatio: 2, maxRatio: 1e9, more: 'more than', bigCap: 20, subject: true, reveal: 1.2, stagger: 0.12 }, vs: 'pill', valueAccent: true, plainPoints: true, fill: 0.62, rim: { alpha: 0.45, blur: 34 }, gap: 6, centre: 0.46, pad: 48, valueFromStep: 4, valueMax: 220, valueGap: 0.3, valueTitle: 0.55, titleFromStep: 3, titleMax: 220, titleLines: 4, titleGap: 0.45, pointStep: 2, pointScale: 1, picture: 0.4, pictureGap: 32 },
     // chart: as desk's, the marks in a shape colour (`marks`: one series, one colour; alternating read as categories),
     // far ends rounded at `round` units (half the width read as domes, rendered), and the highlighted mark in the accent with `glow` units of soft light round it
     // (chart-draw.mjs); every mark labelled directly (`direct`, `refs` false: no axis, gridlines or ticks), marks `fill` of
@@ -193,7 +200,31 @@ export const cosmos = {
     // floor: readable on the phone tile), the claim held at three times the smallest text (`titleFloor` 'smallest': the
     // quieter source), so it is smaller than the chart; the highlighted bar lights in ink (`hlFill`), gold only in the
     // light round it; on a tall frame the claim from column 1 (`titleFromTall`), on the plot's left edge
-    chart: { titleToWide: 12, titleToTall: 12, titleFromTall: 1, titleMax: 168, titleLines: 4, titleGap: 56, labelStep: 2, labelScale: 1.7, sourceStep: 1, sourceGap: 5, gap: 14, line: 6, ref: 2, axis: 3, dim: 0.65, refs: false, direct: true, fill: 0.8, fillTall: 0.65, dimTo: 'ink2', marks: ['ink2'], labelsAbove: 'tall', round: 16, glow: 22, minPlot: 0.4, titleMargin: 1.03, titleFloor: 'smallest', hlFill: 'ink' },
+    chart: { titleToWide: 12, titleToTall: 12, titleFromTall: 1, titleMax: 168, titleLines: 4, titleGap: 56, labelStep: 2, labelScale: 1.7, sourceStep: 1, sourceGap: 5, gap: 14, line: 6, ref: 2, axis: 3, dim: 0.65, refs: false, direct: true, fill: 0.8, fillTall: 0.65, dimTo: 'ink2', marks: ['ink2'], growEase: 'outCubic', labelsAbove: 'tall', round: 16, glow: 22, minPlot: 0.4, titleMargin: 1.03, titleFloor: 'smallest', hlFill: 'ink' },
+    // The second-wave kinds (the looks phase), in cosmos's own vocabulary: the rounded card (`devices.card`), the lavender
+    // for chrome and the deep navy for what recedes, gold only for light (a lit item, a route, a pin), the blue and pink
+    // shapes for data marks.
+    // media: the picture as shot (no treatment), its caption set whole from frame 0 on the rounded card (`setOnOpen`: no
+    // card holding one word)
+    media: { setOnOpen: true, treatment: 'none', push: 1.04, captionSteps: [4, 3, 2], captionLines: 2, heroSteps: [5, 4, 3, 2], maxLines: 3, cardPad: 40, toWide: 6, toTall: 12, besideFrom: 8, gap: 48 },
+    // screen: the screen in a rounded frame on the card's violet with the lavender window dots and the deep navy address
+    // pill; what recedes under a deep-navy mask at 0.9 (`pushDim`) as the camera pushes in. No `ring`: cosmos's circle is an
+    // ellipse, which ran across the lifted card and its heading on the 16:9 sheet
+    screen: { pushDim: 0.9, fill: '#2e2770', line: 'rule', lineWidth: 2, dots: 'ink2', pill: 'deep', text: 'ink', urlText: 'ink2', wideShare: 0.78, gap: 56 },
+    // map: the land a step lighter than its rounded card, the borders in the card's violet, the highlighted region and the
+    // pins lit in the accent, place names in the label face, the places keyed on a tall frame in lavender discs
+    map: { wholeTall: true, card: true, land: '#4d4296', borders: '#2e2770', borderWidth: 1.2, highlight: 'accent', multiply: false, pin: 'accent', labelFace: 'label', titleAbove: true, titleFit: true, titleHeight: 0.3, titleStepsWide: [5], titleTo: 5, titleSteps: [5], listGap: 10, gap: 40, keyFill: 'ink2', keyText: 'deep' },
+    // diagram: rounded nodes, lavender arrows, edge labels on a deep plate
+    diagram: { openNodes: 8, fullColumn: 'room', card: true, steps: [4, 3, 2, 1], maxLines: 2, pad: 28, gap: 48, margin: 10, platePad: 8, plate: 'deep', arrow: 'ink2', arrowWidth: 4, head: 22, text: 'ink', edgeText: 'ink2', titleSteps: [5, 4, 3], titleGap: 48, dim: 0.35, current: false, advance: 0.55 },
+    // timeline: a lavender line with its ticks, every event set from frame 0 and the spoken one lit
+    // `whenSizes`: dates at 140 units, between the scale's 136 and 232 (136 is under three times the events' 46, and 232
+    // does not fit a column on 16:9: measured with the fake measure, 14.5 units of overlap)
+    timeline: { previews: true, whatFace: 'text', whenSteps: [5, 4], whenSizes: [140], whatSteps: [2], whenLines: 2, whatLines: 3, gap: 24, inset: 16, lineGap: 28, lineX: 12, textGap: 48, partGap: 12, line: 'ink2', lineWidth: 4, tick: 18, titleSteps: [5, 4], titleGap: 48, advance: 0.55 },
+    // code: on the rounded panel, the tokens in the blue and pink shapes and the lavender, the lit line on a violet band
+    code: { heroInset: 10, cardWide: true, setOnOpen: true, font: { family: 'JetBrains Mono', weight: 400, width: 'normal' }, advance: 0.6, lineHeight: 1.4, pad: 48, steps: [2, 3], card: true, roles: { plain: 'ink', keyword: 'shape2', string: 'shape', number: 'shape2', comment: 'ink2', name: 'ink', punct: 'ink2' }, highlight: { band: '#352d6e', multiply: false }, removed: 'shape', added: 'shape2', strike: 4, prompt: 'ink2', heroAdvance: 0.5 },
+    // feed: rounded bubbles in two violets, the app's disc in a shape colour, every message set from frame 0, the spoken
+    // one in ink and the others in lavender
+    feed: { lit: { spoken: 'ink', other: 'ink2' }, face: 'display', titleFace: 'label', steps: [2, 3, 4], maxLines: 4, pad: 28, gap: 20, share: 0.82, radius: 36, bold: 700, me: { fill: '#3a3180', text: 'ink' }, them: { fill: '#2e2770', text: 'ink' }, card: { fill: '#2e2770', text: 'ink' }, discs: ['shape', 'shape2', 'ink2'], discText: 'deep', dots: 'ink2', title: 'ink2', lineWidth: 0, shadow: false },
   },
   post: { grain: 0.01, halftone: 0, bloom: 0 },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.

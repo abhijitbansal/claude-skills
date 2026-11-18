@@ -70,9 +70,12 @@ function titlePairs(titleSize, floor, unit) {
 export function fitEvents(events, env) {
   const { look, data, unit } = env;
   const floor = sizeAt(look, env.floorStep, unit);
-  const pairs = data.underTitle && env.titleSize ? titlePairs(env.titleSize, floor, unit) : [...data.whenSteps].sort((a, b) => b - a).flatMap((ws) => [...data.whatSteps].sort((a, b) => b - a)
-    .map((ts) => [sizeAt(look, ws, unit), sizeAt(look, ts, unit)])
-    .filter(([w, t]) => t >= floor - EPS && w >= HERO_RATIO * t - EPS));
+  // data.whenSizes (cosmos): explicit date sizes in units, for a scale with no step between three times the events' words
+  // and its largest (136 against 46: the dates would be 232 and fill the column); else the steps of data.whenSteps
+  const whens = data.whenSizes === undefined ? [...data.whenSteps].sort((a, b) => b - a).map((ws) => sizeAt(look, ws, unit)) : [...data.whenSizes].sort((a, b) => b - a).map((s) => s * unit);
+  const pairs = data.underTitle && env.titleSize ? titlePairs(env.titleSize, floor, unit) : whens.flatMap((w) => [...data.whatSteps].sort((a, b) => b - a)
+    .map((ts) => [w, sizeAt(look, ts, unit)])
+    .filter(([wide, t]) => t >= floor - EPS && wide >= HERO_RATIO * t - EPS));
   const tries = pairs.map(([w, t]) => ({ ...setAt(events, env, w, t), whenSize: w, whatSize: t }));
   const fit = tries.find((s) => holds(s, env));
   return fit ? { ...fit, fits: true } : { ...(tries.at(-1) ?? setAt(events, env, HERO_RATIO * floor, floor)), fits: false };

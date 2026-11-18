@@ -313,8 +313,9 @@ for (const format of Object.keys(FILMS)) {
   });
 }
 
-test('ruling 1: the feed changes leave desk, pop and cosmos feed data untouched', () => {
-  for (const name of ['desk', 'pop', 'cosmos']) {
+// (cosmos left this list in the looks phase: it has its own feed data, with `lit`, ledger's switch, set deliberately)
+test('ruling 1: the feed changes leave desk and pop feed data untouched', () => {
+  for (const name of ['desk', 'pop']) {
     const data = registries.looks.get(name).kinds?.feed ?? {};
     for (const key of ['titleSlug', 'indent', 'lit']) assert.equal(data[key], undefined, `${name} feed ${key}`);
   }
