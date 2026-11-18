@@ -179,7 +179,7 @@ export const keynote = {
     // wide cannot be enlarged on a tall panel without slicing it); `cropRegion`: an untitled one keeps the region panel,
     // its crop never narrower than the region
     // The plan's turned-in-depth card with a second card behind and parallax is not built (open, n2 report)
-    // gate-keynote-1 rulings 1, 2 and 4: `pushPad` 60 units (the title-safe inset, template/formats.mjs safeInsets: 60 px
+    // gate-keynote-1 rulings 1, 2 and 4: `pushPad` 60 units (the title-safe inset, engine/formats.mjs safeInsets: 60 px
     // at 1080): at 16:9 the push lands the whole card centred inside it, its title and url kept on (pushed toward the
     // region the card hugged the left edge, the right 29 percent of the frame empty, and the chrome text faded leaving
     // blank pills); at 9:16 the region lifts off the card as its own card that wide (regionCard: shown whole on the card,

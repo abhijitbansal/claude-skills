@@ -429,13 +429,14 @@ function staleOverrides(ctx, scope = 'all', dir = ctx.skillDir) {
     .map(([name]) => name);
 }
 
-// make-motion's voiceover (kokoro-js) and cutout (onnxruntime-node, running MODNet) stacks are optional. Each is its own
+// make-motion's voiceover (onnxruntime-node and phonemizer, running Kokoro) and cutout (onnxruntime-node, running MODNet) stacks
+// are optional. The voice stack is found by phonemizer, which only it holds. Each is its own
 // locked package in <skill>/optional/<dir>/ (package.json with its own overrides, and a package-lock.json), installed with
 // `npm ci --prefix` and loaded from there by scripts/lib/optional.mjs. They are not in the skill's own lockfile, so
 // `npm ci` in the skill folder leaves them alone, and installing one never removes the other.
-export const OPTIONAL = { kokoro: { dir: 'voice', pkg: 'kokoro-js' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } };
+export const OPTIONAL = { kokoro: { dir: 'voice', pkg: 'phonemizer' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } };
 
-// --ignore-scripts: the locked onnxruntime-node (1.21.0 under kokoro-js, 1.31.1 for cutout) has a postinstall that, on Linux x64
+// --ignore-scripts: the locked onnxruntime-node (1.21.0 for voice, 1.31.1 for cutout) has a postinstall that, on Linux x64
 // only, downloads CUDA provider libraries (a GitHub release, then NuGet) with no hash. The CPU binaries ship in the npm tarball,
 // which the lockfile's integrity covers, and neither skill uses a GPU.
 // A script that cannot find the package prints this same step in its hint, so the hint and `--fix <id>` never differ.
@@ -455,13 +456,14 @@ function staleLocked(ctx, dir) {
 }
 
 // The requirement behind kokoro() and cutout(): present when its own folder holds the package and nothing in it is stale.
-function optionalPackage({ id, why, size, notes }) {
+// oldPkg: what an install from before the move left in the skill's own node_modules (the voice stack then held kokoro-js).
+function optionalPackage({ id, why, size, notes, oldPkg = OPTIONAL[id].pkg }) {
   const { dir, pkg } = OPTIONAL[id];
   const folder = (ctx) => pp(ctx).join(ctx.skillDir, 'optional', dir);
   // An install from before the move sits in the skill's node_modules and is no longer loaded; `--fix node_modules` removes it.
   const oldInstallNote = (ctx) => {
     const oldDir = pp(ctx).join(ctx.skillDir, 'node_modules');
-    return ctx.exists(pp(ctx).join(oldDir, pkg)) ? `the old ${pkg} install in ${oldDir} is no longer used; --fix node_modules removes it` : null;
+    return ctx.exists(pp(ctx).join(oldDir, oldPkg)) ? `the old ${oldPkg} install in ${oldDir} is no longer used; --fix node_modules removes it` : null;
   };
   return {
     id,
@@ -490,9 +492,12 @@ function optionalPackage({ id, why, size, notes }) {
 export const kokoro = () => optionalPackage({
   id: 'kokoro',
   why: 'local text-to-speech for voiceover',
-  // du on macOS of optional/voice/node_modules installed with npm ci --ignore-scripts (2026-11, four direct dependencies).
-  size: '≈440 MB, plus a 90 MB model on first use',
-  notes: 'installs from optional/voice/package-lock.json; the 90 MB voice model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone',
+  // Measured 2026-11-18 on macOS: `du -sk` of optional/voice/node_modules after npm ci --ignore-scripts (two direct dependencies)
+  // gave 221688 KiB = 227 MB; the five pinned model files total 92886949 bytes (VOICE_MODEL in scripts/v2/voice/model.mjs) = 93 MB.
+  // An install made before the trim also holds kokoro-js, transformers and sharp until the next `--fix kokoro`; it still works.
+  size: '≈227 MB, plus a 93 MB model on first use',
+  notes: 'installs from optional/voice/package-lock.json; the 93 MB voice model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone',
+  oldPkg: 'kokoro-js',
 });
 
 export const cutout = () => optionalPackage({

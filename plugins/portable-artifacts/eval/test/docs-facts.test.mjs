@@ -121,7 +121,7 @@ test('README has a per-skill install-size row that matches the doctor, and names
 
 test('README and USAGE give the on-demand voiceover install as the doctor does, not the old 250 MB', () => {
   const doctor = read('shared/doctor.mjs');
-  const size = /size: '(≈\d+ MB), plus a 90 MB model on first use'/.exec(doctor)?.[1];
+  const size = /size: '(≈\d+ MB), plus a \d+ MB model on first use'/.exec(doctor)?.[1];
   assert.ok(size, 'the doctor states a kokoro size');
   for (const [name, text] of [['README', README], ['USAGE', USAGE]]) {
     assert.ok(text.includes(size) || text.includes(size.replace('≈', 'about ')), `${name} states ${size}`);

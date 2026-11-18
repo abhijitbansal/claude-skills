@@ -183,10 +183,10 @@ test('optional/voice lists onnxruntime-node and phonemizer as direct dependencie
   assert.equal(lock.packages['node_modules/phonemizer'].version, '1.2.1');
 });
 
-test('optional/voice/index.mjs exports ort and phonemize beside the version 1 exports', () => {
+test('optional/voice/index.mjs exports ort and phonemize, and the two version 1 export lines are gone', () => {
   const source = readFileSync(path.join(SKILL_ROOT, 'optional', 'voice', 'index.mjs'), 'utf8');
   assert.match(source, /export \* as ort from 'onnxruntime-node';/);
   assert.match(source, /export \{ phonemize \} from 'phonemizer';/);
-  assert.match(source, /export \{ KokoroTTS, TextSplitterStream \} from 'kokoro-js';/);
-  assert.match(source, /export \{ env, RawAudio \} from '@huggingface\/transformers';/);
+  assert.doesNotMatch(source, /export \{ KokoroTTS, TextSplitterStream \} from 'kokoro-js';/);
+  assert.doesNotMatch(source, /export \{ env, RawAudio \} from '@huggingface\/transformers';/);
 });

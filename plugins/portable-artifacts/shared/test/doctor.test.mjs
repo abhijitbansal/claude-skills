@@ -333,7 +333,7 @@ test('linux chromium carries a sudo hint; optional notes exist', async () => {
   const { missing } = await diagnose([browser(), kokoro()], ctx({ platform: 'linux' }));
   assert.match(missing[0].sudoHint, /^sudo npx --no --prefix \/s\/make-motion playwright install-deps chromium$/);
   assert.match(missing[0].notes, /150 MB/);
-  assert.match(missing[1].notes, /90 MB/);
+  assert.match(missing[1].notes, /93 MB/);
   const mac = await diagnose([browser()], ctx());
   assert.equal(mac.missing[0].sudoHint, undefined);
 });
@@ -409,7 +409,7 @@ test('doctorMain: targets defaults to check and must be strings', async () => {
 
 test('doctorMain: text output prints notes', async () => {
   const r = await runMain([], { ...sisterOpts(), requirementsFor: () => [kokoro()] });
-  assert.match(r.out, /Note: installs from optional\/voice\/package-lock\.json; the 90 MB voice model/);
+  assert.match(r.out, /Note: installs from optional\/voice\/package-lock\.json; the 93 MB voice model/);
 });
 
 // --- fix round 2 ---
@@ -921,7 +921,7 @@ test('kokoro and cutout install with npm ci from their own locked folder', async
 });
 
 test('OPTIONAL names the folder and package of each, and optionalInstallArgv is npm ci into that folder', () => {
-  assert.deepEqual(OPTIONAL, { kokoro: { dir: 'voice', pkg: 'kokoro-js' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } });
+  assert.deepEqual(OPTIONAL, { kokoro: { dir: 'voice', pkg: 'phonemizer' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } });
   // --ignore-scripts: onnxruntime-node's postinstall downloads Linux x64 CUDA binaries unhashed; the CPU binaries ship in the tarball.
   assert.deepEqual(optionalInstallArgv(ctx(), 'kokoro'), ['npm', 'ci', '--ignore-scripts', '--prefix', VOICE]);
   assert.deepEqual(optionalInstallArgv(ctx(), 'cutout'), ['npm', 'ci', '--ignore-scripts', '--prefix', CUT]);
@@ -929,7 +929,7 @@ test('OPTIONAL names the folder and package of each, and optionalInstallArgv is 
 
 test('the optional installs say where they come from, that the model downloads once, and that npm ci in the skill folder leaves them alone', async () => {
   const r = await diagnose([kokoro(), cutout()], ctx());
-  assert.match(r.missing[0].notes, /installs from optional\/voice\/package-lock\.json; the 90 MB voice model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone/);
+  assert.match(r.missing[0].notes, /installs from optional\/voice\/package-lock\.json; the 93 MB voice model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone/);
   assert.match(r.missing[1].notes, /installs from optional\/cutout\/package-lock\.json; the 25 MB MODNet model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone/);
 });
 
@@ -940,30 +940,56 @@ test('an old in-skill install does not count', async () => {
 });
 
 test('installed in its folder is present; an old in-skill copy beside it is an info note', async () => {
-  const exists = (p) => p === `${VOICE}/node_modules/kokoro-js` || p === '/s/make-motion/node_modules/kokoro-js';
+  const exists = (p) => p === `${VOICE}/node_modules/phonemizer` || p === '/s/make-motion/node_modules/kokoro-js';
   const r = await diagnose([kokoro()], ctx({ exists, readFile: () => { throw new Error('ENOENT'); } }));
   assert.deepEqual(r.missing, []);
   assert.equal(r.info[0].id, 'kokoro');
   assert.match(r.info[0].note, /no longer used; --fix node_modules removes it/);
 });
 
+// Decision 11: version 2 needs onnxruntime-node and phonemizer only. The voice requirement is found by phonemizer, so a folder
+// installed before the trim (it also holds kokoro-js, transformers and sharp) still counts as present until the next `--fix`.
+test('the voice requirement is present when optional/voice/node_modules/phonemizer exists, and absent without it', async () => {
+  const present = await diagnose([kokoro()], ctx({ exists: (p) => p === `${VOICE}/node_modules/phonemizer` }));
+  assert.deepEqual(present.missing, []);
+  const onlyOnnx = await diagnose([kokoro()], ctx({ exists: (p) => p === `${VOICE}/node_modules/onnxruntime-node` }));
+  assert.equal(onlyOnnx.missing[0].id, 'kokoro', 'onnxruntime-node alone is not the voice stack');
+  const kokoroOnly = await diagnose([kokoro()], ctx({ exists: (p) => p === `${VOICE}/node_modules/kokoro-js` }));
+  assert.equal(kokoroOnly.missing[0].id, 'kokoro', 'kokoro-js alone is no longer the sign of an install');
+});
+
+test('an install made before the trim, which also holds kokoro-js, still counts as present', async () => {
+  const exists = (p) => [`${VOICE}/node_modules/phonemizer`, `${VOICE}/node_modules/kokoro-js`, `${VOICE}/node_modules/sharp`].includes(p);
+  const r = await diagnose([kokoro()], ctx({ exists, readFile: () => { throw new Error('ENOENT'); } }));
+  assert.deepEqual(r.missing, []);
+  assert.equal(r.ok, true);
+});
+
+test('the voice requirement states the measured sizes and names no kokoro-js', async () => {
+  const { missing } = await diagnose([kokoro()], ctx());
+  const [voice] = missing;
+  assert.equal(voice.size, '≈227 MB, plus a 93 MB model on first use');
+  assert.doesNotMatch(`${voice.why} ${voice.size} ${voice.notes}`, /kokoro-js/);
+  assert.doesNotMatch(JSON.stringify(voice.fix), /kokoro-js|huggingface|sharp/);
+});
+
 test('an optional install that predates a pin counts as missing until npm ci reruns', async () => {
   const files = {
-    [`${VOICE}/package.json`]: JSON.stringify({ dependencies: { 'kokoro-js': '1.2.1' }, overrides: { sharp: '0.35.5' } }),
-    [`${VOICE}/node_modules/kokoro-js/package.json`]: JSON.stringify({ version: '1.2.1' }),
-    [`${VOICE}/node_modules/sharp/package.json`]: JSON.stringify({ version: '0.34.5' }),
+    [`${VOICE}/package.json`]: JSON.stringify({ dependencies: { phonemizer: '1.2.1' }, overrides: { 'global-agent': '4.1.3' } }),
+    [`${VOICE}/node_modules/phonemizer/package.json`]: JSON.stringify({ version: '1.2.1' }),
+    [`${VOICE}/node_modules/global-agent/package.json`]: JSON.stringify({ version: '4.1.2' }),
   };
-  const exists = (p) => p === `${VOICE}/node_modules/kokoro-js`;
+  const exists = (p) => p === `${VOICE}/node_modules/phonemizer`;
   const stale = await diagnose([kokoro()], ctx({ exists, readFile: jsonFiles(files) }));
   assert.equal(stale.missing[0].id, 'kokoro');
-  assert.match(stale.missing[0].why, /reinstall to get sharp as pinned in optional\/voice\/package\.json/);
-  files[`${VOICE}/node_modules/sharp/package.json`] = JSON.stringify({ version: '0.35.5' });
+  assert.match(stale.missing[0].why, /reinstall to get global-agent as pinned in optional\/voice\/package\.json/);
+  files[`${VOICE}/node_modules/global-agent/package.json`] = JSON.stringify({ version: '4.1.3' });
   assert.deepEqual((await diagnose([kokoro()], ctx({ exists, readFile: jsonFiles(files) }))).missing, []);
 });
 
 test('a pinned package that is not installed, or whose file cannot be read, is not stale', async () => {
-  const files = { [`${VOICE}/package.json`]: JSON.stringify({ dependencies: { 'kokoro-js': '1.2.1' }, overrides: { sharp: '0.35.5', 'global-agent': { nested: '^1.0.0' } } }) };
-  const exists = (p) => p === `${VOICE}/node_modules/kokoro-js`;
+  const files = { [`${VOICE}/package.json`]: JSON.stringify({ dependencies: { phonemizer: '1.2.1' }, overrides: { 'fast-uri': '3.1.9', 'global-agent': { nested: '^1.0.0' } } }) };
+  const exists = (p) => p === `${VOICE}/node_modules/phonemizer`;
   assert.deepEqual((await diagnose([kokoro()], ctx({ exists, readFile: jsonFiles(files) }))).missing, []);
 });
 
@@ -979,7 +1005,7 @@ test('win32: one npm ci with the backslash folder quoted', async () => {
   const skillDir = 'C:\\Users\\a b\\make-motion';
   const r = await diagnose([kokoro()], ctx({ platform: 'win32', skillDir }));
   assert.equal(r.missing[0].fix.auto, 'npm ci --ignore-scripts --prefix "C:\\Users\\a b\\make-motion\\optional\\voice"');
-  const installed = 'C:\\Users\\a b\\make-motion\\optional\\voice\\node_modules\\kokoro-js';
+  const installed = 'C:\\Users\\a b\\make-motion\\optional\\voice\\node_modules\\phonemizer';
   assert.deepEqual((await diagnose([kokoro()], ctx({ platform: 'win32', skillDir, exists: (p) => p === installed }))).missing, []);
 });
 
@@ -1091,11 +1117,11 @@ test('PA-11: node_modules and sister sizes come from a per-skill table, not one 
   assert.equal(await sister('make-diagram', { size: '≈2 MB' }), '≈2 MB');
 });
 
-test('PA-11: kokoro states the measured size of its own locked folder, and the old 250 MB and 30-60 MB figures are gone', async () => {
+test('PA-11: kokoro states the measured size of its own locked folder, and the old 250 MB, 440 MB and 30-60 MB figures are gone', async () => {
   const { missing } = await diagnose([kokoro()], ctx());
-  assert.match(missing[0].size, /^≈440 MB/);
-  assert.match(missing[0].size, /90 MB model/);
-  assert.doesNotMatch(JSON.stringify(missing), /250 MB/);
+  assert.match(missing[0].size, /^≈227 MB/);
+  assert.match(missing[0].size, /93 MB model/);
+  assert.doesNotMatch(JSON.stringify(missing), /250 MB|440 MB/);
   assert.doesNotMatch(JSON.stringify(missing), /30–60 MB/);
 });
 
@@ -1106,7 +1132,7 @@ test('PA-11: kokoro states the measured size of its own locked folder, and the o
 test('PA-10: the optional install hint is exactly the step the doctor runs, and installing one stack never touches the other', async () => {
   const { render } = await import('../doctor.mjs');
   // The other stack is installed in its own folder: the step names only this one's folder.
-  const other = { kokoro: '/optional/cutout/node_modules/onnxruntime-node', cutout: '/optional/voice/node_modules/kokoro-js' };
+  const other = { kokoro: '/optional/cutout/node_modules/onnxruntime-node', cutout: '/optional/voice/node_modules/phonemizer' };
   for (const [id, req] of [['kokoro', kokoro()], ['cutout', cutout()]]) {
     const c = ctx({ platform: 'linux', exists: (p) => p.endsWith(other[id]) });
     const doctorSays = (await diagnose([req], c)).missing[0].fix.auto;

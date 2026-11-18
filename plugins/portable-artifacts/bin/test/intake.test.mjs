@@ -20,9 +20,11 @@ export function intakeSection(md) {
 
 // One option per list line: a bold name, then text that must carry a default.
 const OPTIONS = ['mode', 'look', 'format', 'length', 'assets', 'voice', 'music', 'sound', 'ask'];
-// The voice install is disclosed without a size until the doctor's figures are measured (cut-over Task 4 fills them in): the
-// line says what is installed and that the doctor reports its size.
-const VOICE_DISCLOSURE = 'a one-time install of the voice package and its model';
+// The voice install is disclosed with the two figures cut-over Task 4 measured, the same two the doctor prints for the voice
+// requirement (shared/doctor.mjs `kokoro().size`): the installed folder after `npm ci --ignore-scripts` (221688 KiB by `du -sk`)
+// and the five pinned model files (92886949 bytes). No other size may appear on the line.
+const VOICE_SIZES = ['227 MB', '93 MB'];
+const VOICE_DISCLOSURE = 'a one-time install of the voice package (about 227 MB installed) and its model (about 93 MB)';
 const TRIGGERS = ['`claude -p`', '`codex exec`', '`copilot -p`', 'the eval'];
 export const optionLine = (section, name) => section.split('\n').find((l) => l.startsWith(`- **${name}**`));
 
@@ -40,7 +42,8 @@ export function problems(section) {
     if (!section.includes(phrase)) out.push(`missing "${phrase}"`);
   }
   const voice = optionLine(section, 'voice') ?? '';
-  if (/\d\s*(MB|GB)\b/i.test(voice)) out.push('the voice line states a size');
+  const sizes = [...voice.matchAll(/\d[\d.,]*\s*(?:MB|GB)\b/gi)].map((m) => m[0].replace(/\s+/g, ' '));
+  if (sizes.some((s) => !VOICE_SIZES.includes(s))) out.push('the voice line states a size nobody measured');
   const sound = optionLine(section, 'sound') ?? '';
   for (const cue of KNOWN_CUES) if (!sound.includes(cue)) out.push(`sound line lacks cue ${cue}`);
   const looks = listedLooks(section);
@@ -158,7 +161,8 @@ test('guardrail: a missing option, a missing default, a missing look, a size or 
   assert.deepEqual(problems(section.replace('`codex exec`', 'x')), ['missing "`codex exec`"']);
   assert.deepEqual(problems(section.replace('erase)', 'x)')), ['sound line lacks cue erase']);
   assert.deepEqual(problems(section.replace('  - `ledger`:', '  - `lodger`:')), ['look ledger is not listed', 'lists a look that does not exist: lodger']);
-  assert.deepEqual(problems(section.replace('and its model, and', 'and its model (440 MB), and')), ['the voice line states a size']);
+  assert.deepEqual(problems(section.replace('(about 227 MB installed)', '(about 440 MB installed)')), [`missing "${VOICE_DISCLOSURE}"`, 'the voice line states a size nobody measured']);
+  assert.deepEqual(problems(section.replace('Captions are a separate switch', 'It keeps 1.5 GB of cache. Captions are a separate switch')), ['the voice line states a size nobody measured']);
   const noDefault = section.split('\n').map((l) => (l.includes('**ask**') ? l.replace(/default/gi, 'usually') : l)).join('\n');
   assert.deepEqual(problems(noDefault), ['option ask names no default']);
 });

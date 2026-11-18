@@ -702,7 +702,7 @@ flac) with `at` (seconds), or `scene` plus `at` so the clip moves with its
 scene, and optional `duration`, `volume`, `fadeIn` and `fadeOut`. ffmpeg
 mixes the tracks into the MP4 as AAC stereo; the preview plays them in sync
 (approximately; `M` mutes) and the MP4 timing is exact. Music is always a
-file you supply. For narration the agent writes `say` on a shot of a version 2 film (make-motion 2 speaks it locally) after asking once to install the voice package (doctor --fix kokoro: about 440 MB on macOS from optional/voice's lockfile, plus a 90 MB model downloaded once, pinned and SHA-256 checked).
+file you supply. For narration the agent writes `say` on a shot of a version 2 film (make-motion 2 speaks it locally) after asking once to install the voice package (doctor --fix kokoro: about 227 MB on macOS from optional/voice's lockfile, plus a 93 MB model downloaded once, pinned and SHA-256 checked).
 `make.mjs --list voices` prints the voices without loading the model. (This section still describes version 1's tracks and cues; the cut-over's document pass rewrites it.) Short UI sounds need no
 file: a root `cues` array (up to 30 of `pop`, `click`, `whoosh`, `chime`, `impact`, `riser`,
 `swoosh`, `typing`, `drop`, `ding`, each with `at`, or `scene` plus `at`, and optional `volume`,
