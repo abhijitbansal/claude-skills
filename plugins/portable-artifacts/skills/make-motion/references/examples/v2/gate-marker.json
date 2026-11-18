@@ -81,16 +81,16 @@
         "points": [
           "orders"
         ]
-      }
+      },
+      "kicker": "Orders by region"
     },
     {
       "id": "learned",
       "show": "list",
       "title": "What we learned",
-      "say": "The North buys most. The West buys least. Every order is printed, packed, shipped.",
+      "say": "The North buys three times the West. Every order is printed, packed, shipped.",
       "items": [
-        "The North buys most",
-        "The West buys least",
+        "The North buys three times the West",
         "Every order is printed, packed, shipped"
       ]
     },
