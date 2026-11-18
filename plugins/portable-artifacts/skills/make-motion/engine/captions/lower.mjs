@@ -15,6 +15,7 @@ import { registries } from '../registry.mjs';
 import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
+import { emphasisFlags } from '../kinds/emphasis-flags.mjs';
 import { sizeAt, fontFor, setCase, isWide, runInk, shownFrom, asTextCard, compositionRect, requireDevice } from '../kinds/shared.mjs';
 import { captionGroups, groupTimes, fitGroup, heardStart, heardEnd, columnRight, visibleDuring, spokenLayout, clearZone, ZONE_ASCENT, ZONE_DESCENT } from './groups.mjs';
 
@@ -95,7 +96,7 @@ function emphasisOf(set, group, origin, ctx, { id, until }) {
   const marked = set.layout.lines.flatMap((line) => line.words.filter((w) => group.words[w.index]?.emphasis).map((w) => ({ line, w })));
   if (marked.length === 0) return { bands: [], wordTracks: [] };
   const at = (w) => heardStart(group.words[w.index]);
-  if (look.emphasis !== 'highlight' || !registries.devices.get('highlight').supports(look)) {
+  if (emphasisFlags(look).bands !== true || !registries.devices.get('highlight').supports(look)) {
     const fills = set.layout.lines.flatMap((l) => l.words).map((w) => (group.words[w.index].emphasis
       ? { fill: track([{ t: 0, v: look.palette.ink }, { t: at(w), v: look.palette.ink }, { t: at(w), v: look.palette.accent }]) } : {}));
     return { bands: [], wordTracks: fills };

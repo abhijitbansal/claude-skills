@@ -102,6 +102,23 @@ test('keynote: the Geist Variable file is present, its hash matches its SOURCES 
   assert.deepEqual({ file: entry.file, axes: { ...entry.axes }, wght: entry.reach.wght }, { file: GEIST_FILE, axes: { wght: [100, 900] }, wght: true });
 });
 
+// The marker look's handwriting (looks-four plan, Task 12): Caveat's variable file, wght 400-700, from the pinned package.
+const CAVEAT_FILE = 'caveat-latin-wght-normal.woff2';
+test('marker: the Caveat variable file is present, its hash matches its SOURCES row, its licence is there, and the total is within budget', () => {
+  const row = parseSources(FONTS_DIR).find((r) => r.file === CAVEAT_FILE);
+  assert.ok(row, `a SOURCES row for ${CAVEAT_FILE}`);
+  assert.equal(row.package, '@fontsource-variable/caveat');
+  assert.equal(row.version, '5.3.0');
+  assert.equal(sha256(path.join(FONTS_DIR, CAVEAT_FILE)), row.sha256);
+  const licence = readFileSync(path.join(FONTS_DIR, 'LICENSES', 'caveat.txt'), 'utf8');
+  assert.ok(licence.includes(LICENCE_MARKER) && licence.includes('Caveat'), 'the SIL OFL text for Caveat');
+  const totalBytes = fontFiles(FONTS_DIR).reduce((sum, file) => sum + statSync(path.join(FONTS_DIR, file)).size, 0);
+  assert.ok(totalBytes <= BUDGET_BYTES, `${totalBytes} bytes against ${BUDGET_BYTES}`);
+  const entry = FONTS.find((f) => f.family === 'Caveat');
+  assert.ok(entry, 'a FONTS entry named Caveat');
+  assert.deepEqual({ file: entry.file, axes: { ...entry.axes }, wght: entry.reach.wght }, { file: CAVEAT_FILE, axes: { wght: [400, 700] }, wght: true });
+});
+
 test('FONTS entries are well formed and point at files on disk', () => {
   const families = FONTS.map((f) => f.family);
   assert.equal(new Set(families).size, families.length, 'family names are unique');

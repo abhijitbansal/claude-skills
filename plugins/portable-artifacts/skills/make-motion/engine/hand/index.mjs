@@ -14,6 +14,7 @@ import { wobble } from './geometry.mjs';
 import { strokePlan, polylinePoints } from './strokes.mjs';
 import { handPose } from './pose.mjs';
 import { handNodes, handOutline } from './shape.mjs';
+import { flattenForHand } from './flatten.mjs';
 
 export { strokePlan } from './strokes.mjs';
 export { handPose } from './pose.mjs';
@@ -21,7 +22,9 @@ export { handNodes } from './shape.mjs';
 
 const FPS = 30;
 const COVER_SECONDS = 0.3;
-const WORD_ENTRANCE = Object.freeze(['opacity', 'x', 'y', 'scale', 'ghost']);
+// a word's entrance, and the colour a word not yet spoken is given (the ghost grey of a recolour look): what is written is
+// written in the marker's own colour from the first stroke, never a grey that lights
+const WORD_ENTRANCE = Object.freeze(['opacity', 'x', 'y', 'scale', 'ghost', 'fill']);
 const EPS = 1e-6;
 
 const keyed = (keys) => track(keys.length === 0 ? [{ t: 0, v: 0 }] : keys);
@@ -37,8 +40,14 @@ function wobbled(n, look, seed, unit) {
   return node(n.type, n.id, { ...n.props, d }, { tracks: n.tracks, children: n.children, wordTracks: n.wordTracks, step: n.step, depth: n.depth });
 }
 
-// A text's words without their entrances (what is written is never faded in); their colours stay.
-const writtenWords = (wordTracks) => wordTracks.map((entry) => Object.fromEntries(Object.entries(entry).filter(([name]) => !WORD_ENTRANCE.includes(name))));
+// A text's words without their entrances or ghost colours (what is written is never faded in or greyed); other word tracks
+// stay. An opacity that only
+// steps (0 or 1: the number's digits shown a step at a time) is not a fade and stays.
+const isStep = (tr) => tr.points.every((k) => k.v === 0 || k.v === 1);
+// A text whose words come on a step at a time (the number's `steps`) keeps those; any other text is written whole by its reveal, so
+// a word is never held back to its spoken time (it showed as a grey half-word on the end kind's first sheet).
+const writtenWords = (wordTracks, counted) => wordTracks.map((entry) => Object.fromEntries(Object.entries(entry)
+  .filter(([name, tr]) => !WORD_ENTRANCE.includes(name) || (counted && name === 'opacity' && isStep(tr)))));
 
 // One node per line of a written text, each revealed by its stroke.
 function writtenLines(n, strokes) {
@@ -46,7 +55,7 @@ function writtenLines(n, strokes) {
   return layout.lines.map((line, k) => {
     const s = strokes.find((x) => x.line === k);
     return node('text', layout.lines.length === 1 ? n.id : `${n.id}.line${k}`, { ...n.props, layout: { ...layout, lines: [line] } }, {
-      tracks: { reveal: progress(s.start, s.end) }, wordTracks: writtenWords(n.wordTracks), depth: n.depth,
+      tracks: { reveal: progress(s.start, s.end) }, wordTracks: writtenWords(n.wordTracks, n.props.steps !== undefined), depth: n.depth,
     });
   });
 }
@@ -76,10 +85,10 @@ function poseTracks(plan, look, ctx, duration) {
   return { x: keyed(xs), y: keyed(ys) };
 }
 
-/** The hand's plan for a shot's nodes, as handLayer draws them (polylines wobbled). */
+/** The hand's plan for a shot's nodes, as handLayer draws them (groups lifted, curves and fills made strokes, polylines wobbled). */
 export function handPlan(shotNodes, timing, ctx) {
   const unit = ctx.unit ?? unitOf(ctx.canvas);
-  const nodes = shotNodes.map((n) => (n.type === 'path' ? wobbled(n, ctx.look, ctx.seed ?? 0, unit) : n));
+  const nodes = flattenForHand(shotNodes, ctx.look, unit).map((n) => (n.type === 'path' ? wobbled(n, ctx.look, ctx.seed ?? 0, unit) : n));
   return { nodes, plan: strokePlan(nodes, timing, ctx.look, { unit }) };
 }
 
@@ -113,6 +122,13 @@ function inPolygon([px, py], poly) {
 const corners = ([x, y, w, h]) => [[x, y], [x + w, y], [x, y + h], [x + w, y + h]];
 const overlaps = (poly, box) => poly.some((p) => inside(p, box)) || corners(box).some((c) => inPolygon(c, poly));
 
+// The windows [from, to] in which a text is the hand's own target (controller ruling, impl-l1): a stroke drawn over its ink box
+// (an underline under a word, a ring round it) marks it, so the hand being on it while it does is the move, not a cover.
+const MARKING_TAIL = 0.15; // s after such a stroke ends
+function markingWindows(plan, box) {
+  return plan.filter((s) => s.kind === 'line' && s.points.some((p) => inside(p, box))).map((s) => [s.start, s.end + MARKING_TAIL]);
+}
+
 // The hand's outline at a pose, in canvas px.
 function outlineAt(outline, pose) {
   const r = (pose.angle * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
@@ -129,13 +145,15 @@ export function handFindings(plan, look, texts, { canvas, unit = 1, duration }) 
     message: `too much to draw in this sentence (${Math.round(fast[0].speed)} units a second, the most is ${look.hand.maxSpeed}): cut an element or lengthen the line` }];
   const outline = handOutline(look, unit);
   const covered = new Map();
+  const marking = new Map(texts.map((text) => [text.id, markingWindows(plan, text.box)]));
   let edge = null;
   for (let f = 0; f <= Math.ceil(duration * FPS); f++) {
     const t = Math.min(duration, f / FPS);
     const poly = outlineAt(outline, handPose(plan, t, look, { canvas, unit }));
     if (edge === null && poly.some(([x, y]) => x < 0 || y < 0)) edge = t;
     for (const text of texts) {
-      const run = text.done <= t + EPS && overlaps(poly, text.box) ? (covered.get(text.id)?.run ?? 0) + 1 / FPS : 0;
+      const marked = marking.get(text.id).some(([from, to]) => t >= from - EPS && t <= to);
+      const run = text.done <= t + EPS && !marked && overlaps(poly, text.box) ? (covered.get(text.id)?.run ?? 0) + 1 / FPS : 0;
       covered.set(text.id, { run, worst: Math.max(run, covered.get(text.id)?.worst ?? 0), at: run > COVER_SECONDS && !covered.get(text.id)?.at ? t : covered.get(text.id)?.at });
     }
   }

@@ -5,3 +5,4 @@ import './halftone.mjs';
 import './cosmos.mjs';
 import './grid.mjs';
 import './flat.mjs';
+import './board.mjs';

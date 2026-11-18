@@ -8,6 +8,7 @@ import { node } from '../graph/node.mjs';
 import {
   checkParams, isHand, styleOf, colourOf, deviceRng, spread, landing, polyline, smoothPath, at2, styledBy,
 } from './shared.mjs';
+import { bowedLine, arrowBarbs } from '../hand/geometry.mjs';
 
 const TAU = Math.PI * 2;
 const DEGREES = Math.PI / 180;
@@ -51,6 +52,15 @@ const BRACKET_JITTER = 2; // units
 const BRACKET_BULGE = 3; // units: the spine bows this far
 const HALF = 2;
 const NO_CROSSING = null;
+// the `drawn` style (marker): every mark is exact points in one polyline, which the drawing hand bends and draws as one
+// stroke (engine/hand: the polyline is wobbled there, so a mark is never wobbled twice)
+const DRAWN_UNDERLINE_OVER = 6; // units the stroke runs past the word at each end
+const DRAWN_UNDERLINE_GAP = 8; // units under the box
+const DRAWN_BOX_OVERSHOOT = 8; // units a drawn box runs on past where it began
+const DRAWN_ARROW_BOW = 0.12; // of the arrow's length
+const DRAWN_HEAD_LENGTH = 34; // units
+const DRAWN_HEAD_SPREAD = 28 * DEGREES; // rad: either side of the shaft
+
 
 const lerp = (a, b, f) => a + (b - a) * f;
 
@@ -83,9 +93,17 @@ function handUnderline([x, y, w, h], unit, rng) {
   return smoothPath(points);
 }
 
+// A drawn underline: two points, a little tilt, running past the word at both ends.
+function drawnUnderline([x, y, w, h], unit, style, rng) {
+  const base = y + h + (style.gap ?? DRAWN_UNDERLINE_GAP) * unit, over = DRAWN_UNDERLINE_OVER * unit;
+  return polyline([[x - over, base], [x + w + over, base + spread(rng, UNDERLINE_TILT) * unit]]);
+}
+
 function buildUnderline(params) {
   const { id, box, at, look, unit, seed } = checkParams('underline', params);
   const [x, y, w, h] = box;
+  const style = styleOf(look, 'underline');
+  if (style.drawn === true) return markNode({ id, d: drawnUnderline(box, unit, style, deviceRng(seed, id, 'underline')), look, unit, at, name: 'underline', fallbackColour: 'accent2' });
   const base = y + h + UNDERLINE_GAP * unit;
   const d = isHand(look) ? handUnderline(box, unit, deviceRng(seed, id, 'underline')) : polyline([[x, base], [x + w, base]]);
   return markNode({ id, d, look, unit, at, name: 'underline', fallbackColour: 'accent2' });
@@ -133,10 +151,17 @@ function splitBox([x, y, w, h], pad) {
   return [`M${at2([l, t])}L${at2([r, t])}L${at2([r, b])}`, `M${at2([l, t])}L${at2([l, b])}L${at2([r, b])}`];
 }
 
+// A drawn box `pad` outside [x, y, w, h]: from its top left corner clockwise, closing past where it began.
+function drawnBox([x, y, w, h], pad, unit) {
+  const [l, t, r, b] = [x - pad, y - pad, x + w + pad, y + h + pad];
+  return polyline([[l, t], [r, t], [r, b], [l, b], [l, t - DRAWN_BOX_OVERSHOOT * unit]]);
+}
+
 function buildCircle(params) {
   const { id, box, at, look, unit, seed } = checkParams('circle', params);
   const [x, y, w, h] = box;
   const style = styleOf(look, 'circle');
+  if (style.drawn === true) return markNode({ id, d: drawnBox(box, (style.pad ?? 0) * unit, unit), look, unit, at, name: 'circle', fallbackColour: 'accent2' });
   if (style.shape === 'box' && style.split === true && !isHand(look)) {
     const [one, two] = splitBox(box, (style.pad ?? 0) * unit);
     const strokes = [[`${id}.a`, one], [`${id}.b`, two]];
@@ -191,10 +216,19 @@ function barbs(tip, last, headLength, rng, hand) {
   });
 }
 
+// A drawn arrow: a gently bowed shaft, then both barbs of the head, one polyline.
+function drawnArrow(from, tip, unit) {
+  const length = Math.hypot(tip[0] - from[0], tip[1] - from[1]);
+  const shaft = bowedLine(from, tip, length * DRAWN_ARROW_BOW);
+  const [first, second] = arrowBarbs(tip, shaft.at(-2), DRAWN_HEAD_LENGTH * unit, DRAWN_HEAD_SPREAD);
+  return polyline([...shaft, first[0], tip, second[0]]);
+}
+
 function buildArrow(params) {
   const { id, box, at, look, unit, seed } = checkParams('arrow', params, ['from']);
   const { from } = params;
   if (!Array.isArray(from) || from.length !== HALF || !from.every(Number.isFinite)) throw new Error(`arrow: from must be [x, y], got ${JSON.stringify(from)}`);
+  if (styleOf(look, 'arrow').drawn === true) return markNode({ id, d: drawnArrow(from, tipOf(from, box, ARROW_GAP * unit), unit), look, unit, at, name: 'arrow', fallbackColour: 'accent2' });
   const hand = isHand(look), rng = deviceRng(seed, id, 'arrow');
   const tip = tipOf(from, box, ARROW_GAP * unit);
   const width = (styleOf(look, 'arrow').width ?? DEFAULT_WIDTH) * unit;
@@ -213,6 +247,7 @@ function buildBracket(params) {
   const spine = x - BRACKET_GAP * unit, top = y - BRACKET_PAD * unit, bottom = y + h + BRACKET_PAD * unit;
   const reach = BRACKET_SERIF * unit;
   const square = [[spine + reach, top], [spine, top], [spine, bottom], [spine + reach, bottom]];
+  if (styleOf(look, 'bracket').drawn === true) return markNode({ id, d: polyline(square), look, unit, at, name: 'bracket', fallbackColour: 'ink' });
   if (!isHand(look)) return markNode({ id, d: polyline(square), look, unit, at, name: 'bracket', fallbackColour: 'ink' });
   const rng = deviceRng(seed, id, 'bracket');
   const loose = ([px, py]) => [px + spread(rng, BRACKET_JITTER) * unit, py + spread(rng, BRACKET_JITTER) * unit];

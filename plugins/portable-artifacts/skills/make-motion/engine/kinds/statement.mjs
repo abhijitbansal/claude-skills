@@ -19,6 +19,7 @@ import {
 } from './shared.mjs';
 import { defaultCamera, driftReach } from './camera.mjs';
 import { highlightBands } from './highlighter.mjs';
+import { underlineMarks } from './underline.mjs';
 import { emphasisOf } from './emphasis.mjs';
 import { emphasisFlags } from './emphasis-flags.mjs';
 import { wordTimes } from './words.mjs';
@@ -363,7 +364,7 @@ function expandStatement(shot, ctx) {
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'text', behind });
   const firstAt = times.length > 0 ? Math.min(look.moves.enter.dur, times[0].at) : 0;
-  const base = [fieldNode(shot, ctx), ...statementSun(shot, ctx, times), ...kickerNodes(shot, ctx, placed, firstAt), ...highlightBands(shot.id, placed, times, ctx, 'statement'), text];
+  const base = [fieldNode(shot, ctx), ...statementSun(shot, ctx, times), ...kickerNodes(shot, ctx, placed, firstAt), ...highlightBands(shot.id, placed, times, ctx, 'statement'), text, ...underlineMarks(shot.id, placed, times, ctx, 'statement')];
   return {
     nodes: placeDevices(base, devices),
     camera: [...defaultCamera(look, timing, unit), ...deviceCamera(devices)],

@@ -9,10 +9,10 @@ import { makeStroke, boxHatch } from './geometry.mjs';
 import { latestLanding } from '../kinds/arrivals.mjs';
 
 const WRITE_MID = 0.37; // em above the baseline: the middle of a line's lower-case letters, where the tip writes
-const TRAVEL_MIN = 0.12; // s: the shortest move between two strokes
+const TRAVEL_MIN = 0.05; // s: the shortest move between two strokes (a board of many short strokes, a chart's labels, must fit its sentence)
 const TRAVEL_SPEED = 2400; // units a second the hand travels between strokes at most (so no frame jumps far)
 const FALLBACK_START = 0.2; // s: an unnarrated shot draws from here
-const HATCH_GAP = 18; // units between the lines of a fill's hatch
+const HATCH_GAP = 26; // units between the lines of a fill's hatch (the hand draws it fast: a wider gap is a shorter stroke)
 const POLYLINE = /^\s*M[\s\d.,eE+-]*(?:[LZ][\s\d.,eE+-]*)*$/;
 const NUMBER = /-?\d*\.?\d+(?:e[+-]?\d+)?/gi;
 
@@ -67,6 +67,17 @@ function windowsOf(timing) {
   return sentences.map((s) => [Math.min(s.start, last), Math.min(s.end, last)]);
 }
 
+const isFurniture = (n) => n.props.fixed === true || n.props.furniture === true;
+const isWindow = (w) => Array.isArray(w) && w.length === 2 && w.every(Number.isFinite) && w[1] >= w[0];
+// an element's own window held inside the shot like a sentence's: it lands by the latest landing
+// and long enough to draw in: MIN_OWN_WINDOW before the landing at the least (a word spoken last lands with the shot)
+const MIN_OWN_WINDOW = 0.9; // s: the hand travels to the word first, then draws
+function windowFor([from, to], timing) {
+  const last = latestLanding(timing);
+  const end = Math.min(to, last);
+  return [Math.max(0, Math.min(from, end - MIN_OWN_WINDOW)), end];
+}
+
 // Which sentence element i of `count` draws in: its node's props.sentence when given, else the elements spread in
 // order over the sentences.
 const sentenceOf = (element, i, count, sentences) => {
@@ -103,15 +114,28 @@ function timeWindow(strokes, [opens, to], unit, before) {
  * draw order, times in shot seconds. `opts.unit` is px per unit (default 1). The first element is complete at 0.
  */
 export function strokePlan(nodes, timing, look, { unit = 1 } = {}) {
-  const elements = elementsOf(nodes, unit);
-  if (elements.length === 0) return [];
-  const windows = windowsOf(timing);
-  const tagged = elements.map((e, i) => e.strokes.map((s, k) => ({ ...s, id: `${e.node.id}#${k}`, node: e.node.id, sentence: sentenceOf(e, i, elements.length, windows.length) })));
-  const first = tagged[0].map((s) => ({ ...s, start: 0, end: 0, speed: 0 }));
+  const all = elementsOf(nodes, unit);
+  if (all.length === 0) return [];
+  // frame furniture (a slug, a kicker, a caption: pinned to the frame) is on the board from frame 0, never drawn by the hand
+  const furniture = all.filter((e) => isFurniture(e.node));
+  const elements = all.filter((e) => !isFurniture(e.node));
+  const standing = furniture.flatMap((e) => e.strokes.map((s, k) => ({ ...s, id: `${e.node.id}#${k}`, node: e.node.id, sentence: 0, start: 0, end: 0, speed: 0 })));
+  if (elements.length === 0) return Object.freeze(standing.map((s) => Object.freeze(s)));
+  const sentences = windowsOf(timing);
+  // an element that names its own window (props.window, [from, to] shot seconds: an underline drawn as its word is
+  // spoken) gets one after the sentences'; windows are timed in order of their start
+  const windows = [...sentences, ...elements.flatMap((e) => (isWindow(e.node.props.window) ? [windowFor(e.node.props.window, timing)] : []))];
+  let own = sentences.length;
+  const tagged = elements.map((e, i) => {
+    const mine = isWindow(e.node.props.window) ? own++ : sentenceOf(e, i, elements.length, sentences.length);
+    return e.strokes.map((s, k) => ({ ...s, id: `${e.node.id}#${k}`, node: e.node.id, sentence: mine }));
+  });
+  const first = [...standing, ...tagged[0].map((s) => ({ ...s, start: 0, end: 0, speed: 0 }))];
   const rest = tagged.slice(1).flat();
-  const timed = windows.reduce((done, win, w) => {
-    const own = rest.filter((s) => s.sentence === w);
-    return own.length === 0 ? done : [...done, ...timeWindow(own, win, unit, done.at(-1))];
+  const order = windows.map((win, w) => w).sort((x, y) => windows[x][0] - windows[y][0] || x - y);
+  const timed = order.reduce((done, w) => {
+    const mine = rest.filter((s) => s.sentence === w);
+    return mine.length === 0 ? done : [...done, ...timeWindow(mine, windows[w], unit, done.at(-1))];
   }, first);
   return Object.freeze(timed.map((s) => Object.freeze(s)));
 }

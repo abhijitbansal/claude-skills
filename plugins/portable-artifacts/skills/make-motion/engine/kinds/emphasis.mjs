@@ -100,7 +100,11 @@ const weightSweep = Object.freeze({
 // its emphasised word; the words keep their colour and their entrance
 const scale = Object.freeze({ ...EMPHASIS_FLAGS.scale, wordTracks: asIs, hookTracks: asIs, inkTracks: none });
 
-export const EMPHASIS = Object.freeze({ highlight, 'recolor-scale': recolorScale, recolor, glow, 'weight-color': weightColor, scale, 'weight-sweep': weightSweep });
+// an underline (marker): the hand draws one stroke in the accent under each emphasised run (kinds/underline.mjs); the
+// words themselves do not change
+const underline = Object.freeze({ ...EMPHASIS_FLAGS.underline, wordTracks: asIs, hookTracks: asIs, inkTracks: none });
+
+export const EMPHASIS = Object.freeze({ highlight, 'recolor-scale': recolorScale, recolor, glow, 'weight-color': weightColor, scale, 'weight-sweep': weightSweep, underline });
 
 /** The entry of look.emphasis; throws naming the look, the name and the names the table has (with did-you-mean). */
 export const emphasisOf = (look) => EMPHASIS[emphasisName(look)];

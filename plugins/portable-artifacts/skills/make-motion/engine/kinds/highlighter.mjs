@@ -3,15 +3,16 @@
 import { registries } from '../registry.mjs';
 import { BAND_HEIGHT } from '../devices/highlight.mjs';
 import { runInk, requireDevice } from './shared.mjs';
+import { emphasisFlags } from './emphasis-flags.mjs';
 
 const HALF = 2;
 
 const HIGHLIGHT_PAST_INK = 0.06; // em of the text: the band reaches this far past the run's ink, above and below
 
-const isEmphasised = (times, timing, index) => times[index] !== undefined && times[index].spoken !== null && timing.words[times[index].spoken].emphasis;
+export const isEmphasised = (times, timing, index) => times[index] !== undefined && times[index].spoken !== null && timing.words[times[index].spoken].emphasis;
 
 // Runs of adjacent emphasised words on one line, each { line, first, last } (word indexes).
-function emphasisRuns(layout, times, timing) {
+export function emphasisRuns(layout, times, timing) {
   return layout.lines.flatMap((line) => line.words.reduce((runs, word) => {
     if (!isEmphasised(times, timing, word.index)) return runs;
     const open = runs.at(-1);
@@ -55,7 +56,7 @@ export function highlightLines(layout, times, timing) {
  */
 export function highlightBands(id, placed, times, ctx, kind) {
   const { look, unit, seed, timing, measure } = ctx;
-  if (look.emphasis !== 'highlight') return [];
+  if (emphasisFlags(look).bands !== true) return [];
   const runs = emphasisRuns(placed.layout, times, timing);
   if (runs.length > 0) requireDevice(look, 'highlight', kind);
   const device = registries.devices.get('highlight');

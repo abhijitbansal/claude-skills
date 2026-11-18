@@ -10,6 +10,7 @@ the licence text for each family is in `LICENSES/`. Bundled faces for text and m
 | archivo-latin-standard-normal.woff2 | @fontsource-variable/archivo | 5.3.0 | files/archivo-latin-standard-normal.woff2 | `e3a28eade21a900c7155a247757f4b2834c07bb7ef07ad7efa55cebaac1e8f5e` | OFL-1.1 |
 | nunito-latin-wght-normal.woff2 | @fontsource-variable/nunito | 5.3.0 | files/nunito-latin-wght-normal.woff2 | `ba344451eab25b217a165363b1982048a5e5830a0daf36577973955a04cac793` | OFL-1.1 |
 | geist-latin-wght-normal.woff2 | @fontsource-variable/geist | 5.3.0 | files/geist-latin-wght-normal.woff2 | `19f9c92546aa300c312235e3125af1b81394d8db9a4bc4a425cd5b641d2d54e1` | OFL-1.1 |
+| caveat-latin-wght-normal.woff2 | @fontsource-variable/caveat | 5.3.0 | files/caveat-latin-wght-normal.woff2 | `891951df5e8b5b0f0bc760d31375405e795c666b5add70437de12d4a6482b33f` | OFL-1.1 |
 
 ## What each file carries
 
@@ -28,9 +29,16 @@ the licence text for each family is in `LICENSES/`. Bundled faces for text and m
   `533dd66117795ac12316fb05fce27736c4bc63c31613b302d0a5285ca3a291d7`); package licence `OFL-1.1`, Fontsource
   metadata `v5`, last modified 2026-05-13. The package's `ital` axis lives in separate italic files, not bundled.
 
+- **Caveat** (`wght`, Latin, upright; the `marker` look's handwriting, in every role): axis `wght` 400-700, 74932
+  bytes (the variable file fits the budget, so the static 700 fallback was not needed). Source:
+  `https://registry.npmjs.org/@fontsource-variable/caveat/-/caveat-5.3.0.tgz` (tarball SHA-256
+  `2f50d55732648330ec8dcb4eef79666ef1131a57e7f0441975657a4b2ff20ba9`); package licence `OFL-1.1`. It replaces
+  version 1's `template/sketch/caveat-700.woff2`, which cut-over deletes.
+
 The Fraunces and Archivo Latin files came from the smallest variant that carries every axis a look needs, so no
 trade-off was made: the two files total 211120 bytes (206 KiB). With Nunito the three total 250248 bytes (244 KiB),
-and with Geist the four total 279648 bytes (273 KiB, measured with `stat`), against the 600 KB budget (`test/v2/fonts.test.mjs`, `test/v2/cosmos-fonts.test.mjs`). The smaller `wght`-only and
+and with Geist the four total 279648 bytes (273 KiB, measured with `stat`); with Caveat the five total 354580 bytes
+(346 KiB, measured with `stat`: 279648 + 74932), against the 600 KB budget (`test/v2/fonts.test.mjs`, `test/v2/cosmos-fonts.test.mjs`). The smaller `wght`-only and
 `wdth`-only variants of Fraunces and Archivo exist but would give up `opsz`, `SOFT` and `wdth`.
 
 ## Verify

@@ -28,6 +28,8 @@ export const FONTS = deepFreeze([
   { family: 'Nunito', file: 'nunito-latin-wght-normal.woff2', axes: { wght: [200, 1000] }, reach: { ...NO_REACH, wght: true } },
   // the keynote look's neutral sans: a weight axis only; named apart from the static shared "Geist" (fonts-shared.mjs)
   { family: 'Geist Variable', file: 'geist-latin-wght-normal.woff2', axes: { wght: [100, 900] }, reach: { ...NO_REACH, wght: true } },
+  // the marker look's handwriting: a weight axis only (400 to 700)
+  { family: 'Caveat', file: 'caveat-latin-wght-normal.woff2', axes: { wght: [400, 700] }, reach: { ...NO_REACH, wght: true } },
 ]);
 
 // ctx.fontStretch takes these keywords and nothing else (a percentage is ignored), so canvas width moves in these

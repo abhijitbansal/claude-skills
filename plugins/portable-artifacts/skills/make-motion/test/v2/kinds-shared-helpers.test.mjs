@@ -56,7 +56,7 @@ const KIND_FILES = Object.freeze({
 // styles (looks-four Task 1); stack-turn.mjs: the turned stack, part of stack.mjs's composition (statement and list,
 // looks-four Task 7 round three); strike.mjs: the beat bar under a hero on a spoken word, chart, code, diagram and compare
 // (gate-poster-2 ruling 3: one builder, the stack's beat bar)
-const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'stack-turn.mjs','slug.mjs', 'words.mjs', 'editorial.mjs', 'secondary.mjs', 'camera.mjs', 'highlighter.mjs', 'plain-tag.mjs', 'values.mjs', 'arrivals.mjs', 'close-ups.mjs', 'region-mark.mjs', 'clipping-rules.mjs', 'emphasis.mjs', 'emphasis-flags.mjs', 'emphasis-fallback.mjs', 'strike.mjs']);
+const SHARED_MODULES = Object.freeze(['shared.mjs', 'stack.mjs', 'stack-turn.mjs','slug.mjs', 'words.mjs', 'editorial.mjs', 'secondary.mjs', 'camera.mjs', 'highlighter.mjs', 'plain-tag.mjs', 'values.mjs', 'arrivals.mjs', 'close-ups.mjs', 'region-mark.mjs', 'clipping-rules.mjs', 'emphasis.mjs', 'emphasis-flags.mjs', 'emphasis-fallback.mjs', 'strike.mjs', 'underline.mjs']);
 
 test('no kind imports another kind\'s file: what several kinds use lives in the shared modules (shared, stack, slug, words, editorial, secondary, camera, highlighter, plain-tag, values, arrivals, close-ups, region-mark, clipping-rules)', async () => {
   const { readdirSync } = await import('node:fs');

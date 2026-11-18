@@ -28,6 +28,7 @@ import { resolveShotCut } from '../../engine/cuts/resolve.mjs';
 import { auditMoments } from './plan.mjs';
 import { pageFinding } from './report.mjs';
 import { loopFindings } from './loop.mjs';
+import { handReviewFindings } from './review-hand.mjs';
 
 export { LOOP_DIFF_MAX } from './loop.mjs';
 
@@ -383,7 +384,8 @@ export async function reviewFilm({ session, signal }) {
   const deduped = dedupeFindings([...audited, ...settleFindings(film, timeline, restingOf, snapshots)], film.shots);
   const still = pacingFindings(film, timeline, await heldFlags(session, signal));
   const loop = await loopFindings(session); // root loop: true (loop.mjs)
-  return [...deduped, ...still, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop].sort((a, b) => a.t - b.t);
+  const hand = await handReviewFindings(session); // a hand look: the drawing hand's speed, cover and edge findings
+  return [...deduped, ...still, ...hand, ...kindFindings(film, timeline, session.info?.pictures), ...hookFindings(film, timeline, snapshots), ...cutWindowFindings(film, timeline), ...matchFindings(film, timeline, snapshots), ...loop].sort((a, b) => a.t - b.t);
 }
 
 const EFFECTS = Object.freeze({ halftone: 'halftone', bloom: 'bloom' });

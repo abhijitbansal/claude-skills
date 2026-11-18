@@ -43,6 +43,8 @@ function buildTag(params) {
       ? roundedRect(-w / HALF, -h / HALF, w, h, h / HALF)
       : polyline([[-w / HALF, -h / HALF], [w / HALF, -h / HALF], [w / HALF, h / HALF], [-w / HALF, h / HALF]].map(jitter), true),
     fill: colourOf(look, style.fill ?? DEFAULT_FILL),
+    // a drawn plate (marker): its outline, in the style's colour and width units; a plate in the board's own colour is no more than that
+    ...(style.outline === undefined ? {} : { stroke: colourOf(look, style.outline.color), strokeWidth: style.outline.width * unit, lineCap: 'round' }),
   });
   const label = node('text', `${id}.text`, {
     x: -w / HALF + PAD_X * unit, y: -h / HALF + PAD_Y * unit, layout, font, fill: colourOf(look, style.text ?? DEFAULT_TEXT), role: 'tag',
