@@ -102,6 +102,31 @@ test('under reduced motion the light jumps to the end', async (t) => {
   assert.deepEqual(ctx.problems, []);
 });
 
+test('labels wear the shared type: group labels in caps with the shared tracking, node names plain, all at the theme weight', async (t) => {
+  const ctx = await open(t, 'architecture.diagram.json', { reducedMotion: 'reduce' });
+  if (!ctx) return;
+  const labels = await ctx.page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      weight: root.getPropertyValue('--strong-weight').trim(),
+      track: parseFloat(root.getPropertyValue('--track-caps')),
+      items: [...document.querySelectorAll('.sc-label')].map((el) => {
+        const s = getComputedStyle(el);
+        return { caps: el.classList.contains('pa-caps'), transform: s.textTransform, tracking: parseFloat(s.letterSpacing) / parseFloat(s.fontSize), weight: s.fontWeight };
+      }),
+    };
+  });
+  const caps = labels.items.filter((l) => l.caps);
+  const plain = labels.items.filter((l) => !l.caps);
+  assert.ok(caps.length > 0 && plain.length > 0, `a tier of group labels (${caps.length}) and a tier of node names (${plain.length})`);
+  for (const l of caps) {
+    assert.equal(l.transform, 'uppercase');
+    assert.ok(Math.abs(l.tracking - labels.track) < 0.01, `tracking ${l.tracking}em is the shared ${labels.track}em`);
+  }
+  for (const l of plain) assert.equal(l.transform, 'none');
+  for (const l of labels.items) assert.equal(l.weight, labels.weight, 'the weight is the theme --strong-weight');
+});
+
 test('a focus beat has no light', async (t) => {
   const ctx = await open(t, 'story.diagram.json', { reducedMotion: 'reduce' });
   if (!ctx) return;

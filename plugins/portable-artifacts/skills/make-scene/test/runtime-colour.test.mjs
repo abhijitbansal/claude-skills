@@ -2,6 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TOKEN_VARS, mixHex, resolveColour, toHex } from '../template/runtime/colour.js';
 import { TOKENS, loadTheme, themeCss } from '../shared/theme.mjs';
+import { buildObjects } from '../template/runtime/render.js';
+import { buildScene } from '../scripts/lib/api.mjs';
+import { citySpec } from './helpers/scene-fixtures.mjs';
 
 const DUSK_LIGHT = { '--s1': '#e8553a', '--s2': '#17a487', '--surface': '#fff8f0', '--glow': '#ff6b4a' };
 const readLight = (name) => DUSK_LIGHT[name];
@@ -52,4 +55,42 @@ test('TOKEN_VARS mirrors the shared theme: same tokens, and every var is emitted
   for (const [token, cssVar] of Object.entries(TOKEN_VARS)) {
     assert.ok(css.includes(`${cssVar}:`), `${token} -> ${cssVar} is not defined by the theme css`);
   }
+});
+
+const dusk = loadTheme('dusk');
+const VAR_TOKEN = Object.fromEntries(Object.entries(TOKEN_VARS).map(([token, cssVar]) => [cssVar, token]));
+const palette = (dark) => ({ dark, readVar: (cssVar) => dusk[dark ? 'dark' : 'light'][VAR_TOKEN[cssVar]] });
+const graphOf = async (overrides = {}) => (await buildScene(citySpec(overrides), { dir: process.cwd(), theme: dusk })).graph;
+const hexOf = (color) => `#${color.getHexString()}`;
+
+test('retint sets the fog colour from the theme in both modes', async () => {
+  const built = buildObjects(await graphOf(), palette(false));
+  assert.equal(hexOf(built.fog.color), dusk.light.page);
+  built.retint(palette(true));
+  assert.equal(hexOf(built.fog.color), dusk.dark.page);
+  built.retint(palette(false));
+  assert.equal(hexOf(built.fog.color), dusk.light.page);
+  built.dispose();
+});
+
+test('a space sky has no fog', async () => {
+  const built = buildObjects(await graphOf({ world: 'galaxy', links: [{ from: 'api', to: 'web', value: 1 }] }), palette(true));
+  assert.equal(built.fog, null);
+  built.dispose();
+});
+
+test('fog near and far scale with the extent', async () => {
+  const graph = await graphOf();
+  const big = { ...graph, bounds: { min: graph.bounds.min.map((v) => v * 3), max: graph.bounds.max.map((v) => v * 3) } };
+  const range = async (g, fit) => {
+    const built = buildObjects(g, palette(false));
+    built.setFit(fit);
+    const out = { near: built.fog.near, far: built.fog.far };
+    built.dispose();
+    return out;
+  };
+  const small = await range(graph, 10);
+  const large = await range(big, 30);
+  assert.ok(Math.abs(large.near - 3 * small.near) < 1e-9, `near ${large.near} is not 3 x ${small.near}`);
+  assert.ok(Math.abs(large.far - 3 * small.far) < 1e-9, `far ${large.far} is not 3 x ${small.far}`);
 });

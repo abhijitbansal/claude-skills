@@ -7,6 +7,7 @@ import {
   RingGeometry, SphereGeometry, TubeGeometry, Vector3,
 } from 'three';
 import { resolveColour } from './colour.js';
+import { KEY_DIRECTION, LIGHT_SETS, MATERIAL_ROLES, RIM_DIRECTION, SKY_SPACE, fogRange, lightSetName } from './look.js';
 import { createTravel } from './travel.js';
 
 const UPSAMPLE = 5; // terrain: data cells sit every 5th vertex (Task 5 convention)
@@ -14,15 +15,12 @@ const STAR_COUNT = 700;
 const SPACE_BASE = '#04050c';
 const SPACE_PAGE_SHARE = 0.06; // a whisper of the theme so space is not a flat void
 const STAR_COLOUR = '#f4f1ff';
-const MOON_COLOUR = '#8fa6e8';
 const WATER_BASE = { base: '#2f6fb0', tint: 'cat5', share: 0.3 };
-const SUN_COLOUR = { base: '#fff4e0', tint: 'page', share: 0.12 };
 const EMISSIVE_STRENGTH = 1.6;
 const SELF_LIT_STRENGTH = 0.9;
 const SWAY_AMPLITUDE = 0.06; // fraction of a leaf cluster's width
 const WINDOW_CELL = 0.36; // world units per window cell, before fitting to the wall
 const NO_ROTATION = new Quaternion();
-const SKY_SPACE = 'space';
 const PICK_TUBE_FACTOR = 4; // hover radius of a thin link, in link radii...
 const PICK_TUBE_MARGIN_CAP = 0.25; // ...but never more than this far (world units) beyond the drawn tube: a 0.55 donut segment must not swallow its hole
 const PICK_TUBE_MIN_SHARE = 0.004; // ...and at least this share of the scene's diagonal
@@ -31,8 +29,6 @@ const LIGHT_MIN_RADIUS = 0.16; // the travelling light: a sphere this big (or a 
 const LIGHT_DIAG_SHARE = 0.005;
 const LIGHT_HALO = 2.4; // ...inside a soft halo this many times wider
 const LIGHT_HALO_OPACITY = 0.3;
-const FOG_NEAR_FACTOR = 1.4; // fog starts and ends this many fitted camera distances away
-const FOG_FAR_FACTOR = 4.5;
 const GROUND_REACH = 1.5; // the ground disc reaches this far past the scene's half-diagonal (plus GROUND_EXTRA)...
 const GROUND_EXTRA = 2;
 const GROUND_FADE_START = 0.5; // ...and is fully solid out to this share of its radius, fading to nothing at the rim
@@ -143,11 +139,11 @@ function patchWindows(material, density) {
   };
 }
 
-function lightingFor(env, isDark) {
-  if (env.sky === SKY_SPACE) return { sun: 2.4, hemi: 0.75, moon: false };
-  if (isDark && env.nightLights) return { sun: 0.5, hemi: 0.6, moon: true };
-  if (isDark) return { sun: 1.4, hemi: 0.8, moon: false };
-  return { sun: 2.6, hemi: 1.3, moon: false };
+/** A standard material for one of look.js's roles (the role is kept on userData so a test can read it back). */
+function roleMaterial(role, params = {}) {
+  const material = new MeshStandardMaterial({ ...MATERIAL_ROLES[role], ...params });
+  material.userData.role = role;
+  return material;
 }
 
 function boundsInfo(bounds) {
@@ -202,35 +198,44 @@ export function buildObjects(graph, palette) {
   const fog = env.fog && env.sky !== SKY_SPACE ? new Fog(0xffffff, 1, 2) : null;
   function setFit(distance) {
     if (!fog) return;
-    fog.near = distance * FOG_NEAR_FACTOR;
-    fog.far = distance * FOG_FAR_FACTOR;
+    Object.assign(fog, fogRange(distance, extent.diag));
   }
   // Until the caller reports the camera it really fits, follow the camera the graph asks for.
   setFit(Math.max(1, Math.hypot(...graph.camera.position.map((c, i) => c - graph.camera.target[i]))));
 
-  // Lights
+  // Lights: a key (sun or moon), a fill (the hemisphere) and a rim from behind that is only lit at night. Numbers: look.js.
   const hemi = new HemisphereLight(0xffffff, 0x888888, 1);
   const sun = new DirectionalLight(0xffffff, 1);
-  sun.position.copy(extent.center).add(new Vector3(0.55, 1, 0.4).multiplyScalar(extent.diag));
+  const rim = new DirectionalLight(0xffffff, 0);
+  const ambient = new AmbientLight(0xffffff, 0);
+  hemi.name = 'fill';
+  sun.name = 'key';
+  rim.name = 'rim';
+  sun.position.copy(extent.center).add(new Vector3(...KEY_DIRECTION).multiplyScalar(extent.diag));
+  rim.position.copy(extent.center).add(new Vector3(...RIM_DIRECTION).multiplyScalar(extent.diag));
   sun.target.position.copy(extent.center);
-  root.add(hemi, sun, sun.target, new AmbientLight(0xffffff, 0.12));
+  rim.target.position.copy(extent.center);
+  root.add(hemi, sun, sun.target, rim, rim.target, ambient);
   tints.push((p) => {
-    const light = lightingFor(env, p.dark);
+    const light = LIGHT_SETS[lightSetName(env, p.dark)];
     const page = colourOf('page');
     const surface = colourOf('surface');
     sceneBackground.copy(env.sky === SKY_SPACE ? colourOf({ base: SPACE_BASE, tint: 'page', share: SPACE_PAGE_SHARE }) : page);
     hemi.color.copy(page).lerp(new Color(0xffffff), env.sky === SKY_SPACE ? 0.7 : 0.55);
     hemi.groundColor.copy(surface).multiplyScalar(0.55);
-    hemi.intensity = light.hemi;
-    sun.color.copy(light.moon ? new Color(MOON_COLOUR) : colourOf(SUN_COLOUR));
-    sun.intensity = light.sun;
+    hemi.intensity = light.fill;
+    sun.color.copy(colourOf(light.keyColour));
+    sun.intensity = light.key;
+    ambient.intensity = light.ambient;
+    rim.intensity = light.rim?.intensity ?? 0;
+    if (light.rim) rim.color.copy(colourOf(light.rim.colour));
     if (fog) fog.color.copy(sceneBackground);
   });
 
   // Ground: a disc well past the scene, solid under it and dissolving into the page at its rim, so no edge is ever framed.
   if (env.ground) {
     const radius = (Math.hypot(extent.size.x, extent.size.z) / 2) * GROUND_REACH + GROUND_EXTRA;
-    const material = track(new MeshStandardMaterial({ roughness: 1, metalness: 0 }));
+    const material = track(roleMaterial('ground'));
     patchEdgeFade(material, radius, GROUND_FADE_START);
     const ground = new Mesh(track(new CircleGeometry(radius, 72).rotateX(-Math.PI / 2)), material);
     ground.position.set(extent.center.x, Math.min(0, graph.bounds.min[1]) - 0.01, extent.center.z);
@@ -244,10 +249,11 @@ export function buildObjects(graph, palette) {
     const count = batch.instances.length;
     if (count === 0) continue;
     const isRing = batch.shape === 'ring';
+    const windows = Boolean(batch.emissive) && Boolean(env.nightLights) && batch.shape === 'box';
+    const selfLit = Boolean(batch.emissive) && !windows; // a star, a lit sphere: the glossy accent role; a wall with windows is a mass
     const material = track(isRing
       ? new MeshBasicMaterial({ transparent: true, opacity: RING_OPACITY, side: DoubleSide, depthWrite: false, fog: false })
-      : new MeshStandardMaterial({ roughness: 0.82, metalness: 0.04, flatShading: Boolean(batch.flat) }));
-    const windows = Boolean(batch.emissive) && Boolean(env.nightLights) && batch.shape === 'box';
+      : roleMaterial(selfLit ? 'accent' : 'mass', { flatShading: Boolean(batch.flat) }));
     if (windows) patchWindows(material, batch.emissive.density);
     const mesh = new InstancedMesh(geometryFor(batch.shape), material, count);
     mesh.frustumCulled = false; // animated and cheap: one batch is one draw call
@@ -317,7 +323,7 @@ export function buildObjects(graph, palette) {
     tubeCurves.set(tube.id, curve);
     const segments = Math.max(12, tube.points.length * 12);
     const geometry = new TubeGeometry(curve, segments, tube.radius, 8, false);
-    const material = new MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 });
+    const material = roleMaterial('accent');
     const mesh = new Mesh(track(geometry, material), material);
     root.add(mesh);
     tints.push(() => material.color.copy(colourOf(tube.colour)));
@@ -385,7 +391,7 @@ export function buildObjects(graph, palette) {
     geometry.setIndex(index);
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
+    const material = roleMaterial('ground', { vertexColors: true });
     const mesh = new Mesh(track(geometry, material), material);
     mesh.userData = { kind: 'surface', surface };
     root.add(mesh);
@@ -406,7 +412,7 @@ export function buildObjects(graph, palette) {
   if (env.water && lead) {
     const radius = (Math.hypot(lead.size[0], lead.size[1]) / 2) * WATER_REACH;
     // Solid over the seabed (so the terrain's flat margin never shows through), dissolving at its rim.
-    const material = track(new MeshStandardMaterial({ roughness: 0.2, metalness: 0.1 }));
+    const material = track(roleMaterial('water'));
     patchEdgeFade(material, radius, WATER_FADE_START);
     const water = new Mesh(track(new CircleGeometry(radius, 96).rotateX(-Math.PI / 2)), material);
     water.position.y = env.water.y * lead.size[2];

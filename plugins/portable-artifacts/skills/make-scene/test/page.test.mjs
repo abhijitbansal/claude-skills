@@ -6,6 +6,7 @@ import { loadTheme } from '../shared/theme.mjs';
 import { buildScene, sceneFromGraph } from '../scripts/lib/api.mjs';
 import { renderPage } from '../scripts/lib/page.mjs';
 import { bundleHeader, readBundle } from '../scripts/lib/bundle.mjs';
+import { labelClasses } from '../template/runtime/chrome/label-class.js';
 import { PINNED_ENV, ROWS, citySpec } from './helpers/scene-fixtures.mjs';
 
 const theme = loadTheme('dusk');
@@ -134,6 +135,17 @@ test('tour beats map to graph tour entries by their first resolvable focus', asy
     { title: 'Label focus', caption: '', focus: 'api w30', path: null, reverse: false },
     { title: 'Nothing resolves', caption: '', focus: 'ghost', path: null, reverse: false },
   ]);
+});
+
+test('labels carry the shared caps and numeral classes', () => {
+  const label = (text, size) => ({ text, at: [0, 0, 0], size });
+  // one size: every name is plain, a number is tabular
+  assert.deepEqual(labelClasses([label('api', 0.6), label('web', 0.6), label('12', 0.6)]), ['sc-label', 'sc-label', 'sc-label pa-num']);
+  // two sizes: the larger tier names regions and axes, in the shared caps style; numbers stay numbers
+  const classes = labelClasses([label('Gadget', 0.45), label('0', 0.45), label('1,200', 0.45), label('units', 0.55), label('2026-01', 0.55), label('−3.5%', 0.45)]);
+  assert.deepEqual(classes, ['sc-label', 'sc-label pa-num', 'sc-label pa-num', 'sc-label pa-caps', 'sc-label pa-num', 'sc-label pa-num']);
+  assert.deepEqual(labelClasses([]), []);
+  assert.deepEqual(labelClasses([label('API 2', 0.6), label('W30', 0.4)]), ['sc-label pa-caps', 'sc-label'], 'a name with a digit in it is still a name');
 });
 
 test('autoplay is carried as an attribute only when there is a tour', async () => {
