@@ -6,8 +6,10 @@
 // dimming. Playing runs each beat as glide (GLIDE_MS, ease in-out), a short
 // rest, then (a hop, motion allowed) the dot, then a hold, and moves on; every
 // duration divides by the speed. While playing, the caption waits for the
-// camera: it changes at the end of the rest, not when the beat starts (a step
-// by hand, a pause and reduced motion paint it at once). Reduced motion drops
+// camera: it changes at the end of the rest, not when the beat starts, and never
+// before the camera reports it has landed (camera.whenStill: a late frame
+// delays the caption, it does not let the caption pass the camera). A step
+// by hand, a pause and reduced motion paint it at once. Reduced motion drops
 // the glide, the rest and the dot: the beat applies at once and the hold is
 // the only timer. Registered as PADiagram.story and composed by viewer.js.
 //
@@ -263,7 +265,17 @@
         if (waiting) { shownIndex = stepIndex; if (hooks.onSettle) hooks.onSettle(); }
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();
       };
-      if (instant) settled(); else later(token, glideMs() + settleMs(), settled);
+      if (instant) { settled(); return; }
+      // The glide timer is a floor, not the signal: a frame that comes late (a busy page) leaves the camera
+      // moving when it fires. The camera says when it has landed (whenStill); a camera still on its way then
+      // gets its own rest after the landing, so the caption never changes under a moving camera.
+      later(token, glideMs() + settleMs(), function () {
+        var late = camera.moving();
+        camera.whenStill(function () {
+          if (token !== run) return; // another beat, a pause or an exit took over while the camera was on its way
+          if (late) later(token, settleMs(), settled); else settled();
+        });
+      });
     }
     // onStep runs before the beat paints: the trace (off in Play) drops its own
     // pa-dim marks first, so the beat's dimming is not undone by it.

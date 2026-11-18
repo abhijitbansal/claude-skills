@@ -214,18 +214,37 @@
       var c = clampCentre(cam.cx + dx * CUE_STEP * sz.w / cam.s, cam.cy + dy * CUE_STEP * sz.h / cam.s);
       moveTo({ cx: c.cx, cy: c.cy, s: cam.s });
     }
-    function cancelTween() {
+    // ---- is the camera moving? ------------------------------------------------------------
+    // The story waits for the camera, by its own landing and not by a clock of its own: a frame that
+    // comes late (a busy page) must not let the caption beat the camera. whenStill(fn) runs fn once
+    // the camera is still (at once if it is), when a glide lands, is cancelled by the reader (a pan, a
+    // zoom) or is replaced by a move at once. A glide that replaces another keeps fn waiting.
+    var stillWaiters = [];
+    function flushStill() {
+      var waiting = stillWaiters;
+      stillWaiters = [];
+      waiting.forEach(function (fn) { fn(); });
+    }
+    function stopTween() {
       if (tween && global.cancelAnimationFrame) global.cancelAnimationFrame(tween);
       tween = 0;
+    }
+    function cancelTween() {
+      stopTween();
+      flushStill();
+    }
+    function moving() { return !!tween; }
+    function whenStill(fn) {
+      if (tween) stillWaiters.push(fn); else fn();
     }
     // Glide to `target` over options.ms (CAMERA_MS by default), ease-out unless options.ease is 'in-out'
     // (a story beat: the camera eases in as well as out); at once when options.instant is set, under
     // reduced motion, or without requestAnimationFrame.
     function moveTo(target, options) {
       options = options || {};
-      cancelTween();
+      stopTween();
       var to = { cx: finite(target.cx, cam.cx), cy: finite(target.cy, cam.cy), s: finite(target.s, cam.s) };
-      if (options.instant || reduced() || !global.requestAnimationFrame) { cam = to; apply(); return; }
+      if (options.instant || reduced() || !global.requestAnimationFrame) { cam = to; apply(); flushStill(); return; }
       var ms = Math.max(1, finite(options.ms, CAMERA_MS));
       var ease = options.ease === 'in-out' ? easeInOut : easeOut;
       var from = { cx: cam.cx, cy: cam.cy, s: cam.s };
@@ -237,6 +256,7 @@
         cam = { cx: from.cx + (to.cx - from.cx) * e, cy: from.cy + (to.cy - from.cy) * e, s: from.s * Math.pow(to.s / from.s, e) };
         apply();
         tween = k < 1 ? global.requestAnimationFrame(tick) : 0;
+        if (!tween) flushStill();
       };
       tween = global.requestAnimationFrame(tick);
     }
@@ -321,7 +341,7 @@
     }
 
     return {
-      size: size, fitScale: fitScale, fitCamera: fitCamera, wholeCamera: wholeCamera, apply: apply, moveTo: moveTo, cancelTween: cancelTween,
+      size: size, fitScale: fitScale, fitCamera: fitCamera, wholeCamera: wholeCamera, apply: apply, moveTo: moveTo, cancelTween: cancelTween, moving: moving, whenStill: whenStill,
       fit: fit, home: home, refit: refit, zoomAt: zoomAt, zoomBy: zoomBy, panBy: panBy,
       boxOf: boxOf, unionBox: unionBox, cameraFor: cameraFor, ensureVisible: ensureVisible,
       reduced: reduced, reduceQuery: reduceQuery,

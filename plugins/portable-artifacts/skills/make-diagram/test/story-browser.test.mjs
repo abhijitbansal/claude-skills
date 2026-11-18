@@ -921,33 +921,63 @@ test('with prefers-reduced-motion: reduce no element has a running transition du
   await moving.context.close();
 });
 
-test('while playing, the caption line changes only after the camera has stopped, and the camera moved first (2x, real DOM)', async (t) => {
+// The order of events, not the time between them. A MutationObserver reports, in the order they happen,
+// 'beat' (the scrubber moves to the new beat, at once, before the camera), 'vb' (the camera moves: the
+// viewBox changes) and 'line' (the caption line changes). Each kind is written by its own task (a click or
+// timer, a rAF frame, a timer), so one observer callback is one event.
+// The page also stalls, as on a loaded machine: STALL_AT_MS after each beat starts (part way through the
+// 300 ms glide at 2x) its main thread is busy for STALL_MS, so the camera's last frames come late. A player
+// that times the caption from the moment the beat starts (not from the camera landing) then changes the
+// caption while the camera is still moving.
+const OBSERVE_ORDER = ({ stallAt, stallMs }) => {
+  window.__events = [];
+  window.__stalls = 0;
+  const stage = document.querySelector('#pa-stage svg');
+  const line = document.querySelector('[data-pa-line]');
+  const scrub = document.querySelector('[data-pa-scrub]');
+  const reads = {
+    vb: () => stage.getAttribute('viewBox'),
+    line: () => line.textContent,
+    beat: () => scrub.getAttribute('aria-valuetext'),
+  };
+  const last = { vb: reads.vb(), line: reads.line(), beat: reads.beat() };
+  const watch = (el, kind, options) => new MutationObserver(() => {
+    const now = reads[kind]();
+    if (now === last[kind]) return;
+    last[kind] = now;
+    window.__events.push(kind);
+    if (kind === 'beat') setTimeout(() => { window.__stalls += 1; const end = performance.now() + stallMs; while (performance.now() < end); }, stallAt);
+  }).observe(el, options);
+  watch(stage, 'vb', { attributes: true, attributeFilter: ['viewBox'] });
+  watch(line, 'line', { childList: true, characterData: true, subtree: true });
+  watch(scrub, 'beat', { attributes: true, attributeFilter: ['aria-valuetext'] });
+};
+const STALL_AT_MS = 150;
+const STALL_MS = 250; // the camera's glide is 300 ms at 2x and the rest after it 30 ms: this holds its last frame past both
+
+test('while playing, a beat starts, then the camera moves, then (only once it has stopped) the caption changes, and the camera does not move again until the next beat starts (2x, a page that stalls)', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
-  await page.evaluate(() => {
-    window.__frames = [];
-    const t0 = performance.now();
-    const tick = () => {
-      window.__frames.push({ t: performance.now() - t0, vb: document.querySelector('#pa-stage svg').getAttribute('viewBox'), line: document.querySelector('[data-pa-line]').textContent });
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  });
+  await page.evaluate(OBSERVE_ORDER, { stallAt: STALL_AT_MS, stallMs: STALL_MS });
   await page.keyboard.press('p');
   await page.click('[data-pa-speed]');
   await page.click('[data-pa-speed]'); // 1.5x, then 2x
   assert.equal(await page.textContent('[data-pa-speed]'), '2×');
   await waitCount(page, '4 / 9');
-  await page.waitForTimeout(600); // the caption of beat 4 lands after its camera
-  const frames = await page.evaluate(() => window.__frames);
+  await page.waitForFunction(() => window.__events.filter((e) => e === 'line').length >= 4, null, { timeout: 10000 }); // the caption of beat 4 lands after its camera
+  const events = await page.evaluate(() => window.__events);
+  const stalls = await page.evaluate(() => window.__stalls);
   await page.keyboard.press('Space');
-  const moved = (i) => frames[i].vb !== frames[i - 1].vb;
-  const changes = frames.map((f, i) => i).filter((i) => i > 0 && frames[i].line !== frames[i - 1].line && frames[i - 1].line !== '');
-  assert.ok(changes.length >= 2, `saw ${changes.length} caption changes`);
-  for (const i of changes) {
-    const lastMove = [...frames.keys()].filter((j) => j > 0 && j < i && moved(j)).at(-1);
-    assert.ok(lastMove !== undefined && frames[i].t - frames[lastMove].t < 1000, 'the camera moved for this beat before its caption');
-    for (let k = i; k < Math.min(frames.length, i + 6); k++) assert.equal(moved(k), false, `the camera was still moving at the frame the caption changed (frame ${k - i} after)`);
+  assert.ok(stalls >= 3, `the page stalled ${stalls} times (once per beat started after the first)`);
+  const lines = events.map((e, i) => (e === 'line' ? i : -1)).filter((i) => i >= 0).slice(1); // the first caption is the opening one
+  assert.ok(lines.length >= 3, `saw ${lines.length} caption changes after the first`);
+  for (const i of lines) {
+    const start = events.lastIndexOf('beat', i);
+    assert.ok(start >= 0, 'a beat started before its caption changed');
+    assert.ok(events.slice(start, i).includes('vb'), `the camera moved for this beat before its caption (${events.join(' ')})`);
+    const next = events.indexOf('beat', i);
+    const after = events.slice(i, next < 0 ? undefined : next);
+    assert.equal(after.includes('vb'), false, `the camera moved again after the caption changed, before the next beat (${events.join(' ')})`);
   }
   assert.deepEqual(problems, []);
   await context.close();

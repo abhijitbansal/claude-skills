@@ -50,6 +50,7 @@ function load(data, hooks, { reduced = false } = {}) {
   const frames = [];
   const moves = [];
   const dot = fakeEl();
+  const still = { moving: false, waiters: [] }; // a test sets moving = true, then lands() the camera
   const win = {
     setTimeout: (fn, ms) => { timers.push({ fn, ms }); return timers.length; },
     clearTimeout: () => {},
@@ -68,9 +69,12 @@ function load(data, hooks, { reduced = false } = {}) {
     reduced: () => reduced, unfit() {}, fit() {}, home() {},
     fitCamera: () => ({ cx: 0, cy: 0, s: 1 }), wholeCamera: () => ({ cx: 0, cy: 0, s: 1 }), cameraFor: () => ({ cx: 0, cy: 0, s: 1 }), boxOf: () => null, unionBox: (a, b) => a || b,
     moveTo: (target, options) => { moves.push(options || {}); },
+    moving: () => still.moving,
+    whenStill: (fn) => { if (still.moving) still.waiters.push(fn); else fn(); },
   };
   const story = win.PADiagram.story(stage, svg, data, els, camera, hooks || {});
-  return { story, moves, timers, frames, dot };
+  const lands = () => { still.moving = false; still.waiters.splice(0).forEach((fn) => fn()); };
+  return { story, moves, timers, frames, dot, still, lands };
 }
 
 // The beat's named timings (story.js GLIDE_MS, SETTLE_MS): a step beat and a story beat glide alike, in-out; the beat then rests SETTLE_MS before the caption, the dot and the hold.
@@ -365,6 +369,50 @@ test('while playing, the caption changes after the camera move ends: the camera 
   glideTimer.fn();
   assert.equal(story.shown(), 1, 'the caption follows once the camera has settled');
   assert.deepEqual(order.slice(-2), ['step', 'settle'], 'the settle hook tells the transport to repaint the caption');
+});
+
+test('a camera that is late (still moving when the glide timer fires) holds the caption back until it lands, then the rest, then the caption', () => {
+  for (const speed of [1, 2]) {
+    const h = captionHarness(STEPS4);
+    h.story.setSpeed(speed);
+    h.story.play();
+    h.timers.at(-1).fn(); // beat 0: the camera is on time
+    h.timers.at(-1).fn(); // the hold expires into beat 1
+    h.still.moving = true; // frames are slow: the camera has not arrived when the glide timer fires
+    const timer = h.timers.at(-1);
+    timer.fn();
+    assert.equal(h.story.shown(), 0, `${speed}x: the glide timer is up but the camera is not: the caption stays`);
+    assert.equal(h.timers.at(-1), timer, `${speed}x: and no rest has been armed yet`);
+    h.lands();
+    assert.equal(h.story.shown(), 0, `${speed}x: the camera has landed: the caption still waits out the rest`);
+    assert.equal(h.timers.at(-1).ms, SETTLE / speed, `${speed}x: a rest of SETTLE_MS over the speed after the landing`);
+    h.timers.at(-1).fn();
+    assert.equal(h.story.shown(), 1, `${speed}x: then the caption follows`);
+  }
+});
+
+test('a camera that is on time lands the caption when the glide timer fires, with no second rest', () => {
+  const h = captionHarness(STEPS4);
+  h.story.play();
+  h.timers.at(-1).fn();
+  h.timers.at(-1).fn();
+  const armed = h.timers.length;
+  h.timers.at(-1).fn(); // the camera is not moving
+  assert.equal(h.story.shown(), 1);
+  assert.equal(h.timers.length, armed + 1, 'only the hold timer follows');
+});
+
+test('a beat that is replaced while the camera is late does not land its caption when the old camera arrives', () => {
+  const h = captionHarness(STEPS4);
+  h.story.play();
+  h.timers.at(-1).fn();
+  h.timers.at(-1).fn(); // beat 1
+  h.still.moving = true;
+  h.timers.at(-1).fn(); // beat 1's glide timer fires with the camera still moving
+  h.story.next(); // beat 2 replaces it
+  h.lands();
+  assert.equal(h.story.shown(), 0, 'the stale landing does nothing');
+  assert.equal(h.story.index(), 2);
 });
 
 test('a step, a pause and an exit do not make the caption wait: it follows at once', () => {
