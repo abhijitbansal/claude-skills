@@ -81,10 +81,14 @@ export function elementsOf(nodes, unit) {
     .filter((e) => e.strokes.length > 0);
 }
 
+// The latest the hand finishes drawing: where the kinds' reveals land (latestLanding), or earlier when the look holds a finished
+// board longer (look.hand.clearBy, marker: the last stroke ends that long before the shot does, m6: 1.2 s)
+const landingOf = (timing, look) => Math.min(latestLanding(timing), Math.max(0, timing.duration - (look?.hand?.clearBy ?? 0)));
+
 // The [start, end] each sentence's elements draw in: from its first word to its end, the last capped so it lands
 // LANDED_BEFORE_END before the shot ends; one window from FALLBACK_START for a shot with no narration.
-function windowsOf(timing) {
-  const last = latestLanding(timing);
+function windowsOf(timing, look) {
+  const last = landingOf(timing, look);
   const sentences = timing.sentences ?? [];
   if (sentences.length === 0) return [[Math.min(FALLBACK_START, last), last]];
   return sentences.map((s) => [Math.min(s.start, last), Math.min(s.end, last)]);
@@ -95,8 +99,8 @@ const isWindow = (w) => Array.isArray(w) && w.length === 2 && w.every(Number.isF
 // an element's own window held inside the shot like a sentence's: it lands by the latest landing
 // and long enough to draw in: MIN_OWN_WINDOW before the landing at the least (a word spoken last lands with the shot)
 const MIN_OWN_WINDOW = 0.9; // s: the hand travels to the word first, then draws
-function windowFor([from, to], timing) {
-  const last = latestLanding(timing);
+function windowFor([from, to], timing, look) {
+  const last = landingOf(timing, look);
   const end = Math.min(to, last);
   return [Math.max(0, Math.min(from, end - MIN_OWN_WINDOW)), end];
 }
@@ -207,11 +211,11 @@ export function strokePlanned(nodes, timing, look, { unit = 1, rest = null, lead
   // before it: every window opens at `lead` at the earliest, and a shot after a cut has no HEAD_START (its pen goes down as the
   // cut ends, the hand arriving on the cut's own frames)
   const held = ([from, to]) => [Math.max(from, cutEnd), Math.max(to, cutEnd)];
-  const spoken = windowsOf(timing).map(held);
+  const spoken = windowsOf(timing, look).map(held);
   const sentences = drawFirst ? [[cutEnd > 0 ? cutEnd : -HEAD_START, spoken[0][1]], ...spoken.slice(1)] : spoken;
   // an element that names its own window (props.window, [from, to] shot seconds: an underline drawn as its word is
   // spoken) gets one after the sentences'; windows are timed in order of their start
-  const windows = [...sentences, ...elements.flatMap((e) => (isWindow(e.node.props.window) ? [held(windowFor(e.node.props.window, timing))] : []))];
+  const windows = [...sentences, ...elements.flatMap((e) => (isWindow(e.node.props.window) ? [held(windowFor(e.node.props.window, timing, look))] : []))];
   let own = sentences.length;
   const tagged = elements.map((e, i) => {
     const mine = isWindow(e.node.props.window) ? own++ : sentenceOf(e, i, elements.length, sentences.length);
@@ -228,7 +232,7 @@ export function strokePlanned(nodes, timing, look, { unit = 1, rest = null, lead
   const cap = look?.hand?.maxSpeed ?? DEFAULT_CAP;
   // look.hand.clearBy (marker, gate-marker-2 ruling 5): the last stroke ends this long before the shot does, so the hand has left
   // the finished writing for its rest point on the shot's last frame (the cut starts from that frame)
-  const hardEnd = Math.max(latestLanding(timing), timing.duration - (look?.hand?.clearBy ?? DRAW_TAIL));
+  const hardEnd = Math.max(landingOf(timing, look), timing.duration - (look?.hand?.clearBy ?? DRAW_TAIL));
   const set = [];
   const runs = order.map((w) => later.filter((s) => s.sentence === w));
   const latest = latestEnds(runs, unit, cap, hardEnd);

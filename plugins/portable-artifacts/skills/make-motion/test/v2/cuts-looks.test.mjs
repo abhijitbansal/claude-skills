@@ -99,7 +99,7 @@ test('--list cuts names, per cut, the looks whose palette holds it', () => {
   const entries = listEntries('cuts');
   // ledger listed after its gate (looks-four Task 5): its palette is cut, match, fade and wipe
   // poster listed after its gate (looks-four Task 8): its palette is cut, cover, iris, wipe, punch and slide
-  assert.deepEqual(entries.find((e) => e.name === 'cut').palettes, [...LOOKS, 'ledger', 'poster', 'keynote']);
+  assert.deepEqual(entries.find((e) => e.name === 'cut').palettes, [...LOOKS, 'ledger', 'poster', 'keynote', 'marker']);
   assert.deepEqual(entries.find((e) => e.name === 'punch').palettes, ['pop', 'poster']);
   assert.deepEqual(entries.find((e) => e.name === 'match').palettes, ['desk', 'cosmos', 'ledger', 'keynote']);
 });

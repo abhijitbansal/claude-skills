@@ -205,18 +205,22 @@ function cutoutWide(shot, ctx, picture) {
   return { box, clip: undefined, caption, placed };
 }
 
-/** Tall cut-out: the caption under the picture across the room, the picture cropped (around its focus) to fill the rest. */
+/** Tall cut-out: the caption under the picture across the room, the picture cropped (around its focus) to fill the rest.
+ *  A look's `minTallAspect` (marker: 1) keeps the box no taller than its width over that, so a landscape picture keeps most of
+ *  its width and its subject is not cut by the crop's edge; the picture and caption are then one block centred in the room. */
 function cutoutTall(shot, ctx, picture) {
   const { data, unit } = ctx;
   const room = roomOf(ctx);
   const width = room.right - room.left;
   const caption = fitCaption(shot, ctx, data.heroSteps, width, data.maxLines);
   const below = caption ? caption.layout.height + data.gap * unit : 0;
-  const height = room.bottom - room.top - below;
+  const available = room.bottom - room.top - below;
+  const height = data.minTallAspect === undefined ? available : Math.min(available, width / data.minTallAspect);
   const w = Math.min(width, height * Math.max(MIN_TALL_ASPECT, Math.min(picture.width / picture.height, width / height)));
   const clip = coverCrop(picture, { w, h: height }, shot.focus ?? [0.5, 0.5]);
-  const box = [room.left, room.top, w, height];
-  return { box, clip, caption, placed: caption ? [room.left, room.top + height + data.gap * unit] : null };
+  const top = room.top + (data.minTallAspect === undefined ? 0 : (available - height) / HALF);
+  const box = [room.left, top, w, height];
+  return { box, clip, caption, placed: caption ? [room.left, top + height + data.gap * unit] : null };
 }
 
 /** A cut-out: the picture as an object with the caption beside it (wide) or under it (tall), the credit on its edge. */

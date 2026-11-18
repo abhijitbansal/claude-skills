@@ -28,6 +28,12 @@ lookContract(NAME, {
   secondaryMin: 60,
   kinds: Object.keys(look().kinds),
   parked: PARKED,
+  listed: true, // listed after its gate (gate record, marker 2026-11-18)
+});
+
+test('marker is listed and parks exactly chart, feed, number, timeline and free (screen and code are excluded, not parked)', () => {
+  assert.equal(look().experimental, undefined);
+  assert.deepEqual(Object.keys(PARKED).sort(), ['chart', 'feed', 'free', 'number', 'timeline']);
 });
 
 test('screen and code are excluded: refused with the looks that support them; every other registered kind has data', () => {

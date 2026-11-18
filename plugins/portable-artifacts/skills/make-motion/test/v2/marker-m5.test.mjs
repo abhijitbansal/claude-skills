@@ -17,6 +17,7 @@ import { filmOf, filmFor, expandIn, canvasOf, all, FPS } from './helpers/kinds.m
 const look = registries.looks.get('marker');
 const GATES = [['gate-marker.json', '16:9'], ['gate-marker-tall.json', '9:16']];
 const SUB = 2; // samples per frame in a cut window
+const OUT_ABOVE = 300; // px: a hand whose tip is this far above the frame has its whole body above it
 
 const specOf = (file) => JSON.parse(readFileSync(new URL(`../../references/examples/v2/${file}`, import.meta.url), 'utf8'));
 // the gate film's shots with its picture swapped for the fake measure's (the test assets hold shot.png)
@@ -111,8 +112,10 @@ for (const [file, format] of GATES) {
       const seen = mine.map(handOf);
       for (let k = 1; k < seen.length; k++) {
         if (!seen[k] || !seen[k - 1]) continue;
-        // a hand out of frame on the right (its tip beyond the edge, its body further out) is not seen: the tool swap there is no jump
-        if (seen[k].x > mine[0].canvas.w && seen[k - 1].x > mine[0].canvas.w) continue;
+        // a hand out of frame (m6: on the right, its tip beyond the edge and its body further out, or above the top, where it leaves with
+        // a lifted picture) is not seen: the tool swap there is no jump
+        const outOfFrame = (h) => h.x > mine[0].canvas.w || h.y < -OUT_ABOVE;
+        if (outOfFrame(seen[k]) && outOfFrame(seen[k - 1])) continue;
         const step = Math.hypot(seen[k].x - seen[k - 1].x, seen[k].y - seen[k - 1].y);
         assert.ok(step < 0.2 * mine[0].canvas.w, `${mine[0].shot}: the hand steps ${Math.round(step)} px at ${mine[k].local.toFixed(3)} s`);
       }
@@ -217,7 +220,7 @@ const textBoxes = (nodes) => nodes.filter((n) => n.type === 'text' && n.props.la
 }));
 
 for (const [file, format] of GATES) {
-  test(`${format}: on the last frame of every shot the hand is at rest, clear of every finished line, and no frame crops it at the bottom`, () => {
+  test(`${format}: on the last frame of every shot the hand is at rest, clear of every finished line, and no resting frame crops it at the bottom`, () => {
     const film = gateFilm(file, format);
     film.shots.forEach((shot, index) => {
       const { nodes, timing, ctx } = expandIn(structuredClone(film), index);
@@ -234,8 +237,12 @@ for (const [file, format] of GATES) {
       assert.deepEqual(over, [], `${shot.id}: the resting hand is over finished writing`);
       for (let f = 0; f <= Math.ceil(timing.duration * FPS); f++) {
         const t = Math.min(timing.duration, f / FPS);
-        const low = Math.max(...polyAt(t).poly.map(([, y]) => y));
-        assert.ok(low <= ctx.canvas.h, `${shot.id} at ${t.toFixed(2)} s: the hand is ${Math.round(low - ctx.canvas.h)} px below the frame`);
+        // m6 (gate-marker-3): only the resting hand is never cropped; a hand writing a low line keeps its writing angle and the bottom edge
+        // of the frame may crop it (m5 turned it flat there, over the finished text)
+        const { pose, poly } = polyAt(t);
+        if (!pose.resting) continue;
+        const low = Math.max(...poly.map(([, y]) => y));
+        assert.ok(low <= ctx.canvas.h, `${shot.id} at ${t.toFixed(2)} s: the resting hand is ${Math.round(low - ctx.canvas.h)} px below the frame`);
       }
     });
   });

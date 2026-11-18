@@ -88,7 +88,7 @@ export function handOutline(look, unit) {
 }
 
 // ---- the eraser (m5, gate-marker-2 ruling 1): the same hand holding a felt board eraser instead of the marker ----
-const ERASER_HAND = 1.25; // the hand is drawn this much larger over the eraser: a board eraser is held in the whole palm
+const ERASER_HAND = 1; // the hand is drawn at the marker hand's own size over the eraser (m6, gate-marker-3: at 1.25 it read as a second, larger hand)
 const ERASER_CORNER = 0.16; // of the short side: the eraser's rounded corners
 const FELT_SHARE = 0.2; // of the short side: the felt strip along its lower edge
 const ERASER_HAND_AT = Object.freeze([0.08, -0.22]); // the body's centre, as shares of the eraser's [long, short] sides from its centre

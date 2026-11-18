@@ -13,9 +13,10 @@ import { unitOf } from '../units.mjs';
 import { wobble } from './geometry.mjs';
 import { strokePlan, strokePlanned, polylinePoints } from './strokes.mjs';
 import { arrivalTrack } from '../kinds/arrivals.mjs';
-import { handPose, restPoint, startsAtRest, angleAt } from './pose.mjs';
+import { handPose, restPoint, startsAtRest } from './pose.mjs';
 import { handNodes, handOutline } from './shape.mjs';
 import { flattenForHand } from './flatten.mjs';
+import { runInk } from '../kinds/shared.mjs';
 
 export { strokePlan } from './strokes.mjs';
 export { handPose } from './pose.mjs';
@@ -96,19 +97,28 @@ function poseTracks(plan, look, ctx, duration, rest) {
 // ---- where the hand rests (m5, gate-marker-2 ruling 5) ----
 
 const REST_CLEAR = 30; // units the resting hand keeps from everything on the board, not only from touching it
-const padded = ([x, y, w, h], by) => [x - by, y - by, w + 2 * by, h + 2 * by];
+const padded =([x, y, w, h], by) => [x - by, y - by, w + 2 * by, h + 2 * by];
 const boxOfPoints = (points) => {
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys)];
 };
 
+// A written line's box on the board: its advance box, grown to the ink the page's measure reports for its words (a final "?"
+// or full stop reaches past the advance edge, m6: the resting pen touched one) when there is a measure.
+function lineBox(n, line, measure) {
+  const size = n.props.font.size, x = n.props.x ?? 0, y = n.props.y ?? 0;
+  const advance = [x + line.x, y + line.y - TEXT_UP * size, line.width, (TEXT_UP + TEXT_DOWN) * size];
+  if (!measure || !line.words?.length) return advance;
+  const ink = runInk(line, n.props.font, measure);
+  const left = Math.min(advance[0], x + ink.left), right = Math.max(advance[0] + advance[2], x + ink.right);
+  const top = Math.min(advance[1], y + line.y - ink.up), bottom = Math.max(advance[1] + advance[3], y + line.y + ink.down);
+  return [left, top, right - left, bottom - top];
+}
+
 // The boxes of what stands on the board when the shot ends: each written line's ink and each drawn polyline's extent.
-function boardBoxes(nodes, unit) {
+function boardBoxes(nodes, unit, measure) {
   return nodes.flatMap((n) => {
-    if (n.type === 'text' && n.props.layout && n.props.font) {
-      const size = n.props.font.size;
-      return n.props.layout.lines.map((line) => [(n.props.x ?? 0) + line.x, (n.props.y ?? 0) + line.y - TEXT_UP * size, line.width, (TEXT_UP + TEXT_DOWN) * size]);
-    }
+    if (n.type === 'text' && n.props.layout && n.props.font) return n.props.layout.lines.map((line) => lineBox(n, line, measure));
     const points = n.type === 'path' ? polylinePoints(n.props.d) : null;
     if (points === null || n.props.put === true) return [];
     const [x, y, w, h] = boxOfPoints(points);
@@ -121,14 +131,15 @@ function boardBoxes(nodes, unit) {
  * canvas shares per format) where the whole hand lies clear of everything on the board and inside the frame, else the one it
  * overlaps least. The hand at rest never hangs over finished writing.
  */
-export function chooseRest(nodes, look, canvas, unit) {
+export function chooseRest(nodes, look, canvas, unit, measure) {
   const primary = restPoint(look, canvas);
   const alt = look.hand.restAlt?.[canvas.w >= canvas.h ? 'wide' : 'tall'] ?? [];
   if (alt.length === 0) return primary;
-  const boxes = boardBoxes(nodes, unit);
+  const boxes = boardBoxes(nodes, unit, measure);
   const outline = handOutline(look, unit);
+  // judged at the look's own writing angle: a point where the hand would have to lie flat to fit the frame is off the frame
+  const r = ((look.hand.angle ?? 0) * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
   const score = ([x, y]) => {
-    const r = (angleAt(look, y, canvas, unit) * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
     const poly = outline.map(([ox, oy]) => [x + ox * c - oy * s, y + ox * s + oy * c]);
     const off = poly.some(([px, py]) => px < 0 || py < 0 || px > canvas.w || py > canvas.h) ? 1 : 0;
     return off * boxes.length + boxes.filter((box) => overlaps(poly, padded(box, REST_CLEAR * unit))).length;
@@ -141,7 +152,7 @@ export function chooseRest(nodes, look, canvas, unit) {
 export function handPlan(shotNodes, timing, ctx) {
   const unit = ctx.unit ?? unitOf(ctx.canvas);
   const nodes = flattenForHand(shotNodes, ctx.look, unit).map((n) => (n.type === 'path' ? wobbled(n, ctx.look, ctx.seed ?? 0, unit) : n));
-  const rest = chooseRest(nodes, ctx.look, ctx.canvas, unit);
+  const rest = chooseRest(nodes, ctx.look, ctx.canvas, unit, ctx.measure);
   return { nodes, rest, ...strokePlanned(nodes, timing, ctx.look, { unit, lead: ctx.lead ?? 0, rest: ctx.look.hand && startsAtRest(ctx.look, ctx.canvas) ? rest : null }) };
 }
 

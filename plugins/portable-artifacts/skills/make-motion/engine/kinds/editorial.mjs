@@ -36,13 +36,27 @@ export function editorialRight(ctx) {
  * The vertical room of an editorial composition: at(share) is the y that share of its height falls on, height(share)
  * that share of its height, top and bottom the highest and lowest y text may reach. On the canvas: share * canvas.h
  * and the margins (what the kinds always used); inside the safe rect: its band, so a block centred on `share` sits on
- * the band rather than hanging from the top of a tall frame.
+ * the band rather than hanging from the top of a tall frame. `room` (px, default 0) is kept clear under the lowest y: a look
+ * whose hand draws a board (marker) keeps the hand's reach under the last stroke (look data bottomRoom, bottomRoomOf).
  */
-export function editorialBounds(ctx) {
+export function editorialBounds(ctx, room = 0) {
   const rect = compositionRect(ctx);
   const { canvas, look, unit } = ctx;
   if (!rect.safe) {
-    return { at: (share) => share * canvas.h, height: (share) => share * canvas.h, top: look.grid.margin * unit, bottom: canvas.h - look.grid.margin * unit, safe: false };
+    const h = canvas.h - room;
+    return { at: (share) => share * h, height: (share) => share * h, top: look.grid.margin * unit, bottom: canvas.h - look.grid.margin * unit - room, safe: false };
   }
-  return { at: (share) => rect.top + share * rect.h, height: (share) => share * rect.h, top: rect.top, bottom: rect.top + rect.h, safe: true };
+  const h = rect.h - room;
+  return { at: (share) => rect.top + share * h, height: (share) => share * h, top: rect.top, bottom: rect.top + h, safe: true };
+}
+
+/**
+ * The room in px a kind keeps clear under its last stroke: look.kinds.<kind>.bottomRoom, in units, a number or { wide, tall }
+ * (0 without it). The hand that draws the board turns flat, then is cropped, when it writes lower than its own reach above the
+ * frame's bottom edge (marker, gate-marker-3: the list and the end card).
+ */
+export function bottomRoomOf(data, ctx) {
+  const value = data?.bottomRoom;
+  const units = typeof value === 'object' && value !== null ? value[ctx.canvas.w >= ctx.canvas.h ? 'wide' : 'tall'] : value;
+  return (units ?? 0) * ctx.unit;
 }

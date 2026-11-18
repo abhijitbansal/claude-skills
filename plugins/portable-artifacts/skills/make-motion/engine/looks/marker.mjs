@@ -2,7 +2,8 @@
 // hand (engine/hand) draws every stroke on screen: text is written a line at a time through a clip the marker tip leads,
 // boxes, underlines and arrows are drawn along their own points, and nothing fades in. One element is begun per sentence
 // of the narration; between boards the hand erases (the `erase` cut). Plain data plus one pure function; index.mjs
-// freezes and registers it, hidden (experimental) until its gate (looks-four plan, Task 14).
+// freezes and registers it, listed after its gate (looks-four plan, Task 12; gate record, marker 2026-11-18) with chart, feed,
+// number, timeline and free parked in it.
 import { desk } from './desk.mjs';
 
 const ROLES = ['display', 'text', 'label'];
@@ -13,6 +14,10 @@ const SHEEN = 0.5; // the board's sheen strength (fields/board.mjs)
 const STROKE = 'linear'; // every move is a stroke at a constant speed: nothing eases, nothing overshoots
 const MARK_WIDTH = 7; // units: the marker's line
 const PARKED_FROM_DESK = Object.freeze(['feed']);
+// units kept clear under the last stroke of the end card (under the band's bottom margin): the hand's reach below its tip is about
+// 290 units at its writing angle, so the stamp, drawn last, is kept above the frame's height - 8 - 290 and the hand is whole while
+// it draws it: 200 keeps the wide board's last stroke above 784 (of 1080), 230 the tall one's above 1624 (of 1920)
+const HAND_ROOM = Object.freeze({ wide: 200, tall: 230 });
 
 // tracking(sizeUnits, role = 'display') -> em: handwriting is not tracked
 function tracking(sizeUnits, role = 'display') {
@@ -24,7 +29,6 @@ export const marker = {
   name: 'marker',
   summary: 'Whiteboard time-lapse: a hand draws every stroke in one black marker and one accent colour; nothing fades in; the hand erases between boards.',
   modes: ['pro'],
-  experimental: true,
   // Caveat (engine/fonts, variable 400 to 700) in every role: display 700, text 600, label 600
   fonts: {
     display: { family: 'Caveat', weight: 700, width: 'normal' },
@@ -94,7 +98,10 @@ export const marker = {
     // turns flatter (minAngle) as the tip nears the bottom edge so it is never cropped, and the last stroke ends clearBy s before
     // the shot so the hand is at rest on the last frame
     restAlt: { wide: [[0.872, 0.62], [0.872, 0.4], [0.6, 0.62], [0.8, 0.12], [0.55, 0.12], [0.3, 0.62], [0.872, 0.88], [0.6, 0.9], [0.15, 0.9]], tall: [[0.72, 0.4], [0.72, 0.85], [0.3, 0.9], [0.72, 0.2]] },
-    minAngle: -25, clearBy: 0.6,
+    // m6 (gate-marker-3): clearBy 1.2, a finished board is held that long before the cut that leaves it (the kinds' tails grew with it);
+    // no minAngle: the hand keeps its writing angle on every frame (it turned flat over the last lines of the list and the end card in
+    // m5), the bottom edge of the frame may crop it while it writes a low line, and it never rests cropped (chooseRest)
+    clearBy: 1.2,
     erase: { passes: 3, smear: 0.4 },
     colours: { skin: '#eec39d', shade: '#d9a680', outline: 'ink', barrel: '#2b2e33', cap: 'accent', nib: 'ink', eraser: '#d8d4c8', felt: '#4a4a52' },
   },
@@ -121,7 +128,7 @@ export const marker = {
   post: { grain: 0.006, halftone: 0, bloom: 0 },
   // Composition data per kind. screen and code are excluded (no entry: a film asking for one is refused with the looks that
   // support it). Kinds that read data start from desk's (the same editorial composition, margins and steps).
-  // PARKED in marker alone (experimental: true: they validate and render here, and are not listed), each measured on its
+  // PARKED in marker alone (experimental: true on the kind: they validate and render here, and are not listed), each measured on its
   // registered example by scripts/v2/review.mjs (the hand's findings are in the review, scripts/v2/review-hand.mjs); the
   // shortest path to finish each is named below (docs/decisions-pending.md has no entries for them yet). m2: the hand's
   // per-element speed model made quote and diagram review clean. m3 shipped list, compare, media, map and clipping
@@ -147,45 +154,53 @@ export const marker = {
     // tail (m4): the hand draws the badge, the kicker and the hero line itself now, so the shot holds long enough after the last
     // word for the pen to finish (script/timing.mjs shotPace; the speed cap is untouched)
     // (m4 ruling 7: the tall lines 1.5 apart, not 2: a board's lines read loose at 2)
-    statement: { toWide: 11, linesWide: 2, tallLineHeight: 1.7, tallHeight: 0.85, tail: 1.6 },
+    // m6 (gate-marker-3): every tail below is 0.6 s longer than m5's, so a finished board is held 1.2 s (hand.clearBy), not 0.6, before
+    // the erase or the pan that leaves it starts (the hand's drawing time after the narration is what it was)
+    statement: { toWide: 11, linesWide: 2, tallLineHeight: 1.7, tallHeight: 0.85, tail: 2.2 },
     // m4 (ruling 8): the ask (the url) and the mark at step 2 (60, the look's secondary minimum) at the least, never the 44 of
     // step 1, and a tail like statement's so the hand finishes the badge and the url
     // m5 (ruling 3): the mark is a box the pen draws (no turn: a turned card would appear at once), last on the board
-    end: { ...desk.kinds.end, tallLineHeight: 1.5, tallHeight: 0.8, askSteps: [2], markSteps: [2], tail: 1.6, turn: 0, markLast: true },
+    end: { ...desk.kinds.end, tallLineHeight: 1.5, tallHeight: 0.8, askSteps: [2], markSteps: [2], tail: 2.2, turn: 0, markLast: true, markAsAsk: true, bottomRoom: HAND_ROOM },
     // m4 (ruling 9): bigger boxes (more room round each label: the labels stay at a third of the title) and a heavier arrow, so
     // the chain reads at phone size and uses the board's width
     // m5: a tail like the other kinds' so the hand has time for the title, four boxes, their labels and three arrows
-    diagram: { ...desk.kinds.diagram, pad: 80, arrowWidth: 7, head: 34, tail: 1.6, bottomRoom: 90 },
+    diagram: { ...desk.kinds.diagram, pad: 80, arrowWidth: 7, head: 34, tail: 2.2, bottomRoom: 90 },
     ...Object.fromEntries(PARKED_FROM_DESK.map((kind) => [kind, { ...desk.kinds[kind], experimental: true }])),
     // gate-marker-1 ruling 4: the picture is a card on the board (the pinned print, its keyline in ink, the caption beside it
     // or under it) at both formats, never full bleed: the board and its frame stay visible round it
-    media: { ...desk.kinds.media, fitWide: 'cutout', fitTall: 'cutout' },
+    // m6 (gate-marker-3): minTallAspect 1: the tall print is never cropped narrower than a square, so a landscape photo keeps its
+    // subject whole (the example's sun was halved by the edge of a 0.7 crop), and the print and its caption are centred
+    media: { ...desk.kinds.media, fitWide: 'cutout', fitTall: 'cutout', minTallAspect: 1, tail: 1.3 },
     // the hand writes each step's figure before its item (m3), so it ends an item at its right end, not hanging over it
     // numbered (m4, ruling 7): the list is written with its numbers, a hand-drawn structure, not three plain lines
     // m5: a tail so the phone tile (85 percent of the shot) shows the finished list with the hand away from it
-    list: { ...desk.kinds.list, bulletFirst: true, numbered: true, tail: 2.2 },
+    // m6 (gate-marker-3): no bottomRoom for the list, unlike the end card: the hand's room under the last line would take the items under
+    // the review's floor at 16:9 (130 units against the 120 left); the hand keeps its writing pose there and the frame's bottom edge
+    // crops it instead (hand.minAngle is gone)
+    list: { ...desk.kinds.list, bulletFirst: true, numbered: true, tail: 2.8 },
     // the arrow (or vs) is drawn between the cards, before the second card's copy (m3): the hand ends it on the second
     // card's top edge and must not then hang over that card's finished title
     // gate-marker-1 ruling 6: the value is the hero (valueMax 240, the title at most a third of it, step 2 at the least),
     // the vs has room (gap 9 gutters: its mark is 144 wide), a point is plain (no dash that reads as a minus), and the gap
     // is drawn: a bar under each value at the true scale of the two (compare-desk.mjs bars)
     // m5 (ruling 6): the vs is written in the look's own face (vs: 'text')
-    compare: { ...desk.kinds.compare, vs: 'text', inlinePoints: true, betweenFirst: true, plainPoints: true, gap: 10, valueMax: 240, valueTitle: 0.33, valueHero: true, titleFromStep: 2, bars: { gap: 0.4, width: 18 }, tail: 2.4 },
+    compare: { ...desk.kinds.compare, vs: 'text', inlinePoints: true, betweenFirst: true, plainPoints: true, gap: 10, valueMax: 240, valueTitle: 0.33, valueHero: true, titleFromStep: 2, bars: { gap: 0.4, width: 18 }, tail: 3.0 },
     // the label is written under the digits' ink box (0.22 em under the baseline: the review's measure), not in it (m3)
     number: { underGap: 90, experimental: true },
-    clipping: {},
+    // m6: a tail like the other kinds' (clearBy 1.2 holds the finished board longer; the ring needs the time it had)
+    clipping: { tail: 2.2 },
     free: { experimental: true },
     // the claim up to step 5 (240): three times the labels at step 2 is 180 (desk's cap of 180 left no room)
     chart: { ...desk.kinds.chart, titleMax: 240, labelScale: 1, experimental: true, experimentalTypes: ['race'] },
     // the quotation up to 240 on every column, its attribution at step 2 (60, secondary.min) so the quotation stays three times it
-    quote: { ...desk.kinds.quote, toWide: 12, pad: 40, max: 240, attrSteps: [2], tail: 2.2 },
+    quote: { ...desk.kinds.quote, toWide: 12, pad: 40, max: 240, attrSteps: [2], tail: 2.8 },
     // dates at step 5 or 4: three times the events' text at the 60 minimum
     timeline: { ...desk.kinds.timeline, whenSteps: [5, 4], experimental: true },
     // the key's numbers in ink on the board (a paper number on a plate the hand does not fill)
     // m3: at 16:9 the title runs across the top in one line (titleAbove, ledger's data) and the map takes the board under it,
     // so the title never stacks against the map's frame; at step 5 (240) it stays over three times the place names (step 4,
     // 150, was 2.5 times the smallest text and the review's hero rule refused it)
-    map: { ...desk.kinds.map, keyText: 'ink', keyFill: 'paper', pin: 'accent', titleAbove: true, titleStepsWide: [5], tail: 2.4 },
+    map: { ...desk.kinds.map, keyText: 'ink', keyFill: 'paper', pin: 'accent', titleAbove: true, titleStepsWide: [5], tail: 3.0 },
   },
   // The cue each event makes (scripts/v2/sound/cues.mjs), or null for none: every registered cut and device is named.
   sounds: {

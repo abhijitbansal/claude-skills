@@ -13,7 +13,10 @@ import { layoutText } from '../text/layout.mjs';
 import { gridX, kindData, kindSupportProblems } from '../looks/index.mjs';
 import { entrance, roundedRect } from '../devices/shared.mjs';
 import { track } from '../time/track.mjs';
-import { editorialSpan, editorialBounds, editorialRight } from './editorial.mjs';
+import { editorialSpan, editorialBounds, editorialRight, bottomRoomOf } from './editorial.mjs';
+
+// the board's vertical room: the look's bounds with data.bottomRoom kept clear under the last stroke (marker: the hand's reach)
+const boundsOf = (ctx, data) => editorialBounds(ctx, bottomRoomOf(data, ctx));
 import { parseSay, SayError } from '../script/say.mjs';
 import {
   CAP_HEIGHT, WORD_DESCENT, HERO_SCHEMA, sizeAt, fontFor, heroId, isWide, arrivesMatched, wordsOf, fitDisplay, setCase, isEditorial, heroProblems, fieldNode, enterTracks, onDevices, placeDevices, deviceCamera, unionBox, runInk, plainSay, endTimes, cutReveal, overlaps, wordBoxes, tagBox, ghostWords, stepUnder, fitLongestSide, NOT_BLANK, assertNoBlanks, cardOf, cardGroup, opensSet,
@@ -63,7 +66,9 @@ function cardParts(shot, ctx, data, block) {
   let mark = null;
   if (shot.mark !== undefined) {
     const limits = [{ size: block.title.font.size, ratio: MIN_HERO_RATIO }, ...(block.ask === null ? [] : [{ size: block.ask.font.size, ratio: 1 }])];
-    const font = fontFor(look, 'label', sizeAt(look, stepUnder(look, data.markSteps, unit, limits), unit), unit);
+    // data.markAsAsk (marker, gate-marker-3): the stamp is set as large as the ask (the ask is a third of the closing line, so the hero rule holds)
+    const markSize = data.markAsAsk === true && block.ask !== null ? block.ask.font.size : sizeAt(look, stepUnder(look, data.markSteps, unit, limits), unit);
+    const font = fontFor(look, 'label', markSize, unit);
     const layout = layoutText({ text: setCase(look, 'label', shot.mark), font, maxWidth: NO_WRAP, measure });
     mark = { font, layout, ink: runInk(layout.lines[0], font, measure) };
   }
@@ -77,7 +82,7 @@ function cardParts(shot, ctx, data, block) {
 function cardBox(parts, ctx, data) {
   const { look, canvas, unit } = ctx;
   // in the platform safe zone on a tall frame: the bottom right of the composition band (editorial.mjs)
-  const bounds = editorialBounds(ctx);
+  const bounds = boundsOf(ctx, data);
   const right = bounds.safe ? editorialRight(ctx) : canvas.w - gridX(look, canvas, FIRST_COLUMN), bottom = bounds.bottom;
   const box = [right - parts.w, bottom - parts.h, parts.w, parts.h];
   const a = Math.abs(data.turn) * DEGREES_TO_RADIANS;
@@ -88,14 +93,14 @@ function cardBox(parts, ctx, data) {
 
 // The card kept clear of the block: where it is (bottom right), or, when the block set at y still meets it there, moved
 // under the block's last line, flush with its left edge, a gutter (and the drift) below, as low as the margin allows.
-function clearCard(card, block, y, ctx) {
+function clearCard(card, block, y, ctx, data) {
   const { look, canvas, unit } = ctx;
   const by = CARD_CLEAR * look.grid.gutter * unit + driftReach(look, unit);
   const [cx, cy, cw, ch] = card.turned;
   const clear = [cx - by, cy - by, cw + HALF * by, ch + HALF * by];
   if (!blockParts(block, y).some((box) => overlaps(clear, box))) return card;
   const under = Math.max(...blockParts(block, y).map((box) => box[1] + box[3])) + by;
-  const top = Math.min(under, editorialBounds(ctx).bottom - card.box[3]);
+  const top = Math.min(under, boundsOf(ctx, data).bottom - card.box[3]);
   const dx = block.span.x - card.box[0], dy = top - card.box[1];
   return { box: [card.box[0] + dx, top, card.box[2], card.box[3]], turned: [cx + dx, cy + dy, cw, ch] };
 }
@@ -192,7 +197,7 @@ function blockParts(block, y) {
 // gutters, and across by the camera drift) as far as the top margin allows.
 function deskY(block, card, ctx, data) {
   const { look, unit } = ctx;
-  const bounds = editorialBounds(ctx);
+  const bounds = boundsOf(ctx, data);
   const y = bounds.at(data.centre) - (block.top + block.bottom) / HALF;
   if (card === null) return y;
   const by = CARD_CLEAR * look.grid.gutter * unit, drift = driftReach(look, unit);
@@ -210,7 +215,7 @@ function expandDesk(shot, ctx, data, times) {
   const parts = cardParts(shot, ctx, data, block);
   const placed = parts === null ? null : cardBox(parts, ctx, data);
   const x = block.span.x, y = deskY(block, placed, ctx, data);
-  const card = placed === null ? null : clearCard(placed, block, y, ctx); // under the block when the corner meets it
+  const card = placed === null ? null : clearCard(placed, block, y, ctx, data); // under the block when the corner meets it
   const hero = heroId(shot, 'title');
   const matched = arrivesMatched(shot, ctx);
   const title = node('text', hero, { x, y, layout: block.title.layout, font: block.title.font, fill: look.palette.ink, role: 'hero' }, {

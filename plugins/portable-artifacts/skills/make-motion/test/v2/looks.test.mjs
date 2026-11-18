@@ -32,8 +32,8 @@ const ACCENT_SAMPLE = '#ff6600';
 const lookNames = () => registries.looks.names();
 const closeTo = (actual, expected, label) => assert.ok(Math.abs(actual - expected) < 1e-9, `${label}: ${actual} vs ${expected}`);
 
-test('desk, pop, cosmos, ledger, poster and keynote are the listed looks, in showreel order (cosmos un-parked after the final gate review, ledger, poster and keynote listed after their gates)', () => {
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote']);
+test('desk, pop, cosmos, ledger, poster, keynote and marker are the listed looks, in showreel order (cosmos un-parked after the final gate review, ledger, poster, keynote and marker listed after their gates)', () => {
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote', 'marker']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
   assert.equal(registries.looks.get('desk').name, 'desk');
   assert.equal(registries.looks.get('pop').name, 'pop');
@@ -140,12 +140,18 @@ test('every field a look names is registered and accepts the look params', () =>
 });
 
 // A move that may take no time: a hard arrival (slam) or a hard emphasis step that scales nothing.
-const zeroAllowed = (key, move) => move.dur === 0 && (key === 'slam' || (key === 'emphasize' && move.scale === 1));
+// A look with a drawing hand (marker, listed after its gate) also has a board that leaves only by the erase (exit 0), a pinned
+// print put on at once (slam 0) and a settle that moves nothing (settle 0): a hand draws what appears, nothing animates in.
+const HAND_HARD = ['exit', 'slam', 'settle'];
+const zeroAllowed = (key, move, hand = false) => move.dur === 0 && (key === 'slam' || (key === 'emphasize' && move.scale === 1) || (hand && HAND_HARD.includes(key)));
 
 test('the zero-duration exception refuses a timeless entrance and an emphasis that scales', () => {
   assert.equal(zeroAllowed('emphasize', { ease: 'linear', dur: 0, scale: 1 }), true);
   assert.equal(zeroAllowed('emphasize', { ease: 'linear', dur: 0, scale: 1.2 }), false);
   assert.equal(zeroAllowed('enter', { ease: 'linear', dur: 0 }), false);
+  assert.equal(zeroAllowed('enter', { ease: 'linear', dur: 0 }, true), false, 'a hand look still refuses a timeless entrance');
+  assert.equal(zeroAllowed('exit', { ease: 'linear', dur: 0 }), false, 'only a look with a hand leaves a board by the erase alone');
+  assert.equal(zeroAllowed('exit', { ease: 'linear', dur: 0 }, true), true);
 });
 
 test('every move names a curve that parses and has the keys the grammar needs', () => {
@@ -159,7 +165,7 @@ test('every move names a curve that parses and has the keys the grammar needs', 
       assert.equal(typeof ease(move.ease), 'function', `${name}.${key}`);
       // desk's slam is a hard arrival: dur 0; poster's emphasis is a hard step on the word that scales nothing (scale 1,
       // dur 0: "nothing pulses", looks-four plan), listed after its gate
-      assert.ok(move.dur > 0 || zeroAllowed(key, move), `${name}.${key} has a duration`);
+      assert.ok(move.dur > 0 || zeroAllowed(key, move, registries.looks.get(name).hand !== undefined), `${name}.${key} has a duration`);
     }
   }
   assert.throws(() => ease('wobble'), /unknown ease/);
@@ -342,7 +348,7 @@ test('mode values are the brief values', () => {
 test('registering twice is harmless: a second evaluation of the index does not throw', async () => {
   await assert.doesNotReject(() => import('../../engine/looks/index.mjs?again'));
   await assert.doesNotReject(() => import('../../engine/modes/index.mjs?again'));
-  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote']);
+  assert.deepEqual(lookNames(), ['desk', 'pop', 'cosmos', 'ledger', 'poster', 'keynote', 'marker']);
   assert.deepEqual(registries.modes.names(), ['pro', 'viral']);
 });
 
@@ -390,7 +396,7 @@ test('the validator reads each look cuts: every registered cut in either look (d
 
 test('an unknown look still lists the real ones', () => {
   const r = validate({ version: 2, look: 'dsk', shots: shots(undefined) });
-  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos, ledger, poster, keynote)' }]);
+  assert.deepEqual(r.errors, [{ path: 'look', message: 'unknown look "dsk"; did you mean "desk"? (have: desk, pop, cosmos, ledger, poster, keynote, marker)' }]);
 });
 
 test('every look names its composition: desk is editorial, pop is a stack', () => {

@@ -86,12 +86,13 @@ for (const format of FORMATS) {
     assert.ok(ask, 'the ask is a text node');
     const title = allNodes(nodes).find((n) => n.id === 'close.title');
     // wide: the look's minimum; tall: the hero is 150 there, and the hero rule (three times the smallest) caps the url at 50: the
-    // largest the rule allows (PARTIAL for ruling 8, see m4-report.md)
+    // largest the rule allows (PARTIAL for ruling 8, see m4-report.md; with the page's real glyphs the tall hero is 196 and the url
+    // 65, marker-m6-browser.test.mjs). m6 (gate-marker-3): the hand rests where the plan puts it (chooseRest), no longer on the
+    // static restAt, which the badge, lifted off the bottom for the hand, can meet
     const floor = format === '16:9' ? look.secondary.min : title.props.font.size / 3 - 1;
     assert.ok(ask.props.font.size / ctx.unit >= floor - 1e-6, `the url is ${Math.round(ask.props.font.size / ctx.unit)} units, the floor ${Math.round(floor)}`);
     const { handOutline } = await import('../../engine/hand/shape.mjs');
-    const { restPoint } = await import('../../engine/hand/pose.mjs');
-    const [rx, ry] = restPoint(look, canvas);
+    const [rx, ry] = handPlan(nodes, ctx.timing, ctx).rest;
     const r = (look.hand.angle * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r);
     const hand = handOutline(look, ctx.unit).map(([x, y]) => [rx + x * c - y * s, ry + x * s + y * c]);
     const [mx, my, mw, mh] = boxes.mark;

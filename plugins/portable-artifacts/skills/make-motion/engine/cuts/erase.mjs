@@ -11,10 +11,17 @@ import { unitOf } from '../units.mjs';
 import { eraserHand, handOf, withoutHand, placed, leaving, incomingHand, within } from './hands.mjs';
 
 export const ERASE = Object.freeze({
-  dur: 1.6, band: 300, sweepShare: 0.82, overlap: 0.15, soft: 0.04, feather: 3, featherUnits: 24, eraserShare: 1.3, longSide: 2.0,
+  dur: 1.8, band: 300, sweepShare: 0.82, overlap: 0.15, soft: 0.04, feather: 3, featherUnits: 24, eraserShare: 1.3, longSide: 2.0,
   // the stretches of p: the marker hand leaves, the eraser comes in, the passes, the eraser leaves, the marker hand comes in
   markerOut: [0, 0.09], eraserIn: [0.09, 0.14], passes: [0.14, 0.86], eraserOut: [0.86, 0.91], markerIn: [0.92, 1],
 });
+// A board with a pinned picture (m6, gate-marker-3: the eraser wiped one like ink): the hand takes the picture off first. In the first
+// `end` of p the marker hand reaches the picture's bottom edge (the first `grip` of that), then hand and picture rise together out of
+// the top of the frame, the picture turning `tilt` degrees; the eraser comes in after, and only the ink is wiped.
+// `handReach`: units of the hand below its tip, how far above the frame the tip must be for the hand to be out of it.
+// The passes then end at `passesEnd` (a little later than an erase with nothing to lift) so each is no quicker than m5's tall frame allows.
+// `settle`: the last of the lift, in p, in which hand and picture are already off the top of the frame, so the tool swap is not seen.
+const LIFT = Object.freeze({ end: 0.15, grip: 0.3, settle: 0.02, tilt: 3, handReach: 330, eraserIn: 0.04, passesEnd: 0.88 });
 const MASK_FILL = '#000000'; // a mask removes what is under it; its colour is never seen
 
 const clamp01 = (v) => Math.min(1, Math.max(0, v));
@@ -24,19 +31,29 @@ const smooth = (v) => v * v * (3 - 2 * v);
 const inOut = (v) => 0.5 * clamp01(v) + 0.25 * (1 - Math.cos(Math.PI * clamp01(v)));
 const lerp = (a, b, k) => a + (b - a) * k;
 
-/** The erase's geometry for `canvas`: an even number of passes (the last ends where the first began), the band each covers, the eraser's sides. */
-export function eraseGeometry(canvas) {
+// The stretches of p of an erase: ERASE's, or with a picture to lift first (`lifted`) the hand lifts it in [0, LIFT.end], the eraser
+// comes in after and the passes take what is left of the cut.
+function timesOf(lifted) {
+  const { markerOut, eraserIn, passes, eraserOut, markerIn } = ERASE;
+  if (!lifted) return { markerOut, eraserIn, passes, eraserOut, markerIn };
+  return { markerOut: [0, LIFT.end], eraserIn: [LIFT.end, LIFT.end + LIFT.eraserIn], passes: [LIFT.end + LIFT.eraserIn, LIFT.passesEnd], eraserOut: [LIFT.passesEnd, markerIn[0]], markerIn };
+}
+
+/** The erase's geometry for `canvas`: an even number of passes (the last ends where the first began), the band each covers, the eraser's sides,
+ *  and the stretches of p (`lifted`: the board holds a picture the hand takes off first). */
+export function eraseGeometry(canvas, lifted = false) {
   const unit = unitOf(canvas);
   const count = Math.max(4, 2 * Math.round(canvas.h / (2 * ERASE.band * unit)));
   const band = canvas.h / count;
   const short = band * ERASE.eraserShare;
-  return { unit, count, band, short, long: short * ERASE.longSide };
+  return { unit, count, band, short, long: short * ERASE.longSide, times: timesOf(lifted) };
 }
 
 // where pass k is at p, as { x, y, sweeping, done }: x the eraser's centre along its pass, y the centre of its band
 function passState(k, p, geo, canvas) {
-  const slot = (ERASE.passes[1] - ERASE.passes[0]) / geo.count;
-  const u = (p - ERASE.passes[0]) / slot - k;
+  const { passes } = geo.times;
+  const slot = (passes[1] - passes[0]) / geo.count;
+  const u = (p - passes[0]) / slot - k;
   const rightToLeft = k % 2 === 0;
   const [from, to] = rightToLeft ? [canvas.w, 0] : [0, canvas.w];
   const y = (geo.band * (k + 0.5));
@@ -48,18 +65,18 @@ function passState(k, p, geo, canvas) {
 
 // the eraser's centre at p, or null when it is out of frame: in from the right, along the passes (turning at the edges), out to the right
 function eraserAt(p, geo, canvas) {
-  const [in0, in1] = ERASE.eraserIn, [out0, out1] = ERASE.eraserOut;
+  const { eraserIn: [in0, in1], eraserOut: [out0, out1], passes } = geo.times;
   if (p < in0 || p > out1) return null;
   const outside = canvas.w + geo.long;
-  const first = passState(0, ERASE.passes[0], geo, canvas), last = passState(geo.count - 1, ERASE.passes[1], geo, canvas);
+  const first = passState(0, passes[0], geo, canvas), last = passState(geo.count - 1, passes[1], geo, canvas);
   if (p < in1) return [lerp(outside, first.x, smooth(within(p, in0, in1))), first.y];
   if (p > out0) return [lerp(last.x, outside, smooth(within(p, out0, out1))), last.y];
-  const slot = (ERASE.passes[1] - ERASE.passes[0]) / geo.count;
-  const k = Math.min(geo.count - 1, Math.max(0, Math.floor((p - ERASE.passes[0]) / slot)));
-  const u = (p - ERASE.passes[0]) / slot - k;
+  const slot = (passes[1] - passes[0]) / geo.count;
+  const k = Math.min(geo.count - 1, Math.max(0, Math.floor((p - passes[0]) / slot)));
+  const u = (p - passes[0]) / slot - k;
   const now = passState(k, p, geo, canvas);
   if (u <= ERASE.sweepShare || k === geo.count - 1) return [now.x, now.y];
-  const next = passState(k + 1, ERASE.passes[0] + (k + 1) * slot, geo, canvas);
+  const next = passState(k + 1, passes[0] + (k + 1) * slot, geo, canvas);
   return [now.x, lerp(now.y, next.y, smooth((u - ERASE.sweepShare) / (1 - ERASE.sweepShare)))];
 }
 
@@ -105,39 +122,73 @@ function eraserFor(look, canvas, geo, like) {
   return known.get(key);
 }
 
+// ---- the pinned picture (gate-marker-3): taken off by the hand, never wiped as ink ----
+
+const hasImage = (n) => n.type === 'image' || (n.children ?? []).some(hasImage);
+const imageOf = (n) => (n.type === 'image' ? n : (n.children ?? []).map(imageOf).find(Boolean));
+
+// The old board's pictures (each top-level node that holds an image) and where the hand takes hold: the bottom edge of the lowest one
+// (the nearest to a hand that rests low), with how far picture and hand rise so both are off the top of the frame. null for a
+// board with no picture.
+function liftOf(old, unit) {
+  const pictures = old.filter(hasImage);
+  if (pictures.length === 0) return null;
+  const boxes = pictures.map((n) => { const { h } = imageOf(n).props; return { x: n.x, bottom: n.y + (h * n.scale) / 2 }; });
+  const lowest = boxes.reduce((best, b) => (b.bottom > best.bottom ? b : best), boxes[0]);
+  const grip = [lowest.x, lowest.bottom];
+  return { pictures, ink: old.filter((n) => !hasImage(n)), grip, travel: lowest.bottom + LIFT.handReach * unit };
+}
+
+// how far up the pictures are at p, 0 to `travel`: still while the hand reaches for them, then eased
+const risen = (lift, p) => inOut(within(p, LIFT.end * LIFT.grip, LIFT.end - LIFT.settle)) * lift.travel;
+const lifted = (lift, p) => lift.pictures.map((n) => Object.freeze({ ...n, y: n.y - risen(lift, p), rotate: (n.rotate ?? 0) - LIFT.tilt * (risen(lift, p) / lift.travel) }));
+
+// the marker hand reaching the picture's top edge, then rising with it
+function liftingHand(hand, lift, p) {
+  const reach = inOut(within(p, 0, LIFT.end * LIFT.grip));
+  const at = p < LIFT.end * LIFT.grip ? [lerp(hand.x, lift.grip[0], reach), lerp(hand.y, lift.grip[1], reach)] : [lift.grip[0], lift.grip[1] - risen(lift, p)];
+  return placed(hand, at);
+}
+
 // The one hand of the frame at p (see the head of this file): [] when neither shot has a hand.
-function handsAt({ from, to, landing, p, canvas, look }, geo) {
+function handsAt({ from, to, landing, p, canvas, look }, geo, lift) {
   const outgoing = handOf(from), incoming = handOf(to);
   if (!outgoing && !incoming) return [];
-  if (p < ERASE.markerOut[1]) return outgoing ? [leaving(outgoing, within(p, ...ERASE.markerOut), canvas)] : [];
+  const { markerOut, markerIn } = geo.times;
+  if (p < markerOut[1]) {
+    if (lift) return outgoing ? [liftingHand(outgoing, lift, p)] : [];
+    return outgoing ? [leaving(outgoing, within(p, ...markerOut), canvas)] : [];
+  }
   const at = eraserAt(p, geo, canvas);
   if (at !== null) return [placed(eraserFor(look, canvas, geo, outgoing ?? incoming), at)];
-  return incomingHand({ to, landing, p, canvas, from: ERASE.markerIn[0], until: ERASE.markerIn[1] });
+  return incomingHand({ to, landing, p, canvas, from: markerIn[0], until: markerIn[1] });
 }
 
 function eraseBlend(args) {
-  const { from, to, p, canvas, look } = args;
-  const geo = eraseGeometry(canvas);
+  const { from, to, p, canvas } = args;
   const old = withoutHand(from).filter((n) => !(n.depth > 0));
+  const lift = liftOf(old, unitOf(canvas));
+  const geo = eraseGeometry(canvas, lift !== null);
   const masks = Array.from({ length: geo.count }, (_, k) => passMask(k, p, geo, canvas)).flat();
   // the old ink and what removes it, on a layer of their own: the board under is never covered
   const layer = Object.freeze({
     type: 'group', id: 'erase.old', depth: 0, props: Object.freeze({ layer: true }),
     x: 0, y: 0, scale: 1, scaleX: 1, scaleY: 1, rotate: 0, opacity: 1, draw: 1, reveal: 1, blur: 0, visible: true,
-    children: Object.freeze([...old, ...masks]),
+    children: Object.freeze([...(lift ? lift.ink : old), ...masks]),
   });
   return [
     ...to.filter((n) => n.depth > 0),
     ...withoutHand(to).filter((n) => !(n.depth > 0)),
+    ...(lift ? lifted(lift, p) : []),
     layer,
-    ...handsAt(args, geo),
+    ...handsAt(args, geo, lift),
   ];
 }
 
 export const erase = Object.freeze({
   family: 'node',
   dur: ERASE.dur,
-  summary: 'A felt eraser the hand holds sweeps the old board off in soft-edged passes over 1.6 s, leaving the board its own tone and frame, and the marker hand comes back to write the next board: the marker look\'s cut.',
+  summary: 'A felt eraser the hand holds sweeps the old board off in soft-edged passes over 1.8 s (a pinned picture is lifted off by the hand first), leaving the board its own tone and frame, and the marker hand comes back to write the next board: the marker look\'s cut.',
   example: 'erase',
   directions: null,
   smearable: false,
