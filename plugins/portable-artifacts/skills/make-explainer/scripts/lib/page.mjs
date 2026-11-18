@@ -21,6 +21,8 @@ import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mj
 import { esc, inline, headingInline, plain, rawText, toneClass } from './render/ui.mjs';
 import { flavorFor, flavorVars, scrimVar, CLASSIC } from './flavor.mjs';
 import { artSvg } from '../../shared/art.mjs';
+import { deckArtPair } from './deck-art.mjs';
+import { colophonHtml } from './colophon.mjs';
 import { dataUri } from './image.mjs';
 import { planHash, planKey } from './plan-hash.mjs';
 import { saveBlock } from './render/plan-ui.mjs';
@@ -34,7 +36,6 @@ const FLAVOR_CSS = new URL('../../template/flavors.css', import.meta.url);
 const DECK_FLAVOR_CSS = new URL('../../template/deck-flavors.css', import.meta.url);
 const DECK_ART_CSS = new URL('../../template/deck-art.css', import.meta.url);
 const ART = { width: 1280, height: 720 };
-const SLIDE_ART = { width: 1920, height: 1080 };
 const SLIDES_JS = new URL('../../template/slides.js', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
 const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
@@ -284,8 +285,8 @@ function deckParts(spec, ctx) {
     const view = simpleView(section);
     return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx), simple: view === null ? undefined : { view, body: renderBody(view, i, def, ctx) } };
   });
-  const artFor = (n) => artPair(ctx.theme, `${spec.title}${n}`, SLIDE_ART);
-  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.footer, artFor }) };
+  const artFor = (n) => deckArtPair(ctx.theme.name, `${spec.title}${n}`);
+  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.deckFooter, artFor }) };
 }
 
 const readCss = (url) => fs.readFileSync(url, 'utf8').replace(/\n$/, '');
@@ -330,6 +331,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     icons: await loadIcons(spec),
     env,
     footer,
+    deckFooter: colophonHtml('make-explainer', spec.generatedBy, buildDate(env), themeData.name),
     targets: linkTargets(spec.sections),
   };
 

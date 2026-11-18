@@ -90,3 +90,67 @@ test('the cover and the closing slide: the cover takes the scrim, the closing sl
   assert.match(css, /\.slide-close \.slide-inner \{/);
   assert.match(css, /\.slide-close \.lead/);
 });
+
+// ---- the look-gate round: feathered cards, art out of the text, one-line colophon --------------------------------
+
+const CLASSIC = ':root[data-flavor="classic"]';
+// `box-shadow: 0 0 <blur>px <spread>px var(--page)` -> { blur, spread }
+const halo = (decl) => {
+  const m = /box-shadow: 0 0 (\d+)px (\d+)px var\(--page\)/.exec(decl);
+  return m ? { blur: Number(m[1]), spread: Number(m[2]) } : null;
+};
+
+test('a classic title card is solid page under the text with a feathered halo, never a hard-edged scrim', () => {
+  const card = rule(read('deck-art.css'), `${CLASSIC} .slide-cover .slide-inner`);
+  assert.match(card, /background: var\(--page\)/, 'solid under the text: no art behind a letter, however the art is drawn');
+  assert.match(card, /padding: 0/, 'the title sits at the slide gutter, as the page hero does');
+  const h = halo(card);
+  assert.ok(h, 'a halo of the page colour round the card');
+  assert.ok(h.blur >= 24, 'a wide feather');
+  assert.ok(h.spread >= h.blur, 'the halo is ~98% opaque where it meets the card: no outline of the box, no band of faded art touching a letter');
+  assert.ok(!/--scrim/.test(card), 'not the translucent scrim');
+});
+
+test('a classic closing card and its footer feather the same way', () => {
+  const css = read('deck-art.css');
+  const card = rule(css, `${CLASSIC} .slide-has-art:not(.slide-cover) .slide-inner`);
+  const foot = rule(css, `${CLASSIC} .slide-has-art:not(.slide-cover) .pa-footer`);
+  for (const [name, decl] of [['card', card], ['footer', foot]]) {
+    const h = halo(decl);
+    assert.ok(h, `${name}: a feathered halo`);
+    assert.ok(h.spread >= h.blur * 0.7, `${name}: opaque at the edge`);
+    if (name === 'card') assert.ok(h.spread >= h.blur, 'the card: no outline of the box shows against the art');
+  }
+});
+
+test('the title slide chips are the page\'s unboxed caps labels on a classic deck', () => {
+  const chip = rule(read('deck-art.css'), `${CLASSIC} .slide-cover .meta div`);
+  assert.match(chip, /padding: 0/);
+  assert.match(chip, /border: 0/);
+  assert.match(chip, /background: none/);
+  assert.match(rule(read('deck-art.css'), `${CLASSIC} .slide-cover .meta`), /gap: 6px 22px/, 'the page hero\'s spacing between labels');
+});
+
+test('the phone title is no smaller than the page hero\'s phone size (about 38px at 390 wide)', () => {
+  const phone = read('deck-art.css').split('@media (max-width: 640px) {')[1] ?? '';
+  const m = /\.slide-cover h1 \{ font-size: clamp\(([\d.]+)rem, ([\d.]+)vw, ([\d.]+)rem\); \}/.exec(phone);
+  assert.ok(m, 'the phone cover title size');
+  assert.ok(Math.max(Number(m[1]) * 16, Math.min(390 * Number(m[2]) / 100, Number(m[3]) * 16)) >= 38, 'at least 38px on a 390px phone');
+});
+
+test('orientation picks the wide or the tall art over the colour-mode rules', () => {
+  const css = read('deck-art.css');
+  assert.match(css, /@media \(orientation: landscape\) \{ \.slide-art \.art-tall \{ display: none !important; \} \}/);
+  assert.match(css, /@media \(orientation: portrait\) \{ \.slide-art \.art-wide \{ display: none !important; \} \}/);
+});
+
+test('the colophon is one quiet nowrap line in the small size, on one class', () => {
+  const line = rule(read('deck-art.css'), '.pa-colophon');
+  assert.match(line, /white-space: nowrap/);
+  assert.match(line, /font-size: var\(--fs-xs\)/);
+  assert.match(line, /color: var\(--text-2\)/);
+});
+
+test('the closing verdict is set in the heading face', () => {
+  assert.match(read('deck-art.css'), /\.slide-close \.lead \{ font-family: var\(--font-display\); \}/);
+});
