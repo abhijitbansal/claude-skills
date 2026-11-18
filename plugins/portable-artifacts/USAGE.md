@@ -89,7 +89,7 @@ If a build prints `warning: this script runs from â€¦, not the installed copy â€
 
 ### Tested hosts
 
-Every number below was measured on a release before 1.2.0, and no run on 1.2.0 or later has a committed summary; which
+Every number below was measured on a release before 1.2.0. The one later committed summary is the 2026-11-18 Claude Code run of the director and operator scheme, under "Director and operator" below; which
 release each summary covers is in [`eval/results/INDEX.md`](eval/results/INDEX.md). Tested live: **Claude Code**, and
 **GitHub Copilot CLI 1.0.98** (one non-interactive run per skill on 2026-10-15, plus reruns of the doctor
 install path: each run picked up its skill, ran the doctor, set the host name,
@@ -111,25 +111,25 @@ and [`eval/results/summary-install-targets-2026-10-15.md`](eval/results/summary-
 
 Each `SKILL.md` has a `## Director and operator` section, the same text in all five skills. The agent you talk to is the director: it runs the intake, writes the spec, views what was built and decides every `creative` finding. It may hand the one build command, `node <skill-dir>/scripts/make.mjs <spec> --json`, to a small `artifact-builder` operator agent on a cheap model. The operator fixes only `mechanical` findings (a JSON path to change), at most twice, and returns the report. It never writes a spec and never acts on a `creative` finding. The director trusts the report and the output file, not the operator's prose, and takes over when the same `mechanical` finding survives two operator attempts or names no path. With no `artifact-builder` in the host's list of agents, or if it fails to start, the director runs the same command itself.
 
-Where the agent file lives, per host:
+The ladder, per host. Where a host cannot pin the operator's model, the director still runs the command itself, so the work never depends on the agent being there:
 
-| Host | File | How the director gets it |
-|---|---|---|
-| Claude Code | `agents/artifact-builder.md` in the plugin (model `haiku`, tools Read, Edit and Bash); `install.mjs claude` writes it to `.claude/agents` | Listed as `<plugin>:artifact-builder`; the skill tells the director to start it with the skill directory and the spec path |
-| Copilot CLI, VS Code Copilot Chat | `~/.copilot/agents/artifact-builder.agent.md` (project scope: `.github/agents`) | The same hand-off from the skill; advisory, the main agent may choose to run the command itself. VS Code is untested |
-| Codex | `~/.codex/agents/artifact-builder.toml` (project scope: `.codex/agents`), or the `default_subagent_model` key under `[agents]` in Codex config | The same hand-off; written from the Codex docs, not run live |
-| Gemini CLI | nothing | The director runs the command itself |
+| Host | Agent file | What decides the hand-off | Status |
+|---|---|---|---|
+| Claude Code | `agents/artifact-builder.md` in the plugin (`model: haiku`, tools Read, Edit and Bash); `install.mjs claude` writes the same file to `.claude/agents` for an install without the plugin | The skill tells the director to start `artifact-builder` with the skill directory and the spec path; the file's `model: haiku` is the one deterministic pin | Run live, 10 prompts, 2026-11-18: see below |
+| Copilot CLI, VS Code Copilot Chat | `~/.copilot/agents/artifact-builder.agent.md` (project scope: `.github/agents`) | The model decides whether to delegate; advisory | Install-tested, not run live (with this agent text). VS Code is untested |
+| Codex | `~/.codex/agents/artifact-builder.toml` (project scope: `.codex/agents`), or the `default_subagent_model` key under `[agents]` in Codex config | The model decides whether to delegate; advisory | Install-tested, not run live. Files were written from the Codex docs |
+| Any other host, or no agent listed (Gemini CLI: no agent file) | nothing | The director runs `make.mjs` itself | The fallback every `SKILL.md` section names |
 
-No `SKILL.md` pins a model or an effort in its frontmatter any more.
+No `SKILL.md` pins a model or an effort in its frontmatter any more. On Claude Code the file's `model: haiku` is a pin for the operator only: an environment variable `CLAUDE_CODE_SUBAGENT_MODEL` in your shell is expected to override it (the eval drops it from its sessions for that reason; the override itself was not run), and so would a model the director names when it starts the agent (none did in the 2026-11-18 run).
 
-Install the agent file with one of these (add `--project <dir>` for project scope, and use `codex` or `agents` in place of `copilot` for those hosts):
+Install the agent file with one of these (add `--project <dir>` for project scope, and use `copilot`, `codex` or `agents` in place of `claude` for those hosts; `agents` writes the Copilot and Codex files):
 
 ```bash
-node plugins/portable-artifacts/bin/install.mjs copilot
-node plugins/portable-artifacts/bin/install.mjs copilot --agents-only
+node plugins/portable-artifacts/bin/install.mjs claude
+node plugins/portable-artifacts/bin/install.mjs claude --agents-only
 ```
 
-The first command installs the skills and the agent. The second writes only the agent file, for users whose skills came another way. An existing agent file is kept unless you pass `--force`.
+The first command installs the skills and the agent. The second writes only the agent file, for users whose skills came another way. An existing agent file is kept unless you pass `--force`. A plugin install on Claude Code already carries the file, so `claude` is for the other ways of installing there.
 
 Installed with `npx skills add`, which copies skill folders only (no `bin/install.mjs`)? Use the doctor instead:
 
@@ -140,7 +140,23 @@ node <skill-dir>/scripts/doctor.mjs --fix builder_agent
 
 The doctor reports a missing agent file as an optional item, and only where `~/.copilot` or `~/.codex` exists. `--fix builder_agent` runs the skill's own copy of `shared/agents.mjs`, which writes `~/.copilot/agents/artifact-builder.agent.md` and/or `~/.codex/agents/artifact-builder.toml` (user level, outside the project; an existing file is kept, never overwritten). The skill's workflow already tells the agent to ask you before running a doctor fix. Project-level install (`.github/agents`, `.codex/agents`) still needs `install.mjs --project`. A host may need a new session before it lists the new agent.
 
-**What was measured, and on which scheme.** No run of the director and operator scheme has a committed summary: the billed eval of it is open, and `eval/run-eval.mjs` has a delegation view for it. The only measurements below were taken on 2026-10-21 on Copilot CLI 1.0.98 under the earlier scheme, where each skill had a "Cheaper model" section and the cheap model wrote the spec itself (the session ran as `copilot -p "<prompt>" --allow-all-tools --agent artifact-builder`, on make-motion 1 for motion). They are kept as dated records ([`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)):
+**What was measured, and on which scheme.** Two records on two schemes. Do not read one as the other.
+
+**Claude Code, director and operator scheme (measured 2026-11-18).** Claude Code 2.1.327, make-motion 2, the 10 motion prompts, one run of each and none repeated, so each cell is one sample. Command: `node plugins/portable-artifacts/eval/run-eval.mjs --skill motion --host claude-director --only <the ten ids> --budget 2` (a pilot of one case, then the other nine; `--budget 2` is the per-case spend cap). Setting sources: Claude Code's project-only setting-sources option was passed (it is in the `claude-director` host in `eval/hosts.json`), so only the workdir's `.claude/` was read; the stream does not list them, so "project only" rests on that option plus no user plugin, user agent or hook event, and no Sonnet, appearing in the stream. Every figure below is read from the session stream by `eval/session.mjs`, except `valid`, which is the harness's own `make.mjs --outline` after the case ([`summary-director-operator-2026-11-18.md`](eval/results/summary-director-operator-2026-11-18.md)):
+
+| Figure | Result (measured 2026-11-18) |
+|---|---|
+| Cases valid (harness) | 10 of 10 |
+| Director delegated to `artifact-builder` | 10 of 10 |
+| Operator model | `claude-haiku-5-5` in 10 of 10; the director named a model in 0 of 10 |
+| Director model | `claude-opus-5-5` (the account default) in 10 of 10 |
+| Spec written by the operator | 0 of 10 (every spec write was the director's) |
+| First build valid | 9 of 10 (`number-kpi` was not; the director took over, then delegated again for the final render) |
+| Total cost | $4.66 for the ten cases, stream `total_cost_usd` at list price; largest case $0.81; the operator model about $0.011 of it. No case reached the $2 cap |
+
+What the run does not show: whether the films are good (the director model viewed the sheets, no person did), the other four skills, a plugin install of the agent (the agent was a workdir file, listed as `artifact-builder` with no plugin prefix), what the account was actually charged (the stream reports `apiKeySource: none`), or any host but Claude Code. In `viral-vertical` and `voiced-pro` the director edited the spec and ran the full build itself after viewing the sheets instead of delegating the rebuild; whether that fits the section's text was not judged. The 2026-10-21 table and trial below are not part of this record.
+
+**Copilot CLI, earlier scheme (measured 2026-10-21, with the previous agent text, which wrote the spec).** Taken on Copilot CLI 1.0.98 under the earlier scheme, where each skill had a "Cheaper model" section and the cheap model wrote the spec itself (the session ran as `copilot -p "<prompt>" --allow-all-tools --agent artifact-builder`, on make-motion 1 for motion). The agent text then is not the agent text now, and the director and operator scheme has not been run on Copilot. They are kept as dated records ([`summary-routing-2026-10-21.md`](eval/results/summary-routing-2026-10-21.md)):
 
 | Run | Valid builds | Model |
 |---|---|---|

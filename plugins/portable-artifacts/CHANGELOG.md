@@ -83,6 +83,14 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
   script prints is still exactly the doctor's `--fix` step, and the 1.3.0 per-user model folder (`$CLAUDE_PLUGIN_DATA`,
   else the OS cache folder) is kept: it now holds the SHA-256-checked model files. `voice.mjs --dir` and the static
   `--list-voices` from 1.3.0 are kept; the first download prints one line per file instead of a percentage.
+- **Director and operator replaces the pinned cheap model.** No `SKILL.md` pins a `model` or `effort` any more; each has
+  a `## Director and operator` section: the agent you talk to writes the spec and decides every creative finding, and may
+  hand the one `make.mjs <spec> --json` command to the `artifact-builder` agent (`model: haiku` on Claude Code), which
+  fixes only mechanical findings. `install.mjs claude` now writes that agent file. On Claude Code, measured 2026-11-18
+  (Claude Code 2.1.327, make-motion 2, ten prompts, one run each, read from the session stream by `eval/session.mjs`):
+  10 of 10 valid, 10 of 10 delegated, operator `claude-haiku-5-5`, director `claude-opus-5-5`, first build valid in 9 of
+  10, $4.66 in all ([record](eval/results/summary-director-operator-2026-11-18.md)). Copilot and Codex: install-tested,
+  not run live.
 
 ## [1.3.0] - 2026-11-15
 

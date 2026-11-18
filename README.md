@@ -173,7 +173,7 @@ adapters/install.sh all
 ```
 
 Idempotent — re-run after pulling updates; it prunes links for removed skills. The adapter
-only links skill folders: it runs no `npm ci`, installs no agent file and does not add sibling
+only links skill folders: it runs no `npm ci --ignore-scripts`, installs no agent file and does not add sibling
 skills, so for `portable-artifacts` use that plugin's own installer, below.
 
 The `portable-artifacts` skills (`make-dashboard`, `make-diagram`, `make-explainer`, `make-motion`, `make-scene`) are Node packages: they also

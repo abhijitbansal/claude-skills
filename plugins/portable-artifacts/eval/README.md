@@ -21,7 +21,7 @@ node run-eval.mjs --skill scene --host claude --model haiku --only city-inline,e
 node run-eval.mjs --skill dashboard --host codex-oss --model gemma4
 node run-eval.mjs --skill motion --host codex-oss --model gemma4 --allow-local-models
 node run-eval.mjs --skill explainer --host copilot --agent artifact-builder --model "Claude Haiku 5.5"
-node run-eval.mjs --skill diagram --host claude-frontmatter     # no --model: the account default model; frontmatter use unverified
+node run-eval.mjs --skill diagram --host claude-frontmatter     # no --model: the account default model, no agent file (baseline; the old frontmatter path was not verified)
 node run-eval.mjs --skill dashboard --host claude-director --only rev-by-region --budget 2   # billed, one case, capped at 2 USD
 ```
 
@@ -31,8 +31,11 @@ Each command above runs a real host, and a billed host is billed per prompt: cou
 Hosts are defined in `hosts.json`: `claude`, `claude-frontmatter` (the same command with no `modelArgs`, so a
 `--model` is refused and the account's default model runs). The harness copies the skill to
 `<work>/skills/<dir>/` and the prompt says to read its `SKILL.md`; Claude Code does not scan that folder for
-skills, so the skill is read as a plain file and whether its `model` and `effort` frontmatter applies is
-unverified. Check the session log before using this host to measure the frontmatter path. The other hosts are `codex`, `codex-oss`
+skills, so the skill is read as a plain file. No `SKILL.md` carries a `model` or `effort` line any more (the
+director and operator scheme replaced the frontmatter pin), so this host no longer measures a frontmatter path (it was
+not verified that one applied here): it runs the account default model with no operator agent file, a baseline in
+which the director does the whole job.
+To see a delegation, use `claude-director` (below), which writes the operator agent file to the workdir. The other hosts are `codex`, `codex-oss`
 (Ollama via `codex exec --oss`), `gemini` and `copilot`. To add a host,
 add an entry with a `cmd` template (`{prompt}`, `{cwd}`, `{model}`), plus
 optional `modelArgs`, `agentArgs` and a `check` command. The `claude` allowlist includes the read-only
@@ -202,7 +205,9 @@ version 1 fixtures `clip.mp4`, `captions.srt`, `captions.vtt`, `badge.lottie.jso
   (no cell here has been run three times, so a pass is one sample), and add a row to
   [`results/INDEX.md`](results/INDEX.md) with the plugin version, the host CLI version and the command line.
 - **Which model ran.** `model reported` is the agent's own claim. With `--host claude-frontmatter` the model is the
-  account default and the frontmatter path is unverified: read the model from the session log.
+  account default and no agent file is written (a frontmatter model was not verified to apply). With `--host claude-director` the models that ran are read from the
+  session stream (`operator model`, `director model`); the 2026-11-18 run is in
+  [`results/summary-director-operator-2026-11-18.md`](results/summary-director-operator-2026-11-18.md).
 
 ## Tests
 

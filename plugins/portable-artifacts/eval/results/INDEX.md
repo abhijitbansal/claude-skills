@@ -26,15 +26,15 @@ lines. Results folders (`eval/results/<timestamp>/`) are gitignored; only the `s
 | [`summary-motion-gate2-2026-11-01.md`](summary-motion-gate2-2026-11-01.md) | 1.1.0 (1fdb1e6f) | motion items; claude haiku | 14 item prompts | Historical. Before the 1.2.0 blocks. |
 | [`summary-motion-gate3-2026-11-02.md`](summary-motion-gate3-2026-11-02.md) | 1.1.0 (1fdb1e6f) | motion items and benchmark; claude haiku | 16 item prompts and 12 benchmark prompts | Historical. Its render-hash table came from a script that was not committed. |
 | [`summary-motion-phase4-2026-11-02.md`](summary-motion-phase4-2026-11-02.md) | 1.1.0 (1fdb1e6f) | motion items; claude haiku | 2 item prompts | Historical. |
+| [`summary-director-operator-2026-11-18.md`](summary-director-operator-2026-11-18.md) | unreleased (make-motion version 2, 67802e6e) | motion; `claude-director` (director Opus 5.5, `artifact-builder` operator Haiku 5.5) | 10 version 2 prompts, one billed run, `--budget 2` per case | Current. 10/10 valid, 10/10 delegated, total cost $4.66, read from the session stream. Codex and Copilot not run live. |
 
 ## What no summary measured
 
-- The ten make-motion blocks added in 1.2.0 (five product-screen mockups, five hand-drawn), `item-hand-drawn`, Simple English,
-  the plan round trip, embeds by file, `diff` sections and cloud diagrams. Prompts for them exist
-  (`prompts/motion-items.json`, `explainer-features`, `diagram-cloud`); no run of them has a committed summary.
-- The Claude Code path with no `--model` flag, and whether the `model: haiku` and `effort: low` in each `SKILL.md` apply.
-  `--host claude-frontmatter` runs `claude` without `--model` (the account default model), but its harness reads the
-  skill as a plain file, so frontmatter use is unverified; read which model ran from the session log.
+- Simple English, the plan round trip, embeds by file, `diff` sections and cloud diagrams. Prompts for them exist
+  (`explainer-features`, `diagram-cloud`); no run of them has a committed summary. (The make-motion 1.2.0 blocks were
+  removed with version 1.)
+- The director and operator scheme on the four page skills (dashboard, diagram, explainer, scene): only make-motion
+  was run (2026-11-18).
 - Chart kinds `area`, `scatter`, `bubble`, `heatmap`, `histogram` and `boxplot` (`prompts/dashboard-kinds.json`).
 - Gemini CLI, and Codex since 2026-10-10 (CLI 0.145.0).
 - Prose and visual quality: every gate above counts valid builds and passing checks, not whether the text or the picture is good.
