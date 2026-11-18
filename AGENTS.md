@@ -164,6 +164,14 @@ to edit when the lineup changes:
 - **Executor tier is the floor for any code/skill change.** Chore tier only
   for the explicit list above — never drafts skill content, never edits a
   `SKILL.md` body or a plugin manifest.
+- **Hard rule: build work runs on the executor tier, not above it.** Every
+  implementer dispatch (a feature, a look, a fix pass, a revision round) sets
+  the executor tier and `effort: high`. It moves to the reviewer or planner
+  tier only through the escalation rule above (effort first, then tier), with
+  the cause written in the run's ledger before the dispatch. Reviewers stay at
+  the reviewer tier at medium; plans and the hardest single verification at
+  the planner tier at high. Make-motion run 2 put most look implementers on
+  the reviewer tier at high by default; the owner ruled that out (2026-11-18).
 - **Caching etiquette.** Subagents do **not** share the session's prompt cache
   — each pays its own context from zero. Anchor `file:line` in prompts, never
   re-paste repo code; continue a warm agent via `SendMessage` instead of
