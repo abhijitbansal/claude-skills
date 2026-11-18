@@ -67,11 +67,11 @@
       "id": "inside",
       "show": "list",
       "title": "What it counts",
-      "say": "Paid orders only. Grouped by region. With its query shown.",
+      "say": "Paid orders only. Grouped by region. Largest first.",
       "items": [
         "Paid orders only",
         "Grouped by region",
-        "With its query shown"
+        "Largest first"
       ]
     },
     {
