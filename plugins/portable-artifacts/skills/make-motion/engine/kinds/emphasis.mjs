@@ -90,7 +90,10 @@ const weightSweep = Object.freeze({
   wordTracks: (look, word, at) => (word.emphasised ? { ...word.tracks, ...sweepTracks(look, word, at) } : word.tracks),
   hookTracks: asIs,
   inkTracks: (look, word, at) => (word.emphasised ? sweepTracks(look, word, at) : {}),
-  reserve: (look) => ({ weight: look.sweep.to }),
+  // look.sweep.flush 'start' (keynote, n2 ruling 2): a line's first and last words sit at their room's start instead of
+  // centred in it, so a light word opening a line starts where the lines above start and one ending a line keeps its
+  // word space (text/layout.mjs reservedInset; page/draw.mjs)
+  reserve: (look) => ({ weight: look.sweep.to, ...(look.sweep.flush === undefined ? {} : { flush: look.sweep.flush }) }),
 });
 
 // size and width alone (poster): the stack sets the emphasised line large (kinds/stack.mjs) and a one-line stack widens

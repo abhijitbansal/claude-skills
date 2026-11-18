@@ -115,7 +115,10 @@ export function geometryOf(shot, ctx, data, room) {
   // rows past what the room holds at the reading floor are left out (the review says how many to cut), so the panel
   // never runs out of the room
   const rowLimit = Math.max(1, Math.floor((cardRoom.h - HALF * pad) / rowH + COL_EPSILON));
-  const w = probe ? room.w : Math.min(room.w, need.chars * advance + HALF * pad), h = Math.min(need.rows, rowLimit) * rowH + HALF * pad;
+  // data.cardWide (keynote, n2 ruling 3): the card takes the room's width on a wide frame, as an editor window does, so a
+  // listing of short lines leaves no empty sides (a card as narrow as its longest line used 40% of the width)
+  const wideCard = probe !== null || (data.cardWide === true && isWide(canvas));
+  const w = wideCard ? room.w : Math.min(room.w, need.chars * advance + HALF * pad), h = Math.min(need.rows, rowLimit) * rowH + HALF * pad;
   const block = (probe ? probe.h + gap : 0) + h;
   const top = room.y + (room.h - block) / HALF; // the block centred in the room
   const panel = [room.x + (room.w - w) / HALF, top + (probe ? probe.h + gap : 0), w, h];

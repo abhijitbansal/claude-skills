@@ -117,26 +117,62 @@ test('keynote screen at 9:16: the screen and its region panel stay inside the ti
   }
 });
 
-for (const format of ['16:9']) {
-  test(`keynote screen at ${format}: the card inside the title-safe box until the push, the ring round the region inside the frame through it`, () => {
-    const { built, ctx, canvas } = keynoteFilm('screen', exampleOf('screen'), format);
-    const safe = [ctx.safe.left, ctx.safe.top, ctx.safe.right - ctx.safe.left, ctx.safe.bottom - ctx.safe.top];
-    let pushed = false;
-    for (const t of framesOf(built.duration)) {
-      const leaves = drawnLeaves(built.sampleShot(0, t));
-      const ring = leaves.filter((l) => l.node.id.startsWith('report.ring'));
-      if (ring.length > 0) {
-        pushed = true;
-        assert.ok(insideBox(union(ring.map((l) => l.box)), [0, 0, canvas.w, canvas.h]), `at ${t.toFixed(2)} s the ring leaves the frame`);
-      }
-      if (!pushed) {
-        const card = leaves.filter((l) => l.node.id.startsWith('report.frame') || l.node.id === 'report.screen.image');
-        assert.ok(card.length > 0 && insideBox(union(card.map((l) => l.box)), safe, 2), `at ${t.toFixed(2)} s the card leaves the title-safe box`);
-      }
+// The card's own parts (its frame and its picture; the elevated shadow's soft rings are not the card), camera applied.
+const cardOf = (leaves) => leaves.filter((l) => (l.node.id.startsWith('report.frame') && !l.node.id.includes('.shadow')) || l.node.id === 'report.screen.image');
+const PUSHED = 1.2; // the smallest push (kinds/camera.mjs PUSH.min)
+
+// n2 ruling 1: at 16:9 the push frames the whole card (look.kinds.screen.pushFrame), so no row of the screen is sliced at
+// the frame's top or bottom (the n1 sheet: the dimmed rows above the ring cut at the top); the card stays in the frame
+// through the whole shot, the push still a push (at least PUSH.min)
+test('keynote screen at 16:9: the card inside the title-safe box until the push, the whole card inside the frame through it, the ring round the region', () => {
+  const { built, ctx, canvas } = keynoteFilm('screen', exampleOf('screen'), '16:9');
+  const safe = [ctx.safe.left, ctx.safe.top, ctx.safe.right - ctx.safe.left, ctx.safe.bottom - ctx.safe.top];
+  const frame = [0, 0, canvas.w, canvas.h];
+  let pushed = false;
+  for (const t of framesOf(built.duration)) {
+    const leaves = drawnLeaves(built.sampleShot(0, t));
+    const ring = leaves.filter((l) => l.node.id.startsWith('report.ring'));
+    if (ring.length > 0) {
+      pushed = true;
+      assert.ok(insideBox(union(ring.map((l) => l.box)), frame), `at ${t.toFixed(2)} s the ring leaves the frame`);
     }
-    assert.ok(pushed, 'the ring is drawn');
+    const card = union(cardOf(leaves).map((l) => l.box));
+    assert.ok(insideBox(card, pushed ? frame : safe, 2), `at ${t.toFixed(2)} s the card ${card.map(Math.round)} leaves the ${pushed ? 'frame' : 'title-safe box'}`);
+  }
+  assert.ok(pushed, 'the ring is drawn');
+  const [first, last] = [0, built.duration].map((t) => union(cardOf(drawnLeaves(built.sampleShot(0, t))).map((l) => l.box)));
+  assert.ok(last[2] >= PUSHED * first[2] - 1, `the push takes the card from ${Math.round(first[2])} to ${Math.round(last[2])} px wide (at least ${PUSHED}x)`);
+});
+
+// n2 ruling 1: at 9:16 no picture of the screen is cropped inside the region's own width (the n1 sheet: the region panel
+// sliced at its sides, "Da", "1"). Every image's crop window spans the region's whole x-extent in picture pixels.
+const IMAGE = { width: 1600, height: 1000 }; // helpers/kinds.mjs IMAGES shot.png
+for (const [label, shot] of [['titled', exampleOf('screen')], ['untitled', (({ title, ...rest }) => rest)(exampleOf('screen'))]]) {
+  test(`keynote screen at 9:16 (${label}): no picture is cropped inside the region's width`, () => {
+    const { built } = keynoteFilm('screen', shot, '9:16');
+    const [fx, , fw] = shot.regions.total;
+    const images = flat(built.sampleShot(0, built.duration)).filter((n) => n.type === 'image');
+    assert.ok(images.length > 0, 'a picture');
+    for (const n of images) {
+      const clip = n.props.clip ?? [0, 0, IMAGE.width, IMAGE.height];
+      assert.ok(clip[0] <= fx * IMAGE.width + 1 && clip[0] + clip[2] >= (fx + fw) * IMAGE.width - 1, `${n.id} crops ${clip.map(Math.round)} inside the region ${Math.round(fx * IMAGE.width)} to ${Math.round((fx + fw) * IMAGE.width)}`);
+    }
   });
 }
+
+// n2 ruling 1: at 9:16 a titled screen is one card under its title set as the headline (look.kinds.screen.tallHero), the
+// ring drawn round the region inside the frame; the title is not drawn twice (the chrome row keeps its dots)
+test('keynote screen at 9:16: the title is the headline over the whole screen, the ring round the region inside the frame', () => {
+  const { built, canvas } = keynoteFilm('screen', exampleOf('screen'), '9:16');
+  const leaves = drawnLeaves(built.sampleShot(0, built.duration));
+  const head = leaves.find((l) => l.node.id === 'report.headline');
+  assert.ok(head, 'a headline');
+  assert.ok(!leaves.some((l) => l.node.id === 'report.title'), 'the chrome title is not drawn under the headline');
+  const card = union(cardOf(leaves).map((l) => l.box));
+  assert.ok(head.box[1] + head.box[3] <= card[1], 'the headline above the card');
+  const ring = leaves.filter((l) => l.node.id.startsWith('report.ring'));
+  assert.ok(ring.length > 0 && insideBox(union(ring.map((l) => l.box)), [0, 0, canvas.w, canvas.h]), 'the ring inside the frame');
+});
 
 test('keynote screen: the frame stands on the elevated card\'s two soft shadow layers, no blur filter; the end card\'s wordmark is set at 800', () => {
   const { nodes } = expandShot(exampleOf('screen'), LOOK, '16:9');

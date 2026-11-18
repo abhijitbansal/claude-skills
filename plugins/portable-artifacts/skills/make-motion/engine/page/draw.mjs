@@ -60,10 +60,12 @@ function stackGlow(ctx, glow, share, paint) {
 // A word with its own weight or width (its tracks), or in a text laid out at a reserved weight and width: set in the
 // font it is drawn in, and how far right of its room's left edge it starts so it is centred in the room layout measured
 // for it (text/layout.mjs reservedInset). Called inside drawWord's save, so the next word starts from the text's font.
-function wordInset(ctx, word, tracks, font, reserve) {
+// `first`: the word opens or ends its line (a reserve whose flush is 'start' sets it at its room's start: a line's first
+// word starts where the other lines start, its last word's slack falls at the line's end, unseen).
+function wordInset(ctx, word, tracks, font, reserve, first) {
   const drawn = drawnFont(font, tracks);
   if (drawn === font && reserve === undefined) return 0;
-  const inset = reservedInset(createMeasure(ctx), reservedFont(font, reserve), drawn, word.text);
+  const inset = reservedInset(createMeasure(ctx), reservedFont(font, reserve), drawn, word.text, first && reserve?.flush === 'start');
   applyFont(ctx, drawn, { tracked: true });
   return inset;
 }
@@ -76,7 +78,7 @@ function drawWord(ctx, line, word, tracks, baseFill, glow, type) {
   ctx.translate(line.x + word.x + word.width / HALF + tracks.x, line.y + tracks.y);
   ctx.scale(tracks.scale, tracks.scale);
   ctx.fillStyle = tracks.fill ?? baseFill;
-  const left = -word.width / HALF + wordInset(ctx, word, tracks, type.font, type.reserve);
+  const left = -word.width / HALF + wordInset(ctx, word, tracks, type.font, type.reserve, word === line.words[0] || word === line.words.at(-1));
   const share = unit01(tracks.glow ?? 0);
   if (glow && share > 0) drawGlow(ctx, word.text, left, glow, share);
   ctx.fillText(word.text, left, 0);

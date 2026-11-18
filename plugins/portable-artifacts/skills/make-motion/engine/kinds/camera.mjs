@@ -49,23 +49,45 @@ export function pushZoom(ctx, box, { caption = false } = {}) {
   return clampTo(Math.min((PUSH.share * rect.w) / box[2], ((caption ? PUSH.tall : PUSH.full) * rect.h) / box[3]), PUSH.min, PUSH.max);
 }
 
+// A push that keeps a whole box in the frame (`keep`, keynote's screen card: look.kinds.screen.pushFrame): the box stays
+// this far inside each edge, room for the resting drift to carry on after the landing (it moves a full drift across the
+// shot) and the look's keyline.
+const keepPad = (look, unit) => HALF * driftReach(look, unit) + (look.keyline ?? 0) * unit;
+
+// The largest zoom at which the box still fits the frame inside the pad.
+const keepZoom = ([, , w, h], canvas, pad) => Math.min((canvas.w - HALF * pad) / w, (canvas.h - HALF * pad) / h);
+
+// A pan along `axis` (0 across, 1 down) moved, as little as it takes, so the box zoomed lies inside the pad. A depth-0
+// point p lands at c + (p - c) zoom - pan, so the box's near edge wants pan <= c + (near - c) zoom - pad and its far edge
+// pan >= c + (far - c) zoom - size + pad.
+function keepPan(pan, keep, canvas, zoom, pad, axis) {
+  const size = axis === 0 ? canvas.w : canvas.h;
+  const c = size / HALF;
+  const near = keep[axis], far = keep[axis] + keep[axis + HALF];
+  const most = c + (near - c) * zoom - pad, least = c + (far - c) * zoom - size + pad;
+  return least > most ? (least + most) / HALF : clampTo(pan, least, most);
+}
+
 /**
  * A camera layer for a deliberate close-up on `box` (canvas pixels): the zoom that makes the box PUSH.share of the
  * composition width and at most PUSH.tall of its height (clamped to PUSH.min..PUSH.max), its top kept under `below`, panned so the box centre sits on the composition centre (as far
  * as the field allows), easing with the look's enter ease over PUSH.dur and landing on `at`. A node at depth 0 moves
  * to c + (x - c) zoom - pan, so pan = c + (boxCentre - c) zoom - target; the drift's own pan at the landing time is
  * taken off, since the camera adds the layers. `max` caps the zoom (a picture's own resolution: a push past it is a soft
- * upscale), never under 1.
+ * upscale), never under 1. `keep` (a box, or null) caps the zoom and moves the pan so that whole box stays in the frame
+ * (keepPad inside each edge): nothing at its border is sliced by the frame's edge.
  */
-export function pushLayer(ctx, box, at, { below = -Infinity, caption = false, max = Infinity } = {}) {
+export function pushLayer(ctx, box, at, { below = -Infinity, caption = false, max = Infinity, keep = null } = {}) {
   const { look, canvas, unit, timing } = ctx;
   const rect = compositionRect(ctx);
-  const zoom = Math.min(pushZoom(ctx, box, { caption }), Math.max(1, max));
+  const pad = keep === null ? 0 : keepPad(look, unit);
+  const zoom = Math.min(pushZoom(ctx, box, { caption }), Math.max(1, max), keep === null ? Infinity : keepZoom(keep, canvas, pad));
   const drift = driftReach(look, unit);
   const pan = (centre, boxCentre, target) => centre + (boxCentre - centre) * zoom - target;
-  const x = pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx) - driftAt(look, timing, unit, at);
+  const kept = (value, axis) => (keep === null ? value : keepPan(value, keep, canvas, zoom, pad, axis));
+  const x = kept(pan(canvas.w / HALF, box[0] + box[2] / HALF, rect.cx), 0) - driftAt(look, timing, unit, at);
   // the pushed box's top stays under `below` (a slug card's bottom), moving its centre down from the composition's
-  const y = pan(canvas.h / HALF, box[1] + box[3] / HALF, Math.max(rect.cy, below + (box[3] * zoom) / HALF));
+  const y = kept(pan(canvas.h / HALF, box[1] + box[3] / HALF, Math.max(rect.cy, below + (box[3] * zoom) / HALF)), 1);
   return [
     { t: Math.max(0, at - PUSH.dur), x: 0, y: 0, zoom: 1 },
     { t: at, x: clampAbs(x, panLimit(canvas.w, zoom, drift)), y: clampAbs(y, panLimit(canvas.h, zoom, drift)), zoom, ease: look.moves.enter.ease },

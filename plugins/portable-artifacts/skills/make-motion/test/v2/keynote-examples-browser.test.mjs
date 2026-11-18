@@ -44,9 +44,9 @@ before(() => {
 });
 after(() => rmSync(specDir, { recursive: true, force: true }));
 
-test('the sweep covers every kind keynote ships: sixteen less the three it parks (number, clipping, screen)', () => {
-  assert.equal(SHIPPED.length, 13);
-  assert.deepEqual(registries.kinds.names().filter((kind) => isParkedKind(look, kind)).sort(), ['clipping', 'number', 'screen']);
+test('the sweep covers every kind keynote ships: sixteen less the two it parks (number, clipping; screen un-parked by n2)', () => {
+  assert.equal(SHIPPED.length, 14);
+  assert.deepEqual(registries.kinds.names().filter((kind) => isParkedKind(look, kind)).sort(), ['clipping', 'number']);
 });
 
 for (const format of FORMATS) {

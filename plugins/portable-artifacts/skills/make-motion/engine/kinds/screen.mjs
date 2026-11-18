@@ -15,7 +15,7 @@ import { landBy } from './arrivals.mjs';
 import { REGION_PREFIX, regionOf, cutsToCloseUp, isWide, fieldNode, onDevices, placeDevices, deviceCamera, requireDevice, NOT_BLANK, assertNoBlanks } from './shared.mjs';
 import { defaultCamera } from './camera.mjs';
 import { FRAMES } from './screen-frame.mjs';
-import { frameFor, isTwoPanel, twoPanelLayout, singleLayout, zoomReach } from './screen-layout.mjs';
+import { frameFor, isTwoPanel, twoPanelLayout, singleLayout, zoomReach, isTallHero, tallHeroLayout } from './screen-layout.mjs';
 import { unmarked } from './shared.mjs';
 import { unitOf } from '../units.mjs';
 
@@ -101,7 +101,8 @@ function expandScreen(shot, ctx) {
   const two = isTwoPanel(shot, picture, canvas);
   const cuts = zoom !== null && !two && cutsToCloseUp(look) && isWide(canvas); // screen-layout.mjs singleLayout
   if (cuts) requireDevice(look, 'punch', KIND);
-  const laid = two ? twoPanelLayout(shot, { ...ctx, data }, { picture, zoom }) : singleLayout(shot, { ...ctx, data }, { picture, zoom });
+  const layout = isTallHero(shot, picture, canvas, data) ? tallHeroLayout : two ? twoPanelLayout : singleLayout;
+  const laid = layout(shot, { ...ctx, data }, { picture, zoom });
   const devices = onDevices(shot, ctx, { boxes: laid.boxes, defaultTarget: 'screen', skip: cuts ? isRegionEvent : () => false });
   return {
     nodes: placeDevices([fieldNode(shot, ctx), ...laid.nodes], devices),
@@ -113,7 +114,7 @@ function expandScreen(shot, ctx) {
 }
 
 function screenField(shot, id) {
-  if (id === `${shot.id}.title`) return 'title';
+  if (id === `${shot.id}.title` || id === `${shot.id}.headline`) return 'title';
   if (id === `${shot.id}.url`) return 'url';
   if (id === `${shot.id}.screen.image` || id === `${shot.id}.panel.image` || id.startsWith(`${shot.id}.close`)) return 'src';
   return undefined;

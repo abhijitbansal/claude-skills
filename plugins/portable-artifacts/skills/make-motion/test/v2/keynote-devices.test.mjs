@@ -39,14 +39,15 @@ function statementIn(say, format = '16:9') {
 
 test('weight-sweep is an emphasis entry reserving the sweep\'s heavy end; emphasisOf returns it for keynote', () => {
   assert.equal(emphasisOf(look()), EMPHASIS['weight-sweep']);
-  assert.deepEqual(EMPHASIS['weight-sweep'].reserve(look()), { weight: HEAVY });
-  assert.deepEqual({ ...look().sweep }, { from: LIGHT, to: HEAVY });
+  // `flush` 'start' (n2 ruling 2): a line's first word at its room's start, measured at the heavy end as before
+  assert.deepEqual(EMPHASIS['weight-sweep'].reserve(look()), { weight: HEAVY, flush: 'start' });
+  assert.deepEqual({ ...look().sweep }, { from: LIGHT, to: HEAVY, flush: 'start' });
 });
 
 test('the weight sweep takes each emphasised word to 800 by that word\'s end, in spoken order, and moves no word box', () => {
   const { out, timing } = statementIn('Meet the *fastest build we have* ever made.');
   const text = flat(out.nodes).find((n) => n.type === 'text' && n.props.role === 'hero');
-  assert.deepEqual(text.props.layout.reserve, { weight: HEAVY }, 'measured at the heavy end');
+  assert.deepEqual(text.props.layout.reserve, { weight: HEAVY, flush: 'start' }, 'measured at the heavy end, a line\'s first word at its room\'s start');
   const words = text.props.layout.lines.flatMap((l) => l.words);
   const spoken = timing.words.filter((w) => w.emphasis);
   assert.equal(spoken.length, 4);

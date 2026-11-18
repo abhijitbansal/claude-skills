@@ -5,6 +5,7 @@
 // legend). A bar, column or area scale that does not start at 0 draws a broken-axis mark and says its baseline. Pure,
 // DOM-free.
 import { node } from '../graph/node.mjs';
+import { track } from '../time/track.mjs';
 import { layoutText } from '../text/layout.mjs';
 import { landing, isHand, colourOf, polyline, at2, roundedRect } from '../devices/shared.mjs';
 import { CAP_HEIGHT, WORD_DESCENT, sizeAt, fontFor, setCase, unionBox, markerAccent, isWide } from './shared.mjs';
@@ -58,8 +59,14 @@ export function chartStyle(ctx, data) {
     growFrom: data.growFrom ?? 0,
     tight: data.tight === true,
     together: data.together === true,
+    // `valuesSet` (keynote, n2 ruling 4): a mark's value label appears at full ink once its mark has grown, never faint
+    // over the enter move while the bar grows beside it
+    valuesSet: data.valuesSet === true,
   };
 }
+
+// A value label's arrival at `at`: a step to full ink (style.valuesSet), else the fade over the look's enter move.
+const valueArrival = (look, style, at) => (style.valuesSet && at !== undefined ? { opacity: track([{ t: 0, v: 0 }, { t: at, v: 0 }, { t: at, v: 1 }]) } : arriveAt(look, at));
 
 /** The decimals a set of values is shown with: the most any of them needs, at most three (from the number, not its string). */
 export const valueDecimals = (values) => Math.max(0, ...values.filter(Number.isFinite).map((v) => shownDecimals(v)));
@@ -248,7 +255,7 @@ export function drawColumns(shot, ctx, style, area, { valueOnHighlight, headroom
     const highlighted = m.index === hl;
     if (!highlighted || valueOnHighlight) {
       const grown = growWindow(m.index, marks.length, times.growEnd, style.together).end;
-      const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, grown);
+      const tracks = valueArrival(ctx.look, style, highlighted ? times.highlightAt : grown);
       const v = label(ctx, { id: `${shot.id}.value.${m.index}`, text: valueText(m.value, decimals, shot.unit), font, x: m.x, y, align: 'center', fill: highlighted ? style.strong : style.text, numeric: true, maxWidth: band, tracks });
       values.push(v.node);
       parts.push(v.box);
@@ -322,7 +329,7 @@ export function drawBars(shot, ctx, style, area, { valueOnHighlight, headroom = 
     const highlighted = m.index === hl;
     if (!highlighted || valueOnHighlight) {
       const grown = growWindow(m.index, marks.length, times.growEnd, style.together).end;
-      const tracks = highlighted ? arriveAt(ctx.look, times.highlightAt) : arriveAt(ctx.look, grown);
+      const tracks = valueArrival(ctx.look, style, highlighted ? times.highlightAt : grown);
       const text = valueText(m.value, decimals, shot.unit);
       // with the label over the bar, the value on the label's row right after the label, one rule for every bar (gate
       // review 3: values at some bar ends and after other labels read as two rules)

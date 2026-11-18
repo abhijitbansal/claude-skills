@@ -7,7 +7,9 @@ import { node } from '../graph/node.mjs';
 import { track } from '../time/track.mjs';
 import { landing } from '../devices/shared.mjs';
 import { moveOf } from '../moves/index.mjs';
-import { REGION_PREFIX, isWide, compositionRect, captionTop, cutsToCloseUp, regionOf, paperScrim } from './shared.mjs';
+import { REGION_PREFIX, isWide, compositionRect, captionTop, cutsToCloseUp, regionOf, paperScrim, fitDisplay, fontFor, setCase, sizeAt, CAP_HEIGHT, WORD_DESCENT } from './shared.mjs';
+import { colourOf } from '../devices/shared.mjs';
+import { MIN_HERO_RATIO } from '../review/frame.mjs';
 import { pushLayer, pushZoom } from './camera.mjs';
 import { closeUps } from './close-ups.mjs';
 import { arrivalTrack } from './arrivals.mjs';
@@ -82,16 +84,27 @@ function panelCrop(picture, region, aspect) {
 // pixel to one frame pixel at most; larger is a soft upscale). `wanted` is the scale it would take with no cap.
 // `whole` (look.kinds.screen.wholeWidth): a crop at least this share of the picture's width takes all of it, so no word
 // is cut at its sides (poster); absent, the crop as it is
-function panelFit(picture, region, area, whole) {
-  const near = panelCrop(picture, region, area.w / area.h);
-  const crop = Number.isFinite(whole) && near[2] >= whole * picture.width ? panelCrop(picture, [0, region[1], 1, region[3]], area.w / area.h) : near;
+// The crop window of `panelCrop` that is never narrower (nor shorter) than the region: it grows along the other side to
+// the panel's aspect as far as the picture goes, and the panel then takes the crop's own shape (look.kinds.screen
+// .cropRegion, keynote: a wide region on a tall panel was scaled narrower, slicing its words at both sides).
+function regionCrop(picture, [fx, fy, fw, fh], aspect) {
+  const rw = fw * picture.width, rh = fh * picture.height;
+  const [w, h] = rw / rh > aspect ? [rw, Math.min(picture.height, rw / aspect)] : [Math.min(picture.width, rh * aspect), rh];
+  const cx = (fx + fw / HALF) * picture.width, cy = (fy + fh / HALF) * picture.height;
+  return [Math.min(Math.max(cx - w / HALF, 0), picture.width - w), Math.min(Math.max(cy - h / HALF, 0), picture.height - h), w, h];
+}
+
+function panelFit(picture, region, area, whole, wholeRegion = false) {
+  const cropOf = wholeRegion ? regionCrop : panelCrop;
+  const near = cropOf(picture, region, area.w / area.h);
+  const crop = Number.isFinite(whole) && near[2] >= whole * picture.width ? cropOf(picture, [0, region[1], 1, region[3]], area.w / area.h) : near;
   const wanted = Math.min(area.w / crop[2], area.h / crop[3]);
   return { crop, wanted, fit: Math.min(NATIVE, wanted) };
 }
 
 function panelNodes(shot, ctx, { picture, region, area, zoomAt, regionAt }) {
   const { look, unit, seed, data } = ctx;
-  const { crop, fit } = panelFit(picture, region, area, data.wholeWidth);
+  const { crop, fit } = panelFit(picture, region, area, data.wholeWidth, data.cropRegion === true);
   const [w, h] = [crop[2] * fit, crop[3] * fit];
   const box = [area.x + (area.w - w) / HALF, area.y, w, h];
   const image = node('image', `${shot.id}.panel.image`, { src: shot.src, w, h, clip: crop });
@@ -136,6 +149,51 @@ export function twoPanelLayout(shot, ctx, { picture, zoom }) {
   return { nodes, boxes, camera: [] };
 }
 
+// ---- a titled screen on a tall frame: the title as the headline over one card (look.kinds.screen.tallHero) ----
+
+const CHROME_STEP_TALL = 2; // the chrome texts' scale step on a tall frame (screen-frame.mjs chromeText)
+
+/** Is this a titled wide screen on a tall frame that the look sets as a headline over one card (keynote)? A region that
+ *  fills most of a wide screen cannot be enlarged on a tall panel without slicing it at the sides, so the card stays
+ *  whole, the frame filled by the headline, and the region gets the ring and the focus. */
+export const isTallHero = (shot, picture, canvas, data) => data?.tallHero === true && shot.title !== undefined && isTwoPanel(shot, picture, canvas);
+
+// The headline: the title in the display face as large as fits the room's width, at most data.heroMax and three lines,
+// never under three times the chrome text (the review's hero rule).
+function headlineSet(shot, ctx, room) {
+  const { look, unit, measure } = ctx;
+  const max = ctx.data.heroMax * unit;
+  const opts = { text: setCase(look, 'display', shot.title), font: fontFor(look, 'display', max, unit), maxWidth: room.w, align: 'left', measure };
+  return fitDisplay(opts, { min: MIN_HERO_RATIO * sizeAt(look, CHROME_STEP_TALL, unit), max, maxHeight: room.h * ctx.data.heroShare, maxLines: ctx.data.heroLines }, look, unit);
+}
+
+export function tallHeroLayout(shot, ctx, { picture, zoom }) {
+  const { look, unit, seed, canvas, data } = ctx;
+  const room = roomOf(ctx);
+  const frame = frameFor(shot, picture);
+  const set = headlineSet(shot, ctx, room);
+  const headH = set.layout.lines.at(-1).y - set.layout.lines[0].y + (CAP_HEIGHT + WORD_DESCENT) * set.font.size;
+  const gap = data.gap * unit;
+  const below = { x: room.x, y: room.y + headH + gap, w: room.w, h: room.h - headH - gap };
+  const fitted = fitFramed(frame, unit, picture, below);
+  const outer = outerOf(frame, unit, fitted);
+  // the headline and the card stand as one block centred down the room
+  const drop = (room.h - (headH + gap + outer[3])) / HALF;
+  const image = [fitted[0], room.y + drop + headH + gap + (fitted[1] - outer[1]), fitted[2], fitted[3]];
+  const top = room.y + drop;
+  const headline = node('text', `${shot.id}.headline`, { x: room.x, y: top + CAP_HEIGHT * set.font.size - set.layout.lines[0].y, layout: set.layout, font: set.font, fill: colourOf(look, 'ink'), role: 'hero' });
+  const { title: _shown, ...untitled } = shot; // the headline carries the title: the chrome row keeps its dots alone
+  const regions = regionBoxes(shot, image);
+  const boxes = { screen: outerOf(frame, unit, image), image, headline: [room.x, top, set.layout.width, headH], ...regions };
+  const screen = screenGroup(untitled, ctx, frame, image);
+  if (!zoom) return { nodes: [screen, headline], boxes, camera: [] };
+  const target = regions[`${REGION_PREFIX}${zoom.region}`];
+  const focus = registries.devices.get('focus').build({ id: `${shot.id}.focus`, box: target, at: zoom.at, look, unit, seed, cover: [0, 0, canvas.w, canvas.h] }).nodes;
+  const ring = registries.devices.get('circle').build({ id: `${shot.id}.ring`, box: target, at: zoom.at, look, unit, seed }).nodes;
+  // the focus dims the rest of the screen; the headline is drawn over it, in ink
+  return { nodes: [screen, ...focus, ...ring, headline], boxes, camera: [] };
+}
+
 // The zoom at which the drawn picture shows one picture pixel per frame pixel: a push past it is a soft upscale.
 const nativeZoom = (picture, image) => (NATIVE * picture.width) / image[2];
 
@@ -159,11 +217,12 @@ export function zoomReach(shot, ctx, picture, region) {
   const { look, canvas, unit, data } = ctx;
   const room = roomOf(ctx);
   const frame = frameFor(shot, picture);
+  if (isTallHero(shot, picture, canvas, data)) return null; // the card stays whole: no zoom (tallHeroLayout)
   if (isTwoPanel(shot, picture, canvas)) {
     const topH = Math.min(room.h * (1 - MIN_PANEL), (outerOf(frame, unit, [0, 0, room.w, (room.w * picture.height) / picture.width])[3]));
     const outer = outerOf(frame, unit, fitFramed(frame, unit, picture, { x: room.x, y: room.y, w: room.w, h: topH }));
     const top = outer[1] + outer[3] + data.gap * unit;
-    const { wanted } = panelFit(picture, region, { x: room.x, y: top, w: room.w, h: room.y + room.h - top }, ctx.data?.wholeWidth);
+    const { wanted } = panelFit(picture, region, { x: room.x, y: top, w: room.w, h: room.y + room.h - top }, ctx.data?.wholeWidth, ctx.data?.cropRegion === true);
     return { wanted, cap: NATIVE };
   }
   if (cutsToCloseUp(look)) return null;
@@ -191,10 +250,15 @@ export function singleLayout(shot, ctx, { picture, zoom }) {
   if (!cutsToCloseUp(look) || !isWide(canvas)) {
     const build = (name, id) => registries.devices.get(name).build({ id, box: target, at: zoom.at, look, unit, seed, cover: [0, 0, canvas.w, canvas.h] }).nodes;
     if (!cutsToCloseUp(look)) {
-      const push = pushLayer(ctx, target, zoom.at, { max: nativeZoom(picture, image) });
+      // data.pushFrame 'card' (keynote): the push frames the whole card, so no row of the screen is sliced at the frame's
+      // top or bottom (n1's 16:9 sheet: the dimmed rows over the ring cut at the top); absent, it frames the region
+      const keep = data.pushFrame === 'card' ? boxes.screen : null;
+      const push = pushLayer(ctx, target, zoom.at, { max: nativeZoom(picture, image), keep });
       const rest = data.pushDim === undefined ? build('focus', `${shot.id}.focus`) : [pushMask(shot, ctx, target, zoom.at)];
       // data.ring (keynote): the look's circle (the zoom ring) drawn round the region as the camera pushes in
       const ring = data.ring === true ? registries.devices.get('circle').build({ id: `${shot.id}.ring`, box: target, at: zoom.at, look, unit, seed }).nodes : [];
+      // the chrome texts fade as the push begins: carried out of the frame, or (a push that frames the card) past the
+      // title-safe edge, they would be cut or reported
       return { nodes: [screenGroup(shot, ctx, frame, image, undefined, push[0].t), ...rest, ...ring], boxes, camera: [push] };
     }
     const focus = build('focus', `${shot.id}.focus`);

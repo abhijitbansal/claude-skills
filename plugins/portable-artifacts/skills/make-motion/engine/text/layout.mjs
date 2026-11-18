@@ -119,12 +119,19 @@ export function drawnFont(font, word) {
   return { ...font, ...(word.weight === undefined ? {} : { weight: word.weight }), ...(word.width === undefined ? {} : { width: word.width }) };
 }
 
-/** The font words are measured in: `font` at the reserved weight and width (font itself without a reserve). */
-export const reservedFont = (font, reserve) => (reserve === undefined ? font : { ...font, ...reserve });
+/** The font words are measured in: `font` at the reserved weight and width (font itself without a reserve). A reserve's
+ *  `flush` says where a word sits in its room (reservedInset), not how it is measured. */
+export function reservedFont(font, reserve) {
+  if (reserve === undefined) return font;
+  const { flush: _where, ...face } = reserve;
+  return { ...font, ...face };
+}
 
 /** How far right of its room's left edge a word drawn in `drawn` starts so it is centred in the room it was measured
- *  for in `measuredAt` (both tracked as layout tracks them): half the difference of the two advances. */
-export function reservedInset(measure, measuredAt, drawn, text) {
+ *  for in `measuredAt` (both tracked as layout tracks them): half the difference of the two advances. `atStart`: the
+ *  word sits at the room's start instead (0), for a line's first word under a reserve whose `flush` is 'start'. */
+export function reservedInset(measure, measuredAt, drawn, text, atStart = false) {
+  if (atStart) return 0;
   return (advanceOf(measure, measuredAt, text).width - advanceOf(measure, drawn, text).width) / 2;
 }
 
