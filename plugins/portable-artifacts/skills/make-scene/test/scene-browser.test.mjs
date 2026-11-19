@@ -29,11 +29,17 @@ after(async () => {
   await browser?.close();
 });
 
+// The browser context each test has open now. A scene that animates (forest, galaxy) never idles, so a page left open keeps
+// drawing in software WebGL and starves the next load; open() closes the test's previous context first.
+const liveContext = new WeakMap();
+
 // Opens a built page with the test hook (?test=1); null (after skipping) when there is no browser or no WebGL2. With WebGL2 the scene must be ready.
 async function open(t, world, { viewport = VIEWPORTS[0], build = {}, search = '?test=1', ...contextOptions } = {}) {
   if (!browser) return t.skip(skipReason) ?? null;
+  await liveContext.get(t)?.close();
   const { file } = await buildWorldPage(t, world, build);
   const context = await browser.newContext({ viewport, ...contextOptions });
+  liveContext.set(t, context);
   t.after(() => context.close());
   const page = await context.newPage();
   const problems = [];
@@ -72,6 +78,18 @@ for (const world of WORLDS) {
     }
   });
 }
+
+// A forest sways and a galaxy orbits for ever, so a page left open keeps drawing in software WebGL and starves the next
+// page's load. On a 14-core Mac the second open of a forest went from 60 ms to 2.9 s with the first page still alive
+// (.scratch/ci-probe/forest-phases.mjs); on a CI runner with four CPUs that overran the 10 s wait for 'ready'.
+test('opening a second page in one test closes the first, so a page that never idles cannot starve it', async (t) => {
+  const first = await open(t, 'forest', { viewport: VIEWPORTS[0] });
+  if (!first) return;
+  const second = await open(t, 'forest', { viewport: VIEWPORTS[1] });
+  if (!second) return;
+  assert.equal(first.page.isClosed(), true, 'the first page is gone');
+  assert.equal(second.page.isClosed(), false, 'the second page is live');
+});
 
 test('theme toggle re-tints the canvas', async (t) => {
   const ctx = await open(t, 'city', { colorScheme: 'dark' });
