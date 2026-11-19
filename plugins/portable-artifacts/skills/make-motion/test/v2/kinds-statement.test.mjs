@@ -355,6 +355,22 @@ test('viral ghost words on every statement: all words on screen in the opaque gh
   quiet.forEach((w, i) => assert.equal(w.fill.points.at(-1).t, noSayAt(i) + look.moves.emphasize.dur, `word ${i} lights at ${noSayAt(i)} s`));
 });
 
+test('viral hook, frame 0 (gate 3, showreel-viral): the kicker tag is drawn and the first sentence is in full ink on frame 0; the rest are ghosts and light as spoken', () => {
+  const look = registries.looks.get('pop');
+  const hook = (shot) => {
+    const frame0 = filmFor([shot], 'pop', '9:16').sampleShot(0, 0);
+    return { words: frame0.find((n) => n.id === `${shot.id}.text`).children.flatMap((n) => n.words), tag: frame0.find((n) => n.id === `${shot.id}.kicker`) };
+  };
+  const drawn = (node) => [node, ...(node.children ?? [])].every((n) => n.opacity === undefined || n.opacity === 1);
+  const two = hook({ id: 'h', show: 'statement', kicker: 'portable-artifacts', text: 'One JSON | file. | Five | kinds of | artifact.', say: 'One JSON file. *Five* kinds of artifact.' });
+  assert.ok(drawn(two.tag), 'the tag is fully drawn on frame 0');
+  assert.equal(two.words.length, 7);
+  assert.ok(two.words.slice(0, 3).every((w) => w.opacity === 1 && w.fill === look.palette.ink), 'ONE JSON FILE. in full ink, opaque');
+  assert.ok(two.words.slice(3).every((w) => w.fill === '#707070'), 'FIVE KINDS OF ARTIFACT. are ghosts on frame 0');
+  const one = hook({ id: 'o', show: 'statement', kicker: 'portable-artifacts', say: 'Your charts are *hiding* something.' });
+  assert.ok(drawn(one.tag) && one.words.every((w) => w.fill === '#707070'), 'a one-sentence hook keeps every word a ghost, and its tag is drawn');
+});
+
 test('pop kicker: an accent tag at scale step 2, flush left, 28 units over the first line, inside the safe zone; a tall stack shrinks to keep it there', () => {
   const { nodes, canvas, ctx } = expandSecond({ id: 'a', show: 'statement', say: 'Save this. Build yours.', text: 'Save this. | Build yours.', kicker: 'portable-artifacts' }, 'pop', '9:16');
   const safe = viralOf(canvas);

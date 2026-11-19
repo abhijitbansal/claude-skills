@@ -46,6 +46,10 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
     `<skill>/.cache/models`). Version 2 keeps its model in `<skill>/.cache/models/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped`:
     keep that one. `<skill>/.cache/cutout` belongs to `cutout.mjs`, which still writes it: keep it too.
     `doctor --fix cache` deletes `.cache/video` and `.cache/cutout` together.
+  - **A viral film's first frame names the product.** In the opening `statement` of a viral film, the kicker tag and
+    the words up to the first full stop are fully drawn on frame 0 (a platform takes frame 0 as the thumbnail). The rest
+    of the line starts as grey ghost words and lights as it is spoken. A one-sentence hook keeps every word a ghost;
+    only its tag is set on frame 0. Pro films are unchanged.
   - **make-explainer's `motion` section** takes a version 2 film, renders it with `make.mjs`, passes no `--theme` (a
     film has a look) and takes its poster from second 0 of the rendered MP4.
   - **The eval's `motion` set** is eleven version 2 prompts. The `benchmark` and `items` sets are removed. Result files

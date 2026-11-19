@@ -323,6 +323,17 @@ function barTimes(shot, ctx, count) {
   return bars;
 }
 
+// The indexes of the words up to and including the first one that ends a sentence ("One JSON file."): a viral film's
+// opening statement sets them at full ink from frame 0, with its kicker tag, so a platform that takes frame 0 as the
+// thumbnail shows the product and the first claim (the rest still lights as it is spoken). A statement that is one
+// sentence keeps every word a ghost (the whole line would be lit, and nothing would light as it is spoken): an empty set,
+// which still sets the kicker tag on frame 0.
+const SENTENCE_END = /[.!?…]["')\]]*$/;
+function firstSentence(words) {
+  const end = words.findIndex((w) => SENTENCE_END.test(w));
+  return end < 0 || end === words.length - 1 ? new Set() : new Set(Array.from({ length: end + 1 }, (_, i) => i));
+}
+
 // A stack (stack.mjs): one text node per line inside the hero group, the kicker as a tag over the first line.
 function expandStacked(shot, ctx) {
   const { look, unit, timing } = ctx;
@@ -333,7 +344,8 @@ function expandStacked(shot, ctx) {
   const texts = placed.lines.flatMap((line) => line.layout.lines[0].words.map((w) => w.text));
   const times = wordTimes(texts, timing, cutReveal(shot, ctx)).map(({ at, spoken }) => ({ at, emphasised: spoken !== null && timing.words[spoken].emphasis }));
   const hero = heroId(shot, 'text');
-  const { group, kicker, boxes } = stackNodes(shot, ctx, placed, { times, ghost: ghostWords(ctx), matched: arrivesMatched(shot, ctx), hero, bars: barTimes(shot, ctx, texts.length) });
+  const opening = hook && ghostWords(ctx) ? firstSentence(texts) : null;
+  const { group, kicker, boxes } = stackNodes(shot, ctx, placed, { times, ghost: ghostWords(ctx), matched: arrivesMatched(shot, ctx), hero, bars: barTimes(shot, ctx, texts.length), opening });
   const behind = Object.fromEntries(Object.keys(boxes).map((target) => [target, hero]));
   const devices = onDevices(shot, ctx, { boxes, defaultTarget: 'text', behind });
   return {

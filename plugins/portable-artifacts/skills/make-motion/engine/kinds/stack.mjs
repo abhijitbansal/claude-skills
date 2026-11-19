@@ -408,7 +408,9 @@ function baseWordTracks(look, { at, emphasised }, { ghost, matched, widen }) {
  *   bars: word index -> the time a highlight bar lands under it; the word takes the look's bar text colour from then
  */
 // `until`: when the last beat bar comes off (a compare side's at the turn), else it stays to the end
-export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bars = new Map(), until = Infinity }) {
+// `opening`: the words (indexes) a viral film's first statement sets at full ink from frame 0, with its kicker tag, so
+// frame 0 names the product and reads its first sentence (null: every word a ghost, the tag fading in)
+export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bars = new Map(), until = Infinity, opening = null }) {
   const { look, unit, seed, measure } = ctx;
   const boxes = [];
   const beats = beatWindows(placed, times, look, until);
@@ -426,7 +428,10 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bar
     const beat = beatOf.get(k);
     // a beat row is hidden while its bar and knockout copy (beatNodes) stand in for it
     return node('text', `${hero}.line${k}`, { ...at, layout: line.layout, font: line.font, fill: look.palette.ink, role: 'hero', stack: hero }, {
-      wordTracks: row.map((i) => wordTracks(look, times[i], { ghost, matched, widen, bar: bars.get(i) })),
+      wordTracks: row.map((i) => {
+        const set = opening?.has(i) === true; // set from frame 0: no ghost, no entrance; an emphasised word still turns on its time
+        return wordTracks(look, times[i], { ghost: ghost && !set, matched: matched || set, widen, bar: bars.get(i) });
+      }),
       ...(beat === undefined ? {} : { tracks: { opacity: stepped(1, 0, beat) } }),
     });
   });
@@ -436,7 +441,7 @@ export function stackNodes(shot, ctx, placed, { times, ghost, matched, hero, bar
   const group = node('group', hero, {}, { children: [...lineNodes, ...beatNodes] });
   const kicker = placed.kicker === null ? [] : registries.devices.get('tag').build({
     // set on the shot's first frame in a look whose shots open set (poster: gate-poster-1 ruling 7, chips not faded in)
-    id: `${shot.id}.kicker`, text: shot.kicker, box: [placed.kicker.left, placed.kicker.top, 1, 1], at: opensSet(look) ? 0 : look.moves.enter.dur, look, unit, seed, measure, ...kickerSized(shot),
+    id: `${shot.id}.kicker`, text: shot.kicker, box: [placed.kicker.left, placed.kicker.top, 1, 1], at: opensSet(look) || opening !== null ? 0 : look.moves.enter.dur, look, unit, seed, measure, ...kickerSized(shot),
   }).nodes;
   return { group, kicker, boxes: Object.fromEntries([['text', unionBox(boxes)], ...boxes.map((box, i) => [`word:${i}`, box])]) };
 }
