@@ -284,14 +284,19 @@ test('paper layers a tint, blotch gradients, fibres, specks and a grain tile', (
   assert.equal(surfaces.some((s) => s.width === p.grain.size && s.height === p.grain.size), true);
 });
 
+// Every offscreen canvas's recorded calls as plain data. A surface passed to drawImage is a Proxy-backed fake, and
+// Node 24.22 no longer calls two such Proxies deep-equal (24.7 did), so each one is swapped for its index and size.
+const recordedSurfaces = (list) => list.map((s) => s.rec.calls.map((call) => call.map((arg) => (
+  arg instanceof globalThis.OffscreenCanvas ? { surface: list.indexOf(arg), width: arg.width, height: arg.height } : arg))));
+
 test('paper grain is the same pixel for pixel for the same seed', () => {
   const a = get('paper').plan({ w: 480, h: 300, seed: 5, palette });
   const b = get('paper').plan({ w: 480, h: 300, seed: 5, palette });
   get('paper').paint(recordingContext().ctx, a, 0);
-  const first = surfaces.map((s) => s.rec.calls);
+  const first = recordedSurfaces(surfaces);
   surfaces.length = 0;
   get('paper').paint(recordingContext().ctx, b, 0);
-  assert.deepEqual(surfaces.map((s) => s.rec.calls), first);
+  assert.deepEqual(recordedSurfaces(surfaces), first);
 });
 
 test('paper and halftone paint the same whatever t is; mesh does not', () => {
@@ -301,7 +306,7 @@ test('paper and halftone paint the same whatever t is; mesh does not', () => {
       surfaces.length = 0;
       const main = recordingContext();
       f.paint(main.ctx, f.plan({ w: 480, h: 300, seed: 3, palette }), t);
-      return { main: main.calls.map((c) => c[0]), cache: surfaces.map((s) => s.rec.calls) };
+      return { main: main.calls.map((c) => c[0]), cache: recordedSurfaces(surfaces) };
     };
     assert.deepEqual(run(0), run(9), name);
   }

@@ -8,7 +8,7 @@ import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFile
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { HERE, browserAvailable, ffmpegOrNull, headlessPids, probeVideo } from './helpers/session.mjs';
+import { HERE, browserAvailable, ffmpegOrNull, headlessPids, headlessPidsUnder, isRunning, probeVideo } from './helpers/session.mjs';
 import { registries } from '../../engine/registry.mjs';
 import { listEntries } from '../../scripts/v2/list.mjs';
 import { validateFilm } from '../../scripts/v2/spec.mjs';
@@ -410,7 +410,6 @@ const until = async (check, ms) => {
 
 test('SIGINT during a render leaves no temp files and no browser behind', async (t) => {
   if (!await needs(t, { ffmpeg: true })) return;
-  const before = headlessPids();
   const out = outPath('sigint');
   const child = spawn(process.execPath, [MAKE, filmPath('long'), '--json', '--out', out], { stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => child.kill('SIGKILL'));
@@ -418,12 +417,14 @@ test('SIGINT during a render leaves no temp files and no browser behind', async 
   child.stderr.on('data', (chunk) => { stderr += chunk; });
   child.stdout.on('data', (chunk) => { stdout += chunk; });
   assert.ok(await until(() => /render \d+\/\d+ frames/.test(stderr), 120_000), `the render never started: ${stderr}`);
+  const browsers = headlessPidsUnder(child.pid); // this render's own, not the ones other test files have up beside it
+  assert.ok(browsers.size > 0, 'the premise: the render has a browser up');
   const closed = new Promise((resolve) => child.on('close', (code) => resolve(code)));
   child.kill('SIGINT');
   assert.equal(await closed, 130);
   const left = existsSync(path.dirname(out)) ? readdirSync(path.dirname(out)).filter((f) => f !== 'film.sheets') : [];
   assert.deepEqual(left, [], 'no partial or finished video');
-  assert.ok(await until(() => [...headlessPids()].every((pid) => before.has(pid)), 10_000), 'a headless browser is still running');
+  assert.ok(await until(() => [...browsers].every((pid) => !isRunning(pid)), 10_000), 'a headless browser is still running');
   const report = JSON.parse(stdout);
   assert.deepEqual(Object.keys(report).sort(), [...REPORT_KEYS, 'error'].sort(), 'the same shape, with an error');
   assert.equal(report.error.message, 'interrupted');
@@ -641,7 +642,6 @@ test('a stalled ffmpeg does not hold the first interrupt', async (t) => {
   if (!await needs(t, { ffmpeg: true })) return;
   const script = path.join(dir, 'stalled-ffmpeg.sh');
   writeFileSync(script, '#!/bin/sh\nexec sleep 120\n', { mode: 0o755 }); // reads nothing: the pipe fills and a write waits
-  const before = headlessPids();
   const child = spawn(process.execPath, [MAKE, filmPath('long'), '--json', '--out', outPath('stalled')], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FFMPEG_PATH: script } });
   t.after(() => child.kill('SIGKILL'));
   let stderr = '', stdout = '';
@@ -649,10 +649,12 @@ test('a stalled ffmpeg does not hold the first interrupt', async (t) => {
   child.stdout.on('data', (chunk) => { stdout += chunk; });
   assert.ok(await until(() => /render started/.test(stderr), 120_000), `the render never started: ${stderr}`);
   await new Promise((resolve) => setTimeout(resolve, 1500)); // long enough for the pipe to fill and a write to wait
+  const browsers = headlessPidsUnder(child.pid); // this render's own, not the ones other test files have up beside it
+  assert.ok(browsers.size > 0, 'the premise: the render has a browser up');
   const closed = new Promise((resolve) => child.on('close', (code) => resolve(code)));
   child.kill('SIGINT');
   const code = await Promise.race([closed, new Promise((resolve) => setTimeout(() => resolve('still running'), 20_000))]);
   assert.equal(code, 130);
   assert.equal(JSON.parse(stdout).error.message, 'interrupted');
-  assert.ok(await until(() => [...headlessPids()].every((pid) => before.has(pid)), 10_000), 'a headless browser is still running');
+  assert.ok(await until(() => [...browsers].every((pid) => !isRunning(pid)), 10_000), 'a headless browser is still running');
 });

@@ -66,3 +66,29 @@ export function headlessPids() {
   const run = spawnSync('pgrep', ['-f', 'chrome-headless-shell']);
   return new Set(String(run.stdout ?? '').split('\n').filter(Boolean).map(Number));
 }
+
+/**
+ * The headless browsers among the descendants of process `root`, as a Set of pids. The test files run in parallel, each
+ * with browsers of its own, so "every headless browser on the machine" blames a run for another file's browser; ask for the
+ * ones below the run's own process, taken while it is still alive (a dead parent's children move to init).
+ */
+export function headlessPidsUnder(root) {
+  const run = spawnSync('ps', ['-A', '-o', 'pid=,ppid=']);
+  const children = new Map();
+  for (const line of String(run.stdout ?? '').split('\n')) {
+    const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+    if (Number.isInteger(pid) && Number.isInteger(ppid)) children.set(ppid, [...(children.get(ppid) ?? []), pid]);
+  }
+  const below = new Set();
+  const walk = (pid) => (children.get(pid) ?? []).forEach((child) => { below.add(child); walk(child); });
+  walk(root);
+  const headless = headlessPids();
+  return new Set([...below].filter((pid) => headless.has(pid)));
+}
+
+/** Whether process `pid` is alive (a zombie, waiting to be reaped, is not). */
+export function isRunning(pid) {
+  const run = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' });
+  const state = String(run.stdout ?? '').trim();
+  return run.status === 0 && state !== '' && !state.startsWith('Z');
+}
