@@ -374,3 +374,11 @@ Linux headless Chromium rounds each glyph advance to a whole pixel by default; J
 ## make-scene: slower page opens since the redraw (2026-11-19)
 
 CI round 5 (`.superpowers/sdd/2026-11-16-pa2-run2/ci-report.md`) measured the branch's make-scene against main's on the same machine: steady frame rate and the tour light are the same (58.5 fps, 1.8-1.9 s), but each page open and its first draws cost 40 to 75% more on macOS (hover 391 to 690 ms, reduced-motion open 464 to 678 ms), and 1.2x to 2.7x on CI. Candidates are the refresh's first-draw shader work (fresnel patches, `render.js`, `look.js`); not bisected. It broke nothing on its own once the tests waited on the light's progress and the check got a 15 s screenshot budget. Default: ship, and bisect the open cost in the next make-scene change. Option: bisect before the release.
+
+## whats-new film: look gate 3 leftovers (2026-11-19)
+
+The what's new film (`plugins/portable-artifacts/skills/make-motion/references/examples/v2/whats-new.json`) passed look gates 1, 2 and 3 with SHIP AFTER FIXES and no failing shot (`.superpowers/sdd/2026-11-16-pa2-run2/gate-whats-new-1.md` to `-3.md`). Both revision rounds were used, so these stay open. Default for all: fix them the next time the film is revised. Nobody has listened to it.
+
+- **Holds and marker:** the hook holds about 0.8-1.0 s and redrawn-dashboard about 1.0 s, under the 1.6 s and 1.2 s rulings; "New" still has several treatments (slug tag, "NEW:" prefix, window title), and the slug numbers start at 02.
+- **Other tools:** keep-warm and session-compass carry "12 ALSO" and "13 ALSO" in the release numbering; only the hook says they are separate. The compass shot never shows the band or says what session-compass is; it is the fourth text-only shot in a row.
+- **Picture:** redrawn-diagram is a thin strip with unreadable nodes; the scene sticker covers the bars and the explainer sticker the verdict; map, diagram and look-tile text is unreadable at phone size; the local voice, the bed and pro against viral are barely shown in picture; LOW: "VS" frames Director and operator as opponents, the ask names no command, the ledger tile shows a fictional "Source:" line, and the v1/v2 counts can read as fewer features.

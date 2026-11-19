@@ -15,7 +15,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 PAGE = ROOT / "docs" / "features" / "portable-artifacts.html"
 FILM_DIR = "showcase/portable-artifacts/gallery/showreel"
-FILMS = ("pro", "viral")
+FILMS = ("whats-new", "pro", "viral")
 # Set False if the showreel films ship by the silent fallback (no voiceover).
 VOICED = True
 LOOKS_DIR = "showcase/portable-artifacts/gallery/looks"
@@ -28,6 +28,7 @@ EXAMPLES = (
 FILM_SOURCES = {
     FILM_DIR + "/pro": "showreel-pro.json",
     FILM_DIR + "/viral": "showreel-viral.json",
+    FILM_DIR + "/whats-new": "whats-new.json",
     LOOKS_DIR + "/cosmos": "look-cosmos.json",
     LOOKS_DIR + "/ledger": "gate-ledger.json",
     LOOKS_DIR + "/poster": "look-poster.json",
@@ -122,6 +123,48 @@ def test_films_meta_matches_the_voice_path():
     assert "music" in block
     assert "no music" not in block
     assert "silent" not in block
+
+
+def _duration(video):
+    ffprobe = shutil.which("ffprobe")
+    if ffprobe is None:
+        pytest.skip("ffprobe is not on PATH")
+    return float(subprocess.run(
+        [ffprobe, "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", str(video)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip())
+
+
+def test_whats_new_card_is_the_first_card_of_the_films_section():
+    block = _section(_page(), "films")
+    cards = re.findall(r'<div class="gal-card"\s+id="(film-[^"]+)"', block)
+    assert cards[0] == "film-whats-new", cards
+    assert block.index('id="film-whats-new"') < block.index('id="film-pro"')
+    card = block[block.index('id="film-whats-new"'):block.index('id="film-pro"')]
+    assert "What's new" in card, card
+    assert 'href="%s/whats-new/film.json"' % FILM_DIR in card
+    assert 'href="%s/whats-new/video.mp4" download' % FILM_DIR in card
+
+
+def test_whats_new_meta_says_voiceover_and_its_seconds_match_the_video():
+    block = _section(_page(), "films")
+    card = block[block.index('id="film-whats-new"'):block.index('id="film-pro"')]
+    meta = re.search(r'<p class="gal-meta"[^>]*>([^<]*)</p>', card).group(1)
+    assert "voiceover" in meta, meta
+    seconds = float(re.search(r"([0-9]+\.[0-9]) s", meta).group(1))
+    video = PAGE.parent / FILM_DIR / "whats-new" / "video.mp4"
+    assert seconds == round(_duration(video), 1), (meta, _duration(video))
+    # the build report is a working file (gitignored): when it is present it must agree too
+    report = ROOT / ".scratch" / "pa2-release" / "whats-new" / "report.json"
+    if report.is_file():
+        import json
+        assert seconds == round(json.loads(report.read_text())["frames"] / 30, 1)
+
+
+def test_whats_new_video_stays_under_the_repo_size_warning():
+    video = PAGE.parent / FILM_DIR / "whats-new" / "video.mp4"
+    assert video.is_file()
+    assert video.stat().st_size <= 30 * 1024 * 1024, video.stat().st_size
 
 
 def test_both_films_have_an_audio_stream():

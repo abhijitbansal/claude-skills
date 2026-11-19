@@ -168,6 +168,14 @@ Director and operator split, locked and hashed optional installs and a smaller v
   screenshots of version 2 builds they show in `showreel-assets/`; and `look-cosmos.json`, `gate-ledger.json`,
   `look-poster.json`, `gate-keynote.json` and `gate-marker.json`, one for each other look. `SKILL.md` names them under
   "Finished films". Renders, posters and a copy of each film file are in the gallery under `showreel/` and `looks/`.
+- **A "What's new" film of every change in this release.** `whats-new.json` (`desk`, 16:9, voiced, 113.0 s) in
+  `skills/make-motion/references/examples/v2/`, with its `whats-new.review.md` (the director's notes and the look gate
+  record) and the clips and pictures it shows in `whats-new-assets/`. It shows the sixteen kinds, the seven looks as
+  clips, the local voice that times each shot, the review sheets, the four redrawn skills, Director and operator,
+  locked installs, and, marked "also", cache-clock's keep-warm (off until turned on, tested against a fake Copilot
+  host only) and session-compass's two-line band. It is the first film in the feature page's films section. The
+  gallery's `video.mp4` is a 24.6 MB re-encode of the 71.2 MB render (`libx264 -crf 28 -preset slow`, audio copied);
+  the film file is the same bytes. Nobody has listened to the audio.
 - **Shared tokens and classes.** Three display sizes `--fs-d3` (28px), `--fs-d2` (37px) and `--fs-d1` (49px), `--lh-tight`,
   `--track-caps`, `--num` (tabular, lining figures), the `.pa-caps` and `.pa-num` classes, three surface steps
   `--surface-2` and `--surface-3` with `--shadow`, and a three-level elevation scale `--elev-1` to `--elev-3`. Every
