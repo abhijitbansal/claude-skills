@@ -79,6 +79,11 @@ jobs:
         run: node plugins/portable-artifacts/bin/sync-shared.mjs --check
       - name: shared/ (themes, contrast, errors)
         run: node --test "plugins/portable-artifacts/shared/test/*.test.mjs"
+      # bin/test/intake.test.mjs and make-motion-docs.test.mjs import make-motion's own modules (spec.mjs imports ajv), so
+      # its node_modules must be there; tests/pytest/test_workflow_node_job_installs.py keeps this list in step with them.
+      - name: install make-motion's packages (the installer tests import its code)
+        working-directory: plugins/portable-artifacts/skills/make-motion
+        run: npm ci
       - name: cross-host installer
         working-directory: plugins/portable-artifacts/bin
         run: node --test "test/*.test.mjs"
