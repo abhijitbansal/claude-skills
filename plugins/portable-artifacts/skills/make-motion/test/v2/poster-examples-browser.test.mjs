@@ -14,6 +14,7 @@ import { listEntries } from '../../scripts/v2/list.mjs';
 import { reviewFilm } from '../../scripts/v2/review.mjs';
 import { sessionOrNull } from './helpers/session.mjs';
 
+process.env.MM_DEBUG_SAFE ??= '1'; // TEMPORARY: engine/review/frame.mjs prints the ink and the safe area of a text outside it
 const FPS = 30;
 const CASES = Object.freeze([['16:9', 'pro'], ['9:16', 'pro'], ['9:16', 'viral']]);
 const look = registries.looks.get('poster');

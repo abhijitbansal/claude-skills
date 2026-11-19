@@ -274,6 +274,7 @@ function textRules(texts, ctx) {
     const id = node.id;
     if (node.layout.overflow) out.push(finding(ctx, CREATIVE, 'overflow', id, overflowMessage(node, size), role));
     if (landed && smallest < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(smallest)} units tall; the floor is ${MIN_TEXT_UNITS}`, role));
+    if (process.env.MM_DEBUG_SAFE && landed && outsideSafe(ink, ctx.safe, SAFE_TOLERANCE_UNITS * unitOf(ctx.canvas))) console.error(`SAFEDBG ${id} ink=${JSON.stringify(ink)} safe=${JSON.stringify(ctx.safe)} size=${node.layout.size} font=${JSON.stringify(node.props?.font)} lines=${JSON.stringify((node.layout.lines ?? []).map((l) => ({ w: l.width, words: (l.words ?? []).map((w) => [w.text, w.x, w.width]) })))}`); // TEMPORARY
     if (landed && outsideSafe(ink, ctx.safe, SAFE_TOLERANCE_UNITS * unitOf(ctx.canvas))) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
     return out;
   });
