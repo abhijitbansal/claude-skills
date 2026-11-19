@@ -492,8 +492,8 @@ function optionalPackage({ id, why, size, notes, oldPkg = OPTIONAL[id].pkg }) {
 export const kokoro = () => optionalPackage({
   id: 'kokoro',
   why: 'local text-to-speech for voiceover',
-  // Measured 2026-11-18 on macOS: `du -sk` of optional/voice/node_modules after npm ci --ignore-scripts (two direct dependencies)
-  // gave 221688 KiB = 227 MB; the five pinned model files total 92886949 bytes (VOICE_MODEL in scripts/v2/voice/model.mjs) = 93 MB.
+  // Measured 2026-11-18 on macOS: `du -sk` over the 23 packages named in optional/voice/package-lock.json, in an existing
+  // install (two direct dependencies; no new download), gave 221676 KiB = 227 MB; the five pinned model files total 92886949 bytes (VOICE_MODEL in scripts/v2/voice/model.mjs) = 93 MB.
   // An install made before the trim also holds kokoro-js, transformers and sharp until the next `--fix kokoro`; it still works.
   size: '≈227 MB, plus a 93 MB model on first use',
   notes: 'installs from optional/voice/package-lock.json; the 93 MB voice model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone',

@@ -160,6 +160,20 @@ def test_motion_gallery_has_one_card_per_look():
     assert len(re.findall(r"<video\b", block)) == len(LOOKS)
 
 
+def test_archive_links_the_motion_showcase_films_labelled_1x():
+    page = _page()
+    block = page[page.index('id="gallery-motion-1-4"'):page.index('id="gallery-explainer"')]
+    for film in ("features", "hand-drawn"):
+        folder = "showcase/portable-artifacts/gallery/motion-showcase/%s" % film
+        for name in ("video.mp4", "poster.jpg", "motion.json"):
+            assert (PAGE.parent / folder / name).is_file(), folder + "/" + name
+        assert re.search(r'<video\b[^>]*poster="%s/poster\.jpg"[^>]*>\s*<source src="%s/video\.mp4"' % (re.escape(folder), re.escape(folder)), block), film
+        card = block[block.index(folder + "/video.mp4"):]
+        card = card[:card.index("</div>")]
+        assert 'href="%s/motion.json"' % folder in card, film
+        assert "make-motion 1.x" in card, film
+
+
 def test_films_open_the_page_and_do_not_depend_on_scripts_or_gallery_css():
     page = _page()
     main_start = page.index('<main id="main"')

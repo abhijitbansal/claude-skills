@@ -504,7 +504,7 @@ preset in `references/examples/`.
 
 ## 5. Videos with make-motion
 
-make-motion 2 reads version 2 films only: a script of shots in one JSON file, `film.json`. A version 1 spec (one with `scenes`) is refused with a pointer to `skills/make-motion/references/migrating.md`, which says what each version 1 feature became and what is not in 2.0. The clips in the gallery and on the site were made with make-motion 1.x.
+make-motion 2 reads version 2 films only: a script of shots in one JSON file, `film.json`. A version 1 spec (one with `scenes`) is refused with a pointer to `skills/make-motion/references/migrating.md`, which says what each version 1 feature became and what is not in 2.0. The films in the gallery and on the site were made with make-motion 2; clips made with make-motion 1.x stay on the gallery page as a labelled archive.
 
 **Ask:**
 

@@ -84,6 +84,8 @@ There is no per-film sync check other than `timed: "measured"` and the figures a
 
 Three fresh reviewers (Opus, medium, report only) judged the sheets. Full reports: `.superpowers/sdd/2026-11-16-pa2-run2/gate-showreel-1.md` to `-3.md`.
 
+What a reader of this file cannot check: the gate reports and the claims table `S/claims-showreel.md` cited in this file live in the run's working folders (`.superpowers/` and `.scratch/`), which are gitignored and not shipped, so no row or verdict here can be checked from the repository. Also, the reviewers of the look films (gate-looks-1 and gate-looks-2) did not see only contact sheets and the rubric: they also read the film files (`look-cosmos.json`, `look-poster.json`) and the build reports, and gate-looks-2 read the header of `scripts/make.mjs`. The showreel gates pulled frames from the MP4 with ffmpeg as well as reading the sheets.
+
 | Gate | Build judged | Verdict | Shots marked fail |
 |---|---|---|---|
 | 1 | round 0 | SHIP AFTER FIXES | none |

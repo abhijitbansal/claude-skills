@@ -40,8 +40,8 @@ Director and operator split, locked and hashed optional installs and a smaller v
     `vega-interpreter` and `vega-util`. Nothing in version 2 imports them. make-dashboard keeps its own Vega packages.
     The Kenney sample files and the version 1 sketch assets are deleted with them.
   - **The voice install is smaller.** `optional/voice` no longer holds `kokoro-js`, `@huggingface/transformers` or the
-    `sharp` override; it holds `onnxruntime-node` and `phonemizer`. It measures 227 MB installed (`du -sk` of
-    `optional/voice/node_modules` after `npm ci --ignore-scripts`), plus a 93 MB model downloaded on first use (the five
+    `sharp` override; it holds `onnxruntime-node` and `phonemizer`. It measures 227 MB installed (`du -sk` over the 23
+    packages of its lockfile, in an existing install; the `npm ci --ignore-scripts` install itself was not re-run), plus a 93 MB model downloaded on first use (the five
     pinned files total 92,886,949 bytes). The doctor still names the requirement `kokoro` (`doctor --fix kokoro`) and
     now detects it by `phonemizer`.
   - **An old voice install still works.** An install made before this release also holds `kokoro-js` and its
@@ -54,7 +54,7 @@ Director and operator split, locked and hashed optional installs and a smaller v
     keep that one. `<skill>/.cache/cutout` belongs to `cutout.mjs`, which still writes it: keep it too.
     `doctor --fix cache` deletes `.cache/video` and `.cache/cutout` together.
   - **A viral film's first frame names the product.** In the opening `statement` of a viral film, the kicker tag and
-    the words up to the first full stop are fully drawn on frame 0 (a platform takes frame 0 as the thumbnail). The rest
+    the words up to the end of the first sentence (`.`, `!`, `?` or `…`) are fully drawn on frame 0 (a platform takes frame 0 as the thumbnail). The rest
     of the line starts as grey ghost words and lights as it is spoken. A one-sentence hook keeps every word a ghost;
     only its tag is set on frame 0. Pro films are unchanged.
   - **make-explainer's `motion` section** takes a version 2 film, renders it with `make.mjs`, passes no `--theme` (a
@@ -78,14 +78,15 @@ Director and operator split, locked and hashed optional installs and a smaller v
   for cutouts) has a postinstall that, on Linux x64 only, downloads CUDA libraries (a GitHub release, then NuGet) with no
   hash; the CPU binaries ship inside the npm tarball, which the lockfile's integrity covers, and neither feature uses a
   GPU. The loader also refuses to load when a direct dependency of an optional folder would resolve outside that folder
-  (a partial install with an old unlocked copy above it). Each
-  folder carries its own `overrides`, which are the ones the skill's `package.json` used to hold for these installs:
-  `sharp` 0.35.5 (GHSA-f88m-g3jw-g9cj, GHSA-rgj7-g3m4-5g8c, GHSA-wq5f-xc86-pv6w; kokoro-js 1.2.1 reaches sharp ^0.34
-  through `@huggingface/transformers` 3.x; both packages and this override are gone again with make-motion 2, above) and `global-agent` 4.1.3 (global-agent 3.x pulls in roarr and sprintf-js,
-  GHSA-hp3w-g68c-fv3c). `npm audit --package-lock-only` in each folder reports 0 vulnerabilities (measured 2026-11-15).
-- **The Kokoro model is pinned to commit `1939ad2` with a SHA-256 per file.** The voice script downloads the four files
-  itself and checks each one before every use; a cached file that differs is downloaded again once. Before, kokoro-js
-  read the model from the Hugging Face branch head, unhashed.
+  (a partial install with an old unlocked copy above it). Each folder carries one `overrides` entry: `global-agent`
+  4.1.3 (global-agent 3.x pulls in roarr and sprintf-js, GHSA-hp3w-g68c-fv3c). 1.3.0's voice folder also carried a
+  `sharp` 0.35.5 override (kokoro-js 1.2.1 reached sharp ^0.34 through `@huggingface/transformers` 3.x); that package
+  and the override are gone with make-motion 2, above. `npm audit --package-lock-only` in each folder reports 0
+  vulnerabilities (measured 2026-11-19).
+- **The Kokoro model is pinned to commit `dd4401a9` with a SHA-256 per file.** Version 2 narrates with
+  `onnx-community/Kokoro-82M-v1.0-ONNX-timestamped`. `make.mjs` downloads the five files itself
+  (`scripts/v2/voice/model.mjs`) and checks each one before every use; a cached file that differs is downloaded again
+  once. Before, kokoro-js read the model from the Hugging Face branch head, unhashed.
 - **ffmpeg-static is no longer looked for.** Use a system ffmpeg or set `FFMPEG_PATH`. Its postinstall download was
   unpinned and unhashed, and an existing install in `node_modules` no longer counts (the doctor says ffmpeg is missing
   until you set `FFMPEG_PATH` to that binary).
@@ -93,11 +94,12 @@ Director and operator split, locked and hashed optional installs and a smaller v
 - **New standing tests: exact pins, locked installs, hashed downloads.** `bin/test/dependency-pins.test.mjs` fails on a
   dependency range, an install without a lockfile or an unpinned or unhashed download.
 - **What changes from 1.3.0 for these installs.** 1.3.0 said the voiceover install is about 465 MB and that it shares
-  `onnxruntime-node` with the cutout; in its own folder it is about 440 MB (`du` of `optional/voice/node_modules` on
-  macOS) and shares nothing. 1.3.0's pinned `ffmpeg-static` install hint is gone with `ffmpeg-static`. The install hint a
-  script prints is still exactly the doctor's `--fix` step, and the 1.3.0 per-user model folder (`$CLAUDE_PLUGIN_DATA`,
-  else the OS cache folder) is kept: it now holds the SHA-256-checked model files. `voice.mjs --dir` and the static
-  `--list-voices` from 1.3.0 are kept; the first download prints one line per file instead of a percentage.
+  `onnxruntime-node` with the cutout; in its own folder it is 227 MB (above) and shares nothing. 1.3.0's pinned
+  `ffmpeg-static` install hint is gone with `ffmpeg-static`. The install hint a script prints is still exactly the
+  doctor's `--fix` step. The 1.3.0 per-user model folder (`$CLAUDE_PLUGIN_DATA`, else the OS cache folder) no longer
+  holds the voice model: version 2 keeps its SHA-256-checked files in `<skill>/.cache/models` (see "Old folders you can
+  delete", above). `voice.mjs` is gone, with its `--dir` and `--list-voices`; use `make.mjs --list voices`. The first
+  download prints one line per file instead of a percentage.
 - **Director and operator replaces the pinned cheap model.** No `SKILL.md` pins a `model` or `effort` any more; each has
   a `## Director and operator` section: the agent you talk to writes the spec and decides every creative finding, and may
   hand the one `make.mjs <spec> --json` command to the `artifact-builder` agent (`model: haiku` on Claude Code), which

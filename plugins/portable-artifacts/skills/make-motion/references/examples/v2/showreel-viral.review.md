@@ -1,6 +1,6 @@
-# showreel-viral: director's notes (revision round 2)
+# showreel-viral: director's notes (revision round 3)
 
-Film: `showreel-viral.json` (viral, `pop`, 9:16, voiced `af_heart`, `pulse` bed at 124, cues on by default). Voice path: voiced (owner's answer of 2026-11-18). Built on 2026-11-18 with `SOURCE_DATE_EPOCH=1794960000`. Sheets looked at: every PNG under `S/showreel-viral/showreel-viral.sheets/` (8 shot sheets and 7 cut strips). The hook, spec, close and all seven cut strips and the video sheet were opened from the final build; the dashboard, diagram, explainer and scene shot sheets were opened from the build before it, which differs from the final build only in the hook, spec and close pauses (the pictures are the same files; only the time stamps move by 0.2 to 0.5 s). Nobody has listened to this film. This is revision round 2 (the last allowed); round 0 and the round 1 look gate notes are in `.superpowers/sdd/2026-11-16-pa2-run2/gate-showreel-1.md`, the round 2 gate's findings (V1 to V18) in `gate-showreel-2.md`.
+Film: `showreel-viral.json` (viral, `pop`, 9:16, voiced `af_heart`, `pulse` bed at 124, cues on by default). Voice path: voiced (owner's answer of 2026-11-18). Built on 2026-11-18 with `SOURCE_DATE_EPOCH=1794960000`. Sheets looked at: every PNG under `S/showreel-viral/showreel-viral.sheets/` (8 shot sheets and 7 cut strips). The hook, spec, close and all seven cut strips and the video sheet were opened from the final build; the dashboard, diagram, explainer and scene shot sheets were opened from the build before it, which differs from the final build only in the hook, spec and close pauses (the pictures are the same files; only the time stamps move by 0.2 to 0.5 s). Nobody has listened to this film. The sections down to "Sync" describe the round 2 build; round 3 (owner-authorised, beyond the two rounds the plan allows) changed the hook and the explainer shot, and the section "Revision round 3" and its measurements replace the round 2 ones where they differ. Round 0 and the round 1 look gate notes are in `.superpowers/sdd/2026-11-16-pa2-run2/gate-showreel-1.md`, the round 2 gate's findings (V1 to V18) in `gate-showreel-2.md`.
 
 ## Each shot, as a stranger sees it
 
@@ -36,7 +36,7 @@ New assets are listed in `S/claims-showreel.md` under "Added in Task 2 revision 
 | V2 HIGH, video never shown | new `video` shot: a real make-motion frame (`motion.png`) in the same card, caption "VIDEO"; the "5 skills" counter shot is gone |
 | V3 MEDIUM, no shot names its skill | every picture carries its skill name as a caption (Dashboard, Diagram, Explainer, Scene, Video) |
 | V4 MEDIUM, dangling dashed edge | the diagram is a variant of the bundled example without the Payments node and its edge (and without the "POST /checkout" label), captured whole, so no edge leaves the picture |
-| V5 MEDIUM, off-message explainer | the explainer picture is now the build-path figure (Explainer JSON to Validate to buildDiagram), not the branch stats |
+| V5 MEDIUM, off-message explainer | the explainer picture was changed to the build-path figure (Explainer JSON to Validate to buildDiagram), not the branch stats (round 2; round 3 replaced it with the explainer page's own header and verdict) |
 | V6 LOW, 1,107 against 1107 | gone with V5 |
 | V7 MEDIUM, scene undersells 3D, nothing highlighted | the scene capture has the page's own hover tooltip open on the tallest block ("web · 2026-W32, 22 commits"); page buttons are cropped out. Not fixed: the picture is a still, so the camera does not turn (see note 3) |
 | V8 MEDIUM, close repeats the hook | partly fixed: no tag on top, the product name moves to a lime plate at the bottom, four lines instead of five, different wording. The type and the word-by-word reveal are the look's own and stay (note 5) |
@@ -64,7 +64,7 @@ New assets are listed in `S/claims-showreel.md` under "Added in Task 2 revision 
 
 None: the last build has 0 findings (0 mechanical, 0 creative).
 
-## Measurements (copied from `S/showreel-viral/report.json`, `make.mjs --json`; nothing else)
+## Measurements, round 2 (superseded by "Measurements, round 3" below; copied from `S/showreel-viral/report.json`, `make.mjs --json`; nothing else)
 
 - `ok`: true; findings: 0.
 - `frames`: 682 (22.73 s at 30 fps; band 18 to 23 s); `captured`: 545; `seconds` (render): 36.027; `msPerFrame`: 52.825; `bytes`: 10,367,453; `mbps`: 3.648.
@@ -102,6 +102,8 @@ Other shots are unchanged (same JSON). The video shot still shows its own "04 IN
 
 Four fresh reviewers (Opus, medium, report only) judged the sheets. Full reports: `.superpowers/sdd/2026-11-16-pa2-run2/gate-showreel-1.md` to `-4.md`.
 
+What a reader of this file cannot check: the gate reports and the claims table `S/claims-showreel.md` cited in this file live in the run's working folders (`.superpowers/` and `.scratch/`), which are gitignored and not shipped, so no row or verdict here can be checked from the repository. Also, the reviewers of the look films (gate-looks-1 and gate-looks-2) did not see only contact sheets and the rubric: they also read the film files (`look-cosmos.json`, `look-poster.json`) and the build reports, and gate-looks-2 read the header of `scripts/make.mjs`. The showreel gates pulled frames from the MP4 with ffmpeg as well as reading the sheets.
+
 | Gate | Build judged | Verdict | Shots marked fail |
 |---|---|---|---|
 | 1 | round 0 | NOT YET | `diagram` |
@@ -109,6 +111,6 @@ Four fresh reviewers (Opus, medium, report only) judged the sheets. Full reports
 | 3 | round 2 | NOT YET | `hook` (no tag at frame 0, every word grey), `explainer` (read as a second diagram) |
 | 4 | round 3 (owner-authorised, this file) | **SHIP AFTER FIXES** | none |
 
-The plan allows two revision rounds; the owner authorised a third, limited to gate 3's two failing shots, on 2026-11-18. Gate 4 passes the film under the plan's rule (SHIP AFTER FIXES with no failing shot). Its strongest frame: "dashboard at about 8.9 s. The title states the takeaway, the East bar is highlighted, and the SQL and refresh time are shown." Its weakest: "video at about 17 s. A still letterboxed "5 skills" frame where only a shimmer moves." Frame 0: "The PORTABLE-ARTIFACTS tag and the claim are on screen (frames 0–2 identical)."
+The plan allows two revision rounds; the owner authorised a third, limited to gate 3's two failing shots, on 2026-11-18. Gate 4 passes the film under the plan's rule (SHIP AFTER FIXES with no failing shot). Gate 4's words, copied from `gate-showreel-4.md`. Strongest frame: "dashboard at about 8.9 s. "East earns the most revenue" is the title, the East bar is teal and the other bars grey, and the SQL with its refresh time is visible." Weakest frame: "the video shot at about 17 s. It is a still "5 skills / ONE JSON FILE EACH" frame letterboxed inside a near-square card." On frame 0: "frame 0 (`f1.png`) shows the PORTABLE-ARTIFACTS tag"; ""ONE JSON FILE." is in full white. "FIVE KINDS OF ARTIFACT." is in dim grey."; "Frames 1 and 2 are identical to frame 0."
 
 Gate 4's fix items (F1 to F14: the video shown as a still, the explainer headline that is about diagrams, five skill shots in one composition, label sizes, the small scene card, the garbled wipe labels, card tops on the 14% line, and the LOW items) are left open under the pass and listed in `docs/decisions-pending.md`.
