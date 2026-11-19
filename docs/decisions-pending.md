@@ -342,3 +342,12 @@ The pro showreel passed look gate 3 with SHIP AFTER FIXES and no failing shot (`
 - **V-P4:** "10 of 10 films built valid" is accurate (claims row 8) but opaque to a viewer. Say what was built and checked.
 - **V-P5:** the problem question is tiny title-bar text over the product's own dashboard, with its Query toggles visible. Make the question the large line, and show a dashboard without provenance.
 - **LOW (V-P6 to V-P15):** the scene is a still; all five capability shots share one shape; the idea holds about 1.4 s; the wide diagram print is unreadable for about 1 s; the dashboard box strikes through "Data table"; cut types vary without meaning; the "COMMITS PER FOLDER" caption describes data; brief crossfade artefacts; the close shows no install command.
+
+## showreel-viral: look gate 4 leftovers (2026-11-18)
+
+The viral showreel passed look gate 4 with SHIP AFTER FIXES and no failing shot (`.superpowers/sdd/2026-11-16-pa2-run2/gate-showreel-4.md`), after an owner-authorised third round limited to gate 3's two fails. These stay open. Default for all: fix them the next time the film is revised.
+
+- **F1:** the video skill is a still frame where only a shimmer moves. Show a few seconds of a real film playing (a `media` clip).
+- **F2:** the explainer page's headline is "Diagram sections: make-diagram figures inside an explainer", right after the DIAGRAM shot. Use an explainer page whose title is not about diagrams.
+- **F3 to F7:** the five skill shots share one composition; the labels change size because each is fit to width; the scene card is small and its legend unreadable on a phone; the scene-to-video wipe shows garbled labels for about 4 frames; card tops sit on the 14% safe line.
+- **LOW (F8 to F14):** dim hook words at frame 0; the video card's letterbox bars and missing lime shadow; the close mirrors the hook; unmotivated cover and wipe cuts; the "04 IN NUMBERS" sticker; branch and repo metadata on the explainer page; an asymmetric spec highlight bar.
