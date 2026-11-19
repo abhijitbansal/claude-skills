@@ -328,3 +328,17 @@ The make-scene refresh look passed: review 1 NOT YET, review 2 SHIP AFTER FIXES,
 ## Old-token themes in make-dashboard: warn, not refuse (2026-11-18)
 
 A theme written outside the repo before the refresh lacks `surface2`, `surface3` and `shadow`. Since 5b0485db those tokens fall back (a small mix of `surface` toward `text`; `#000000`) and `checkTheme` names each missing one. make-dashboard used to fail the build on any `checkTheme` entry, so it refused such a theme although it now renders. Chosen default: a missing token that has a fallback is a warning and the build succeeds; a failed contrast pair still fails the build. Option not taken: keep refusing, so the theme's author must add the three tokens. Say if you want the stricter rule.
+
+## showreel-pro: no hero object (2026-11-18)
+
+Design section 14 asks for "the five skills as pieces on a desk with one hero object that becomes each artifact". The film shows each skill as a separate print with its own slug (01 to 05), joined by plain cuts. Look gate 2 flagged it (P3, `.superpowers/sdd/2026-11-16-pa2-run2/gate-showreel-2.md`). Owner decision, 2026-11-18: park it for this release, so the last revision round fixed only the failing shots; gate 3 was told not to count it. Default: the next showreel revision either builds one card carried by `match` cuts or changes the brief to separate prints.
+
+## showreel-pro: look gate 3 leftovers (2026-11-18)
+
+The pro showreel passed look gate 3 with SHIP AFTER FIXES and no failing shot (`.superpowers/sdd/2026-11-16-pa2-run2/gate-showreel-3.md`). Both revision rounds were used, so these stay open. Default for all: fix them the next time the film is revised.
+
+- **V-P1:** the video frame carries its own "04 IN NUMBERS" note beside the film's "05 VIDEO" note, so it reads as a numbering error. Use a frame without the chapter tag, or crop it out.
+- **V-P2, V-P3:** the "A RECAP, ON ONE PAGE" note covers the explainer page title, and the push boxes only the embedded flowchart. Move the note, and box a header with prose or the checklist.
+- **V-P4:** "10 of 10 films built valid" is accurate (claims row 8) but opaque to a viewer. Say what was built and checked.
+- **V-P5:** the problem question is tiny title-bar text over the product's own dashboard, with its Query toggles visible. Make the question the large line, and show a dashboard without provenance.
+- **LOW (V-P6 to V-P15):** the scene is a still; all five capability shots share one shape; the idea holds about 1.4 s; the wide diagram print is unreadable for about 1 s; the dashboard box strikes through "Data table"; cut types vary without meaning; the "COMMITS PER FOLDER" caption describes data; brief crossfade artefacts; the close shows no install command.
