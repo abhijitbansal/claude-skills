@@ -632,8 +632,27 @@ test('a text flush on the safe edge is inside: the safe-area rule allows 1 unit,
   };
   assert.equal(at(0), 0, 'flush on the edge');
   assert.equal(at(-0.8), 0, 'within a unit of it (a punch at 0.2 percent moves a flush line this far)');
-  assert.equal(at(-2), 1, 'two units out is outside');
+  assert.equal(at(-4), 1, 'four units out is outside (the allowance at 132 is 1 unit plus 1.5 percent of 132, about 3)');
   assert.equal(at(-20, 1.015), 0, 'a camera punch at 1.5 percent is a move in progress');
+});
+
+// Linux's canvas reports the ink of a large word as a pixel-rounded outset of the real glyph bounds: CI run 44475322956,
+// Archivo 900 extra-condensed at 280 px, the right edge of "TOTAL" 3.37 units past macOS's, the left edge of the same
+// word 4.23 and "l" 2.04 (all at 280 px; under 120 px the outsets were under 1 unit). A word fitted to the whole safe
+// width then read as past its edge by 1.93 units (poster, code example, 9:16). The rule therefore allows the 1 unit and
+// 1.5 percent of the text's size, the largest outset measured (4.23 of 280).
+test('the safe-area rule allows for the ink a canvas reports a little wide: 1 unit and 1.5 percent of the text size', () => {
+  const safe = safeRectFor(CANVAS, registries.looks.get('desk'));
+  const pastRight = (size, over) => {
+    const n = textNode({ id: 'edge', size, x: 0, y: 300, words: 1 });
+    const x = safe.right - n.layout.width + over;
+    return auditFrame([{ ...n, x, bbox: [x, n.bbox[1], n.bbox[2], n.bbox[3]] }], ctx({ restScales: new Map([['edge', 1]]) })).filter((f) => f.rule === 'safe-area').length;
+  };
+  assert.equal(pastRight(280, 1.93), 0, 'the poster hero: the ink Linux reports ends 1.93 units past the edge');
+  assert.equal(pastRight(280, 5), 0, 'the allowance at 280 is 1 + 4.2 units: five past is inside');
+  assert.equal(pastRight(280, 6), 1, 'and six past is outside');
+  assert.equal(pastRight(28, 1.93), 1, 'a small text has a small allowance (1.4 at 28): 1.93 past is outside');
+  assert.equal(pastRight(28, 1.3), 0, 'and 1.3 past is inside');
 });
 
 // ---- revision 2: frame furniture (the lead's ruling) ----

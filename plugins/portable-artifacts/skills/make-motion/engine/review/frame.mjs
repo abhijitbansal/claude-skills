@@ -69,6 +69,11 @@ const SETTLE_TOLERANCE = 0.002;
 // Text may reach this far past the safe area (units) before it is outside: a line set flush on the edge by its measured
 // ink stays within it through the last 0.2% of a punch.
 const SAFE_TOLERANCE_UNITS = 1;
+// The safe-area rule also allows this share of the text's size (em) for the ink a canvas reports a little wide. Linux's
+// canvas gives a large word's ink as a pixel-rounded outset of the real glyph bounds, and macOS gives them tight. CI run
+// 44475322956 (Archivo 900 extra-condensed at 280 px) against macOS: the right edge of "TOTAL" 3.37 units wider, its left
+// edge 4.23, "l" 2.04, ascent 2.63; under 120 px the outsets were under 1 unit. 0.015 em is the largest measured, 4.23 of 280.
+const INK_OUTSET_EM = 0.015;
 const EPSILON = 1e-6;
 const MECHANICAL = 'mechanical';
 const CREATIVE = 'creative';
@@ -274,8 +279,7 @@ function textRules(texts, ctx) {
     const id = node.id;
     if (node.layout.overflow) out.push(finding(ctx, CREATIVE, 'overflow', id, overflowMessage(node, size), role));
     if (landed && smallest < MIN_TEXT_UNITS - EPSILON) out.push(finding(ctx, MECHANICAL, 'min-size', id, `text "${id}" is ${units(smallest)} units tall; the floor is ${MIN_TEXT_UNITS}`, role));
-    if (process.env.MM_DEBUG_SAFE && landed && outsideSafe(ink, ctx.safe, SAFE_TOLERANCE_UNITS * unitOf(ctx.canvas))) console.error(`SAFEDBG ${id} ink=${JSON.stringify(ink)} safe=${JSON.stringify(ctx.safe)} size=${node.layout.size} font=${JSON.stringify(node.props?.font)} lines=${JSON.stringify((node.layout.lines ?? []).map((l) => ({ w: l.width, words: (l.words ?? []).map((w) => [w.text, w.x, w.width]) })))}`); // TEMPORARY
-    if (landed && outsideSafe(ink, ctx.safe, SAFE_TOLERANCE_UNITS * unitOf(ctx.canvas))) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
+    if (landed && outsideSafe(ink, ctx.safe, (SAFE_TOLERANCE_UNITS + INK_OUTSET_EM * size) * unitOf(ctx.canvas))) out.push(finding(ctx, MECHANICAL, 'safe-area', id, `text "${id}" is outside the safe area; move it in or cut words`, role));
     return out;
   });
 }

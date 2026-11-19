@@ -57,6 +57,12 @@ Director and operator split, locked and hashed optional installs and a smaller v
     the words up to the end of the first sentence (`.`, `!`, `?` or `…`) are fully drawn on frame 0 (a platform takes frame 0 as the thumbnail). The rest
     of the line starts as grey ghost words and lights as it is spoken. A one-sentence hook keeps every word a ghost;
     only its tag is set on frame 0. Pro films are unchanged.
+  - **The same film measures and reviews the same on Linux and macOS.** Every make-motion browser launches with
+    `--font-render-hinting=none`, because Linux headless Chromium otherwise rounds each glyph advance to a whole pixel
+    (Archivo at 24 px x8 measured 344 against 349 on macOS) and a fit that clears on one machine overflowed on the
+    other. The review's safe-area rule allows 1 unit plus 0.015 em of the text's size, because Linux reports a
+    glyph's ink up to 0.015 em wider than macOS (4.2 units at 280; measured in CI). A line up to about 3 units past
+    the safe edge at size 132, or 5 at 280, is no longer a mechanical finding on either platform.
   - **make-explainer's `motion` section** takes a version 2 film, renders it with `make.mjs`, passes no `--theme` (a
     film has a look) and takes its poster from second 0 of the rendered MP4.
   - **The eval's `motion` set** is eleven version 2 prompts. The `benchmark` and `items` sets are removed. Result files
