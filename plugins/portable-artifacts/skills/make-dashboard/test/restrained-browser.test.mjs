@@ -42,6 +42,9 @@ const facts = (page) => page.evaluate(() => {
   const notes = (id) => [...document.querySelectorAll(`#${id} g.mark-text text`)].filter(shown).map(box);
   return {
     accent,
+    // what a failed tick assertion needs to be read without a rerun: the faces' load state and each chart's drawn width
+    fonts: [...document.fonts].map((f) => `${f.family} ${f.weight} ${f.status}`),
+    widths: { c3: document.querySelector('#chart-c3')?.getBoundingClientRect().width, c5: document.querySelector('#chart-c5')?.getBoundingClientRect().width },
     c4: [...new Set(attrs('#chart-c4 g.mark-rect path', 'fill'))],
     c6: [...new Set(attrs('#chart-c6 g.mark-line path', 'stroke'))],
     c3: [...new Set(attrs('#chart-c3 g.mark-line path', 'stroke'))],
@@ -104,7 +107,9 @@ for (const theme of THEMES) {
       const f = await facts(page);
       for (const id of ['c3', 'c5']) {
         const months = xAxis(f.axes[id]).map((l) => monthIndex(l.text));
-        assert.ok(months.length >= 3 && months.every((m) => m !== null), `${id}: month ticks ${xAxis(f.axes[id]).map((l) => l.text)}`);
+        const seen = `${id}: month ticks ${xAxis(f.axes[id]).map((l) => l.text)}; tick widths ${xAxis(f.axes[id]).map((l) => (l.right - l.left).toFixed(1))}; `
+          + `y labels ${yAxis(f.axes[id]).map((l) => `${l.text} ${(l.right - l.left).toFixed(1)}`)}; chart ${f.widths[id]} px wide; fonts ${f.fonts.join(', ')}`;
+        assert.ok(months.length >= 3 && months.every((m) => m !== null), seen);
         const steps = new Set(months.slice(1).map((m, i) => m - months[i]));
         assert.equal(steps.size, 1, `${id}: one step between ticks: ${xAxis(f.axes[id]).map((l) => l.text)}`);
       }

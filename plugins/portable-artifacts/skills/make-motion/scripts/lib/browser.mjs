@@ -8,7 +8,11 @@ const firstLine = (e) => String(e?.message ?? e).split('\n')[0];
 // Render mode paints every element into the stage layer (styles.css), so each seek re-rasters the tiles a moving element
 // touched. With partial raster, Chromium re-rasters only the changed part of a reused tile, and an image or art under
 // that part came out one of two ways per browser launch. Whole-tile raster gives the same bytes every launch.
-const ARGS = ['--disable-partial-raster'];
+// `--font-render-hinting=none`: on Linux, Chromium's headless shell rounds each glyph advance to a whole pixel (hinted
+// metrics), where macOS keeps fractions. A word then measures differently from one machine to the next and a fit that
+// clears by a hair on one overflows on the other (CI, ubuntu: Archivo "Rag" at 24 px x8 was 344, at 192 px 350; macOS 349.0
+// for both). No hinting gives the unrounded advances every machine agrees on; macOS ignores the flag.
+const ARGS = ['--disable-partial-raster', '--font-render-hinting=none'];
 
 // Bundled Chromium first; falls back to system Chrome with a warning.
 // Playwright closes the browser and exits 130 or 143 itself on Ctrl+C or SIGTERM, which pre-empts a caller's own handler
