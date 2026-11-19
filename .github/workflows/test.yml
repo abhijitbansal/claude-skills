@@ -147,12 +147,6 @@ jobs:
           PA_REQUIRE_RENDER: ${{ matrix.name == 'make-motion' && '1' || '' }}
           PA_REQUIRE_BROWSER: ${{ matrix.name == 'make-motion' && '1' || '' }}
         run: node --test ${SHARD:+--test-shard=$SHARD} "test/**/*.test.mjs"
-      # TEMPORARY (delete with make-scene/test/probe-frames.mjs): how long the tour light takes on this runner, alone and
-      # with three browsers at once (node's default test concurrency). Read the `frame-probe:` lines in the log.
-      - name: frame probe (temporary)
-        if: always() && matrix.name == 'make-scene 2/2'
-        working-directory: plugins/portable-artifacts/skills/make-scene
-        run: node test/probe-frames.mjs
 
   # WebGL spike and the shader cuts (ripple, cube), macOS half: manual runs only (gh workflow run test.yml). The Ubuntu half
   # is the make-motion step of the node job above, whose npm test includes the same test/v2/cuts-*-browser tests. This job

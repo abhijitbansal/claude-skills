@@ -370,3 +370,7 @@ Release Task 4 made the site hero (`site/index.html`) and the page's films secti
 ## make-dashboard mono on hinted Linux browsers (2026-11-19)
 
 Linux headless Chromium rounds each glyph advance to a whole pixel by default; JetBrains Mono at 11 px then measures 7 px per character instead of 6.6. Vega picks month ticks from those widths, so in the `mono` theme at 390 px a chart can show 2 month labels (Jan, Sep) instead of 3. The test browser now launches with `--font-render-hinting=none` (e758c5ba), so the test measures like macOS; a Linux reader's own browser may still show 2 labels. They do not collide and step evenly. Default: accept it. Option: a tick rule that does not depend on a fraction of a pixel of label width, or the same flag in make-dashboard's own check browser (`scripts/lib/browser.mjs`).
+
+## make-scene: slower page opens since the redraw (2026-11-19)
+
+CI round 5 (`.superpowers/sdd/2026-11-16-pa2-run2/ci-report.md`) measured the branch's make-scene against main's on the same machine: steady frame rate and the tour light are the same (58.5 fps, 1.8-1.9 s), but each page open and its first draws cost 40 to 75% more on macOS (hover 391 to 690 ms, reduced-motion open 464 to 678 ms), and 1.2x to 2.7x on CI. Candidates are the refresh's first-draw shader work (fresnel patches, `render.js`, `look.js`); not bisected. It broke nothing on its own once the tests waited on the light's progress and the check got a 15 s screenshot budget. Default: ship, and bisect the open cost in the next make-scene change. Option: bisect before the release.
