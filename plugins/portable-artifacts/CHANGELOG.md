@@ -6,6 +6,13 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-18
+
+make-motion 2 replaces make-motion 1: a film is a script of shots in one JSON file, written for one engine with seven
+looks and sixteen kinds, and one command validates, reviews and renders it. The site and the README now show two
+showreel films and five more example films, all made with make-motion 2, and the other four skills are redrawn. The
+Director and operator split, locked and hashed optional installs and a smaller voice install come with it.
+
 ### Behaviour changes to know about
 
 - **make-motion 2 replaces make-motion 1. The skill reads version 2 films only.** A film is a script of shots in
@@ -58,8 +65,12 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
     for version 2: none has been re-measured. The one claim about the voice is this, from the gate record: on the
     held-out fixture lines, for the word starts that follow a silence, the predicted start was a median 9 ms from the
     onset ffmpeg's silence detector found. Nobody has listened to the audio.
-  - **Version 1 clips on the site and in the README** were made with make-motion 1.x. They stay, and version 2 reads a
-    different spec.
+  - **The site and the README show version 2 renders.** The films section of the feature page, the `#gallery-motion`
+    grid, the site hero and both README heroes show the two showreel films and one film per look, made with
+    make-motion 2. The version 1 clips are kept as a labelled archive ("made with make-motion 1.x") in
+    `#gallery-motion-1-4`, with their folders `motion-showcase` and `motion-1-4`; version 2 reads a different spec, so
+    they cannot be rebuilt with it. Three version 1 GIFs (`launch-announcement.gif`, `motion-q3-revenue.gif`,
+    `motion-how-it-works.gif`) are removed, and `showreel-pro.gif` and `showreel-viral.gif` replace them.
 - **The voiceover and cutout installs move to `optional/voice` and `optional/cutout`** and are installed by `npm ci
   --ignore-scripts` from committed lockfiles (`doctor --fix kokoro`, `doctor --fix cutout`). An old install in the
   skill's `node_modules` is ignored: run `doctor --fix kokoro` or `--fix cutout` once, and `--fix node_modules` removes
@@ -140,6 +151,12 @@ Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release say
 
 ### Added
 
+- **Two showreel films and one example film per look, as the films to start from.** In
+  `skills/make-motion/references/examples/v2/`: `showreel-pro.json` (`desk`, 16:9, voiced, 46.77 s) and
+  `showreel-viral.json` (`pop`, 9:16, voiced, 22.73 s), each with a `.review.md` of the director's notes, and the
+  screenshots of version 2 builds they show in `showreel-assets/`; and `look-cosmos.json`, `gate-ledger.json`,
+  `look-poster.json`, `gate-keynote.json` and `gate-marker.json`, one for each other look. `SKILL.md` names them under
+  "Finished films". Renders, posters and a copy of each film file are in the gallery under `showreel/` and `looks/`.
 - **Shared tokens and classes.** Three display sizes `--fs-d3` (28px), `--fs-d2` (37px) and `--fs-d1` (49px), `--lh-tight`,
   `--track-caps`, `--num` (tabular, lining figures), the `.pa-caps` and `.pa-num` classes, three surface steps
   `--surface-2` and `--surface-3` with `--shadow`, and a three-level elevation scale `--elev-1` to `--elev-3`. Every
