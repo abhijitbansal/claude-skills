@@ -10,13 +10,19 @@ import { fileURLToPath } from 'node:url';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const BUILD = path.join(ROOT, 'scripts/build.mjs');
 
+// `--font-render-hinting=none`: Linux's headless Chromium rounds every glyph advance to a whole pixel, where macOS keeps
+// fractions (CI, ubuntu: JetBrains Mono at 11 px measured 56 and 42 px for "Jan 2025" and "$1,000"; 52.8 and 39.6 on
+// macOS and with the flag). Vega reads those widths to decide which month ticks fit, so the 390 px tick-count test drew
+// 2 labels instead of 3 in the mono theme. The flag makes the browser measure the same everywhere; macOS ignores it.
+const ARGS = ['--font-render-hinting=none'];
+
 export async function launchBrowser() {
   const { chromium } = await import('playwright');
   try {
-    return await chromium.launch();
+    return await chromium.launch({ args: ARGS });
   } catch (first) {
     if (!/Executable doesn't exist/i.test(first.message)) throw first;
-    return chromium.launch({ channel: 'chrome' });
+    return chromium.launch({ channel: 'chrome', args: ARGS });
   }
 }
 
