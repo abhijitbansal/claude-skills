@@ -11,6 +11,7 @@ import { distinctColours } from '../scripts/lib/png.mjs';
 import { canvasPng, launchBrowser } from './helpers/browser.mjs';
 import { PINNED_ENV, tempDir } from './helpers/scene-fixtures.mjs';
 import { consoleProblem, skipUnlessReady } from './helpers/webgl.mjs';
+import { lightArrives } from './helpers/light.mjs';
 
 const FIX = new URL('./fixtures/', import.meta.url);
 
@@ -68,8 +69,7 @@ test('the tour sends a light along the beat edge and it arrives', async (t) => {
   await page.waitForFunction(() => window.PAScene.__scene.traveller()?.id === 'edge-0', null, { timeout: 3000 });
   const start = await light(page);
   assert.equal(start.done, false, 'it is travelling');
-  await page.waitForFunction(() => window.PAScene.__scene.traveller().done === true, null, { timeout: 5000 });
-  const end = await light(page);
+  const end = await lightArrives(page); // by what it does, not a wall-clock budget: see helpers/light.mjs
   assert.equal(end.at, 1);
   assert.notDeepEqual(end.position, start.position, 'it moved along the tube');
   await page.keyboard.press('ArrowRight'); // beat 2: place
@@ -85,8 +85,7 @@ test('a reply beat sends the light back along the edge', async (t) => {
   for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight'); // beat 6: "The shopper sees a receipt", reversed
   await page.waitForFunction(() => window.PAScene.__scene.traveller()?.id === 'edge-0', null, { timeout: 3000 });
   const first = await light(page);
-  await page.waitForFunction(() => window.PAScene.__scene.traveller().done === true, null, { timeout: 5000 });
-  const last = await light(page);
+  const last = await lightArrives(page);
   assert.ok(first.at > 0.5 && last.at === 0, `it runs from the far end (${first.at}) back to the start (${last.at})`);
 });
 
