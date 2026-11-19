@@ -54,7 +54,7 @@ To run this skill's tests one browser at a time, use `npm run test:serial`.
 }
 ```
 
-`say` is the narration. A shot lasts as long as its narration takes at the mode's pace, plus a short tail. `*word*` marks emphasis. `on` places a device (a circle, a highlight, an arrow) on a word. `node scripts/make.mjs --list kinds` prints every kind with its fields and one example to copy. The root fields, the fields every shot takes, the report and the exit codes are in [`references/schema.md`](references/schema.md). How to write for the picture is in [`references/story.md`](references/story.md). Finished films to start from are in [`references/examples/v2/`](references/examples/v2/).
+`say` is the narration. A shot lasts as long as its narration takes at the mode's pace, plus a short tail. `*word*` marks emphasis. `on` places a device (a circle, a highlight, an arrow) on a word. `node scripts/make.mjs --list kinds` prints every kind with its fields and one example to copy. The root fields, the fields every shot takes, the report and the exit codes are in [`references/schema.md`](references/schema.md). How to write for the picture is in [`references/story.md`](references/story.md). Finished films to start from are in [`references/examples/v2/`](references/examples/v2/): `showreel-pro.json` (pro, `desk`), `showreel-viral.json` (viral, `pop`), `look-cosmos.json` (`cosmos`), `gate-ledger.json` (`ledger`), `look-poster.json` (`poster`), `gate-keynote.json` (`keynote`), `gate-marker.json` (`marker`, the whiteboard look), `voiced-desk.json` (a voice), `sound-desk.json` (a music bed and cues), `kinds-b-desk.json` (a map and code) and `batch-welcome.json` (`vars`).
 
 ## Looks
 

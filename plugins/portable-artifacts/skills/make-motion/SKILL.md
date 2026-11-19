@@ -112,7 +112,7 @@ Each look serves the modes it names, and some kinds are not drawn in some looks.
 | `keynote` | pro | `number`, `clipping` | none |
 | `marker` | pro | `number`, `feed`, `chart`, `timeline`, `free` | `screen`, `code` |
 
-The `pop` look has no `ripple` cut. Finished films to start from, in `<skill-dir>/references/examples/v2/`: `gate-desk.json` (pro, `desk`), `gate-pop.json` (viral, `pop`), `gate-marker.json` (the whiteboard look), `voiced-desk.json` (a voice), `sound-desk.json` (a music bed and cues), `kinds-b-desk.json` (a map and code) and `batch-welcome.json` (`vars`).
+The `pop` look has no `ripple` cut. Finished films, in `<skill-dir>/references/examples/v2/`: `showreel-pro.json` (pro, `desk`, voice, bed, cues), `showreel-viral.json` (viral, `pop`), one per look (`look-cosmos.json`, `gate-ledger.json`, `look-poster.json`, `gate-keynote.json`, `gate-marker.json`), `kinds-b-desk.json` (map, code) and `batch-welcome.json` (`vars`).
 
 ## Rules
 

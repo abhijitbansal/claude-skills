@@ -351,3 +351,14 @@ The viral showreel passed look gate 4 with SHIP AFTER FIXES and no failing shot 
 - **F2:** the explainer page's headline is "Diagram sections: make-diagram figures inside an explainer", right after the DIAGRAM shot. Use an explainer page whose title is not about diagrams.
 - **F3 to F7:** the five skill shots share one composition; the labels change size because each is fit to width; the scene card is small and its legend unreadable on a phone; the scene-to-video wipe shows garbled labels for about 4 frames; card tops sit on the 14% safe line.
 - **LOW (F8 to F14):** dim hook words at frame 0; the video card's letterbox bars and missing lime shadow; the close mirrors the hook; unmotivated cover and wipe cuts; the "04 IN NUMBERS" sticker; branch and repo metadata on the explainer page; an asymmetric spec highlight bar.
+
+## look-cosmos: figures from NASA, not the Ridgeline data (2026-11-18)
+
+The release plan (Task 3 Step 2) lets a new look film use figures only from the bundled Ridgeline Prints data or the showreel claims. The first look-cosmos.json did that, and its look review (`.superpowers/sdd/2026-11-16-pa2-run2/gate-looks-1.md`) failed it: cosmos suits a science explainer, the same order data is already gate-ledger's, and the diameter-scaled circles showed a 3.1x gap as about 9.5x by area. Lead decision: look-cosmos becomes a short cut of gate-cosmos's science subject with every figure taken from NASA's Planetary Fact Sheet, its sources listed in `.scratch/pa2-release/looks/qualify.md` and the review notes. Option not taken: keep order data and change the circles to scale by area. Say if you want the Ridgeline-only rule kept.
+
+## Look examples: review 2 leftovers (2026-11-18)
+
+look-cosmos.json and look-poster.json passed look review 2 with SHIP AFTER FIXES and no failing shot (`.superpowers/sdd/2026-11-16-pa2-run2/gate-looks-2.md`). These stay open. Default for all: fix them the next time either film is revised.
+
+- **look-cosmos:** "The sky is bigger." has no referent after the chart (C1); the starred "eleven times" (11.2x, honest) never appears on screen (C2); Uranus is left out, so Neptune reads as third-widest (C3); 149.6 million km is the mean distance and the label does not say so (C4); the end mark reads as a placeholder (C5); LOW: small source text, plain cuts, the chart is the least cosmos-like shot, the schematic is not to scale, a fast count-up.
+- **look-poster:** the held highlight stresses "NOT A TIMELINE" over the starred "IS A SCRIPT" (P1); all three cuts are plain cuts (P2); a highlight in every shot (P3); the diagram shows Script, Voice, Review, Render, while the real stages are validate, voice, timeline, sound, review, render (P4); RENDER sits about 20 px from the right edge (P6); make.mjs is never named on screen (P8); LOW: small kicker and CTA at phone width, a corner wedge artefact, "one file away" leaves out the install.
