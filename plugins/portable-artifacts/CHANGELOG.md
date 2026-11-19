@@ -148,6 +148,9 @@ Director and operator split, locked and hashed optional installs and a smaller v
   `--strong-weight` (the weight nearest 600 that the font has, the heavier on a tie), so a theme whose font lacks 600
   draws a real face, not a synthesised one. `mono` draws headings, labels and numbers in regular weight (its font
   ships 400 only), which removes the synthesised bold there.
+- **make-scene's check waits up to 15 s for a screenshot** (it was 5 s, shared with every page action). On a busy
+  machine a canvas screenshot took 2.1 to 2.5 s in CI, and one check reported "check crashed" for a page that was
+  fine. Other actions keep 5 s, and the 60 s watchdog still ends a page that hangs.
 - **The tour flight time follows the distance (make-scene).** A beat's camera flight takes 450 ms plus 650 ms per span
   (the move over the camera-to-target distance), capped at 1,400 ms; it was a fixed 900 ms. The curve is the same
   ease in and out, and under reduced motion a beat still cuts.
