@@ -14,8 +14,26 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PAGE = ROOT / "docs" / "features" / "portable-artifacts.html"
-FILM_DIR = "showcase/portable-artifacts/gallery/motion-showcase"
-FILMS = ("hand-drawn", "features")
+FILM_DIR = "showcase/portable-artifacts/gallery/showreel"
+FILMS = ("pro", "viral")
+# Set False if the showreel films ship by the silent fallback (no voiceover).
+VOICED = True
+LOOKS_DIR = "showcase/portable-artifacts/gallery/looks"
+LOOKS = ("cosmos", "ledger", "poster", "keynote", "marker")
+EXAMPLES = (
+    ROOT / "plugins" / "portable-artifacts" / "skills" / "make-motion"
+    / "references" / "examples" / "v2"
+)
+# Each film folder under gallery/ keeps a copy of the film file it was rendered from.
+FILM_SOURCES = {
+    FILM_DIR + "/pro": "showreel-pro.json",
+    FILM_DIR + "/viral": "showreel-viral.json",
+    LOOKS_DIR + "/cosmos": "look-cosmos.json",
+    LOOKS_DIR + "/ledger": "gate-ledger.json",
+    LOOKS_DIR + "/poster": "look-poster.json",
+    LOOKS_DIR + "/keynote": "gate-keynote.json",
+    LOOKS_DIR + "/marker": "gate-marker.json",
+}
 SKILLS = ("make-dashboard", "make-diagram", "make-explainer", "make-motion", "make-scene")
 TOP_ORDER = ("films", "quick-install", "skills", "details")
 KEPT_IDS = (
@@ -91,16 +109,19 @@ def test_both_films_are_referenced_with_poster_and_exist():
         assert 'aria-label="' in tag, tag
 
 
-def test_films_page_no_longer_says_the_films_are_silent():
+def test_films_meta_matches_the_voice_path():
     block = _section(_page(), "films").lower()
-    assert "silent" not in block
-    assert "no sound" not in block
-    assert "neither has sound" not in block
     metas = re.findall(r'<p class="gal-meta"[^>]*>([^<]*)</p>', block)
     assert len(metas) == len(FILMS), metas
-    assert all("voiceover" in meta for meta in metas), metas
-    # still true: no music or sound cues, said plainly in the tour's caption
-    assert "no music" in block
+    if VOICED:
+        assert all("voiceover" in meta for meta in metas), metas
+    else:
+        assert all("no voiceover" in meta for meta in metas), metas
+        assert block.count("voiceover") == len(FILMS), "voiceover named outside the meta lines"
+    # the bed and the cues play on both paths
+    assert "music" in block
+    assert "no music" not in block
+    assert "silent" not in block
 
 
 def test_both_films_have_an_audio_stream():
@@ -115,6 +136,28 @@ def test_both_films_have_an_audio_stream():
             capture_output=True, text=True, check=True,
         ).stdout.split()
         assert out, "no audio stream in " + str(video)
+
+
+def test_gallery_film_files_match_the_examples():
+    for folder, name in FILM_SOURCES.items():
+        copy = PAGE.parent / folder / "film.json"
+        source = EXAMPLES / name
+        assert copy.is_file(), str(copy)
+        assert source.is_file(), str(source)
+        assert copy.read_bytes() == source.read_bytes(), folder
+
+
+def test_motion_gallery_has_one_card_per_look():
+    page = _page()
+    block = page[page.index('id="gallery-motion"'):page.index('id="gallery-motion-1-4"')]
+    assert "make-motion 1.x" not in block
+    for look in LOOKS:
+        video = "%s/%s/video.mp4" % (LOOKS_DIR, look)
+        poster = "%s/%s/poster.jpg" % (LOOKS_DIR, look)
+        assert re.search(r'<video\b[^>]*>\s*<source src="%s"' % re.escape(video), block), video
+        assert (PAGE.parent / video).is_file(), video
+        assert (PAGE.parent / poster).is_file(), poster
+    assert len(re.findall(r"<video\b", block)) == len(LOOKS)
 
 
 def test_films_open_the_page_and_do_not_depend_on_scripts_or_gallery_css():
@@ -208,7 +251,7 @@ def test_cloud_architecture_gallery_files_exist_and_are_linked_without_autoplay(
     assert "cloud:" in diagrams
     films = _section(page, "films")
     assert CLOUD_DIR + "/dusk/thumb.jpg" in films
-    assert films.index('id="film-features"') < films.index(CLOUD_DIR + "/dusk/thumb.jpg")
+    assert films.index('id="film-viral"') < films.index(CLOUD_DIR + "/dusk/thumb.jpg")
     assert len(re.findall(r"<video\b", films)) == len(FILMS)  # the preview is an image
 
 

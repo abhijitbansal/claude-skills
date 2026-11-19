@@ -7,14 +7,10 @@
 **Decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt: files that open offline, built by whatever coding agent you already use.**
 
 <p align="center">
-  <a href="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery"><img src="docs/features/img/portable-artifacts/launch-announcement.gif" width="640" alt="A launch announcement clip: the title Lumen 2.0 scales in over the tagline Search that keeps up, a counter runs from 1 to 3 with the suffix x faster under the caption Median query time vs 1.0, three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another, and the end card reads Available today."></a>
+  <a href="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery"><img src="docs/features/img/portable-artifacts/showreel-pro.gif" width="640" alt="The first 12 seconds of the make-motion showreel on a paper-collage desk: a browser window holding a dashboard asks where a number came from, the camera closes in on the revenue tile and a red hand-drawn line underlines it, then a pinned printout of sales.json types itself out with its query line highlighted."></a>
 </p>
 
-Made by an agent from this prompt with `/make-motion` 1.x: JSON in, MP4 out, offline. make-motion 2 reads a different JSON file (a script of shots), so this prompt, written for version 1's scenes, would be worded as shots today.
-
-```text
-Make a 10-second launch announcement, 1920x1080: scene 1 the product name "Lumen 2.0" scales in with the tagline "Search that keeps up"; scene 2 a counter from 1 to 3 with the suffix "x faster" and the caption "Median query time vs 1.0"; scene 3 three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another; end on "Available today".
-```
+The first 12 seconds of the showreel, a 46.8 s film made with `/make-motion` 2 from one JSON file ([`showreel-pro.json`](plugins/portable-artifacts/skills/make-motion/references/examples/v2/showreel-pro.json)): JSON in, MP4 out. The full film, with a locally made voiceover, a synthesised music bed and sound cues, is on the [gallery page](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#films). The voice needs a one-time model download (about 93 MB); everything else runs offline.
 
 Install the five artifact skills (`portable-artifacts`):
 
