@@ -366,3 +366,7 @@ look-cosmos.json and look-poster.json passed look review 2 with SHIP AFTER FIXES
 ## Site hero: a 26 MB showreel (2026-11-18)
 
 Release Task 4 made the site hero (`site/index.html`) and the page's films section play the pro showreel, a 26 MB 1080p MP4 with autoplay, loop, `preload="metadata"` and controls; the old hero was a 12 s clip. The file has its index (`moov`) before the data, so it streams rather than loading whole, but a looping autoplay still downloads it all over time. Default: keep it, since the film is voiced and the caption invites unmuting. Option: a short, silent, lighter hero cut (for example the first 12 s at a higher CRF) with the full film one click away.
+
+## make-dashboard mono on hinted Linux browsers (2026-11-19)
+
+Linux headless Chromium rounds each glyph advance to a whole pixel by default; JetBrains Mono at 11 px then measures 7 px per character instead of 6.6. Vega picks month ticks from those widths, so in the `mono` theme at 390 px a chart can show 2 month labels (Jan, Sep) instead of 3. The test browser now launches with `--font-render-hinting=none` (e758c5ba), so the test measures like macOS; a Linux reader's own browser may still show 2 labels. They do not collide and step evenly. Default: accept it. Option: a tick rule that does not depend on a fraction of a pixel of label width, or the same flag in make-dashboard's own check browser (`scripts/lib/browser.mjs`).
