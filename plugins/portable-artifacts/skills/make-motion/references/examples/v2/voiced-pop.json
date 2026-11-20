@@ -1,0 +1,52 @@
+{
+  "version": 2,
+  "mode": "viral",
+  "voice": { "name": "af_heart" },
+  "look": "pop",
+  "format": "9:16",
+  "seed": 7,
+  "shots": [
+    {
+      "id": "hook",
+      "show": "statement",
+      "say": "Your charts are *hiding* something."
+    },
+    {
+      "id": "proof",
+      "show": "clipping",
+      "cut": "punch",
+      "src": "clipping.png",
+      "caption": "It shows its work.",
+      "say": "This one shows you the query behind it.",
+      "regions": { "query": [0.58, 0.14, 0.37, 0.24] },
+      "crop": [0.57, 0.1, 0.405, 0.885],
+      "on": [{ "at": "word:query", "do": "highlight", "target": "region:query" }]
+    },
+    {
+      "id": "count",
+      "show": "number",
+      "cut": "cut",
+      "say": "Five skills. One file each.",
+      "value": 5,
+      "label": "skills",
+      "delta": "one JSON file each",
+      "on": [{ "at": "word:One", "do": "punch", "target": "value" }]
+    },
+    {
+      "id": "local",
+      "show": "statement",
+      "cut": "cut",
+      "text": "No cloud. | No account. | No upload.",
+      "say": "No cloud. No account. *No upload*.",
+      "on": [{ "at": "word:upload", "do": "punch", "target": "text" }]
+    },
+    {
+      "id": "ask",
+      "show": "statement",
+      "cut": "punch",
+      "kicker": "portable-artifacts",
+      "text": "Save this. | Build yours.",
+      "say": "Save this. *Build yours*."
+    }
+  ]
+}

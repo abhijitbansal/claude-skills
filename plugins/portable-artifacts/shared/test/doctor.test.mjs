@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { roundTrip } from './helpers/cmdsim.mjs';
-import { nodeVersion, nodeModules, devDeps, sisterSkill, builderAgent, ffmpeg, browser, kokoro, quoteArg, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
+import { nodeVersion, nodeModules, devDeps, sisterSkill, builderAgent, ffmpeg, browser, kokoro, cutout, OPTIONAL, optionalInstallArgv, quoteArg, diagnose, runFixes, doctorMain, ALL, cmdQuote } from '../doctor.mjs';
 
 const ctx = (over = {}) => ({
   platform: 'darwin', env: {}, skillDir: '/s/make-motion', nodeVersion: '24.7.0',
@@ -16,7 +16,8 @@ test('node version below the floor is a required miss', async () => {
 
 test('guardrail proof: a stub that reports everything present yields ok', async () => {
   const r = await diagnose([nodeModules(), ffmpeg(), kokoro()], ctx({ exists: () => true, which: () => true }));
-  assert.deepEqual(r, { ok: true, missing: [] });
+  assert.equal(r.ok, true);
+  assert.deepEqual(r.missing, []); // `exists: () => true` also finds the old in-skill kokoro-js, which adds an info note, not a miss
 });
 
 test('ffmpeg missing, no brew: manual command only', async () => {
@@ -66,8 +67,8 @@ test('runFixes runs only requested auto fixes and refuses sudo and unknown ids',
   const run = (cmd, args, o) => { ran.push([cmd, ...args].join(' ')); cwds.push(o.cwd); return { status: 0 }; };
   const reqs = [ffmpeg(), kokoro()];
   const res = await runFixes(['kokoro', 'ffmpeg', 'nope'], reqs, ctx({ platform: 'linux' }), run);
-  assert.deepEqual(ran, ['npm install kokoro-js@1.2.1 --no-save']);
-  assert.deepEqual(cwds, ['/s/make-motion'], 'kokoro installs from inside the skill so npm applies its package.json overrides');
+  assert.deepEqual(ran, ['npm ci --ignore-scripts --prefix /s/make-motion/optional/voice']);
+  assert.deepEqual(cwds, [undefined], 'kokoro installs with --prefix into its own folder, no cwd');
   assert.equal(res.find((r) => r.id === 'ffmpeg').refused, 'needs sudo');
   assert.match(res.find((r) => r.id === 'ffmpeg').manual, /sudo apt-get install ffmpeg/);
   assert.equal(res.find((r) => r.id === 'nope').refused, 'unknown id');
@@ -78,34 +79,10 @@ test('a failing fix reports ok:false', async () => {
   assert.equal(res[0].ok, false);
 });
 
-test('kokoro fix is cd <skill> && npm install (no --prefix), so the skill package.json overrides apply', async () => {
-  const r = await diagnose([kokoro()], ctx({ platform: 'linux' }));
-  assert.equal(r.missing[0].fix.auto, 'cd /s/make-motion && npm install kokoro-js@1.2.1 --no-save');
-  assert.doesNotMatch(r.missing[0].fix.manual.linux, /--prefix/);
-});
-
-test('kokoro installed before the overrides existed counts as missing until reinstalled', async () => {
-  const files = {
-    '/s/make-motion/package.json': JSON.stringify({ overrides: { sharp: '0.35.5', 'global-agent': '4.1.3', other: '^1.0.0' } }),
-    '/s/make-motion/node_modules/sharp/package.json': JSON.stringify({ version: '0.34.5' }),
-    '/s/make-motion/node_modules/global-agent/package.json': JSON.stringify({ version: '4.1.3' }),
-    '/s/make-motion/node_modules/other/package.json': JSON.stringify({ version: '9.9.9' }),
-  };
-  const readFile = (p) => {
-    if (!(p in files)) throw new Error('ENOENT');
-    return files[p];
-  };
-  const stale = await diagnose([kokoro()], ctx({ exists: () => true, readFile }));
-  assert.equal(stale.missing[0].id, 'kokoro');
-  assert.match(stale.missing[0].why, /reinstall to get the patched sharp pinned/);
-  files['/s/make-motion/node_modules/sharp/package.json'] = JSON.stringify({ version: '0.35.5' });
-  assert.deepEqual(await diagnose([kokoro()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
-});
-
 // Everything exists except the dev package playwright: a production-only install.
 const noPlaywright = (p) => !/[\\/]node_modules[\\/]playwright$/.test(p);
 
-// A lockfile whose tree holds fast-uri (via ajv) but not sharp or global-agent, which only a kokoro install brings.
+// A lockfile whose tree holds fast-uri (via ajv) but not sharp or global-agent.
 const LOCK = JSON.stringify({ packages: { '': {}, 'node_modules/ajv': {}, 'node_modules/fast-uri': {}, 'node_modules/@scope/pkg': {} } });
 
 test('node_modules installed before an overrides pin existed counts as missing until npm ci reruns', async () => {
@@ -122,27 +99,9 @@ test('node_modules installed before an overrides pin existed counts as missing u
   assert.equal(stale.ok, false, 'the stale install must go red, node_modules is a required requirement');
   assert.equal(stale.missing[0].id, 'node_modules');
   assert.match(stale.missing[0].why, /reinstall to get the patched fast-uri pinned in package\.json "overrides"/);
-  assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+  assert.equal(stale.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-motion');
   files['/s/make-motion/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
   assert.deepEqual(await diagnose([nodeModules()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
-});
-
-test('make-motion: a stale sharp from an old kokoro install leaves node_modules ok and turns only kokoro red', async () => {
-  const files = {
-    '/s/make-motion/package.json': JSON.stringify({ overrides: { sharp: '0.35.5', 'global-agent': '4.1.3', 'fast-uri': '3.1.9' } }),
-    '/s/make-motion/package-lock.json': LOCK,
-    '/s/make-motion/node_modules/sharp/package.json': JSON.stringify({ version: '0.34.5' }),
-    '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.9' }),
-  };
-  const readFile = (p) => {
-    if (!(p in files)) throw new Error('ENOENT');
-    return files[p];
-  };
-  const r = await diagnose([nodeModules({ omitDev: false }), kokoro()], ctx({ exists: () => true, readFile }));
-  assert.deepEqual(r.missing.map((m) => m.id), ['kokoro']);
-  assert.equal(r.ok, true, 'kokoro is optional, so the required items stay green');
-  assert.match(r.missing[0].why, /reinstall to get the patched sharp pinned/);
-  assert.doesNotMatch(r.missing[0].why, /fast-uri/);
 });
 
 test('node_modules fix on an existing install says what npm ci removes and which --fix ids restore it', async () => {
@@ -153,9 +112,7 @@ test('node_modules fix on an existing install says what npm ci removes and which
   const readFile = (p) => { if (!(p in stale)) throw new Error('ENOENT'); return stale[p]; };
   const note = async (opts, over = {}) => (await diagnose([nodeModules(opts)], ctx({ exists, readFile, skillDir: '/s/x', ...over }))).missing[0].notes;
   assert.match(await note({ restore: ['dev_deps'] }), /removes the dev packages; restore with --fix dev_deps$/);
-  assert.match(await note({ omitDev: false, restore: ['kokoro'] }), /removes any voiceover install \(kokoro-js\); restore with --fix kokoro$/);
-  assert.doesNotMatch(await note({ omitDev: false, restore: ['kokoro'] }), /dev packages/);
-  assert.match(await note({}), /removes the dev packages; restore the dev packages with npm ci --prefix \/s\/x \(this skill's doctor has no --fix id/);
+  assert.match(await note({}), /removes the dev packages; restore the dev packages with npm ci --ignore-scripts --prefix \/s\/x \(this skill's doctor has no --fix id/);
   assert.equal(await note({ omitDev: false }), undefined, 'nothing removed, nothing to disclose');
   assert.equal((await diagnose([nodeModules({ restore: ['dev_deps'] })], ctx({ exists: () => false, skillDir: '/s/x' }))).missing[0].notes, undefined, 'a first install removes nothing');
 });
@@ -172,7 +129,7 @@ test('sister skill: a node_modules that predates a pin in the sister package.jso
   const stale = await diagnose([sisterSkill('make-diagram')], ctx(base));
   assert.equal(stale.ok, false);
   assert.match(stale.missing[0].why, /make-diagram is installed but its dependencies predate the patched fast-uri/);
-  assert.equal(stale.missing[0].fix.auto, 'npm ci --omit=dev --prefix ' + dir);
+  assert.equal(stale.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix ' + dir);
   assert.match(stale.missing[0].notes, /removes its dev packages/);
   files[dir + '/node_modules/fast-uri/package.json'] = JSON.stringify({ version: '3.1.9' });
   assert.deepEqual(await diagnose([sisterSkill('make-diagram')], ctx(base)), { ok: true, missing: [] });
@@ -182,9 +139,9 @@ test('sister skill: a node_modules that predates a pin in the sister package.jso
 
 test('nodeModules: omitDev false drops --omit=dev; present dir is fine', async () => {
   const a = await diagnose([nodeModules({ omitDev: false })], ctx());
-  assert.equal(a.missing[0].fix.auto, 'npm ci --prefix /s/make-motion');
+  assert.equal(a.missing[0].fix.auto, 'npm ci --ignore-scripts --prefix /s/make-motion');
   const b = await diagnose([nodeModules()], ctx());
-  assert.equal(b.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+  assert.equal(b.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-motion');
   const c = await diagnose([nodeModules()], ctx({ exists: (p) => p === '/s/make-motion/node_modules' }));
   assert.equal(c.ok, true);
 });
@@ -195,7 +152,7 @@ test('sister skill: present when sibling dir has SKILL.md; fix chains npm ci, pr
   const here = await diagnose([sisterSkill('make-diagram')], ctx({ ...base, exists: (p) => p === '/p/.agents/skills/make-diagram/SKILL.md' || p === '/p/.agents/skills/make-diagram/node_modules' }));
   assert.equal(here.ok, true);
   const { missing } = await diagnose([sisterSkill('make-diagram')], ctx(base));
-  assert.match(missing[0].fix.auto, / && npm ci --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram$/);
+  assert.match(missing[0].fix.auto, / && npm ci --ignore-scripts --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram$/);
   assert.doesNotMatch(missing[0].fix.auto, / -g/);
   assert.match(missing[0].notes, /skills-lock\.json/);
 });
@@ -342,16 +299,16 @@ test('win32: one quoted command line, empty args, spaced path stays one argument
   const rec = [];
   const run = (c, a, o) => { rec.push({ c, a, shell: o.shell }); return { status: 0 }; };
   await runFixes(['node_modules'], [nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\Users\\John Doe\\skills\\x' }), run);
-  assert.deepEqual(rec, [{ c: 'npm ci --omit=dev --prefix "C:\\Users\\John Doe\\skills\\x"', a: [], shell: true }]);
+  assert.deepEqual(rec, [{ c: 'npm ci --ignore-scripts --omit=dev --prefix "C:\\Users\\John Doe\\skills\\x"', a: [], shell: true }]);
   rec.length = 0;
   await runFixes(['node_modules'], [nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\a&b\\100%\\x' }), run);
-  assert.equal(rec[0].c, 'npm ci --omit=dev --prefix "C:\\a&b\\100"^%"\\x"');
+  assert.equal(rec[0].c, 'npm ci --ignore-scripts --omit=dev --prefix "C:\\a&b\\100"^%"\\x"');
 });
 
 test('non-win32: argv arrays, no shell, spaces untouched', async () => {
   const rec = [];
   await runFixes(['node_modules'], [nodeModules()], ctx({ skillDir: '/a b/x' }), (c, a, o) => { rec.push({ c, a, shell: o.shell }); return { status: 0 }; });
-  assert.deepEqual(rec, [{ c: 'npm', a: ['ci', '--omit=dev', '--prefix', '/a b/x'], shell: false }]);
+  assert.deepEqual(rec, [{ c: 'npm', a: ['ci', '--ignore-scripts', '--omit=dev', '--prefix', '/a b/x'], shell: false }]);
 });
 
 test('runFixes: requirement order, deduped; unknown ids last', async () => {
@@ -376,17 +333,19 @@ test('linux chromium carries a sudo hint; optional notes exist', async () => {
   const { missing } = await diagnose([browser(), kokoro()], ctx({ platform: 'linux' }));
   assert.match(missing[0].sudoHint, /^sudo npx --no --prefix \/s\/make-motion playwright install-deps chromium$/);
   assert.match(missing[0].notes, /150 MB/);
-  assert.match(missing[1].notes, /90 MB/);
+  assert.match(missing[1].notes, /93 MB/);
   const mac = await diagnose([browser()], ctx());
   assert.equal(mac.missing[0].sudoHint, undefined);
 });
 
-test('ffmpeg: FFMPEG_PATH must be executable; ffmpeg-static binary counts only if executable', async () => {
+test('ffmpeg: an ffmpeg-static binary in node_modules no longer counts; FFMPEG_PATH pointing at it does', async () => {
   const base = { exists: () => true, isExecutable: () => false };
   assert.equal((await diagnose([ffmpeg()], ctx({ ...base, env: { FFMPEG_PATH: '/x/ffmpeg' } }))).ok, false);
   assert.equal((await diagnose([ffmpeg()], ctx({ ...base, isExecutable: (p) => p === '/x/ffmpeg', env: { FFMPEG_PATH: '/x/ffmpeg' } }))).ok, true);
-  const staticOk = ctx({ ...base, isExecutable: (p) => p === '/s/make-motion/node_modules/ffmpeg-static/ffmpeg' });
-  assert.equal((await diagnose([ffmpeg()], staticOk)).ok, true);
+  const staticBinary = '/s/make-motion/node_modules/ffmpeg-static/ffmpeg';
+  const staticOk = ctx({ ...base, isExecutable: (p) => p === staticBinary });
+  assert.equal((await diagnose([ffmpeg()], staticOk)).ok, false);
+  assert.equal((await diagnose([ffmpeg()], { ...staticOk, env: { FFMPEG_PATH: staticBinary } })).ok, true);
 });
 
 test('ffmpeg darwin without brew: manual says install Homebrew', async () => {
@@ -450,7 +409,7 @@ test('doctorMain: targets defaults to check and must be strings', async () => {
 
 test('doctorMain: text output prints notes', async () => {
   const r = await runMain([], { ...sisterOpts(), requirementsFor: () => [kokoro()] });
-  assert.match(r.out, /Note: the 90 MB voice model/);
+  assert.match(r.out, /Note: installs from optional\/voice\/package-lock\.json; the 93 MB voice model/);
 });
 
 // --- fix round 2 ---
@@ -491,7 +450,7 @@ test('N2: the shown sister command includes cd <root>; ran includes it; win32 us
 test('N3: doctorMain with injected ctx/run never reaches spawnSync; --fix uses the recorder', async () => {
   const calls = [];
   const r = await runMain(['--fix', 'kokoro', '--json'], { ...mainOpts(), requirementsFor: () => [kokoro()] }, { run: (c, a) => { calls.push([c, ...a].join(' ')); return { status: 0 }; } });
-  assert.deepEqual(calls, ['npm install kokoro-js@1.2.1 --no-save']);
+  assert.deepEqual(calls, ['npm ci --ignore-scripts --prefix /s/make-motion/optional/voice']);
   assert.equal(JSON.parse(r.out)[0].id, 'kokoro');
 });
 
@@ -534,7 +493,7 @@ test('N5: chromium failure says to install playwright (dev_deps) first', async (
 test('N6: installed elsewhere names where it landed and what to do', async () => {
   const exists = (p) => p === '/p/.claude/skills/make-diagram/SKILL.md';
   const res = await runFixes(['make-diagram'], [sisterSkill('make-diagram')], ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h', exists }), () => ({ status: 0 }));
-  assert.match(res[0].manual, /wrote it to \/p\/\.claude\/skills\/make-diagram; move that folder to \/p\/\.agents\/skills\/make-diagram, then run: npm ci --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram \(that step was skipped\)/);
+  assert.match(res[0].manual, /wrote it to \/p\/\.claude\/skills\/make-diagram; move that folder to \/p\/\.agents\/skills\/make-diagram, then run: npm ci --ignore-scripts --omit=dev --prefix \/p\/\.agents\/skills\/make-diagram \(that step was skipped\)/);
   const text = await runMain(['--fix', 'make-diagram'], { ...mainOpts(), requirementsFor: () => [sisterSkill('make-diagram')] }, { ctx: ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }) });
   assert.match(text.out, /^installed elsewhere: make-diagram — /);
 });
@@ -584,11 +543,11 @@ test('N11: spawn errors surface in the result', async () => {
 
 test('N12: display quoting is shell-safe per platform', async () => {
   const mac = await diagnose([nodeModules()], ctx({ skillDir: "/Users/o'neil/a&b $HOME/x" }));
-  assert.equal(mac.missing[0].fix.auto, "npm ci --omit=dev --prefix '/Users/o'\\''neil/a&b $HOME/x'");
+  assert.equal(mac.missing[0].fix.auto, "npm ci --ignore-scripts --omit=dev --prefix '/Users/o'\\''neil/a&b $HOME/x'");
   const win = await diagnose([nodeModules()], ctx({ platform: 'win32', skillDir: 'C:\\John Doe\\x\\' }));
-  assert.equal(win.missing[0].fix.auto, 'npm ci --omit=dev --prefix "C:\\John Doe\\x\\\\"');
+  assert.equal(win.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix "C:\\John Doe\\x\\\\"');
   const plain = await diagnose([nodeModules()], ctx());
-  assert.equal(plain.missing[0].fix.auto, 'npm ci --omit=dev --prefix /s/make-motion');
+  assert.equal(plain.missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-motion');
 });
 
 // --- fix round 3 ---
@@ -642,7 +601,7 @@ test('sister skill: SKILL.md present but node_modules missing fixes with npm ci 
   const { ok, missing } = await diagnose([sisterSkill('make-diagram')], ctx(base));
   assert.equal(ok, false);
   assert.equal(missing[0].why, 'make-diagram is installed but its dependencies are not');
-  assert.equal(missing[0].fix.auto, 'npm ci --omit=dev --prefix /p/.agents/skills/make-diagram');
+  assert.equal(missing[0].fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /p/.agents/skills/make-diagram');
   assert.doesNotMatch(missing[0].fix.auto, /npx/);
   assert.match(missing[0].notes, /npm ci/);
   const calls = [];
@@ -670,7 +629,7 @@ test('dev_deps: present when node_modules/playwright exists; fix is a full npm c
   const { missing } = await diagnose([devDeps()], ctx());
   assert.equal(missing[0].id, 'dev_deps');
   assert.equal(missing[0].required, false);
-  assert.equal(missing[0].fix.auto, 'npm ci --prefix /s/make-motion');
+  assert.equal(missing[0].fix.auto, 'npm ci --ignore-scripts --prefix /s/make-motion');
   assert.match(missing[0].notes, /dev dependencies/);
 });
 
@@ -686,13 +645,6 @@ test('fix order: node_modules, dev_deps, sisters, ffmpeg, chromium, kokoro', asy
   const reqs = [kokoro(), browser(), ffmpeg(), sisterSkill('make-diagram'), devDeps(), nodeModules(), nodeVersion(20)];
   const res = await runFixes(reqs.map((r) => r.id), reqs, ctx({ skillDir: '/p/.agents/skills/make-explainer', homedir: '/h' }), () => ({ status: 0 }));
   assert.deepEqual(res.map((r) => r.id), ['node', 'node_modules', 'dev_deps', 'make-diagram', 'ffmpeg', 'chromium', 'kokoro']);
-});
-
-test('ffmpeg staticDir: a static binary in another skill counts', async () => {
-  const dir = (c) => '/s/make-motion-sibling/node_modules';
-  const isExecutable = (p) => p === '/s/make-motion-sibling/node_modules/ffmpeg-static/ffmpeg';
-  assert.equal((await diagnose([ffmpeg({ staticDir: dir })], ctx({ isExecutable }))).ok, true);
-  assert.equal((await diagnose([ffmpeg()], ctx({ isExecutable }))).ok, false);
 });
 
 test('quoteArg: POSIX single quotes, cmd.exe double quotes, safe words bare', () => {
@@ -728,15 +680,14 @@ test('devDeps size option is disclosed', async () => {
   assert.match(missing[0].notes, /measured on macOS, approximate/);
 });
 
-test('KOKORO_PIN is exported and used by the kokoro fix', async () => {
-  const { KOKORO_PIN } = await import('../doctor.mjs');
-  const { missing } = await diagnose([kokoro()], ctx());
-  assert.ok(missing[0].fix.auto.includes(KOKORO_PIN));
-});
-
 // --- builderAgent: the optional artifact-builder agent file ---
 
-const AGENT_DIRS = ["/h/.copilot/agents", "/h/.codex/agents", "/p/.github/agents", "/p/.codex/agents"];
+const AGENT_DIRS = ["/h/.claude/agents", "/h/.copilot/agents", "/h/.codex/agents", "/p/.claude/agents", "/p/.github/agents", "/p/.codex/agents"];
+const AGENT_FILE_NAMES = ["artifact-builder.md", "artifact-builder.agent.md", "artifact-builder.toml"];
+// A current agent file carries make.mjs; the text before this plan told the builder to write the spec and run two scripts.
+const CURRENT_TEXT = "Run: node <skill-dir>/scripts/make.mjs <spec> --json";
+const OLD_TEXT = "Run the skill's validate script on the spec, then its build script.";
+const readerOf = (files) => (p) => { if (!(p in files)) throw new Error("ENOENT"); return files[p]; };
 // files: existing agent files; dirs: other existing folders (the host's home folder is what makes the requirement apply).
 const agentCtx = (files = [], dirs = ["/h/.codex"]) => ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", exists: (p) => files.includes(p) || dirs.includes(p) });
 const EMPTY_HOME = [];
@@ -752,8 +703,9 @@ test("builderAgent: false on an empty home and cwd; optional with the shared req
   assert.equal(await b.check(agentCtx()), false);
 });
 
+// builderAgent knows three file names (one per host) in six folders (user and project level): every pair counts.
 for (const dir of AGENT_DIRS) {
-  for (const file of ["artifact-builder.agent.md", "artifact-builder.toml"]) {
+  for (const file of AGENT_FILE_NAMES) {
     test(`builderAgent: ${file} in ${dir} counts as installed`, async () => {
       assert.equal(await builderAgent().check(agentCtx([`${dir}/${file}`])), true);
     });
@@ -761,7 +713,88 @@ for (const dir of AGENT_DIRS) {
 }
 
 test("builderAgent: another file in an agents folder does not count", async () => {
-  assert.equal(await builderAgent().check(agentCtx(["/h/.copilot/agents/other.agent.md", "/h/.codex/agents/artifact-builder.md"])), false);
+  assert.equal(await builderAgent().check(agentCtx(["/h/.copilot/agents/other.agent.md", "/h/.codex/agents/artifact-builder.yaml"])), false);
+});
+
+test("builderAgent: the plugin's own agents/artifact-builder.md counts as installed", async () => {
+  // skillDir is <plugin>/skills/<skill>; the plugin file is <plugin>/agents/artifact-builder.md
+  const c = ctx({ homedir: "/h", cwd: "/p", skillDir: "/plug/skills/make-motion", exists: (p) => p === "/plug/agents/artifact-builder.md" || p === "/h/.claude" });
+  assert.deepEqual(await diagnose([builderAgent()], c), { ok: true, missing: [] });
+});
+
+test("builderAgent: the plugin file satisfies Claude Code only; ~/.codex or ~/.copilot still wants its own file, and no claude file is written beside the plugin's", async () => {
+  const plugin = "/plug/agents/artifact-builder.md";
+  for (const other of ["/h/.codex", "/h/.copilot"]) {
+    const c = ctx({ homedir: "/h", cwd: "/p", execPath: "/n/node", skillDir: "/plug/skills/make-motion", exists: (p) => [plugin, "/h/.claude", other].includes(p) });
+    const { missing } = await diagnose([builderAgent()], c);
+    assert.deepEqual(missing.map((m) => m.id), ["builder_agent"], other);
+    const hosts = builderAgent().fix(c).auto.map((argv) => argv[3]);
+    assert.deepEqual(hosts, [other === "/h/.codex" ? "codex" : "copilot"], "the writer skips claude: the plugin already ships that agent");
+  }
+});
+
+// An agent file is outdated when it lacks make.mjs: the earlier text told the builder to write the spec itself.
+const stateCtx = (path, text, dirs = ["/h/.claude"]) => ctx({
+  homedir: "/h", cwd: "/p", execPath: "/n/node",
+  exists: (p) => p === path || dirs.includes(p),
+  readFile: readerOf({ [path]: text }),
+});
+
+test("builderAgent: a file without the text make.mjs is reported as outdated with the command that replaces it", async () => {
+  const file = "/h/.claude/agents/artifact-builder.md";
+  const c = stateCtx(file, OLD_TEXT);
+  assert.equal(await builderAgent().check(c), false);
+  const { ok, missing } = await diagnose([builderAgent()], c);
+  assert.equal(ok, true);
+  assert.equal(missing.length, 1);
+  assert.equal(missing[0].id, "builder_agent");
+  assert.deepEqual(missing[0].outdated, [file]);
+  assert.match(missing[0].why, /outdated/);
+  assert.equal(missing[0].fix.auto, null, "no automatic fix: the doctor never overwrites");
+  assert.match(missing[0].fix.manual.darwin, /install\.mjs claude --agents-only --force/);
+  const human = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
+  assert.equal(human.code, 0);
+  assert.match(human.out, /outdated \(optional\): builder_agent — /);
+  assert.match(human.out, /install\.mjs claude --agents-only --force/);
+});
+
+test("builderAgent: an outdated project-level file names the project in the replacing command, and each host its own", async () => {
+  const proj = "/p/.github/agents/artifact-builder.agent.md";
+  const c1 = stateCtx(proj, OLD_TEXT, ["/h/.copilot"]);
+  const m1 = (await diagnose([builderAgent()], c1)).missing[0];
+  assert.match(m1.fix.manual.linux, /install\.mjs copilot --agents-only --force --project \/p/);
+  const toml = "/h/.codex/agents/artifact-builder.toml";
+  const m2 = (await diagnose([builderAgent()], stateCtx(toml, OLD_TEXT, ["/h/.codex"]))).missing[0];
+  assert.match(m2.fix.manual.linux, /install\.mjs codex --agents-only --force(?! --project)/);
+});
+
+test("builderAgent: an up-to-date file is ok, and an unreadable one is not called outdated", async () => {
+  const file = "/h/.claude/agents/artifact-builder.md";
+  assert.deepEqual(await diagnose([builderAgent()], stateCtx(file, `---\n---\n${CURRENT_TEXT}\n`)), { ok: true, missing: [] });
+  const unreadable = ctx({ homedir: "/h", cwd: "/p", exists: (p) => p === file || p === "/h/.claude", readFile: () => { throw new Error("EACCES"); } });
+  assert.deepEqual(await diagnose([builderAgent()], unreadable), { ok: true, missing: [] });
+});
+
+test("builderAgent: the outdated report never fails doctor, and --fix refuses it and writes nothing", async () => {
+  const file = "/h/.claude/agents/artifact-builder.md";
+  const c = stateCtx(file, OLD_TEXT);
+  const run = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
+  assert.equal(run.code, 0);
+  const json = JSON.parse((await runMain(["--json"], mainOpts({ requirementsFor: () => [builderAgent()] }), { ctx: c })).out);
+  assert.equal(json.ok, true);
+  const ran = [];
+  const res = await runFixes(["builder_agent"], [builderAgent()], c, (...a) => { ran.push(a); return { status: 0 }; });
+  assert.deepEqual(ran, []);
+  assert.equal(res[0].refused, "no automatic fix");
+  assert.match(res[0].manual, /--agents-only --force/);
+});
+
+test("builderAgent: one outdated file among current ones still reports, and names only the outdated one", async () => {
+  const old = "/h/.claude/agents/artifact-builder.md";
+  const cur = "/h/.codex/agents/artifact-builder.toml";
+  const c = ctx({ homedir: "/h", cwd: "/p", exists: (p) => [old, cur, "/h/.claude"].includes(p), readFile: readerOf({ [old]: OLD_TEXT, [cur]: CURRENT_TEXT }) });
+  const m = (await diagnose([builderAgent()], c)).missing[0];
+  assert.deepEqual(m.outdated, [old]);
 });
 
 test("builderAgent: auto fix writes the agent file for each host folder that exists; manual names the installer", () => {
@@ -771,6 +804,13 @@ test("builderAgent: auto fix writes the agent file for each host folder that exi
     ["/s/make-motion/shared/agents.mjs", "write", "codex", "/h/.codex/agents"],
   ]);
   assert.ok(both.auto.every((s) => s[0] === "/n/node"), "runs this process's Node, not node from PATH");
+  const withClaude = builderAgent().fix(agentCtx([], ["/h/.claude", "/h/.codex"]));
+  assert.deepEqual(withClaude.auto.map((s) => s.slice(1)), [
+    ["/s/make-motion/shared/agents.mjs", "write", "codex", "/h/.codex/agents"],
+    ["/s/make-motion/shared/agents.mjs", "write", "claude", "/h/.claude/agents"],
+  ]);
+  assert.match(withClaude.notes, /\/h\/\.claude\/agents\/artifact-builder\.md/);
+  assert.match(withClaude.manual.darwin, /install\.mjs claude --agents-only/);
   const codexOnly = builderAgent().fix(agentCtx([], ["/h/.codex"]));
   assert.deepEqual(codexOnly.auto.map((s) => s.slice(1)), [["/s/make-motion/shared/agents.mjs", "write", "codex", "/h/.codex/agents"]]);
   assert.match(codexOnly.notes, /\/h\/\.codex\/agents\/artifact-builder\.toml/);
@@ -798,7 +838,7 @@ test("builderAgent: a missing agent file is optional and never makes doctor exit
   assert.equal(json.ok, true);
 });
 
-test("builderAgent: not reported at all when neither ~/.copilot nor ~/.codex exists (Claude Code, Gemini)", async () => {
+test("builderAgent: not reported at all when none of ~/.claude, ~/.copilot and ~/.codex exists (Gemini)", async () => {
   const empty = agentCtx([], EMPTY_HOME);
   assert.equal(builderAgent().applies(empty), false);
   assert.deepEqual(await diagnose([builderAgent()], empty), { ok: true, missing: [] });
@@ -811,8 +851,8 @@ test("builderAgent: not reported at all when neither ~/.copilot nor ~/.codex exi
   assert.deepEqual(json, { ok: true, missing: [] });
 });
 
-test("builderAgent: ~/.codex or ~/.copilot present without the file is a missing optional, exit 0", async () => {
-  for (const dir of ["/h/.codex", "/h/.copilot"]) {
+test("builderAgent: ~/.claude, ~/.codex or ~/.copilot present without the file is a missing optional, exit 0", async () => {
+  for (const dir of ["/h/.claude", "/h/.codex", "/h/.copilot"]) {
     const c = agentCtx([], [dir]);
     assert.equal(builderAgent().applies(c), true, dir);
     const { ok, missing } = await diagnose([builderAgent()], c);
@@ -820,7 +860,7 @@ test("builderAgent: ~/.codex or ~/.copilot present without the file is a missing
     assert.deepEqual(missing.map((m) => [m.id, m.required]), [["builder_agent", false]]);
     const human = await runMain([], mainOpts({ requirementsFor: () => [nodeVersion(1), builderAgent()] }), { ctx: c });
     assert.equal(human.code, 0);
-    assert.match(human.out, /missing \(optional\): builder_agent — .*Run: \/n\/node \/s\/make-motion\/shared\/agents\.mjs write (codex|copilot) \/h\/\.(codex|copilot)\/agents/);
+    assert.match(human.out, /missing \(optional\): builder_agent — .*Run: \/n\/node \/s\/make-motion\/shared\/agents\.mjs write (claude|codex|copilot) \/h\/\.(claude|codex|copilot)\/agents/);
   }
 });
 
@@ -867,104 +907,121 @@ test("builderAgent: --fix with no host folder has no automatic fix and runs noth
   assert.doesNotMatch(res[0].manual, /this skill's own writer/);
 });
 
-// --- cutout: onnxruntime-node for make-motion's cutout.mjs (installed on demand, like kokoro) ---
+// --- kokoro and cutout: each is its own locked package under <skill>/optional/, installed with npm ci ---
 
-test('CUTOUT_PIN is an exact onnxruntime-node version, and the cutout fix installs it from inside the skill folder (no --prefix)', async () => {
-  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
-  assert.match(CUTOUT_PIN, /^onnxruntime-node@\d+\.\d+\.\d+$/);
-  const r = await diagnose([cutout()], ctx({ platform: 'linux' }));
-  assert.equal(r.missing[0].id, 'cutout');
-  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install ${CUTOUT_PIN} --no-save`);
-  assert.doesNotMatch(r.missing[0].fix.manual.linux, /--prefix/);
-  assert.equal(r.missing[0].required, false, 'cutouts are opt-in');
+const VOICE = '/s/make-motion/optional/voice';
+const CUT = '/s/make-motion/optional/cutout';
+const jsonFiles = (files) => (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
+
+test('kokoro and cutout install with npm ci from their own locked folder', async () => {
+  const r = await diagnose([kokoro(), cutout()], ctx({ platform: 'linux' }));
+  assert.deepEqual(r.missing.map((m) => m.fix.auto), [`npm ci --ignore-scripts --prefix ${VOICE}`, `npm ci --ignore-scripts --prefix ${CUT}`]);
+  assert.equal(r.ok, true, 'both are opt-in');
+  assert.match(r.missing[1].size, /25 MB/, 'the size names the model download');
+});
+
+test('OPTIONAL names the folder and package of each, and optionalInstallArgv is npm ci into that folder', () => {
+  assert.deepEqual(OPTIONAL, { kokoro: { dir: 'voice', pkg: 'phonemizer' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } });
+  // --ignore-scripts: onnxruntime-node's postinstall downloads Linux x64 CUDA binaries unhashed; the CPU binaries ship in the tarball.
+  assert.deepEqual(optionalInstallArgv(ctx(), 'kokoro'), ['npm', 'ci', '--ignore-scripts', '--prefix', VOICE]);
+  assert.deepEqual(optionalInstallArgv(ctx(), 'cutout'), ['npm', 'ci', '--ignore-scripts', '--prefix', CUT]);
+});
+
+test('the optional installs say where they come from, that the model downloads once, and that npm ci in the skill folder leaves them alone', async () => {
+  const r = await diagnose([kokoro(), cutout()], ctx());
+  assert.match(r.missing[0].notes, /installs from optional\/voice\/package-lock\.json; the 93 MB voice model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone/);
+  assert.match(r.missing[1].notes, /installs from optional\/cutout\/package-lock\.json; the 25 MB MODNet model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone/);
+});
+
+test('an old in-skill install does not count', async () => {
+  const r = await diagnose([kokoro()], ctx({ platform: 'linux', exists: (p) => p === '/s/make-motion/node_modules/kokoro-js' }));
+  assert.equal(r.missing[0].id, 'kokoro');
+  assert.match(r.missing[0].why, /the old kokoro-js install in \/s\/make-motion\/node_modules is no longer used; --fix node_modules removes it/);
+});
+
+test('installed in its folder is present; an old in-skill copy beside it is an info note', async () => {
+  const exists = (p) => p === `${VOICE}/node_modules/phonemizer` || p === '/s/make-motion/node_modules/kokoro-js';
+  const r = await diagnose([kokoro()], ctx({ exists, readFile: () => { throw new Error('ENOENT'); } }));
+  assert.deepEqual(r.missing, []);
+  assert.equal(r.info[0].id, 'kokoro');
+  assert.match(r.info[0].note, /no longer used; --fix node_modules removes it/);
+});
+
+// Decision 11: version 2 needs onnxruntime-node and phonemizer only. The voice requirement is found by phonemizer, so a folder
+// installed before the trim (it also holds kokoro-js, transformers and sharp) still counts as present until the next `--fix`.
+test('the voice requirement is present when optional/voice/node_modules/phonemizer exists, and absent without it', async () => {
+  const present = await diagnose([kokoro()], ctx({ exists: (p) => p === `${VOICE}/node_modules/phonemizer` }));
+  assert.deepEqual(present.missing, []);
+  const onlyOnnx = await diagnose([kokoro()], ctx({ exists: (p) => p === `${VOICE}/node_modules/onnxruntime-node` }));
+  assert.equal(onlyOnnx.missing[0].id, 'kokoro', 'onnxruntime-node alone is not the voice stack');
+  const kokoroOnly = await diagnose([kokoro()], ctx({ exists: (p) => p === `${VOICE}/node_modules/kokoro-js` }));
+  assert.equal(kokoroOnly.missing[0].id, 'kokoro', 'kokoro-js alone is no longer the sign of an install');
+});
+
+test('an install made before the trim, which also holds kokoro-js, still counts as present', async () => {
+  const exists = (p) => [`${VOICE}/node_modules/phonemizer`, `${VOICE}/node_modules/kokoro-js`, `${VOICE}/node_modules/sharp`].includes(p);
+  const r = await diagnose([kokoro()], ctx({ exists, readFile: () => { throw new Error('ENOENT'); } }));
+  assert.deepEqual(r.missing, []);
   assert.equal(r.ok, true);
-  assert.match(r.missing[0].size, /25 MB/, 'the why/size name the model download');
 });
 
-test('cutout is missing on a fresh copy and present once onnxruntime-node is installed', async () => {
-  const { cutout } = await import('../doctor.mjs');
-  assert.equal((await diagnose([cutout()], ctx())).missing.length, 1);
-  assert.deepEqual(await diagnose([cutout()], ctx({ exists: () => true })), { ok: true, missing: [] });
+test('the voice requirement states the measured sizes and names no kokoro-js', async () => {
+  const { missing } = await diagnose([kokoro()], ctx());
+  const [voice] = missing;
+  assert.equal(voice.size, '≈227 MB, plus a 93 MB model on first use');
+  assert.doesNotMatch(`${voice.why} ${voice.size} ${voice.notes}`, /kokoro-js/);
+  assert.doesNotMatch(JSON.stringify(voice.fix), /kokoro-js|huggingface|sharp/);
 });
 
-test('cutout installed before the overrides existed counts as missing until reinstalled, and node_modules stays green', async () => {
+test('an optional install that predates a pin counts as missing until npm ci reruns', async () => {
   const files = {
-    '/s/make-motion/package.json': JSON.stringify({ overrides: { 'global-agent': '4.1.3', 'fast-uri': '3.1.9' } }),
-    '/s/make-motion/package-lock.json': LOCK,
-    '/s/make-motion/node_modules/global-agent/package.json': JSON.stringify({ version: '3.0.0' }),
-    '/s/make-motion/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.9' }),
+    [`${VOICE}/package.json`]: JSON.stringify({ dependencies: { phonemizer: '1.2.1' }, overrides: { 'global-agent': '4.1.3' } }),
+    [`${VOICE}/node_modules/phonemizer/package.json`]: JSON.stringify({ version: '1.2.1' }),
+    [`${VOICE}/node_modules/global-agent/package.json`]: JSON.stringify({ version: '4.1.2' }),
   };
-  const readFile = (p) => { if (!(p in files)) throw new Error('ENOENT'); return files[p]; };
-  const { cutout } = await import('../doctor.mjs');
-  const r = await diagnose([nodeModules({ omitDev: false }), cutout()], ctx({ exists: () => true, readFile }));
-  assert.deepEqual(r.missing.map((m) => m.id), ['cutout']);
-  assert.match(r.missing[0].why, /reinstall to get the patched global-agent pinned/);
-  files['/s/make-motion/node_modules/global-agent/package.json'] = JSON.stringify({ version: '4.1.3' });
-  assert.deepEqual(await diagnose([cutout()], ctx({ exists: () => true, readFile })), { ok: true, missing: [] });
+  const exists = (p) => p === `${VOICE}/node_modules/phonemizer`;
+  const stale = await diagnose([kokoro()], ctx({ exists, readFile: jsonFiles(files) }));
+  assert.equal(stale.missing[0].id, 'kokoro');
+  assert.match(stale.missing[0].why, /reinstall to get global-agent as pinned in optional\/voice\/package\.json/);
+  files[`${VOICE}/node_modules/global-agent/package.json`] = JSON.stringify({ version: '4.1.3' });
+  assert.deepEqual((await diagnose([kokoro()], ctx({ exists, readFile: jsonFiles(files) }))).missing, []);
 });
 
-test('--fix cutout runs the pinned install in the skill folder, after node_modules and before nothing else it depends on', async () => {
-  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
+test('a pinned package that is not installed, or whose file cannot be read, is not stale', async () => {
+  const files = { [`${VOICE}/package.json`]: JSON.stringify({ dependencies: { phonemizer: '1.2.1' }, overrides: { 'fast-uri': '3.1.9', 'global-agent': { nested: '^1.0.0' } } }) };
+  const exists = (p) => p === `${VOICE}/node_modules/phonemizer`;
+  assert.deepEqual((await diagnose([kokoro()], ctx({ exists, readFile: jsonFiles(files) }))).missing, []);
+});
+
+test('offline: a failed npm ci reports that command and runs nothing else', async () => {
   const ran = [];
-  const res = await runFixes(['cutout', 'node_modules'], [cutout(), nodeModules()], ctx({ platform: 'linux', exists: (p) => p.endsWith('/node_modules') }), (cmd, args, o) => { ran.push(`${cmd} ${args.join(' ')} @${o.cwd ?? ''}`); return { status: 0 }; });
-  assert.deepEqual(res.map((r) => r.id), ['node_modules', 'cutout']);
-  assert.deepEqual(ran, ['npm ci --omit=dev --prefix /s/make-motion @', `npm install ${CUTOUT_PIN} --no-save @/s/make-motion`]);
+  const res = await runFixes(['kokoro'], [kokoro()], ctx({ platform: 'linux' }), (c, a) => { ran.push([c, ...a].join(' ')); return { status: 1 }; });
+  assert.deepEqual(ran, [`npm ci --ignore-scripts --prefix ${VOICE}`]);
+  assert.equal(res[0].ok, false);
+  assert.equal(res[0].manual, `npm ci --ignore-scripts --prefix ${VOICE}`);
 });
 
-test('the node_modules reinstall note names a cutout install when the skill can restore it', async () => {
+test('win32: one npm ci with the backslash folder quoted', async () => {
+  const skillDir = 'C:\\Users\\a b\\make-motion';
+  const r = await diagnose([kokoro()], ctx({ platform: 'win32', skillDir }));
+  assert.equal(r.missing[0].fix.auto, 'npm ci --ignore-scripts --prefix "C:\\Users\\a b\\make-motion\\optional\\voice"');
+  const installed = 'C:\\Users\\a b\\make-motion\\optional\\voice\\node_modules\\phonemizer';
+  assert.deepEqual((await diagnose([kokoro()], ctx({ platform: 'win32', skillDir, exists: (p) => p === installed }))).missing, []);
+});
+
+test('--fix kokoro,cutout runs one npm ci per folder, after node_modules', async () => {
+  const ran = [];
+  const reqs = [cutout(), kokoro(), nodeModules()];
+  const res = await runFixes(['kokoro', 'cutout', 'node_modules'], reqs, ctx({ platform: 'linux', exists: () => ran.length > 0 }), (c, a) => { ran.push([c, ...a].join(' ')); return { status: 0 }; });
+  assert.deepEqual(res.map((r) => r.ok), [true, true, true]);
+  assert.deepEqual(ran, ['npm ci --ignore-scripts --omit=dev --prefix /s/make-motion', `npm ci --ignore-scripts --prefix ${VOICE}`, `npm ci --ignore-scripts --prefix ${CUT}`]);
+});
+
+test('the make-motion node_modules reinstall names no optional install', async () => {
   const stale = { '/s/x/package.json': JSON.stringify({ overrides: { 'fast-uri': '3.1.9' } }), '/s/x/package-lock.json': LOCK, '/s/x/node_modules/fast-uri/package.json': JSON.stringify({ version: '3.1.8' }) };
-  const readFile = (p) => { if (!(p in stale)) throw new Error('ENOENT'); return stale[p]; };
-  const note = async (opts) => (await diagnose([nodeModules(opts)], ctx({ exists: () => true, readFile, skillDir: '/s/x' }))).missing[0].notes;
-  assert.match(await note({ omitDev: false, restore: ['kokoro', 'cutout'] }), /removes any voiceover install \(kokoro-js\) and any cutout install \(onnxruntime-node\); restore with --fix kokoro and --fix cutout$/);
-  assert.match(await note({ omitDev: false, restore: ['cutout'] }), /removes any cutout install \(onnxruntime-node\); restore with --fix cutout$/);
-});
-
-// --- on-demand installs keep each other: both are `npm install --no-save`, which prunes the other one ---
-
-const has = (...pkgs) => (p) => pkgs.some((k) => p.endsWith(`/node_modules/${k}`));
-
-test('installing the voiceover with a cutout install in place installs both pins in one command', async () => {
-  const { CUTOUT_PIN } = await import('../doctor.mjs');
-  const r = await diagnose([kokoro()], ctx({ platform: 'linux', exists: has('onnxruntime-node') }));
-  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install kokoro-js@1.2.1 ${CUTOUT_PIN} --no-save`);
-});
-
-test('installing the cutout with a voiceover install in place installs both pins in one command', async () => {
-  const { CUTOUT_PIN, cutout } = await import('../doctor.mjs');
-  const r = await diagnose([cutout()], ctx({ platform: 'linux', exists: has('kokoro-js') }));
-  assert.equal(r.missing[0].fix.auto, `cd /s/make-motion && npm install kokoro-js@1.2.1 ${CUTOUT_PIN} --no-save`);
-});
-
-test('--fix kokoro,cutout in one run ends with both installed, in either order given', async () => {
-  const { cutout } = await import('../doctor.mjs');
-  const ran = [];
-  const installed = new Set();
-  const run = (cmd, args) => {
-    ran.push([cmd, ...args].join(' '));
-    for (const a of args) { if (a.startsWith('kokoro-js')) installed.add('kokoro-js'); if (a.startsWith('onnxruntime-node')) installed.add('onnxruntime-node'); }
-    return { status: 0 };
-  };
-  const c = ctx({ platform: 'linux', exists: (p) => [...installed].some((k) => p.endsWith(`/node_modules/${k}`)) });
-  // A real npm prune: an install that omits an installed package removes it.
-  const pruning = (cmd, args) => {
-    const keep = new Set(args.filter((a) => a.includes('@')).map((a) => a.split('@')[0]));
-    for (const k of [...installed]) if (!keep.has(k)) installed.delete(k);
-    return run(cmd, args);
-  };
-  const res = await runFixes(['cutout', 'kokoro'], [cutout(), kokoro()], c, pruning);
-  assert.deepEqual(res.map((r) => r.ok), [true, true]);
-  assert.deepEqual([...installed].sort(), ['kokoro-js', 'onnxruntime-node']);
-  assert.equal(ran.length, 2);
-});
-
-test('the on-demand install notes say the other install is kept, and that npm ci removes both', async () => {
-  const { cutout } = await import('../doctor.mjs');
-  for (const req of [kokoro(), cutout()]) {
-    const r = await diagnose([req], ctx());
-    assert.match(r.missing[0].notes, /keeps an installed (cutout|voiceover)/);
-    assert.match(r.missing[0].notes, /npm ci/);
-    assert.doesNotMatch(r.missing[0].notes, /removes other --no-save installs/);
-  }
+  const r = await diagnose([nodeModules({ omitDev: false })], ctx({ exists: () => true, readFile: jsonFiles(stale), skillDir: '/s/x' }));
+  assert.equal(r.missing[0].id, 'node_modules', 'the stale install is still reported');
+  assert.equal(r.missing[0].notes, undefined);
 });
 
 // --- PA-14: an unknown --fix id lists the ids that exist ---
@@ -1017,18 +1074,18 @@ test('G-66: a node_modules that is truly absent is still "missing", and carries 
 test('G-66: keep dev packages when node_modules/playwright exists, at the skill and at a sister skill', async () => {
   const readFile = reader(STALE_FILES('/s/make-diagram'));
   const dev = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: () => true, readFile }))).missing[0];
-  assert.equal(dev.fix.auto, 'npm ci --prefix /s/make-diagram', 'no --omit=dev: it would delete the playwright that check.mjs uses');
+  assert.equal(dev.fix.auto, 'npm ci --ignore-scripts --prefix /s/make-diagram', 'no --omit=dev: it would delete the playwright that check.mjs uses');
   assert.doesNotMatch(dev.notes ?? '', /removes the dev packages/);
   const prod = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram', exists: noPlaywright, readFile }))).missing[0];
-  assert.equal(prod.fix.auto, 'npm ci --omit=dev --prefix /s/make-diagram');
+  assert.equal(prod.fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-diagram');
   const fresh = (await diagnose([nodeModules()], ctx({ skillDir: '/s/make-diagram' }))).missing[0];
-  assert.equal(fresh.fix.auto, 'npm ci --omit=dev --prefix /s/make-diagram', 'a first install stays production-only');
+  assert.equal(fresh.fix.auto, 'npm ci --ignore-scripts --omit=dev --prefix /s/make-diagram', 'a first install stays production-only');
 
   const dir = '/p/.agents/skills/make-diagram';
   const sisterFiles = reader(STALE_FILES(dir));
   const base = { skillDir: '/p/.agents/skills/make-explainer', cwd: '/p', homedir: '/h', readFile: sisterFiles };
   const withDev = (await diagnose([sisterSkill('make-diagram')], ctx({ ...base, exists: () => true }))).missing[0];
-  assert.equal(withDev.fix.auto, `npm ci --prefix ${dir}`);
+  assert.equal(withDev.fix.auto, `npm ci --ignore-scripts --prefix ${dir}`);
   assert.match(withDev.notes, /keeps its dev packages/);
   assert.deepEqual(withDev.stale, ['fast-uri']);
   assert.match(withDev.why, /predate the patched fast-uri/);
@@ -1039,7 +1096,7 @@ test('G-66: keep dev packages when node_modules/playwright exists, at the skill 
 test('G-66: an explicit --fix node_modules on a dev checkout does not strip playwright either', async () => {
   const ran = [];
   await runFixes(['node_modules'], [nodeModules()], ctx({ exists: () => true }), (c, a) => { ran.push([c, ...a].join(' ')); return { status: 0 }; });
-  assert.deepEqual(ran, ['npm ci --prefix /s/make-motion']);
+  assert.deepEqual(ran, ['npm ci --ignore-scripts --prefix /s/make-motion']);
 });
 
 // --- PA-11: sizes are per skill and measured ---
@@ -1049,7 +1106,7 @@ test('PA-11: node_modules and sister sizes come from a per-skill table, not one 
   assert.equal(await size('make-explainer'), '≈3 MB');
   assert.equal(await size('make-diagram'), '≈11 MB');
   assert.equal(await size('make-dashboard'), '≈150 MB');
-  assert.equal(await size('make-motion'), '≈58 MB');
+  assert.equal(await size('make-motion'), '≈57 MB');
   assert.equal(await size('make-scene'), '≈3 MB');
   assert.match(await size('make-future'), /depending on the skill/, 'an unknown skill gets an honest range');
   const own = (await diagnose([nodeModules({ size: '≈1 MB' })], ctx())).missing[0].size;
@@ -1060,30 +1117,31 @@ test('PA-11: node_modules and sister sizes come from a per-skill table, not one 
   assert.equal(await sister('make-diagram', { size: '≈2 MB' }), '≈2 MB');
 });
 
-test('PA-11: kokoro is about 465 MB, says it shares onnxruntime-node with cutout, and the old 250 MB figure is gone', async () => {
+test('PA-11: kokoro states the measured size of its own locked folder, and the old 250 MB, 440 MB and 30-60 MB figures are gone', async () => {
   const { missing } = await diagnose([kokoro()], ctx());
-  assert.match(missing[0].size, /^≈465 MB/);
-  assert.match(missing[0].size, /90 MB model/);
-  assert.match(missing[0].notes, /shares onnxruntime-node with cutout/);
-  assert.doesNotMatch(JSON.stringify(missing), /250 MB/);
+  assert.match(missing[0].size, /^≈227 MB/);
+  assert.match(missing[0].size, /93 MB model/);
+  assert.doesNotMatch(JSON.stringify(missing), /250 MB|440 MB/);
   assert.doesNotMatch(JSON.stringify(missing), /30–60 MB/);
 });
 
 // --- PA-10: the install hints a script prints are the doctor's own step ---
+// (Merge note: main's form was `npm install <pin> --no-save` plus ffmpeg-static; this branch installs each optional stack
+// with npm ci into its own locked folder and dropped ffmpeg-static, so the hint is optionalInstallArgv.)
 
-test('PA-10: onDemandHint is exactly the step the doctor runs; ffmpeg-static is pinned and keeps the other installs', async () => {
-  const { onDemandHint, FFMPEG_STATIC_PIN, CUTOUT_PIN } = await import('../doctor.mjs');
-  assert.match(FFMPEG_STATIC_PIN, /^ffmpeg-static@\d+\.\d+\.\d+$/);
-  const c = ctx({ platform: 'linux', exists: has('onnxruntime-node') });
-  const doctorSays = (await diagnose([kokoro()], c)).missing[0].fix.auto;
-  assert.equal(onDemandHint('kokoro', c), doctorSays);
-  assert.equal(onDemandHint('kokoro', c), `cd /s/make-motion && npm install kokoro-js@1.2.1 ${CUTOUT_PIN} --no-save`);
-  const both = onDemandHint('ffmpeg-static', ctx({ platform: 'linux', exists: has('kokoro-js', 'onnxruntime-node') }));
-  assert.equal(both, `cd /s/make-motion && npm install kokoro-js@1.2.1 onnxruntime-node@1.31.1 ${FFMPEG_STATIC_PIN} --no-save`);
-  assert.doesNotMatch(both, /--prefix/);
-  assert.equal(onDemandHint('ffmpeg-static', ctx({ platform: 'linux' })), `cd /s/make-motion && npm install ${FFMPEG_STATIC_PIN} --no-save`);
-  assert.match(onDemandHint('kokoro', ctx({ platform: 'linux', exists: has('ffmpeg-static') })), new RegExp(`${FFMPEG_STATIC_PIN} --no-save$`), 'an installed ffmpeg-static survives a kokoro install');
-  assert.throws(() => onDemandHint('nope', ctx()), /unknown on-demand install "nope"/);
+test('PA-10: the optional install hint is exactly the step the doctor runs, and installing one stack never touches the other', async () => {
+  const { render } = await import('../doctor.mjs');
+  // The other stack is installed in its own folder: the step names only this one's folder.
+  const other = { kokoro: '/optional/cutout/node_modules/onnxruntime-node', cutout: '/optional/voice/node_modules/phonemizer' };
+  for (const [id, req] of [['kokoro', kokoro()], ['cutout', cutout()]]) {
+    const c = ctx({ platform: 'linux', exists: (p) => p.endsWith(other[id]) });
+    const doctorSays = (await diagnose([req], c)).missing[0].fix.auto;
+    assert.equal(render([optionalInstallArgv(c, id)], 'linux'), doctorSays);
+    assert.equal(doctorSays, `npm ci --ignore-scripts --prefix /s/make-motion/optional/${OPTIONAL[id].dir}`);
+    assert.doesNotMatch(doctorSays, /--no-save|npm install/);
+  }
+  assert.throws(() => optionalInstallArgv(ctx(), 'ffmpeg-static'), /unknown optional install "ffmpeg-static"; known: kokoro, cutout/);
+  assert.throws(() => optionalInstallArgv(ctx(), 'nope'), /unknown optional install "nope"/);
 });
 
 // --- PA-09: a stable cache dir, and a list of older plugin-cache copies (printed, never removed) ---

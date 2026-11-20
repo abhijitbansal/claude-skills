@@ -21,6 +21,8 @@ import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mj
 import { esc, inline, headingInline, plain, rawText, toneClass } from './render/ui.mjs';
 import { flavorFor, flavorVars, scrimVar, CLASSIC } from './flavor.mjs';
 import { artSvg } from '../../shared/art.mjs';
+import { deckArtPair } from './deck-art.mjs';
+import { colophonHtml } from './colophon.mjs';
 import { dataUri } from './image.mjs';
 import { planHash, planKey } from './plan-hash.mjs';
 import { saveBlock } from './render/plan-ui.mjs';
@@ -32,8 +34,8 @@ const TEMPLATES = { page: new URL('../../template/page.html', import.meta.url), 
 const BASE_CSS = new URL('../../template/base.css', import.meta.url);
 const FLAVOR_CSS = new URL('../../template/flavors.css', import.meta.url);
 const DECK_FLAVOR_CSS = new URL('../../template/deck-flavors.css', import.meta.url);
+const DECK_ART_CSS = new URL('../../template/deck-art.css', import.meta.url);
 const ART = { width: 1280, height: 720 };
-const SLIDE_ART = { width: 1920, height: 1080 };
 const SLIDES_JS = new URL('../../template/slides.js', import.meta.url);
 const PA_LIB = new URL('../../template/pa-lib.js', import.meta.url);
 const RUNTIME = new URL('../../template/runtime.js', import.meta.url);
@@ -275,26 +277,28 @@ function pageParts(spec, ctx, ids) {
   };
 }
 
-// The slide layout: the whole deck is one marker. A flavored deck's first and last slides get full-bleed art,
-// seeded from the title and the slide number so the two drawings (and their svg ids) differ.
-function deckParts(spec, ctx, flavored) {
+// The slide layout: the whole deck is one marker. Every deck's first and last slides get full-bleed art in its
+// theme's own style, seeded from the title and the slide number so the two drawings (and their svg ids) differ.
+function deckParts(spec, ctx) {
   const rendered = spec.sections.map((section, i) => {
     const def = SECTIONS[section.type];
     const view = simpleView(section);
     return { section, ownHeading: def.ownHeading, body: renderBody(section, i, def, ctx), simple: view === null ? undefined : { view, body: renderBody(view, i, def, ctx) } };
   });
-  const artFor = flavored ? (n) => artPair(ctx.theme, `${spec.title}${n}`, SLIDE_ART) : undefined;
-  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.footer, artFor }) };
+  const artFor = (n) => deckArtPair(ctx.theme.name, `${spec.title}${n}`);
+  return { DECK: renderDeck({ spec, rendered, metaHtml: renderMeta(spec.meta), slug: ctx.slug, footerHtml: ctx.deckFooter, artFor }) };
 }
 
 const readCss = (url) => fs.readFileSync(url, 'utf8').replace(/\n$/, '');
 
-// Stylesheets after the template's own: the page gets the flavor sheet; a deck gets it too (its section
-// treatments are shared) plus the deck sheet and the scrim. Classic gets nothing.
+// Stylesheets after the template's own. Every deck gets the art sheet (title and closing slides) and the scrim, so
+// all nine themes draw art; a flavored page gets the flavor sheet, and a flavored deck gets it too (its section
+// treatments are shared) plus the deck flavor sheet. A classic page gets nothing.
 function flavorSheets(flavor, slides) {
-  if (flavor === CLASSIC) return '';
-  if (!slides) return `<style>\n${readCss(FLAVOR_CSS)}\n</style>`;
-  return `<style>\n${readCss(FLAVOR_CSS)}\n${scrimVar(flavor)}\n${readCss(DECK_FLAVOR_CSS)}\n</style>`;
+  const flavored = flavor !== CLASSIC;
+  if (!slides) return flavored ? `<style>\n${readCss(FLAVOR_CSS)}\n</style>` : '';
+  const sheets = [...(flavored ? [readCss(FLAVOR_CSS)] : []), scrimVar(), readCss(DECK_ART_CSS), ...(flavored ? [readCss(DECK_FLAVOR_CSS)] : [])];
+  return `<style>\n${sheets.join('\n')}\n</style>`;
 }
 
 /**
@@ -327,6 +331,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     icons: await loadIcons(spec),
     env,
     footer,
+    deckFooter: colophonHtml('make-explainer', spec.generatedBy, buildDate(env), themeData.name),
     targets: linkTargets(spec.sections),
   };
 
@@ -337,7 +342,7 @@ export async function buildPage(spec, { dir = process.cwd(), theme, out, env = p
     if (def.assets) assets.push(...(await def.assets(section, ctx)).map((a) => ({ ...a, at: `sections[${i}]` })));
   }
   const flavored = flavor !== CLASSIC;
-  const layout = slides ? deckParts(spec, ctx, flavored) : pageParts(spec, ctx, ids);
+  const layout = slides ? deckParts(spec, ctx) : pageParts(spec, ctx, ids);
 
   const parts = {
     CSP: esc(contentSecurityPolicy(spec)),

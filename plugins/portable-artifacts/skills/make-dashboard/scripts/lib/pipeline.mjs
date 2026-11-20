@@ -63,8 +63,11 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   const vendor = readVendor();
   // Theme is resolved before the full queries run (validate already ran LIMIT 0 binds), so a bad --theme fails fast.
   const theme = resolveTheme(themeName ?? spec.theme ?? DEFAULT_THEME);
-  const themeErrors = checkTheme(theme).map((e) => ({ path: `theme ${theme.name}: ${e.path}`, message: e.message }));
+  // A token the theme leaves out that the build fills in (kind 'fallback') is a warning; anything else stops the build.
+  const themeEntries = checkTheme(theme).map((e) => ({ kind: e.kind, path: `theme ${theme.name}: ${e.path}`, message: e.message }));
+  const themeErrors = themeEntries.filter((e) => e.kind !== 'fallback').map(({ path: p, message }) => ({ path: p, message }));
   if (themeErrors.length) return { ok: false, errors: themeErrors };
+  const themeWarnings = themeEntries.map(({ path: p, message }) => ({ path: p, message }));
   let results;
   try {
     results = await runQueries(spec, dir, { now, allowOutside, timeoutMs });
@@ -76,7 +79,7 @@ export async function buildDashboard(specFile, { out, theme: themeName, allowOut
   if (fieldErrors.length) return { ok: false, errors: fieldErrors };
   const expanded = expandCharts(spec, results);
   if (expanded.errors.length) return { ok: false, errors: expanded.errors };
-  const warnings = kpiRowWarnings(spec, results);
+  const warnings = [...themeWarnings, ...kpiRowWarnings(spec, results)];
   const outDir = path.resolve(out ?? path.join(dir, 'dist'));
   const target = writePage(outDir, renderPage(spec, results, { vendor, theme, charts: expanded.charts, env, now }));
   const sources = Object.entries(spec.sources).map(([name, src]) => [

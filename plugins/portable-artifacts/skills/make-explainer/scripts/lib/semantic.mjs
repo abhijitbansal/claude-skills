@@ -228,7 +228,7 @@ function checkSection(s, i, errors, state) {
     case 'chart': checkChart(s, at, errors); break;
     case 'motion':
       if (s.video === undefined && s.spec === undefined) {
-        errors.push({ path: at, message: 'a motion section needs video (an .mp4 path) or spec (a motion.json path); add one' });
+        errors.push({ path: at, message: 'a motion section needs video (an .mp4 path) or spec (a make-motion film.json path); add one' });
       }
       break;
     case 'decision': checkDecision(s, at, errors); break;
@@ -236,6 +236,10 @@ function checkSection(s, i, errors, state) {
     case 'question': length(errors, s, 'text', at, LIMITS.planQuestion); break;
     case 'review': checkReview(s, at, errors, state.ids); break;
     case 'verdict': checkVerdict(i, at, errors, state); break;
+    case 'quote':
+      length(errors, s, 'text', at, LIMITS.quoteText);
+      length(errors, s, 'by', at, LIMITS.quoteBy);
+      break;
     default:
   }
 }

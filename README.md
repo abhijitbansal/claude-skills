@@ -7,14 +7,10 @@
 **Decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt: files that open offline, built by whatever coding agent you already use.**
 
 <p align="center">
-  <a href="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery"><img src="docs/features/img/portable-artifacts/launch-announcement.gif" width="640" alt="A launch announcement clip: the title Lumen 2.0 scales in over the tagline Search that keeps up, a counter runs from 1 to 3 with the suffix x faster under the caption Median query time vs 1.0, three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another, and the end card reads Available today."></a>
+  <a href="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery"><img src="docs/features/img/portable-artifacts/showreel-pro.gif" width="640" alt="The first 12 seconds of the make-motion showreel on a paper-collage desk: a browser window holding a dashboard asks where a number came from, the camera closes in on the revenue tile and a red hand-drawn line underlines it, then a pinned printout of sales.json types itself out with its query line highlighted."></a>
 </p>
 
-Made by an agent from this prompt with `/make-motion`: JSON in, MP4 out, offline.
-
-```text
-Make a 10-second launch announcement, 1920x1080: scene 1 the product name "Lumen 2.0" scales in with the tagline "Search that keeps up"; scene 2 a counter from 1 to 3 with the suffix "x faster" and the caption "Median query time vs 1.0"; scene 3 three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another; end on "Available today".
-```
+The first 12 seconds of the showreel, a 46.8 s film made with `/make-motion` 2 from one JSON file ([`showreel-pro.json`](plugins/portable-artifacts/skills/make-motion/references/examples/v2/showreel-pro.json)): JSON in, MP4 out. The full film, with a locally made voiceover, a synthesised music bed and sound cues, is on the [gallery page](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#films). The voice needs a one-time model download (about 93 MB); everything else runs offline.
 
 Install the five artifact skills (`portable-artifacts`):
 
@@ -27,11 +23,11 @@ node plugins/portable-artifacts/bin/install.mjs codex
 
 The first two lines are Claude Code. The `npx skills` line works in any agent, and the last runs from a clone for `codex`, `copilot`, `gemini` or `agents`. `npx skills` does not install sibling skills for you: `make-explainer` needs `make-diagram` and `make-dashboard` beside it, and `make-scene` needs them to lift a diagram or a chart, so name them as shown.
 
-**What you need:** Node 20 or newer. Opening a built page needs no network, but installing a skill's npm packages does (about 3 MB for `make-explainer` up to about 150 MB for `make-dashboard`, measured in a dev checkout; the installer asks first). `make-motion` also needs ffmpeg and a Chromium (about 150 MB) for frame capture, and an optional voiceover is an on-demand install of about 465 MB plus a 90 MB model. Details: [`plugins/portable-artifacts/README.md`](plugins/portable-artifacts/README.md).
+**What you need:** Node 20 or newer. Opening a built page needs no network, but installing a skill's npm packages does (about 3 MB for `make-explainer` up to about 150 MB for `make-dashboard`, measured in a dev checkout; the installer asks first). `make-motion` also needs ffmpeg and a Chromium (about 150 MB) for frame capture, and an optional voiceover is an on-demand install of about 227 MB plus a 93 MB model. Details: [`plugins/portable-artifacts/README.md`](plugins/portable-artifacts/README.md).
 
 **[Open the live gallery (no install)](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery)**
 
-Tested live on Claude Code and GitHub Copilot CLI 1.0.98; on Copilot, a cheap-model agent built motion 10/10 valid and 9/9 across dashboard, diagram, explainer and scene, all on `claude-haiku-5.5`. Also run on Codex CLI 0.145.0 (dashboard 10/10, motion 5/10 under today's scorer, four more prompts stopped by a usage limit); `make-scene` built 10/10 valid pages on Claude Haiku in Claude Code. Gemini CLI: install paths checked against its documentation only, never run live. Every figure predates 1.2.0; the runs and what each covers are listed in [`eval/results/INDEX.md`](plugins/portable-artifacts/eval/results/INDEX.md).
+Tested live on Claude Code and GitHub Copilot CLI 1.0.98; on Copilot, a cheap-model agent built motion (make-motion 1) 10/10 valid and 9/9 across dashboard, diagram, explainer and scene, all on `claude-haiku-5.5`. Also run on Codex CLI 0.145.0 (dashboard 10/10, motion (make-motion 1) 5/10 under today's scorer, four more prompts stopped by a usage limit); `make-scene` built 10/10 valid pages on Claude Haiku in Claude Code. Gemini CLI: install paths checked against its documentation only, never run live. Every figure predates 1.2.0; the runs and what each covers are listed in [`eval/results/INDEX.md`](plugins/portable-artifacts/eval/results/INDEX.md).
 
 These three came from the same plugin, each linked to its page:
 
@@ -44,7 +40,7 @@ These three came from the same plugin, each linked to its page:
   </tr>
   <tr>
     <td align="center" valign="top" width="50%">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/growth-dashboard.html"><img src="docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="A Growth overview dashboard: three KPI tiles (total revenue, units sold, signup conversion rate) above bar charts of revenue by region and signup conversion rate by channel, a line chart of monthly revenue and a line chart of daily sessions by channel." width="400" height="533"></a><br>
+      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/growth-dashboard.html"><img src="docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="A Growth overview dashboard: three KPI tiles (total revenue, units sold, signup conversion rate) above bar charts of revenue by region and signup conversion rate by channel, a line chart of monthly revenue and a line chart of daily sessions by channel." width="400" height="558"></a><br>
       <sub><code>/make-dashboard</code>: two CSV files in, one offline dashboard out</sub>
     </td>
     <td align="center" valign="top" width="50%">
@@ -138,18 +134,26 @@ with a per-repo install (`install.sh --project`) and `"chat.canvases.enabled": t
 VS Code settings.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh -s -- --project   # VS Code: run in each repo
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh -s -- --project   # VS Code: run in each repo
 node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # what cold sends already cost you
 ```
 
-Then run `/cache-clock help` in Copilot.
+Then run `/cache-clock help` in Copilot. The install is pinned to the release tag
+`cache-clock-v1.1.0` and checks a SHA-256 for every file; the curl lines work once that tag
+exists. Optional keep-warm is off until `/cache-clock keepwarm on` and it costs money: it
+keeps the cache warm for 3 hours after your last message (up to 12) and stops at payback,
+the budget, the window end or the daily limit. The setting is global, but each open session
+has its own window, budget and 24-hour ceiling: per session, at most 362 pings in 24 hours and
+the daily dollar limit (default $2.00); deleting the ledger file resets it. It is tested against
+a fake Copilot host only; do not enable it before the owner's live check confirms that Copilot
+labels the ping's message as ours.
 
 Full reference: [tools/cache-clock/README.md](tools/cache-clock/README.md) ·
 [guide](docs/features/cache-clock.html) ·
 [visual explainer](docs/features/showcase/cache-clock/how-it-works.html) ·
 [architecture diagram](docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html) ·
-[17-second video](docs/features/showcase/cache-clock/video.mp4)
+[17-second video](docs/features/showcase/cache-clock/video.mp4) (made with make-motion 1.x)
 
 ### Other AI tools (Codex, Copilot CLI, Hermes, …)
 
@@ -165,11 +169,11 @@ adapters/install.sh all
 ```
 
 Idempotent — re-run after pulling updates; it prunes links for removed skills. The adapter
-only links skill folders: it runs no `npm ci`, installs no agent file and does not add sibling
+only links skill folders: it runs no `npm ci --ignore-scripts`, installs no agent file and does not add sibling
 skills, so for `portable-artifacts` use that plugin's own installer, below.
 
 The `portable-artifacts` skills (`make-dashboard`, `make-diagram`, `make-explainer`, `make-motion`, `make-scene`) are Node packages: they also
-need `npm ci` in each skill folder. Their own installer does that and covers Gemini CLI and
+need `npm ci --ignore-scripts` in each skill folder. Their own installer does that and covers Gemini CLI and
 project-scoped installs too:
 `node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`
 — see [plugins/portable-artifacts/USAGE.md](plugins/portable-artifacts/USAGE.md).

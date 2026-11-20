@@ -1,9 +1,24 @@
 import { describe, expect, test } from 'claude-code/testing'
 import type { Artifact } from '../types'
 import {
-  LIMITS, addArtifact, applyStatus, artifactKey, newRecord, orderIndex, sortByActive, withFirstPrompt, ago,
+  LIMITS, addArtifact, applyStatus, artifactKey, newRecord, orderIndex, sortByActive, truncate, withFirstPrompt, ago,
 } from '../hooks/record'
 import { isRecord } from '../hooks/io'
+
+describe('truncate', () => {
+  test('control characters never reach the display, whitespace still flattens to one space', () => {
+    expect(truncate('a\u001b[31mred\u0007b\u007fc\u0085d\u009be', 80)).toBe('a[31mredbcde')
+    expect(truncate('a\n\t b\r\nc', 80)).toBe('a b c')
+    expect(applyStatus(base(), { goal: 'ship\u001b]0;pwned\u0007 it' }, 1).goal).toBe('ship]0;pwned it')
+  })
+
+  test('never leaves half of a surrogate pair or a split emoji sequence', () => {
+    const family = '👨‍👩‍👧'
+    const cut = truncate(`a${family}${family}`, 10)
+    expect(cut).toBe(`a${family}…`)
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(truncate('a🚀🚀🚀', 3))).toBe(false)
+  })
+})
 
 const WHERE = { repo: 'cubby', worktree: '/w/feature-scan', branch: 'feature/scan' }
 const base = () => newRecord('s1', WHERE, 1000)

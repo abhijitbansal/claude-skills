@@ -2,8 +2,6 @@
 name: make-scene
 description: Use when the user wants data shown as an explorable 3D world, such as a city of towers, a forest, a galaxy or a terrain, or wants a diagram or dashboard chart lifted into 3D, as one offline HTML page with a camera tour. The agent writes a small JSON spec and scripts build the page. Not for a flat chart (make-dashboard) or hand-written three.js and games.
 argument-hint: what to show, e.g. "our commits per week per module as a city, with a tour of the busiest weeks"
-model: haiku
-effort: low
 ---
 
 # make-scene
@@ -12,22 +10,22 @@ You write one JSON file, `scene.json`: a title, then either `data` (rows that be
 
 Run every command from the project folder (where `scene.json` lives), using the full path to the scripts. If the request is empty, ask what to show.
 
-Run every step yourself (or hand off as the Cheaper model section says), in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
+Run every step yourself (or hand off as the Director and operator section says), in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists. The one command is `make.mjs` (see Director and operator); `validate.mjs` and `build.mjs` below remain for stepwise work.
 
-## Cheaper model
+## Director and operator
 
-Skip this section if you are running in Claude Code (it already runs this skill on the model named in the frontmatter), or if `artifact-builder` is not in your list of available agents. Otherwise, if you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
+You are the director: you run the intake, write the spec, view what was built and decide every `creative` finding. A cheaper operator agent only runs the one command and fixes `mechanical` findings.
 
-Give it a self-contained brief. It has no memory of this conversation, so the brief must say:
+The command is `node <skill-dir>/scripts/make.mjs <spec> --json` (add `--out <path>` to name the output). It checks the spec, builds, checks the result and prints one report: `ok`, `output`, `stages`, `findings`. A `mechanical` finding names a JSON path to change and makes `ok` false. A `creative` finding is a call for you and never a failure.
 
-1. What to build, and every fact and choice from this conversation that affects it (data, names, wording, theme, what the user asked for and what they ruled out).
-2. This skill directory: the full path of the folder that holds this SKILL.md.
-3. The spec path: where it should write the JSON spec.
-4. Optionally, an output folder for the build (it passes this to the build script as `--out`).
+Hand off with the first rung that works, unless you are already artifact-builder (then run the command, fix only `mechanical` findings, as your own instructions say, and do not hand off again):
 
-Relay only the output path it returns. Do not repeat its work.
+1. Write the spec first. If `artifact-builder` is in your list of available agents (a plugin may list it as `<plugin>:artifact-builder`), start that agent with three things: this skill directory (the full path of the folder that holds this SKILL.md), the spec path (the file already exists) and, optionally, the output path. It has no memory of this conversation and needs nothing else. Do not choose a model for it: its own file names one.
+2. No such agent, or it fails or cannot start: run the same command yourself.
 
-If the `artifact-builder` agent is not installed, or you cannot start another agent, continue with the steps below yourself.
+Trust the report and the output file, never the operator's prose. You take over (fix it yourself and rerun) when the same `mechanical` finding survives two operator attempts, or when its path is empty (the operator may change nothing).
+
+Before you report, view what was built: the files listed under `sheets` in the report (make-motion), or the page through `node <skill-dir>/shared/shot.mjs <output>` when that file exists, then open each PNG it prints. Fix what you see and decide each `creative` finding.
 
 ## Before the first build
 

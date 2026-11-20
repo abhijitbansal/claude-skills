@@ -334,7 +334,10 @@ test('geometry carries the contract fields', async () => {
   assert.equal(api.tone, 'neutral');
   assert.equal(api.noteLine, null);
   assert.deepEqual(g.nodes.find((n) => n.id === 'db').noteLine, 'primary + replica');
-  assert.equal(g.nodes.find((n) => n.id === 'pay').tone, 'warn');
+  // A spec tone reaches the geometry (the example's own external node is untoned now: one external style).
+  const toned = { ...example('architecture'), nodes: example('architecture').nodes.map((n) => (n.id === 'pay' ? { ...n, tone: 'warn' } : n)) };
+  assert.equal((await layout(toned)).nodes.find((n) => n.id === 'pay').tone, 'warn');
+  assert.equal(g.nodes.find((n) => n.id === 'pay').tone, 'neutral');
   assert.equal(g.nodes.find((n) => n.id === 'web').group, null);
   assert.deepEqual(g.groups.map((x) => [x.id, x.depth, x.label, x.parent]), [['aws', 0, 'AWS us-east-1', null], ['vpc', 1, 'Private VPC', 'aws']]);
   const [e0, , , e3] = g.edges;

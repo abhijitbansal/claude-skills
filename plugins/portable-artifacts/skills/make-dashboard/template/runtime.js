@@ -23,8 +23,8 @@
     var cat = [1, 2, 3, 4, 5, 6, 7, 8].map(function (i) { return css('--s' + i); });
     var seq = [1, 2, 3, 4, 5, 6, 7].map(function (i) { return css('--seq' + i); });
     return window.PAVegaConfig({
-      surface: css('--surface'), text2: css('--text-2'), text3: css('--text-3'), grid: css('--grid'), cat: cat, seq: seq
-    }, css('--font'));
+      surface: css('--surface'), text2: css('--text-2'), text3: css('--text-3'), grid: css('--grid'), accent: css('--accent'), cat: cat, seq: seq
+    }, css('--font-num') || css('--font')); // --font-num: the body face, or its fallback where the face's zero is slashed
   }
 
   // Each pane has a render token. Every paint takes a fresh one, and an async
@@ -235,8 +235,9 @@
       line = document.createElement('p');
       line.className = 'chart-error export-error';
       line.setAttribute('role', 'alert');
-      var head = card.querySelector('.card-head');
-      head.parentNode.insertBefore(line, head.nextSibling);
+      // First in the card body: the head stays one grid row, so sibling cards keep their charts level.
+      var body = card.querySelector('.card-body');
+      body.insertBefore(line, body.firstChild);
     }
     line.textContent = 'Export failed: ' + message;
   }

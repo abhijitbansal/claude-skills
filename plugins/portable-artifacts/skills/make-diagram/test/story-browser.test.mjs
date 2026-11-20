@@ -880,3 +880,105 @@ test('with reduced motion the Play story tab and P open beat 1 and wait for Spac
   assert.deepEqual(problems, []);
   await context.close();
 });
+
+// ---- a calmer player (Task 5b) ---------------------------------------------------------------
+
+// Runs in the page before its scripts: every frame, notes each CSS transition that is running.
+const SAMPLE_TRANSITIONS = () => {
+  window.__transitions = [];
+  const tick = () => {
+    for (const a of document.getAnimations()) {
+      if (a instanceof CSSTransition) window.__transitions.push(`${a.transitionProperty} on ${a.effect.target.id || a.effect.target.getAttribute('class')}`);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+};
+
+// Plays the story, then steps forward and back by hand, so beats start in both ways.
+async function playSomeBeats(page) {
+  await page.keyboard.press('p');
+  if (!(await playing(page))) await page.keyboard.press('Space'); // reduced motion waits for Space
+  await waitCount(page, '2 / 9');
+  for (const key of ['ArrowRight', 'ArrowRight', 'ArrowLeft']) {
+    await page.keyboard.press(key);
+    await page.waitForTimeout(450);
+  }
+  await page.keyboard.press('Space');
+}
+
+test('with prefers-reduced-motion: reduce no element has a running transition during a beat (the same run with motion allowed does)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const reduced = await openPage(built('story').url, { reducedMotion: 'reduce', init: SAMPLE_TRANSITIONS });
+  await playSomeBeats(reduced.page);
+  assert.deepEqual([...new Set(await reduced.page.evaluate(() => window.__transitions))], [], 'nothing transitions under reduce');
+  assert.deepEqual(reduced.problems, []);
+  await reduced.context.close();
+
+  const moving = await openPage(built('story').url, { init: SAMPLE_TRANSITIONS });
+  await playSomeBeats(moving.page);
+  assert.ok((await moving.page.evaluate(() => window.__transitions.length)) > 0, 'the sampler does see the fades when motion is allowed');
+  await moving.context.close();
+});
+
+// The order of events, not the time between them. A MutationObserver reports, in the order they happen,
+// 'beat' (the scrubber moves to the new beat, at once, before the camera), 'vb' (the camera moves: the
+// viewBox changes) and 'line' (the caption line changes). Each kind is written by its own task (a click or
+// timer, a rAF frame, a timer), so one observer callback is one event.
+// The page also stalls, as on a loaded machine: STALL_AT_MS after each beat starts (part way through the
+// 300 ms glide at 2x) its main thread is busy for STALL_MS, so the camera's last frames come late. A player
+// that times the caption from the moment the beat starts (not from the camera landing) then changes the
+// caption while the camera is still moving.
+const OBSERVE_ORDER = ({ stallAt, stallMs }) => {
+  window.__events = [];
+  window.__stalls = 0;
+  const stage = document.querySelector('#pa-stage svg');
+  const line = document.querySelector('[data-pa-line]');
+  const scrub = document.querySelector('[data-pa-scrub]');
+  const reads = {
+    vb: () => stage.getAttribute('viewBox'),
+    line: () => line.textContent,
+    beat: () => scrub.getAttribute('aria-valuetext'),
+  };
+  const last = { vb: reads.vb(), line: reads.line(), beat: reads.beat() };
+  const watch = (el, kind, options) => new MutationObserver(() => {
+    const now = reads[kind]();
+    if (now === last[kind]) return;
+    last[kind] = now;
+    window.__events.push(kind);
+    if (kind === 'beat') setTimeout(() => { window.__stalls += 1; const end = performance.now() + stallMs; while (performance.now() < end); }, stallAt);
+  }).observe(el, options);
+  watch(stage, 'vb', { attributes: true, attributeFilter: ['viewBox'] });
+  watch(line, 'line', { childList: true, characterData: true, subtree: true });
+  watch(scrub, 'beat', { attributes: true, attributeFilter: ['aria-valuetext'] });
+};
+const STALL_AT_MS = 150;
+const STALL_MS = 250; // the camera's glide is 300 ms at 2x and the rest after it 30 ms: this holds its last frame past both
+
+test('while playing, a beat starts, then the camera moves, then (only once it has stopped) the caption changes, and the camera does not move again until the next beat starts (2x, a page that stalls)', async (t) => {
+  if (await skipUnlessBrowser(t)) return;
+  const { page, problems, context } = await openPage(built('story').url);
+  await page.evaluate(OBSERVE_ORDER, { stallAt: STALL_AT_MS, stallMs: STALL_MS });
+  await page.keyboard.press('p');
+  await page.click('[data-pa-speed]');
+  await page.click('[data-pa-speed]'); // 1.5x, then 2x
+  assert.equal(await page.textContent('[data-pa-speed]'), '2×');
+  await waitCount(page, '4 / 9');
+  await page.waitForFunction(() => window.__events.filter((e) => e === 'line').length >= 4, null, { timeout: 10000 }); // the caption of beat 4 lands after its camera
+  const events = await page.evaluate(() => window.__events);
+  const stalls = await page.evaluate(() => window.__stalls);
+  await page.keyboard.press('Space');
+  assert.ok(stalls >= 3, `the page stalled ${stalls} times (once per beat started after the first)`);
+  const lines = events.map((e, i) => (e === 'line' ? i : -1)).filter((i) => i >= 0).slice(1); // the first caption is the opening one
+  assert.ok(lines.length >= 3, `saw ${lines.length} caption changes after the first`);
+  for (const i of lines) {
+    const start = events.lastIndexOf('beat', i);
+    assert.ok(start >= 0, 'a beat started before its caption changed');
+    assert.ok(events.slice(start, i).includes('vb'), `the camera moved for this beat before its caption (${events.join(' ')})`);
+    const next = events.indexOf('beat', i);
+    const after = events.slice(i, next < 0 ? undefined : next);
+    assert.equal(after.includes('vb'), false, `the camera moved again after the caption changed, before the next beat (${events.join(' ')})`);
+  }
+  assert.deepEqual(problems, []);
+  await context.close();
+});

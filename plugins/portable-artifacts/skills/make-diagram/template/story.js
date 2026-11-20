@@ -3,20 +3,27 @@
 // edge and lights the edge; a focus beat fits and lights its ids (a group
 // lights its members); everything else dims. A step beat (from the older
 // steps[] form) reveals what it shows and hides the rest, as before, with no
-// dimming. Playing runs each beat as glide (450 ms for a story beat, the
-// camera's own glide for a step beat), then (a hop, motion allowed) the dot,
-// then a hold, and moves on; every duration divides by the speed; reduced
-// motion drops the dot and the glide. Registered as PADiagram.story and
-// composed by viewer.js.
+// dimming. Playing runs each beat as glide (GLIDE_MS, ease in-out), a short
+// rest, then (a hop, motion allowed) the dot, then a hold, and moves on; every
+// duration divides by the speed. While playing, the caption waits for the
+// camera: it changes at the end of the rest, not when the beat starts, and never
+// before the camera reports it has landed (camera.whenStill: a late frame
+// delays the caption, it does not let the caption pass the camera). A step
+// by hand, a pause and reduced motion paint it at once. Reduced motion drops
+// the glide, the rest and the dot: the beat applies at once and the hold is
+// the only timer. Registered as PADiagram.story and composed by viewer.js.
 //
-//   var story = PADiagram.story(stage, svg, data, els, camera, { onStep });
+//   var story = PADiagram.story(stage, svg, data, els, camera, { onStep, onSettle });
 //
 // onStep runs after every change of beat or mode, before the camera moves.
+// onSettle runs when a waiting caption catches up (shown() moved to the beat).
 (function (global) {
   'use strict';
   var PADiagram = global.PADiagram || (global.PADiagram = {});
 
-  var GLIDE_MS = 450; // the camera's glide to a story (hop or focus) beat
+  var GLIDE_MS = 600; // the camera's glide to a beat (story or step), ease in-out
+  var GLIDE_EASE = 'in-out'; // camera.moveTo's name for it: the camera eases in as well as out
+  var SETTLE_MS = 60; // the camera rests this long after it lands, then the caption changes and the dot sets off
   var DOT_MS = 900; // the dot along a hop's edge
   var HOLD_MS = 1800; // then the caption holds...
   var HOLD_PER_CHAR_MS = 30; // ...longer for a longer caption...
@@ -39,6 +46,7 @@
     var words = function (el, name) { var v = el.getAttribute(name); return v ? v.split(' ') : []; };
     var presenting = false;
     var stepIndex = 0;
+    var shownIndex = 0; // the beat whose caption is on screen: behind stepIndex while the camera is on its way (playing only)
     var playing = false;
     var speed = 1;
     var loop = !!data.autoplay; // a page that starts by itself keeps going
@@ -224,20 +232,22 @@
 
     // ---- moving between beats -----------------------------------------------------------------
     function targetOf(beat, seen) {
-      if (beat.kind === 'step') return framesEverything(beat) ? camera.fitCamera() : camera.cameraFor(stepFocusBox(beat, seen));
+      // a beat that frames everything shows the whole drawing, even where the opening view sits at the reading floor
+      if (beat.kind === 'step') return framesEverything(beat) ? camera.wholeCamera() : camera.cameraFor(stepFocusBox(beat, seen));
       // a hop also frames its own edge: a sequence message sits below its participants' headers
       return camera.cameraFor(camera.boxOf(beat.edge ? beat.ids.concat(beat.edge) : beat.ids));
     }
-    // A story beat glides GLIDE_MS; a step beat (the older steps[] form) keeps the camera's own pace.
-    function glideFor(beat) { return (beat.kind === 'step' ? camera.glideMs() : GLIDE_MS) / speed; }
-    // Show the beat: glide, then (a hop, motion allowed) the dot, then hold. While
-    // playing, the hold ends in the next beat, the first again on loop, or a pause.
-    function show(beat, seen) {
+    // Every beat, story or step, glides GLIDE_MS over the speed and then rests SETTLE_MS over the speed.
+    function glideMs() { return GLIDE_MS / speed; }
+    function settleMs() { return SETTLE_MS / speed; }
+    // Show the beat: glide, rest, then the caption catches up if it was waiting, then (a hop, motion
+    // allowed) the dot, then hold. Under reduced motion the camera jumps and nothing waits: the hold is
+    // the only timer. While playing, the hold ends in the next beat, the first again on loop, or a pause.
+    function show(beat, seen, waiting) {
       var token = run;
       var instant = camera.reduced();
-      var glide = glideFor(beat);
       camera.unfit();
-      camera.moveTo(targetOf(beat, seen), { ms: glide });
+      camera.moveTo(targetOf(beat, seen), { ms: glideMs(), ease: GLIDE_EASE });
       var hold = function () {
         if (token !== run) return; // a dot frame that outlived its run
         var ms = holdMs(beat);
@@ -251,8 +261,20 @@
         // only a hold armed while playing is reported: one armed while paused never moves on
         if (playing) { inHold = true; if (hooks.onHold) hooks.onHold(ms); }
       };
-      later(token, instant ? 0 : glide, function () {
+      var settled = function () {
+        if (waiting) { shownIndex = stepIndex; if (hooks.onSettle) hooks.onSettle(); }
         if (beat.kind === 'hop' && !instant) travel(beat, DOT_MS / speed, hold); else hold();
+      };
+      if (instant) { settled(); return; }
+      // The glide timer is a floor, not the signal: a frame that comes late (a busy page) leaves the camera
+      // moving when it fires. The camera says when it has landed (whenStill); a camera still on its way then
+      // gets its own rest after the landing, so the caption never changes under a moving camera.
+      later(token, glideMs() + settleMs(), function () {
+        var late = camera.moving();
+        camera.whenStill(function () {
+          if (token !== run) return; // another beat, a pause or an exit took over while the camera was on its way
+          if (late) later(token, settleMs(), settled); else settled();
+        });
       });
     }
     // onStep runs before the beat paints: the trace (off in Play) drops its own
@@ -264,11 +286,14 @@
       stepIndex = clamp(Math.round(finite(i, 0)), 0, beats.length - 1);
       stage.classList.add('pa-presenting');
       var beat = beats[stepIndex];
+      // Playing, the caption waits for the camera; a step by hand, a pause and reduced motion paint it at once.
+      var waiting = playing && !camera.reduced() && stepIndex !== shownIndex;
+      if (!waiting) shownIndex = stepIndex;
       if (hooks.onStep) hooks.onStep();
       var seen = stepMode ? applyReveal() : null;
       seenNow = seen;
       if (!stepMode) light(beat);
-      show(beat, seen);
+      show(beat, seen, waiting);
     }
     function present(i) { goTo(i || 0); }
     function next() { if (presenting) goTo(stepIndex + 1); }
@@ -295,13 +320,14 @@
     function exit() {
       if (!presenting) return;
       cancelRun();
+      shownIndex = stepIndex;
       presenting = false;
       playing = false;
       stage.classList.remove('pa-presenting', 'pa-playing');
       clearReveal();
       unlight();
       if (hooks.onStep) hooks.onStep();
-      camera.fit();
+      camera.home(); // the readable opening view (Fit, the whole drawing, can be under the reading floor)
     }
     function togglePresent() { if (presenting) exit(); else present(0); }
     // A resize reframes the beat where it stands: the camera glides to the beat's
@@ -312,7 +338,7 @@
     function reframe() {
       if (!presenting) return;
       camera.unfit();
-      camera.moveTo(targetOf(beats[stepIndex], seenNow), { ms: glideFor(beats[stepIndex]) });
+      camera.moveTo(targetOf(beats[stepIndex], seenNow), { ms: glideMs(), ease: GLIDE_EASE });
     }
 
     // ---- play, pause, speed, loop ---------------------------------------------------------------
@@ -325,6 +351,7 @@
     function pause() {
       if (!playing) return;
       cancelRun();
+      shownIndex = stepIndex; // a caption that was waiting for the camera lands where the chips already are
       playing = false;
       stage.classList.remove('pa-playing');
       if (hooks.onStep) hooks.onStep();
@@ -342,6 +369,8 @@
       count: function () { return beats.length; },
       current: function () { return beats[stepIndex] || null; },
       chapter: function () { return chapterAt(stepIndex); },
+      shown: function () { return shownIndex; },
+      chapterShown: function () { return chapterAt(shownIndex); },
       isPlaying: function () { return playing; },
       speed: function () { return speed; },
       loop: function () { return loop; },

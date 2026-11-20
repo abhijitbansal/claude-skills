@@ -24,7 +24,9 @@ export function problems(section, themes = listThemes()) {
   return out;
 }
 
-for (const skill of ['make-explainer', 'make-motion']) {
+// make-motion is not in this list: a version 2 film has a look, not a theme (its Intake names the looks, and a test in
+// intake.test.mjs holds them to the registry).
+for (const skill of ['make-explainer']) {
   const md = fs.readFileSync(path.join(SKILLS, skill, 'SKILL.md'), 'utf8');
   test(`${skill}/SKILL.md has a "${HEADING}" section naming only real themes, with dusk as the fallback`, () => {
     const section = guidanceSection(md);
@@ -33,6 +35,13 @@ for (const skill of ['make-explainer', 'make-motion']) {
     for (const t of ['dusk', 'press', 'poster']) assert.ok(themeLikeNames(section).includes(t), `${t} not named`);
   });
 }
+
+test('make-motion/SKILL.md has no theme guidance: a film is drawn in a look, and --theme is not a flag of version 2', () => {
+  const md = fs.readFileSync(path.join(SKILLS, 'make-motion/SKILL.md'), 'utf8');
+  assert.equal(guidanceSection(md), null);
+  assert.ok(!md.includes('--theme'));
+  assert.ok(!/\bthemes\b/i.test(md), 'no list of themes');
+});
 
 test('guardrail: a bogus theme name or a missing dusk fallback is caught', () => {
   const md = fs.readFileSync(path.join(SKILLS, 'make-explainer/SKILL.md'), 'utf8');

@@ -17,7 +17,7 @@ Shape matches the existing entries: hhea ascender/descender/lineGap, unitsPerEm,
 and `fallback` = mean advance of the ASCII letters, rounded to 2 decimals.
 
 `--every-glyph` widens `advance` to every printable codepoint the font maps (not U+0000-001F or U+007F-009F), for a
-subset font whose repertoire is not Latin-1: bin/vendor-sketch-assets.mjs uses it on Caveat's Latin subset, which holds
+subset font whose repertoire is not Latin-1: version 1's bin/vendor-sketch-assets.mjs (deleted at cut-over) used it on Caveat's Latin subset, which holds
 curly quotes, dashes, the euro and the trademark sign. Without it, only U+0020-007E and U+00A0-00FF are written.
 """
 import argparse

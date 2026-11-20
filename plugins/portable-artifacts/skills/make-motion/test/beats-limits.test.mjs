@@ -1,14 +1,13 @@
-// The beat detector's documented limits (references/schema.md, "Known limits") and the flags that fix them, measured on
+// The beat detector's documented limits (SKILL.md, the beats step) and the flags that fix them, measured on
 // the third review's own audio (test/helpers/beat-grooves.mjs) and on the helper synthesis (test/helpers/beat-signals.mjs).
 // The tempo estimator is not tuned here: these tests pin where each limit is and that its documented fix works.
 import { test } from 'node:test';
-import { readSchema } from './helpers/schema-docs.mjs';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { detectBeats } from '../scripts/lib/beats.mjs';
-import { mulberry32 } from '../template/seeded.mjs';
+import { mulberry32 } from '../engine/seeded.mjs';
 import { groove, kickOneAndThree } from './helpers/beat-grooves.mjs';
 import { SR, synth, grid, bar } from './helpers/beat-signals.mjs';
 
@@ -115,10 +114,9 @@ test('narration-like syllables can pass the default gate, and --min-confidence 0
   assert.ok(Math.max(...confidences) < 0.6, `the fix works: highest ${Math.max(...confidences).toFixed(3)}`);
 });
 
-test('schema.md and SKILL.md name every known limit with the flag that fixes it', () => {
-  const schema = readSchema(root);
+test('SKILL.md names every known limit with the flag that fixes it', () => {
   const skill = readFileSync(path.join(root, 'SKILL.md'), 'utf8');
-  for (const [name, text] of [['schema.md', schema], ['SKILL.md', skill]]) {
+  for (const [name, text] of [['SKILL.md', skill]]) {
     for (const words of ['bossa', 'polka', '2/3', 'from about 115', '6/8', 'below 60', 'swing', 'ritardando', 'narration', 'heavy noise', '0.8 to 1.25 times', '--min-confidence 0.6', '--bpm', '--min-bpm', '--max-bpm']) {
       assert.ok(text.includes(words), `${name} names: ${words}`);
     }

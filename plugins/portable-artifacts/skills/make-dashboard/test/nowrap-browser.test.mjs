@@ -70,7 +70,8 @@ const rowFill = (page) => page.evaluate(() => {
   return { wide: grid.querySelectorAll('.kpi-wide').length, rows: [...rows.values()].map((r) => (r.right - r.left) / g.width) };
 });
 
-for (const theme of [undefined, 'dusk']) {
+// The numeral is set in the display face, so the widest display faces (press's serif, mono) are probed too.
+for (const theme of [undefined, 'dusk', 'press', 'mono']) {
   for (const width of [1280, 390]) {
     test(`KPI values stay on one line, fit their tile and leave no hole in the row at ${width}px (${theme ?? 'paper'})`, async (t) => {
       if (!(await haveBrowser())) return t.skip('no browser');

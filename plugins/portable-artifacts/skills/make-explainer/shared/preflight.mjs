@@ -1,5 +1,5 @@
 // Entry-script preflight. Node built-ins and sibling shared files only: it must run before the skill's node_modules
-// exists. An entry script that statically imports a validator (which imports ajv) dies at link time with a raw
+// exists (or while it is only partly there). An entry script that statically imports a validator (which imports ajv) dies at link time with a raw
 // ERR_MODULE_NOT_FOUND stack and exit 1; calling this first and importing the heavy modules afterwards turns that into
 // one line that names the doctor command, exit 2.
 //
@@ -20,15 +20,30 @@ export function doctorCommand(skillRoot) {
   return `node ${quoteArg(path.join(skillRoot, 'scripts', 'doctor.mjs'))} --fix node_modules`;
 }
 
+// The names under "dependencies" in the skill's package.json that have no folder with a package.json in its node_modules.
+// A skill whose package.json cannot be read lists none: the folder check alone is what remains.
+function missingPackages(skillRoot, exists) {
+  let names;
+  try {
+    names = Object.keys(JSON.parse(fs.readFileSync(path.join(skillRoot, 'package.json'), 'utf8')).dependencies ?? {});
+  } catch {
+    return [];
+  }
+  return names.filter((name) => !exists(path.join(skillRoot, 'node_modules', name, 'package.json')));
+}
+
 /**
- * true when the skill's node_modules is there. Otherwise prints one line (JSON on stdout under --json, text on
- * stderr), sets exitCode 2 and returns false.
+ * true when the skill's node_modules is there and holds every package the skill's package.json lists under
+ * "dependencies" (a folder alone is not enough: an aborted npm ci leaves a partial one). Otherwise prints one line (JSON
+ * on stdout under --json, text on stderr), sets exitCode 2 and returns false.
  * Options (tests): argv, scriptPath (default process.argv[1]), exists, warn (default warnIfStaleCopy).
  */
 export function preflight(skillRoot, { argv = process.argv.slice(2), scriptPath = process.argv[1], exists = fs.existsSync, warn = warnIfStaleCopy } = {}) {
   warn(scriptPath);
-  if (exists(path.join(skillRoot, 'node_modules'))) return true;
-  const message = `dependencies are not installed (no node_modules in ${skillRoot}); run: ${doctorCommand(skillRoot)}`;
-  exitUsage(new Error(message), { json: argv.includes('--json') });
+  const present = exists(path.join(skillRoot, 'node_modules'));
+  const missing = present ? missingPackages(skillRoot, exists) : [];
+  if (present && missing.length === 0) return true;
+  const what = present ? `node_modules in ${skillRoot} lacks ${missing.join(', ')}` : `no node_modules in ${skillRoot}`;
+  exitUsage(new Error(`dependencies are not installed (${what}); run: ${doctorCommand(skillRoot)}`), { json: argv.includes('--json') });
   return false;
 }

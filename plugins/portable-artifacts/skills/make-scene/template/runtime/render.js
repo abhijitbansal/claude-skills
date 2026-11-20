@@ -7,6 +7,7 @@ import {
   RingGeometry, SphereGeometry, TubeGeometry, Vector3,
 } from 'three';
 import { resolveColour } from './colour.js';
+import { EDGE, FRESNEL, LIGHT_SETS, MATERIAL_ROLES, POOL, SKY_SPACE, WATER_DARK_LEVEL, contactFootings, contactStyle, fogRange, lightDirections, lightSetName, poolStyle } from './look.js';
 import { createTravel } from './travel.js';
 
 const UPSAMPLE = 5; // terrain: data cells sit every 5th vertex (Task 5 convention)
@@ -14,15 +15,12 @@ const STAR_COUNT = 700;
 const SPACE_BASE = '#04050c';
 const SPACE_PAGE_SHARE = 0.06; // a whisper of the theme so space is not a flat void
 const STAR_COLOUR = '#f4f1ff';
-const MOON_COLOUR = '#8fa6e8';
 const WATER_BASE = { base: '#2f6fb0', tint: 'cat5', share: 0.3 };
-const SUN_COLOUR = { base: '#fff4e0', tint: 'page', share: 0.12 };
 const EMISSIVE_STRENGTH = 1.6;
-const SELF_LIT_STRENGTH = 0.9;
+const SELF_LIT_STRENGTH = 0.5; // a self-lit body keeps a lit side and a shaded side: the glow only lifts it
 const SWAY_AMPLITUDE = 0.06; // fraction of a leaf cluster's width
 const WINDOW_CELL = 0.36; // world units per window cell, before fitting to the wall
 const NO_ROTATION = new Quaternion();
-const SKY_SPACE = 'space';
 const PICK_TUBE_FACTOR = 4; // hover radius of a thin link, in link radii...
 const PICK_TUBE_MARGIN_CAP = 0.25; // ...but never more than this far (world units) beyond the drawn tube: a 0.55 donut segment must not swallow its hole
 const PICK_TUBE_MIN_SHARE = 0.004; // ...and at least this share of the scene's diagonal
@@ -31,8 +29,7 @@ const LIGHT_MIN_RADIUS = 0.16; // the travelling light: a sphere this big (or a 
 const LIGHT_DIAG_SHARE = 0.005;
 const LIGHT_HALO = 2.4; // ...inside a soft halo this many times wider
 const LIGHT_HALO_OPACITY = 0.3;
-const FOG_NEAR_FACTOR = 1.4; // fog starts and ends this many fitted camera distances away
-const FOG_FAR_FACTOR = 4.5;
+const CONTACT_LIFT = 0.012; // a contact disc floats this far above the surface it lights, so the two never fight over a pixel
 const GROUND_REACH = 1.5; // the ground disc reaches this far past the scene's half-diagonal (plus GROUND_EXTRA)...
 const GROUND_EXTRA = 2;
 const GROUND_FADE_START = 0.5; // ...and is fully solid out to this share of its radius, fading to nothing at the rim
@@ -72,21 +69,30 @@ const SHAPES = {
 };
 const Y_AXIS = new Vector3(0, 1, 0);
 
+// A mesh of one instance. The look patch compiles one program for instanced meshes and another for the rest, and the first-draw
+// cost of a page is mostly shader compile, so everything lit that is not a ground is instanced, even a lone tube.
+function singleInstance(geometry, material, matrix = new Matrix4()) {
+  const mesh = new InstancedMesh(geometry, material, 1);
+  mesh.setMatrixAt(0, matrix);
+  mesh.frustumCulled = false;
+  return mesh;
+}
+
 // A cone whose tip sits on `tip` and which points away from `from` (the route's neighbouring point), sharing the tube's material.
 function addArrowhead(root, track, material, tip, from, radius) {
   const dir = new Vector3(tip[0] - from[0], tip[1] - from[1], tip[2] - from[2]);
   if (dir.lengthSq() === 0) return;
   dir.normalize();
   const length = radius * ARROW_LENGTH;
-  const cone = new Mesh(track(new ConeGeometry(0.5, 1, ARROW_SEGMENTS)), material);
-  cone.scale.set(radius * ARROW_WIDTH, length, radius * ARROW_WIDTH);
-  cone.quaternion.setFromUnitVectors(Y_AXIS, dir);
-  cone.position.set(tip[0], tip[1], tip[2]).addScaledVector(dir, -length / 2);
-  root.add(cone);
+  const position = new Vector3(tip[0], tip[1], tip[2]).addScaledVector(dir, -length / 2);
+  const rotation = new Quaternion().setFromUnitVectors(Y_AXIS, dir);
+  const scale = new Vector3(radius * ARROW_WIDTH, length, radius * ARROW_WIDTH);
+  root.add(singleInstance(track(new ConeGeometry(0.5, 1, ARROW_SEGMENTS)), material, new Matrix4().compose(position, rotation, scale)));
 }
 
 // A flat disc that dissolves at its rim: alpha falls from 1 to 0 between `start` (a share of `radius`) and the rim.
-// The disc is never rotated, so its local xz is its distance from the centre.
+// The disc is never rotated, so its local xz is its distance from the centre. For the contact discs, which stay on a basic
+// material: a lit instanced program for them costs more to compile than this one.
 function patchEdgeFade(material, radius, start) {
   material.transparent = true;
   material.depthWrite = false;
@@ -143,11 +149,112 @@ function patchWindows(material, density) {
   };
 }
 
-function lightingFor(env, isDark) {
-  if (env.sky === SKY_SPACE) return { sun: 2.4, hemi: 0.75, moon: false };
-  if (isDark && env.nightLights) return { sun: 0.5, hemi: 0.6, moon: true };
-  if (isDark) return { sun: 1.4, hemi: 0.8, moon: false };
-  return { sun: 2.6, hemi: 1.3, moon: false };
+// One patch for every lit material, so a scene compiles to as few programs as it did before the look work: two (one for instanced
+// meshes, one for the rest), three with lit windows. The first-draw cost of a page is mostly shader compile, about 50 to 70 ms
+// per program on software WebGL, and a program of its own for each look feature (the edge band, the fresnel rim, the pool of
+// light) was most of the slowdown of opening a page. Every feature is a uniform that is off for a material that does not use
+// it, and a uniform branch skips it. `instanced` is whether the mesh is an InstancedMesh: only then does the shader read
+// `instanceMatrix` (three's program cache keys on it, so the two kinds never share text).
+//
+// Edge band (look.kind 'edge', instanced boxes): a band of the rim colour along the edges that make the box's outline, `width`
+// wide (never more than EDGE.maxShare of the box's own smallest side), `strength` bright. An edge is on the outline when the
+// face across it turns away from the camera (a lit crescent a light behind the box would leave); the edge between two faces the
+// camera sees, and the one the box stands on, are not. No dynamic indexing: it compiles much slower than selects.
+//
+// Fresnel rim (look.kind 'fresnel'): the rim colour towards the silhouette, `(1 - facing) ^ power` times `strength`.
+//
+// Fade (look.fade = { radius, start }): a flat disc that dissolves at its rim, alpha falling from 1 to 0 between `start` (a
+// share of `radius`) and the rim. The disc is never rotated, so its local xz is its distance from the centre.
+//
+// Unlit (look.unlit): the material's own colour, as a MeshBasicMaterial draws it: no lights, no fog, and the shader leaves main()
+// before the lighting runs, so it costs a pixel no more than a basic one. The pool of light under the masses is drawn this way,
+// so it shares the ground's program instead of compiling a basic one.
+//
+// The rim and the edge add to the lit colour after the lights, so the patch chains after any other patch on the material (the windows).
+const EDGE_VARYINGS = 'varying vec3 vEdgeQ;\nvarying vec3 vEdgeS;\nvarying vec3 vEdgeN;\nvarying vec3 vEdgeAx0;\nvarying vec3 vEdgeAx1;\nvarying vec3 vEdgeAx2;';
+const EDGE_VERTEX = `
+        vEdgeS = vec3(length(instanceMatrix[0].xyz), length(instanceMatrix[1].xyz), length(instanceMatrix[2].xyz));
+        vEdgeQ = position * vEdgeS;
+        vEdgeN = normal;
+        mat4 edgeView = modelViewMatrix * instanceMatrix;
+        vEdgeAx0 = normalize(edgeView[0].xyz);
+        vEdgeAx1 = normalize(edgeView[1].xyz);
+        vEdgeAx2 = normalize(edgeView[2].xyz);`;
+const EDGE_FRAGMENT = `
+        if (uEdgeStrength > 0.0) {
+          vec3 an = abs(vEdgeN);
+          vec3 inset = 0.5 * vEdgeS - abs(vEdgeQ);
+          bool onX = an.x > 0.5;
+          bool onY = !onX && an.y > 0.5;
+          vec2 pair = onX ? inset.yz : (onY ? inset.xz : inset.xy);
+          vec2 qPair = onX ? vEdgeQ.yz : (onY ? vEdgeQ.xz : vEdgeQ.xy);
+          bool firstNearer = pair.x < pair.y;
+          float nearest = firstNearer ? pair.x : pair.y;
+          float sgn = (firstNearer ? qPair.x : qPair.y) >= 0.0 ? 1.0 : -1.0;
+          vec3 axis = firstNearer ? (onX ? vEdgeAx1 : vEdgeAx0) : ((onX || onY) ? vEdgeAx2 : vEdgeAx1);
+          float outline = 1.0 - smoothstep(-0.05, 0.15, dot(sgn * axis, normalize(vViewPosition)));
+          bool acrossY = firstNearer ? onX : !(onX || onY);
+          outline *= (acrossY && sgn < 0.0) ? 0.0 : 1.0;
+          float side = min(vEdgeS.x, min(vEdgeS.y, vEdgeS.z));
+          float width = min(uEdgeWidth, ${EDGE.maxShare.toFixed(2)} * side);
+          outgoingLight += uRimColour * uEdgeStrength * outline * step(${EDGE.minSide.toFixed(2)}, side) * (1.0 - smoothstep(0.0, width, nearest));
+        }`;
+const FADE_ALPHA = 'if (uFadeRadius > 0.0) gl_FragColor.a *= 1.0 - smoothstep(uFadeStart, 1.0, length(vFadeXZ) / uFadeRadius);';
+
+/** `source` with `after` put behind `token`, and `before` in front of it; throws when three's shader has no such chunk (a three upgrade). */
+function inject(source, token, after, before = '') {
+  if (!source.includes(token)) throw new Error(`make-scene: ${token} is not in three's shader; update patchLook in render.js`);
+  return source.replace(token, () => `${before}${token}${after ?? ''}`);
+}
+
+function patchLook(material, look = {}, instanced = false) {
+  const { kind = null, fade = null, unlit = false } = look;
+  const isEdge = kind === 'edge';
+  const previous = material.onBeforeCompile;
+  if (fade) {
+    material.transparent = true;
+    material.depthWrite = false;
+  }
+  material.onBeforeCompile = (shader, renderer) => {
+    previous?.call(material, shader, renderer);
+    shader.uniforms.uRimColour = { value: look.colour ?? new Color() };
+    shader.uniforms.uFresnelStrength = kind === 'fresnel' ? look.strength : { value: 0 };
+    shader.uniforms.uFresnelPower = { value: look.power ?? FRESNEL.power };
+    shader.uniforms.uFadeRadius = { value: fade?.radius ?? 0 };
+    shader.uniforms.uFadeStart = { value: fade?.start ?? 0 };
+    shader.uniforms.uUnlit = { value: unlit ? 1 : 0 };
+    if (instanced) {
+      shader.uniforms.uEdgeStrength = isEdge ? look.strength : { value: 0 };
+      shader.uniforms.uEdgeWidth = isEdge ? look.width : { value: 1 };
+    }
+    shader.vertexShader = inject(inject(shader.vertexShader,
+      '#include <common>', `\nvarying vec2 vFadeXZ;\n${instanced ? EDGE_VARYINGS : ''}`),
+    '#include <begin_vertex>', `\nvFadeXZ = position.xz;${instanced ? EDGE_VERTEX : ''}`);
+    shader.fragmentShader = inject(inject(inject(inject(shader.fragmentShader,
+      '#include <common>', `\nuniform vec3 uRimColour;\nuniform float uFresnelStrength;\nuniform float uFresnelPower;\nuniform float uFadeRadius;\nuniform float uFadeStart;\nuniform float uUnlit;\nvarying vec2 vFadeXZ;\n${instanced ? `uniform float uEdgeStrength;\nuniform float uEdgeWidth;\n${EDGE_VARYINGS}` : ''}`),
+    // An unlit material has its colour by here: it leaves main() before the lights, as a basic material would, with no fog.
+    '#include <roughnessmap_fragment>', null, `if (uUnlit > 0.5) {
+          gl_FragColor = vec4(diffuseColor.rgb, diffuseColor.a);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          ${FADE_ALPHA}
+          return;
+        }
+        `),
+    '#include <opaque_fragment>', null, `${instanced ? EDGE_FRAGMENT : ''}
+        if (uFresnelStrength > 0.0) outgoingLight += uRimColour * uFresnelStrength * pow(1.0 - clamp(dot(normalize(normal), normalize(vViewPosition)), 0.0, 1.0), uFresnelPower);
+        `),
+    '#include <dithering_fragment>', `\n${FADE_ALPHA}`);
+  };
+  // Every look patch wraps the same text (per instanced or not), so give them one key: three would otherwise key on the function's source.
+  material.customProgramCacheKey = () => `look${fade ? '+fade' : ''}${material.userData.windowDensity ? '+windows' : ''}`;
+}
+
+/** A standard material for one of look.js's roles (the role is kept on userData so a test can read it back). */
+function roleMaterial(role, params = {}) {
+  const material = new MeshStandardMaterial({ ...MATERIAL_ROLES[role], ...params });
+  material.userData.role = role;
+  return material;
 }
 
 function boundsInfo(bounds) {
@@ -181,6 +288,7 @@ export function buildObjects(graph, palette) {
   const root = new Group();
   const pickables = [];
   const tints = []; // (palette) => void; every retintable thing registers one
+  const rimmed = []; // { colour, strength, level } of every material with an edge band or a fresnel rim: lit in dark sets only
   const disposables = [];
   const animators = [];
   const tubeCurves = new Map(); // tube id -> the curve the tube is drawn along (the travelling light rides it)
@@ -202,41 +310,106 @@ export function buildObjects(graph, palette) {
   const fog = env.fog && env.sky !== SKY_SPACE ? new Fog(0xffffff, 1, 2) : null;
   function setFit(distance) {
     if (!fog) return;
-    fog.near = distance * FOG_NEAR_FACTOR;
-    fog.far = distance * FOG_FAR_FACTOR;
+    Object.assign(fog, fogRange(distance, extent.diag));
   }
   // Until the caller reports the camera it really fits, follow the camera the graph asks for.
   setFit(Math.max(1, Math.hypot(...graph.camera.position.map((c, i) => c - graph.camera.target[i]))));
 
-  // Lights
+  // Lights: a key (sun or moon), a fill (the hemisphere) and a rim from behind that is only lit at night. Numbers: look.js.
   const hemi = new HemisphereLight(0xffffff, 0x888888, 1);
   const sun = new DirectionalLight(0xffffff, 1);
-  sun.position.copy(extent.center).add(new Vector3(0.55, 1, 0.4).multiplyScalar(extent.diag));
+  const rim = new DirectionalLight(0xffffff, 0);
+  const ambient = new AmbientLight(0xffffff, 0);
+  hemi.name = 'fill';
+  sun.name = 'key';
+  rim.name = 'rim';
   sun.target.position.copy(extent.center);
-  root.add(hemi, sun, sun.target, new AmbientLight(0xffffff, 0.12));
+  rim.target.position.copy(extent.center);
+  // The key and the rim stand relative to the camera that looks at the scene (look.js), so what a viewer sees is lit the same
+  // way in every world. Until the caller reports the camera it really has, follow the one the graph asks for.
+  function aim(cameraPosition) {
+    const dirs = lightDirections(cameraPosition.map((c, i) => c - graph.camera.target[i]));
+    sun.position.copy(extent.center).add(new Vector3(...dirs.key).multiplyScalar(extent.diag));
+    rim.position.copy(extent.center).add(new Vector3(...dirs.rim).multiplyScalar(extent.diag));
+  }
+  aim(graph.camera.position);
+  root.add(hemi, sun, sun.target, rim, rim.target, ambient);
+  // A material that edges its silhouette: the box's edge band, or a curved surface's fresnel rim (patchLook).
+  const rimFor = (material, level, extra = {}) => {
+    const entry = { colour: new Color(), strength: { value: 0 }, level, ...extra };
+    rimmed.push(entry);
+    material.userData.rim = entry;
+    return entry;
+  };
+  const fresnelRim = (material, { power = FRESNEL.power, instanced = false } = {}) => patchLook(material, rimFor(material, FRESNEL.strength, { kind: 'fresnel', power }), instanced);
   tints.push((p) => {
-    const light = lightingFor(env, p.dark);
+    const set = LIGHT_SETS[lightSetName(env, p.dark)].rim;
+    for (const entry of rimmed) {
+      entry.strength.value = set ? entry.level : 0;
+      if (set) entry.colour.copy(colourOf(set.colour));
+    }
+  });
+  tints.push((p) => {
+    const light = LIGHT_SETS[lightSetName(env, p.dark)];
     const page = colourOf('page');
     const surface = colourOf('surface');
     sceneBackground.copy(env.sky === SKY_SPACE ? colourOf({ base: SPACE_BASE, tint: 'page', share: SPACE_PAGE_SHARE }) : page);
-    hemi.color.copy(page).lerp(new Color(0xffffff), env.sky === SKY_SPACE ? 0.7 : 0.55);
+    hemi.color.copy(page).lerp(new Color(0xffffff), light.skyWhite);
     hemi.groundColor.copy(surface).multiplyScalar(0.55);
-    hemi.intensity = light.hemi;
-    sun.color.copy(light.moon ? new Color(MOON_COLOUR) : colourOf(SUN_COLOUR));
-    sun.intensity = light.sun;
+    hemi.intensity = light.fill;
+    sun.color.copy(colourOf(light.keyColour));
+    sun.intensity = light.key;
+    ambient.intensity = light.ambient;
+    rim.intensity = light.rim?.intensity ?? 0;
+    if (light.rim) rim.color.copy(colourOf(light.rim.colour));
     if (fog) fog.color.copy(sceneBackground);
   });
 
   // Ground: a disc well past the scene, solid under it and dissolving into the page at its rim, so no edge is ever framed.
   if (env.ground) {
     const radius = (Math.hypot(extent.size.x, extent.size.z) / 2) * GROUND_REACH + GROUND_EXTRA;
-    const material = track(new MeshStandardMaterial({ roughness: 1, metalness: 0 }));
-    patchEdgeFade(material, radius, GROUND_FADE_START);
+    const material = track(roleMaterial('ground'));
+    patchLook(material, { fade: { radius, start: GROUND_FADE_START } });
     const ground = new Mesh(track(new CircleGeometry(radius, 72).rotateX(-Math.PI / 2)), material);
     ground.position.set(extent.center.x, Math.min(0, graph.bounds.min[1]) - 0.01, extent.center.z);
     ground.renderOrder = -1;
     root.add(ground);
     tints.push(() => ground.material.color.copy(colourOf(env.ground)));
+
+    // The contact pool: a soft disc under the masses (lighter than the page in light mode, darker in dark mode). Unlit, in the
+    // ground's own program, and not drawn at all while it has no opacity (a forest at night).
+    const footprint = Math.hypot(extent.size.x, extent.size.z) / 2;
+    const pool = new Mesh(track(new CircleGeometry(footprint * POOL.reach + GROUND_EXTRA, 72).rotateX(-Math.PI / 2)), track(roleMaterial('ground')));
+    patchLook(pool.material, { fade: { radius: footprint * POOL.reach + GROUND_EXTRA, start: 0 }, unlit: true });
+    pool.name = 'pool';
+    pool.position.set(extent.center.x, ground.position.y + 0.005, extent.center.z);
+    pool.renderOrder = -0.5;
+    root.add(pool);
+    tints.push((p) => {
+      const style = poolStyle(env, p.dark);
+      pool.material.color.copy(colourOf(style.colour));
+      pool.material.opacity = style.opacity;
+      pool.visible = style.opacity > 0;
+    });
+  }
+
+  // Contact glow of a lifted chart or diagram: a soft disc under each bar or node (look.js CONTACT).
+  const footings = contactFootings(graph);
+  if (footings.length > 0) {
+    const material = track(new MeshBasicMaterial({ fog: false }));
+    patchEdgeFade(material, 1, 0);
+    const discs = new InstancedMesh(track(new CircleGeometry(1, 40).rotateX(-Math.PI / 2)), material, footings.length);
+    track(discs);
+    footings.forEach((f, k) => discs.setMatrixAt(k, new Matrix4().compose(new Vector3(f.x, f.y + CONTACT_LIFT, f.z), NO_ROTATION, new Vector3(f.r, 1, f.r))));
+    discs.name = 'contact';
+    discs.renderOrder = -0.4;
+    discs.frustumCulled = false;
+    root.add(discs);
+    tints.push((p) => {
+      const style = contactStyle(p.dark);
+      material.color.copy(colourOf(style.colour));
+      material.opacity = style.opacity;
+    });
   }
 
   // Instanced batches
@@ -244,11 +417,17 @@ export function buildObjects(graph, palette) {
     const count = batch.instances.length;
     if (count === 0) continue;
     const isRing = batch.shape === 'ring';
+    const windows = Boolean(batch.emissive) && Boolean(env.nightLights) && batch.shape === 'box';
+    const selfLit = Boolean(batch.emissive) && !windows; // a star, a lit sphere: the body role (a smooth ball, no point highlight); a wall with windows is a mass
     const material = track(isRing
       ? new MeshBasicMaterial({ transparent: true, opacity: RING_OPACITY, side: DoubleSide, depthWrite: false, fog: false })
-      : new MeshStandardMaterial({ roughness: 0.82, metalness: 0.04, flatShading: Boolean(batch.flat) }));
-    const windows = Boolean(batch.emissive) && Boolean(env.nightLights) && batch.shape === 'box';
+      : roleMaterial(selfLit ? 'body' : 'mass', { flatShading: Boolean(batch.flat) }));
     if (windows) patchWindows(material, batch.emissive.density);
+    if (!isRing && batch.shape === 'box') {
+      patchLook(material, rimFor(material, EDGE.strength, { kind: 'edge', width: { value: Math.max(EDGE.minWidth, EDGE.widthShare * extent.diag) } }), true);
+    } else if (!isRing) {
+      fresnelRim(material, { instanced: true });
+    }
     const mesh = new InstancedMesh(geometryFor(batch.shape), material, count);
     mesh.frustumCulled = false; // animated and cheap: one batch is one draw call
     const matrix = new Matrix4();
@@ -317,9 +496,9 @@ export function buildObjects(graph, palette) {
     tubeCurves.set(tube.id, curve);
     const segments = Math.max(12, tube.points.length * 12);
     const geometry = new TubeGeometry(curve, segments, tube.radius, 8, false);
-    const material = new MeshStandardMaterial({ roughness: 0.6, metalness: 0.1 });
-    const mesh = new Mesh(track(geometry, material), material);
-    root.add(mesh);
+    const material = roleMaterial('accent');
+    fresnelRim(material, { instanced: true });
+    root.add(singleInstance(track(geometry, material), material));
     tints.push(() => material.color.copy(colourOf(tube.colour)));
     if (tube.arrow === 'end' || tube.arrow === 'both') {
       const last = tube.points.length - 1;
@@ -385,7 +564,8 @@ export function buildObjects(graph, palette) {
     geometry.setIndex(index);
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
-    const material = new MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0 });
+    const material = roleMaterial('ground', { vertexColors: true });
+    fresnelRim(material, { power: FRESNEL.groundPower }); // land is mostly seen from above: only its outline takes the rim
     const mesh = new Mesh(track(geometry, material), material);
     mesh.userData = { kind: 'surface', surface };
     root.add(mesh);
@@ -406,13 +586,13 @@ export function buildObjects(graph, palette) {
   if (env.water && lead) {
     const radius = (Math.hypot(lead.size[0], lead.size[1]) / 2) * WATER_REACH;
     // Solid over the seabed (so the terrain's flat margin never shows through), dissolving at its rim.
-    const material = track(new MeshStandardMaterial({ roughness: 0.2, metalness: 0.1 }));
-    patchEdgeFade(material, radius, WATER_FADE_START);
+    const material = track(roleMaterial('water'));
+    patchLook(material, { fade: { radius, start: WATER_FADE_START } });
     const water = new Mesh(track(new CircleGeometry(radius, 96).rotateX(-Math.PI / 2)), material);
     water.position.y = env.water.y * lead.size[2];
     water.renderOrder = -1;
     root.add(water);
-    tints.push(() => water.material.color.copy(colourOf(WATER_BASE)));
+    tints.push((p) => water.material.color.copy(colourOf(WATER_BASE)).multiplyScalar(p.dark ? WATER_DARK_LEVEL : 1));
   }
 
   // Stars: a seeded shell, so one graph always gives the same sky
@@ -481,6 +661,8 @@ export function buildObjects(graph, palette) {
     extent,
     /** The fitted camera distance: fog starts and ends relative to it. */
     setFit,
+    /** The camera position the viewer starts from: the key and the rim stand relative to it (look.js). */
+    aim,
     dispose() {
       for (const thing of disposables) thing.dispose();
       for (const mesh of pickables) if (mesh.isInstancedMesh) mesh.dispose();

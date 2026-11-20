@@ -7,13 +7,9 @@ ffmpeg -y -f lavfi -i testsrc=size=160x90:rate=10:duration=1 -c:v libx264 -crf 3
 ffmpeg -y -i demo.mp4 -frames:v 1 -ss 0.5 poster.png
 ```
 
-`motion.json` is hand-written (one text scene, 160x90).
+`motion.json` is a hand-written version 2 film (one statement shot). Its name stays from version 1, when it held a spec of one text scene.
 
-`../../references/examples/clip.mp4` (the motion slide in `slides.explainer.json`) is rendered by make-motion from `clip.motion.json` next to it, from `plugins/portable-artifacts/skills/make-explainer/references/examples`:
-
-```
-node ../../../make-motion/scripts/render.mjs clip.motion.json --out clip.mp4
-```
+`../../references/examples/clip.mp4` (the motion slide in `slides.explainer.json`) is a 480x270 clip rendered by make-motion 1.x (committed before the cut-over, 22 KB; a version 2 render of the same length is 1080p and 3.5 MB, so it was not replaced). `clip.motion.json` next to it is a valid version 2 film that tests keep valid; it is not what `clip.mp4` was rendered from.
 
 `../../references/examples/clip-poster.png` is the poster for that slide: a frame from `clip.mp4` taken after the fade-in (the first frame is black), with ffmpeg, from the same folder:
 

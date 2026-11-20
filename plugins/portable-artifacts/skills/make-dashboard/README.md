@@ -39,7 +39,7 @@ Replace `<skill-dir>` with the folder that holds this README. Run each line as o
 plain command with that literal path: no shell variable, no `&&` or `;` chains.
 
 ```bash
-npm ci --omit=dev --prefix <skill-dir>                  # one-time
+npm ci --ignore-scripts --omit=dev --prefix <skill-dir>                  # one-time
 node <skill-dir>/scripts/doctor.mjs                     # optional: what is missing, and how to fix it
 node <skill-dir>/scripts/inspect.mjs data/sales.csv     # columns, types, 5 sample rows, distinct/min/max/nulls
 # … write dashboard.json (or let your agent write it) …
@@ -97,13 +97,13 @@ there are working specs in [`references/examples/`](references/examples/).
 | `query.mjs <spec> --chart <id>` | Runs one chart's query as build does and prints its rows, so a title can state what they show | `--limit <n>` (default 20), `--json`, `--allow-outside`, `--timeout <s>` |
 | `build.mjs <spec>` | Runs the queries and writes `dist/index.html` (next to the spec). Prints the page's `file://` URL on its own line and the exact `serve:` command | `--out <dir>`, `--timeout <s>` (default 30), `--theme <name>`, `--model <m>`, `--effort <e>`, `--agent <a>`, `--allow-outside`, `--json` |
 | `check.mjs <dist>` | Opens the built page at 1280 and 390 px, light and dark; fails on console errors, chart errors, empty panes or horizontal scroll. Without a browser it prints `check: skipped` and exits 0, so a caller must read the output, not only the exit code: `--json` carries `"skipped": true`, and a skipped run is not a pass | `--shots <dir>` (one PNG per width and colour scheme: open them and look), `--json` |
-| `doctor.mjs` | What the skill needs and is missing, with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci`. Exit `0` when nothing required is missing, `1` when something is, `2` on a usage error | `--json`, `--for <check\|spec.json>`, `--fix <id[,id]>` |
+| `doctor.mjs` | What the skill needs and is missing, with the fix for your OS; `--fix <ids>` installs the ones that need no `sudo`. Runs before `npm ci --ignore-scripts`. Exit `0` when nothing required is missing, `1` when something is, `2` on a usage error | `--json`, `--for <check\|spec.json>`, `--fix <id[,id]>` |
 | `serve.mjs [dir]` | Serves the built page on `127.0.0.1`. `--open` warns instead of crashing when no opener exists; `PA_NO_BROWSER=1` never opens one | `--port <n>`, `--open` |
 | `serve.mjs --watch <spec>` | Builds, serves and live-reloads; rebuilds on save of the spec or file sources. Has a *Rebuild now* button. Postgres/MySQL need `--interval`. It never exits: run it in the background and stop it when done | `--interval <5..86400 s>`, `--theme <name>`, `--port`, `--open`, `--allow-outside`, `--timeout`, `--out <dir>` |
 | `setup.mjs [spec]` | One-time `INSTALL` of the DuckDB extensions for sqlite/postgres/mysql, so builds stay offline | — |
 
 Exit codes for every script: `0` OK, `1` spec errors, `2` usage or IO error. A script
-run before `npm ci` prints the doctor command to install the dependencies and exits `2`.
+run before `npm ci --ignore-scripts` prints the doctor command to install the dependencies and exits `2`.
 Errors name the JSON path and suggest the fix:
 
 ```

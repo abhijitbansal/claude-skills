@@ -1,5 +1,5 @@
 // The look in a real browser: the dark glow against the light thickness, the
-// tinted cards, the tile and emoji, a tone over a hue, the canvas, the lanes and
+// surface cards with their hue on the tile, the tile and emoji, a tone over a hue, the canvas, the lanes and
 // the legend. Screenshots land in the scratch dir: look at them.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -23,7 +23,7 @@ for (const colorScheme of ['light', 'dark']) {
     const { page, problems, context } = await openPage(built('story').url, { colorScheme });
     const plain = await styleOf(page, '.pa-edge[data-id="place"] .pa-wire', ['strokeWidth', 'filter', 'stroke']);
     assert.equal(plain.filter, 'none');
-    assert.equal(plain.stroke, await varColour(page, '--k-service'), 'app (client) -> gateway takes the service hue');
+    assert.equal(plain.stroke, await varColour(page, '--text-3'), 'a plain wire is the one quiet colour, not its family hue');
     await page.screenshot({ path: path.join(scratchDir(), `look-${colorScheme}.png`) });
     await enterPlay(page);
     for (let i = 0; i < 3; i++) await page.click('[data-pa-speed]'); // 0.5×: the dot shows for 2.4 s
@@ -53,14 +53,18 @@ for (const colorScheme of ['light', 'dark']) {
   });
 }
 
-test('cards: tinted by family, the tile inside the card and the emoji inside the tile, the type line in the hue, a tone over it, a mono note', async (t) => {
+test('cards: the surface with a hairline and a lift, the family hue on the tile and the type line, the emoji inside the tile, a tone over it, a mono note', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('story').url);
   const fill = async (id) => (await styleOf(page, `.pa-node[data-id="${id}"] .pa-shape`, ['fill'])).fill;
-  assert.notEqual(await fill('orders'), await fill('db'), 'service and data differ');
-  assert.notEqual(await fill('orders'), await varColour(page, '--surface'), 'a tint, not the bare surface');
-  assert.equal(await fill('orders'), await fill('gateway'), 'one family, one tint');
-  assert.notEqual((await styleOf(page, '.pa-node[data-id="orders"] .pa-tile', ['fill'])).fill, await fill('orders'), 'the tile is a stronger tint');
+  const tile = async (id) => (await styleOf(page, `.pa-node[data-id="${id}"] .pa-tile`, ['fill'])).fill;
+  const surface = await varColour(page, '--surface');
+  assert.equal(await fill('orders'), surface, 'the card is the plain surface');
+  assert.equal(await fill('db'), surface, 'every family card is the same surface');
+  assert.equal((await styleOf(page, '.pa-node[data-id="orders"] .pa-shape', ['stroke'])).stroke, await varColour(page, '--line'), 'a neutral hairline');
+  assert.match((await styleOf(page, '.pa-node[data-id="orders"] .pa-shape', ['filter'])).filter, /drop-shadow/, 'the card lifts');
+  assert.notEqual(await tile('orders'), await tile('db'), 'the tile carries the family: service and data differ');
+  assert.notEqual(await tile('orders'), surface, 'the tile is a tint of the hue');
   const inside = await page.evaluate(() => {
     const n = document.querySelector('.pa-node[data-id="orders"]');
     const box = (sel) => n.querySelector(sel).getBBox();
@@ -74,10 +78,11 @@ test('cards: tinted by family, the tile inside the card and the emoji inside the
   });
   assert.deepEqual(inside, { tileInShape: true, emojiInTile: true, typeInShape: true, typeText: 'SERVICE' });
   assert.equal((await styleOf(page, '.pa-node[data-id="orders"] .pa-type', ['fill'])).fill, await varColour(page, '--k-service'));
-  const warn = await varColour(page, '--warn');
-  assert.deepEqual(await styleOf(page, '.pa-node[data-id="warehouse"] .pa-shape', ['stroke', 'strokeWidth']), { stroke: warn, strokeWidth: '2px' }, 'the tone border wins over the external hue');
-  assert.equal((await styleOf(page, '.pa-node[data-id="warehouse"] .pa-type', ['fill'])).fill, await varColour(page, '--k-external'), 'a tone leaves the type line in the kind hue');
-  assert.equal((await styleOf(page, '.pa-edge[data-id="edge-5"] .pa-wire', ['stroke'])).stroke, await varColour(page, '--k-queue'), 'bus -> warehouse takes the queue hue');
+  // The example's external node is untoned (one external style): a dashed --text-3 outline, the kind hue on its type line.
+  // Tone over a card is covered by the twin-node tone tests below.
+  assert.deepEqual(await styleOf(page, '.pa-node[data-id="warehouse"] .pa-shape', ['stroke', 'strokeDasharray']), { stroke: await varColour(page, '--text-3'), strokeDasharray: '5px, 4px' }, 'external: a dashed --text-3 outline');
+  assert.equal((await styleOf(page, '.pa-node[data-id="warehouse"] .pa-type', ['fill'])).fill, await varColour(page, '--k-external'), 'the type line keeps the kind hue');
+  assert.equal((await styleOf(page, '.pa-edge[data-id="edge-5"] .pa-wire', ['stroke'])).stroke, await varColour(page, '--text-3'), 'bus -> warehouse is the quiet wire colour, not the queue hue');
   assert.match((await styleOf(page, '.pa-node[data-id="gateway"] .pa-note', ['fontFamily'])).fontFamily, /Mono/);
   assert.deepEqual(problems, []);
   await context.close();
@@ -118,7 +123,9 @@ test('the canvas is a dotted grid in light and a glow with faint lines in dark; 
   assert.equal(await light.page.locator('.pa-legend .pa-swatch').count(), 4);
   assert.equal(await light.page.locator('.pa-legend .pa-legend-sample').count(), 3);
   assert.equal(await light.page.locator('.pa-group[data-lane="0"] .pa-lane').count(), 1);
-  assert.equal((await styleOf(light.page, '.pa-lane', ['fill'])).fill, await varColour(light.page, '--s1'));
+  // the lane bar is toned (its series colour mixed into the surface, look-quiet.test.mjs): drawn, but not the raw colour
+  const lane = (await styleOf(light.page, '.pa-lane', ['fill'])).fill;
+  assert.ok(lane && lane !== 'none' && lane !== await varColour(light.page, '--s1'), `toned lane fill ${lane}`);
   assert.deepEqual([light.problems, dark.problems], [[], []]);
   await light.context.close();
   await dark.context.close();

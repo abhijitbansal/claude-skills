@@ -2,8 +2,6 @@
 name: make-explainer
 description: Use when the user wants to explain, recap or walk through something as one polished offline HTML page, such as what we built on a branch, a diff review, a concept or plan explainer, a setup or test checklist with steps to tick, or a slide deck. The agent fills a small JSON document of typed sections and scripts validate, lint and render it, embedding make-diagram figures and make-dashboard charts when asked. Not for a lone flow diagram (make-diagram) or a chart of numbers (make-dashboard).
 argument-hint: what to explain, e.g. "recap of this branch with a test checklist"
-model: haiku
-effort: low
 ---
 
 # make-explainer
@@ -12,22 +10,22 @@ You write one JSON file, `explainer.json`: a title and a list of typed sections.
 
 Run every command from the project folder (where `explainer.json` lives), using the full path to the scripts. If the request is empty, ask what to explain.
 
-Run every step yourself (or hand off as the Cheaper model section says), in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists.
+Run every step yourself (or hand off as the Director and operator section says), in this same turn. Do not end your reply after showing the JSON: keep going until validate prints `valid` and the HTML exists. The one command is `make.mjs` (see Director and operator); `validate.mjs` and `build.mjs` below remain for stepwise work.
 
-## Cheaper model
+## Director and operator
 
-Skip this section if you are running in Claude Code (it already runs this skill on the model named in the frontmatter), or if `artifact-builder` is not in your list of available agents. Otherwise, if you can start another agent, start the `artifact-builder` agent to do the work, unless you are already artifact-builder. If you are already artifact-builder, skip the rest of this section and do the work yourself.
+You are the director: you run the intake, write the spec, view what was built and decide every `creative` finding. A cheaper operator agent only runs the one command and fixes `mechanical` findings.
 
-Give it a self-contained brief. It has no memory of this conversation, so the brief must say:
+The command is `node <skill-dir>/scripts/make.mjs <spec> --json` (add `--out <path>` to name the output). It checks the spec, builds, checks the result and prints one report: `ok`, `output`, `stages`, `findings`. A `mechanical` finding names a JSON path to change and makes `ok` false. A `creative` finding is a call for you and never a failure.
 
-1. What to build, and every fact and choice from this conversation that affects it (data, names, wording, theme, what the user asked for and what they ruled out).
-2. This skill directory: the full path of the folder that holds this SKILL.md.
-3. The spec path: where it should write the JSON spec.
-4. Optionally, an output folder for the build (it passes this to the build script as `--out`).
+Hand off with the first rung that works, unless you are already artifact-builder (then run the command, fix only `mechanical` findings, as your own instructions say, and do not hand off again):
 
-Relay only the output path it returns. Do not repeat its work.
+1. Write the spec first. If `artifact-builder` is in your list of available agents (a plugin may list it as `<plugin>:artifact-builder`), start that agent with three things: this skill directory (the full path of the folder that holds this SKILL.md), the spec path (the file already exists) and, optionally, the output path. It has no memory of this conversation and needs nothing else. Do not choose a model for it: its own file names one.
+2. No such agent, or it fails or cannot start: run the same command yourself.
 
-If the `artifact-builder` agent is not installed, or you cannot start another agent, continue with the steps below yourself.
+Trust the report and the output file, never the operator's prose. You take over (fix it yourself and rerun) when the same `mechanical` finding survives two operator attempts, or when its path is empty (the operator may change nothing).
+
+Before you report, view what was built: the files listed under `sheets` in the report (make-motion), or the page through `node <skill-dir>/shared/shot.mjs <output>` when that file exists, then open each PNG it prints. Fix what you see and decide each `creative` finding.
 
 ## Before the first build
 
@@ -53,7 +51,7 @@ If it reports anything missing, tell the user in one message: each item, why it 
 2. Fill the file. A scaffold marks every sentence for you with `TODO: …`; replace each one with real prose from the facts and from reading the changed files. Facts (numbers, files, commits) are already correct: do not retype them. Delete a section you cannot fill. Set `generatedBy` in the spec with the keys `model`, `effort` and `agent` (your host; `host` is accepted as an alias of `agent`), for example `"generatedBy": { "model": "claude-opus-5-5", "effort": "low", "agent": "Claude Code" }`. Never guess; leave out any key you do not know. `--model`, `--effort` and `--agent` on the build override it. A scaffold seeds `generatedBy` with TODO placeholders: replace each value with yours, or delete the object.
 3. Once the spec exists, rerun `node <skill-dir>/scripts/doctor.mjs --json --for explainer.json` and handle anything new (make-diagram, make-dashboard, make-scene or make-motion for `diagram`, `chart`, `scene` and `motion` sections) as in "Before the first build". Then `node <skill-dir>/scripts/validate.mjs explainer.json`. Fix every line it prints (a JSON path, the problem, the fix) and rerun until it says `valid`. Exit 0 ok, 1 spec errors, 2 usage error. `--strict` (on validate and build) turns the page and section length caps into errors. Warnings do not block, but resolve the budget warnings (too many words in a title, label, paragraph, card, list or page) before building where you can, and report any you leave.
 4. `node <skill-dir>/scripts/build.mjs explainer.json` prints the theme it used (`theme: <name>`), `wrote <path>` and the page's `file://` URL on a line of its own. The page goes to `<git root>/.scratch/<slug>.html` when the spec sits in a git repository (the build says so when `.scratch/` is not gitignored), else to `~/.agent/diagrams/<slug>.html`; the `PA_OUTPUT_DIR` environment variable or `--out <file.html|dir>` picks another folder. `--theme dusk|press|poster|paper|blueprint|ink|editorial|mono|brief` overrides the theme (`dusk` is the default; a plan defaults to `mono`); `--strict` makes the length caps errors; `--md` also writes the checklist sections as a markdown twin next to the page; `--json` prints machine-readable results. Sections with files (video, interactive chart) add a `<name>.assets/` folder next to the page: keep the two together.
-5. Look at it. First run `node <skill-dir>/scripts/doctor.mjs --json --for check` (it installs the check tools after the user agrees), then `node <skill-dir>/scripts/check.mjs <printed path> --shots shots`. It opens the page at phone, desktop and wide-window width and fails on console errors, sideways scrolling, a number-plus-unit token that wraps, a KPI value wider than its tile, a Simple English view that breaks either of those, a deck that cannot reach its last slide, a diagram Present overlay that will not close and a checklist whose ticks are not saved. `--shots shots` also writes one PNG per width (390 and 1280) and colour scheme (light and dark) into the `shots` folder and prints each path: view every PNG before you report, and fix what you see. It needs Playwright and a browser (a full `npm ci`; `doctor --for check` reports and installs both, after the user agrees). Without them it prints `check: skipped` and exits 0: a skipped check is not a pass.
+5. Look at it. First run `node <skill-dir>/scripts/doctor.mjs --json --for check` (it installs the check tools after the user agrees), then `node <skill-dir>/scripts/check.mjs <printed path> --shots shots`. It opens the page at phone, desktop and wide-window width and fails on console errors, sideways scrolling, a number-plus-unit token that wraps, a KPI value wider than its tile, a Simple English view that breaks either of those, a deck that cannot reach its last slide, a diagram Present overlay that will not close and a checklist whose ticks are not saved. `--shots shots` also writes one PNG per width (390 and 1280) and colour scheme (light and dark) into the `shots` folder and prints each path: view every PNG before you report, and fix what you see. It needs Playwright and a browser (a full `npm ci --ignore-scripts`; `doctor --for check` reports and installs both, after the user agrees). Without them it prints `check: skipped` and exits 0: a skipped check is not a pass.
 6. Report: the HTML path, one line on what it shows, the validate warnings you left, and the check result as one word: passed, failed or skipped.
 
 For a change ("rename the card", "add a risk"), edit only those fields, then validate and build again; see "Updating a page you built before".
@@ -108,6 +106,7 @@ Use it when the user wants a plan, proposal or design reviewed and answered: wha
 - `timeline`: dated events.
 - `compare`: 2-3 columns of points.
 - `callout`: `tone` info, warn, good or bad (a `tldr` takes neutral, accent, good, warn or bad).
+- `quote`: one line set large (`text`, `by`, `tone`); in a deck one slide, and as the last slide it closes the deck.
 - `code`: a block with a copy button.
 - `diff`: a unified diff (`diff`, at most 200 lines; `file`, `caption`), each line marked added, deleted or context; no highlighting.
 - `details`: a collapsed block.
@@ -115,7 +114,7 @@ Use it when the user wants a plan, proposal or design reviewed and answered: wha
 - `diagram`: a make-diagram spec, inline or a `.json` path.
 - `chart`: inline `data` rows plus `kind`, `x`, `y`; or a `dashboard` path and `chart` id.
 - `scene`: a make-scene 3D scene, inline or a `.json` path; at most 4 per page; the page theme wins; decks and print show its data table.
-- `motion`: a `.mp4` `video`, or a make-motion `spec` rendered at build.
+- `motion`: a `.mp4` `video`, or a make-motion film (version 2, `spec`) rendered at build.
 - `image`: a local `src` with required `alt`.
 - `decision`, `approval`, `question`, `review`, `verdict`: plan mode (see above and `sections.md`).
 

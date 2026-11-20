@@ -13,16 +13,16 @@ what the host left behind.
 (cd ../skills/make-motion && npm ci && npx playwright install chromium)
 
 node run-eval.mjs --skill dashboard --host claude --limit 3
-node run-eval.mjs --skill motion --host codex --only q3-counter,edit-existing
-node run-eval.mjs --skill motion --host claude --model haiku --set benchmark
-node run-eval.mjs --skill motion --host claude --model haiku --set benchmark --only chart-race,map-regions
+node run-eval.mjs --skill motion --host codex --only number-kpi,edit-existing
+node run-eval.mjs --skill motion --host claude --model haiku --only chart-bar,vars-batch
 node run-eval.mjs --skill diagram --host claude --only checkout-path,edit-existing
 node run-eval.mjs --skill explainer --host claude --model haiku --only recap-from-repo,edit-existing
 node run-eval.mjs --skill scene --host claude --model haiku --only city-inline,edit-switch-forest
 node run-eval.mjs --skill dashboard --host codex-oss --model gemma4
 node run-eval.mjs --skill motion --host codex-oss --model gemma4 --allow-local-models
 node run-eval.mjs --skill explainer --host copilot --agent artifact-builder --model "Claude Haiku 5.5"
-node run-eval.mjs --skill diagram --host claude-frontmatter     # no --model: the account default model; frontmatter use unverified
+node run-eval.mjs --skill diagram --host claude-frontmatter     # no --model: the account default model, no agent file (baseline; the old frontmatter path was not verified)
+node run-eval.mjs --skill dashboard --host claude-director --only rev-by-region --budget 2   # billed, one case, capped at 2 USD
 ```
 
 Each command above runs a real host, and a billed host is billed per prompt: count the prompts first (`--limit`,
@@ -31,8 +31,11 @@ Each command above runs a real host, and a billed host is billed per prompt: cou
 Hosts are defined in `hosts.json`: `claude`, `claude-frontmatter` (the same command with no `modelArgs`, so a
 `--model` is refused and the account's default model runs). The harness copies the skill to
 `<work>/skills/<dir>/` and the prompt says to read its `SKILL.md`; Claude Code does not scan that folder for
-skills, so the skill is read as a plain file and whether its `model` and `effort` frontmatter applies is
-unverified. Check the session log before using this host to measure the frontmatter path. The other hosts are `codex`, `codex-oss`
+skills, so the skill is read as a plain file. No `SKILL.md` carries a `model` or `effort` line any more (the
+director and operator scheme replaced the frontmatter pin), so this host no longer measures a frontmatter path (it was
+not verified that one applied here): it runs the account default model with no operator agent file, a baseline in
+which the director does the whole job.
+To see a delegation, use `claude-director` (below), which writes the operator agent file to the workdir. The other hosts are `codex`, `codex-oss`
 (Ollama via `codex exec --oss`), `gemini` and `copilot`. To add a host,
 add an entry with a `cmd` template (`{prompt}`, `{cwd}`, `{model}`), plus
 optional `modelArgs`, `agentArgs` and a `check` command. The `claude` allowlist includes the read-only
@@ -44,11 +47,58 @@ A host marked `"local": true` (`codex-oss`) is not run on `motion` or `explainer
 made no `validate` call after `--abort-no-spec <sec>` seconds (default: the host's `abortNoSpecSec`, 240 for
 `codex-oss`; `0` turns it off) is killed and marked `aborted` in the summary. For an edit prompt, a seed left unchanged counts as no spec.
 
+## The `claude-director` host: seeing a delegation
+
+`claude-director` runs the session as Claude Code does for a user and records what it did, so the evidence of who
+built what comes from the session's own events, not from what an agent says about itself. Its command is the `claude`
+one plus `--output-format stream-json --verbose --forward-subagent-text --include-hook-events`, the subagent tool
+(`Agent`, and `Task` as an older name) in `--allowedTools`, and `--setting-sources project`, so only the workdir's
+`.claude/` is read and the owner's user-level setup (global rules, hooks, plugins) is not loaded. It names no `--model`:
+the director runs as the account default, and `--model` is refused. For each case the harness writes the `claude`
+operator agent file (`shared/agents.mjs`) to `<work>/.claude/agents/artifact-builder.md`, and the prompt ends with "follow
+the skill's Director and operator section; stop when the build is done" instead of "stop after validate and
+build/render" (the other hosts' prompt is unchanged). A skill whose `SKILL.md` has no such section gives the session
+nothing to follow, and its rows read "director ran it".
+
+`--budget <usd>` is the per-case spend cap (`--max-budget-usd`). The host needs it, and any host without `budgetArgs`
+refuses it. A case that reaches the cap is marked `hit the budget cap` in the notes.
+
+`eval/session.mjs` reads each case's `transcript.txt` (the stream) into a record kept in `results.json` as `session`:
+whether the director delegated, to which agent name, the model each side ran as (`director` events versus events with a
+parent tool-use id, which are the subagent's), the model the delegating call asked for (`requestedModel`: a model named
+there overrides the agent file), who wrote the spec, ran `make.mjs` and viewed a sheet or page, the agents, plugins,
+setting sources and hooks the stream lists, cost and cap. These columns follow `first try` in `summary.md`:
+
+| Column | Meaning |
+|---|---|
+| first build valid | `ok` of the report from the first `make.mjs` run in the session (`✓`, `✗`, or `-` when none ran or its result was not a report) |
+| spec by, make by | `director`, `operator`, or `director+operator`, with `×n` for n steps; `-` for none |
+| operator model | the model of the subagent's own messages; `director ran it` when nobody delegated (the case is kept); `(director requested <m>: overrides the agent file)` when the delegating call named a model |
+| director model | the model of the session's own messages |
+
+`model reported` is kept and its header reads `model reported (self-reported)` in these summaries: it is
+`generatedBy.model` as the agent wrote it, never evidence of which model ran. A stream the parser cannot read gives
+`unreadable` in every new column and a note. The summary also prints `Delegated d/n · first build valid v/m` and a
+`Session setup (read from the stream)` line (setting sources, plugins, hooks that fired). A `make.mjs` run adds a
+`{ "command": "make" }` line to `.eval-log.jsonl`; `validate runs` and `first try` ignore those lines.
+
+Status of the parser: most tests use hand-written, synthetic streams (`test/helpers/stream-fixtures.mjs`). One test
+reads a real stream, the Task 9 pilot (`test/helpers/real-stream-pilot-2026-11-18.jsonl`, Claude Code 2.1.327, image bytes
+and long text trimmed). From it: the `init` event lists `model`, `agents` (names, the workdir file as `artifact-builder`
+with no plugin prefix) and `plugins` (objects, here four `builtin` ones), and no setting sources; the delegating call is
+named `Agent` while the `init` tool list says `Task`; a subagent's events carry `parent_tool_use_id` and its assistant
+messages carry `message.model`; the `result` event carries `total_cost_usd`. Still expectations, not observations: hook
+event names (no hook fired in the pilot) and the `error_max_budget_usd` cap marker. A `make.mjs --list` or `--outline`
+call looks at the film and builds nothing, so it is not a make step.
+
+The harness drops `CLAUDE_CODE_SUBAGENT_MODEL` and `ANTHROPIC_MODEL` from the environment of a `claude-director`
+case (`--setting-sources project` does not remove them, and the first would override the operator's model).
+
 `--set <name>` runs the prompts in `prompts/<skill>-<name>.json` instead of
 the default `prompts/<skill>.json` (which stays as it is, so committed
 summaries remain comparable). An unknown set exits 2 with
-`unknown --set "x"; available for motion: benchmark, items`. `--only` and
-`--limit` apply after `--set`. The sets are: motion `benchmark` and `items` (see "Motion sets" below),
+`unknown --set "x"; available for dashboard: kinds`. `--only` and
+`--limit` apply after `--set`. Motion has no set (see "Motion sets" below). The sets are:
 explainer `features` (Simple English, a plan round trip, embeds by file, an edit, `kpis`, `cards`, `image`, `details`
 and `diff` sections), dashboard `kinds` (the six chart kinds the default set does not name) and diagram `cloud` (AWS icons).
 
@@ -79,7 +129,7 @@ of which model ran. (The harness rebuilds each page from the spec without
    folder as `.eval-log.jsonl`. The per-call error messages are not in it yet: the validators write only the count,
    so a retry loop can be seen (how many calls, which one was the first valid) but not read.
 3. Scores the result. The harness reruns `validate` and the output step
-   (`build` for dashboards, diagrams, explainers and scenes, `render --contact-sheet` for motion) itself,
+   (`build` for dashboards, diagrams, explainers and scenes, `make.mjs --sheets-only` for motion) itself,
    so a host whose sandbox blocked commands is still scored on its spec.
 
 | Metric | Meaning |
@@ -87,9 +137,9 @@ of which model ran. (The harness rebuilds each page from the spec without
 | spec | the host wrote the spec file |
 | valid | the harness's final `validate` passes |
 | validate runs | how many times the host ran `validate`. 1 is a single call; 0 means the host never ran it (the harness still validates the spec itself), which is not the same as valid on the first call |
-| output | the build or contact sheet succeeded |
-| check | `scripts/check.mjs … --json` passed (`✓`), failed (`✗`), or did not apply (`-`: skipped without a browser, the output step failed, or the skill has no check). Motion's check reads the spec; diagram, explainer and scene check the page the build wrote (`out/<skill>.html`); dashboard has none here. It runs only after `output` succeeded, and its output is kept as `check.log`. The totals line reads `check ok n/m` over the rows whose check ran. A check that opens a browser runs one prompt at a time, like everything else here. |
-| feature | the spec uses what the prompt asked for: the prompt's `expect` list (`key`, `key=value` or `key^=prefix`, matched on any object in the spec; `block=title-card`, `kind=area`, `type=diff`; `a|b` is met by either, for a thing the spec can say two ways, like a transition given as a bare name or as an object with a `type`) is all found. `kind=` counts the typed chart kind only, so a chart written as raw Vega-Lite reads as missing. `-` when the prompt lists none. It never changes `valid`, so a summary from before this column is still comparable. The totals line reads `feature used n/m`; a miss names what was not found |
+| output | the build or the review sheets succeeded |
+| check | `scripts/check.mjs … --json` passed (`✓`), failed (`✗`), or did not apply (`-`: skipped without a browser, the output step failed, or the skill has no check). Diagram, explainer and scene check the page the build wrote (`out/<skill>.html`); dashboard has none here; motion has no separate check, its column is the `ok` of the `make.mjs` report of the output step. It runs only after `output` succeeded, and its output is kept as `check.log`. The totals line reads `check ok n/m` over the rows whose check ran. A check that opens a browser runs one prompt at a time, like everything else here. |
+| feature | the spec uses what the prompt asked for: the prompt's `expect` list (`key`, `key=value` or `key^=prefix`, matched on any object in the spec; `show=statement`, `kind=area`, `type=diff`; `a|b` is met by either, for a thing the spec can say two ways, like a transition given as a bare name or as an object with a `type`) is all found. `kind=` counts the typed chart kind only, so a chart written as raw Vega-Lite reads as missing. `-` when the prompt lists none. It never changes `valid`, so a summary from before this column is still comparable. The totals line reads `feature used n/m`; a miss names what was not found |
 | first try | `✓` when the host's first `validate` call passed, `✗` when it needed more, `-` when it never ran one |
 | changed | for edit prompts: the leaf JSON paths that differ from the seed (a targeted edit changes only a few). A prompt with `maxChanged` is flagged `edit too broad` in the notes when more paths changed than that (a rewrite of the seed is not an edit). It never changes `valid`: the paths are counted by array index, so one node inserted mid-array shifts every later one. The limits sit above what committed summaries show a correct edit changing |
 
@@ -113,36 +163,25 @@ tour, for the rename). The pass bar for a billed run is 90% valid.
 
 ## Motion sets
 
-- `prompts/motion.json` (no `--set`): the original ten prompts.
-- `--set benchmark`: twelve prompts, two per category (product launch, PR
-  walkthrough, data viz, captioned social, docs to video, templated batch),
-  each naming a 10 to 30 second duration and tagged with a `category`. Some ask for
-  capabilities a later release adds, so a spec that cannot express them is a
-  real miss, not a harness fault.
-- `--set items`: 57 prompts, one per field or block added since the first release, each with an `expect` list for the
-  feature-used column. It covers all 38 blocks, including the ten added in 1.2.0 (five product-screen mockups,
-  five hand-drawn), none of which has a committed result. A test checks that every block has a prompt that expects it, and that
-  each expectation is met by a spec the skill ships. `item-beats` is a 6-second clip with a closing line on beat 8:
-  the first version (10 seconds, last change at 3 seconds) could not pass `check.mjs`, which fails a dead stretch,
-  more than 3 seconds in which nothing on screen changes, outside the final 3 seconds.
+`prompts/motion.json` (no `--set`; the version 1 `benchmark` and `items` sets are gone) holds eleven prompts for
+make-motion 2. The agent writes `film.json`, a script of shots; the harness checks it with `make.mjs --outline --json`
+and builds the review sheets with `make.mjs --sheets-only --json --out <work>/out/film.mp4`, and the `check` column
+reads the `ok` of that report (the review runs inside `make.mjs`; there is no separate check command). The ids are
+`statement-hook`, `number-kpi`, `clipping-highlight`, `list-steps`, `quote-card`, `compare-two`, `chart-bar`,
+`viral-vertical`, `voiced-pro`, `edit-existing` (from `fixtures/seeds/motion.json`) and `vars-batch`. Each names what a
+correct film must contain, and an `expect` list feeds the feature-used column (`show=<kind>`, `mode=viral`,
+`vars`, and so on). A test checks that every expectation is met by a film in
+`skills/make-motion/references/examples/v2/`. These prompts have not been run on any host; nothing is recorded for them.
 
-The benchmark prompts read files from `fixtures/data/`, which every run copies to
-`./data/`:
+The motion prompts read two files from `fixtures/data/`, which every run copies to `./data/`:
 
 | File | Content |
 |---|---|
-| `captions.srt` | 6 cues, 24 words, English |
-| `captions.vtt` | the same cues as WebVTT |
-| `badge.lottie.json` | a 2 s Lottie shape animation (a disc pops in, a ring sweeps round, a tick draws), 512x512 at 30 fps; a copy of make-motion's `references/examples/data/badge.lottie.json` |
-| `clip.mp4` | 2 s, 320x180, SMPTE bars, silent (committed, a few KB) |
-| `music.wav` | 10 s mono 8 kHz click track at 120 BPM: a 20 ms 1 kHz burst every 0.5 s on silence, so beat detection has onsets |
-| `rows.json` | 3 rows of `{ "name", "city", "count" }` for the templated-batch prompts |
-| `portrait.jpg`, `portrait-cutout.png` | a drawn portrait (1280x720) and its cutout, an RGBA PNG made by make-motion's `cutout.mjs`; copies of `references/examples/blocks/portrait.jpg` and `portrait-cutout.png`. The `text-behind-subject` prompt names both, so the eval installs nothing |
+| `rows.json` | 3 rows of `{ "name", "city", "count" }` for the `vars-batch` prompt |
+| `portrait.jpg` | a drawn portrait (1280x720) for the `clipping-highlight` prompt |
 
-`music.wav` is `writeWav` from the make-motion test helpers with
-`{ seconds: 10, sampleRate: 8000, clickBpm: 120 }`, and `clip.mp4` is
-`makeTestVideo` with `{ source: 'smptebars' }`; both were generated once and
-committed. A test checks `music.wav` byte for byte against the helper.
+`music.wav` (a 10 s, 120 BPM click track) stays because make-motion's `beats` tests read it; no motion prompt names it. The
+version 1 fixtures `clip.mp4`, `captions.srt`, `captions.vtt`, `badge.lottie.json` and `portrait-cutout.png` were deleted at cut-over.
 
 ## Other fixtures
 
@@ -166,13 +205,16 @@ committed. A test checks `music.wav` byte for byte against the helper.
   (no cell here has been run three times, so a pass is one sample), and add a row to
   [`results/INDEX.md`](results/INDEX.md) with the plugin version, the host CLI version and the command line.
 - **Which model ran.** `model reported` is the agent's own claim. With `--host claude-frontmatter` the model is the
-  account default and the frontmatter path is unverified: read the model from the session log.
+  account default and no agent file is written (a frontmatter model was not verified to apply). With `--host claude-director` the models that ran are read from the
+  session stream (`operator model`, `director model`); the 2026-11-18 run is in
+  [`results/summary-director-operator-2026-11-18.md`](results/summary-director-operator-2026-11-18.md).
 
 ## Tests
 
 `node --test "test/**/*.test.mjs"` uses a fake skill and fake host, so it
 needs no LLM. `test/lib.test.mjs` covers scoring, the prompt files (every block, section type and chart kind has a
-prompt that expects it) and the run-eval flags; `test/validate-fuzz.test.mjs` runs the five `validate.mjs` scripts on specs
+prompt that expects it) and the run-eval flags; `test/session.test.mjs` and `test/director-host.test.mjs` cover the stream
+parser, the `claude-director` host, `--budget` and the new columns on synthetic streams (a fake `claude` prints one); `test/validate-fuzz.test.mjs` runs the five `validate.mjs` scripts on specs
 whose keys and lookup values are `constructor`, `__proto__` and `toString`, and shows it catches a scratch validator
 that accepts them; `test/docs-facts.test.mjs` ties the plugin README and USAGE to the code. They need each skill's
 `node_modules` installed, and none opens a browser or calls a model.

@@ -9,13 +9,13 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { UsageError } from '../scripts/lib/spec.mjs';
+import { UsageError } from '../shared/cli.mjs';
 import { modelsDir } from '../scripts/lib/model-cache.mjs';
 import {
   MODEL_URL, MODEL_SHA256, MODEL_BYTES, MODEL_FILE, MODEL_DIR, INSTALL_HINT, USAGE,
   MAX_FRAMES, parseCutoutArgs, extractArgs, modelSize, ensureModel, loadOnnx, fileKind,
 } from '../scripts/lib/cutout.mjs';
-import { probeVideo, decodeFrames, decodeArgs } from '../scripts/lib/video.mjs';
+import { probeVideo, decodeFrames, decodeArgs } from '../scripts/lib/video-probe.mjs';
 import { findFfmpeg, findFfprobe } from '../scripts/lib/ffmpeg.mjs';
 import { requireRender, BROWSER_ONLY } from './helpers/render.mjs';
 import { drawPortrait, alphaAt } from './helpers/portrait.mjs';
@@ -28,7 +28,7 @@ process.on('exit', () => { for (const d of made) rmSync(d, { recursive: true, fo
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
 const cli = (...args) => spawnSync(process.execPath, [CLI, ...args], { encoding: 'utf8' });
-const hasOrt = existsSync(path.join(root, 'node_modules/onnxruntime-node'));
+const hasOrt = existsSync(path.join(root, 'optional/cutout/node_modules/onnxruntime-node'));
 const hasModel = existsSync(path.join(MODEL_DIR, MODEL_FILE));
 
 /** True when the model test can run; false (after t.skip) when a piece is absent and PA_REQUIRE_CUTOUT is not 1. */
@@ -161,15 +161,17 @@ test('ensureModel names the URL and the fix when the download fails or is far bi
 
 test('loadOnnx turns a missing onnxruntime-node into a UsageError that carries the install command and the doctor id', async () => {
   const missing = async () => { throw Object.assign(new Error("Cannot find package 'onnxruntime-node' imported from x"), { code: 'ERR_MODULE_NOT_FOUND' }); };
-  await assert.rejects(() => loadOnnx(missing), (e) => e instanceof UsageError && e.message === INSTALL_HINT);
-  assert.match(INSTALL_HINT, /npm install (?:\S+@\S+ )*onnxruntime-node@\d+\.\d+\.\d+(?: \S+@\S+)* --no-save/, 'the doctor step, which also names an installed kokoro-js');
-  assert.doesNotMatch(INSTALL_HINT, /--prefix/);
+  const exists = () => true;
+  await assert.rejects(() => loadOnnx({ importer: missing, exists }), (e) => e instanceof UsageError && e.message === INSTALL_HINT);
+  assert.match(INSTALL_HINT, /npm ci --ignore-scripts --prefix \S*optional[\\/]cutout/);
+  assert.doesNotMatch(INSTALL_HINT, /npm install/);
   assert.match(INSTALL_HINT, /doctor\.mjs.* --for cutout, id cutout\)/);
   assert.match(INSTALL_HINT, /25 MB/);
   const other = async () => { throw new Error('boom'); };
-  await assert.rejects(() => loadOnnx(other), /boom/, 'any other failure passes through');
-  const ok = await loadOnnx(async () => ({ default: { InferenceSession: 1 } }));
+  await assert.rejects(() => loadOnnx({ importer: other, exists }), /boom/, 'any other failure passes through');
+  const ok = await loadOnnx({ importer: async () => ({ default: { InferenceSession: 1 } }), exists });
   assert.deepEqual(ok, { InferenceSession: 1 });
+  await assert.rejects(() => loadOnnx({ importer: async () => { throw new Error('never reached'); }, exists: () => false }), (e) => e instanceof UsageError && e.message === INSTALL_HINT, 'no folder install: the hint, without importing');
 });
 
 test('cutout.mjs: no arguments and unknown options exit 2 with the usage; a missing file exits 2 before anything is loaded', () => {
@@ -266,9 +268,8 @@ test('video.mjs: a VP9 alpha WebM probes as alpha (pix_fmt says yuv420p, alpha_m
 
 // ---- the install path is one command everywhere ---------------------------------------------------------------------------
 
-test('audit-on-demand-deps.sh audits every on-demand pin the doctor owns (the audit itself runs in CI weekly and by hand: it needs the registry)', () => {
+test('audit-on-demand-deps.sh audits every optional lockfile (the audit itself runs in CI weekly and by hand: it needs the registry)', () => {
   const script = readFileSync(path.resolve(root, '../../../../scripts/audit-on-demand-deps.sh'), 'utf8');
-  assert.match(script, /KOKORO_PIN/);
-  assert.match(script, /CUTOUT_PIN/);
-  assert.match(script, /for pin in /, 'one loop over the pins');
+  assert.match(script, /optional\/\*\//, 'one loop over every optional/<name>/ folder');
+  assert.match(script, /audit --package-lock-only/);
 });

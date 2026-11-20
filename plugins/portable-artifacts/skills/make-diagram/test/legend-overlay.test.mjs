@@ -21,6 +21,20 @@ test('the page carries one overlay entry per legend item, text escaped', () => {
   assert.ok(html.indexOf('data-pa-legend') > html.indexOf('id="pa-stage"'), 'inside the stage');
 });
 
+// The overlay swatches match the nodes as the drawn legend does: a neutral box whose hue shows only as a mark inside
+// it (a card's tile and icon), a dashed box for external, a bare neutral diamond for a decision, dots for start/end.
+test('overlay swatches are neutral boxes in their kind\'s shape; the hue is a mark inside a card swatch only', () => {
+  const { html } = buildPage(example('flow'), { name: 'legend-shapes' });
+  const overlay = html.match(/<div class="legend" data-pa-legend[^>]*>([\s\S]*?)<\/div>/)[1];
+  assert.match(overlay, /<i class="lg-sw lg-sw-decision lg-shape-diamond"><\/i>1 decision/);
+  assert.match(overlay, /<i class="lg-sw lg-sw-bare lg-shape-stadium"><\/i>/);
+  const css = html.match(/<style id="pa-legend-css">([\s\S]*?)<\/style>/)[1];
+  assert.ok(!/border-color:var\(--k-/.test(css), 'no swatch border is a hue');
+  assert.match(css, /\.lg-sw-service\{background:var\(--k-service\);box-shadow:inset 0 0 0 3px var\(--surface\)\}/, 'the hue is the swatch centre, inside a surface ring');
+  assert.match(css, /\.lg-shape-diamond,\.lg-shape-small-diamond\{background:var\(--surface\);box-shadow:none;border-color:var\(--text-3\);transform:rotate\(45deg\) scale\(\.75\)\}/);
+  assert.match(css, /\.lg-sw-external\{border-style:dashed;border-color:var\(--text-3\)\}/);
+});
+
 test('a dashed edge is keyed "secondary" in the overlay and in the drawn legend of the built page', () => {
   const spec = { title: 't', type: 'flow', nodes: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], edges: [{ from: 'a', to: 'b', style: 'dashed' }] };
   const { html } = buildPage(spec, { name: 'legend-dashed' });

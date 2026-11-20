@@ -187,7 +187,8 @@ test('two diagrams on one page share no ids, and the css and runtime ship once',
   const { html } = await build([section(flow('First'), { title: 'One' }), text, section(flow('Second'), { title: 'Two' })]);
   const ids = idsOf(html);
   assert.equal(new Set(ids).size, ids.length, `duplicate ids: ${ids.filter((x, i) => ids.indexOf(x) !== i)}`);
-  assert.equal((html.match(/\.pa-dim\{/g) ?? []).length, 1, 'diagram css once');
+  // The stylesheet's first rule: `.pa-dim{` also opens the `.pa-presenting .pa-dim{` rule, so it cannot count the sheet.
+  assert.equal((html.match(/\.pa-diagram\{display:block;/g) ?? []).length, 1, 'diagram css once');
   assert.equal((html.match(/PADiagram\.mount = mount;/g) ?? []).length, 1, 'viewer runtime once');
   assert.equal((html.match(/<svg[^>]*class="pa-diagram/g) ?? []).length, 2);
   assert.equal((html.match(/<button[^>]*data-dg-present/g) ?? []).length, 2);

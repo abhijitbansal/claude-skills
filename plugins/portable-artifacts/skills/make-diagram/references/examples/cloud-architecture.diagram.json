@@ -14,7 +14,7 @@
     { "id": "orders", "label": "Orders function", "group": "aws", "icon": "cloud:aws-lambda", "note": "validates and saves" },
     { "id": "table", "label": "Orders table", "kind": "database", "group": "aws", "icon": "cloud:aws-dynamodb" },
     { "id": "queue", "label": "Invoice queue", "kind": "queue", "group": "aws", "icon": "cloud:aws-sqs" },
-    { "id": "invoice", "label": "Invoice service", "group": "gcp", "icon": "cloud:google-cloud-run", "tone": "accent", "detail": "Reads each queued order, builds the invoice and sends it." },
+    { "id": "invoice", "label": "Invoice service", "group": "gcp", "icon": "cloud:google-cloud-run", "detail": "Reads each queued order, builds the invoice and sends it." },
     { "id": "ledger", "label": "Ledger function", "kind": "function", "group": "gcp", "icon": "cloud:google-cloud-functions" }
   ],
   "edges": [

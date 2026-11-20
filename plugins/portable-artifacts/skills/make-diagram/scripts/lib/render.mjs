@@ -52,7 +52,7 @@ function renderGraph(raw, spec, theme, prefix) {
   const nodes = g.nodes.map((n, i) => ({ id: n.id, svg: graphNodeSvg(n, spec.nodes[i], spec.type, f) }))
     .sort((a, b) => rank.get(a.id) - rank.get(b.id)).map((n) => n.svg);
   const labels = drawn.filter((x) => x.plate).map((x) => plateSvg(x.id, x.plate, f));
-  return { width: g.width, height: g.height, body: [...groups, ...edges, ...nodes, ...labels, legendSvg(g.legend, f)].join(''), counts: `${g.nodes.length} nodes and ${g.edges.length} edges` };
+  return { width: g.width, height: g.height, body: [...groups, ...edges, ...nodes, ...labels, legendSvg(g.legend, f, spec.type)].join(''), counts: `${g.nodes.length} nodes and ${g.edges.length} edges` };
 }
 
 /**

@@ -1,0 +1,102 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "cosmos",
+  "voice": {
+    "name": "af_heart"
+  },
+  "sound": "on",
+  "music": {
+    "bed": "drift",
+    "bpm": 90
+  },
+  "format": "16:9",
+  "seed": 7,
+  "shots": [
+    {
+      "id": "light",
+      "show": "statement",
+      "say": "The sunlight on your face is *eight minutes* old."
+    },
+    {
+      "id": "distance",
+      "show": "number",
+      "say": "One hundred fifty million kilometres. One astronomical unit.",
+      "value": 150,
+      "suffix": "million",
+      "label": "kilometres from the Sun to Earth"
+    },
+    {
+      "id": "path",
+      "show": "list",
+      "say": "It passes Mercury. Then Venus. Then it reaches Earth.",
+      "items": [
+        "Mercury",
+        "Venus",
+        "Earth"
+      ]
+    },
+    {
+      "id": "sizes",
+      "show": "compare",
+      "say": "Earth is small. The Sun is one hundred nine Earths wide.",
+      "left": {
+        "title": "Earth",
+        "value": "12,742",
+        "points": [
+          "km across"
+        ]
+      },
+      "right": {
+        "title": "The Sun",
+        "value": "1,392,700",
+        "points": [
+          "km across"
+        ]
+      },
+      "ratioLabel": "× wider"
+    },
+    {
+      "id": "giants",
+      "show": "chart",
+      "type": "bar",
+      "title": "Jupiter is the widest planet",
+      "say": "Neptune is four Earths wide. Saturn, nine. Jupiter beats them all.",
+      "unit": "km",
+      "data": [
+        {
+          "label": "Earth",
+          "value": 12742
+        },
+        {
+          "label": "Neptune",
+          "value": 49244
+        },
+        {
+          "label": "Saturn",
+          "value": 116460
+        },
+        {
+          "label": "Jupiter",
+          "value": 139820
+        }
+      ],
+      "highlight": "Jupiter",
+      "source": "NASA planetary fact sheet"
+    },
+    {
+      "id": "home",
+      "show": "quote",
+      "say": "That's here. That's home. That's us.",
+      "by": "Carl Sagan",
+      "role": "Pale Blue Dot, 1994"
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "Scale changes everything.",
+      "ask": "Light takes time.",
+      "mark": "cosmos"
+    }
+  ]
+}

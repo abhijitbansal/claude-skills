@@ -23,6 +23,49 @@ const GROUP_VIEW_MARGIN = 4;
 /** The top surface of a platform `depth` levels deep: level 0 is the floor. */
 const topOfDepth = (depth) => PLATFORM_RISE * depth;
 
+const GROUP_LABEL_DEPTH = 0.7; // how far a group label's text reaches back (towards -z) from its anchor, in world units
+
+/** The world width a group label takes: a rough width per character, plus padding, never wider than its platform. */
+export const groupLabelWidth = (text, platformWidth) => 2 * Math.min(platformWidth / 2, (GROUP_LABEL_CHAR * text.length) / 2 + GROUP_LABEL_PAD);
+
+/** The floor-plan box a group label covers when anchored at (x, z): its text runs back from the anchor. */
+export const labelBox = (x, z, width) => ({ x0: x - width / 2, x1: x + width / 2, z0: z - GROUP_LABEL_DEPTH, z1: z });
+
+// Does the segment p -> q (as [x, y, z] points, plan only) touch the box? Slab clipping on x and z.
+function segmentTouches(p, q, box) {
+  let [t0, t1] = [0, 1];
+  for (const [a, b, lo, hi] of [[p[0], q[0], box.x0, box.x1], [p[2], q[2], box.z0, box.z1]]) {
+    const d = b - a;
+    if (d === 0) {
+      if (a < lo || a > hi) return false;
+      continue;
+    }
+    const [s, e] = [(lo - a) / d, (hi - a) / d];
+    t0 = Math.max(t0, Math.min(s, e));
+    t1 = Math.min(t1, Math.max(s, e));
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/** True when no edge tube runs through the box. */
+export const clearOfTubes = (box, tubes) => tubes.every((t) => t.points.every((p, i) => i === 0 || !segmentTouches(t.points[i - 1], p, box)));
+
+/**
+ * Where a platform's label goes, as { x, z }: at its back-left corner, where a nested group's label cannot land on its
+ * parent's; if an edge runs through that spot (a loop round the back), in front of the platform, then inside its back
+ * edge. The label is centred on its anchor, so the anchor sits half its width in from the corner.
+ */
+export function groupLabelAnchor({ x, z, w, d }, width, tubes) {
+  const left = x - w / 2 + width / 2;
+  const candidates = [
+    { x: left, z: z - d / 2 + LABEL_RISE },
+    { x: left, z: z + d / 2 + GROUP_LABEL_DEPTH + LABEL_RISE },
+    { x: left, z: z - d / 2 + GROUP_LABEL_DEPTH + LABEL_RISE + 0.1 },
+  ];
+  return candidates.find((c) => clearOfTubes(labelBox(c.x, c.z, width), tubes)) ?? candidates[0];
+}
+
 /** One tube per edge along its ELK points (ids are make-diagram's edge ids), labelled for the tooltip. */
 function tubesOf(geometry, names, at) {
   return geometry.edges.map((e) => {
@@ -48,6 +91,7 @@ export function flatGraph(built, spec) {
   const depthOf = new Map(geometry.groups.map((g) => [g.id, g.depth]));
   const names = new Map(Object.entries(data.info).map(([id, entry]) => [id, entry.label]));
 
+  const tubes = tubesOf(geometry, names, at);
   const infos = geometry.nodes.map((n) => data.info[n.id]);
   const { groups, indexOf, batches } = kindGroups(infos.map((i) => i.kind));
   const items = [];
@@ -74,11 +118,9 @@ export function flatGraph(built, spec) {
     const [x, z] = [at.x(g.x + g.width / 2), at.z(g.y + g.height / 2)];
     const top = topOfDepth(g.depth);
     platform.instances.push([x, top - PLATFORM_THICKNESS / 2, z, w, PLATFORM_THICKNESS, d, -1]);
-    // At the platform's back-left corner, where a nested group's label cannot land on its parent's: the label is
-    // centred on its anchor, so the anchor sits half its width in from the corner.
     const text = oneLine(g.label);
-    const half = Math.min(w / 2, (GROUP_LABEL_CHAR * text.length) / 2 + GROUP_LABEL_PAD);
-    labels.push({ text, at: [x - w / 2 + half, top, z - d / 2 + LABEL_RISE], size: GROUP_LABEL_SIZE });
+    const anchor = groupLabelAnchor({ x, z, w, d }, groupLabelWidth(text, w), tubes);
+    labels.push({ text, at: [anchor.x, top, anchor.z], size: GROUP_LABEL_SIZE });
     groupViews.push([g.id, viewOf([x, top, z], VIEW_DIRECTION, GROUP_VIEW_PER_UNIT * Math.hypot(w, d) + GROUP_VIEW_MARGIN)]);
   });
 
@@ -86,7 +128,7 @@ export function flatGraph(built, spec) {
   g.groups = groups;
   g.items = items;
   g.batches = platform.instances.length > 0 ? [...batches, platform] : batches;
-  g.tubes = tubesOf(geometry, names, at);
+  g.tubes = tubes;
   g.labels = labels;
   const edgeViews = g.tubes.map((t) => [t.id, routeView(t.points, VIEW_DIRECTION)]);
   g.focus = focusFrom([...nodeViews, ...groupViews, ...edgeViews], geometry.nodes.map((n, i) => [items[i].label, nodeViews[i][1]]));

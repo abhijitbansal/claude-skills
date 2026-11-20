@@ -111,7 +111,7 @@ The 2000-row limit is a ceiling on the input. The page also has a size cap (1408
 | city | 2000 | all 2000 fit in every shape tried |
 | galaxy | 2000 | all 2000 fit in every shape tried |
 | terrain | 2000 | all 2000 fit (needs one row per group and `t`) |
-| forest | about 1,250 | largest fit 1,248 rows (24 groups), 1,280 (8 groups, two-decimal values), 1,304 (8 groups, whole values) |
+| forest | about 1,225 | largest fit 1,224 rows (24 groups), 1,240 (8 groups, two-decimal values), 1,288 (8 groups, whole values) |
 
 An earlier probe measured the forest at about 1,050 rows and the terrain at about 1,700; those used other row shapes and were not re-run for this table, so treat them as that probe's numbers. Longer values and labels cost bytes, so a forest near its ceiling can still go over. When a page is over the cap, `validate.mjs` and `build.mjs` name the worlds whose page does fit the same rows ("or pick a world that fits these rows (city, galaxy)"). A lifted chart has no other world to offer, so aggregate in SQL.
 

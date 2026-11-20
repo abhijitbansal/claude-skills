@@ -5,6 +5,7 @@ import * as vega from 'vega';
 import { compile } from 'vega-lite';
 import { vegaConfig } from './vega-config.mjs';
 import { tickLayout } from './axis-ticks.mjs';
+import { numeralFont } from './numeral-face.mjs';
 import { AXIS_FORMAT } from './views.mjs';
 
 // Two widths per scheme: a phone shows the narrow one at about its natural size instead of shrinking the wide one.
@@ -35,7 +36,7 @@ const staticType = ({ labelX, labelY }) => ({
 // Vega-Lite warns about autosize details that do not matter here; the dashboard page shows none of them either.
 const QUIET = { level() { return this; }, warn() { return this; }, info() { return this; }, debug() { return this; }, error(...args) { throw new Error(args.join(' ')); } };
 
-const COLOUR_ROLES = ['surface', 'text2', 'text3', 'grid'];
+const COLOUR_ROLES = ['surface', 'text2', 'text3', 'grid', 'accent'];
 const isObject = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /** `"Family", fallback` for a theme's body font (the page's --font value). */
@@ -75,6 +76,23 @@ export function staticView(node) {
     }
   }
   return out;
+}
+
+/**
+ * A bar view's headroom (views.mjs newsroomBar: usermeta.paHeadroom names the value channel) is for the live page,
+ * whose ticks Vega picks; a static render plans its own ticks and a domain that ends on one (planValueAxes), so the
+ * headroom settings are dropped there rather than read as an author's own axis.
+ */
+export function withoutHeadroom(vl) {
+  const channel = vl?.usermeta?.paHeadroom;
+  if (!isObject(vl) || !isObject(vl.encoding?.[channel])) return vl;
+  const { usermeta, ...rest } = vl;
+  const { domainMax, nice, ...scale } = vl.encoding[channel].scale ?? {};
+  const { tickCount, ...axis } = vl.encoding[channel].axis ?? {};
+  const def = { ...vl.encoding[channel], scale, axis };
+  if (Object.keys(scale).length === 0) delete def.scale;
+  if (Object.keys(axis).length === 0) delete def.axis;
+  return { ...rest, encoding: { ...vl.encoding, [channel]: def } };
 }
 
 const merge = (a, b) => {
@@ -217,14 +235,18 @@ async function planValueAxes(vegaSpec, sizing, own, family) {
   let pixels = new Map([...first].map(([name, m]) => [name, m.pixels]));
   let planned = layOut(vegaSpec, scales, extents, pixels, sizing, family);
   if (planned === vegaSpec) return planned;
-  // The plot is a little shorter or longer once the real labels are in place; lay out again with what it came to.
-  const actual = await measure(planned);
-  if ([...actual].some(([name, m]) => Math.abs(m.pixels - pixels.get(name)) > 1)) {
+  // The plot is a little shorter or longer once the real labels are in place, and a bar's value label past the bar
+  // end moves the plot edge with the domain. A layout is kept once the plot it gives is at least as long as the room
+  // its ticks were planned for (they then only gain space); otherwise lay out again with what it came to.
+  for (let pass = 0; pass < LAYOUT_PASSES; pass++) {
+    const actual = await measure(planned);
+    if ([...actual].every(([name, m]) => m.pixels >= pixels.get(name) - 1)) break;
     pixels = new Map([...actual].map(([name, m]) => [name, m.pixels]));
     planned = layOut(vegaSpec, scales, extents, pixels, sizing, family);
   }
   return planned;
 }
+const LAYOUT_PASSES = 4;
 
 // The spec with each value axis's ticks, labels and domain planned for `pixels` of room.
 function layOut(vegaSpec, scales, extents, pixels, sizing, family) {
@@ -271,7 +293,7 @@ function layOut(vegaSpec, scales, extents, pixels, sizing, family) {
  */
 export async function renderSvg(vegaLite, rows, { colours, font, size = 'wide', idPrefix = '' }) {
   const sizing = STATIC_SIZES[size];
-  const base = alignDateTicks(staticView(vegaLite), rows, sizing.dates);
+  const base = alignDateTicks(staticView(withoutHeadroom(vegaLite)), rows, sizing.dates);
   const unit = !('hconcat' in base || 'vconcat' in base || 'concat' in base || 'repeat' in base || 'facet' in base);
   const own = base.config?.numberFormat ? { numberFormat: base.config.numberFormat } : {};
   const config = { ...merge(vegaConfig(colours, font), staticType(sizing)), ...own };
@@ -295,7 +317,7 @@ export async function renderSvg(vegaLite, rows, { colours, font, size = 'wide', 
  * { light: { wide, narrow }, dark: { wide, narrow } } strings. Ids carry `idPrefix`, the scheme and the size.
  */
 export async function renderThemedSvgs(vegaLite, rows, theme, { idPrefix = 'c-' } = {}) {
-  const font = fontOf(theme.fonts);
+  const font = numeralFont(theme.fonts); // the page's --font-num: the body face unless its zero is slashed
   const draw = (mode, size) => renderSvg(vegaLite, rows, { colours: coloursOf(theme[mode]), font, size, idPrefix: `${idPrefix}${mode[0]}${size[0]}-` });
   const both = (mode) => Promise.all(['wide', 'narrow'].map((size) => draw(mode, size))).then(([wide, narrow]) => ({ wide, narrow }));
   const [light, dark] = await Promise.all([both('light'), both('dark')]);

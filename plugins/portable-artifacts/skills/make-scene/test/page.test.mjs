@@ -6,6 +6,7 @@ import { loadTheme } from '../shared/theme.mjs';
 import { buildScene, sceneFromGraph } from '../scripts/lib/api.mjs';
 import { renderPage } from '../scripts/lib/page.mjs';
 import { bundleHeader, readBundle } from '../scripts/lib/bundle.mjs';
+import { CAPS_SIZE_SHARE, MAX_PX, MIN_PX, fontPx, keepInside, labelClasses } from '../template/runtime/chrome/label-class.js';
 import { PINNED_ENV, ROWS, citySpec } from './helpers/scene-fixtures.mjs';
 
 const theme = loadTheme('dusk');
@@ -134,6 +135,41 @@ test('tour beats map to graph tour entries by their first resolvable focus', asy
     { title: 'Label focus', caption: '', focus: 'api w30', path: null, reverse: false },
     { title: 'Nothing resolves', caption: '', focus: 'ghost', path: null, reverse: false },
   ]);
+});
+
+test('every label is a number (tabular) or in the shared caps, whatever its size', () => {
+  const label = (text, size) => ({ text, at: [0, 0, 0], size });
+  // one size: a name is caps, a number is tabular
+  assert.deepEqual(labelClasses([label('api', 0.6), label('web', 0.6), label('12', 0.6)]), ['sc-label pa-caps', 'sc-label pa-caps', 'sc-label pa-num']);
+  // two sizes: the same rule for both tiers, so no label set is left in mixed case
+  const classes = labelClasses([label('Gadget', 0.45), label('0', 0.45), label('1,200', 0.45), label('units', 0.55), label('2026-01', 0.55), label('−3.5%', 0.45)]);
+  assert.deepEqual(classes, ['sc-label pa-caps', 'sc-label pa-num', 'sc-label pa-num', 'sc-label pa-caps', 'sc-label pa-num', 'sc-label pa-num']);
+  assert.deepEqual(labelClasses([]), []);
+  assert.deepEqual(labelClasses([label('API 2', 0.6), label('W30', 0.4)]), ['sc-label pa-caps', 'sc-label pa-caps'], 'a name with a digit in it is still a name');
+});
+
+test('caps are set a share smaller than lower case, within the same floor and ceiling', () => {
+  assert.equal(fontPx(30, false), MAX_PX, 'a lower-case label is capped at the ceiling');
+  assert.equal(fontPx(30, true), MAX_PX * CAPS_SIZE_SHARE, 'a caps label at a smaller one, so its wider letters do not crowd its neighbours');
+  assert.equal(fontPx(15, true), 15 * CAPS_SIZE_SHARE);
+  assert.equal(fontPx(4, false), MIN_PX);
+  assert.equal(fontPx(4, true), MIN_PX, 'and nothing goes under the floor');
+});
+
+test('no label is ever set under 11 px, caps or not, whatever its size and depth ask for', () => {
+  for (const raw of [0, 1, 4, 9, 11, 12, 13.5, 14]) {
+    for (const caps of [false, true]) assert.ok(fontPx(raw, caps) >= 11, `fontPx(${raw}, ${caps}) = ${fontPx(raw, caps)}`);
+  }
+});
+
+test('a label whose anchor is in the frame is kept clear of both edges; one sliding in from off screen is not moved', () => {
+  assert.equal(keepInside(200, 100, 390, 10), 200, 'a label clear of the edges stays put');
+  assert.equal(keepInside(350, 100, 390, 10), 390 - 10 - 50, 'a box that would pass the right margin is pulled back to it');
+  assert.equal(keepInside(20, 100, 390, 10), 10 + 50, 'and one past the left margin');
+  assert.equal(keepInside(-30, 100, 390, 10), -30, 'an anchor off screen to the left is left alone');
+  assert.equal(keepInside(420, 100, 390, 10), 420, 'and off screen to the right');
+  assert.equal(keepInside(100, 380, 390, 10), 100, 'a box too wide for the frame is left alone');
+  assert.equal(keepInside(350, 100, 0, 10), 350, 'a frame with no width (not laid out) moves nothing');
 });
 
 test('autoplay is carried as an attribute only when there is a tour', async () => {

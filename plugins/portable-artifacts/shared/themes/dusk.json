@@ -28,6 +28,9 @@
   "light": {
     "page": "#fbeee2",
     "surface": "#fff8f0",
+    "surface2": "#f9f1ea",
+    "surface3": "#f2e9e4",
+    "shadow": "#2b1936",
     "text": "#2b1936",
     "text2": "#4a3556",
     "text3": "#6a5272",
@@ -64,6 +67,9 @@
   "dark": {
     "page": "#17102a",
     "surface": "#241a38",
+    "surface2": "#2a203d",
+    "surface3": "#2f2541",
+    "shadow": "#090611",
     "text": "#f7ebe0",
     "text2": "#d9c8d8",
     "text3": "#bfaecb",

@@ -1,0 +1,122 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "desk",
+  "voice": {
+    "name": "af_heart"
+  },
+  "sound": "on",
+  "music": {
+    "bed": "drift",
+    "bpm": 92
+  },
+  "format": "16:9",
+  "seed": 11,
+  "shots": [
+    {
+      "id": "idea",
+      "show": "statement",
+      "say": "A film is a *script*, not a timeline."
+    },
+    {
+      "id": "how",
+      "show": "list",
+      "title": "How it works",
+      "style": "steps",
+      "say": "Write the shots as JSON. Run one command. Get an MP4.",
+      "items": [
+        "Write the shots as JSON",
+        "Run one command",
+        "Get an MP4"
+      ]
+    },
+    {
+      "id": "swap",
+      "show": "compare",
+      "mode": "before-after",
+      "say": "Before, you placed every keyframe. Now, you write what is said.",
+      "left": {
+        "title": "Keyframes",
+        "points": [
+          "Durations",
+          "Positions",
+          "Easing"
+        ]
+      },
+      "right": {
+        "title": "A script",
+        "points": [
+          "Words set the timing"
+        ]
+      }
+    },
+    {
+      "id": "proof",
+      "show": "clipping",
+      "src": "clipping.png",
+      "say": "A screenshot becomes a clipping. The camera can push into any region.",
+      "regions": {
+        "query": [
+          0.58,
+          0.14,
+          0.37,
+          0.24
+        ]
+      },
+      "on": [
+        {
+          "at": "word:push",
+          "do": "highlight",
+          "target": "region:query"
+        }
+      ]
+    },
+    {
+      "id": "tests",
+      "show": "chart",
+      "type": "column",
+      "title": "Every stage added tests",
+      "say": "Each stage added tests. Shots took it past sixteen hundred.",
+      "data": [
+        {
+          "label": "Picture",
+          "value": 844
+        },
+        {
+          "label": "Voice",
+          "value": 1240
+        },
+        {
+          "label": "Sound",
+          "value": 1507
+        },
+        {
+          "label": "Shots",
+          "value": 1636
+        }
+      ],
+      "highlight": "Shots",
+      "source": "make-motion test suite"
+    },
+    {
+      "id": "count",
+      "show": "number",
+      "say": "Nine kinds of shot. One script.",
+      "value": 9,
+      "label": "kinds of shot"
+    },
+    {
+      "id": "bar",
+      "show": "quote",
+      "say": "A look that falls short of the bar is cut, not shipped weak.",
+      "by": "make-motion design notes"
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "Write the script. The engine does the rest.",
+      "ask": "Write your first film",
+      "mark": "make-motion"
+    }
+  ]
+}

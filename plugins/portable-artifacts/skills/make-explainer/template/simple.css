@@ -8,7 +8,7 @@ html[data-simple="on"] span[data-text="simple"] { display: inline; }
 
 /* The toggle is a theme-toggle pill (same surface, line and text tokens, same flavor treatment) that carries a word.
    Off is a hollow dot and on is a filled one, so the state does not rest on colour. */
-.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer; }
+.simple-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 14px; font: inherit; font-size: var(--fs-sm); font-weight: var(--strong-weight); line-height: 1; white-space: nowrap; cursor: pointer; }
 .simple-dot { flex: none; width: 10px; height: 10px; box-sizing: border-box; border: 2px solid currentColor; border-radius: 50%; }
 /* The root attribute is there at first paint, before the script has set aria-pressed, so the look follows both. */
 html[data-simple="on"] .simple-toggle, .simple-toggle[aria-pressed="true"] { color: var(--text); border-color: var(--text); }

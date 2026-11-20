@@ -12,7 +12,7 @@ const FOOTPRINT = 0.8;
 const SLOT_PITCH = 1.0;
 const ROW_PITCH = 1.8;
 const LIGHT_LEVELS = 4;
-const LABEL_GAP = 1.4;
+const LABEL_GAP = 2; // clear ground between a row's left end and its name: a name is about a metre wide in the world and is centred on its point
 const LABEL_SIZE = 0.6;
 const FOCUS_MIN = 12; // a focus view is at least this far from its target...
 const FOCUS_PER_UNIT = 1.4; // ...and this many times a district's width (+ FOCUS_MARGIN): authored for a square viewport
@@ -155,9 +155,12 @@ export function build({ rows }, spec = {}) {
   g.groups = groups;
   g.items = itemsFrom(rows, spec.units);
   g.batches = buildBatches(placed, groups.length);
+  // A row's name stands on the line of its row, past its left end. Seen from the front, a row behind others would have its name drawn
+  // over their towers; so the further back a row is, the further out its name stands: one step of ROW_PITCH per row in front, which
+  // puts every name in one column to the left of the whole city.
   g.labels = groups.map((grp, i) => ({
     text: grp.name,
-    at: [-(total / 2) * SLOT_PITCH - LABEL_GAP, 0.1, (i - (groups.length - 1) / 2) * ROW_PITCH],
+    at: [-(total / 2) * SLOT_PITCH - LABEL_GAP - (groups.length - 1 - i) * ROW_PITCH, 0.1, (i - (groups.length - 1) / 2) * ROW_PITCH],
     size: LABEL_SIZE,
   }));
   g.focus = rows.length === 0 ? {} : buildFocus(placed, groups, namedTimes(rows, spec));

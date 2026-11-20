@@ -108,6 +108,47 @@ test('child process: with node_modules present the guarded import is reached (th
   assert.match(r.stderr, /Cannot find package 'some-package-that-is-not-installed'/, 'without the preflight this is what a missing install looked like');
 });
 
+// A node_modules folder that exists but lacks a package (an aborted npm ci, one made by another npm install) is the same
+// miss as no folder: each package the skill's package.json lists under "dependencies" must resolve.
+function partialSkill(installed) {
+  const skill = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-preflight-partial-'));
+  fs.writeFileSync(path.join(skill, 'package.json'), JSON.stringify({ name: 'x', dependencies: { ajv: '1.0.0', '@scope/pkg': '1.0.0' }, devDependencies: { playwright: '1.0.0' } }));
+  for (const name of installed) {
+    fs.mkdirSync(path.join(skill, 'node_modules', name), { recursive: true });
+    fs.writeFileSync(path.join(skill, 'node_modules', name, 'package.json'), '{}');
+  }
+  return skill;
+}
+
+test('a node_modules that lacks a dependency of the skill is a miss: exit 2, the missing names, the doctor command', () => {
+  const skill = partialSkill(['ajv']);
+  const r = run(skill, { argv: [] });
+  assert.equal(r.ok, false);
+  assert.equal(r.code, 2);
+  assert.match(r.err, /dependencies are not installed \(node_modules in .* lacks @scope\/pkg\)/);
+  assert.ok(r.err.includes('--fix node_modules'), r.err);
+  assert.doesNotMatch(r.err, /ajv\b.*lacks|lacks.*\bajv\b/, 'only the missing one is named');
+});
+
+test('every dependency present is a pass, and a devDependency that is not installed is not required', () => {
+  const r = run(partialSkill(['ajv', '@scope/pkg']), { argv: [] });
+  assert.deepEqual(r, { ok: true, out: '', err: '', code: 0 });
+});
+
+test('child process: a node_modules holding one package of two ends in the hint and exit 2, not a raw ERR_MODULE_NOT_FOUND', () => {
+  const skill = partialSkill(['ajv']);
+  const entry = path.join(skill, 'entry.mjs');
+  fs.writeFileSync(entry, [
+    `import { preflight } from ${JSON.stringify(PREFLIGHT_URL)};`,
+    `if (preflight(${JSON.stringify(skill)})) await import('@scope/pkg');`,
+    '',
+  ].join('\n'));
+  const r = spawnSync(process.execPath, [entry], { encoding: 'utf8', env: { ...process.env, HOME: skill, USERPROFILE: skill } });
+  assert.equal(r.status, 2, r.stderr);
+  assert.doesNotMatch(r.stderr, /ERR_MODULE_NOT_FOUND|Cannot find package/);
+  assert.match(r.stderr, /--fix node_modules/);
+});
+
 test('child process: an old plugin-cache copy without node_modules still gets the stale-copy warning', () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-preflight-home-'));
   const cache = path.join(home, '.claude', 'plugins', 'cache', 'claude-skills', 'portable-artifacts');

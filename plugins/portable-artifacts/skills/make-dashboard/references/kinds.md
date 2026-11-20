@@ -47,7 +47,7 @@ Views: `stacked`, `normalized` (needs every `y` >= 0 and a positive total), `tab
 ## line
 
 Change over time. Roles: `x` (date or timestamp, or text in query order), `y` (number), optional `color` (text). A numeric `x` (a year, an hour) is an error that names the fix: `CAST(x AS VARCHAR) AS x` for categories in query order, or a real date (`make_date(year, month, 1)`) for a time axis.
-Gets: crosshair on the nearest point, x zoom and pan (date x only; double-click resets), legend filter when `color` is set.
+Gets: crosshair on the nearest point, x zoom and pan (date x only; double-click resets). With `color` and at most 4 series, each line is labelled at its last point and there is no legend; with more series, a legend filter.
 Views: `area` (when `color` is set it needs every `y` >= 0 and a positive total), `table`.
 
     { "id": "trend", "title": "Revenue up 18% since March", "query": "monthly",

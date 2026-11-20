@@ -226,4 +226,4 @@ adapters/install.sh all
 
 Re-run after adding skills; the script is idempotent and prunes links it created for removed skills. The `codex` adapter links into `~/.agents/skills`, the folder Codex reads; links an older run left in `~/.codex/skills` are not removed, so delete them by hand.
 
-The adapters link skill folders only. `make-dashboard` / `make-diagram` / `make-explainer` / `make-motion` / `make-scene` additionally need `npm ci` in their skill folders, and sibling skills beside them; `node plugins/portable-artifacts/bin/install.mjs <host>` handles that (plus Gemini and project-scoped installs). Run any installer against a temporary directory when testing, not this checkout.
+The adapters link skill folders only. `make-dashboard` / `make-diagram` / `make-explainer` / `make-motion` / `make-scene` additionally need `npm ci --ignore-scripts` in their skill folders, and sibling skills beside them; `node plugins/portable-artifacts/bin/install.mjs <host>` handles that (plus Gemini and project-scoped installs). Run any installer against a temporary directory when testing, not this checkout.

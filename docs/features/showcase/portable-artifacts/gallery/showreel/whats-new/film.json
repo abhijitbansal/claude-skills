@@ -1,0 +1,359 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "desk",
+  "format": "16:9",
+  "seed": 7,
+  "voice": { "name": "af_heart" },
+  "music": { "bed": "drift" },
+  "sound": "on",
+  "generatedBy": { "model": "claude-sonnet-5-5", "agent": "Claude Code" },
+  "shots": [
+    {
+      "id": "hook",
+      "show": "statement",
+      "say": "Everything new in *portable-artifacts* 2.0, and two tools beside it."
+    },
+    {
+      "id": "the-file",
+      "show": "code",
+      "cut": { "type": "slide", "direction": "up" },
+      "mode": "type",
+      "lang": "json",
+      "title": "whats-new.json, an excerpt",
+      "highlight": [4],
+      "code": "{\n  \"id\": \"hook\",\n  \"show\": \"statement\",\n  \"say\": \"Everything new in …\"\n}",
+      "say": "This film is one JSON file, voiced on this machine. (1.1)"
+    },
+    {
+      "id": "sixteen",
+      "show": "number",
+      "cut": "cut",
+      "kicker": "New",
+      "value": 16,
+      "label": "kinds of shot, in seven looks",
+      "say": "Sixteen kinds of shot, in seven looks."
+    },
+    {
+      "id": "looks-draw",
+      "show": "chart",
+      "cut": "crossfade",
+      "type": "bar",
+      "title": "NEW: kinds per look",
+      "highlight": "desk",
+      "source": "Parked or excluded kinds not counted. SKILL.md look table",
+      "data": [
+        { "label": "desk", "value": 16 },
+        { "label": "pop", "value": 16 },
+        { "label": "cosmos", "value": 16 },
+        { "label": "ledger", "value": 15 },
+        { "label": "poster", "value": 14 },
+        { "label": "keynote", "value": 14 },
+        { "label": "marker", "value": 9 }
+      ],
+      "say": "*Desk* draws all sixteen. (1.5)"
+    },
+    {
+      "id": "releases",
+      "show": "timeline",
+      "cut": { "type": "slide", "direction": "left" },
+      "title": "Three days from 1.3.0 to 2.0.0",
+      "highlight": 1,
+      "events": [
+        { "when": "15 Nov", "what": "1.3.0" },
+        { "when": "18 Nov", "what": "2.0.0" }
+      ],
+      "say": "One point three. Three days later, two point oh."
+    },
+    {
+      "id": "map",
+      "show": "map",
+      "cut": "cut",
+      "region": "world",
+      "title": "NEW: the map kind",
+      "source": "Example places",
+      "places": [
+        { "name": "Paris", "at": [2.35, 48.86] },
+        { "name": "Nairobi", "at": [36.82, -1.29] },
+        { "name": "Tokyo", "at": [139.69, 35.68] }
+      ],
+      "routes": [
+        { "from": "Paris", "to": "Nairobi" },
+        { "from": "Paris", "to": "Tokyo" }
+      ],
+      "say": "A map. Paris, Nairobi, Tokyo. (1.8)"
+    },
+    {
+      "id": "one-command",
+      "show": "diagram",
+      "cut": { "type": "wipe", "direction": "right" },
+      "layout": "row",
+      "title": "NEW: one command",
+      "nodes": [
+        { "id": "film", "label": "film.json" },
+        { "id": "command", "label": "make.mjs" },
+        { "id": "sheets", "label": "Sheets" },
+        { "id": "mp4", "label": "MP4" }
+      ],
+      "edges": [
+        { "from": "film", "to": "command" },
+        { "from": "command", "to": "sheets" },
+        { "from": "sheets", "to": "mp4" }
+      ],
+      "say": "One command turns film.json into sheets and an MP4. (0.7)"
+    },
+    {
+      "id": "no-animation-code",
+      "show": "quote",
+      "cut": "cut",
+      "text": "You never write animation code.",
+      "by": "make-motion SKILL.md",
+      "role": "NEW, in the skill's own words",
+      "say": "You never write animation code. (0.9)"
+    },
+    {
+      "id": "findings",
+      "show": "feed",
+      "cut": "crossfade",
+      "style": "notifications",
+      "title": "NEW: two kinds of finding",
+      "items": [
+        { "app": "make.mjs", "text": "Mechanical: a JSON path to change" },
+        { "app": "make.mjs", "text": "Creative: a call for the director" }
+      ],
+      "say": "Mechanical findings name a path. Creative ones are your call."
+    },
+    {
+      "id": "sheet",
+      "show": "clipping",
+      "cut": { "type": "wipe", "direction": "up" },
+      "hero": "card",
+      "src": "whats-new-assets/sheet-dashboard.png",
+      "kicker": "New",
+      "caption": "A real contact sheet",
+      "regions": { "cell": [0.67, 0.01, 0.32, 0.32] },
+      "on": [{ "at": "word:sheet", "do": "highlight", "target": "region:cell" }],
+      "say": "Every shot is reviewed, and a contact sheet is written."
+    },
+    {
+      "id": "look-cosmos",
+      "show": "media",
+      "cut": "page-curl",
+      "src": "whats-new-assets/look-cosmos.mp4",
+      "muted": true,
+      "in": 0,
+      "out": 2,
+      "fit": "cutout",
+      "caption": "cosmos",
+      "say": "Cosmos, for science."
+    },
+    {
+      "id": "look-ledger",
+      "show": "media",
+      "cut": "crossfade",
+      "src": "whats-new-assets/look-ledger.mp4",
+      "muted": true,
+      "in": 0,
+      "out": 2,
+      "fit": "cutout",
+      "caption": "ledger",
+      "say": "Ledger, for data."
+    },
+    {
+      "id": "look-keynote",
+      "show": "media",
+      "cut": "crossfade",
+      "src": "whats-new-assets/look-keynote.mp4",
+      "muted": true,
+      "in": 0,
+      "out": 2.5,
+      "fit": "cutout",
+      "caption": "keynote",
+      "say": "Keynote, for launches."
+    },
+    {
+      "id": "look-marker",
+      "show": "media",
+      "cut": "cut",
+      "src": "whats-new-assets/look-marker.mp4",
+      "muted": true,
+      "in": 0,
+      "out": 2.2,
+      "fit": "cutout",
+      "caption": "marker",
+      "say": "Marker, drawn by hand."
+    },
+    {
+      "id": "look-poster",
+      "show": "media",
+      "cut": "cut",
+      "src": "whats-new-assets/look-poster.mp4",
+      "muted": true,
+      "in": 0,
+      "out": 2.5,
+      "fit": "cutout",
+      "caption": "poster",
+      "say": "Poster, loud claims."
+    },
+    {
+      "id": "look-pop",
+      "show": "media",
+      "cut": { "type": "slide", "direction": "left" },
+      "src": "whats-new-assets/look-pop.mp4",
+      "muted": true,
+      "in": 0,
+      "out": 2.5,
+      "fit": "cutout",
+      "caption": "pop",
+      "say": "Pop, for fast shorts."
+    },
+    {
+      "id": "look-desk",
+      "show": "media",
+      "cut": "cut",
+      "src": "whats-new-assets/look-desk.mp4",
+      "muted": true,
+      "in": 0,
+      "out": 2.5,
+      "fit": "cutout",
+      "caption": "desk",
+      "say": "Desk, for this film."
+    },
+    {
+      "id": "sound",
+      "show": "number",
+      "cut": "page-curl",
+      "kicker": "New",
+      "value": 13,
+      "label": "kinds of sound cue, made here",
+      "say": "The voice times each shot. Thirteen kinds of cue. (0.8)"
+    },
+    {
+      "id": "frame-zero",
+      "show": "clipping",
+      "cut": { "type": "wipe", "direction": "right" },
+      "hero": "card",
+      "src": "whats-new-assets/viral-frame-0.png",
+      "kicker": "New",
+      "caption": "Frame zero names the product",
+      "regions": { "top": [0.05, 0.15, 0.9, 0.62] },
+      "on": [{ "at": "word:product", "do": "highlight", "target": "region:top" }],
+      "say": "In a viral film, frame zero names the product."
+    },
+    {
+      "id": "redrawn-dashboard",
+      "show": "screen",
+      "cut": "cut",
+      "frame": "window",
+      "src": "showreel-assets/dashboard-hd.png",
+      "title": "NEW: make-dashboard, redrawn",
+      "regions": {
+        "tile": [0.013, 0.02, 0.235, 0.215],
+        "label": [0.027, 0.048, 0.1, 0.034],
+        "numeral": [0.027, 0.088, 0.106, 0.065]
+      },
+      "zoom": "tile",
+      "on": [
+        { "at": "word:caps", "do": "circle", "target": "region:label" },
+        { "at": "word:numeral", "do": "underline", "target": "region:numeral" }
+      ],
+      "say": "make-dashboard. A caps label, a big numeral."
+    },
+    {
+      "id": "redrawn-diagram",
+      "show": "clipping",
+      "cut": { "type": "slide", "direction": "left" },
+      "hero": "card",
+      "src": "showreel-assets/diagram-wide.png",
+      "kicker": "New",
+      "caption": "make-diagram, redrawn",
+      "regions": { "edges": [0.29, 0.38, 0.7, 0.5] },
+      "on": [{ "at": "word:dotted", "do": "highlight", "target": "region:edges" }],
+      "say": "make-diagram. Calls are solid. Event edges are dotted."
+    },
+    {
+      "id": "redrawn-explainer",
+      "show": "clipping",
+      "cut": { "type": "slide", "direction": "left" },
+      "hero": "card",
+      "src": "showreel-assets/explainer.png",
+      "kicker": "New",
+      "caption": "make-explainer, redrawn",
+      "regions": { "air": [0.03, 0.0, 0.78, 0.32] },
+      "on": [{ "at": "word:hero", "do": "bracket", "target": "region:air" }],
+      "say": "make-explainer. More air above the hero."
+    },
+    {
+      "id": "redrawn-scene",
+      "show": "clipping",
+      "cut": { "type": "slide", "direction": "left" },
+      "hero": "card",
+      "src": "showreel-assets/scene-hover.png",
+      "kicker": "New",
+      "caption": "make-scene, redrawn",
+      "regions": { "tower": [0.44, 0.04, 0.36, 0.6] },
+      "on": [{ "at": "word:tones", "do": "highlight", "target": "region:tower" }],
+      "say": "make-scene. Every wall has two tones."
+    },
+    {
+      "id": "director-operator",
+      "show": "compare",
+      "cut": "cut",
+      "mode": "versus",
+      "kicker": "New",
+      "left": { "title": "Director", "points": ["Writes the spec", "Views the sheets", "Decides every creative finding"] },
+      "right": { "title": "Operator", "points": ["Runs the one command", "Fixes mechanical findings only"] },
+      "say": "The agent you talk to writes the file. A cheaper agent runs the build."
+    },
+    {
+      "id": "locked",
+      "show": "statement",
+      "cut": "cut",
+      "kicker": "New",
+      "say": "Locked installs. *Hashed* downloads. (0.7)"
+    },
+    {
+      "id": "same-everywhere",
+      "show": "statement",
+      "cut": "cut",
+      "kicker": "New",
+      "say": "A film reviews the same on *Linux* and *macOS*. (0.7)"
+    },
+    {
+      "id": "keepwarm",
+      "show": "list",
+      "cut": { "type": "wipe", "direction": "right" },
+      "title": "Also",
+      "style": "points",
+      "items": ["cache-clock keep-warm", "Off until you turn it on", "It costs money", "Tested against a fake Copilot host only"],
+      "say": "Cache clock can keep the cache warm. Off by default. It costs money. Only a fake host tested it. (0.4)"
+    },
+    {
+      "id": "compass",
+      "show": "list",
+      "cut": "cut",
+      "title": "Also",
+      "style": "points",
+      "items": ["session-compass: up to two lines", "/compass more: the full text", "/compass hide and /compass show"],
+      "say": "session compass has a two line band. (0.4)"
+    },
+    {
+      "id": "one-against-four",
+      "show": "compare",
+      "cut": { "type": "wipe", "direction": "up" },
+      "mode": "before-after",
+      "left": { "title": "Version 1", "points": ["Four scripts", "Nine themes, 38 blocks", "A duration per scene"] },
+      "right": { "title": "Version 2", "points": ["One command", "Seven looks, sixteen kinds", "The voice times each shot"] },
+      "say": "One command, not four scripts. Seven looks, not nine themes."
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "cut": "fade",
+      "title": "Open source. On your machine.",
+      "say": "Open source. Install it in Claude Code.",
+      "ask": "Install it in Claude Code",
+      "mark": "portable-artifacts"
+    }
+  ]
+}

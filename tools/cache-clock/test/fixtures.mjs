@@ -29,6 +29,9 @@ export function usage({
   initiator = "user",
   interactionType = "conversation-agent",
   display = model === "gpt-6-luna" ? "GPT-6 Luna" : "Claude Sonnet 5.5",
+  duration,
+  nanoAiu = 111133000,
+  maxPromptTokens,
 } = {}) {
   const exp = expiresAt === undefined ? new Date(Date.parse(at) + ttl * 1000).toISOString() : expiresAt;
   return {
@@ -40,6 +43,8 @@ export function usage({
     cacheWriteTokens: write,
     ...(exp === null ? {} : { cacheExpiresAt: exp }),
     ...(ttl === null ? {} : { cacheTtlSeconds: ttl }),
+    ...(duration === undefined ? {} : { duration }),
+    ...(maxPromptTokens === undefined ? {} : { maxPromptTokens }),
     initiator,
     interactionType,
     copilotUsage: {
@@ -47,9 +52,14 @@ export function usage({
         ...p,
         tokenCount: { input: input - read - write, cache_read: read, cache_write: write, output }[p.tokenType],
       })),
-      totalNanoAiu: 111133000,
+      totalNanoAiu: nanoAiu,
     },
   };
+}
+
+// A keep-warm ping's usage record: reads the whole previous context, writes and outputs nothing.
+export function pingUsage({ at, input = 200_000, read = input, nanoAiu = 2e9, model = "claude-sonnet-5.5", ttl = 300 } = {}) {
+  return usage({ model, at, ttl, input, read, write: 0, output: 0, nanoAiu });
 }
 
 export const T0 = Date.parse("2026-10-10T08:15:56.769Z");

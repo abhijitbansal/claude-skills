@@ -339,15 +339,15 @@ test('renderFailure has no special case for ENOBUFS: runChild never reports it',
 
 test('make-motion exiting 0 without writing the video is a clear error keyed to the spec, not a raw ENOENT', async () => {
   const dir = tmp('b2-nofile-');
-  const script = path.join(dir, 'render.mjs');
+  const script = path.join(dir, 'make.mjs');
   fs.writeFileSync(script, 'process.exitCode = 0;\n');
   await assert.rejects(
-    renderMotion(path.join(SKILL, 'test/fixtures/motion.json'), { scenes: [{ duration: 1 }] }, process.env, { script }),
+    renderMotion(path.join(SKILL, 'test/fixtures/motion.json'), process.env, { script }),
     (e) => {
       assert.equal(e.name, 'SectionErrors');
       assert.equal(e.errors.length, 1);
       assert.equal(e.errors[0].path, 'spec');
-      assert.match(e.errors[0].message, /^make-motion finished without writing the video; run its scripts\/render\.mjs by hand to see why$/);
+      assert.match(e.errors[0].message, /^make-motion finished without writing the video; run its scripts\/make\.mjs by hand to see why$/);
       assert.ok(!/ENOENT/.test(e.errors[0].message));
       return true;
     },

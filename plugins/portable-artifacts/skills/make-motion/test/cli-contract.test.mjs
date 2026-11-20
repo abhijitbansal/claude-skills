@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const run = (script, ...args) => spawnSync(process.execPath, [path.join(root, 'scripts', script), ...args], { encoding: 'utf8' });
-const SCRIPTS = ['beats', 'blocks', 'check', 'cutout', 'doctor', 'preview', 'render', 'sketch-icons', 'storyboard', 'validate', 'voice'];
+const SCRIPTS = ['beats', 'cutout', 'doctor', 'make', 'storyboard'];
 
 for (const name of SCRIPTS) {
   test(`${name}.mjs --help prints the usage on stdout and exits 0`, () => {
@@ -21,28 +21,25 @@ for (const name of SCRIPTS) {
   });
 }
 
-test('validate.mjs and preview.mjs reject an unknown flag with exit 2 and the usage line', () => {
+test('make.mjs rejects an unknown flag with exit 2 and names the accepted ones', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'cli-'));
-  const spec = path.join(dir, 'm.json');
-  writeFileSync(spec, JSON.stringify({ scenes: [{ id: 's1', duration: 1, elements: [] }] }));
-  for (const script of ['validate.mjs', 'preview.mjs']) {
-    const r = run(script, spec, '--jsno');
-    assert.equal(r.status, 2, `${script}: ${r.stdout}${r.stderr}`);
-    assert.match(r.stderr, /Unknown option '--jsno'/, script);
-    assert.match(r.stderr, new RegExp(`usage: node scripts/${script}`), script);
-  }
+  const film = path.join(dir, 'film.json');
+  writeFileSync(film, JSON.stringify({ shots: [] }));
+  const r = run('make.mjs', film, '--jsno');
+  assert.equal(r.status, 2, `${r.stdout}${r.stderr}`);
+  assert.match(r.stderr, /--jsno/);
 });
 
-test('validate.mjs: no file, two files and an unreadable file are usage errors (exit 2)', () => {
-  assert.equal(run('validate.mjs').status, 2);
-  assert.equal(run('validate.mjs', 'a.json', 'b.json').status, 2);
-  assert.equal(run('validate.mjs', path.join(tmpdir(), 'no-such-motion.json')).status, 2);
+test('make.mjs: no film, two films and an unreadable film are usage errors (exit 2)', () => {
+  assert.equal(run('make.mjs').status, 2);
+  assert.equal(run('make.mjs', 'a.json', 'b.json').status, 2);
+  assert.equal(run('make.mjs', path.join(tmpdir(), 'no-such-film.json')).status, 2);
 });
 
-test('validate.mjs --json keeps its envelope on a usage error', () => {
-  const r = run('validate.mjs', '--json');
+test('make.mjs --json keeps one JSON object with ok:false and an error on a usage error', () => {
+  const r = run('make.mjs', '--json');
   assert.equal(r.status, 2);
   const out = JSON.parse(r.stdout);
   assert.equal(out.ok, false);
-  assert.match(out.errors[0].message, /expected one spec file/);
+  assert.ok(out.error?.message, r.stdout);
 });

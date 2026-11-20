@@ -110,29 +110,56 @@ test('spec path rules: outside, missing, wrong extension, symlink, not JSON, not
 
 // ---- validation: the motion spec itself ----------------------------------------------------
 
-test("a motion spec's errors are make-motion's own, re-pathed under the section's spec field", async () => {
+// make-motion 2's own validator, loaded the way the explainer loads it, so a test takes its sentences from it instead of retyping them.
+const MOTION = path.join(SKILL, '..', 'make-motion');
+async function filmErrors(film, specDir) {
+  await import(pathToFileURL(path.join(MOTION, 'scripts/v2/list.mjs')).href);
+  const { validateFilm } = await import(pathToFileURL(path.join(MOTION, 'scripts/v2/spec.mjs')).href);
+  return validateFilm(film, { specDir }).errors;
+}
+
+test("a motion film's errors are make-motion 2's own, re-pathed under the section's spec field", async () => {
   const dir = folder({
-    'bad.json': { size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [{ id: 'a', type: 'text', text: 'x', x: 0, y: 0, fontSize: 'big' }] }] },
-    'dup.json': { size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [{ id: 'a', type: 'text', text: 'x', x: 0, y: 0 }, { id: 'a', type: 'shape', shape: 'ellipse', x: 0, y: 0 }] }] },
+    'bad.json': { version: 2, shots: [{ id: 'a', show: 'statement', kicker: 5, say: 'x' }] },
+    'dup.json': { version: 2, shots: [{ id: 'a', show: 'statement', say: 'x' }, { id: 'a', show: 'statement', say: 'y' }] },
     'empty.json': {},
-    'img.json': { scenes: [{ id: 's', duration: 1, elements: [{ id: 'i', type: 'image', src: '../outside.png', width: 10, height: 10, x: 0, y: 0 }] }] },
+    'img.json': { version: 2, shots: [{ id: 'p', show: 'media', src: '../outside.png', hold: 2 }] },
   });
   const at = async (spec) => errorsOf(doc([text, { type: 'motion', spec }]), dir);
-  assert.deepEqual(await at('bad.json'), [
-    'sections[1].spec.scenes[0].elements[0].fontSize: must be number (in bad.json)',
-  ]);
-  // make-motion's own wording (it now adds the shared-namespace hint); the explainer only re-paths it and adds the file.
-  assert.deepEqual(await at('dup.json'), [
-    'sections[1].spec.scenes[0].elements[1].id: duplicate id "a" (first used at scenes[0].elements[0].id); scene ids and element ids share one namespace; rename one (in dup.json)',
-  ]);
-  assert.deepEqual(await at('empty.json'), ['sections[1].spec.scenes: required (array of object) (in empty.json)']);
+  assert.deepEqual(await at('bad.json'), ['sections[1].spec.shots[0].kicker: must be string (in bad.json)']);
+  assert.deepEqual(await at('dup.json'), ['sections[1].spec.shots[1].id: duplicate id "a" (first used at shots[0]) (in dup.json)']);
+  assert.deepEqual(await at('empty.json'), ['sections[1].spec.version: required; write "version": 2 (in empty.json)', 'sections[1].spec.shots: required (array) (in empty.json)']);
   const [img] = await at('img.json');
-  assert.match(img, /^sections\[1\]\.spec\.scenes\[0\]\.elements\[0\]\.src: must stay inside the spec folder \(in img\.json\)$/);
+  assert.match(img, /^sections\[1\]\.spec\.shots\[0\]\.src: "\.\.\/outside\.png" is outside the spec folder; .* \(in img\.json\)$/);
+  // every sentence is the validator's own
+  const own = (await filmErrors(JSON.parse(fs.readFileSync(path.join(dir, 'bad.json'), 'utf8')), dir)).map((e) => e.message);
+  assert.deepEqual(own, ['must be string']);
 });
 
-test("a motion spec's images resolve against the motion spec's own folder", async () => {
+test('a version 1 spec is refused with the validator\'s own sentence, behind the section\'s path', async () => {
+  const dir = folder({ 'old.json': { size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [] }] }, 'old2.json': { version: 1, shots: [] } });
+  const [refusal] = await filmErrors({ scenes: [] }, dir);
+  assert.match(refusal.message, /version 1 spec; make-motion 2 reads version 2 only\. See references\/migrating\.md/);
+  assert.deepEqual(await errorsOf(doc([text, { type: 'motion', spec: 'old.json' }]), dir), [`sections[1].spec: ${refusal.message} (in old.json)`]);
+  assert.deepEqual(await errorsOf(doc([{ type: 'motion', spec: 'old2.json' }]), dir), [`sections[0].spec: ${refusal.message} (in old2.json)`]);
+});
+
+// In a child process: this file's own helper (filmErrors) registers the kinds in this one, which would hide a missing load.
+test('the kinds are registered before a film is judged: a film with a map shot validates through make-explainer', () => {
+  const film = { version: 2, shots: [{ id: 'where', show: 'map', region: 'world', title: 'Where', places: [{ name: 'Oslo', at: [10.75, 59.91] }], say: 'There.' }, { id: 'x', show: 'nope', say: 'x' }] };
+  const dir = folder({ 'map.json': film });
+  const spec = path.join(dir, 'a.explainer.json');
+  fs.writeFileSync(spec, JSON.stringify(doc([{ type: 'motion', spec: 'map.json' }])));
+  const r = spawnSync(process.execPath, [path.join(SKILL, 'scripts/validate.mjs'), spec], { encoding: 'utf8', env: { ...process.env, EVAL_LOG: '' } });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const lines = r.stdout.split('\n').filter((l) => l.startsWith('sections['));
+  assert.equal(lines.length, 1, r.stdout);
+  assert.match(lines[0], /^sections\[0\]\.spec\.shots\[1\]\.show: unknown kind "nope"/, 'the map shot is known, the made-up one is not');
+});
+
+test("a motion film's pictures resolve against the film's own folder", async () => {
   const dir = folder({
-    'media/m.json': { size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [{ id: 'i', type: 'image', src: 'p.png', width: 16, height: 9, x: 80, y: 45 }] }] },
+    'media/m.json': { version: 2, shots: [{ id: 'i', show: 'media', src: 'p.png', hold: 2 }] },
   });
   fs.copyFileSync(path.join(FIXTURES, 'poster.png'), path.join(dir, 'media/p.png'));
   assert.deepEqual(await errorsOf(doc([{ type: 'motion', spec: 'media/m.json' }]), dir), []);
@@ -373,8 +400,8 @@ test('renderFailure shows a bounded tail of the output, not just the last line',
   assert.ok(text.includes('line 30') && text.includes('line 25'), text);
   assert.ok(!text.includes('line 20\n') && !text.includes('line 1\n'), 'older lines are cut');
   assert.ok(text.split('\n').length <= 10);
-  const spec = renderFailure({ status: 1, stderr: '', stdout: 'sections\nscenes[0].duration: required\nm.json: 1 error\n' });
-  assert.match(spec, /scenes\[0\]\.duration: required\n.*m\.json: 1 error$/s, 'the output of a failed validation is shown whole, not just its summary line');
+  const spec = renderFailure({ status: 1, stderr: '', stdout: 'sections\nshots[0].say: required\nm.json: 1 error\n' });
+  assert.match(spec, /shots\[0\]\.say: required\n.*m\.json: 1 error$/s, 'output that is not a report is shown whole, not just its summary line');
   const long = renderFailure({ status: 1, stderr: `${'x'.repeat(2000)}\n` });
   assert.ok(long.length < 600, 'a very long line is cut');
 });
@@ -438,7 +465,7 @@ test('a rendered video gets the same size cap as a user video', async (t) => {
   const why = await canRender();
   if (why) return t.skip(why);
   const dir = folder();
-  await assert.rejects(renderMotion(path.join(dir, 'motion.json'), { scenes: [{ duration: 1 }] }, process.env, { maxBytes: 100 }), (e) => {
+  await assert.rejects(renderMotion(path.join(dir, 'motion.json'), process.env, { maxBytes: 100 }), (e) => {
     assert.equal(e.errors[0].path, 'spec');
     assert.match(e.errors[0].message, /^rendered video is \d+\.\d+ MB; the limit is \S+ MB — shorten it or lower the size in the spec/);
     return true;
@@ -446,33 +473,69 @@ test('a rendered video gets the same size cap as a user video', async (t) => {
   return undefined;
 });
 
-// ---- the page theme reaches the embedded motion spec -------------------------------------------------
+// ---- the command it runs: make-motion 2's make.mjs, no theme, a poster from second 0 -----------------
 
-test('motionArgs: a motion spec without a theme is rendered with the page theme, one with its own keeps it', () => {
-  assert.deepEqual(motionArgs('/s/m.json', '/t/v.mp4', {}, 'ink'), ['/s/m.json', '--out', '/t/v.mp4', '--theme', 'ink']);
-  assert.deepEqual(motionArgs('/s/m.json', '/t/v.mp4', { theme: 'paper' }, 'ink'), ['/s/m.json', '--out', '/t/v.mp4']);
-  assert.deepEqual(motionArgs('/s/m.json', '/t/v.mp4', {}, undefined), ['/s/m.json', '--out', '/t/v.mp4']);
+test('motionArgs: the film, --out and --json, and nothing about a theme', () => {
+  assert.deepEqual(motionArgs('/s/m.json', '/t/v.mp4'), ['/s/m.json', '--out', '/t/v.mp4', '--json']);
 });
 
-test('end to end: the poster frame follows the page theme, and a motion spec with its own theme ignores it', async (t) => {
-  const why = await canRender();
-  if (why) return t.skip(why);
-  const frame = async (motion, theme) => {
-    const dir = folder({ 'm.json': motion });
-    const { html } = await buildPage(doc([{ type: 'motion', spec: 'm.json' }], { theme }), { dir, out: out(dir) });
-    return /poster="([^"]+)"/.exec(html)[1];
-  };
-  const base = { size: [160, 90], scenes: [{ id: 's', duration: 1, elements: [] }] };
-  assert.notEqual(await frame(base, 'blueprint'), await frame(base, 'paper'), 'no theme in the spec: the page theme paints the video');
-  const own = { ...base, theme: 'ink' };
-  assert.equal(await frame(own, 'blueprint'), await frame(own, 'paper'), 'a theme in the spec wins');
-  return undefined;
+// A make.mjs stand-in that records its argument list and writes a file where --out says; an ffmpeg stand-in that records its.
+const recordingMake = () => {
+  const { file, dir } = stub(`import fs from 'node:fs'; const a = process.argv.slice(2); fs.writeFileSync(new URL('argv.json', import.meta.url), JSON.stringify(a)); fs.writeFileSync(a[a.indexOf('--out') + 1], Buffer.from('....ftypmp42 a video')); process.stdout.write(JSON.stringify({ ok: true, findings: [] }) + '\\n');`);
+  return { script: file, argv: () => JSON.parse(fs.readFileSync(path.join(dir, 'argv.json'), 'utf8')) };
+};
+
+test('renderMotion runs make.mjs with exactly film, --out file, --json, whatever the page theme', async () => {
+  const { script, argv } = recordingMake();
+  await renderMotion('/s/film.json', process.env, { script, theme: 'ink' });
+  const args = argv();
+  assert.equal(args.length, 4, args.join(' '));
+  assert.deepEqual([args[0], args[1], path.basename(args[2]), args[3]], ['/s/film.json', '--out', 'video.mp4', '--json']);
 });
 
+test('renderMotion takes the poster from second 0 of the rendered file', async () => {
+  const { script } = recordingMake();
+  const { file: ffmpeg, dir } = stub(`#!${process.execPath}\nimport fs from 'node:fs'; const a = process.argv.slice(2); fs.writeFileSync(new URL('ffmpeg-argv.json', import.meta.url), JSON.stringify(a)); fs.writeFileSync(a.at(-1), Buffer.from('a poster'));\n`);
+  fs.chmodSync(ffmpeg, 0o755);
+  const saved = process.env.FFMPEG_PATH;
+  process.env.FFMPEG_PATH = ffmpeg;
+  try {
+    const rendered = await renderMotion('/s/film.json', process.env, { script });
+    assert.equal(rendered.poster?.toString(), 'a poster');
+    const args = JSON.parse(fs.readFileSync(path.join(dir, 'ffmpeg-argv.json'), 'utf8'));
+    assert.equal(args[args.indexOf('-ss') + 1], '0', args.join(' '));
+  } finally {
+    if (saved === undefined) delete process.env.FFMPEG_PATH; else process.env.FFMPEG_PATH = saved;
+  }
+});
 
-test('renderMotion without make-motion/render.mjs throws a SiblingError that names the doctor id', async () => {
+test('a make.mjs that exits non-zero fails the section with the report\'s own words', async () => {
+  const report = { ok: false, findings: [{ kind: 'mechanical', shot: 'a', path: 'shots[0].say', message: 'say is too long for the shot' }], error: null };
+  const { file } = stub(`process.stdout.write(${JSON.stringify(`${JSON.stringify(report)}\n`)}); process.exitCode = 1;`);
+  await assert.rejects(renderMotion('/s/film.json', process.env, { script: file }), (e) => {
+    assert.equal(e.name, 'SectionErrors');
+    assert.equal(e.errors[0].path, 'spec');
+    assert.match(e.errors[0].message, /^make-motion found 1 problem in the film \(exit 1\):\n {2}shots\[0\]\.say: say is too long for the shot$/);
+    return true;
+  });
+});
+
+test('renderFailure reads make-motion 2\'s JSON report: its error and hint, or its mechanical findings', () => {
+  const reportOf = (extra) => `${JSON.stringify({ ok: false, findings: [], error: null, ...extra })}\n`;
+  const ffmpeg = renderFailure({ status: 2, stdout: reportOf({ error: { message: 'ffmpeg not found', hint: 'Install it (macOS: brew install ffmpeg)' } }) });
+  assert.match(ffmpeg, /^make-motion cannot render this spec: it needs ffmpeg and a Chromium browser\. ffmpeg not found\. Install it \(macOS: brew install ffmpeg\)$/);
+  const browser = renderFailure({ status: 2, stdout: reportOf({ error: { message: 'No browser available', hint: 'Run: npx playwright install chromium' } }) });
+  assert.match(browser, /needs ffmpeg and a Chromium browser\. No browser available\. Run: npx playwright install chromium$/);
+  const other = renderFailure({ status: 2, stdout: reportOf({ error: { message: 'the page crashed', hint: '' } }) });
+  assert.equal(other, 'make-motion failed (exit 2): the page crashed');
+  const found = renderFailure({ status: 1, stdout: reportOf({ findings: [{ kind: 'mechanical', path: 'shots[0].hold', message: 'hold cannot be used with say' }, { kind: 'creative', path: 'shots[0].say', message: 'long' }] }) });
+  assert.equal(found, 'make-motion found 1 problem in the film (exit 1):\n  shots[0].hold: hold cannot be used with say');
+  assert.match(renderFailure({ status: 1, stdout: '{"ok":false', stderr: 'boom\n' }), /^make-motion failed \(exit 1\); the end of its output:\n {2}boom$/, 'a report that cut off falls back to the end of the output');
+});
+
+test('renderMotion without make-motion/scripts/make.mjs throws a SiblingError that names the doctor id', async () => {
   await assert.rejects(
-    renderMotion('/nonexistent/motion.json', { scenes: [] }, process.env, { script: '/nonexistent/render.mjs' }),
+    renderMotion('/nonexistent/film.json', process.env, { script: '/nonexistent/make.mjs' }),
     (e) => e.name === 'SiblingError' && /\(doctor: node \S*scripts\/doctor\.mjs, id make-motion\)$/.test(e.message),
   );
 });

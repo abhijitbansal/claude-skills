@@ -112,7 +112,9 @@ test('a legend overlay sitting on a node fails and names the node', async (t) =>
 
 test('a camera that ignores the legend overlay (fits the whole padded canvas) fails at 390 px, where it covers the first node', async (t) => {
   if (await skipUnlessBrowser(t)) return;
-  const bad = doctored('flow', (html) => swap(swap(html, 'var fitBox = overlay &&', 'var fitBox = false && overlay &&'), IGNORE_OVERLAY[0], IGNORE_OVERLAY[1]));
+  // The phone's folded legend is undone too (its keys show): the guard needs the overlay as tall as it wraps to reach the first node.
+  const PHONE_LEGEND = '  .lg-keys { display: none; }\n';
+  const bad = doctored('flow', (html) => swap(swap(swap(html, 'var fitBox = overlay &&', 'var fitBox = false && overlay &&'), IGNORE_OVERLAY[0], IGNORE_OVERLAY[1]), PHONE_LEGEND, ''));
   const r = run([bad]);
   assert.equal(r.status, 1, r.stdout + r.stderr);
   assert.match(r.stdout, /^390px: node "begin" is \d+% under the legend overlay$/m);
@@ -183,7 +185,7 @@ test('without playwright installed the check skips and exits 0', () => {
   fs.mkdirSync(path.join(dir, 'scripts/lib'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'shared'));
   fs.writeFileSync(path.join(dir, 'package.json'), '{"type":"module"}');
-  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'scripts/lib/legibility.mjs', 'scripts/lib/shots.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs', 'shared/stale-copy.mjs']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
+  for (const f of ['scripts/check.mjs', 'scripts/lib/browser.mjs', 'scripts/lib/doctor-hint.mjs', 'scripts/lib/legibility.mjs', 'scripts/lib/shots.mjs', 'shared/cli.mjs', 'shared/errors.mjs', 'shared/doctor.mjs', 'shared/agents.mjs', 'shared/stale-copy.mjs']) fs.copyFileSync(path.join(ROOT, f), path.join(dir, f));
   const { file } = buildPage(example('flow'), { name: 'flow' });
   const r = spawnSync(process.execPath, [path.join(dir, 'scripts/check.mjs'), file], { encoding: 'utf8', env: { ...process.env, PA_NO_BROWSER: '' } });
   assert.equal(r.status, 0, r.stdout + r.stderr);

@@ -8,13 +8,10 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { parseCli, UsageError, exitUsage } from './cli.mjs';
+import { CURRENT_MARKER } from './agents.mjs';
 
 const REPO = 'abhijitbansal/claude-skills';
-export const KOKORO_PIN = 'kokoro-js@1.2.1';
-// make-motion's cutout.mjs runs MODNet on this (MIT); installed on demand like kokoro, never by `npm ci`.
-export const CUTOUT_PIN = 'onnxruntime-node@1.31.1';
-// make-motion's optional static ffmpeg (used when no ffmpeg is on PATH); installed on demand like kokoro, never by `npm ci`.
-export const FFMPEG_STATIC_PIN = 'ffmpeg-static@5.3.0';
+const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
 const SKILLS_CLI = 'skills@1.7.2';
 
 // What `npm ci --omit=dev` puts in a skill's node_modules, as the consent prompt shows it. Measured 2026-11 on macOS in
@@ -26,7 +23,7 @@ export const INSTALL_SIZES = {
   'make-explainer': '≈3 MB',
   'make-diagram': '≈11 MB',
   'make-dashboard': '≈150 MB',
-  'make-motion': '≈58 MB',
+  'make-motion': '≈57 MB',
   'make-scene': '≈3 MB',
 };
 const UNKNOWN_SIZE = '≈3–150 MB, depending on the skill';
@@ -148,17 +145,13 @@ export function nodeVersion(min = 20) {
 }
 
 // What `npm ci` removes from a node_modules that already exists, and the --fix ids that put it back.
-// restore: the --fix ids this skill has for that (dev_deps, kokoro, cutout); omitDev: the reinstall drops dev packages.
+// restore: the --fix ids this skill has for that (dev_deps); omitDev: the reinstall drops dev packages.
+// The optional voice and cutout installs live in <skill>/optional/, so npm ci in the skill folder never touches them.
 function reinstallNote({ omitDev, restore, dir }) {
-  const removes = [
-    ...(omitDev ? ['the dev packages'] : []),
-    ...(restore.includes('kokoro') ? ['any voiceover install (kokoro-js)'] : []),
-    ...(restore.includes('cutout') ? ['any cutout install (onnxruntime-node)'] : []),
-  ];
-  if (removes.length === 0) return undefined;
+  if (!omitDev) return undefined;
   const ids = restore.map((id) => `--fix ${id}`);
-  const back = ids.length > 0 ? `restore with ${ids.join(' and ')}` : `restore the dev packages with npm ci --prefix ${dir} (this skill's doctor has no --fix id for them)`;
-  return `npm ci reinstalls node_modules from the lockfile and removes ${removes.join(' and ')}; ${back}`;
+  const back = ids.length > 0 ? `restore with ${ids.join(' and ')}` : `restore the dev packages with npm ci --ignore-scripts --prefix ${dir} (this skill's doctor has no --fix id for them)`;
+  return `npm ci reinstalls node_modules from the lockfile and removes the dev packages; ${back}`;
 }
 
 // size: what the consent prompt shows; default is the measured figure for this skill (INSTALL_SIZES).
@@ -179,7 +172,7 @@ export function nodeModules({ omitDev = true, restore = [], size } = {}) {
       const installed = ctx.exists(modules);
       // An install that already has playwright (a dev checkout, a --link install) keeps its dev packages: --omit=dev would delete it.
       const dropDev = omitDev && !(installed && ctx.exists(pp(ctx).join(modules, 'playwright')));
-      const argv = ['npm', 'ci', ...(dropDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
+      const argv = ['npm', 'ci', '--ignore-scripts', ...(dropDev ? ['--omit=dev'] : []), '--prefix', ctx.skillDir];
       const out = { auto: [argv], manual: manualAll(render([argv], ctx.platform)) };
       const stale = installed ? staleOverrides(ctx, 'own') : [];
       if (stale.length > 0) out.stale = stale;
@@ -202,7 +195,7 @@ export function devDeps({ size = '≈20–120 MB more than node_modules alone, d
     size,
     check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'playwright')),
     fix: (ctx) => {
-      const argv = ['npm', 'ci', '--prefix', ctx.skillDir];
+      const argv = ['npm', 'ci', '--ignore-scripts', '--prefix', ctx.skillDir];
       return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes: `reinstalls node_modules with the dev dependencies included; size measured on macOS, approximate` };
     },
     needsSudo: () => false,
@@ -289,7 +282,7 @@ export function sisterSkill(name, { size } = {}) {
   const present = (ctx) => skillPresent(ctx) && depsPresent(ctx);
   // Like nodeModules: a sister that already has playwright keeps its dev packages.
   const keepsDev = (ctx) => ctx.exists(modulesDir(ctx)) && ctx.exists(pp(ctx).join(modulesDir(ctx), 'playwright'));
-  const installStep = (ctx) => ['npm', 'ci', ...(keepsDev(ctx) ? [] : ['--omit=dev']), '--prefix', sisterDir(ctx)];
+  const installStep = (ctx) => ['npm', 'ci', '--ignore-scripts', ...(keepsDev(ctx) ? [] : ['--omit=dev']), '--prefix', sisterDir(ctx)];
   return {
     id: name,
     rank: RANK.sister,
@@ -329,9 +322,8 @@ export function sisterSkill(name, { size } = {}) {
   };
 }
 
-// staticDir: the node_modules folder whose ffmpeg-static counts (default: this skill's; make-explainer points at make-motion's).
-export function ffmpeg({ staticDir } = {}) {
-  const staticBinary = (ctx) => pp(ctx).join(staticDir?.(ctx) ?? pp(ctx).join(ctx.skillDir, 'node_modules'), 'ffmpeg-static', ctx.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
+// $FFMPEG_PATH, then PATH. An ffmpeg-static binary in node_modules is not looked for: its postinstall download is unpinned.
+export function ffmpeg() {
   return {
     id: 'ffmpeg',
     rank: RANK.ffmpeg,
@@ -341,8 +333,7 @@ export function ffmpeg({ staticDir } = {}) {
     check: (ctx) => {
       const p = ctx.env.FFMPEG_PATH;
       if (p && isExec(ctx, p)) return true;
-      if (ctx.which('ffmpeg')) return true;
-      return isExec(ctx, staticBinary(ctx));
+      return ctx.which('ffmpeg');
     },
     fix: (ctx) => {
       const hasBrew = ctx.platform === 'darwin' && ctx.which('brew');
@@ -412,147 +403,200 @@ export function browser({ required = false, dir, id = 'chromium' } = {}) {
   };
 }
 
+// A parsed JSON file, or null when it cannot be read or parsed: an unreadable file counts as nothing to compare.
+function readJson(ctx, p) {
+  try {
+    return JSON.parse(ctx.readFile(p));
+  } catch {
+    return null;
+  }
+}
+
 // Names whose installed version differs from an exact-version "overrides" pin in the skill's
-// package.json. An install made before a pin existed (fast-uri in every skill's tree; sharp and
-// global-agent in a kokoro install) keeps the vulnerable version until it is reinstalled.
-// Unreadable files count as not stale.
+// package.json. An install made before a pin existed (fast-uri in every skill's tree) keeps the
+// vulnerable version until it is reinstalled. Unreadable files count as not stale.
 // scope 'own': only packages in the skill's own package-lock.json tree (what `npm ci` installs), so
-// node_modules goes red for those alone. scope 'extra': the rest (sharp and global-agent come in only with
-// the on-demand kokoro install, which is not in the lockfile), so that staleness stays on the optional
-// kokoro item. An unreadable lockfile leaves 'own' empty and puts every pin in 'extra'.
+// node_modules goes red for those alone. scope 'extra': the rest. An unreadable lockfile leaves
+// 'own' empty and puts every pin in 'extra'. (The optional voice and cutout stacks have their own
+// package.json and lockfile now; staleLocked checks them.)
 function staleOverrides(ctx, scope = 'all', dir = ctx.skillDir) {
-  const read = (p) => {
-    try {
-      return JSON.parse(ctx.readFile(p));
-    } catch {
-      return null;
-    }
-  };
   const P = pp(ctx);
-  const overrides = read(P.join(dir, 'package.json'))?.overrides ?? {};
-  const locked = new Set(Object.keys(read(P.join(dir, 'package-lock.json'))?.packages ?? {}).map((k) => k.slice(k.lastIndexOf('node_modules/') + 'node_modules/'.length)));
+  const overrides = readJson(ctx, P.join(dir, 'package.json'))?.overrides ?? {};
+  const locked = new Set(Object.keys(readJson(ctx, P.join(dir, 'package-lock.json'))?.packages ?? {}).map((k) => k.slice(k.lastIndexOf('node_modules/') + 'node_modules/'.length)));
   const inScope = (name) => scope === 'all' || locked.has(name) === (scope === 'own');
   return Object.entries(overrides)
-    .filter(([name, want]) => inScope(name) && /^\d+\.\d+\.\d+$/.test(want) && (read(P.join(dir, 'node_modules', name, 'package.json'))?.version ?? want) !== want)
+    .filter(([name, want]) => inScope(name) && EXACT_VERSION.test(want) && (readJson(ctx, P.join(dir, 'node_modules', name, 'package.json'))?.version ?? want) !== want)
     .map(([name]) => name);
 }
 
-// kokoro and cutout are both `npm install <pin> --no-save`. npm rebuilds node_modules from package.json and the
-// lockfile and prunes every package not in them, so an install that leaves the other one off the command line
-// deletes it. Each fix therefore names its own pin plus the pin of whichever sibling is already installed.
-// ffmpeg-static joins them: its script hint used to be `npm i ffmpeg-static --no-save --prefix <skill>`, which pruned both.
-const ON_DEMAND_PINS = [
-  { pkg: 'kokoro-js', pin: KOKORO_PIN, id: 'kokoro' },
-  { pkg: 'onnxruntime-node', pin: CUTOUT_PIN, id: 'cutout' },
-  { pkg: 'ffmpeg-static', pin: FFMPEG_STATIC_PIN, id: 'ffmpeg-static' },
-];
+// make-motion's voiceover (onnxruntime-node and phonemizer, running Kokoro) and cutout (onnxruntime-node, running MODNet) stacks
+// are optional. The voice stack is found by phonemizer, which only it holds. Each is its own
+// locked package in <skill>/optional/<dir>/ (package.json with its own overrides, and a package-lock.json), installed with
+// `npm ci --prefix` and loaded from there by scripts/lib/optional.mjs. They are not in the skill's own lockfile, so
+// `npm ci` in the skill folder leaves them alone, and installing one never removes the other.
+export const OPTIONAL = { kokoro: { dir: 'voice', pkg: 'phonemizer' }, cutout: { dir: 'cutout', pkg: 'onnxruntime-node' } };
 
-function onDemandInstall(ctx, id) {
-  if (!ON_DEMAND_PINS.some((p) => p.id === id)) throw new TypeError(`unknown on-demand install ${JSON.stringify(id)}; known: ${ON_DEMAND_PINS.map((p) => p.id).join(', ')}`);
-  const pins = ON_DEMAND_PINS.filter((p) => p.id === id || ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', p.pkg))).map((p) => p.pin);
-  return { argv: ['npm', 'install', ...pins, '--no-save'], cwd: ctx.skillDir };
-}
-
-// The command text for an on-demand install ('kokoro', 'cutout', 'ffmpeg-static'), exactly the step `--fix <id>` runs.
-// A script that cannot find the package prints this in its error hint, so the hint and the doctor never disagree
-// (one that names only its own pin would delete the other on-demand packages).
-export function onDemandHint(id, ctx) {
-  return render([onDemandInstall(ctx, id)], ctx.platform);
-}
-
-export function kokoro() {
-  return {
-    id: 'kokoro',
-    rank: RANK.kokoro,
-    needsNodeModules: true,
-    why: (ctx) => {
-      const stale = staleOverrides(ctx, 'extra');
-      return stale.length > 0 ? `local text-to-speech for voiceover; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : 'local text-to-speech for voiceover';
-    },
-    required: false,
-    // The plan register's figure for a kokoro-js install (du on macOS, about 1.9x the 250 MB this used to say); not re-measured here.
-    size: '≈465 MB, plus a 90 MB model on first use',
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'kokoro-js')) && staleOverrides(ctx, 'extra').length === 0,
-    fix: (ctx) => {
-      // Run inside the skill folder so npm applies the skill's package.json "overrides" (patched sharp
-      // and global-agent). --prefix applied them in Linux tests with npm 10.8/10.9, but was reported
-      // not to on macOS with npm 10.8.2; running from the folder works either way.
-      const step = onDemandInstall(ctx, 'kokoro');
-      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 90 MB voice model downloads on first use; kokoro-js shares onnxruntime-node with cutout, so installing both costs less than the two sizes added; this keeps an installed cutout (onnxruntime-node), but a later `--fix node_modules` (npm ci) removes both, so rerun `--fix kokoro` (and `--fix cutout`)' };
-    },
-    needsSudo: () => false,
-  };
-}
-
-// make-motion's cutout.mjs: onnxruntime-node (the MODNet weights, about 25 MB, download on first use). The install names
-// an installed kokoro-js too (see onDemandInstall), so neither removes the other. A pre-pin install counts as missing like
-// kokoro's does (the 'extra' overrides: not in the lockfile).
-export function cutout() {
-  return {
-    id: 'cutout',
-    rank: RANK.cutout,
-    needsNodeModules: true,
-    why: (ctx) => {
-      const stale = staleOverrides(ctx, 'extra');
-      return stale.length > 0 ? `cuts a person out of a photo or clip (text-behind-subject) with MODNet; reinstall to get the patched ${stale.join(', ')} pinned in package.json "overrides"` : 'cuts a person out of a photo or clip (text-behind-subject) with MODNet, locally';
-    },
-    required: false,
-    size: '≈300 MB, plus a 25 MB model on first use',
-    check: (ctx) => ctx.exists(pp(ctx).join(ctx.skillDir, 'node_modules', 'onnxruntime-node')) && staleOverrides(ctx, 'extra').length === 0,
-    fix: (ctx) => {
-      // From inside the skill folder, like kokoro, so npm applies the skill's package.json "overrides".
-      const step = onDemandInstall(ctx, 'cutout');
-      return { auto: [step], manual: manualAll(render([step], ctx.platform)), notes: 'the 25 MB MODNet model downloads on first use; this keeps an installed voiceover (kokoro-js), but a later `--fix node_modules` (npm ci) removes both, so rerun `--fix cutout` (and `--fix kokoro`)' };
-    },
-    needsSudo: () => false,
-  };
-}
-
-// The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing file
-// never fails doctor. The auto fix runs the skill's own shared/agents.mjs writer; the plugin's installer
-// (bin/install.mjs) writes the same file and is the way to a project-level install.
-// Doctor does not know its host, so it looks in every host folder, user level and project level.
-// It applies only where Copilot or Codex plausibly exists (~/.copilot or ~/.codex is there): on a
-// Claude Code or Gemini machine no agent file is ever installed, so nothing is reported at all.
-// Limit: project level means the current folder, not the git root.
-const BUILDER_AGENT_HOST_DIRS = ['.copilot', '.codex'];
-const BUILDER_AGENT_FILES = ['artifact-builder.agent.md', 'artifact-builder.toml'];
-const BUILDER_AGENT_FILE_FOR = { copilot: BUILDER_AGENT_FILES[0], codex: BUILDER_AGENT_FILES[1] };
-const BUILDER_AGENT_USER_HOSTS = [{ host: 'copilot', dotDir: '.copilot' }, { host: 'codex', dotDir: '.codex' }];
-const BUILDER_AGENT_DIRS = (ctx) => {
-  const P = pp(ctx);
-  const home = ctx.homedir ?? os.homedir();
-  const cwd = ctx.cwd ?? process.cwd();
-  return [P.join(home, '.copilot', 'agents'), P.join(home, '.codex', 'agents'), P.join(cwd, '.github', 'agents'), P.join(cwd, '.codex', 'agents')];
+// --ignore-scripts: the locked onnxruntime-node (1.21.0 for voice, 1.31.1 for cutout) has a postinstall that, on Linux x64
+// only, downloads CUDA provider libraries (a GitHub release, then NuGet) with no hash. The CPU binaries ship in the npm tarball,
+// which the lockfile's integrity covers, and neither skill uses a GPU.
+// A script that cannot find the package prints this same step in its hint, so the hint and `--fix <id>` never differ.
+export const optionalInstallArgv = (ctx, id) => {
+  if (!Object.hasOwn(OPTIONAL, id)) throw new TypeError(`unknown optional install ${JSON.stringify(id)}; known: ${Object.keys(OPTIONAL).join(', ')}`);
+  return ['npm', 'ci', '--ignore-scripts', '--prefix', pp(ctx).join(ctx.skillDir, 'optional', OPTIONAL[id].dir)];
 };
+
+// Names in { ...dependencies, ...overrides } of <dir>/package.json whose installed version is present and differs from an
+// exact pin. An install made before a pin landed keeps the old version until `npm ci` reruns. Unreadable files count as not stale.
+function staleLocked(ctx, dir) {
+  const P = pp(ctx);
+  const pkg = readJson(ctx, P.join(dir, 'package.json')) ?? {};
+  return Object.entries({ ...pkg.dependencies, ...pkg.overrides })
+    .filter(([name, want]) => typeof want === 'string' && EXACT_VERSION.test(want) && (readJson(ctx, P.join(dir, 'node_modules', name, 'package.json'))?.version ?? want) !== want)
+    .map(([name]) => name);
+}
+
+// The requirement behind kokoro() and cutout(): present when its own folder holds the package and nothing in it is stale.
+// oldPkg: what an install from before the move left in the skill's own node_modules (the voice stack then held kokoro-js).
+function optionalPackage({ id, why, size, notes, oldPkg = OPTIONAL[id].pkg }) {
+  const { dir, pkg } = OPTIONAL[id];
+  const folder = (ctx) => pp(ctx).join(ctx.skillDir, 'optional', dir);
+  // An install from before the move sits in the skill's node_modules and is no longer loaded; `--fix node_modules` removes it.
+  const oldInstallNote = (ctx) => {
+    const oldDir = pp(ctx).join(ctx.skillDir, 'node_modules');
+    return ctx.exists(pp(ctx).join(oldDir, oldPkg)) ? `the old ${oldPkg} install in ${oldDir} is no longer used; --fix node_modules removes it` : null;
+  };
+  return {
+    id,
+    rank: RANK[id],
+    needsNodeModules: true,
+    why: (ctx) => {
+      const stale = staleLocked(ctx, folder(ctx));
+      const old = oldInstallNote(ctx);
+      return `${why}${stale.length > 0 ? `; reinstall to get ${stale.join(', ')} as pinned in optional/${dir}/package.json` : ''}${old ? `; ${old}` : ''}`;
+    },
+    required: false,
+    size,
+    check: (ctx) => ctx.exists(pp(ctx).join(folder(ctx), 'node_modules', pkg)) && staleLocked(ctx, folder(ctx)).length === 0,
+    presentInfo: (ctx) => {
+      const old = oldInstallNote(ctx);
+      return old ? { note: old } : null;
+    },
+    fix: (ctx) => {
+      const argv = optionalInstallArgv(ctx, id);
+      return { auto: [argv], manual: manualAll(render([argv], ctx.platform)), notes };
+    },
+    needsSudo: () => false,
+  };
+}
+
+export const kokoro = () => optionalPackage({
+  id: 'kokoro',
+  why: 'local text-to-speech for voiceover',
+  // Measured 2026-11-18 on macOS: `du -sk` over the 23 packages named in optional/voice/package-lock.json, in an existing
+  // install (two direct dependencies; no new download), gave 221676 KiB = 227 MB; the five pinned model files total 92886949 bytes (VOICE_MODEL in scripts/v2/voice/model.mjs) = 93 MB.
+  // An install made before the trim also holds kokoro-js, transformers and sharp until the next `--fix kokoro`; it still works.
+  size: '≈227 MB, plus a 93 MB model on first use',
+  notes: 'installs from optional/voice/package-lock.json; the 93 MB voice model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone',
+  oldPkg: 'kokoro-js',
+});
+
+export const cutout = () => optionalPackage({
+  id: 'cutout',
+  why: 'cuts a person out of a photo or clip (text-behind-subject) with MODNet, locally',
+  size: '≈300 MB, plus a 25 MB model on first use',
+  notes: 'installs from optional/cutout/package-lock.json; the 25 MB MODNet model downloads on first use, pinned to one commit and checked against SHA-256; npm ci in the skill folder leaves it alone',
+});
+
+// The cheap-model `artifact-builder` agent file the skills hand their build to. Optional: a missing or
+// outdated file never fails doctor. The auto fix runs the skill's own shared/agents.mjs writer; the plugin's
+// installer (bin/install.mjs) writes the same file and is the way to a project-level install.
+// Doctor does not know its host, so it looks in every host folder, user level and project level.
+// It applies only where Claude Code, Copilot or Codex plausibly exists (~/.claude, ~/.copilot or ~/.codex
+// is there): on a Gemini machine no agent file is ever installed, so nothing is reported at all.
+// The Claude Code plugin ships the same file as <plugin>/agents/artifact-builder.md; where this skill runs
+// from a plugin, that file counts as present (a plugin update replaces it, so its text is not compared).
+// A file without CURRENT_MARKER (make.mjs) predates the one-command operator and is reported as outdated, with
+// the command that replaces it. The doctor never overwrites it: the writer keeps an existing file.
+// Limit: project level means the current folder, not the git root.
+const BUILDER_AGENT_HOST_DIRS = ['.claude', '.copilot', '.codex'];
+const BUILDER_AGENT_FILE_FOR = { claude: 'artifact-builder.md', copilot: 'artifact-builder.agent.md', codex: 'artifact-builder.toml' };
+const BUILDER_AGENT_HOST_OF = Object.fromEntries(Object.entries(BUILDER_AGENT_FILE_FOR).map(([host, file]) => [file, host]));
+const BUILDER_AGENT_FILES = Object.values(BUILDER_AGENT_FILE_FOR);
+// Writer order: the order `--fix` writes in. Claude Code last, so the Copilot and Codex order is as it was.
+const BUILDER_AGENT_USER_HOSTS = [{ host: 'copilot', dotDir: '.copilot' }, { host: 'codex', dotDir: '.codex' }, { host: 'claude', dotDir: '.claude' }];
+// [where, folder under it]: user level then project level.
+const BUILDER_AGENT_PLACES = [['home', '.claude/agents'], ['home', '.copilot/agents'], ['home', '.codex/agents'], ['cwd', '.claude/agents'], ['cwd', '.github/agents'], ['cwd', '.codex/agents']];
+
+// Existing agent files, any of the three names in any folder: { file, host, project }.
+function builderAgentFiles(ctx) {
+  const P = pp(ctx);
+  const base = { home: ctx.homedir ?? os.homedir(), cwd: ctx.cwd ?? process.cwd() };
+  return BUILDER_AGENT_PLACES.flatMap(([where, rel]) => BUILDER_AGENT_FILES
+    .map((name) => ({ file: P.join(base[where], ...rel.split('/'), name), host: BUILDER_AGENT_HOST_OF[name], project: where === 'cwd' }))
+    .filter(({ file }) => ctx.exists(file)));
+}
+
+// The files among them whose text lacks the marker. An unreadable file counts as current: nothing to compare.
+function outdatedBuilderAgents(ctx) {
+  return builderAgentFiles(ctx).filter(({ file }) => {
+    try {
+      return !ctx.readFile(file).includes(CURRENT_MARKER);
+    } catch {
+      return false;
+    }
+  });
+}
+
+const pluginBuilderAgent = (ctx) => pp(ctx).join(ctx.skillDir, '..', '..', 'agents', BUILDER_AGENT_FILE_FOR.claude);
+// The plugin file serves Claude Code only. It satisfies the requirement only on a machine that has no
+// ~/.copilot or ~/.codex, and the writer then skips the claude file (the plugin already ships that agent).
+const pluginServes = (ctx) => ctx.exists(pluginBuilderAgent(ctx));
+const otherHostsPresent = (ctx) => ['.copilot', '.codex'].some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d)));
 
 export function builderAgent() {
   const install = 'node <path-to-claude-skills>/plugins/portable-artifacts/bin/install.mjs';
   return {
     id: 'builder_agent',
     rank: RANK.other,
-    why: 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Copilot or Codex)',
+    why: (ctx) => {
+      const old = outdatedBuilderAgents(ctx).map((f) => f.file);
+      const base = 'lets the skill hand the build to a cheaper model (the artifact-builder agent file for Claude Code, Copilot or Codex)';
+      return old.length ? `${base}; ${old.join(' and ')} is outdated (it predates make.mjs and still tells the builder to write the spec)` : base;
+    },
     required: false,
     size: '≈2 KB',
     // diagnose() skips a requirement whose applies(ctx) is false: not missing, not listed.
     applies: (ctx) => BUILDER_AGENT_HOST_DIRS.some((d) => ctx.exists(pp(ctx).join(ctx.homedir ?? os.homedir(), d))),
-    check: (ctx) => BUILDER_AGENT_DIRS(ctx).some((dir) => BUILDER_AGENT_FILES.some((f) => ctx.exists(pp(ctx).join(dir, f)))),
+    check: (ctx) => (builderAgentFiles(ctx).length > 0 || (pluginServes(ctx) && !otherHostsPresent(ctx))) && outdatedBuilderAgents(ctx).length === 0,
     // Auto fix: the skill's own copy of shared/agents.mjs writes the file into each host folder that
-    // exists (user level; an existing file is kept). That works for an `npx skills add` install,
+    // exists (user level; an existing file is kept). That works for an install made with the skills CLI,
     // which has no bin/. The manual line offers that same writer first, then the installer (project-level install).
     // The program is this process's own Node, not "node" from PATH: it may not be on PATH, and on Windows
     // cmd.exe would look in the current (project) folder first.
+    // An outdated file has no auto fix, because the writer keeps what is there: the manual line names the
+    // installer with --force, which replaces it, and `outdated` lists the files so the report says so.
     fix: (ctx) => {
       const P = pp(ctx);
+      const old = outdatedBuilderAgents(ctx);
+      if (old.length) {
+        const cwd = ctx.cwd ?? process.cwd();
+        const cmds = old.map(({ host, project }) => `${install} ${host} --agents-only --force${project ? ` --project ${cwd}` : ''}`);
+        return {
+          auto: null,
+          outdated: old.map((f) => f.file),
+          manual: manualAll(`${cmds.join(' ; ')} (replaces the outdated file; <path-to-claude-skills> is a local checkout, or clone the repo)`),
+          notes: `${old.map((f) => f.file).join(' and ')} predates make.mjs; the doctor never overwrites an agent file, so run the command yourself`,
+        };
+      }
       const home = ctx.homedir ?? os.homedir();
       const writer = P.join(ctx.skillDir, 'shared', 'agents.mjs');
-      const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ dotDir }) => ctx.exists(P.join(home, dotDir)));
+      const hosts = BUILDER_AGENT_USER_HOSTS.filter(({ host, dotDir }) => ctx.exists(P.join(home, dotDir)) && !(host === 'claude' && pluginServes(ctx)));
       const auto = hosts.map(({ host, dotDir }) => [ctx.execPath ?? process.execPath, writer, 'write', host, P.join(home, dotDir, 'agents')]);
       const files = hosts.map(({ host, dotDir }) => P.join(home, dotDir, 'agents', BUILDER_AGENT_FILE_FOR[host]));
       const byHand = hosts.map(({ host, dotDir }) => `node ${writer} write ${host} ${P.join(home, dotDir, 'agents')}`);
       return {
         auto: auto.length ? auto : null,
-        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
+        manual: manualAll(`${byHand.length ? `${byHand.join(' ; ')} (this skill's own writer); or ` : ''}${install} claude --agents-only (Claude Code), ${install} copilot --agents-only (Copilot) or ${install} codex --agents-only (Codex); \`agents\` writes both Copilot and Codex; add --project <dir> to install into one repo; <path-to-claude-skills> is a local checkout (or clone the repo)`),
         notes: `writes ${files.join(' and ')} (user level, outside this project; an existing file is kept)`,
       };
     },
@@ -584,6 +628,8 @@ export async function diagnose(requirements, ctx) {
     if (fix.notes) entry.notes = fix.notes;
     // Installed, but older than a pin in package.json "overrides": reported as stale, not missing. Still required, still exit 1.
     if (fix.stale?.length > 0) entry.stale = fix.stale;
+    // An installed file that predates the current text: reported as outdated, not missing. The doctor never overwrites it.
+    if (fix.outdated?.length > 0) entry.outdated = fix.outdated;
     if (fix.sudoHint) entry.sudoHint = fix.sudoHint;
     missing.push(entry);
   }
@@ -698,7 +744,7 @@ function describe(m, platform) {
   const cmd = m.fix.auto ?? m.fix.manual[platform] ?? m.fix.manual.linux;
   const sudo = m.needsSudo ? ' (needs sudo: run it yourself)' : '';
   const notes = m.notes ? ` Note: ${m.notes}.` : '';
-  const state = m.stale ? `stale (older than the pinned ${m.stale.join(', ')} override${m.stale.length > 1 ? 's' : ''})` : 'missing';
+  const state = m.stale ? `stale (older than the pinned ${m.stale.join(', ')} override${m.stale.length > 1 ? 's' : ''})` : m.outdated ? 'outdated' : 'missing';
   return `${state} (${m.required ? 'required' : 'optional'}): ${m.id} — ${m.why} (${m.size}). Run${platform === 'win32' ? ' (cmd.exe)' : ''}: ${cmd}${sudo}${notes}`;
 }
 

@@ -53,6 +53,12 @@
       "text": "A page written freehand looks fine once. The second one uses a different spacing scale, the third a different set of colours, and the fourth quietly pulls a font from a CDN.\n\nWith an outline, the layout is not up for discussion. Each section **type** has one renderer, and the renderer is the only place that knows about markup. The `title` of a section is a claim a reader can agree or disagree with, not a label such as \"Overview\".\n\nText fields accept a small subset of markdown: bold, italic, `code`, [links to https pages](https://example.com) and `- ` lists. Anything else is shown as plain text, so a stray angle bracket can never become a tag."
     },
     {
+      "type": "quote",
+      "text": "You write the facts; the tool owns the layout.",
+      "by": "The rule behind every skill",
+      "tone": "accent"
+    },
+    {
       "type": "image",
       "title": "Three steps from facts to a finished page",
       "label": "The pipeline",

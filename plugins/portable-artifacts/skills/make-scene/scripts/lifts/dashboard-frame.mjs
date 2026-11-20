@@ -21,7 +21,9 @@ const TICK_LABEL = 0.45;
 const TITLE_LABEL = 0.55;
 const MAX_X_LABELS = 12;
 const TICK_GAP = 1; // value tick labels sit this far left of the plot
-const TITLE_GAP = 2.2; // the x title sits this far in front of it
+const TITLE_GAP = 3; // the x title sits this far in front of it, clear of the x tick labels (caps and tracking make a title wide)
+/** The gridlines: the theme's text colour thinned into a grey, so a hairline reads on the page in light and in dark. */
+const GRID_COLOUR = { base: '#a8a0a0', tint: 'text3', share: 0.3 };
 const VIEW_MIN = 9;
 const VIEW_PER_UNIT = 1.3;
 const VIEW_MARGIN = 5;
@@ -101,7 +103,7 @@ export function frameOf({ axis, depth, xTicks, titles, laneNames = [], lane, fir
   const slab = floor && !axis.negative ? [[0, -FLOOR_THICKNESS / 2, 0, WIDTH + FLOOR_MARGIN, FLOOR_THICKNESS, depth + FLOOR_MARGIN, -1]] : [];
   const batches = [
     { id: `b${firstBatch}`, shape: 'box', colour: 'line', emissive: null, flat: false, instances: [...slab, ...zero] },
-    { id: `b${firstBatch + 1}`, shape: 'box', colour: 'grid', emissive: null, flat: false, instances: rules },
+    { id: `b${firstBatch + 1}`, shape: 'box', colour: GRID_COLOUR, emissive: null, flat: false, instances: rules },
   ].filter((b) => b.instances.length > 0);
   const labels = [
     ...axis.ticks.map((v) => ({ text: displayValue(v, ''), at: [-WIDTH / 2 - TICK_GAP, v * axis.k, back], size: TICK_LABEL })),

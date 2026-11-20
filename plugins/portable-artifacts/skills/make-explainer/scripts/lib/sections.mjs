@@ -29,10 +29,11 @@ import * as approval from './render/approval.mjs';
 import * as question from './render/question.mjs';
 import * as review from './render/review.mjs';
 import * as verdict from './render/verdict.mjs';
+import * as quote from './render/quote.mjs';
 
 const MODULES = {
   tldr, text, kpis, cards, table, risks, files, steps, timeline, compare, callout, code, diff, details, image, checklist, diagram, chart, motion, scene,
-  decision, approval, question, review, verdict,
+  decision, approval, question, review, verdict, quote,
 };
 
 export const SECTIONS = Object.freeze(Object.fromEntries(

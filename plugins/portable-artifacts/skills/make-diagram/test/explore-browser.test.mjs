@@ -265,6 +265,8 @@ for (const width of [1280, 390]) {
   test(`the panel open with a selection at ${width} px: no console problems, no overflow, a finite camera`, async (t) => {
     if (await skipUnlessBrowser(t)) return;
     const { page, problems, context } = await openPage(built('story').url, { width, height: width === 390 ? 780 : 800 });
+    // a phone opens story at the reading floor on its first group (phone-fit-browser.test.mjs): Fit brings Orders into view
+    if (width === 390) { await page.click('[data-act="fit"]'); await settle(page); }
     await page.click('.pa-node[data-id="orders"]');
     assert.equal(await title(page), 'Orders service');
     await settle(page);
@@ -637,6 +639,9 @@ test('more matches than the list holds: the rest is a plain "+N more" text, not 
 test('arrow keys with focus in the details panel scroll it and leave the camera alone; on the stage they still pan', async (t) => {
   if (await skipUnlessBrowser(t)) return;
   const { page, problems, context } = await openPage(built('flow').url, { width: 390, height: 480 });
+  // so short a phone opens flow at the reading floor (phone-fit-browser.test.mjs): Fit brings the decision into view
+  await page.click('[data-act="fit"]');
+  await settle(page);
   await page.click('.pa-node[data-id="ask"]');
   await settle(page);
   const scrolls = await page.evaluate(() => { const p = document.querySelector('[data-pa-panel]'); return p.scrollHeight - p.clientHeight; });

@@ -69,10 +69,11 @@ function load({ playing = () => false, reduced = false } = {}) {
   row.clientWidth = 200;
   const caption = fakeEl(doc, 'aside');
   caption.querySelector = (sel) => parts[sel.slice(1, -1)] ?? null;
-  const state = { at: 0, loop: false, speed: 1 };
+  const state = { at: 0, shown: null, loop: false, speed: 1 }; // `shown` is the beat whose caption is on screen; null: the one the story is on
   const noop = () => {};
   const story = {
     isPresenting: () => true, index: () => state.at, count: () => DATA.beats.length, current: () => DATA.beats[state.at], chapter: () => 0,
+    shown: () => state.shown ?? state.at, chapterShown: () => 0,
     isPlaying: () => playing(), speed: () => state.speed, loop: () => state.loop,
     goTo: noop, prev: noop, next: noop, exit: noop, prevChapter: noop, nextChapter: noop, togglePlay: noop, cycleSpeed: noop, toggleLoop: noop, pause: noop,
   };
@@ -279,4 +280,19 @@ test('paint() after holdEnd (what pause does through onStep) does not bring the 
   transport.paint();
   assert.equal(ringOf(parts['data-pa-next']), undefined);
   assert.equal(ringOf(parts['data-pa-play']), undefined);
+});
+
+test('the caption (count and line) paints the beat story.shown() reports; the chips and the scrubber follow the beat the story is on', () => {
+  const { transport, parts, row, state } = load();
+  state.at = 2;
+  state.shown = 0; // the camera is still on its way: the caption has not moved
+  transport.paint();
+  assert.equal(parts['data-pa-count'].textContent, '1 / 5');
+  assert.match(parts['data-pa-line'].textContent, /^01 \/ 05 · S · One/);
+  assert.equal(row.children[2].getAttribute('aria-current'), 'true', 'the chip is already on the new beat');
+  assert.equal(parts['data-pa-scrub'].value, '2', 'and so is the scrubber');
+  state.shown = 2; // the camera settled
+  transport.paint();
+  assert.equal(parts['data-pa-count'].textContent, '3 / 5');
+  assert.match(parts['data-pa-line'].textContent, /^03 \/ 05 · S · Three/);
 });

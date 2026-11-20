@@ -72,9 +72,10 @@ test('snake_case column names become readable axis titles; other names stay as w
 });
 
 test('compact numbers read the same on the axis as on a KPI tile (B, not G; K, not k)', () => {
-  const enc = expand1({ kind: 'bar', query: 'cat', x: 'region', y: 'revenue', format: 'compact' }).views[0].vegaLite.encoding;
-  assert.deepEqual(enc.y.axis, { format: '.3~s', labelExpr: "replace(replace(datum.label, 'G', 'B'), 'k', 'K')" });
-  const tip = enc.tooltip.find((t) => t.field === 'revenue');
+  const vl = expand1({ kind: 'bar', query: 'cat', x: 'region', y: 'revenue', format: 'compact' }).views[0].vegaLite;
+  // tickCount: the bar's value axis nices to one tick count with its headroom (restrained-browser.test.mjs)
+  assert.deepEqual(vl.encoding.y.axis, { format: '.3~s', labelExpr: "replace(replace(datum.label, 'G', 'B'), 'k', 'K')", tickCount: 5 });
+  const tip = vl.layer[0].encoding.tooltip.find((t) => t.field === 'revenue'); // the bar layer (a value label layer follows)
   assert.equal(tip.format, ',.2~f', 'the tooltip shows the exact value');
 });
 
@@ -141,8 +142,211 @@ test('x zoom is bound only on a temporal x (Vega-Lite drops it, with a warning, 
   for (const kind of ['line', 'area']) {
     assert.deepEqual(zoomNames(expand1({ kind, query: 'time', x: 'month', y: 'revenue' }).views[0].vegaLite), ['pa_zoom']);
     assert.deepEqual(zoomNames(expand1({ kind, query: 'catcol', x: 'quarter', y: 'revenue' }).views[0].vegaLite), []);
-    assert.deepEqual(zoomNames(expand1({ kind, query: 'catcol', x: 'quarter', y: 'revenue', color: 'region' }).views[0].vegaLite), ['pa_legend']);
   }
+  // A coloured area keeps its legend filter; a coloured line with few series is labelled directly and has no legend.
+  assert.deepEqual(zoomNames(expand1({ kind: 'area', query: 'catcol', x: 'quarter', y: 'revenue', color: 'region' }).views[0].vegaLite), ['pa_legend']);
+  assert.deepEqual(zoomNames(expand1({ kind: 'line', query: 'catcol', x: 'quarter', y: 'revenue', color: 'region' }).views[0].vegaLite), []);
+});
+
+// Direct labels: a line chart with a colour role and at most DIRECT_LABEL_MAX series names each line at its last point.
+const seriesRows = (n, months = 3) => ({
+  columns: ['month', 'g', 'v'], types: ['DATE', 'VARCHAR', 'DOUBLE'],
+  rows: Array.from({ length: n }, (_, s) => Array.from({ length: months }, (_, m) => ({ month: `2025-0${m + 1}-01`, g: `s${s}`, v: s + m }))).flat(),
+  rowCount: n * months,
+});
+const lineOf = (res, extra = {}) => expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'line', query: 'q', x: 'month', y: 'v', color: 'g', ...extra }] }, { q: res }).charts[0].views[0].vegaLite;
+const labelLayer = (vl) => vl.layer.find((l) => (l.mark?.type ?? l.mark) === 'text');
+// A few series name the config's restrained range (vega-config.mjs paSeries); a compile needs it defined.
+const SERIES_CONFIG = { range: { paSeries: ['#000000', '#333333', '#666666', '#999999'] } };
+
+test('a single-series chart has no legend', async () => {
+  const { compile } = await import('vega-lite');
+  for (const kind of ['bar', 'line', 'area']) {
+    const vl = expand1({ kind, query: 'time', x: 'month', y: 'revenue' }).views[0].vegaLite;
+    const spec = compile({ ...vl, data: { values: results.time.rows } }).spec;
+    assert.equal(spec.legends, undefined, `${kind}: no legend`);
+  }
+});
+
+test('a line chart with at most 4 series labels its line ends and has no legend', async () => {
+  const { compile } = await import('vega-lite');
+  const res = seriesRows(4);
+  const vl = lineOf(res);
+  const text = labelLayer(vl);
+  assert.ok(text, 'a text layer labels the line ends');
+  assert.equal(text.encoding.text.field, 'g');
+  assert.equal(text.encoding.color, undefined, 'label text is ink (--text-2 through the config), not the series hue');
+  assert.equal(vl.layer[0].encoding.color.legend, null);
+  const spec = compile({ ...vl, data: { values: res.rows }, config: SERIES_CONFIG }).spec;
+  assert.equal(spec.legends, undefined, 'no legend');
+  // The label layer keeps one row per series: the last month.
+  const vega = await import('vega');
+  const view = new vega.View(vega.parse(spec), { renderer: 'none' });
+  await view.runAsync();
+  const textMark = spec.marks.find((m) => m.type === 'text');
+  const items = view.data(textMark.from.data);
+  view.finalize();
+  const day = (t) => new Date(t).toISOString().slice(0, 10); // Vega parses the temporal field to a time
+  assert.deepEqual(items.map((d) => [d.g, day(d.month)]).sort(), [['s0', '2025-03-01'], ['s1', '2025-03-01'], ['s2', '2025-03-01'], ['s3', '2025-03-01']]);
+});
+
+// A time x binds zoom to the scales, and Vega-Lite then clips the layered marks to the plot: the last point sits on
+// the plot's right edge, so a clipped label vanishes and the series goes unnamed (seen on the page, 2026-11-17).
+test('on a zoomable time axis the end dots and labels are not clipped to the plot', async () => {
+  const { compile } = await import('vega-lite');
+  const res = seriesRows(3);
+  const vl = lineOf(res);
+  assert.ok(vl.layer[0].params.some((p) => p.name === 'pa_zoom'), 'the premise: zoom is bound on this time axis');
+  const marks = compile({ ...vl, data: { values: res.rows } }).spec.marks;
+  // Vega-Lite writes clip: true on a clipped mark and leaves it out otherwise.
+  assert.deepEqual(marks.filter((m) => m.type === 'text').map((m) => m.clip === true), [false], 'the label mark is not clipped');
+  assert.deepEqual(marks.filter((m) => m.name === 'layer_3_marks').map((m) => m.clip === true), [false], 'the end dot mark is not clipped');
+  assert.ok(marks.some((m) => m.clip === true), 'the premise: the other layers are clipped');
+});
+
+test('a line chart with a nominal x labels the last point in query order', async () => {
+  const res = { columns: ['quarter', 'g', 'v'], types: ['VARCHAR', 'VARCHAR', 'DOUBLE'], rows: ['Q3', 'Q1', 'Q2'].flatMap((q) => ['a', 'b'].map((g) => ({ quarter: q, g, v: 1 }))), rowCount: 6 }; // last in query order (Q2) is not the largest name (Q3)
+  const vl = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'line', query: 'q', x: 'quarter', y: 'v', color: 'g' }] }, { q: res }).charts[0].views[0].vegaLite;
+  const { compile } = await import('vega-lite');
+  const vega = await import('vega');
+  const spec = compile({ ...vl, data: { values: res.rows }, config: SERIES_CONFIG }).spec;
+  const view = new vega.View(vega.parse(spec), { renderer: 'none' });
+  await view.runAsync();
+  const items = view.data(spec.marks.find((m) => m.type === 'text').from.data);
+  view.finalize();
+  assert.deepEqual(items.map((d) => [d.g, d.quarter]).sort(), [['a', 'Q2'], ['b', 'Q2']], 'labelled at the last row in query order');
+});
+
+// The end labels sit right of the last point, which is the plot's right edge: the view reserves that much padding,
+// sized for the widest series name at a monospace advance (the widest body face a theme ships), so no label clips.
+test('direct end labels reserve room on the right for the widest series name', () => {
+  const vl = lineOf({ ...seriesRows(2), rows: seriesRows(2).rows.map((r) => ({ ...r, g: r.g === 's0' ? 'South' : 'Northwest' })) });
+  const right = vl.padding?.right;
+  assert.ok(Number.isFinite(right), 'the view sets a right padding');
+  assert.ok(right >= Math.ceil('Northwest'.length * 0.6 * 11) + 7, `room for "Northwest" at 0.6 em plus the 7 px offset (${right})`);
+  assert.ok(right < 120, 'and not much more');
+});
+
+test('a series name too long for the reserved room falls back to the legend', () => {
+  const long = 'Northern Europe and Scandinavia';
+  const vl = lineOf({ ...seriesRows(2), rows: seriesRows(2).rows.map((r) => ({ ...r, g: r.g === 's0' ? 'East' : long })) });
+  assert.equal(labelLayer(vl), undefined, 'no end labels');
+  assert.notEqual(vl.layer[0].encoding.color.legend, null, 'the legend is back');
+  assert.equal(vl.padding, undefined, 'no room reserved');
+});
+
+// ---- newsroom bars: the claimed bar in the accent, the rest neutral, a value on each bar ------------------------
+
+const barOf = (title, name = 'bar', extra = {}) => {
+  const out = expandCharts({ charts: [{ id: 'c', title, kind: 'bar', query: 'cat', x: 'region', y: 'revenue', ...extra }] }, results);
+  assert.deepEqual(out.errors, []);
+  return out.charts[0].views.find((v) => v.name === name).vegaLite;
+};
+const barLayer = (vl) => vl.layer?.find((l) => (l.mark?.type ?? l.mark) === 'bar');
+const textLayer = (vl) => vl.layer?.find((l) => (l.mark?.type ?? l.mark) === 'text');
+
+async function claimOf(vl) {
+  const vega = await import('vega');
+  const spec = compile({ ...vl, data: { values: results.cat.rows }, config: { range: { paHighlight: ['#000000', '#999999'] } } }).spec;
+  const view = new vega.View(vega.parse(spec), { renderer: 'none' });
+  await view.runAsync();
+  const mark = spec.marks.find((m) => m.type === 'rect');
+  const items = view.data(mark.from.data);
+  view.finalize();
+  return Object.fromEntries(items.map((d) => [d.region, d.paClaim]));
+}
+
+for (const name of ['bar', 'sorted', 'share']) {
+  test(`${name}: a title that names a category paints that bar in the accent and the others neutral`, async () => {
+    const vl = barOf('North earns the most revenue', name);
+    const color = barLayer(vl).encoding.color;
+    assert.equal(color.field, 'paClaim');
+    assert.deepEqual(color.scale, { domain: ['claim', 'rest'], range: 'paHighlight' }, 'the config range holds the accent, then the neutral');
+    assert.equal(color.legend, null);
+    assert.deepEqual(await claimOf(vl), { North: 'claim', South: 'rest' });
+    assert.ok(!barLayer(vl).encoding.tooltip.some((t) => t.field === 'paClaim'), 'the helper field is not in the tooltip');
+  });
+}
+
+test('a bar chart whose title names no category keeps its one colour', () => {
+  const vl = barOf('Revenue by region');
+  assert.equal(barLayer(vl).encoding.color, undefined);
+});
+
+test('a coloured (multi-series) bar chart is not repainted by its title', () => {
+  const vl = expand1({ kind: 'grouped-bar', ...KIND_CHARTS['grouped-bar'], title: 'North leads Q1' }).views[0].vegaLite;
+  assert.equal(JSON.stringify(vl).includes('paClaim'), false);
+});
+
+test('bars carry their value, shown only where the band is wide enough for it', () => {
+  const vl = barOf('Revenue by region', 'bar', { format: 'currency' });
+  const text = textLayer(vl);
+  assert.ok(text, 'a value label layer');
+  assert.deepEqual(text.encoding.text, { field: 'revenue', type: 'quantitative', format: '$,.2~f' });
+  assert.match(JSON.stringify(text.mark.opacity), /bandwidth\('x'\) >= \d+/, 'vertical bars: the label hides when the band is narrower than it');
+  assert.ok(vl.padding?.top > 5, 'room above the tallest bar for its label');
+  assert.equal(text.encoding.color, undefined, 'the label is ink (--text-2 through the config)');
+});
+
+// Horizontal: no padding is reserved, since Vega's "fit" autosize counts a label past the longest bar (reserving it
+// as well cost the plot the room twice and left a phone's static axis two ticks).
+test('share labels print the share; horizontal bars put the label after the bar end', () => {
+  assert.deepEqual(textLayer(barOf('Revenue by region', 'share')).encoding.text, { field: 'pa_share', type: 'quantitative', format: '.0%' });
+  const long = { ...results.cat, rows: Array.from({ length: 10 }, (_, i) => ({ region: `Region number ${i}`, revenue: i + 1 })), rowCount: 10 };
+  const vl = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'bar', query: 'q', x: 'region', y: 'revenue' }] }, { q: long }).charts[0].views[0].vegaLite;
+  const text = textLayer(vl);
+  assert.equal(text.mark.align, 'left');
+  assert.equal(text.mark.dx, 4, 'just past the bar end');
+});
+
+test('a labelled bar keeps its hover dim on the bar layer', () => {
+  const vl = barOf('Revenue by region');
+  assert.deepEqual(barLayer(vl).params.map((p) => p.name), ['pa_hover']);
+  assert.ok(barLayer(vl).encoding.opacity, 'hover opacity on the bar');
+});
+
+// ---- the claimed month: a dot and a label on the mark ---------------------------------------------------------
+
+const MONTHLY = { columns: ['month', 'revenue'], types: ['DATE', 'DOUBLE'], rows: Array.from({ length: 12 }, (_, i) => ({ month: `2025-${String(i + 1).padStart(2, '0')}-01`, revenue: 1000 + 100 * ((i * 5) % 12) })), rowCount: 12 };
+const monthLine = (title, kind = 'line') => expandCharts({ charts: [{ id: 'c', title, kind, query: 'q', x: 'month', y: 'revenue', format: 'currency' }] }, { q: MONTHLY }).charts[0].views[0].vegaLite;
+
+async function annotationText(vl) {
+  const vega = await import('vega');
+  const spec = compile({ ...vl, data: { values: MONTHLY.rows } }).spec;
+  const view = new vega.View(vega.parse(spec), { renderer: 'none' });
+  await view.runAsync();
+  const marks = spec.marks.filter((m) => m.type === 'text');
+  const items = marks.flatMap((m) => view.data(m.from.data));
+  view.finalize();
+  return items.map((d) => d.paNote);
+}
+
+for (const kind of ['line', 'area']) {
+  test(`${kind}: a title that names a month annotates that point with a dot and a label naming the month`, async () => {
+    const vl = monthLine('August is the peak revenue month', kind);
+    const note = vl.layer.find((l) => l.encoding?.text?.field === 'paNote');
+    assert.ok(note, 'a note layer');
+    assert.equal(note.mark.clip, false, 'never clipped at the plot edge');
+    assert.ok(vl.layer.some((l) => (l.mark?.type ?? l.mark) === 'point' && JSON.stringify(l.transform ?? []).includes(String(Date.UTC(2025, 7, 1)))), 'a dot on the August point');
+    assert.deepEqual(await annotationText(vl), ['Aug 2025 · $2,100']);
+  });
+}
+
+test('a title that names no month adds no note', () => {
+  const vl = monthLine('Revenue by month');
+  assert.equal(JSON.stringify(vl).includes('paNote'), false);
+});
+
+test('a line chart above 4 series keeps the legend and draws no end labels', () => {
+  const vl = lineOf(seriesRows(5));
+  assert.equal(labelLayer(vl), undefined, 'above 4 series: no end labels');
+  assert.notEqual(vl.layer[0].encoding.color.legend, null);
+  assert.deepEqual(vl.layer[0].params.map((p) => p.name), ['pa_zoom', 'pa_legend']);
+});
+
+test('a coloured area keeps its legend (stacked bands have no single line end)', () => {
+  const vl = expandCharts({ charts: [{ id: 'c', title: 'C', kind: 'area', query: 'q', x: 'month', y: 'v', color: 'g' }] }, { q: seriesRows(2) }).charts[0].views[0].vegaLite;
+  assert.equal(labelLayer(vl), undefined);
 });
 
 test('line and area with a nominal x keep the query order (sort: null); temporal x is unchanged', () => {
@@ -322,7 +526,7 @@ test('guardrails: the 8-colour cap holds on a non-scatter kind; negatives block 
 // ---- format reaches every quantitative encoding and every tooltip ------------
 const CURRENCY = '$,.2~f';
 // keyed by field (titles are humanised: revenue -> Revenue); the count row has no field, only its title
-const tipByTitle = (vl) => Object.fromEntries((vl.encoding.tooltip ?? vl.layer.at(-1).encoding.tooltip).map((t) => [t.field ?? t.title, t]));
+const tipByTitle = (vl) => Object.fromEntries((vl.encoding.tooltip ?? vl.layer.find((l) => l.encoding?.tooltip).encoding.tooltip).map((t) => [t.field ?? t.title, t]));
 const withFormat = (kind) => expand1({ kind, format: 'currency', ...KIND_CHARTS[kind] });
 
 test('format: bar-like and line-like tooltips format the number and leave categories alone', () => {
@@ -365,7 +569,7 @@ test('format: histogram formats the bins but not the count; boxplot formats its 
 
 test('share and normalized tooltips: raw value formatted, share titled "Share of <y>" in .1%', () => {
   const share = expand1({ kind: 'bar', format: 'currency', ...KIND_CHARTS.bar }).views.find((v) => v.name === 'share').vegaLite;
-  assert.deepEqual(share.encoding.tooltip.map((t) => [t.title, t.field, t.format]), [
+  assert.deepEqual(share.layer[0].encoding.tooltip.map((t) => [t.title, t.field, t.format]), [
     ['Region', 'region', undefined], ['Revenue', 'revenue', CURRENCY], ['Share of revenue', 'pa_share', '.1%'],
   ]);
   const norm = expand1({ kind: 'stacked-bar', format: 'currency', ...KIND_CHARTS['stacked-bar'] }).views.find((v) => v.name === 'normalized').vegaLite;

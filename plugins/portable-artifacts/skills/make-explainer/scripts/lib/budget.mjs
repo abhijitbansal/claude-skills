@@ -16,6 +16,8 @@ export const SOFT_CAPS = {
   pageWords: 900,
   planPageWords: 1800,
   tldrPoints: 3,
+  quoteWords: 40,
+  quoteByWords: 8,
 };
 
 // Counted prose: what a reader reads as sentences in these section types. It counts toward the page total.
@@ -166,9 +168,28 @@ function stringWarnings(s) {
   });
 }
 
+// A quote is one line set large: its own caps replace the paragraph and backstop ones (one warning per field), and
+// its words count toward the page total.
+function quoteWarnings(section, at) {
+  const out = [];
+  const textWords = words(section.text ?? '');
+  if (textWords > SOFT_CAPS.quoteWords) {
+    out.push(warn(pathJoin(at, 'text'), `quote is ${textWords} words; keep it to ${SOFT_CAPS.quoteWords} → quote the one line that matters, put the rest in a text section`));
+  }
+  const byWords = words(section.by ?? '');
+  if (byWords > SOFT_CAPS.quoteByWords) {
+    out.push(warn(pathJoin(at, 'by'), `attribution is ${byWords} words; keep it to ${SOFT_CAPS.quoteByWords} → a name and, if needed, a role`));
+  }
+  return { out, wordCount: textWords };
+}
+
 function sectionWarnings(section, i) {
   const at = pathJoin('sections', i);
   const out = titleWarnings(section, at);
+  if (section.type === 'quote') {
+    const q = quoteWarnings(section, at);
+    return { out: [...out, ...q.out], caps: [], wordCount: q.wordCount };
+  }
   const strings = proseStrings(section, at);
   for (const s of strings) out.push(...stringWarnings(s));
   if (section.type === 'tldr' && Array.isArray(section.points) && section.points.length > SOFT_CAPS.tldrPoints) {

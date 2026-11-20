@@ -145,6 +145,65 @@ test('city: night lights on, window density tracks value, every district has a f
   assert.equal(g.fallback.rows.length, 72);
 });
 
+// ---- row labels, seen from the default camera ------------------------------------------------------------------
+// A label is a flat overlay on the screen: a back row's label, drawn from the front, can land on the towers of a row in
+// front of it and read as the name of that row's bars. So the box a label takes on screen must not touch any tower of
+// another row. (Orthographic projection along the camera's own direction: enough to state the rule.)
+
+const screenOf = (camera) => {
+  const d = camera.position.map((c, i) => c - camera.target[i]);
+  const len = Math.hypot(...d);
+  const v = d.map((c) => c / len);
+  const rlen = Math.hypot(v[2], v[0]);
+  const right = [v[2] / rlen, 0, -v[0] / rlen];
+  const up = [v[1] * right[2] - v[2] * 0, v[2] * right[0] - v[0] * right[2], v[0] * 0 - v[1] * right[0]];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  return (p) => [dot(p, right), dot(p, up)];
+};
+
+const hullOf = (points) => {
+  const pts = [...points].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list) => list.reduce((h, p) => {
+    while (h.length >= 2 && cross(h[h.length - 2], h[h.length - 1], p) <= 0) h.pop();
+    return [...h, p];
+  }, []);
+  return [...half(pts).slice(0, -1), ...half([...pts].reverse()).slice(0, -1)];
+};
+
+// Separating-axis test: do two convex polygons overlap?
+const overlap = (a, b) => [a, b].every((poly) => poly.every((p, i) => {
+  const q = poly[(i + 1) % poly.length];
+  const axis = [q[1] - p[1], p[0] - q[0]];
+  const span = (shape) => shape.map((s) => s[0] * axis[0] + s[1] * axis[1]);
+  const [sa, sb] = [span(a), span(b)];
+  return Math.max(...sa) >= Math.min(...sb) && Math.max(...sb) >= Math.min(...sa);
+}));
+
+const LABEL_CHAR = 0.3; // world width of one character of a caps label, roughly (the lift's group labels use the same)
+const LABEL_HEIGHT = 0.9; // world height of a label's box above its anchor
+
+test('city: a row label, seen from the default camera, lands on no tower of another row', () => {
+  for (const data of [fixture(), { rows: fixture().rows.filter((r) => ['api', 'web', 'docs'].includes(r.group)), links: [] }]) {
+    const g = WORLDS.city(data, SPEC);
+    const screen = screenOf(g.camera);
+    const towers = g.batches.flatMap((b) => b.instances).map(([x, y, z, sx, sy, sz]) => ({
+      z,
+      hull: hullOf([-1, 1].flatMap((i) => [-1, 1].flatMap((j) => [-1, 1].map((k) => screen([x + (i * sx) / 2, y + (j * sy) / 2, z + (k * sz) / 2]))))),
+    }));
+    assert.ok(g.labels.length >= 3);
+    for (const label of g.labels) {
+      const [cx, cy] = screen(label.at);
+      const half = (LABEL_CHAR * label.text.length + 0.5) / 2;
+      const box = [[cx - half, cy], [cx + half, cy], [cx + half, cy + LABEL_HEIGHT], [cx - half, cy + LABEL_HEIGHT]];
+      for (const tower of towers) {
+        if (Math.abs(tower.z - label.at[2]) < 0.01) continue; // its own row
+        assert.ok(!overlap(box, tower.hull), `the label ${label.text} lands on a tower of the row at z ${tower.z}`);
+      }
+    }
+  }
+});
+
 test('city focus: nothing but the target itself stands between the camera and a district or a labelled building', () => {
   const labelled = fixture();
   labelled.rows = labelled.rows.map((r, i) => (i % 17 === 3 ? { ...r, label: `row ${i}` } : r));

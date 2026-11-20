@@ -183,9 +183,11 @@ function heatmapOf(t, n) {
 }
 
 dtest('validate rejects a heatmap whose page is over the cap, as build does', async (t) => {
-  const { dir, file } = heatmapOf(t, 100);
+  // 120: the band axes draw no ticks since the newsroom axes (make-dashboard vega-config.mjs), so 100 rows now land
+  // just under the cap (1,429,784 of 1,441,792 bytes); 120 rows build to about 1,657 KB.
+  const { dir, file } = heatmapOf(t, 120);
   const built = await build(file, { env: env(dir) });
-  assert.equal(built.ok, false, 'the premise: 100 sparse rows build to an over-cap page');
+  assert.equal(built.ok, false, 'the premise: 120 sparse rows build to an over-cap page');
   assert.match(built.errors[0].message, CAP_MESSAGE);
   const v = validated(file);
   assert.equal(v.status, 1, `validate must refuse too: ${JSON.stringify(v.result)} ${v.stderr.split('\n')[0]}`);

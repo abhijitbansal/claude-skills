@@ -317,7 +317,7 @@
       "label": "Rendered clip",
       "video": "clip.mp4",
       "poster": "clip-poster.jpg",
-      "caption": "A 4 second make-motion video rendered from a JSON spec. The first scene shows the heading One JSON file, one video, and the second counts up to 18."
+      "caption": "A 4 second video made with make-motion 1.x, rendered from a JSON spec. The first scene shows the heading One JSON file, one video, and the second counts up to 18."
     },
     {
       "type": "motion",
@@ -325,7 +325,7 @@
       "label": "Narrated clip",
       "video": "media/prompt-to-dashboard.mp4",
       "poster": "media/prompt-to-dashboard-poster.jpg",
-      "caption": "Made with make-motion from one prompt at 1920x1080. The follow-up \"Add a voiceover that reads each scene aloud\" added a Kokoro voiceover, synthesised locally."
+      "caption": "Made with make-motion 1.x from one prompt at 1920x1080. The follow-up \"Add a voiceover that reads each scene aloud\" added a Kokoro voiceover, synthesised locally."
     },
     {
       "type": "motion",
@@ -333,7 +333,7 @@
       "label": "Launch clip",
       "video": "media/launch-announcement.mp4",
       "poster": "media/launch-announcement-poster.jpg",
-      "caption": "The product name scales in, a counter runs from 1 to 3, and three feature labels appear one after another. Voiceover by Kokoro."
+      "caption": "The product name scales in, a counter runs from 1 to 3, and three feature labels appear one after another. Made with make-motion 1.x. Voiceover by Kokoro."
     },
     {
       "type": "motion",
@@ -341,7 +341,7 @@
       "label": "SQL guard clip",
       "video": "media/sql-guard-explainer.mp4",
       "poster": "media/sql-guard-explainer-poster.jpg",
-      "caption": "A rejected query card, then three stacked boxes drawn in order: parse with DuckDB, allowlist the tables, locked connection. Voiceover by Kokoro."
+      "caption": "A rejected query card, then three stacked boxes drawn in order: parse with DuckDB, allowlist the tables, locked connection. Made with make-motion 1.x. Voiceover by Kokoro."
     },
     {
       "type": "motion",
@@ -349,7 +349,7 @@
       "label": "Square clip",
       "video": "media/quarterly-highlights-square.mp4",
       "poster": "media/quarterly-highlights-square-poster.jpg",
-      "caption": "A revenue counter to $42.1M and a bar chart of signups by quarter, sized for social feeds. Voiceover by Kokoro."
+      "caption": "A revenue counter to $42.1M and a bar chart of signups by quarter, sized for social feeds. Made with make-motion 1.x. Voiceover by Kokoro."
     },
     {
       "type": "compare",

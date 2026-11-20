@@ -82,8 +82,8 @@
         if (story.isPresenting()) { keepFocus([options.panel], 'play'); trace.clear(); } else keepFocus([options.caption, options.chapters], 'explore');
         transport.paint(); trace.refresh(); panel.paint(); emit();
       },
-      // the transport shows the hold as a progress ring
-      onHold: function (ms) { transport.hold(ms); },
+      // the transport shows the hold as a progress ring, and paints a caption that waited for the camera once it settles
+      onHold: function (ms) { transport.hold(ms); }, onSettle: function () { transport.paint(); },
       onHoldEnd: function () { transport.holdEnd(); },
     });
     var transport = PADiagram.transport({ caption: options.caption || null, chapters: options.chapters || null }, data, story);
@@ -189,7 +189,7 @@
       trace.clear();
       clearFind();
       panel.paint();
-      camera.fit();
+      camera.home(); // the readable opening view, not the whole drawing
       emit();
     }
 

@@ -1,7 +1,7 @@
 // The travelling light's state machine: no DOM, no three, a clock the test drives.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createTravel, TRAVEL_SECONDS } from '../template/runtime/travel.js';
+import { createTravel, easeFlight, TRAVEL_SECONDS } from '../template/runtime/travel.js';
 
 test('nothing travels until a path starts', () => {
   const travel = createTravel();
@@ -64,4 +64,62 @@ test('a clock that runs backwards never leaves 0..1', () => {
   travel.tick(50);
   const early = travel.tick(10);
   assert.equal(early.at, 0);
+});
+
+// The light's position at `seconds` into a run that started on clock 0.
+function atSeconds(seconds, options) {
+  const travel = createTravel();
+  travel.start('e0', options);
+  travel.tick(0);
+  return travel.tick(seconds).at;
+}
+
+test('the eased position is 0 at 0 and 1 at 1 and never leaves [0, 1]', () => {
+  assert.equal(atSeconds(0), 0);
+  assert.equal(atSeconds(TRAVEL_SECONDS), 1);
+  for (const reverse of [false, true]) {
+    for (let s = -1; s <= TRAVEL_SECONDS * 2; s += TRAVEL_SECONDS / 40) {
+      const at = atSeconds(s, { reverse });
+      assert.ok(at >= 0 && at <= 1, `at ${at} outside [0, 1] at ${s} s (reverse ${reverse})`);
+    }
+  }
+});
+
+test('speed is zero at both ends: the light eases out of its start and into its end', () => {
+  const dt = 1e-3; // seconds
+  const meanSpeed = 1 / TRAVEL_SECONDS;
+  const startSpeed = (atSeconds(dt) - atSeconds(0)) / dt;
+  const endSpeed = (atSeconds(TRAVEL_SECONDS) - atSeconds(TRAVEL_SECONDS - dt)) / dt;
+  assert.ok(startSpeed < meanSpeed * 0.01, `start speed ${startSpeed}`);
+  assert.ok(endSpeed < meanSpeed * 0.01, `end speed ${endSpeed}`);
+  const midSpeed = (atSeconds(TRAVEL_SECONDS / 2 + dt) - atSeconds(TRAVEL_SECONDS / 2)) / dt;
+  assert.ok(midSpeed > meanSpeed, 'and it is fastest in the middle');
+});
+
+test('reverse mirrors forward at every instant', () => {
+  for (let s = 0; s <= TRAVEL_SECONDS; s += TRAVEL_SECONDS / 24) {
+    assert.ok(Math.abs(atSeconds(s, { reverse: true }) - (1 - atSeconds(s))) < 1e-12, `at ${s} s`);
+  }
+});
+
+// Camera flight ease (the duration rule is in tour-unit.test.mjs).
+test('the camera flight ease is 0 at 0 and 1 at 1, stays in [0, 1], and clamps outside', () => {
+  assert.equal(easeFlight(0), 0);
+  assert.equal(easeFlight(1), 1);
+  assert.equal(easeFlight(-3), 0);
+  assert.equal(easeFlight(7), 1);
+  for (let k = 0; k <= 1; k += 0.01) assert.ok(easeFlight(k) >= 0 && easeFlight(k) <= 1);
+});
+
+test('the camera flight ease is at rest at both ends, never goes backwards, and mirrors itself', () => {
+  const dk = 1e-3;
+  assert.ok((easeFlight(dk) - easeFlight(0)) / dk < 0.01, 'at rest at the start');
+  assert.ok((easeFlight(1) - easeFlight(1 - dk)) / dk < 0.01, 'at rest at the end');
+  assert.ok((easeFlight(0.5 + dk) - easeFlight(0.5)) / dk > 1.5, 'quick in the middle');
+  let last = 0;
+  for (let k = 0; k <= 1; k += 0.01) {
+    assert.ok(easeFlight(k) >= last - 1e-12, `non-decreasing at ${k}`);
+    assert.ok(Math.abs(easeFlight(k) + easeFlight(1 - k) - 1) < 1e-12, `mirror at ${k}`);
+    last = easeFlight(k);
+  }
 });

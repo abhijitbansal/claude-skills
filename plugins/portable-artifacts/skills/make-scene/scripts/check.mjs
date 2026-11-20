@@ -22,6 +22,11 @@ const OPTIONS = { json: { type: 'boolean' }, shots: { type: 'string' } };
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 780 }];
 const READY_MS = 10000; // software WebGL is slow to draw the first frame
 const ACTION_MS = 5000; // default timeout for every page action and navigation
+// A screenshot under software WebGL is the slowest thing the check does. Measured on a CI runner (4 CPUs, run 44484783849):
+// the first canvas screenshot 0.9 s with one browser and 2.1 to 2.5 s with three at once; 0.12 s on a laptop; one check
+// run timed out at 4.95 s (run 44465347491). 15 s is six times the worst healthy figure and well inside WATCHDOG_MS, which
+// still ends a page that truly hangs.
+const SHOT_MS = 15000;
 const SELECTOR_MS = 2000; // reads of elements the runtime should already have drawn
 const FLY_SETTLE_MS = 1200; // the camera's fly-to takes 900 ms; a beat frame waits this long so it shows the landing, not the flight
 const WATCHDOG_MS = 60000; // wall-clock cap for the whole check
@@ -58,7 +63,7 @@ const sceneFacts = () => {
 };
 
 async function checkCanvas(page, label, problems) {
-  const colours = distinctColours(await canvasPng(page, { timeout: ACTION_MS }), GRID);
+  const colours = distinctColours(await canvasPng(page, { timeout: SHOT_MS }), GRID);
   if (colours < MIN_COLOURS) problems.push(`${label}: the canvas looks blank (${colours} distinct colours on a ${GRID}x${GRID} grid, need ${MIN_COLOURS})`);
 }
 
@@ -84,7 +89,7 @@ async function checkViewport(browser, url, viewport, readyMs, { scheme = 'light'
   const written = [];
   const snap = async (name) => {
     const target = path.join(shots.dir, name);
-    await page.screenshot({ path: target });
+    await page.screenshot({ path: target, timeout: SHOT_MS });
     written.push(target);
   };
   let page;

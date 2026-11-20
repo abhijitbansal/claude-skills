@@ -77,7 +77,9 @@ test('a build missing its vendored chart libraries prints the npm ci command', (
   for (const e of fs.readdirSync(path.join(SKILL, 'node_modules'))) {
     if (e !== 'vega-embed') fs.symlinkSync(path.join(SKILL, 'node_modules', e), path.join(dir, 'node_modules', e));
   }
+  // The package is there (the preflight resolves each dependency) and its build output is not: the build's own check names the fix.
   fs.mkdirSync(path.join(dir, 'node_modules', 'vega-embed'));
+  fs.writeFileSync(path.join(dir, 'node_modules', 'vega-embed', 'package.json'), '{}');
   const proj = tmp('doctor-proj-');
   fs.cpSync(path.join(SKILL, 'test/fixtures/data'), path.join(proj, 'data'), { recursive: true });
   const spec = path.join(proj, 'dashboard.json');
@@ -117,6 +119,7 @@ test('builder_agent is an optional requirement in every target, and a missing ag
   assert.equal(miss.required, false);
   assert.match(miss.fix.manual.darwin, /install\.mjs copilot --agents-only/);
   fs.mkdirSync(path.join(home, '.codex/agents'));
-  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
+  // A current file carries make.mjs; a stub without it would be reported as outdated.
+  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n# node scripts/make.mjs <spec> --json\n');
   assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
 });

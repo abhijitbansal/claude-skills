@@ -41,15 +41,13 @@ test('modelsDir: an install that already downloaded the models into <skill>/.cac
   assert.equal(modelsDir(skillDir, options), stable, 'once the stable folder exists it wins');
 });
 
-test('voice.mjs and cutout.mjs put their models under that folder', () => {
+// The version 2 voice model keeps its own folder under <skill>/.cache/models (voice-model.test.mjs); only the cut-out tool uses this one.
+test('cutout.mjs puts its model under that folder', () => {
   const data = tmp();
   mkdirSync(path.join(data, 'models')); // an existing stable folder wins over a legacy <skill>/.cache/models on this machine
-  const script = `const v = await import(${JSON.stringify(pathToFileURL(path.join(root, 'scripts/lib/voice.mjs')).href)});
-    const c = await import(${JSON.stringify(pathToFileURL(path.join(root, 'scripts/lib/cutout.mjs')).href)});
-    process.stdout.write(JSON.stringify({ voice: v.MODEL_CACHE_DIR, cutout: c.MODEL_DIR }));`;
+  const script = `const c = await import(${JSON.stringify(pathToFileURL(path.join(root, 'scripts/lib/cutout.mjs')).href)});
+    process.stdout.write(JSON.stringify({ cutout: c.MODEL_DIR }));`;
   const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', env: { ...process.env, CLAUDE_PLUGIN_DATA: data } });
   assert.equal(r.status, 0, r.stderr);
-  const dirs = JSON.parse(r.stdout);
-  assert.equal(dirs.voice, path.join(data, 'models'));
-  assert.equal(dirs.cutout, path.join(data, 'models', 'modnet'));
+  assert.equal(JSON.parse(r.stdout).cutout, path.join(data, 'models', 'modnet'));
 });

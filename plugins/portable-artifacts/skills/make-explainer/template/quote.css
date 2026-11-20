@@ -1,0 +1,21 @@
+/* quote */
+/* Shipped once, only on a page or deck that has a quote section. The tone picks the rule and the mark (--tc, the
+   shared tone colour; accent when neutral); colours are theme tokens only. The opening mark hangs: the first line is
+   pulled back by its width, so the words align with the text above and below it, and it fits the narrowest gutter. */
+.quote { --qc: var(--tc, var(--accent)); margin: 0; max-width: 34rem; padding-top: var(--sp-4); border-top: var(--card-rule) solid var(--qc); }
+.quote.tone-neutral { --qc: var(--accent); }
+.quote blockquote { margin: 0; text-indent: -0.42em; font: var(--display-weight) var(--fs-d3)/1.22 var(--font-display); letter-spacing: var(--track-display); text-wrap: balance; overflow-wrap: anywhere; }
+.quote blockquote::before { content: "\201C"; content: "\201C" / ""; color: var(--qc); }
+.quote blockquote::after { content: "\201D"; content: "\201D" / ""; color: var(--qc); }
+.quote-by { margin: var(--sp-4) 0 0; color: var(--text-2); overflow-wrap: anywhere; }
+
+/* in a deck the quote is the slide: projection size, wider measure; a closing quote is centred */
+.slide .quote { max-width: 52rem; padding-top: var(--sp-5); }
+.slide .quote blockquote { font-size: clamp(1.9rem, 1.1rem + 2.8vw, 3.4rem); line-height: 1.15; }
+.slide .quote-by { font-size: clamp(var(--fs-xs), 0.5rem + 0.6vw, 18px); }
+.slide-close .quote { margin-inline: auto; border-top: 0; text-align: center; }
+.slide-close .quote blockquote { text-indent: 0; margin-inline: auto; max-width: 22em; }
+
+@media (max-width: 640px) {
+  .quote blockquote { font-size: var(--fs-md); }
+}

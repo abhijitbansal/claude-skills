@@ -3,19 +3,17 @@
 import { Spherical, Vector3 } from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { arrowOwner } from './keys.js';
+import { easeFlight, flightMsFor } from './travel.js';
 
 const AUTO_ROTATE_SPEED = 0.8;
 const DAMPING = 0.08;
 const KEY_STEP = 0.12; // radians per arrow press
-const FLY_MS = 900;
 const MAX_DT = 0.05; // seconds; a frame after a long pause must not jump the camera
 const POLAR_MARGIN = 0.05;
 const MIN_DISTANCE_SHARE = 0.15; // zoom in this far, in overview distances...
 const FOCUS_CLEARANCE = 0.9; // ...but never nearer than this share of the closest authored view, so every focus view can land
 const MIN_DISTANCE_FLOOR = 0.2; // world units: a scene is never zoomed into its own camera plane
 const ARROWS = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-
-const ease = (k) => (k < 0.5 ? 4 * k * k * k : 1 - ((-2 * k + 2) ** 3) / 2);
 
 /** How close the camera may come: a share of the overview distance, kept clear of the nearest authored focus view. */
 export function minDistanceFor(overview, nearestFocus = Infinity) {
@@ -93,7 +91,10 @@ export function createControls({ camera, dom, target, polarMax, polarMin = 0, di
         controls.target.copy(to.target);
         controls.update();
       } else {
-        tween = { from: { position: camera.position.clone(), target: controls.target.clone() }, to, start: null };
+        const from = { position: camera.position.clone(), target: controls.target.clone() };
+        const reach = Math.max(from.position.distanceTo(from.target), Number.EPSILON); // the view distance: span is scene-size free
+        const span = (from.position.distanceTo(to.position) + from.target.distanceTo(to.target)) / reach;
+        tween = { from, to, start: null, ms: flightMsFor(span) };
       }
       onInput('fly');
     },
@@ -116,8 +117,8 @@ export function createControls({ camera, dom, target, polarMax, polarMin = 0, di
     update(nowMs, dtSeconds) {
       if (tween) {
         tween.start ??= nowMs;
-        const k = Math.min(1, (nowMs - tween.start) / FLY_MS);
-        const e = ease(k);
+        const k = Math.min(1, (nowMs - tween.start) / tween.ms);
+        const e = easeFlight(k);
         camera.position.lerpVectors(tween.from.position, tween.to.position, e);
         controls.target.lerpVectors(tween.from.target, tween.to.target, e);
         if (k >= 1) tween = null;

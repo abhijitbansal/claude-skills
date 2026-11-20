@@ -1,15 +1,7 @@
 {
-  "params": [
-    {
-      "name": "pa_hover",
-      "select": {
-        "type": "point",
-        "on": "pointerover",
-        "clear": "pointerout"
-      }
-    }
-  ],
-  "mark": "bar",
+  "usermeta": {
+    "paHeadroom": "y"
+  },
   "encoding": {
     "x": {
       "field": "region",
@@ -29,27 +21,76 @@
     "y": {
       "field": "revenue",
       "type": "quantitative",
-      "title": "Revenue"
-    },
-    "tooltip": [
-      {
-        "field": "region",
-        "type": "nominal",
-        "title": "Region"
+      "title": "Revenue",
+      "scale": {
+        "domainMax": 124.80000000000001,
+        "nice": 5
       },
-      {
-        "field": "revenue",
-        "type": "quantitative",
-        "title": "Revenue"
+      "axis": {
+        "tickCount": 5
       }
-    ],
-    "opacity": {
-      "condition": {
-        "param": "pa_hover",
-        "empty": true,
-        "value": 1
-      },
-      "value": 0.55
     }
+  },
+  "layer": [
+    {
+      "params": [
+        {
+          "name": "pa_hover",
+          "select": {
+            "type": "point",
+            "on": "pointerover",
+            "clear": "pointerout"
+          }
+        }
+      ],
+      "mark": "bar",
+      "encoding": {
+        "tooltip": [
+          {
+            "field": "region",
+            "type": "nominal",
+            "title": "Region"
+          },
+          {
+            "field": "revenue",
+            "type": "quantitative",
+            "title": "Revenue"
+          }
+        ],
+        "opacity": {
+          "condition": {
+            "param": "pa_hover",
+            "empty": true,
+            "value": 1
+          },
+          "value": 0.55
+        }
+      }
+    },
+    {
+      "encoding": {
+        "text": {
+          "field": "revenue",
+          "type": "quantitative",
+          "format": ",.2~f"
+        }
+      },
+      "mark": {
+        "type": "text",
+        "tooltip": false,
+        "align": "center",
+        "baseline": "bottom",
+        "dy": -4,
+        "opacity": {
+          "expr": "bandwidth('x') >= 27 ? 1 : 0"
+        }
+      }
+    }
+  ],
+  "padding": {
+    "top": 19,
+    "bottom": 5,
+    "left": 5,
+    "right": 5
   }
 }

@@ -5,6 +5,7 @@
 // Token -> CSS variable. Mirrors VARS in shared/theme.mjs (a test keeps the two in step).
 export const TOKEN_VARS = {
   page: '--page', surface: '--surface', text: '--text', text2: '--text-2', text3: '--text-3',
+  surface2: '--surface-2', surface3: '--surface-3', shadow: '--shadow',
   line: '--line', grid: '--grid', accent: '--accent', accentSoft: '--accent-soft',
   warn: '--warn', good: '--good', bad: '--bad',
   cat1: '--s1', cat2: '--s2', cat3: '--s3', cat4: '--s4', cat5: '--s5', cat6: '--s6', cat7: '--s7', cat8: '--s8',

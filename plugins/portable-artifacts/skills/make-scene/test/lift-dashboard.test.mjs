@@ -11,6 +11,7 @@ import { assertGraph } from '../scripts/lib/graph.mjs';
 import { buildScene, SceneError, validateSpec } from '../scripts/lib/api.mjs';
 import { loadTheme } from '../shared/theme.mjs';
 import { liftDashboard, dashboardLiftCheck } from '../scripts/lifts/dashboard.mjs';
+import { TOKEN_VARS, resolveColour } from '../template/runtime/colour.js';
 import { installCommand, loadSibling } from '../scripts/lib/siblings.mjs';
 import { build } from '../scripts/build.mjs';
 import { PINNED_ENV, tempDir } from './helpers/scene-fixtures.mjs';
@@ -134,6 +135,31 @@ dtest('negative values go below the floor, and the floor is drawn at 0', async (
   assert.ok(floor.every((i) => i[6] === -1 && Math.abs(i[1]) < 0.06), 'at y = 0, so a negative tower is not hidden by it');
   assert.ok(g.labels.some((l) => l.text.startsWith('-')), 'the axis has negative ticks');
   assert.ok(finite(g));
+});
+
+// WCAG relative luminance contrast of two #rrggbb colours.
+const lum = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)).reduce((s, c, k) => s + c * [0.2126, 0.7152, 0.0722][k], 0);
+const contrast = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+const VAR_TOKEN = Object.fromEntries(Object.entries(TOKEN_VARS).map(([token, cssVar]) => [cssVar, token]));
+
+dtest('the gridlines read against the page in light and in dark', async () => {
+  const g = await lift('revenue-by-region');
+  const grid = g.batches.find((b) => b.id !== g.batches[0].id && b.instances.every((i) => i[6] === -1 && i[4] < 0.06));
+  assert.ok(grid, 'the chart has a gridline batch');
+  for (const mode of ['light', 'dark']) {
+    const readVar = (cssVar) => THEME[mode][VAR_TOKEN[cssVar]];
+    const ratio = contrast(resolveColour(grid.colour, readVar), readVar('--page'));
+    assert.ok(ratio >= 1.8, `${mode}: the gridlines are ${ratio.toFixed(2)}:1 against the page, under 1.8:1`);
+  }
+});
+
+dtest('the x axis title sits clear of the x tick labels, so a wide caps title cannot crowd them', async () => {
+  const g = await lift('revenue-by-region');
+  const title = g.labels.find((l) => l.size === 0.55 && l.at[0] === 0);
+  const ticks = g.labels.filter((l) => l.size === 0.45 && l.at[1] === 0.05); // the x ticks stand on the floor's front edge
+  assert.ok(title && ticks.length > 0, 'the chart has an x title and x ticks');
+  const gap = title.at[2] - Math.max(...ticks.map((l) => l.at[2]));
+  assert.ok(gap >= 2, `the title is ${gap.toFixed(1)} world units in front of the ticks, under 2`);
 });
 
 dtest('stacked bars stack in one column, grouped bars stand side by side', async () => {

@@ -21,7 +21,6 @@ const USAGE_RAW = read('USAGE.md');
 const USAGE = squash(USAGE_RAW);
 const skillNames = fs.readdirSync(SKILLS_DIR).filter((d) => d.startsWith('make-')).sort();
 
-const { BLOCK_NAMES } = await import('../../skills/make-motion/template/blocks/index.mjs');
 const { TYPES: SECTION_TYPES } = await import('../../skills/make-explainer/scripts/lib/schema.mjs');
 const { KIND_NAMES } = await import('../../skills/make-dashboard/scripts/lib/kinds.mjs');
 const { listThemes } = await import('../../shared/theme.mjs');
@@ -85,8 +84,7 @@ test('USAGE counts the explainer section types and lists every one', () => {
   for (const t of SECTION_TYPES) assert.ok(m[2].includes(`\`${t}\``), `USAGE lists the \`${t}\` section`);
 });
 
-test('README counts the motion blocks in words, and the dashboard chart kinds in digits', () => {
-  assert.ok(README.includes(`${words(BLOCK_NAMES.length)} blocks`), `README says "${words(BLOCK_NAMES.length)} blocks"`);
+test('README counts the dashboard chart kinds in digits', () => {
   assert.ok(README.includes(`${KIND_NAMES.length} kinds`), `README says "${KIND_NAMES.length} kinds"`);
 });
 
@@ -123,7 +121,7 @@ test('README has a per-skill install-size row that matches the doctor, and names
 
 test('README and USAGE give the on-demand voiceover install as the doctor does, not the old 250 MB', () => {
   const doctor = read('shared/doctor.mjs');
-  const size = /size: '(≈\d+ MB), plus a 90 MB model on first use'/.exec(doctor)?.[1];
+  const size = /size: '(≈\d+ MB), plus a \d+ MB model on first use'/.exec(doctor)?.[1];
   assert.ok(size, 'the doctor states a kokoro size');
   for (const [name, text] of [['README', README], ['USAGE', USAGE]]) {
     assert.ok(text.includes(size) || text.includes(size.replace('≈', 'about ')), `${name} states ${size}`);
@@ -148,11 +146,10 @@ test('every production dependency of every skill is named in the README licence 
   assert.deepEqual([...new Set(missing)], []);
 });
 
-test('the README licence table names what the repo bundles without an npm dependency: three.js and the Feather-derived icons', () => {
+test('the README licence table names what the repo bundles without an npm dependency: three.js', () => {
   const section = /## Licences[^]*$/.exec(README)?.[0] ?? '';
   const notices = [
     ['three.js', 'skills/make-scene/THIRD_PARTY_NOTICES.md', /bundles \*\*three\.js/],
-    ['Feather', 'skills/make-motion/template/sketch/LICENSES', /derived from the Feather project/],
   ];
   for (const [name, file, marker] of notices) {
     assert.match(read(file), marker, `${file} still says it ships ${name}`);
@@ -218,7 +215,7 @@ async function helpProblems(files) {
 
 test('every entry script takes --help: a usage line on stdout and exit 0 (USAGE says so)', async () => {
   const files = entryScripts();
-  assert.ok(files.length >= 35, `${files.length} entry scripts found`);
+  assert.ok(files.length >= 34, `${files.length} entry scripts found`); // 34 measured after version 1's seven entry scripts were deleted (41 before)
   assert.match(USAGE, /Every entry script takes `--help`/);
   assert.deepEqual(await helpProblems(files), []);
 });

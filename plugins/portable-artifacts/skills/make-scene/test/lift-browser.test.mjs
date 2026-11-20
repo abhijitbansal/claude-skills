@@ -11,6 +11,7 @@ import { distinctColours } from '../scripts/lib/png.mjs';
 import { canvasPng, launchBrowser } from './helpers/browser.mjs';
 import { PINNED_ENV, tempDir } from './helpers/scene-fixtures.mjs';
 import { consoleProblem, skipUnlessReady } from './helpers/webgl.mjs';
+import { lightArrives } from './helpers/light.mjs';
 
 const FIX = new URL('./fixtures/', import.meta.url);
 
@@ -68,8 +69,7 @@ test('the tour sends a light along the beat edge and it arrives', async (t) => {
   await page.waitForFunction(() => window.PAScene.__scene.traveller()?.id === 'edge-0', null, { timeout: 3000 });
   const start = await light(page);
   assert.equal(start.done, false, 'it is travelling');
-  await page.waitForFunction(() => window.PAScene.__scene.traveller().done === true, null, { timeout: 5000 });
-  const end = await light(page);
+  const end = await lightArrives(page); // by what it does, not a wall-clock budget: see helpers/light.mjs
   assert.equal(end.at, 1);
   assert.notDeepEqual(end.position, start.position, 'it moved along the tube');
   await page.keyboard.press('ArrowRight'); // beat 2: place
@@ -85,8 +85,7 @@ test('a reply beat sends the light back along the edge', async (t) => {
   for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight'); // beat 6: "The shopper sees a receipt", reversed
   await page.waitForFunction(() => window.PAScene.__scene.traveller()?.id === 'edge-0', null, { timeout: 3000 });
   const first = await light(page);
-  await page.waitForFunction(() => window.PAScene.__scene.traveller().done === true, null, { timeout: 5000 });
-  const last = await light(page);
+  const last = await lightArrives(page);
   assert.ok(first.at > 0.5 && last.at === 0, `it runs from the far end (${first.at}) back to the start (${last.at})`);
 });
 
@@ -100,6 +99,29 @@ test('under reduced motion the light jumps to the end', async (t) => {
   await page.getByRole('button', { name: 'Close' }).click();
   assert.equal(await light(page), null, 'a closed tour hides the light');
   assert.deepEqual(ctx.problems, []);
+});
+
+test('labels wear the shared type: every label in caps with the shared tracking, all at the theme weight', async (t) => {
+  const ctx = await open(t, 'architecture.diagram.json', { reducedMotion: 'reduce' });
+  if (!ctx) return;
+  const labels = await ctx.page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    return {
+      weight: root.getPropertyValue('--strong-weight').trim(),
+      track: parseFloat(root.getPropertyValue('--track-caps')),
+      items: [...document.querySelectorAll('.sc-label')].map((el) => {
+        const s = getComputedStyle(el);
+        return { caps: el.classList.contains('pa-caps'), transform: s.textTransform, tracking: parseFloat(s.letterSpacing) / parseFloat(s.fontSize), weight: s.fontWeight };
+      }),
+    };
+  });
+  assert.ok(labels.items.length > 0, 'the diagram has labels');
+  for (const l of labels.items) {
+    assert.equal(l.caps, true, 'no label is left in mixed case');
+    assert.equal(l.transform, 'uppercase');
+    assert.ok(Math.abs(l.tracking - labels.track) < 0.01, `tracking ${l.tracking}em is the shared ${labels.track}em`);
+    assert.equal(l.weight, labels.weight, 'the weight is the theme --strong-weight');
+  }
 });
 
 test('a focus beat has no light', async (t) => {

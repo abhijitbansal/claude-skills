@@ -74,7 +74,9 @@ for (const name of EXAMPLES) {
       assert.ok(fit.fits, 'no page overflow');
       const size = await page.evaluate(() => JSON.parse(document.getElementById('pa-data').textContent));
       const [dx, dy, dw, dh] = size.drawing; // the page hides the drawn legend, so the fit holds the drawing, not the canvas widened and banded for it
-      assert.ok(fit.x <= dx + 0.01 && fit.y <= dy + 0.01 && fit.x + fit.w >= dx + dw - 0.01 && fit.y + fit.h >= dy + dh - 0.01, 'the first view shows the whole diagram');
+      // a drawing that fits only under the reading floor opens at the floor instead (phone-fit-browser.test.mjs covers that view)
+      const floored = await page.evaluate(() => 14 * Number(document.getElementById('pa-stage').getAttribute('data-fit-scale')) < 8);
+      if (!floored) assert.ok(fit.x <= dx + 0.01 && fit.y <= dy + 0.01 && fit.x + fit.w >= dx + dw - 0.01 && fit.y + fit.h >= dy + dh - 0.01, 'the first view shows the whole diagram');
       assert.ok(Math.abs((await zoom(page)) - 1) < 0.001);
       assert.deepEqual(problems, []);
       await context.close();
@@ -653,13 +655,14 @@ test('at 390 px a beat whose box fits at 100% is shown at 100%, not at 2x of a t
   await enterPlay(page);
   await settle(page);
   const m = await page.evaluate(() => {
-    const svg = document.querySelector('#pa-stage svg');
-    const fit = Number(document.getElementById('pa-stage').dataset.zoom);
-    return { px: svg.getScreenCTM().a, fit };
+    const stage = document.getElementById('pa-stage');
+    const svg = stage.querySelector('svg');
+    return { px: svg.getScreenCTM().a, zoom: Number(stage.dataset.zoom), whole: Number(stage.dataset.fitScale) };
   });
-  const fs = m.px / m.fit;
-  assert.ok(fs < 0.5, `precondition: the fit-all scale is tiny (${fs})`);
-  assert.ok(Math.abs(m.px - 1) < 0.01, `focus beat scale ${m.px}`);
+  assert.ok(m.whole < 0.5, `precondition: the fit-all scale is tiny (${m.whole})`);
+  // The phone opens this chain at the reading floor (8/14), so the cap is 2x of that view; the beat is at least 100%.
+  const opening = m.px / m.zoom;
+  assert.ok(m.px >= 0.99 && m.px <= Math.max(2 * opening, 1) + 0.01, `focus beat scale ${m.px} (opening view ${opening.toFixed(3)})`);
   assert.deepEqual(problems, []);
   await context.close();
 });

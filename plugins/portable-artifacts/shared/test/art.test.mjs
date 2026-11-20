@@ -1,9 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { artSvg, seedFrom, assertHex, ART_STYLES } from '../art.mjs';
-import { ThemeError } from '../theme.mjs';
+import { ThemeError, listThemes, loadTheme } from '../theme.mjs';
 
-const THEMES = ['dusk', 'press', 'poster'];
+const THEMES = listThemes();
+const ORIGINAL = ['dusk', 'press', 'poster'];
+const NEW_STYLES = THEMES.filter((t) => !ORIGINAL.includes(t));
 const MODES = ['light', 'dark'];
 const base = { theme: 'dusk', seed: 'Launch review', width: 1280, height: 720, mode: 'dark' };
 
@@ -75,10 +79,14 @@ test('small 400x300 renders within budget too', () => {
 });
 
 test('only #rrggbb colours appear, and they come from the theme tokens', () => {
-  const svg = artSvg({ ...base, theme: 'press', mode: 'light' });
-  const colours = [...svg.matchAll(/(?:fill|stroke|stop-color|flood-color)="([^"]+)"/g)].map((m) => m[1]).filter((c) => !c.startsWith('url(') && c !== 'none');
-  assert.ok(colours.length > 0);
-  for (const c of colours) assert.match(c, /^#[0-9a-f]{6}$/, c);
+  for (const theme of THEMES) {
+    for (const mode of MODES) {
+      const svg = artSvg({ ...base, theme, mode });
+      const colours = [...svg.matchAll(/(?:fill|stroke|stop-color|flood-color)="([^"]+)"/g)].map((m) => m[1]).filter((c) => !c.startsWith('url(') && c !== 'none');
+      assert.ok(colours.length > 0, `${theme}/${mode}`);
+      for (const c of colours) assert.match(c, /^#[0-9a-f]{6}$/, `${theme}/${mode}: ${c}`);
+    }
+  }
 });
 
 test('assertHex accepts #rrggbb and throws on anything else', () => {
@@ -88,12 +96,51 @@ test('assertHex accepts #rrggbb and throws on anything else', () => {
   }
 });
 
-test('unknown theme throws ThemeError; legacy themes fall back to the press style', () => {
+test('every theme has its own style and an unknown theme still throws ThemeError', () => {
   assert.throws(() => artSvg({ ...base, theme: 'nope' }), ThemeError);
   assert.throws(() => artSvg({ ...base, theme: '../themes/dusk' }), ThemeError);
-  assert.equal(ART_STYLES.paper, undefined);
-  const svg = artSvg({ ...base, theme: 'paper' });
-  assert.match(svg, /data-art="press"/);
+  assert.deepEqual(Object.keys(ART_STYLES).sort(), THEMES, 'one style per shipped theme');
+  for (const theme of THEMES) {
+    assert.equal(ART_STYLES[theme], theme, theme);
+    assert.match(artSvg({ ...base, theme }), new RegExp(`data-art="${theme}"`), theme);
+  }
+});
+
+test('no two themes give the same bytes for the same seed, in either mode', () => {
+  for (const mode of MODES) {
+    for (const seed of ['Launch review', 'cover-7']) {
+      const seen = new Map();
+      for (const theme of THEMES) {
+        // the style name and the theme are both in the id prefix; strip ids so only the drawing is compared
+        const drawing = artSvg({ ...base, theme, mode, seed }).replace(/\bid="[^"]+"|url\(#[^)]+\)|data-art="[^"]+"/g, '');
+        assert.ok(!seen.has(drawing), `${theme} draws the same as ${seen.get(drawing)} (${mode}, ${seed})`);
+        seen.set(drawing, theme);
+      }
+    }
+  }
+});
+
+test('the three original styles keep their bytes (pinned at HEAD before the move into shared/art/)', () => {
+  const pins = JSON.parse(fs.readFileSync(new URL('./fixtures/art-pins.json', import.meta.url), 'utf8'));
+  assert.equal(Object.keys(pins).length, 90);
+  for (const [key, sha] of Object.entries(pins)) {
+    const [theme, mode, size, seed] = key.split('|');
+    const [width, height] = size.split('x').map(Number);
+    const got = crypto.createHash('sha256').update(artSvg({ theme, mode, width, height, seed })).digest('hex');
+    assert.equal(got, sha, key);
+  }
+});
+
+test('the six new styles paint only their own theme tokens, in both modes', () => {
+  for (const theme of NEW_STYLES) {
+    for (const mode of MODES) {
+      const tokens = new Set(Object.values(loadTheme(theme)[mode]).map((v) => v.toLowerCase()));
+      const svg = artSvg({ ...base, theme, mode });
+      const colours = [...svg.matchAll(/(?:fill|stroke|stop-color|flood-color)="([^"]+)"/g)].map((m) => m[1]).filter((c) => !c.startsWith('url(') && c !== 'none');
+      assert.ok(colours.length > 0, `${theme}/${mode} paints something`);
+      for (const c of colours) assert.ok(tokens.has(c), `${theme}/${mode}: ${c} is not a ${mode} token`);
+    }
+  }
 });
 
 test('bad mode, size or seed type is rejected', () => {
@@ -122,16 +169,14 @@ test('seedFrom is a stable non-negative 32-bit integer', () => {
 });
 
 test('ids are unique within an SVG, disjoint across seeds and themes, and every url(#) resolves', () => {
-  const one = artSvg({ ...base, seed: 'first' });
-  const two = artSvg({ ...base, seed: 'second' });
-  const three = artSvg({ ...base, seed: 'first', theme: 'press' });
-  for (const svg of [one, two, three]) {
+  const svgs = THEMES.flatMap((theme) => MODES.flatMap((mode) => ['first', 'second'].map((seed) => artSvg({ ...base, theme, mode, seed }))));
+  for (const svg of svgs) {
     const own = ids(svg);
     assert.ok(own.length > 0);
     assert.equal(new Set(own).size, own.length, 'unique within one SVG');
     for (const r of refs(svg)) assert.ok(own.includes(r), `dangling url(#${r})`);
   }
-  const all = [...ids(one), ...ids(two), ...ids(three)];
+  const all = svgs.flatMap(ids);
   assert.equal(new Set(all).size, all.length, 'no id shared between SVGs on one page');
 });
 

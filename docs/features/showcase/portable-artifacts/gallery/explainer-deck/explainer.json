@@ -79,7 +79,7 @@
       "label": "Clip",
       "video": "clip.mp4",
       "poster": "clip-poster.jpg",
-      "caption": "Rendered from a JSON spec. The clip never autoplays, so press play when you want it."
+      "caption": "Made with make-motion 1.x and rendered from a JSON spec. The clip never autoplays, so press play when you want it."
     },
     {
       "type": "steps",

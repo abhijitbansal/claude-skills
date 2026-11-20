@@ -20,6 +20,15 @@
   var MAX_ZOOM = 4;
   var MAX_FIT_SCALE = 1.25; // a small diagram is not blown up past this to fill a big stage
   var FIT_MARGIN = 16;
+  // On a phone (a viewport inside viewer.html's 719 px breakpoint) the opening view never draws a 14 px node label
+  // below the 8 px reading floor (legibility.mjs LABEL_PX and MIN_LABEL_PX): a diagram too big for that opens at the
+  // floor (axisFloor places it) and pans; the Fit button still shows the whole drawing. Wider viewports open fitted
+  // whole, whatever the text size (scripts/check.mjs warns when that draws labels under the floor).
+  var PHONE_QUERY = '(max-width: 719px)';
+  var READ_SCALE = 8 / 14;
+  var FLOOR_GAP = 16; // px: at the floor a node in view sits at least this far inside the stage
+  var OUT_PX = 4; // px: a node out of view sits at least this far past the edge (its outline and lift included)
+  var CUE_STEP = 0.75; // a pan cue moves the view this share of the stage
   var FOCUS_PAD = 48;
   var MAX_FOCUS_SCALE = 1.6; // px per diagram unit when a beat zooms in on a few nodes
   var MAX_FOCUS_ZOOM = 2; // and never past this multiple of the fit, unless the fit is tiny: a beat may always reach 100%
@@ -29,6 +38,8 @@
   var clamp = function (v, lo, hi) { return Math.min(hi, Math.max(lo, v)); };
   var finite = function (v, fallback) { return typeof v === 'number' && isFinite(v) ? v : fallback; };
   var round = function (v) { return Math.round(v * 100) / 100; };
+  var easeOut = function (k) { return 1 - Math.pow(1 - k, 3); }; // Fit, Home, a pan cue: quick to respond
+  var easeInOut = function (k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }; // a story beat: calm at both ends
 
   // Ids are model-provided keys: every id-keyed map has no prototype, so an id
   // like "constructor" is just a key (a plain {} would answer for it).
@@ -38,6 +49,29 @@
     return d;
   };
 
+  var toBox = function (b) { return { x: b[0], y: b[1], w: b[2], h: b[3] }; };
+  // What the floor view places: every box drawn (`all`), the node boxes (no group, no edge or message), the first
+  // group and the first node in the spec's order (data.info), each { x, y, w, h }; null when there is none.
+  function contentOf(boxes, info, fallback) {
+    var ids = Object.keys(info || boxes).filter(function (id) { return boxes[id] && boxes[id].every(function (v) { return isFinite(v); }); });
+    var isGroup = function (id) { return !!info && !!info[id] && info[id].kind === 'group'; };
+    var isNode = function (id) { return !isGroup(id) && !(info && info[id] && info[id].style); };
+    var all = null;
+    Object.keys(boxes).forEach(function (id) {
+      var b = boxes[id];
+      if (!b.every(function (v) { return isFinite(v); })) return;
+      all = all ? { x: Math.min(all.x, b[0]), y: Math.min(all.y, b[1]), r: Math.max(all.r, b[0] + b[2]), b: Math.max(all.b, b[1] + b[3]) } : { x: b[0], y: b[1], r: b[0] + b[2], b: b[1] + b[3] };
+    });
+    var group = ids.filter(isGroup)[0];
+    var first = ids.filter(isNode)[0];
+    return {
+      all: all ? { x: all.x, y: all.y, w: all.r - all.x, h: all.b - all.y } : fallback,
+      nodes: ids.filter(isNode).map(function (id) { return toBox(boxes[id]); }),
+      group: group ? toBox(boxes[group]) : null,
+      first: first ? toBox(boxes[first]) : null,
+    };
+  }
+
   PADiagram.camera = function (stage, svg, data, hooks) {
     hooks = hooks || {};
     var W = Math.max(1, finite(data.width, 1));
@@ -45,12 +79,16 @@
     var boxes = PADiagram.dict(data.boxes);
     var reduceQuery = global.matchMedia ? global.matchMedia('(prefers-reduced-motion: reduce)') : null;
     var reduced = function () { return !!(reduceQuery && reduceQuery.matches); };
+    var phoneQuery = global.matchMedia ? global.matchMedia(PHONE_QUERY) : null;
+    var phone = function () { return !!(phoneQuery && phoneQuery.matches); };
     var overlay = stage.querySelector('[data-pa-legend]');
     var d = data.drawing;
     // What the fit shows: the drawing when the page covers the drawn legend with its own, else the canvas.
     var fitBox = overlay && d && d.length === 4 && d.every(function (v) { return finite(v, NaN) === v; }) && d[2] > 0 && d[3] > 0 ? { x: d[0], y: d[1], w: d[2], h: d[3] } : { x: 0, y: 0, w: W, h: H };
+    var content = contentOf(boxes, data.info, fitBox);
     var cam = { cx: W / 2, cy: H / 2, s: 1 };
     var fitted = true;
+    var whole = false; // the fitted view is the whole drawing (Fit) rather than the opening view
     var tween = 0;
 
     // A stage with no size (hidden, not laid out yet) is treated as the
@@ -84,11 +122,50 @@
       var halfH = (fitBox.h / 2 + FIT_MARGIN) * below;
       return { s: below, dx: 0, dy: Math.max(0, sz.top - (sz.h / 2 - halfH)) };
     }
-    function fitScale(sz) { return fitPlace(sz).s; }
-    function fitCamera() {
+    // ---- the reading floor ------------------------------------------------------------------
+    // On a phone a fit below READ_SCALE opens at READ_SCALE instead. On each axis: when everything drawn fits the stage at that
+    // scale (FLOOR_GAP to spare on both sides) it is centred; else the view centres on the anchor (the first group
+    // when it fits the stage, else the first node), stays within what is drawn, and then moves the least it must so
+    // that no node is cut by the stage edge (each is whole in view, FLOOR_GAP in, or wholly out, behind a pan cue).
+    // Centring and the anchor use the band past `lead` px (the legend overlay's depth on the y axis); the cut test uses
+    // the whole stage length `len`, where a node beside the overlay still shows. Returns the camera centre on the axis.
+    function axisFloor(len, lead, s, extent, anchor, spans) {
+      var band = len - lead;
+      var toFull = lead / (2 * s); // band centre minus this is the stage centre
+      if ((extent[1] - extent[0]) * s + 2 * FLOOR_GAP <= band) return (extent[0] + extent[1]) / 2 - toFull;
+      var half = band / (2 * s);
+      var c = clamp((anchor[0] + anchor[1]) / 2, extent[0] - FLOOR_GAP / s + half, extent[1] + FLOOR_GAP / s - half) - toFull;
+      var start = c - len / (2 * s); // the stage's first diagram unit on this axis
+      var px = spans.map(function (sp) { return [(sp[0] - start) * s, (sp[1] - start) * s]; });
+      var keep = [(anchor[0] - start) * s, (anchor[1] - start) * s];
+      var ok = function (d) {
+        var anchored = keep[1] - keep[0] > band - 2 * FLOOR_GAP || (keep[0] + d >= lead && keep[1] + d <= len);
+        return anchored && px.every(function (p) { var a = p[0] + d, b = p[1] + d; return b <= -OUT_PX || a >= len + OUT_PX || (a >= FLOOR_GAP && b <= len - FLOOR_GAP); });
+      };
+      var shifts = [0];
+      px.forEach(function (p) { shifts.push(FLOOR_GAP - p[0], len - FLOOR_GAP - p[1], -OUT_PX - p[1], len + OUT_PX - p[0]); });
+      shifts.sort(function (a, b) { return Math.abs(a) - Math.abs(b); });
+      for (var i = 0; i < shifts.length; i++) if (ok(shifts[i])) return c - shifts[i] / s;
+      return c;
+    }
+    function readable(sz) {
+      if (!phone() || fitPlace(sz).s >= READ_SCALE) return null;
+      var s = READ_SCALE;
+      var band = sz.h - sz.top;
+      var fitsStage = function (b) { return b.w * s <= sz.w - 2 * FLOOR_GAP && b.h * s <= band - 2 * FLOOR_GAP; };
+      var anchor = content.group && fitsStage(content.group) ? content.group : content.first || content.all;
+      var x = axisFloor(sz.w, 0, s, [content.all.x, content.all.x + content.all.w], [anchor.x, anchor.x + anchor.w], content.nodes.map(function (b) { return [b.x, b.x + b.w]; }));
+      var y = axisFloor(sz.h, sz.top, s, [content.all.y, content.all.y + content.all.h], [anchor.y, anchor.y + anchor.h], content.nodes.map(function (b) { return [b.y, b.y + b.h]; }));
+      return { s: s, cx: x, cy: y };
+    }
+    function fitScale(sz) { var r = readable(sz); return r ? r.s : fitPlace(sz).s; }
+    // The whole drawing, readable or not (the Fit button, double-click, 0, and a beat that frames everything).
+    function wholeCamera() {
       var p = fitPlace(size());
       return { cx: fitBox.x + fitBox.w / 2 + p.dx / p.s, cy: fitBox.y + fitBox.h / 2 - p.dy / p.s, s: p.s };
     }
+    // The opening view: the whole drawing, or on a phone the floor view when that would draw labels under the floor.
+    function fitCamera() { return readable(size()) || wholeCamera(); }
     // Pan and zoom keep the centre on the canvas, widened to take in the fit
     // centre, so the first move after a fit never snaps the view.
     function clampCentre(cx, cy) {
@@ -102,42 +179,99 @@
       var h = sz.h / cam.s;
       svg.setAttribute('viewBox', [cam.cx - w / 2, cam.cy - h / 2, w, h].map(round).join(' '));
       stage.setAttribute('data-zoom', (cam.s / fitScale(sz)).toFixed(3));
+      stage.setAttribute('data-fit-scale', fitPlace(sz).s.toFixed(4)); // the whole-drawing fit, read by scripts/check.mjs
+      showCues(sz);
       if (hooks.onApply) hooks.onApply();
     }
-    function cancelTween() {
+
+    // ---- pan cues -------------------------------------------------------------------------
+    // A button on each stage edge (viewer.html, [data-pa-cue]) shows while a node lies wholly past that edge (one cut
+    // by the edge shows itself); pressing it glides the view CUE_STEP of the stage that way. Its presses never reach
+    // the stage (no drag, no deselect).
+    var cues = {};
+    (stage.querySelectorAll ? Array.prototype.slice.call(stage.querySelectorAll('[data-pa-cue]')) : []).forEach(function (b) {
+      var side = b.getAttribute('data-pa-cue');
+      cues[side] = b;
+      ['pointerdown', 'pointerup', 'dblclick'].forEach(function (t) { b.addEventListener(t, function (e) { e.stopPropagation(); }); });
+      b.addEventListener('click', function (e) { e.stopPropagation(); cueTo(side); });
+    });
+    var CUE_SIDES = {
+      left: function (b, v) { return b.x + b.w <= v.x0; }, right: function (b, v) { return b.x >= v.x1; },
+      top: function (b, v) { return b.y + b.h <= v.y0; }, bottom: function (b, v) { return b.y >= v.y1; },
+    };
+    function showCues(sz) {
+      var v = { x0: cam.cx - sz.w / (2 * cam.s), x1: cam.cx + sz.w / (2 * cam.s), y0: cam.cy - sz.h / (2 * cam.s), y1: cam.cy + sz.h / (2 * cam.s) };
+      Object.keys(cues).forEach(function (side) {
+        var more = !!CUE_SIDES[side] && content.nodes.some(function (b) { return CUE_SIDES[side](b, v); });
+        if (cues[side].hidden === more) cues[side].hidden = !more;
+      });
+    }
+    function cueTo(side) {
+      var sz = size();
+      var dx = side === 'left' ? -1 : side === 'right' ? 1 : 0;
+      var dy = side === 'top' ? -1 : side === 'bottom' ? 1 : 0;
+      fitted = false;
+      var c = clampCentre(cam.cx + dx * CUE_STEP * sz.w / cam.s, cam.cy + dy * CUE_STEP * sz.h / cam.s);
+      moveTo({ cx: c.cx, cy: c.cy, s: cam.s });
+    }
+    // ---- is the camera moving? ------------------------------------------------------------
+    // The story waits for the camera, by its own landing and not by a clock of its own: a frame that
+    // comes late (a busy page) must not let the caption beat the camera. whenStill(fn) runs fn once
+    // the camera is still (at once if it is), when a glide lands, is cancelled by the reader (a pan, a
+    // zoom) or is replaced by a move at once. A glide that replaces another keeps fn waiting.
+    var stillWaiters = [];
+    function flushStill() {
+      var waiting = stillWaiters;
+      stillWaiters = [];
+      waiting.forEach(function (fn) { fn(); });
+    }
+    function stopTween() {
       if (tween && global.cancelAnimationFrame) global.cancelAnimationFrame(tween);
       tween = 0;
     }
-    // Glide to `target` over options.ms (CAMERA_MS by default); at once when
-    // options.instant is set, under reduced motion, or without requestAnimationFrame.
+    function cancelTween() {
+      stopTween();
+      flushStill();
+    }
+    function moving() { return !!tween; }
+    function whenStill(fn) {
+      if (tween) stillWaiters.push(fn); else fn();
+    }
+    // Glide to `target` over options.ms (CAMERA_MS by default), ease-out unless options.ease is 'in-out'
+    // (a story beat: the camera eases in as well as out); at once when options.instant is set, under
+    // reduced motion, or without requestAnimationFrame.
     function moveTo(target, options) {
       options = options || {};
-      cancelTween();
+      stopTween();
       var to = { cx: finite(target.cx, cam.cx), cy: finite(target.cy, cam.cy), s: finite(target.s, cam.s) };
-      if (options.instant || reduced() || !global.requestAnimationFrame) { cam = to; apply(); return; }
+      if (options.instant || reduced() || !global.requestAnimationFrame) { cam = to; apply(); flushStill(); return; }
       var ms = Math.max(1, finite(options.ms, CAMERA_MS));
+      var ease = options.ease === 'in-out' ? easeInOut : easeOut;
       var from = { cx: cam.cx, cy: cam.cy, s: cam.s };
       var t0 = null;
       var tick = function (now) {
         if (t0 === null) t0 = now;
         var k = Math.min(1, (now - t0) / ms);
-        var e = 1 - Math.pow(1 - k, 3); // ease-out
+        var e = ease(k);
         cam = { cx: from.cx + (to.cx - from.cx) * e, cy: from.cy + (to.cy - from.cy) * e, s: from.s * Math.pow(to.s / from.s, e) };
         apply();
         tween = k < 1 ? global.requestAnimationFrame(tick) : 0;
+        if (!tween) flushStill();
       };
       tween = global.requestAnimationFrame(tick);
     }
 
-    function fit() { fitted = true; moveTo(fitCamera()); }
-    // The fit view at once, no glide (first paint, and a resize of a fitted view).
-    function refit() { fitted = true; cam = fitCamera(); apply(); }
+    function fit() { fitted = true; whole = true; moveTo(wholeCamera()); }
+    // Back to the opening view with a glide (leaving Play, clearing Explore): readable, unlike Fit.
+    function home() { fitted = true; whole = false; moveTo(fitCamera()); }
+    // The opening view at once, no glide (first paint, and a resize of an untouched view).
+    function refit() { fitted = true; whole = false; cam = fitCamera(); apply(); }
     function zoomAt(factor, px, py) {
       cancelTween();
       fitted = false;
       var sz = size();
       var fs = fitScale(sz);
-      var ns = clamp(cam.s * factor, fs * MIN_ZOOM, fs * MAX_ZOOM);
+      var ns = clamp(cam.s * factor, Math.min(fs, fitPlace(sz).s) * MIN_ZOOM, fs * MAX_ZOOM);
       var wx = cam.cx + (px - sz.w / 2) / cam.s;
       var wy = cam.cy + (py - sz.h / 2) / cam.s;
       var c = clampCentre(wx - (px - sz.w / 2) / ns, wy - (py - sz.h / 2) / ns);
@@ -200,22 +334,21 @@
       var after = size();
       if (before.w !== after.w || before.h !== after.h) panBy((after.w - before.w) / 2, (after.h - before.h) / 2);
     }
-    // On a resize a fitted view refits; any other view keeps its camera.
+    // On a resize a fitted view refits (the whole drawing or the opening view, whichever it was); any other view keeps its camera.
     function onResize() {
-      if (fitted) cam = fitCamera();
+      if (fitted) cam = whole ? wholeCamera() : fitCamera();
       apply();
     }
 
     return {
-      size: size, fitScale: fitScale, fitCamera: fitCamera, apply: apply, moveTo: moveTo, cancelTween: cancelTween,
-      fit: fit, refit: refit, zoomAt: zoomAt, zoomBy: zoomBy, panBy: panBy,
+      size: size, fitScale: fitScale, fitCamera: fitCamera, wholeCamera: wholeCamera, apply: apply, moveTo: moveTo, cancelTween: cancelTween, moving: moving, whenStill: whenStill,
+      fit: fit, home: home, refit: refit, zoomAt: zoomAt, zoomBy: zoomBy, panBy: panBy,
       boxOf: boxOf, unionBox: unionBox, cameraFor: cameraFor, ensureVisible: ensureVisible,
       reduced: reduced, reduceQuery: reduceQuery,
       zoom: function () { return cam.s / fitScale(size()); },
       isFitted: function () { return fitted; },
-      unfit: function () { fitted = false; },
+      unfit: function () { fitted = false; whole = false; },
       onResize: onResize, holdView: holdView,
-      glideMs: function () { return CAMERA_MS; },
     };
   };
 })(window);

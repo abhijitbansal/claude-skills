@@ -6,8 +6,9 @@ import { ALL, nodeVersion, nodeModules, ffmpeg, browser, kokoro, cutout, builder
 
 export const CACHE_LIMIT_BYTES = 2 * 1024 ** 3;
 const GB = 1024 ** 3;
-// The frame caches: the decoded frames of video elements (scripts/lib/video.mjs) and the alpha frames of a cutout clip, up to
-// 900 RGBA PNGs each (scripts/lib/cutout.mjs). Never .cache/models: the downloaded models are not a cache to throw away.
+// The frame caches: `.cache/video` is version 1's (decoded frames of video elements; nothing kept writes it, an old install may
+// still hold one) and `.cache/cutout` is the cut-out tool's alpha frames of a clip, up to 900 RGBA PNGs (scripts/lib/cutout.mjs).
+// Never .cache/models: the downloaded models are not a cache to throw away.
 const cacheDirs = (ctx) => ['video', 'cutout'].map((name) => path.join(ctx.skillDir, '.cache', name));
 const cacheBytes = (ctx) => cacheDirs(ctx).reduce((sum, dir) => sum + folderBytes(dir), 0);
 
@@ -24,9 +25,9 @@ function folderBytes(dir) {
   return total;
 }
 
-// Optional: the decoded frames of video elements and the cutout mattes are kept for the next render. Past CACHE_LIMIT_BYTES
-// (both together) doctor lists them; `--fix cache` deletes both folders (any time, not only past the limit), and the next render
-// decodes or cuts out what it needs again.
+// Optional: the cutout mattes (and any frames an older install left) are kept for the next run. Past CACHE_LIMIT_BYTES
+// (both together) doctor lists them; `--fix cache` deletes both folders (any time, not only past the limit), and the next run
+// cuts out what it needs again.
 export function videoCache() {
   return {
     id: 'cache',
@@ -44,9 +45,10 @@ export function videoCache() {
   };
 }
 
-// Information only, never a failure (check is always true): the loudness limiter stage of `render.mjs --loudness` (viral
-// clips of cues alone use it) needs ffmpeg 5.1 or later; an older one still renders, with a plain gain and a stderr note.
-// Shown as a doctor note with the installed version, when ffmpeg answers `-version`.
+// Information only, never a failure (check is always true): the loudness limiter stage (version 1's `--loudness` render flag,
+// deleted at cut-over; version 2 masters with `alimiter` too, scripts/v2/voice/master.mjs) needs ffmpeg 5.1 or later; whether
+// 5.1 is the right floor for version 2's options was not re-checked. Shown as a doctor note with the installed version, when
+// ffmpeg answers `-version`.
 export function loudnessLimiter() {
   return {
     id: 'loudness-limiter',
@@ -65,23 +67,37 @@ export function loudnessLimiter() {
 }
 
 // Rendering always needs ffmpeg and a browser; kokoro only for a voiceover, onnxruntime-node (cutout) only for cutout.mjs (both
-// or --fix, which may install any). beats.mjs needs ffmpeg alone, so every target but `check` covers it (a spec that names a beats file needs nothing extra to check).
-// check.mjs needs only the browser (it captures no video), so `check` leaves ffmpeg, kokoro and cutout out. A spec with a video
-// element is the exception (check decodes its frames with ffmpeg); `--for <spec.json>` asks for ffmpeg.
-export const targets = ['check', 'voiceover', 'cutout'];
-// Optional in every target: the cheap-model agent file the SKILL.md may hand the build to.
-export const requirementsFor = (target) => (target === 'check'
-  ? [nodeVersion(20), nodeModules({ omitDev: false, restore: ['kokoro', 'cutout'] }), browser({ required: true }), builderAgent()]
-  : [
-    nodeVersion(20),
-    nodeModules({ omitDev: false, restore: ['kokoro', 'cutout'] }),
-    ffmpeg(),
-    browser({ required: true }),
-    ...(target === 'voiceover' || target === ALL ? [kokoro()] : []),
-    ...(target === 'cutout' || target === ALL ? [cutout()] : []),
-    builderAgent(),
-  ]);
+// or --fix, which may install any). beats.mjs needs ffmpeg alone, so every target covers it.
+export const targets = ['voiceover', 'cutout'];
 
-// What doctor.mjs checks and fixes: the requirements of `target`, plus the video frame cache in every target (check.mjs
-// fills it too). The cache is housekeeping, not something the skill needs, so requirementsFor leaves it out.
-export const doctorRequirementsFor = (target) => [...requirementsFor(target), videoCache(), ...(target === 'check' ? [] : [loudnessLimiter()])];
+// A version 2 film whose narration the synthesiser speaks (`voice: { name }`) cannot render without the voice package,
+// so `--for <film.json>` asks for it as required. A film read here is data: only these two fields are looked at.
+function synthesisedVoice(specPath) {
+  let film;
+  try {
+    film = JSON.parse(fs.readFileSync(specPath, 'utf8'));
+  } catch (err) {
+    throw new Error(`cannot read ${specPath} as a film: ${String(err.message).split('\n')[0]}`, { cause: err });
+  }
+  return film?.version === 2 && typeof film.voice?.name === 'string';
+}
+const isSpecPath = (target) => typeof target === 'string' && target.endsWith('.json') && !targets.includes(target);
+
+// Optional in every target: the cheap-model agent file the SKILL.md may hand the build to.
+export const requirementsFor = (target) => (isSpecPath(target) && synthesisedVoice(target)
+  ? [...baseRequirementsFor(target), { ...kokoro(), required: true }]
+  : baseRequirementsFor(target));
+
+const baseRequirementsFor = (target) => [
+  nodeVersion(20),
+  nodeModules({ omitDev: false }),
+  ffmpeg(),
+  browser({ required: true }),
+  ...(target === 'voiceover' || target === ALL ? [kokoro()] : []),
+  ...(target === 'cutout' || target === ALL ? [cutout()] : []),
+  builderAgent(),
+];
+
+// What doctor.mjs checks and fixes: the requirements of `target`, plus the frame cache in every target. The cache is
+// housekeeping, not something the skill needs, so requirementsFor leaves it out.
+export const doctorRequirementsFor = (target) => [...requirementsFor(target), videoCache(), loudnessLimiter()];

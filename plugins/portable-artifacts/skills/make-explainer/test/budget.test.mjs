@@ -14,7 +14,23 @@ test('counting helpers', () => {
 });
 
 test('caps are the agreed values', () => {
-  assert.deepEqual(SOFT_CAPS, { titleWords: 8, labelWords: 4, paragraphWords: 60, paragraphSentences: 3, textSectionWords: 120, cardWords: 30, itemWords: 20, pageWords: 900, planPageWords: 1800, tldrPoints: 3 });
+  assert.deepEqual(SOFT_CAPS, { titleWords: 8, labelWords: 4, paragraphWords: 60, paragraphSentences: 3, textSectionWords: 120, cardWords: 30, itemWords: 20, pageWords: 900, planPageWords: 1800, tldrPoints: 3, quoteWords: 40, quoteByWords: 8 });
+});
+
+test('a quote over its budget warns with its path: 40 words silent, 41 warns; an attribution of 8 words silent, 9 warns', () => {
+  assert.deepEqual(paths(spec([{ type: 'quote', text: w(40), by: w(8) }])), []);
+  assert.deepEqual(warnBudget(spec([{ type: 'quote', text: w(41) }])), [
+    { path: 'sections[0].text', message: 'quote is 41 words; keep it to 40 → quote the one line that matters, put the rest in a text section' },
+  ]);
+  assert.deepEqual(warnBudget(spec([{ type: 'quote', text: 'Short.', by: w(9) }])), [
+    { path: 'sections[0].by', message: 'attribution is 9 words; keep it to 8 → a name and, if needed, a role' },
+  ]);
+  assert.deepEqual(paths(spec([{ type: 'quote', text: w(130) }])), ['sections[0].text'], 'one warning, not a second backstop one');
+});
+
+test('a quote counts toward the page words, so a page of quotes still hits the page cap', () => {
+  const quotes = Array.from({ length: 23 }, () => ({ type: 'quote', text: w(40) }));
+  assert.equal(warnBudget(spec(quotes)).filter((x) => x.path === '').length, 1);
 });
 
 test('title: 8 words silent, 9 warns', () => {

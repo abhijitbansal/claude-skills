@@ -67,6 +67,16 @@ export const SCHEMA = {
           query: { type: 'string' },
           field: { type: 'string', minLength: 1 },
           format: { enum: FORMATS },
+          // An opt-in sparkline: the name of a declared query and one of its columns, never SQL text.
+          trend: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['query', 'field'],
+            properties: {
+              query: { type: 'string', minLength: 1 },
+              field: { type: 'string', minLength: 1 },
+            },
+          },
         },
       },
     },
@@ -141,6 +151,11 @@ function crossRefs(spec, dir, { allowOutside }) {
       });
     }
   }
+  (spec.kpis ?? []).forEach((k, i) => {
+    if (k.trend && !queryNames.includes(k.trend.query)) {
+      errors.push({ path: `${pathJoin('kpis', i)}.trend.query`, message: `unknown query ${JSON.stringify(k.trend.query)}; declared: ${queryNames.join(', ')}` });
+    }
+  });
   for (const [name, src] of Object.entries(spec.sources ?? {})) {
     if (RESERVED_SOURCE_NAMES.includes(name)) {
       errors.push({ path: `sources.${name}`, message: `${JSON.stringify(name)} is reserved by DuckDB; choose another source name` });

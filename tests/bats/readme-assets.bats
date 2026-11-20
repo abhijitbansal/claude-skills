@@ -10,7 +10,7 @@ ROOT="${BATS_TEST_DIRNAME}/../.."
   paths="$(grep -o 'docs/features/img/[A-Za-z0-9._/-]*' "$readme" | sort -u)"
 
   # Guard against passing vacuously: the hero and diagram GIFs must be referenced.
-  grep -q '^docs/features/img/portable-artifacts/launch-announcement\.gif$' <<<"$paths"
+  grep -q '^docs/features/img/portable-artifacts/showreel-pro\.gif$' <<<"$paths"
   grep -q '^docs/features/img/portable-artifacts/diagram-story\.gif$' <<<"$paths"
 
   local p

@@ -43,6 +43,7 @@ const HOSTILE = {
   question: { type: 'question', id: 'q', text: P, default: P },
   review: { type: 'review', items: [{ point: P, why: P, target: 'd' }] },
   verdict: { type: 'verdict', text: P },
+  quote: { type: 'quote', text: P, by: P, tone: 'accent' },
 };
 
 function countLeaves(value, target) {
@@ -67,6 +68,22 @@ for (const [type, section] of Object.entries(HOSTILE)) {
     assert.ok(seen >= countLeaves(section, P) - (type === 'files' ? 1 : 0), `${type}: found ${seen} escaped copies, fixture has ${countLeaves(section, P)}`);
   });
 }
+
+test('a quote renders a figure with a blockquote and a caps attribution, and escapes its text', () => {
+  const html = SECTIONS.quote.render({ type: 'quote', text: P, by: 'Ada **Lovelace**', tone: 'good' }, ctx);
+  assert.match(html, /^<figure class="quote tone-good">\n<blockquote>/);
+  assert.ok(html.includes(`<blockquote>${ESCAPED_P}</blockquote>`), html);
+  assert.match(html, /<figcaption class="quote-by pa-caps">Ada <strong>Lovelace<\/strong><\/figcaption>\n<\/figure>$/);
+  assert.ok(!html.includes('<i>'));
+  assert.ok(!SECTIONS.quote.render({ type: 'quote', text: 'Just this.' }, ctx).includes('<figcaption'), 'no attribution, no caption');
+  assert.ok(!SECTIONS.quote.render({ type: 'quote', text: 'x', tone: '"><script>' }, ctx).includes('<script'), 'a junk tone falls back to neutral');
+});
+
+test('a KPI numeral carries pa-num (tabular, lining figures) and its label the shared caps label', () => {
+  const html = SECTIONS.kpis.render({ type: 'kpis', items: [{ label: 'Commits', value: 42 }] }, ctx);
+  assert.match(html, /<dt class="pa-caps">Commits<\/dt>/);
+  assert.match(html, /<dd class="kpi-value pa-num"/);
+});
 
 test('files: a hostile path is escaped in the title attribute and the folder names', () => {
   const html = SECTIONS.files.render(HOSTILE.files, ctx);

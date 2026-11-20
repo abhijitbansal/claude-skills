@@ -1,9 +1,65 @@
+// formatAjvErrors over an anyOf of object shapes (branch review B, I9): only the closest branch's errors are reported, so
+// a misspelled key gives one did-you-mean, not contradictory lines from the other shapes. The errors below are Ajv's own
+// (allErrors, verbose), printed for a column chart's `data: [{ label: 'Q1', vale: 12 }]` against item, point and series
+// shapes (.scratch/fixA/anyof-probe.mjs).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { levenshtein, didYouMean, formatAjvErrors, printResult, makeResult } from '../errors.mjs';
 import { GENERATED_BY_SCHEMA } from '../provenance.mjs';
+
+const ITEM = { type: 'object', additionalProperties: false, required: ['label', 'value'], properties: { label: { type: 'string' }, value: { type: 'number' } } };
+const POINT = { type: 'object', additionalProperties: false, required: ['x', 'y'], properties: { x: { type: 'number' }, y: { type: 'number' } } };
+const err = (keyword, instancePath, schemaPath, params, parentSchema) => ({ keyword, instancePath, schemaPath, params, ...(parentSchema ? { parentSchema } : {}), message: keyword === 'type' ? `must be ${params.type}` : undefined });
+const MISSPELLED = Object.freeze([
+  err('required', '/data/0', '#/properties/data/anyOf/0/items/required', { missingProperty: 'value' }),
+  err('additionalProperties', '/data/0', '#/properties/data/anyOf/0/items/additionalProperties', { additionalProperty: 'vale' }, ITEM),
+  err('required', '/data/0', '#/properties/data/anyOf/1/items/required', { missingProperty: 'x' }),
+  err('required', '/data/0', '#/properties/data/anyOf/1/items/required', { missingProperty: 'y' }),
+  err('additionalProperties', '/data/0', '#/properties/data/anyOf/1/items/additionalProperties', { additionalProperty: 'label' }, POINT),
+  err('additionalProperties', '/data/0', '#/properties/data/anyOf/1/items/additionalProperties', { additionalProperty: 'vale' }, POINT),
+  err('type', '/data', '#/properties/data/anyOf/2/type', { type: 'object' }),
+  err('anyOf', '/data', '#/properties/data/anyOf', {}),
+]);
+
+test('a misspelled key in an anyOf of shapes gives one did-you-mean from the closest shape, nothing from the others', () => {
+  assert.deepEqual(formatAjvErrors(MISSPELLED), [{ path: 'data[0].vale', message: 'unknown property; did you mean "value"?' }]);
+});
+
+test('a branch that fails on the value\'s own type is the farthest, even with the fewest errors', () => {
+  // the series shape (one error: data must be object) is not where an array of items was meant
+  const lines = formatAjvErrors(MISSPELLED);
+  assert.ok(!lines.some((l) => l.path === 'data' && /must be object/.test(l.message)), JSON.stringify(lines));
+});
+
+test('of branches with as many errors, the first is kept', () => {
+  const tie = [
+    err('required', '/v', '#/properties/v/anyOf/0/required', { missingProperty: 'a' }),
+    err('required', '/v', '#/properties/v/anyOf/1/required', { missingProperty: 'b' }),
+    err('anyOf', '/v', '#/properties/v/anyOf', {}),
+  ];
+  assert.deepEqual(formatAjvErrors(tie), [{ path: 'v.a', message: 'required' }]);
+});
+
+test('each item of an array is judged by its own closest branch', () => {
+  const two = [
+    err('required', '/d/0', '#/properties/d/items/anyOf/0/required', { missingProperty: 'a' }),
+    err('required', '/d/0', '#/properties/d/items/anyOf/1/required', { missingProperty: 'b' }),
+    err('required', '/d/0', '#/properties/d/items/anyOf/1/required', { missingProperty: 'c' }),
+    err('anyOf', '/d/0', '#/properties/d/items/anyOf', {}),
+    err('required', '/d/1', '#/properties/d/items/anyOf/0/required', { missingProperty: 'a' }),
+    err('required', '/d/1', '#/properties/d/items/anyOf/0/required', { missingProperty: 'z' }),
+    err('required', '/d/1', '#/properties/d/items/anyOf/1/required', { missingProperty: 'b' }),
+    err('anyOf', '/d/1', '#/properties/d/items/anyOf', {}),
+  ];
+  assert.deepEqual(formatAjvErrors(two), [{ path: 'd[0].a', message: 'required' }, { path: 'd[1].b', message: 'required' }]);
+});
+
+test('errors outside any anyOf, and errors without a schemaPath, are kept as before', () => {
+  const plain = [err('required', '', '#/required', { missingProperty: 'title' }), { keyword: 'type', instancePath: '/n', params: { type: 'number' }, message: 'must be number' }];
+  assert.deepEqual(formatAjvErrors(plain), [{ path: 'title', message: 'required' }, { path: 'n', message: 'must be number' }]);
+});
 
 // shared/ has no npm deps, so these are hand-built Ajv error objects (allErrors + verbose shape).
 const extra = (instancePath, additionalProperty, properties) => ({ keyword: 'additionalProperties', instancePath, params: { additionalProperty }, parentSchema: { properties } });
@@ -85,8 +141,19 @@ test('pattern uses the schema description when it has one', () => {
 
 test('a meaning-style description on an unanchored pattern is not read as a character set', () => {
   // NON_SPACE ('\\S') only checks that some visible character exists; "the page heading" is what the field is for.
+  // Merge: the version 2 branch words this exact pattern as "must not be blank", which is still not a character set.
   const err = { keyword: 'pattern', instancePath: '/title', params: { pattern: '\\S' }, message: 'must match pattern "\\S"', parentSchema: { type: 'string', pattern: '\\S', description: 'the page heading' } };
-  assert.deepEqual(format(err), [{ path: 'title', message: 'must match pattern "\\S"' }]);
+  assert.deepEqual(format(err), [{ path: 'title', message: 'must not be blank: write the text, or leave the field out' }]);
+  assert.doesNotMatch(format(err)[0].message, /must contain only/);
+  const other = { ...err, params: { pattern: '\\d' }, message: 'must match pattern "\\d"', parentSchema: { ...err.parentSchema, pattern: '\\d' } };
+  assert.deepEqual(format(other), [{ path: 'title', message: 'must match pattern "\\d"' }], 'any other unanchored pattern keeps Ajv\'s wording');
+});
+
+test('a not-blank error a skill already worded keeps its own words (make-diagram spec.mjs)', () => {
+  const worded = { keyword: 'pattern', instancePath: '/nodes/0/label', params: { pattern: '\\S' }, message: 'must contain at least one non-space character', parentSchema: { type: 'string', pattern: '\\S' } };
+  assert.deepEqual(format(worded), [{ path: 'nodes[0].label', message: 'must contain at least one non-space character' }]);
+  const { message, ...bare } = worded;
+  assert.deepEqual(format(bare), [{ path: 'nodes[0].label', message: 'must not be blank: write the text, or leave the field out' }], 'no message at all: the shared wording');
 });
 
 test('required on a character-set field says what it may contain, not what it means', () => {

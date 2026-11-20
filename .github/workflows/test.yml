@@ -67,7 +67,7 @@ jobs:
 
   # portable-artifacts skills are self-contained Node packages (own lockfile).
   # Render tests skip themselves when no browser/ffmpeg is present, except in the make-motion step,
-  # where PA_REQUIRE_RENDER=1 turns a missing tool into a failure.
+  # where PA_REQUIRE_RENDER=1 (the kept tests) and PA_REQUIRE_BROWSER=1 (test/v2) turn a missing tool into a failure.
   node:
     runs-on: ubuntu-latest
     steps:
@@ -79,6 +79,11 @@ jobs:
         run: node plugins/portable-artifacts/bin/sync-shared.mjs --check
       - name: shared/ (themes, contrast, errors)
         run: node --test "plugins/portable-artifacts/shared/test/*.test.mjs"
+      # bin/test/intake.test.mjs and make-motion-docs.test.mjs import make-motion's own modules (spec.mjs imports ajv), so
+      # its node_modules must be there; tests/pytest/test_workflow_node_job_installs.py keeps this list in step with them.
+      - name: install make-motion's packages (the installer tests import its code)
+        working-directory: plugins/portable-artifacts/skills/make-motion
+        run: npm ci
       - name: cross-host installer
         working-directory: plugins/portable-artifacts/bin
         run: node --test "test/*.test.mjs"
@@ -123,8 +128,9 @@ jobs:
         run: npx playwright install --with-deps chromium
       # Same glob as each package.json "test" script. A shard flag passed through
       # `npm test --` is silently ignored, so sharded runs call node directly.
-      # make-motion's render tests need ffmpeg; PA_REQUIRE_RENDER=1 (make-motion only) turns a missing browser or ffmpeg
-      # into a failure instead of a skip
+      # make-motion's render tests need ffmpeg; PA_REQUIRE_RENDER=1 and PA_REQUIRE_BROWSER=1 (make-motion only) turn a
+      # missing browser or ffmpeg into a failure instead of a skip: the first is read by the kept tests under test/, the
+      # second by the version 2 helpers under test/v2/helpers
       - name: install ffmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: package.json test script is still the glob run below
@@ -139,21 +145,13 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           PA_REQUIRE_RENDER: ${{ matrix.name == 'make-motion' && '1' || '' }}
+          PA_REQUIRE_BROWSER: ${{ matrix.name == 'make-motion' && '1' || '' }}
         run: node --test ${SHARD:+--test-shard=$SHARD} "test/**/*.test.mjs"
-      # A byte-identical render mismatch leaves per-frame framemd5 dumps of both renders here.
-      - name: upload make-motion framemd5 dumps
-        if: failure() && matrix.name == 'make-motion'
-        uses: actions/upload-artifact@v4
-        with:
-          name: make-motion-framemd5
-          path: plugins/portable-artifacts/skills/make-motion/test/.out/framemd5
-          if-no-files-found: ignore
 
-  # WebGL transitions (gl-ripple, gl-cube), macOS half: manual runs only (gh workflow run test.yml). The Ubuntu half is the
-  # make-motion step of the node job above, whose npm test includes test/gl-transitions.test.mjs. Both runners print
-  # `gl-frame: <platform> <type> <dir> <sha>` (the same composed frame on both is the evidence that software WebGL is
-  # deterministic across them); this job also prints `webgl-spike: <platform> <sha>`. Compare them in the logs
-  # (gh run view <id> --log); nothing asserts the equality.
+  # WebGL spike and the shader cuts (ripple, cube), macOS half: manual runs only (gh workflow run test.yml). The Ubuntu half
+  # is the make-motion step of the node job above, whose npm test includes the same test/v2/cuts-*-browser tests. This job
+  # also prints `webgl-spike: <platform> <sha>`. Compare it with the Ubuntu log (gh run view <id> --log); nothing asserts
+  # the equality.
   webgl-spike-macos:
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-latest
@@ -164,12 +162,13 @@ jobs:
           node-version: '24'
       - name: install ffmpeg
         run: brew install ffmpeg
-      - name: webgl spike and gl transitions
+      - name: webgl spike and shader cuts
         working-directory: plugins/portable-artifacts/skills/make-motion
         env:
           PA_WEBGL_SPIKE: '1'
           PA_REQUIRE_RENDER: '1'
-        run: npm ci && npx playwright install chromium && node --test test/webgl-spike.test.mjs && node --test test/gl-transitions.test.mjs
+          PA_REQUIRE_BROWSER: '1'
+        run: npm ci && npx playwright install chromium && node --test test/webgl-spike.test.mjs && node --test --test-concurrency=1 test/v2/cuts-browser.test.mjs test/v2/cuts-smear-browser.test.mjs test/v2/cuts-determinism-browser.test.mjs test/v2/cuts-look-browser.test.mjs test/v2/cuts-round2-browser.test.mjs test/v2/cuts-legible-browser.test.mjs test/v2/cuts-direction-browser.test.mjs
 
   # AGENTS.md trailer rule: no Claude-Session line and no model-named
   # Co-Authored-By in the PR's commits (the harness reminder asks for both).

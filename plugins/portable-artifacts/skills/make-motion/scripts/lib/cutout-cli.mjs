@@ -1,4 +1,4 @@
-// The body of scripts/cutout.mjs, imported only after its preflight found node_modules (it imports ajv through spec.mjs).
+// The body of scripts/cutout.mjs, imported only after its preflight found node_modules (it needs playwright for the decode and encode pages).
 // Usage, in the entry script:
 // node scripts/cutout.mjs <photo.png|clip.mp4> [--out <dir>] [--fps n]
 // Cuts the person out of a photo (writes <out>/<stem>.png, RGBA) or a clip (writes <out>/<stem>.webm, VP9 with alpha, no
@@ -6,10 +6,10 @@
 // Pass the original as `src` and this file as `cutout` of a `text-behind-subject` block.
 // Needs `doctor --fix cutout` (onnxruntime-node, on demand); the 25 MB weights download once on first use.
 import { existsSync } from 'node:fs';
-import { UsageError } from './spec.mjs';
+import { UsageError } from '../../shared/cli.mjs';
 import { launchBrowser } from './browser.mjs';
 import { findFfmpeg, findFfprobe } from './ffmpeg.mjs';
-import { probeVideo } from './video.mjs';
+import { probeVideo } from './video-probe.mjs';
 import { wantsHelp, printHelp } from './help.mjs';
 import { USAGE, INSTALL_HINT, parseCutoutArgs, loadOnnx, ensureModel, openCanvasPage, cutoutImage, cutoutVideo, clipFps } from './cutout.mjs';
 
@@ -29,7 +29,7 @@ async function cutOut(opts, tools) {
 
 // The model session is always released before the process ends, on success and on failure: exiting with a live
 // onnxruntime session aborts with "mutex lock failed" (SIGABRT), and so does process.exit(), so the exit code is set and
-// the event loop is left to drain (the same rule as voice.mjs).
+// the event loop is left to drain (the same rule as the voice worker's, scripts/v2/voice/worker.mjs).
 async function main() {
   if (wantsHelp(process.argv.slice(2))) return printHelp(USAGE);
   const opts = parseCutoutArgs(process.argv.slice(2));

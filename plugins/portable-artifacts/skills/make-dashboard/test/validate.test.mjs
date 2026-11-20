@@ -65,6 +65,42 @@ test('kpi query typo is reported', async () => {
   assert.deepEqual(r.errors, [{ path: 'kpis[0].query', message: '"totl" not found; did you mean "total"?' }]);
 });
 
+test('a kpi trend naming an undeclared query fails with the declared names', async () => {
+  const s = base();
+  s.kpis = [{ id: 'k1', title: 'K', query: 'total', field: 'revenue', trend: { query: 'by_month', field: 'revenue' } }];
+  const r = await check(s);
+  assert.deepEqual(r.errors, [{ path: 'kpis[0].trend.query', message: 'unknown query "by_month"; declared: rev_by_region, total' }]);
+});
+
+test('a kpi without trend validates as before; one with a declared trend query validates too', async () => {
+  const s = base();
+  s.kpis = [{ id: 'k1', title: 'K', query: 'total', field: 'revenue' }];
+  assert.deepEqual((await check(s)).errors, []);
+  s.kpis[0].trend = { query: 'rev_by_region', field: 'revenue' };
+  assert.deepEqual((await check(s)).errors, []);
+});
+
+test('a kpi trend field that is not a column of its query is reported with the columns', async () => {
+  const s = base();
+  s.kpis = [{ id: 'k1', title: 'K', query: 'total', field: 'revenue', trend: { query: 'rev_by_region', field: 'revenu' } }];
+  const r = await check(s);
+  assert.equal(r.errors.length, 1, 'one error, at trend.field');
+  assert.equal(r.errors[0].path, 'kpis[0].trend.field');
+  assert.match(r.errors[0].message, /"revenu" is not a column of query "rev_by_region"/);
+});
+
+test('trend carries no SQL text: a trend.sql key is refused as an unknown key, and both trend keys are required', async () => {
+  const s = base();
+  s.kpis = [{ id: 'k1', title: 'K', query: 'total', field: 'revenue', trend: { query: 'rev_by_region', field: 'revenue', sql: 'SELECT 1' } }];
+  const r = await check(s);
+  assert.equal(r.ok, false, 'a trend.sql key makes the spec invalid');
+  assert.ok(r.errors.some((e) => e.path === 'kpis[0].trend.sql' && /unknown property/.test(e.message)), JSON.stringify(r.errors));
+  s.kpis[0].trend = { sql: 'SELECT 1 AS revenue' };
+  const r2 = await check(s);
+  assert.ok(r2.errors.some((e) => e.path.startsWith('kpis[0].trend')), JSON.stringify(r2.errors));
+  assert.ok(!r2.ok);
+});
+
 test('duplicate chart / kpi ids are rejected', async () => {
   const s = base();
   s.charts.push({ ...s.charts[0] });

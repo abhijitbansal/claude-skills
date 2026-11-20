@@ -95,12 +95,15 @@ const TYPE_LABELS = {
   timeline: 'Timeline', compare: 'Comparison', callout: 'Note', code: 'Code', diff: 'Diff', details: 'Details', checklist: 'Checklist',
   diagram: 'Diagram', scene: 'Scene', chart: 'Chart', motion: 'Video', image: 'Image',
   decision: 'Decision', approval: 'Approval', question: 'Open question', verdict: 'Verdict', review: 'Review these first',
+  quote: 'Quote',
 };
+// The last slide gets the closing layout when it is one of these: a statement, not a list or a table.
+export const CLOSING_TYPES = new Set(['tldr', 'callout', 'quote']);
 const typeLabel = (type) => TYPE_LABELS[type] ?? `${type[0].toUpperCase()}${type.slice(1)}`;
 export const slideTitle = (section) => (section.title === undefined ? typeLabel(section.type) : plain(section.title));
 
 // A section's own id is a deep link (#<id>), kept in data-sid: the element id stays slide-N.
-// `art` is a decorative full-bleed drawing (flavored decks, first and last slide only), '' for none.
+// `art` is a decorative full-bleed drawing (every theme, first and last slide only), '' for none.
 // `simpleTitle` is the slide's title in the simple view when it differs: it becomes data-simple-label, the slide's
 // name while the toggle is on.
 function slide(n, total, title, classes, inner, sid, footer = '', art = '', simpleTitle = undefined) {
@@ -122,14 +125,15 @@ function cover(spec, total, metaHtml, art) {
 
 // `simple` = { view, body } is the section as the simple view shows it (withSimple) and its rendered body; present
 // only for a section with simple text.
-function sectionSlide({ section, body, simple, ownHeading }, n, total, footer = '', art = '') {
+function sectionSlide({ section, body, simple, ownHeading }, n, total, footer = '', art = '', closing = false) {
   const view = simple === undefined ? null : simple.view;
   const hasHeading = section.title !== undefined && !ownHeading;
   const eyebrow = hasHeading && section.label !== undefined ? `<p class="slide-eyebrow pa-label">${plain(section.label)}</p>\n` : '';
   const heading = hasHeading ? `${eyebrow}<h2 class="slide-title" id="slide-${n}-title">${titleHtml(section, view)}</h2>\n` : '';
   const text = view === null ? body : dualText(body, simple.body);
   const simpleTitle = hasHeading && view !== null && view.title !== undefined && view.title !== section.title ? slideTitle(view) : undefined;
-  return slide(n, total, slideTitle(section), `slide-${section.type}`, `${heading}${text}`, section.id, footer, art, simpleTitle);
+  const classes = closing && CLOSING_TYPES.has(section.type) ? `slide-${section.type} slide-close` : `slide-${section.type}`;
+  return slide(n, total, slideTitle(section), classes, `${heading}${text}`, section.id, footer, art, simpleTitle);
 }
 
 function outline(titles, sids) {
@@ -165,7 +169,7 @@ export function renderDeck({ spec, rendered, metaHtml, slug, footerHtml = '', ar
   const last = (i) => i === rendered.length - 1;
   const slides = [
     cover(spec, total, metaHtml, artFor(1)),
-    ...rendered.map((r, i) => sectionSlide(r, i + 2, total, last(i) ? `\n${footerHtml}` : '', last(i) ? artFor(total) : '')),
+    ...rendered.map((r, i) => sectionSlide(r, i + 2, total, last(i) ? `\n${footerHtml}` : '', last(i) ? artFor(total) : '', last(i))),
   ];
   const titles = [plain(spec.title), ...rendered.map((r) => slideTitle(r.section))];
   const sids = [undefined, ...rendered.map((r) => r.section.id)];

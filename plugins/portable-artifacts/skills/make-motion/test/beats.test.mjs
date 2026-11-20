@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { requireRender } from './helpers/render.mjs';
 import { synth, grid, pcmWav } from './helpers/beat-signals.mjs';
 import { wavBuffer, writeWav } from './helpers/wav.mjs';
-import { mulberry32 } from '../template/seeded.mjs';
+import { mulberry32 } from '../engine/seeded.mjs';
 import { decodeArgs, decodePcm, onsetEnvelope, estimateTempo, beatGrid, detectBeats, MIN_BPM, MAX_BPM } from '../scripts/lib/beats.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');

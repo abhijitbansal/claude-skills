@@ -1,3 +1,7 @@
+// Every install command the plugin's documents print carries --ignore-scripts, as the doctor's own `--fix node_modules`,
+// `dev_deps` and sister-skill steps do (shared/doctor.mjs): no dependency's install script runs on the user's machine from
+// an install this plugin starts. A command is an `npm ci` inside a code span (backticks or <code>) or a fenced block.
+// make-motion's own pages are also covered by make-motion-docs.test.mjs. Built-ins only.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -5,27 +9,37 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const PLUGIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const REPO = path.resolve(PLUGIN, '../..');
+const DOCS = [
+  'README.md', 'USAGE.md', 'plugins/portable-artifacts/README.md', 'plugins/portable-artifacts/USAGE.md', 'docs/features/portable-artifacts.html',
+  ...['make-dashboard', 'make-diagram', 'make-explainer', 'make-motion', 'make-scene'].map((s) => `plugins/portable-artifacts/skills/${s}/README.md`),
+  'plugins/portable-artifacts/skills/make-explainer/SKILL.md', 'plugins/portable-artifacts/skills/make-explainer/references/schema.md',
+];
 
-// A kokoro or cutout (onnxruntime-node) install must run from inside the skill folder so npm applies the skill's package.json
-// "overrides" (patched sharp and global-agent). The doctor, the runtime hint and every doc state the
-// same command; PR #45 fixed the doctor and missed voice.mjs's hint and schema.md.
-const KOKORO_INSTALL = /npm install (?:kokoro-js|onnxruntime-node)@\S+[^\n]*/g;
-
-function prefixInstalls(text) {
-  return (text.match(KOKORO_INSTALL) ?? []).filter((cmd) => cmd.includes('--prefix'));
+/** The `npm ci` commands in `text` (code spans and fenced lines) that lack --ignore-scripts. */
+export function installCommandsWithoutFlag(text) {
+  const found = [];
+  let fenced = false;
+  for (const line of text.split('\n')) {
+    if (/^\s*```/.test(line)) fenced = !fenced;
+    const spans = fenced ? [line] : [...line.matchAll(/`([^`]*)`|<code>([^<]*)<\/code>/g)].map((m) => m[1] ?? m[2]);
+    for (const span of spans) {
+      const at = span.search(/\bnpm ci\b/);
+      if (at !== -1 && !span.slice(at).includes('--ignore-scripts')) found.push(span.trim());
+    }
+  }
+  return found;
 }
 
-const DOCS = ['README.md', 'USAGE.md', 'skills/make-motion/README.md', 'skills/make-motion/SKILL.md', 'skills/make-motion/references/schema.md'];
+test('every `npm ci` the plugin\'s documents print carries --ignore-scripts', () => {
+  for (const doc of DOCS) {
+    const file = path.join(REPO, doc);
+    assert.ok(fs.existsSync(file), `${doc} exists`);
+    assert.deepEqual(installCommandsWithoutFlag(fs.readFileSync(file, 'utf8')), [], doc);
+  }
+});
 
-for (const rel of DOCS) {
-  test(`${rel} never tells the reader to install kokoro or onnxruntime-node with --prefix`, () => {
-    assert.deepEqual(prefixInstalls(fs.readFileSync(path.join(PLUGIN, rel), 'utf8')), []);
-  });
-}
-
-test('guardrail proof: the check flags the --prefix form and passes the in-folder form', () => {
-  assert.equal(prefixInstalls('run `npm install kokoro-js@1.2.1 --no-save --prefix <skill-dir>` first').length, 1);
-  assert.equal(prefixInstalls('run `cd <skill-dir> && npm install kokoro-js@1.2.1 --no-save` first').length, 0);
-  assert.equal(prefixInstalls('run `npm install onnxruntime-node@1.31.1 --no-save --prefix <skill-dir>` first').length, 1);
-  assert.equal(prefixInstalls('run `cd <skill-dir> && npm install onnxruntime-node@1.31.1 --no-save` first').length, 0);
+test('guardrail: a bare `npm ci`, an --omit=dev one and a fenced one are caught; the flagged forms pass', () => {
+  assert.deepEqual(installCommandsWithoutFlag('run `npm ci` and <code>npm ci --omit=dev</code>\n```\nnpm ci --prefix x\n```'), ['npm ci', 'npm ci --omit=dev', 'npm ci --prefix x']);
+  assert.deepEqual(installCommandsWithoutFlag('run `npm ci --ignore-scripts` and <code>npm ci --ignore-scripts --omit=dev</code>; `npm install --package-lock-only`'), []);
 });

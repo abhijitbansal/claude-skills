@@ -10,6 +10,8 @@
 :root[data-flavor="poster"] { --head-weight: 900; --head-case: uppercase; --head-track: 0.004em; --lh-hero: 0.86; --display: calc(var(--fs-display) * 1.22); --grain-op: 0.06; }
 
 html[data-flavor] body { -webkit-font-smoothing: antialiased; }
+/* print looks: blocks stay flat (hard offset shadows only, set per flavor below), never the soft classic elevation */
+html[data-flavor] :is(.tldr, .kpi, .card, .files, .cmp-col, .det, .sec-alt) { box-shadow: none; }
 /* only the hero clips sideways: the tilted card and its offset shadow reach a few px past its box */
 html[data-flavor] .hero { overflow-x: clip; }
 
@@ -95,7 +97,7 @@ html[data-flavor] .sec-eyebrow.pa-label { font-family: var(--mono); font-weight:
 html[data-flavor] .sec-tldr .sec-title { font-family: var(--font-display); font-size: var(--fs-md); }
 html[data-flavor] .sec-alt { border-radius: var(--r-big); }
 /* the counter is decoration: the alt text after "/" keeps it out of the accessible name */
-html[data-flavor] .sec:has(> .sec-title)::before { content: counter(sec, decimal-leading-zero); content: counter(sec, decimal-leading-zero) / ""; pointer-events: none; user-select: none; font-family: var(--font-display); font-weight: var(--head-weight); font-variant-numeric: tabular-nums; }
+html[data-flavor] .sec:has(> .sec-title)::before { content: counter(sec, decimal-leading-zero); content: counter(sec, decimal-leading-zero) / ""; pointer-events: none; user-select: none; font-family: var(--font-display); font-weight: var(--head-weight); font-variant-numeric: var(--num); }
 
 /* dusk: an oversized outlined numeral floats at the heading's right end; the section's content clears it */
 :root[data-flavor="dusk"] .sec:has(> .sec-title)::before { float: right; margin: 0 0 var(--sp-2) var(--sp-4); font-size: calc(var(--fs-numeral) * 0.8); line-height: 0.8; letter-spacing: -0.06em; color: transparent; -webkit-text-stroke: 1.5px color-mix(in srgb, var(--text) 30%, transparent); }
@@ -130,7 +132,7 @@ html[data-flavor] .kpi { background: none; border: 0; border-top: var(--rule-w) 
 html[data-flavor] .kpi-value { margin-bottom: var(--sp-2); font-size: min(clamp(2.6rem, 1.6rem + 2.2vw, 4rem), var(--kpi-fit)); line-height: 0.92; font-weight: var(--head-weight); letter-spacing: -0.04em; }
 :root[data-flavor="poster"] .kpi-value { letter-spacing: 0; font-size: min(clamp(3rem, 2rem + 2.6vw, 4.8rem), var(--kpi-fit)); }
 html[data-flavor] .kpi:first-child .kpi-value { color: var(--accent); }
-html[data-flavor] .kpi dt { font-family: var(--mono); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.08em; }
+html[data-flavor] .kpi dt { font-family: var(--mono); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--track-caps); }
 :root[data-flavor="dusk"] .kpi { border: 0; border-radius: var(--r-card); padding: var(--sp-5); background: var(--surface); }
 :root[data-flavor="dusk"] .sec-alt .kpi { background: var(--page); }
 :root[data-flavor="dusk"] .kpi:nth-child(3n + 2) { border-radius: var(--r-big) var(--r-card) var(--r-card) var(--r-card); }
@@ -176,23 +178,23 @@ html[data-flavor] .tl-item::before { left: -30px; top: 5px; width: 14px; height:
 :root[data-flavor="press"] .tl-item:last-child::before { background: var(--accent); border-color: var(--accent); }
 :root[data-flavor="poster"] .tl-item::before { border-radius: 0; border: 1px solid var(--text); left: -30px; }
 :root[data-flavor="poster"] .tl-item:last-child::before { background: var(--accent); border-color: var(--accent); }
-html[data-flavor] .tl-date { text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-2); }
+html[data-flavor] .tl-date { text-transform: uppercase; letter-spacing: var(--track-caps); color: var(--text-2); }
 html[data-flavor] .tl-title { font-family: var(--font-display); font-weight: var(--head-weight); font-size: var(--fs-md); line-height: 1.15; margin: 2px 0; text-transform: var(--head-case); }
 
 /* ---- files, code, tables, callout, details, image: hairlines instead of boxes ----------------------- */
 html[data-flavor] .files { background: none; border: 0; border-top: var(--rule-w) solid var(--text); border-radius: 0; padding: var(--sp-3) 0 0; }
 html[data-flavor] .file { padding: 6px 0; border-bottom: 1px solid var(--line); }
-html[data-flavor] .files-sum { font-family: var(--mono); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 0.06em; }
+html[data-flavor] .files-sum { font-family: var(--mono); font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: var(--track-caps); }
 :root[data-flavor="dusk"] .files { background: var(--surface); border: 0; border-radius: var(--r-card); padding: var(--sp-4) var(--sp-5); }
 html[data-flavor] .code { border-radius: var(--r-card); }
 :root[data-flavor="press"] .code { border-width: 2px 0 0; border-color: var(--text); }
 :root[data-flavor="poster"] .code { border-color: var(--text); }
-html[data-flavor] .code-lang { text-transform: uppercase; letter-spacing: 0.08em; }
+html[data-flavor] .code-lang { text-transform: uppercase; letter-spacing: var(--track-caps); }
 html[data-flavor] .tablewrap { border-radius: var(--r-card); }
 :root[data-flavor="press"] .tablewrap { background: none; border-width: 2px 0 1px; border-color: var(--text); }
 :root[data-flavor="press"] thead th { background: var(--page); }
 :root[data-flavor="poster"] .tablewrap { border-color: var(--text); }
-html[data-flavor] thead th { font-family: var(--mono); font-weight: 400; letter-spacing: 0.08em; }
+html[data-flavor] thead th { font-family: var(--mono); font-weight: 400; letter-spacing: var(--track-caps); }
 html[data-flavor] .callout { border: 1px solid var(--tc); background: color-mix(in srgb, var(--tc) 5%, var(--surface)); padding: var(--sp-4) var(--sp-5); }
 :root[data-flavor="dusk"] .callout { border-radius: 4px var(--r-card) var(--r-card) var(--r-card); }
 :root[data-flavor="press"] .callout { border: 2px solid var(--tc); border-radius: 0; background: var(--page); }
@@ -227,7 +229,7 @@ html[data-flavor] .toc summary { font-family: var(--mono); }
 :root[data-flavor="poster"] .toc a { text-transform: uppercase; letter-spacing: 0.02em; }
 html[data-flavor] .pa-footer { border-top: var(--rule-w) solid var(--text); display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--sp-2) var(--sp-5); }
 :root[data-flavor="dusk"] .pa-footer { border-top-color: var(--line); }
-html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+html[data-flavor] .pa-theme { margin: 0; font-family: var(--mono); text-transform: uppercase; letter-spacing: var(--track-caps); }
 
 /* ---- phone ------------------------------------------------------------------------------------------ */
 @media (max-width: 640px) {

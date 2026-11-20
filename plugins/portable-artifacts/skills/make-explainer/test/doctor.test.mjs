@@ -117,13 +117,15 @@ test('a fresh --omit=dev copy with a motion spec reports no dev_deps', () => {
   assert.ok(ids.includes('make-motion'));
 });
 
-test('a motion section needs a required browser and counts make-motion\'s ffmpeg-static', async () => {
+test('a motion section needs a required browser and system ffmpeg', async () => {
   const requirementsFor = await loadRequirements();
   const reqs = requirementsFor(specFile([{ type: 'motion' }]));
   assert.equal(reqs.find((r) => r.id === 'motion_chromium').required, true);
   const ff = reqs.find((r) => r.id === 'ffmpeg');
   const isExecutable = (p) => p === '/s/make-motion/node_modules/ffmpeg-static/ffmpeg';
-  assert.equal(await ff.check({ platform: 'darwin', env: {}, skillDir: '/s/make-explainer', exists: () => false, which: () => false, isExecutable }), true);
+  const ctx = { platform: 'darwin', env: {}, skillDir: '/s/make-explainer', exists: () => false, which: () => false, isExecutable };
+  assert.equal(await ff.check(ctx), false, 'make-motion\'s ffmpeg-static no longer counts');
+  assert.equal(await ff.check({ ...ctx, which: (c) => c === 'ffmpeg' }), true);
 });
 
 // R44: --fix takes the same --for the diagnosis used, so both browsers are addressable.
@@ -173,6 +175,7 @@ test('builder_agent is an optional requirement in every target, and a missing ag
   assert.equal(miss.required, false);
   assert.match(miss.fix.manual.darwin, /install\.mjs copilot --agents-only/);
   fs.mkdirSync(path.join(home, '.codex/agents'));
-  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n');
+  // A current file carries make.mjs; a stub without it would be reported as outdated.
+  fs.writeFileSync(path.join(home, '.codex/agents/artifact-builder.toml'), 'name = "artifact-builder"\n# node scripts/make.mjs <spec> --json\n');
   assert.equal(consistent(doctor()).missing.some((m) => m.id === 'builder_agent'), false, 'present once the file exists');
 });

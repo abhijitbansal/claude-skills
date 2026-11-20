@@ -4,6 +4,8 @@ import { MAX_ROWS_DEFAULT } from './spec.mjs';
 import { themeCss } from '../../shared/theme.mjs';
 import { formatValue } from './format.mjs';
 import { vegaConfig } from './vega-config.mjs';
+import { sparklineSvg, trendValues } from './sparkline.mjs';
+import { numeralCss } from './numeral-face.mjs';
 import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
@@ -56,13 +58,17 @@ const timeTag = (iso, text) => `<time datetime="${escapeHtml(iso)}" data-t="${te
 const KPI_WIDE_CHARS = 8;
 const KPI_LONG_CHARS = 17;
 
+// The opt-in trend line's drawing box; the CSS scales it to the tile's width.
+const SPARK = { width: 160, height: 28 };
+
 function kpiTile(kpi, results) {
   const value = formatValue(results[kpi.query]?.rows[0]?.[kpi.field], kpi.format);
   const chars = [...value].length;
   const size = chars > KPI_LONG_CHARS ? ' kpi-wide kpi-long' : chars > KPI_WIDE_CHARS ? ' kpi-wide' : '';
   const sql = results[kpi.query]?.sql;
   const query = sql === undefined ? '' : `<details class="kpi-sql"><summary>Query</summary><pre class="sql">${escapeHtml(sql)}</pre></details>`;
-  return `<div class="kpi${size}" id="kpi-${escapeHtml(kpi.id)}"><div class="kpi-label">${escapeHtml(kpi.title)}</div><div class="kpi-value" style="--n: ${Math.max(1, chars)}">${escapeHtml(value)}</div>${query}</div>`;
+  const trend = kpi.trend ? sparklineSvg(trendValues(results[kpi.trend.query]?.rows, kpi.trend.field), SPARK) : '';
+  return `<div class="kpi${size}" id="kpi-${escapeHtml(kpi.id)}"><div class="kpi-label pa-caps">${escapeHtml(kpi.title)}</div><div class="kpi-value pa-num" style="--n: ${Math.max(1, chars)}">${escapeHtml(value)}</div>${trend}${query}</div>`;
 }
 
 function dataTable(res) {
@@ -111,7 +117,8 @@ function card(chart, expanded, results, maxRows) {
   const empty = res.rowCount === 0 ? '<p class="meta empty">No rows returned</p>' : '';
   const shown = Math.min(res.rowCount, TABLE_ROWS);
   return `<article class="card ${expanded.width === 'half' ? 'half' : 'full'}" id="card-${escapeHtml(chart.id)}">
-  <div class="card-head"><h2>${escapeHtml(chart.title)}</h2>${tabs(expanded)}${exportMenu(chart)}</div>
+  <div class="card-head"><h2>${escapeHtml(chart.title)}</h2><div class="card-tools">${tabs(expanded)}${exportMenu(chart)}</div></div>
+  <div class="card-body">
   ${panes(expanded)}
   ${empty}${note}
   <details>
@@ -120,6 +127,7 @@ function card(chart, expanded, results, maxRows) {
     <p class="meta">Data table (first ${shown} rows)</p>
     ${dataTable(res)}
   </details>
+  </div>
 </article>`;
 }
 
@@ -158,7 +166,7 @@ export function renderPage(spec, results, { vendor, theme, charts, env = process
     KPIS: kpis,
     CARDS: cards,
     DATA: jsonForScript(data),
-    THEME: themeCss(theme),
+    THEME: `${themeCss(theme)}\n${numeralCss(theme.fonts)}`,
     VENDOR: [vendor.vega, vendor.vegaLite, vendor.vegaEmbed].map(inlineScript).join('\n'),
     RUNTIME: [fs.readFileSync(PA_LIB, 'utf8'), vegaConfigScript(), fs.readFileSync(RUNTIME, 'utf8')].map(inlineScript).join('\n'),
   };

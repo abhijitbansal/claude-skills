@@ -1,0 +1,142 @@
+{
+  "version": 2,
+  "mode": "pro",
+  "look": "ledger",
+  "format": "9:16",
+  "voice": {
+    "name": "af_heart"
+  },
+  "sound": "on",
+  "music": {
+    "bed": "drift",
+    "bpm": 88
+  },
+  "seed": 29,
+  "shots": [
+    {
+      "id": "lede",
+      "show": "statement",
+      "kicker": "Ridgeline Prints",
+      "say": "Two of every five prints went *North*."
+    },
+    {
+      "id": "regions",
+      "show": "chart",
+      "type": "column",
+      "title": "The North led",
+      "say": "The North bought one hundred and eighty two of four hundred and fifty nine orders.",
+      "data": [
+        {
+          "label": "North",
+          "value": 182
+        },
+        {
+          "label": "South",
+          "value": 121
+        },
+        {
+          "label": "East",
+          "value": 97
+        },
+        {
+          "label": "West",
+          "value": 59
+        }
+      ],
+      "highlight": "North",
+      "source": "Ridgeline Prints dashboard: paid orders to date"
+    },
+    {
+      "id": "growth",
+      "show": "chart",
+      "type": "area",
+      "title": "Every quarter beat the last",
+      "say": "Each quarter sold more than the one before.",
+      "data": [
+        {
+          "x": "Q1",
+          "y": 6
+        },
+        {
+          "x": "Q2",
+          "y": 46
+        },
+        {
+          "x": "Q3",
+          "y": 130
+        },
+        {
+          "x": "Q4",
+          "y": 277
+        }
+      ],
+      "source": "Ridgeline Prints dashboard: new orders per quarter"
+    },
+    {
+      "id": "gap",
+      "show": "compare",
+      "say": "North against West: about three to one.",
+      "left": {
+        "title": "North",
+        "value": "182",
+        "points": [
+          "orders, three times the West"
+        ]
+      },
+      "right": {
+        "title": "West",
+        "value": "59",
+        "points": [
+          "orders"
+        ]
+      }
+    },
+    {
+      "id": "chat",
+      "show": "feed",
+      "title": "Studio",
+      "items": [
+        {
+          "from": "them",
+          "text": "North sold three times the West."
+        },
+        {
+          "from": "me",
+          "text": "Then the North gets stock first."
+        }
+      ],
+      "say": "North sold three times the West. Then the North gets stock first."
+    },
+    {
+      "id": "year",
+      "show": "timeline",
+      "title": "How the year went",
+      "events": [
+        {
+          "when": "Mar",
+          "what": "The first print sold"
+        },
+        {
+          "when": "Jun",
+          "what": "The shop went online"
+        },
+        {
+          "when": "Sep",
+          "what": "Orders from abroad"
+        },
+        {
+          "when": "Dec",
+          "what": "A dashboard for orders"
+        }
+      ],
+      "say": "March: the first print sold. June: the shop went online. September: orders from abroad. December: a dashboard for orders."
+    },
+    {
+      "id": "close",
+      "show": "end",
+      "say": "Year two starts in the North.",
+      "ask": "ridgelineprints.shop",
+      "mark": "Ridgeline"
+    }
+  ]
+}

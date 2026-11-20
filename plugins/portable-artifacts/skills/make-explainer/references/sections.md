@@ -6,7 +6,7 @@ Numbers with a percent sign or unit (`87%`, `1,204 ms`, `$4.2k`) are kept on one
 
 On a page, a `tldr` that comes first (and is not the only section) is drawn inside the hero, under the title, as its summary card; its `label` is the card's heading, and the `title` then names the card for screen readers only. Visual sections (`kpis`, `cards`, `compare`, `diagram`, `chart`, `scene`) alternate onto a surface band, starting with the first: the 1st, 3rd and so on.
 
-In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not.
+In slides mode each section is one slide (the title is the slide heading) and must fit the budget in schema.md; split a section that does not. Every theme draws its own art on the title slide and the last slide. A last slide that is a `tldr`, a `callout` or a `quote` also gets the closing layout: one centred statement at projection size.
 
 `tldr`, `text`, `cards`, `risks`, `steps`, `timeline`, `compare`, `callout`, `details` and `table` also take an optional `simple` object: the same prose fields in plainer words, shown by the page's Simple English toggle (see "Simple English" in schema.md). The toggle itself never touches `code`, `files`, `kpis`, diagrams, charts, images, scenes, motion or any plan section. Inside the ten types, the author keeps numbers, names and commands exact in `simple` (a table's `simple.rows` can replace any cell). Validate warns when a field and its simple twin both hold digits and the twin has a number the normal text does not (`410 ms` against `400 ms`); names and commands are not checked.
 
@@ -20,6 +20,7 @@ In slides mode each section is one slide (the title is the slide heading) and mu
 | `cards` | `items[]`* (1-12): `title`*, `text`*, `icon`, `tone`, `tag`; `columns` (2, 3 or 4) | Parallel items. `icon` is a make-diagram catalog ref (`lucide:<name>` or `brand:<slug>`); find one with `node <skill-dir>/../make-diagram/scripts/icons.mjs search <word>`. An unknown icon is an error. |
 | `table` | `columns[]`* (1-8 strings), `rows[][]`* (1-60 rows of strings or numbers, one cell per column), `caption`, `align[]` (`left` `center` `right`, one per column) | Sticky header; numbers align right. |
 | `callout` | `tone`* (`info` `warn` `good` `bad`), `title`*, `text`* | A boxed note with an icon and a label. |
+| `quote` | `text`* (at most 300 characters), `by` (at most 80), `tone` | One line set large in the display face, with a hanging opening mark and the attribution in small caps; the `tone` colours its rule and marks (accent when neutral). Quote the one line worth setting large: warns over 40 words, or an attribution over 8. Not a `callout` (a boxed note) or a `tldr` (the verdict). In a deck it is one slide, and as the last slide it closes the deck, as a closing `tldr` or `callout` does. It takes no `simple` version. |
 | `details` | `summary`*, `text`* | A collapsed block for detail most readers skip. |
 | `code` | `code`*, `language`, `caption` | At most 120 lines. Has a copy button. |
 | `diff` | `diff`* (a unified diff, at most 200 lines; 12 in a deck), `file` (a label above it), `caption` | One marked row per line: added, deleted, context, hunk header, file header. The `+` and `-` stay in the text (and a bar and a tint back them up), so Copy gives the diff as written. There is no syntax highlighting. The body is data: the prose lint and the word caps skip it, a `TODO:` still fails. |
@@ -101,12 +102,12 @@ Five types for a plan a reviewer answers on the page (`preset: "plan"`; SKILL.md
 
 ## Motion
 
-`motion`: `video` (an `.mp4`, at most 50 MB) and/or `spec` (a make-motion `motion.json` path); `poster`, `caption`. At least one of `video` and `spec` is required.
+`motion`: `video` (an `.mp4`, at most 50 MB) and/or `spec` (a make-motion film, version 2: a `.json` path); `poster`, `caption`. At least one of `video` and `spec` is required.
 
 - With `video` the file is copied to `<slug>.assets/`. With only `spec`, make-motion renders it during the build (needs ffmpeg and Chromium; it can take minutes, bounded by `PA_MOTION_TIMEOUT_MS`).
 - If both are given the video is shown and the spec is ignored, with a warning.
-- A `spec` without its own `theme` is drawn with the page theme. A rendered video uses the theme's dark variant whatever the page mode.
-- `poster` (png, jpg or webp) is inlined; a rendered video gets a frame as its poster. The video never autoplays, and print shows the poster.
+- A film is drawn in its own look (`look` in the film, or its mode's default), whatever the page theme. A version 1 spec is refused at validation with make-motion's own sentence under the section's `spec` path.
+- `poster` (png, jpg or webp) is inlined; a rendered video gets its first frame as its poster (a film that opens on an empty board, such as the `marker` look, gives a sparse poster: name a `poster` for a fuller one). The video never autoplays, and print shows the poster.
 - Needs the `make-motion` skill next to this one only when `spec` is used.
 
 ## Which section for what

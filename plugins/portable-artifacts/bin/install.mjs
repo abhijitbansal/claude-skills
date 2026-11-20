@@ -2,7 +2,7 @@
 // Install the portable-artifacts skills into another agent host's skill dir.
 //   node bin/install.mjs <claude|codex|copilot|gemini|agents> [--project <dir>] [--skills a,b] [--link] [--force] [--no-deps]
 //   node bin/install.mjs <host> [--project <dir>] --agents-only [--force]   (agent file only: no skills, no preflight, no npm)
-// codex, copilot and agents also get the cheap-model artifact-builder agent file (kept if present unless --force).
+// claude, codex, copilot and agents also get the cheap-model artifact-builder agent file (kept if present unless --force).
 // Each host reads SKILL.md folders from its own documented locations; the
 // skill itself is the slash command there (/name, or $name in Codex).
 // A skill's package.json "portableArtifacts": {"requires": [...]} pulls in sibling skills first.
@@ -35,13 +35,15 @@ export function targetsFor(host, scope, { home, proj }) {
   };
 }
 
-// Custom-agent folders: the artifact-builder agent file goes where Copilot and Codex read agents.
-// claude and gemini get none; the shared "agents" host gets both.
+// Custom-agent folders: the artifact-builder agent file goes where Claude Code, Copilot and Codex read agents.
+// gemini gets none; the shared "agents" host gets the Copilot and Codex files (Claude Code has its own host).
+// The plugin install gets its builder from the plugin's own agents/ folder instead; this is the path for installs without the plugin.
 const AGENT_DIRS = {
+  claude: { user: '.claude/agents', project: '.claude/agents' },
   copilot: { user: '.copilot/agents', project: '.github/agents' },
   codex: { user: '.codex/agents', project: '.codex/agents' },
 };
-const AGENT_HOSTS = { copilot: ['copilot'], codex: ['codex'], agents: ['copilot', 'codex'] };
+const AGENT_HOSTS = { claude: ['claude'], copilot: ['copilot'], codex: ['codex'], agents: ['copilot', 'codex'] };
 
 export function agentTargetsFor(host, scope, { home, proj }) {
   const base = scope === 'user' ? home : proj;
@@ -129,7 +131,7 @@ function installSkill(skill, dstRoot, { link, force, deps }) {
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     const where = link ? src : dst;
     // A linked install runs inside the source checkout: --omit=dev there would delete the developer's dev deps.
-    const args = ['ci', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund'];
+    const args = ['ci', '--ignore-scripts', ...(link ? [] : ['--omit=dev']), '--no-audit', '--no-fund'];
     const r = spawnSync(npm, args, { cwd: where, stdio: 'inherit' });
     if (r.status !== 0) {
       fs.rmSync(dst, { recursive: true, force: true }); // a link is removed, never its target

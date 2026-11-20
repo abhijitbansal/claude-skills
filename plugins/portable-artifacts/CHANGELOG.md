@@ -4,6 +4,211 @@ All notable changes to the `portable-artifacts` plugin. Newest first; the versio
 [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json). Dates are the commit dates in this repository's history.
 Entries for 0.4.0 to 0.7.0 name only what the commit subject of that release says.
 
+## [Unreleased]
+
+## [2.0.0] - 2026-11-18
+
+make-motion 2 replaces make-motion 1: a film is a script of shots in one JSON file, written for one engine with seven
+looks and sixteen kinds, and one command validates, reviews and renders it. The site and the README now show two
+showreel films and five more example films, all made with make-motion 2, and the other four skills are redrawn. The
+Director and operator split, locked and hashed optional installs and a smaller voice install come with it.
+
+### Behaviour changes to know about
+
+- **make-motion 2 replaces make-motion 1. The skill reads version 2 films only.** A film is a script of shots in
+  `film.json` (`"version": 2`), written for one engine with seven looks and sixteen kinds. One command,
+  `node <skill-dir>/scripts/make.mjs film.json`, validates the film, reviews every shot in a browser, writes review
+  sheets and renders the MP4. `references/migrating.md` in the skill maps each version 1 feature to version 2 or says it
+  is not in 2.0. There is no migrator.
+  - **A version 1 spec is refused**, with the one sentence `this is a version 1 spec; make-motion 2 reads version 2
+    only. See references/migrating.md`. In make-explainer a `motion` section carrying one gets that sentence with the
+    section's path in front.
+  - **The commands changed.** `make.mjs` replaces `render.mjs`, `validate.mjs`, `check.mjs` and `preview.mjs`
+    (`--preview [--open]` is the preview). `--list` takes `kinds`, `looks`, `modes`, `devices`, `moves`, `cuts`,
+    `fields` and `voices`. `beats.mjs`, `storyboard.mjs`, `cutout.mjs` and `doctor.mjs` stay. The doctor has no `check`
+    target (`doctor --for voiceover` and `--for cutout` remain).
+  - **Removed, and what replaces it.** Each is refused or absent, with no replacement of the same shape:
+    Lottie (removed by design); the nine themes and `--theme` (a look replaces a theme); the 38 blocks and `blocks.mjs`
+    (kinds and `--list kinds`); scenes, elements, keyframes, groups, camera keyframes and grades (a script of shots);
+    `--contact-sheet`, `--quality`, `--fps`, `--size`, `--loudness` and `--true-peak` (each refused with a hint);
+    a caption file as input and the six caption styles (captions come from the narration, and `--subtitles srt|vtt`
+    writes a file); the recorded `kenney:<name>` cues (cues are synthesised); `"beat:<n>"` times (`music.beats` and
+    `music.snap`); `voice.mjs` as its own command with `--text-file` and a folder mode (narration is `say`;
+    `--list voices` and `--phonemes` stay); the sketch icons and `sketch-icons.mjs`; `validate.mjs` and `check.mjs` as
+    separate commands.
+  - **Six packages leave make-motion's `package.json`:** `animejs`, `lottie-web`, `vega`, `vega-lite`,
+    `vega-interpreter` and `vega-util`. Nothing in version 2 imports them. make-dashboard keeps its own Vega packages.
+    The Kenney sample files and the version 1 sketch assets are deleted with them.
+  - **The voice install is smaller.** `optional/voice` no longer holds `kokoro-js`, `@huggingface/transformers` or the
+    `sharp` override; it holds `onnxruntime-node` and `phonemizer`. It measures 227 MB installed (`du -sk` over the 23
+    packages of its lockfile, in an existing install; the `npm ci --ignore-scripts` install itself was not re-run), plus a 93 MB model downloaded on first use (the five
+    pinned files total 92,886,949 bytes). The doctor still names the requirement `kokoro` (`doctor --fix kokoro`) and
+    now detects it by `phonemizer`.
+  - **An old voice install still works.** An install made before this release also holds `kokoro-js` and its
+    neighbours on disk. The doctor counts it as present and nothing breaks. To shrink it, delete
+    `optional/voice/node_modules` and run `doctor --fix kokoro`.
+  - **Old folders you can delete.** `<skill>/.cache/video` (decoded frames of version 1 `video` elements; version 2
+    writes none). The version 1 voice model: the folder `onnx-community/Kokoro-82M-v1.0-ONNX` inside the models folder
+    (`$CLAUDE_PLUGIN_DATA/models` if set, else `portable-artifacts/models` in the OS cache folder, else
+    `<skill>/.cache/models`). Version 2 keeps its model in `<skill>/.cache/models/onnx-community/Kokoro-82M-v1.0-ONNX-timestamped`:
+    keep that one. `<skill>/.cache/cutout` belongs to `cutout.mjs`, which still writes it: keep it too.
+    `doctor --fix cache` deletes `.cache/video` and `.cache/cutout` together.
+  - **A viral film's first frame names the product.** In the opening `statement` of a viral film, the kicker tag and
+    the words up to the end of the first sentence (`.`, `!`, `?` or `…`) are fully drawn on frame 0 (a platform takes frame 0 as the thumbnail). The rest
+    of the line starts as grey ghost words and lights as it is spoken. A one-sentence hook keeps every word a ghost;
+    only its tag is set on frame 0. Pro films are unchanged.
+  - **The same film measures and reviews the same on Linux and macOS.** Every make-motion browser launches with
+    `--font-render-hinting=none`, because Linux headless Chromium otherwise rounds each glyph advance to a whole pixel
+    (Archivo at 24 px x8 measured 344 against 349 on macOS) and a fit that clears on one machine overflowed on the
+    other. The review's safe-area rule allows 1 unit plus 0.015 em of the text's size, because Linux reports a
+    glyph's ink up to 0.015 em wider than macOS (4.2 units at 280; measured in CI). A line up to about 3 units past
+    the safe edge at size 132, or 5 at 280, is no longer a mechanical finding on either platform.
+  - **make-explainer's `motion` section** takes a version 2 film, renders it with `make.mjs`, passes no `--theme` (a
+    film has a look) and takes its poster from second 0 of the rendered MP4.
+  - **The eval's `motion` set** is eleven version 2 prompts. The `benchmark` and `items` sets are removed. Result files
+    under `eval/results/` were measured on make-motion 1 and are not edited.
+  - **Not carried over.** No figure from the version 1 documents about render time, audio loudness or sync is repeated
+    for version 2: none has been re-measured. The one claim about the voice is this, from the gate record: on the
+    held-out fixture lines, for the word starts that follow a silence, the predicted start was a median 9 ms from the
+    onset ffmpeg's silence detector found. Nobody has listened to the audio.
+  - **The site and the README show version 2 renders.** The films section of the feature page, the `#gallery-motion`
+    grid, the site hero and both README heroes show the two showreel films and one film per look, made with
+    make-motion 2. The version 1 clips are kept as a labelled archive ("made with make-motion 1.x") in
+    `#gallery-motion-1-4`, with their folders `motion-showcase` and `motion-1-4`; version 2 reads a different spec, so
+    they cannot be rebuilt with it. Three version 1 GIFs (`launch-announcement.gif`, `motion-q3-revenue.gif`,
+    `motion-how-it-works.gif`) are removed, and `showreel-pro.gif` and `showreel-viral.gif` replace them.
+- **The voiceover and cutout installs move to `optional/voice` and `optional/cutout`** and are installed by `npm ci
+  --ignore-scripts` from committed lockfiles (`doctor --fix kokoro`, `doctor --fix cutout`). An old install in the
+  skill's `node_modules` is ignored: run `doctor --fix kokoro` or `--fix cutout` once, and `--fix node_modules` removes
+  the old copy. Install scripts are skipped on purpose: the locked `onnxruntime-node` (1.21.0 for the voice, 1.31.1
+  for cutouts) has a postinstall that, on Linux x64 only, downloads CUDA libraries (a GitHub release, then NuGet) with no
+  hash; the CPU binaries ship inside the npm tarball, which the lockfile's integrity covers, and neither feature uses a
+  GPU. The loader also refuses to load when a direct dependency of an optional folder would resolve outside that folder
+  (a partial install with an old unlocked copy above it). Each folder carries one `overrides` entry: `global-agent`
+  4.1.3 (global-agent 3.x pulls in roarr and sprintf-js, GHSA-hp3w-g68c-fv3c). 1.3.0's voice folder also carried a
+  `sharp` 0.35.5 override (kokoro-js 1.2.1 reached sharp ^0.34 through `@huggingface/transformers` 3.x); that package
+  and the override are gone with make-motion 2, above. `npm audit --package-lock-only` in each folder reports 0
+  vulnerabilities (measured 2026-11-19).
+- **The Kokoro model is pinned to commit `dd4401a9` with a SHA-256 per file.** Version 2 narrates with
+  `onnx-community/Kokoro-82M-v1.0-ONNX-timestamped`. `make.mjs` downloads the five files itself
+  (`scripts/v2/voice/model.mjs`) and checks each one before every use; a cached file that differs is downloaded again
+  once. Before, kokoro-js read the model from the Hugging Face branch head, unhashed.
+- **ffmpeg-static is no longer looked for.** Use a system ffmpeg or set `FFMPEG_PATH`. Its postinstall download was
+  unpinned and unhashed, and an existing install in `node_modules` no longer counts (the doctor says ffmpeg is missing
+  until you set `FFMPEG_PATH` to that binary).
+- **The unused `@fontsource/inter` and `@fontsource/jetbrains-mono` are removed** from make-motion.
+- **New standing tests: exact pins, locked installs, hashed downloads.** `bin/test/dependency-pins.test.mjs` fails on a
+  dependency range, an install without a lockfile or an unpinned or unhashed download.
+- **What changes from 1.3.0 for these installs.** 1.3.0 said the voiceover install is about 465 MB and that it shares
+  `onnxruntime-node` with the cutout; in its own folder it is 227 MB (above) and shares nothing. 1.3.0's pinned
+  `ffmpeg-static` install hint is gone with `ffmpeg-static`. The install hint a script prints is still exactly the
+  doctor's `--fix` step. The 1.3.0 per-user model folder (`$CLAUDE_PLUGIN_DATA`, else the OS cache folder) no longer
+  holds the voice model: version 2 keeps its SHA-256-checked files in `<skill>/.cache/models` (see "Old folders you can
+  delete", above). `voice.mjs` is gone, with its `--dir` and `--list-voices`; use `make.mjs --list voices`. The first
+  download prints one line per file instead of a percentage.
+- **Director and operator replaces the pinned cheap model.** No `SKILL.md` pins a `model` or `effort` any more; each has
+  a `## Director and operator` section: the agent you talk to writes the spec and decides every creative finding, and may
+  hand the one `make.mjs <spec> --json` command to the `artifact-builder` agent (`model: haiku` on Claude Code), which
+  fixes only mechanical findings. `install.mjs claude` now writes that agent file. On Claude Code, measured 2026-11-18
+  (Claude Code 2.1.327, make-motion 2, ten prompts, one run each, read from the session stream by `eval/session.mjs`):
+  10 of 10 valid, 10 of 10 delegated, operator `claude-haiku-5-5`, director `claude-opus-5-5`, first build valid in 9 of
+  10, $4.66 in all ([record](eval/results/summary-director-operator-2026-11-18.md)). Copilot and Codex: install-tested,
+  not run live.
+- **make-dashboard, make-diagram, make-explainer and make-scene are redrawn.** A page you built before looks
+  different when you rebuild it; no spec format, SQL rule, validator rule or CSP changed. What to expect:
+  - **make-dashboard.** Charts are drawn as in a newsroom: a line ends in a dot and its series name, bars have rounded
+    tops, and a multi-series chart claims one series in the theme accent and draws the rest in neutral greys (a
+    chart whose title names no series keeps the category colours). Line and area charts take the theme accent.
+    Month ticks on a phone are evenly spaced, and the tallest bar stays under the top gridline. A KPI tile carries a
+    caps label and a large aligned numeral with no empty band when it has no sparkline. The 100% tab no longer
+    draws a slashed zero.
+  - **make-diagram.** A phone opens a diagram at a readable size on its first group and pans (four edge tabs show where
+    nodes lie off screen); a desktop still opens the whole drawing, and Fit shows the whole drawing on both. The
+    phone toolbar is one row plus a More button, and the legend opens as one panel. Return, reply and event
+    edges are lighter than calls and dotted or dashed edges keep a readable width and contrast. Decision diamonds
+    keep their hue outline, and the state example shows its outcomes in the legend as success and failure.
+  - **make-explainer.** More air above the hero, section rhythm by role (bands stand apart from text), cards mark
+    their tone with a top rule instead of a full border, and chips on the classic themes are plain caps text.
+    A deck's title slide takes the hero type, every theme draws art on the title and closing slides, and a
+    last slide that is a `tldr`, `callout` or `quote` gets a closing layout (one centred statement at projection
+    size) with a one-line colophon. A deck example that ends on a quote is now 12 slides.
+  - **make-scene.** Lit by a key light from the viewer's side with a lower fill (so a wall has two clear tones), a
+    rim light at night, five material roles (ground, mass, accent, body and water, each with its own roughness),
+    fog that starts behind the middle of the scene, a soft pool of light under a world and a contact shadow or glow
+    under lifted bars and diagram nodes. Boxes get a silhouette edge in dark mode. Labels are caps in the theme's
+    strong weight, numerals stay tabular, and no label draws below 11 px. City row names stand in one column left
+    of the city. `scene-graph.md` and the city golden changed with this.
+  - **The forest row ceiling is 1,224, not 1,248** (24 groups; 1,240 for 8 groups with two-decimal values, 1,288 for 8
+    groups with whole values). The bundle grew by shader code, so fewer rows fit under the page cap. Re-measured with
+    `heaviestPage` in `row-ceilings.test.mjs`.
+- **Five accents were retuned** so they stand out from the neutrals in grouped and stacked charts: `blueprint` dark
+  `#45b6ff`, `brief` dark `#f28aa5`, `editorial` dark `#6aaeff`, `poster` light `#3b5f00`, `mono` light `#00659e`.
+  Anything that read those tokens changes colour, and the seeded `poster` light art draws in the new accent.
+- **Heading and strong text ask for a weight the theme ships.** Every theme gets `--display-weight` and
+  `--strong-weight` (the weight nearest 600 that the font has, the heavier on a tie), so a theme whose font lacks 600
+  draws a real face, not a synthesised one. `mono` draws headings, labels and numbers in regular weight (its font
+  ships 400 only), which removes the synthesised bold there.
+- **make-scene's check waits up to 15 s for a screenshot** (it was 5 s, shared with every page action). On a busy
+  machine a canvas screenshot took 2.1 to 2.5 s in CI, and one check reported "check crashed" for a page that was
+  fine. Other actions keep 5 s, and the 60 s watchdog still ends a page that hangs.
+- **The tour flight time follows the distance (make-scene).** A beat's camera flight takes 450 ms plus 650 ms per span
+  (the move over the camera-to-target distance), capped at 1,400 ms; it was a fixed 900 ms. The curve is the same
+  ease in and out, and under reduced motion a beat still cuts.
+- **The diagram story player is calmer (make-diagram).** On Play the caption (count, title, note, line) paints 60 ms
+  after the camera settles, not at the same moment; every beat glides 600 ms, ease in and out (was 450 ms for a
+  story beat and 300 ms for a step, ease out); during Play the dim is softer (opacity .4, was .25) and fades over .35 s
+  (was .2 s). Manual step, pause and
+  exit paint at once. Under reduced motion a beat applies at once and no CSS transition runs.
+
+### Added
+
+- **Two showreel films and one example film per look, as the films to start from.** In
+  `skills/make-motion/references/examples/v2/`: `showreel-pro.json` (`desk`, 16:9, voiced, 46.77 s) and
+  `showreel-viral.json` (`pop`, 9:16, voiced, 22.73 s), each with a `.review.md` of the director's notes, and the
+  screenshots of version 2 builds they show in `showreel-assets/`; and `look-cosmos.json`, `gate-ledger.json`,
+  `look-poster.json`, `gate-keynote.json` and `gate-marker.json`, one for each other look. `SKILL.md` names them under
+  "Finished films". Renders, posters and a copy of each film file are in the gallery under `showreel/` and `looks/`.
+- **A "What's new" film of every change in this release.** `whats-new.json` (`desk`, 16:9, voiced, 113.0 s) in
+  `skills/make-motion/references/examples/v2/`, with its `whats-new.review.md` (the director's notes and the look gate
+  record) and the clips and pictures it shows in `whats-new-assets/`. It shows the sixteen kinds, the seven looks as
+  clips, the local voice that times each shot, the review sheets, the four redrawn skills, Director and operator,
+  locked installs, and, marked "also", cache-clock's keep-warm (off until turned on, tested against a fake Copilot
+  host only) and session-compass's two-line band. It is the first film in the feature page's films section. The
+  gallery's `video.mp4` is a 24.6 MB re-encode of the 71.2 MB render (`libx264 -crf 28 -preset slow`, audio copied);
+  the film file is the same bytes. Nobody has listened to the audio.
+- **Shared tokens and classes.** Three display sizes `--fs-d3` (28px), `--fs-d2` (37px) and `--fs-d1` (49px), `--lh-tight`,
+  `--track-caps`, `--num` (tabular, lining figures), the `.pa-caps` and `.pa-num` classes, three surface steps
+  `--surface-2` and `--surface-3` with `--shadow`, and a three-level elevation scale `--elev-1` to `--elev-3`. Every
+  theme sets `surface2`, `surface3` and `shadow` in both modes, and `checkTheme` now checks them: text and the accent at
+  4.5:1 and the status colours at 3:1 on all three surfaces, and surface steps in order and at least 1.04:1 apart.
+  - **A theme written against the old token set still builds, with fallbacks, and is flagged.** Checked by
+    `shared/test/theme-old-tokens.test.mjs` (a copy of `paper` with `surface2`, `surface3` and `shadow` removed):
+    `themeCss` writes every older token and never `undefined`, `null` or `NaN` for any token (a token a theme leaves
+    out is omitted). A missing `surface2` and `surface3` become `surface` mixed 3% and 6% toward `text`, the same rule
+    in light and dark; a missing `shadow` becomes `#000000`, the plain black the elevation scale used before it had a
+    shadow colour. The test checks that the fallback surfaces of the old `paper` copy pass every `checkTheme` contrast
+    rule. `checkTheme` reports `surface2`, `surface3` and `shadow` as missing in both modes and names the fallback in
+    each message, and every entry carries a `kind`: `fallback` for those three (the build can carry on) and `error` for
+    anything else. The contrast checks run on the tokens the build will use, so an old theme whose fallback surfaces
+    make a text colour or the accent too faint still fails. **make-dashboard warns rather than refuses:** it builds
+    such a theme with exit 0 and prints one `warning:` line per missing token (in `warnings` under `--json`), and fails
+    only on `error` entries (a failed contrast pair, or a missing token that has no fallback, such as `text`). It is the
+    only skill that gates on `checkTheme`; the `checkTheme` functions in make-diagram's and make-scene's `spec.mjs` only
+    check the theme name. Add the three tokens to such a theme (copy `paper.json`'s and adjust) to choose the look and
+    clear the warnings; make-scene reads `shadow` for the contact shadow in light mode. How a page built from the
+    fallbacks renders in a browser was not checked.
+- **make-dashboard `kpis[].trend`.** `{ "query": "<a declared query>", "field": "<column>" }` draws a small line of that
+  column beside the KPI. It names a query the spec already declares, never SQL text; an unknown query fails validation.
+  A KPI without `trend` is drawn as before.
+- **make-explainer `quote` section** (`text`, `by`, `tone`): one line set large with a hanging mark and a caps
+  attribution. Limits: 300 characters of text, 80 of attribution, warnings over 40 words or 8 attribution words. In a deck
+  it is one slide, and as the last slide it closes the deck. The section types are now 26.
+- **Seeded art for the other six themes.** `paper`, `ink`, `blueprint`, `mono`, `brief` and `editorial` each have
+  their own generator (feint rules and a fold, brush washes, a construction grid, a dot matrix, folder tabs, a masthead
+  with a fleuron). `dusk`, `press` and `poster` draw the same bytes as before (pinned by `shared/test/art.test.mjs`), except `poster` light,
+  which draws in its retuned accent.
+  `shared/art.mjs` is the entry point and the generators live in `shared/art/`.
+
 ## [1.3.0] - 2026-11-15
 
 Pages now land where you can find them, every script answers `--help`, and a check that passes can leave screenshots to

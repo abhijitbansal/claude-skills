@@ -7,9 +7,10 @@ this one scripted sweep, never by hand.
 
 Live count = directories under plugins/<plugin>/skills/ that contain SKILL.md
 (excluding `_lib`). Scopes are `total` plus one per plugin that has a skills dir,
-`plugins` (entries in .claude-plugin/marketplace.json) and `make-motion-blocks`
-(entries in make-motion's BLOCKS registry). Command, agent and hook counts,
-taglines and word forms ("five") are not modeled and stay manual.
+and `plugins` (entries in .claude-plugin/marketplace.json). Command, agent and hook
+counts, taglines and word forms ("five") are not modeled and stay manual. (A
+`make-motion-blocks` scope counted version 1's block registry; it went with that
+registry at cut-over.)
 
 Each SITES entry is (relative file, scope, regex template). The template has one
 capture group for the number. A template may reuse the number with a `(?P<n>\\d+)`
@@ -34,10 +35,7 @@ CATALOG_FILE = "docs/catalog.html"
 CATALOG_ROW_RE = re.compile(r'<div class="crow" data-type="Skill"')
 TOTAL_SCOPE = "total"
 PLUGINS_SCOPE = "plugins"
-BLOCKS_SCOPE = "make-motion-blocks"
 MARKETPLACE_FILE = ".claude-plugin/marketplace.json"
-BLOCKS_INDEX = "plugins/portable-artifacts/skills/make-motion/template/blocks/index.mjs"
-BLOCKS_BODY_RE = re.compile(r"export const BLOCKS = Object\.freeze\(\{\n(.*?)\n\}\);", re.S)
 OG_SCOPES = {TOTAL_SCOPE, PLUGINS_SCOPE}
 OG_REGEN_NOTE = "total changed: regenerate site/og.png from site/og.html"
 
@@ -77,12 +75,6 @@ SITES = (
         *[(f, PLUGINS_SCOPE, r"(\d+) plugins · \d+ skills") for f in _FOOTER_FILES],
         ("site/og.html", PLUGINS_SCOPE, r"(\d+) plugins · \d+ skills"),
         ("site/index.html", PLUGINS_SCOPE, r"(\d+) plugins, \d+ skills,"),
-        # make-motion block counts. The "What's new" rows of the portable-artifacts
-        # page quote the count at each release (28 at 1.1.0, 38 at 1.2.0) and are
-        # history, so they are deliberately not swept; neither is CHANGELOG.md.
-        ("docs/catalog.html", BLOCKS_SCOPE, r"(\d+) blocks in all"),
-        ("docs/skills-catalog.md", BLOCKS_SCOPE, r"(\d+) blocks in all"),
-        ("docs/features/portable-artifacts.html", BLOCKS_SCOPE, r"most of the (\d+) blocks"),
         # mermaid labels (architecture.html uses <br/><small>, architecture.md a dash)
         ("docs/architecture.html", "ios-dev", r"ios-dev<br/><small>(\d+) skills? ·"),
         ("docs/architecture.html", "linear-pm", r"linear-pm<br/><small>(\d+) skills? ·"),
@@ -114,20 +106,9 @@ SITES = (
 )
 
 
-def _block_count(root):
-    """Entries in make-motion's BLOCKS registry, or None when it is absent."""
-    path = Path(root) / BLOCKS_INDEX
-    if not path.is_file():
-        return None
-    m = BLOCKS_BODY_RE.search(_read(path))
-    if not m:
-        return None
-    return sum(1 for line in m.group(1).splitlines() if line.strip().rstrip(",") and not line.strip().startswith("//"))
-
-
 def live_counts(root) -> dict:
-    """Skills per plugin plus `total`, from the plugins/ tree; `plugins` and
-    `make-motion-blocks` when their sources exist."""
+    """Skills per plugin plus `total`, from the plugins/ tree; `plugins` when
+    the marketplace file exists."""
     counts = {}
     for skills_dir in sorted(Path(root).glob("plugins/*/skills")):
         if not skills_dir.is_dir():
@@ -140,9 +121,6 @@ def live_counts(root) -> dict:
     marketplace = Path(root) / MARKETPLACE_FILE
     if marketplace.is_file():
         live[PLUGINS_SCOPE] = len(json.loads(_read(marketplace)).get("plugins", []))
-    blocks = _block_count(root)
-    if blocks is not None:
-        live[BLOCKS_SCOPE] = blocks
     return live
 
 

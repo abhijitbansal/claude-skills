@@ -43,9 +43,8 @@ export function flavorVars(flavor) {
 // any section type can close a deck.
 export const SCRIM = Object.freeze({ token: 'page', alpha: 0.84, inks: Object.freeze(['text', 'text2']) });
 
-/** The scrim as one custom property ('' for classic); color-mix keeps it a token, so it follows the mode. */
-export function scrimVar(flavor) {
-  if (!CARD_INKS[flavorFor(flavor)]) return '';
+/** The scrim as one custom property, for every theme (all nine draw deck art); color-mix keeps it a token, so it follows the mode. */
+export function scrimVar() {
   return `:root{--scrim:color-mix(in srgb, var(${CSS_NAME[SCRIM.token]}) ${Math.round(SCRIM.alpha * 100)}%, transparent)}`;
 }
 

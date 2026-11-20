@@ -6,8 +6,8 @@ import fs from 'node:fs';
 import { themeCss } from '../../shared/theme.mjs';
 import { esc } from './svg.mjs';
 import { runtimeSource } from './runtime.mjs';
-import { legendItems } from './legend.mjs';
-import { FAMILIES } from './kinds.mjs';
+import { legendItems, TONE_WORD } from './legend.mjs';
+import { FAMILIES, KINDS } from './kinds.mjs';
 import { faviconLink } from '../../shared/icons.mjs';
 import { generatorMeta, provenanceHtml, buildDate } from '../../shared/provenance.mjs';
 import { toggleIcons, TOGGLE_CSS, TOGGLE_JS } from '../../shared/theme-toggle.mjs';
@@ -84,39 +84,40 @@ function textAlternative(spec) {
 // The key as HTML in the stage's corner: the in-SVG legend scales with the camera and
 // is unreadable at fit on a wide diagram. Same items as the drawn one (legend.mjs).
 
-const LEGEND_TINT = 10; // % of the kind hue in a swatch: the card tint (css.mjs CARD_TINT)
 const WIRE_LOOK = { solid: 'solid', dashed: 'dashed', async: 'dotted' };
 
 const legendWord = (it) => (it.kind === 'kind' ? `${it.count} ${it.name}` : it.label);
 
-function legendMark(it) {
+function legendMark(it, type) {
   if (it.kind === 'style') return `<i class="lg-wire lg-wire-${WIRE_LOOK[it.style]}"></i>`;
-  return `<i class="lg-sw lg-sw-${esc(it.family)}"></i>`;
+  if (it.kind === 'tone') return `<i class="lg-sw lg-tone lg-tone-${esc(it.name)}"></i>`;
+  const shape = KINDS[type].kinds[it.name]?.shape ?? 'rounded-rect';
+  return `<i class="lg-sw lg-sw-${esc(it.family)} lg-shape-${esc(shape)}"></i>`;
 }
 
+// On a phone the keys fold behind a labelled toggle (viewer.html, toolbar.js); on a desktop the toggle is not shown.
+// The overlay stays decorative (the text alternative names every node), so the toggle is a pointer control only.
 function legendHtml(spec) {
-  const items = legendItems(spec).map((it) => `<span class="lg">${legendMark(it)}${esc(legendWord(it))}</span>`);
-  return `<div class="legend" data-pa-legend aria-hidden="true">${items.join('')}</div>`;
+  const items = legendItems(spec).map((it) => `<span class="lg">${legendMark(it, spec.type)}${esc(legendWord(it))}</span>`);
+  const toggle = `<button type="button" class="lg-toggle" data-pa-legend-toggle tabindex="-1" aria-expanded="false" aria-controls="pa-legend-keys">Legend <span class="lg-count">${items.length}</span></button>`;
+  return `<div class="legend" data-pa-legend aria-hidden="true">${toggle}<div class="lg-keys" id="pa-legend-keys">${items.join('')}</div></div>`;
 }
 
-// color-mix() wraps var(), so it sits in @supports (see css.mjs): an engine without it keeps the plain swatch.
+// The overlay swatches match the nodes as the drawn legend does (css.mjs legendRules): a neutral box with the hue as
+// its centre inside a surface ring (a card's tile and icon), dashed for external, a bare neutral diamond for a
+// decision or choice, dots for start and end; the box edge follows the card outline, --text-3 in dark.
 const legendCss = () => [
-  ...FAMILIES.map((f) => `.lg-sw-${f}{background:var(--surface);border-color:var(--k-${f})}`),
-  `@supports (color: color-mix(in srgb, red, red)){${FAMILIES.map((f) => `.lg-sw-${f}{background:color-mix(in srgb,var(--k-${f}) ${LEGEND_TINT}%,var(--surface))}`).join('')}}`,
+  '@media (prefers-color-scheme: dark){:where(:root:not([data-theme="light"])) .lg-sw{border-color:var(--text-3)}}',
+  ':where(:root[data-theme="dark"]) .lg-sw{border-color:var(--text-3)}',
+  ...FAMILIES.map((f) => `.lg-sw-${f}{background:var(--k-${f});box-shadow:inset 0 0 0 3px var(--surface)}`),
+  '.lg-sw-external{border-style:dashed;border-color:var(--text-3)}',
+  '.lg-shape-diamond,.lg-shape-small-diamond{background:var(--surface);box-shadow:none;border-color:var(--text-3);transform:rotate(45deg) scale(.75)}',
+  '.lg-shape-stadium{width:14px;height:8px;border-radius:999px;border-color:var(--text-3)}',
+  '.lg-shape-filled-dot{width:9px;height:9px;border-radius:50%;border-color:var(--text-2);background:var(--text-2)}',
+  '.lg-shape-ringed-dot{width:10px;height:10px;border-radius:50%;border:1.5px solid var(--text-2);background:var(--surface)}',
+  // a toned node's key: a neutral card with the tone's border (css.mjs toneRules)
+  ...Object.keys(TONE_WORD).map((t) => `.lg-tone-${t}{background:var(--surface);border-width:2px;border-color:var(--${t})}`),
 ].join('\n');
-
-// ---- font weights ---------------------------------------------------------------------------
-
-const WANTED_WEIGHT = 600; // what the page's headings and its current chip ask for
-// The weight of `role` (a theme font role) nearest to WANTED_WEIGHT, the heavier on a tie. A weight the font does not
-// ship is drawn by the browser as synthesised bold (Young Serif in press ships 400 only), so the page asks for a real one.
-export function nearestWeight(role, wanted = WANTED_WEIGHT) {
-  const have = Object.keys(role.weights).map(Number).sort((a, b) => a - b);
-  return have.reduce((best, w) => (Math.abs(w - wanted) < Math.abs(best - wanted) || (Math.abs(w - wanted) === Math.abs(best - wanted) && w > best) ? w : best), have[0]);
-}
-
-/** { display, strong }: the heading weight (display font) and the emphasis weight (body font) the theme has. */
-export const themeWeights = (theme) => ({ display: nearestWeight(theme.fonts.display), strong: nearestWeight(theme.fonts.body) });
 
 // ---- build record ----------------------------------------------------------------------------
 
@@ -136,7 +137,6 @@ function buildMeta(build, theme) {
  * recorded in the page's pa-build meta when given.
  */
 export function renderViewer(spec, built, { theme, env = process.env, build }) {
-  const weights = themeWeights(theme);
   const parts = {
     TITLE: esc(spec.title),
     SUBTITLE: spec.subtitle ? `<p class="sub">${esc(spec.subtitle)}</p>` : '',
@@ -144,7 +144,6 @@ export function renderViewer(spec, built, { theme, env = process.env, build }) {
     FAVICON: faviconLink('make-diagram', theme),
     GENERATOR: generatorMeta('make-diagram', spec.generatedBy),
     BUILD_META: buildMeta(build, theme),
-    WEIGHTS: `:root{--display-weight:${weights.display};--strong-weight:${weights.strong}}`,
     TOGGLE_ICONS: toggleIcons(),
     TOGGLE_CSS,
     TOGGLE_JS: inlineCode(TOGGLE_JS),

@@ -66,27 +66,30 @@ that bite hardest in this repo:
 
 ### Lessons from the voiceover dependency fix (PRs #45, #46)
 
-- **Dependencies installed on demand are invisible to `npm audit`.** A package
-  the doctor installs with `npm install <pin> --no-save` (make-motion's
-  voiceover: `kokoro-js`) is not in the skill's `package-lock.json`, so audit,
-  Dependabot and CI all report clean while the user's machine gets the
-  vulnerable tree (PR #45/#46: `sharp` 0.34.5, 3 high). When you add or bump
-  one: (1) audit it with `scripts/audit-on-demand-deps.sh`, which CI also runs
-  weekly in `audit-on-demand-deps.yml` because advisories land without a
-  commit; (2) fix transitive advisories with exact-version `overrides` in the
-  skill's `package.json`, not by waiting on upstream; (3) install from inside
-  the skill folder (`cd <skill-dir> && npm install …`), the form that applies
-  `overrides` on every npm we tried (`--prefix` did too on npm 10.9 and 11.5;
-  a report that it does not on npm 10.8.2 was never reproduced, so do not state
-  it as fact). In a guarded worktree (Shell rules below), run `npm --prefix
-  <absolute skill dir> install …` or a `.scratch/` script instead of `cd … &&`.
+- **Dependencies installed on demand are invisible to the skill's own `npm
+  audit`.** Until 2026-11 make-motion's voiceover (`kokoro-js`) was installed
+  with an unlocked `--no-save` install, so audit, Dependabot and CI all
+  reported clean while the user's machine got the vulnerable tree (PR #45/#46:
+  `sharp` 0.34.5, 3 high). Now make-motion's on-demand installs are `npm ci
+  --ignore-scripts --prefix <skill>/optional/<name>`, from a committed
+  lockfile in that folder, with the folder's own exact-version `overrides`, so
+  `npm audit --package-lock-only` sees them. When you add or bump one: (1)
+  audit it with `scripts/audit-on-demand-deps.sh`, which CI also runs weekly in
+  `audit-on-demand-deps.yml` because advisories land without a commit; (2) fix
+  transitive advisories with exact-version `overrides` in that folder's
+  `package.json`, not by waiting on upstream; (3) keep `--ignore-scripts` on the
+  install while any package in its lockfile has an install script
+  (`onnxruntime-node` downloads Linux x64 CUDA libraries, unhashed;
+  `bin/test/dependency-pins.test.mjs` fails without the flag). In a guarded
+  worktree (Shell rules below), run `npm --prefix <absolute dir> …` or a
+  `.scratch/` script instead of `cd … &&`.
 - **Changing an install command or pin is a cross-surface edit.** The doctor
   fix (`shared/doctor.mjs`, synced into every skill with `node
   bin/sync-shared.mjs`), the runtime error hint (`doctor-hint.mjs`), README,
   USAGE, `references/schema.md` and the changelog all print it. Grep the old
   form across the whole plugin before you push (PR #45 fixed the doctor and
-  missed the hint and schema.md; `bin/test/install-commands.test.mjs` now
-  guards the docs).
+  missed the hint and schema.md; `bin/test/dependency-pins.test.mjs` now
+  guards docs and code).
 - **A pin that fixes a vulnerability must also reach existing installs.** The
   doctor's check must go red for an install made before the pin (see
   `staleOverrides` in `shared/doctor.mjs`), otherwise everyone who already
@@ -161,6 +164,14 @@ to edit when the lineup changes:
 - **Executor tier is the floor for any code/skill change.** Chore tier only
   for the explicit list above — never drafts skill content, never edits a
   `SKILL.md` body or a plugin manifest.
+- **Hard rule: build work runs on the executor tier, not above it.** Every
+  implementer dispatch (a feature, a look, a fix pass, a revision round) sets
+  the executor tier and `effort: high`. It moves to the reviewer or planner
+  tier only through the escalation rule above (effort first, then tier), with
+  the cause written in the run's ledger before the dispatch. Reviewers stay at
+  the reviewer tier at medium; plans and the hardest single verification at
+  the planner tier at high. Make-motion run 2 put most look implementers on
+  the reviewer tier at high by default; the owner ruled that out (2026-11-18).
 - **Caching etiquette.** Subagents do **not** share the session's prompt cache
   — each pays its own context from zero. Anchor `file:line` in prompts, never
   re-paste repo code; continue a warm agent via `SendMessage` instead of

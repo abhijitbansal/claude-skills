@@ -10,6 +10,15 @@
             "--allowedTools", "Read", "Write", "Edit", "Glob", "Grep", "Bash(node:*)", "Bash(npm:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(echo:*)", "Bash(pwd:*)", "Bash(head:*)"],
     "check": ["claude", "--version"]
   },
+  "claude-director": {
+    "cmd": ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits",
+            "--output-format", "stream-json", "--verbose", "--forward-subagent-text", "--include-hook-events",
+            "--setting-sources", "project",
+            "--allowedTools", "Read", "Write", "Edit", "Glob", "Grep", "Agent", "Task", "Bash(node:*)", "Bash(npm:*)", "Bash(ls:*)", "Bash(cat:*)", "Bash(echo:*)", "Bash(pwd:*)", "Bash(head:*)"],
+    "budgetArgs": ["--max-budget-usd", "{budget}"],
+    "agentFile": "claude",
+    "check": ["claude", "--version"]
+  },
   "codex": {
     "cmd": ["codex", "exec", "-s", "workspace-write", "--skip-git-repo-check", "-C", "{cwd}", "{prompt}"],
     "modelArgs": ["-m", "{model}"],

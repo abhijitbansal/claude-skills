@@ -1,0 +1,97 @@
+{
+  "from": "9b8aab5468b0f68195f33eb9e328fdd411e960f4",
+  "windows": {
+    "cut": {
+      "dur": 0,
+      "incomingOnly": false
+    },
+    "slide": {
+      "dur": 0.4,
+      "incomingOnly": false
+    },
+    "punch": {
+      "dur": 0.2,
+      "incomingOnly": true
+    },
+    "match": {
+      "dur": 0.5,
+      "incomingOnly": false
+    }
+  },
+  "nodes": {
+    "cut p0 still": "4f3c2497b3a694a7df0269bfa970cf90bc90a189ee95729626c3a2a539a172ec",
+    "cut p0 frame": "4f3c2497b3a694a7df0269bfa970cf90bc90a189ee95729626c3a2a539a172ec",
+    "cut p0.1 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.1 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.25 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.25 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.5 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.5 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.75 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.75 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.9 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p0.9 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p1 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "cut p1 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "slide p0 still": "4f3c2497b3a694a7df0269bfa970cf90bc90a189ee95729626c3a2a539a172ec",
+    "slide p0 frame": "4f3c2497b3a694a7df0269bfa970cf90bc90a189ee95729626c3a2a539a172ec",
+    "slide p0.1 still": "983edc4f7bffc7a7e58395d1edf9289772a4a05f9f9befe3ef6253c4a869bc76",
+    "slide p0.1 frame": "983edc4f7bffc7a7e58395d1edf9289772a4a05f9f9befe3ef6253c4a869bc76",
+    "slide p0.25 still": "c2a706698939063617998ae827f2dd6aade464c4923b9e0e74f4f00578f751c7",
+    "slide p0.25 frame": "c2a706698939063617998ae827f2dd6aade464c4923b9e0e74f4f00578f751c7",
+    "slide p0.5 still": "4b5d3947ccaaac9c95bd983c0d11c4bf22b5f05747f7285dc816062b400809b1",
+    "slide p0.5 frame": "4b5d3947ccaaac9c95bd983c0d11c4bf22b5f05747f7285dc816062b400809b1",
+    "slide p0.75 still": "31fcdbdd0600cadf066ffc379dc1990a6bf9d49f7527f1e78a3eb3b98793c28a",
+    "slide p0.75 frame": "31fcdbdd0600cadf066ffc379dc1990a6bf9d49f7527f1e78a3eb3b98793c28a",
+    "slide p0.9 still": "30e26640cd5f13b373ba8e449951767f85b97c3e05214c12d2bc6ee9145e86fb",
+    "slide p0.9 frame": "30e26640cd5f13b373ba8e449951767f85b97c3e05214c12d2bc6ee9145e86fb",
+    "slide p1 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "slide p1 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "punch p0 still": "4f3c2497b3a694a7df0269bfa970cf90bc90a189ee95729626c3a2a539a172ec",
+    "punch p0 frame": "4f3c2497b3a694a7df0269bfa970cf90bc90a189ee95729626c3a2a539a172ec",
+    "punch p0.1 still": "fbfdf42a2a38f181c5a7f87e8ef58fc56fe2bb6eff7c38ca19f35f42e0844ac1",
+    "punch p0.1 frame": "fbfdf42a2a38f181c5a7f87e8ef58fc56fe2bb6eff7c38ca19f35f42e0844ac1",
+    "punch p0.25 still": "1edab64f26571d0545f701757679e07f7a0884eec7dc749543904a60e4762724",
+    "punch p0.25 frame": "1edab64f26571d0545f701757679e07f7a0884eec7dc749543904a60e4762724",
+    "punch p0.5 still": "9fb6f1be3b69d0769a24b3cdba52b075192573096eeb49b3205fb68d17f864cb",
+    "punch p0.5 frame": "9fb6f1be3b69d0769a24b3cdba52b075192573096eeb49b3205fb68d17f864cb",
+    "punch p0.75 still": "00b063b97c88475b449d12b33fc37a12137c8f56b1f986ccce052a1ac858cdb0",
+    "punch p0.75 frame": "00b063b97c88475b449d12b33fc37a12137c8f56b1f986ccce052a1ac858cdb0",
+    "punch p0.9 still": "fe74ca1349136931dd44c2e6c430ca9b4ba347bd55e953f37013f4808b035f70",
+    "punch p0.9 frame": "fe74ca1349136931dd44c2e6c430ca9b4ba347bd55e953f37013f4808b035f70",
+    "punch p1 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "punch p1 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "match p0 still": "4f3c2497b3a694a7df0269bfa970cf90bc90a189ee95729626c3a2a539a172ec",
+    "match p0 frame": "4f3c2497b3a694a7df0269bfa970cf90bc90a189ee95729626c3a2a539a172ec",
+    "match p0.1 still": "51821d14cc3cc294ba155cf07a10db9ea46b1f9a1404e873b60f65c131b67cdf",
+    "match p0.1 frame": "51821d14cc3cc294ba155cf07a10db9ea46b1f9a1404e873b60f65c131b67cdf",
+    "match p0.25 still": "5e46e7f0b92731ed1a5029c07eb007419774e5ebe25d7951a4abde98e8b0cfdf",
+    "match p0.25 frame": "5e46e7f0b92731ed1a5029c07eb007419774e5ebe25d7951a4abde98e8b0cfdf",
+    "match p0.5 still": "3a56c1f470eb92d4fc0884e2b99362ff5e608ba938cc49d9818d076ede22910b",
+    "match p0.5 frame": "3a56c1f470eb92d4fc0884e2b99362ff5e608ba938cc49d9818d076ede22910b",
+    "match p0.75 still": "e6f0e73c0f64766e3a76a4a9e7e26a31709ab29f7832f17251f3f56d03d8b0e1",
+    "match p0.75 frame": "e6f0e73c0f64766e3a76a4a9e7e26a31709ab29f7832f17251f3f56d03d8b0e1",
+    "match p0.9 still": "36aad6c5b48732c4b8a67c8001c71d275463513ba08f2377a85a19b456d29716",
+    "match p0.9 frame": "36aad6c5b48732c4b8a67c8001c71d275463513ba08f2377a85a19b456d29716",
+    "match p1 still": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d",
+    "match p1 frame": "5b36234b94a54e876ff3099a8ea72720251f2e437b83c7b1100a36777cbc4e1d"
+  },
+  "film": {
+    "name": "gate-pop",
+    "frames": {
+      "frame 73": "2bbe89c908af310faf81fcaa95009d899f1f73a49748f4efbb4376f7b9ae17e2",
+      "frame 74": "c0769a43765127c630c805c69fe2f01d0a577202a18c005d22b59431d8dd6935",
+      "frame 75": "a3229ead187166d3c70b412bd2d16a73d5c25dde765bebbaf638d7a41bbca9d1",
+      "frame 76": "243b7882626509cfe29bd01b013eb2acaf6dc1e6bd09d6b1f7d3fb320a9743be",
+      "frame 77": "8525e01ba6157b3369132d320156d6d994f411a47a828f40baf3a65f7bba8fd0",
+      "frame 78": "c443de890e636fe2a631d78912fae5f0fa0d56a0bb39b832f69ab2242fa9eafd",
+      "frame 298": "4811a458a55dd5eaf090cce2714ae0206a6fa2e44c0d2d6d0e3a5ca6c892247b",
+      "frame 299": "4bbaea9f087a4b662d48fcd3652ae9caaf5473174e16bcb98d30d57fef592927",
+      "frame 300": "490994ccbea972218fb07f45a773458ceb6997a8fe417936b52847349ef67181",
+      "frame 301": "9e6f886fed386ac152f959e8b5e69bdb757d29527821ca237d94388d911d10f4",
+      "frame 302": "2f671627bdf1dc2c7eb4d4619f14252f5dda139e2cd6449aa72b41fb26a25ba8",
+      "frame 303": "f3f89a8789e4dc6723fc2bc32cb561f845c9ab65f8e6ba8d05cc3c58ef822ccb"
+    }
+  },
+  "regenerated": "transitions Task 6: the smear left apply() (engine/cuts/smear.mjs, engine/page/accumulate.mjs); the slide and punch \"frame\" keys are now their \"still\" keys; transitions Task 6 option A: gate-pop's punch windows are smeared in pop, so their film frames moved"
+}
