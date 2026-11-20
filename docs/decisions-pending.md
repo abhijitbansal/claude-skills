@@ -386,3 +386,7 @@ The what's new film (`plugins/portable-artifacts/skills/make-motion/references/e
 - **Holds and marker:** the hook holds about 0.8-1.0 s and redrawn-dashboard about 1.0 s, under the 1.6 s and 1.2 s rulings; "New" still has several treatments (slug tag, "NEW:" prefix, window title), and the slug numbers start at 02.
 - **Other tools:** keep-warm and session-compass carry "12 ALSO" and "13 ALSO" in the release numbering; only the hook says they are separate. The compass shot never shows the band or says what session-compass is; it is the fourth text-only shot in a row.
 - **Picture:** redrawn-diagram is a thin strip with unreadable nodes; the scene sticker covers the bars and the explainer sticker the verdict; map, diagram and look-tile text is unreadable at phone size; the local voice, the bed and pro against viral are barely shown in picture; LOW: "VS" frames Director and operator as opponents, the ask names no command, the ledger tile shows a fictional "Source:" line, and the v1/v2 counts can read as fewer features.
+
+## Install path after the move to its own repo (2026-11-19)
+
+Install path after the move: the user did not answer; default taken = both marketplaces (new repo is its own marketplace; claude-skills keeps a git-subdir entry). Alternative: drop the claude-skills entry.

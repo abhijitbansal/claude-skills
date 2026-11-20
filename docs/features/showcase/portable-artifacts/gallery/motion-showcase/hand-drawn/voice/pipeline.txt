@@ -1,1 +1,0 @@
-Next, how a file becomes a video. The spec file is loaded in a browser. Then it is encoded as an MP4.

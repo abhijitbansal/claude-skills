@@ -1,1 +1,0 @@
-UI blocks mock up a product screen. A form types itself in, and then a button changes.

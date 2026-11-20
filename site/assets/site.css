@@ -412,7 +412,7 @@ h3.subtitle{font-size:clamp(20px,2.6vw,26px);font-weight:600;margin:0 0 10px}
 .term-label span+span{text-align:right;white-space:nowrap}
 @media(max-width:600px){.cl .ct{white-space:pre-wrap;overflow-wrap:anywhere}}
 
-/* media figures for the portable-artifacts spotlight */
+/* media figures for the spotlight articles (cache-clock) */
 .media-stack{display:grid;gap:14px}
 .media-stack figure{margin:0}
 .media-stack video,.media-stack img{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;object-position:top;border:1px solid var(--border-bright);border-radius:var(--r-md);background:var(--surface3);box-shadow:var(--shadow)}

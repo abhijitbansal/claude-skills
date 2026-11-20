@@ -42,15 +42,15 @@ teardown() { rm -rf "${TMP}"; }
 }
 
 @test "codex mode warns and skips a real directory already in ~/.agents/skills" {
-  # portable-artifacts' installer (or npx skills) can leave a real dir with a
-  # repo skill's name; the rest of the skills must still link and exit 0.
-  mkdir -p "${HOME}/.codex" "${HOME}/.agents/skills/make-dashboard"
-  echo "other tool's copy" > "${HOME}/.agents/skills/make-dashboard/SKILL.md"
+  # Another installer (the portable-artifacts repo's, or npx skills) can leave a real
+  # dir with a repo skill's name; the rest of the skills must still link and exit 0.
+  mkdir -p "${HOME}/.codex" "${HOME}/.agents/skills/debug"
+  echo "other tool's copy" > "${HOME}/.agents/skills/debug/SKILL.md"
   run bash "${INSTALL}" codex
   [ "$status" -eq 0 ]
-  [[ "$output" == *"make-dashboard"* ]] || false
-  [ -d "${HOME}/.agents/skills/make-dashboard" ] && [ ! -L "${HOME}/.agents/skills/make-dashboard" ]
-  grep -q "other tool's copy" "${HOME}/.agents/skills/make-dashboard/SKILL.md"
+  [[ "$output" == *"debug"* ]] || false
+  [ -d "${HOME}/.agents/skills/debug" ] && [ ! -L "${HOME}/.agents/skills/debug" ]
+  grep -q "other tool's copy" "${HOME}/.agents/skills/debug/SKILL.md"
   [ -L "${HOME}/.agents/skills/second-wind" ]   # sorts after the collision
 }
 

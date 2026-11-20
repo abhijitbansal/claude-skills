@@ -5,7 +5,7 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>claude-skills — plugins for Claude Code</title>
-<meta name="description" content="A Claude Code plugin marketplace: an iOS build-and-ship loop, offline dashboards and videos from any agent, two session mods that live above the prompt, an overnight auto-resume for the 5-hour limit, and workflow helpers. One copy command to install; adapters for Codex, Copilot CLI and AGENTS.md agents.">
+<meta name="description" content="A Claude Code plugin marketplace: an iOS build-and-ship loop, two session mods that live above the prompt, an overnight auto-resume for the 5-hour limit, a Copilot cache guard, and workflow helpers. One copy command to install; adapters for Codex, Copilot CLI and AGENTS.md agents.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Crect%20width='32'%20height='32'%20rx='8'%20fill='%238f5410'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='6.5'%20fill='%231b1915'/%3E%3Ccircle%20cx='16'%20cy='16'%20r='3'%20fill='%23f4f1ea'/%3E%3C/svg%3E">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -13,16 +13,16 @@
 <!-- Open Graph / unfurl. Absolute URLs assume the default Pages URL; adjust if you set a custom domain. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="claude-skills">
-<meta property="og:title" content="claude-skills — decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt">
-<meta property="og:description" content="Decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt: files that open offline, built by whatever coding agent you already use.">
+<meta property="og:title" content="claude-skills — plugins for Claude Code">
+<meta property="og:description" content="iOS builds and releases from chat, session mods above the prompt, overnight auto-resume, a Copilot cache guard and workflow helpers. One copy command to install.">
 <meta property="og:url" content="https://abhijitbansal.github.io/claude-skills/">
 <meta property="og:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="claude-skills — plugins for Claude Code, mined from real sessions. 8 plugins, 92 skills, 18 commands.">
+<meta property="og:image:alt" content="claude-skills — plugins for Claude Code, mined from real sessions. 7 plugins, 87 skills, 18 commands.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="claude-skills — plugins for Claude Code">
-<meta name="twitter:description" content="iOS from chat, offline dashboards and videos, session mods above the prompt, overnight auto-resume. One copy command to install.">
+<meta name="twitter:description" content="iOS from chat, session mods above the prompt, overnight auto-resume, a Copilot cache guard. One copy command to install.">
 <meta name="twitter:image" content="https://abhijitbansal.github.io/claude-skills/og.png">
 <link rel="stylesheet" href="assets/site.css">
 <script>(function(){try{var t=localStorage.getItem('theme');if(t==='light'||t==='dark')document.documentElement.setAttribute('data-theme',t)}catch(e){}})()</script>
@@ -50,55 +50,24 @@
   <!-- HERO -->
   <header class="hero">
     <span class="kicker"><span class="pulse"></span>Claude Code plugin marketplace · MIT</span>
-    <h1>Decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt.</h1>
-    <p class="lead">Files that open offline, built by whatever coding agent you already use. Installing their npm packages needs the network, and make-motion also needs ffmpeg and a Chromium. Beside them: iOS apps built, previewed and shipped from chat, test results above the prompt, sessions that resume themselves after the 5-hour limit, and a Copilot extension that asks before a cold prompt cache costs you. Eight plugins and two tools, each from a real job, each one line to install.</p>
+    <h1>Plugins for the Claude Code dev loop, each from a real job.</h1>
+    <p class="lead">iOS apps built, previewed and shipped from chat, test results above the prompt, sessions that resume themselves after the 5-hour limit, and a Copilot extension that asks before a cold prompt cache costs you. Seven plugins and two tools, each one line to install. The artifact skills (dashboards, diagrams, explainers, 3D scenes and MP4 films) have their own repo, <a href="#portable-artifacts">linked below</a>.</p>
     <div class="hero-cmd">
       <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div></div>
       <p class="hint">Paste it into Claude Code, then <code>/plugin install &lt;name&gt;@claude-skills</code> for any plugin below. The skills also port to Codex and Copilot CLI.</p>
     </div>
     <div class="inventory" aria-label="Repository at a glance">
-      <span>8 plugins · 92 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
+      <span>7 plugins · 87 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
       <span>Tested on macOS and Ubuntu</span>
-      <span>Markdown, shell and stdlib Python; portable-artifacts and the Cache Clock report need Node, and make-motion needs ffmpeg and a Chromium</span>
+      <span>Markdown, shell and stdlib Python; the Cache Clock report needs Node</span>
     </div>
   </header>
 
   <!-- SPOTLIGHT -->
   <section id="spotlight">
     <div class="eyebrow">Spotlight</div>
-    <h2 class="title">Artifacts any agent can build, a cost guard for Copilot, and two lines above the prompt.</h2>
-    <p class="section-lead">The newest work: five artifact skills, a Copilot extension and two mods. All of them run locally, and each is one line to install.</p>
-
-    <article class="spot">
-      <div class="spot-media media-stack">
-        <figure>
-          <video id="pa-video" autoplay muted loop playsinline controls preload="metadata" poster="../docs/features/showcase/portable-artifacts/gallery/showreel/pro/poster.jpg" aria-label="A 47-second film rendered by make-motion 2 on a paper-collage desk: a browser window asks where a dashboard number came from, a printed JSON file types itself out, then printed pages show a dashboard with its query open, a diagram, an explainer, a 3D scene and a video frame, and the film ends on the words Open source. On your machine."><source src="../docs/features/showcase/portable-artifacts/gallery/showreel/pro/video.mp4" type="video/mp4"></video>
-          <figcaption><b>/make-motion</b> the showreel: a 46.8 s 1080p film rendered from one JSON file (<code>film.json</code>) in the <code>desk</code> look. It opens on a dashboard number nobody can trace, types out the JSON that makes the page, then shows a printout for each of the five skills and closes on “Open source. On your machine.” It carries a locally made voiceover, a synthesised music bed and sound cues; it plays muted here, so unmute to hear them.</figcaption>
-        </figure>
-        <figure>
-          <a href="../docs/features/portable-artifacts.html#showcase-dashboard"><img src="../docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="The Growth overview dashboard built by make-dashboard: three KPI tiles and four charts, each with a disclosure that shows its SQL" loading="lazy" width="1100" height="1534"></a>
-          <figcaption><b>/make-dashboard</b> “Growth overview from data/sales.csv and data/web_traffic.csv: KPI tiles, revenue by region …” — one self-contained HTML file.</figcaption>
-        </figure>
-      </div>
-      <div class="spot-text">
-        <p class="tagline">portable-artifacts · /make-dashboard · /make-diagram · /make-explainer · /make-motion · /make-scene</p>
-        <h3>Dashboards, diagrams, explainers, 3D scenes and videos, built offline by any agent</h3>
-        <p><code>/make-dashboard</code> turns a data file into one self-contained HTML page of KPI tiles and charts, and every chart expands to show its SQL, row count and refresh time. <code>/make-diagram</code> turns a prompt into an architecture diagram, flowchart, sequence or state diagram as one offline page with zoom, a story player, an Explore panel and full screen. <code>/make-explainer</code> turns a branch, an idea or a plan into one offline page or slide deck of typed sections (a verdict, numbers, files changed, a timeline, a test checklist that remembers its ticks), embedding diagrams, charts, 3D scenes and clips, and a linter rejects filler phrases and leftover placeholders before it builds. Its <code>plan</code> preset makes a page a reviewer answers in the browser (an option per decision, approve or changes, a verdict) and hands back as a checked <code>plan-answers.json</code>, or as the page itself saved with the answers inside. Numbers and their units stay on one line, and the agent you talk to writes the spec and can hand the build command to a cheaper operator agent, through an optional agent file on Copilot and Codex. <code>/make-motion</code> turns a prompt into a script of shots, then a local preview with a scrubber and an MP4 in one of seven looks, from an editorial paper collage to a hand-drawn whiteboard. It makes widescreen films and vertical shorts for Reels, TikTok and Shorts, and is silent unless you ask for sound, then music from your file or a locally synthesised voiceover. It reads version 2 films only; the film above and the <a href="../docs/features/portable-artifacts.html#films">films on the feature page</a> were made with it, and the older clips, explainer and guide made with make-motion 1.x stay as a labelled archive (<a href="../docs/features/portable-artifacts.html#gallery-motion-1-4">clips, explainer and guide</a>). <code>/make-scene</code> turns your data into an explorable 3D city, forest, galaxy or terrain, or lifts a diagram or chart into 3D, with a camera tour, as one offline page. Each page also carries a favicon, an icon theme toggle (except the make-motion preview) and a line saying which model, effort level and agent wrote it. Each skill's doctor reports anything missing before the first build. Tested live on this branch in Claude Code and GitHub Copilot CLI, and in an earlier eval on Codex CLI; Gemini CLI install paths are checked against its docs, not run live; make-scene passed its eval with 10/10 valid builds in one eval run (Claude Haiku in Claude Code, median 1.5 validate runs; <a href="https://github.com/abhijitbansal/claude-skills/blob/main/plugins/portable-artifacts/eval/results/summary-scene-2026-10-19.md">results</a>).</p>
-        <ol class="howlist" aria-label="How portable-artifacts works">
-          <li><b>Offline, and the same result every time.</b> After a one-time install nothing touches the network except your own data files (and an image service, only if you opt in to make-explainer's <code>--image-api</code>), and the same spec always produces the same page or video (the build date in the page footer and a dashboard's refresh time aside). A spec that tries to reach the network is rejected.</li>
-          <li><b>The model's whole job is one small JSON file.</b> Writing a spec that matches a schema is easy work, so this runs on small and local models too. A mistake comes back as a precise message, for example <code>charts[0].query: "rev_by_regin" not found; did you mean "rev_by_region"?</code>, and the agent fixes one field instead of regenerating everything.</li>
-          <li><b>Scripts do the rest.</b> Plain Node scripts validate the spec, build the HTML page, run the preview and render the MP4. "Slow down shot 2" changes one field, so everything else stays exactly as it was. Needs Node 20; make-motion also needs Chromium and ffmpeg, and fetches the Kokoro voice model once if you ask for narration.</li>
-        </ol>
-        <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">npx</span> skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene</code><button class="copy" data-copy="npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene">copy</button></div></div>
-        <p style="margin-top:10px">Optional, on Copilot or Codex: a cheaper operator agent that runs the build command. After an <code>npx skills</code> install, the skill's doctor offers to write a small <code>artifact-builder</code> agent file, or run it yourself (replace <code>&lt;skill-dir&gt;</code> with the installed skill folder):</p>
-        <div class="code cmds"><div class="cl"><code class="ct">node &lt;skill-dir&gt;/scripts/doctor.mjs --fix builder_agent</code><button class="copy" data-copy="node &lt;skill-dir&gt;/scripts/doctor.mjs --fix builder_agent">copy</button></div></div>
-        <div class="links">
-          <a href="../docs/features/portable-artifacts.html#showcase">See the showcase</a>
-          <a href="../docs/features/portable-artifacts.html#gallery">Gallery: dashboards, videos, explainers, plans, diagrams</a>
-          <a href="../docs/features/portable-artifacts.html">Full guide</a>
-        </div>
-      </div>
-    </article>
+    <h2 class="title">A cost guard for Copilot, and two lines above the prompt.</h2>
+    <p class="section-lead">The newest work: a Copilot extension and two mods. All of them run locally, and each is one line to install.</p>
 
     <article class="spot flip" id="cache-clock">
       <div class="spot-media media-stack">
@@ -160,7 +129,7 @@
         </div>
       </div>
     </article>
-    <script>(function(){if(!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))return;['pa-video','cc-video'].forEach(function(id){var v=document.getElementById(id);if(v){v.removeAttribute('autoplay');v.pause();v.controls=true;}});})();</script>
+    <script>(function(){if(!(window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches))return;['cc-video'].forEach(function(id){var v=document.getElementById(id);if(v){v.removeAttribute('autoplay');v.pause();v.controls=true;}});})();</script>
   </section>
 
   <!-- PLUGINS -->
@@ -270,10 +239,26 @@
         <p class="what">Makes Linear the operational centre: <code>/linear-pick</code> implements agent-ready issues end to end, and three autonomy modes gate what agents may touch. <a href="../docs/features/linear-pm.html">Guide</a></p>
       </article>
 
+      <article class="prow" id="portable-artifacts">
+        <div class="name">
+          <h3><a href="https://abhijitbansal.github.io/portable-artifacts/">portable-artifacts</a></h3>
+          <span class="meta">companion plugin · now in its own repo</span>
+          <p class="what">Decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt: files that open offline, built by whatever coding agent you already use.</p>
+          <div class="get">
+            <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/portable-artifacts</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/portable-artifacts">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@portable-artifacts</code><button class="copy" data-copy="/plugin install portable-artifacts@portable-artifacts">copy</button></div><div class="cl"><code class="ct"><span class="k">npx</span> skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene</code><button class="copy" data-copy="npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene">copy</button></div><div class="cl"><code class="ct">git clone https://github.com/abhijitbansal/portable-artifacts</code><button class="copy" data-copy="git clone https://github.com/abhijitbansal/portable-artifacts">copy</button></div><div class="cl"><code class="ct"><span class="k">node</span> portable-artifacts/plugins/portable-artifacts/bin/install.mjs codex</code><button class="copy" data-copy="node portable-artifacts/plugins/portable-artifacts/bin/install.mjs codex">copy</button></div></div>
+            <a class="guide-link" href="https://abhijitbansal.github.io/portable-artifacts/">site and gallery</a> · <a class="guide-link" href="https://github.com/abhijitbansal/portable-artifacts">repository</a>
+          </div>
+        </div>
+        <ul>
+          <li>It used to live in this repo. If you already added this marketplace, <code>portable-artifacts@claude-skills</code> still works: it resolves to the new repo, so existing installs keep updating.</li>
+          <li>Other agents: install the five skills with <code>npx skills</code>, or clone the repo and run its installer for Codex, Copilot CLI, Gemini CLI or any AGENTS.md agent.</li>
+        </ul>
+      </article>
+
       <article class="prow compact">
         <div class="name">
           <h3><a href="../docs/catalog.html">Everything, searchable</a></h3>
-          <span class="meta">92 skills · 18 commands · agents · hooks · CLI</span>
+          <span class="meta">87 skills · 18 commands · agents · hooks · CLI</span>
         </div>
         <p class="what">The catalog lists every skill, command, agent, hook and CLI tool with a search box and type filters, each linked back to the plugin it ships in. <a href="../docs/catalog.html">Open the catalog</a></p>
       </article>
@@ -287,7 +272,7 @@
     <h2 class="title">A plugin is a folder.</h2>
     <p class="section-lead">One marketplace file lists the plugins. Each plugin is a directory of Markdown and scripts that Claude Code reads on install. Nothing is compiled.</p>
     <div class="anatomy">
-      <pre class="tree"><b>.claude-plugin/marketplace.json</b>   <i>lists the 8 plugins</i>
+      <pre class="tree"><b>.claude-plugin/marketplace.json</b>   <i>lists 7 plugins, plus one hosted in its own repo</i>
 
 <b>plugins/ios-dev/</b>
 ├─ .claude-plugin/plugin.json    <i>name, version, description</i>
@@ -321,12 +306,12 @@
   <section id="install">
     <div class="eyebrow">Install</div>
     <h2 class="title">Three ways in.</h2>
-    <p class="section-lead">Claude Code is the main path. The marketplace itself is Markdown and shell; portable-artifacts needs Node 20, the Second Wind CLI is one stdlib Python file, and the Cache Clock report needs Node 18.</p>
+    <p class="section-lead">Claude Code is the main path. The marketplace itself is Markdown and shell, the Second Wind CLI is one stdlib Python file, and the Cache Clock report needs Node 18.</p>
     <div class="install-rows">
 
       <div class="irow">
         <div><h3>Claude Code</h3><p>Inside any session. Install only what you need; each plugin is self-contained.</p></div>
-        <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install ios-dev@claude-skills</code><button class="copy" data-copy="/plugin install ios-dev@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install test-board@claude-skills</code><button class="copy" data-copy="/plugin install test-board@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@claude-skills</code><button class="copy" data-copy="/plugin install portable-artifacts@claude-skills">copy</button></div></div>
+        <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/claude-skills</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install ios-dev@claude-skills</code><button class="copy" data-copy="/plugin install ios-dev@claude-skills">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install test-board@claude-skills</code><button class="copy" data-copy="/plugin install test-board@claude-skills">copy</button></div></div>
       </div>
 
       <div class="irow">
@@ -370,7 +355,7 @@
       <div>
         <b>Guides</b>
         <a href="../docs/features/mods.html">Session mods</a>
-        <a href="../docs/features/portable-artifacts.html">portable-artifacts</a>
+        <a href="https://abhijitbansal.github.io/portable-artifacts/">portable-artifacts</a>
         <a href="../docs/features/ios-dev.html">ios-dev</a>
         <a href="../docs/features/core-workflow.html">core-workflow</a>
         <a href="../docs/features/prompt-craft.html">prompt-craft</a>

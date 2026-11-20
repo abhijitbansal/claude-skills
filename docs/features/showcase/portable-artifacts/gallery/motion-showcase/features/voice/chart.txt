@@ -1,1 +1,0 @@
-A line chart is revealed from left to right.

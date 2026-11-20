@@ -4,7 +4,7 @@ Single-source dev environment seed. Cloned on every machine, referenced by every
 
 ## What this repo is
 
-- **`plugins/<name>/`** — the eight plugins (`ios-dev`, `linear-pm`, `core-workflow`, `second-wind`, `prompt-craft`, `portable-artifacts`, `test-board`, `session-compass`). Each holds its own `skills/`, `commands/`, `agents/` and `hooks/` and installs through the marketplace in `.claude-plugin/marketplace.json`; nothing is symlinked out of this repo any more.
+- **`plugins/<name>/`** — the seven plugins (`ios-dev`, `linear-pm`, `core-workflow`, `second-wind`, `prompt-craft`, `test-board`, `session-compass`). Each holds its own `skills/`, `commands/`, `agents/` and `hooks/` and installs through the marketplace in `.claude-plugin/marketplace.json`; nothing is symlinked out of this repo any more.
 - **`claude-setup.toml`** — declarative manifest: marketplaces, plugins, npx-skills, dotfile mappings. Hand-edit it or let `capture.sh` rewrite it.
 - **`setup/setup.sh`** — idempotent installer. Reads the TOML, brings a machine to the manifest's state.
 - **`setup/capture.sh`** — snapshots the current machine into the TOML and `templates/`, after a secret scan.
@@ -34,7 +34,7 @@ which wind                       # → ~/.local/bin/wind
 claude plugin list               # the plugins from the manifest and from this repo
 ```
 
-End state: Claude Code installed and updated, the manifest's marketplaces registered, its plugins installed at user scope, this repo's own marketplace added from the checkout with all eight plugins installed, npx-skills installed, `~/CLAUDE.md` and `~/.claude/settings.json` copied from `templates/` (a different existing file is backed up as `<name>.bak.<timestamp>` first; `--dry-run` only reports "would back up"), the shared behavioral guidelines merged into `~/CLAUDE.md`, and the `claude-skills-contribute` and `wind` shims on PATH. The `symlinks` step also removes links in `~/.claude/{skills,agents,commands}` that point into this repo, left over from the pre-plugin layout.
+End state: Claude Code installed and updated, the manifest's marketplaces registered, its plugins installed at user scope, this repo's own marketplace added from the checkout with the seven plugins plus portable-artifacts (from its own repo) installed, npx-skills installed, `~/CLAUDE.md` and `~/.claude/settings.json` copied from `templates/` (a different existing file is backed up as `<name>.bak.<timestamp>` first; `--dry-run` only reports "would back up"), the shared behavioral guidelines merged into `~/CLAUDE.md`, and the `claude-skills-contribute` and `wind` shims on PATH. The `symlinks` step also removes links in `~/.claude/{skills,agents,commands}` that point into this repo, left over from the pre-plugin layout.
 
 Which `CLAUDE.md` the setup writes, which plugins it enables, whether the self marketplace is a folder or a GitHub source, and the site wording are open owner decisions: see [`docs/decisions-pending.md`](docs/decisions-pending.md).
 
@@ -115,7 +115,6 @@ Each plugin's skills, commands, agents and hooks are listed in the [skills catal
 | `core-workflow` | `commit`, `contribute`, `/team`, `/explain-branch`, `/cleanup-branches`, the `/learn` lesson capture, the image-parser and web-researcher agents, a shellcheck-on-edit hook and a hook that suggests a lesson skill from an exact error string. |
 | `second-wind` | The `wind` CLI and a skill that resume tmux sessions after the usage limit resets. |
 | `prompt-craft` | `/improve-prompt`, `/plan`, debug, refactor and review lenses, and opt-in guardrails. |
-| `portable-artifacts` | `make-dashboard`, `make-diagram`, `make-explainer`, `make-motion` and `make-scene`: offline HTML pages and MP4 films from a prompt. See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
 | `test-board`, `session-compass` | Two session mods: a test-results band and a session compass above the prompt. |
 
 ## Files Claude reads automatically
@@ -152,7 +151,7 @@ shellcheck setup/*.sh adapters/*.sh
         │
         ▼
   claude-skills/
-  ├── .claude-plugin/marketplace.json  → the eight plugins
+  ├── .claude-plugin/marketplace.json  → the seven plugins plus portable-artifacts (from its own repo)
   ├── plugins/<name>/{skills,commands,agents,hooks}
   └── templates/
 
@@ -226,4 +225,4 @@ adapters/install.sh all
 
 Re-run after adding skills; the script is idempotent and prunes links it created for removed skills. The `codex` adapter links into `~/.agents/skills`, the folder Codex reads; links an older run left in `~/.codex/skills` are not removed, so delete them by hand.
 
-The adapters link skill folders only. `make-dashboard` / `make-diagram` / `make-explainer` / `make-motion` / `make-scene` additionally need `npm ci --ignore-scripts` in their skill folders, and sibling skills beside them; `node plugins/portable-artifacts/bin/install.mjs <host>` handles that (plus Gemini and project-scoped installs). Run any installer against a temporary directory when testing, not this checkout.
+The adapters link skill folders only. The `portable-artifacts` skills (`make-dashboard` / `make-diagram` / `make-explainer` / `make-motion` / `make-scene`) live in their own repo, <https://github.com/abhijitbansal/portable-artifacts>, and need `npm ci --ignore-scripts` in their skill folders plus sibling skills beside them; its installer handles that (plus Gemini and project-scoped installs): `git clone https://github.com/abhijitbansal/portable-artifacts`, then `node portable-artifacts/plugins/portable-artifacts/bin/install.mjs <host>`. In Claude Code: `/plugin marketplace add abhijitbansal/portable-artifacts` then `/plugin install portable-artifacts@portable-artifacts`. Run any installer against a temporary directory when testing, not this checkout.

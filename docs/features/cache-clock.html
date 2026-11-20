@@ -72,7 +72,7 @@
       <h2><span class="ix">01</span> Overview</h2>
       <p>Cache Clock is an extension for GitHub Copilot CLI and VS Code's Copilot chat, modelled on <a href="https://github.com/karanb192/cache-tax">cache-tax</a> for Claude Code. Copilot bills tokens in AI credits, and on Claude and newer GPT models a cache write costs far more than a cache read. Step away longer than the cache lives and your next message, even "give me a recap", rewrites the whole conversation at the write price. Cache Clock shows that clock and that price, and asks before a costly cold send goes out.</p>
       <video controls playsinline preload="metadata" poster="showcase/cache-clock/poster.jpg" style="width:100%;height:auto;aspect-ratio:16/9;margin-top:14px;border:1px solid var(--border);border-radius:var(--r-md);background:#000"><source src="showcase/cache-clock/video.mp4" type="video/mp4"></video>
-      <p style="margin-top:10px"><a href="showcase/cache-clock/video.mp4" download>Download the MP4 ↓</a> (17 s, silent). Made with <a href="portable-artifacts.html">make-motion</a> from <a href="showcase/cache-clock/motion.json">this spec</a>.</p>
+      <p style="margin-top:10px"><a href="showcase/cache-clock/video.mp4" download>Download the MP4 ↓</a> (17 s, silent). Made with <a href="https://abhijitbansal.github.io/portable-artifacts/">make-motion</a> from <a href="showcase/cache-clock/motion.json">this spec</a>.</p>
       <div class="arch reveal" aria-hidden="true"><div class="arch-row" style="gap:6px"><div class="node"><div class="nt">assistant.usage</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">clock per model</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">prompt submitted</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">cold + costly?</div></div><svg width="34" height="16" viewBox="0 0 34 16" style="flex:0 0 auto"><path class="flow-line" d="M2 8 H26" fill="none" stroke="var(--accent)" stroke-width="2"/><path d="M24 3 l6 5 -6 5" fill="none" stroke="var(--accent)" stroke-width="2"/></svg><div class="node"><div class="nt">ask before sending</div></div></div></div>
       <p style="margin-top:14px">Companion pages go deeper: the <a href="showcase/cache-clock/how-it-works.html">visual explainer</a> walks through the clock, the guard and the report step by step; the diagrams map the <a href="showcase/cache-clock/diagram/cache-clock-architecture.html">architecture</a>, <a href="showcase/cache-clock/diagram-install/cache-clock-install.html">every install case</a>, <a href="showcase/cache-clock/diagram-flow/cache-clock-flow.html">every prompt</a>, <a href="showcase/cache-clock/diagram-flow/cache-clock-flow-clock.html">the clock</a> and <a href="showcase/cache-clock/diagram-flow/cache-clock-flow-report.html">heads-up, report and VS Code</a>.</p>
     </section>
@@ -214,8 +214,8 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
           <div class="head"><h3>core-workflow</h3><p class="desc">Opinionated dev workflow: commit + share + team up</p></div>
           <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="linear-pm.html">
           <div class="head"><h3>linear-pm</h3><p class="desc">Linear issues → code, branches, PRs — autonomous end-to-end</p></div>
-          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="portable-artifacts.html">
-          <div class="head"><h3>portable-artifacts</h3><p class="desc">Dashboards and animated explainers from a prompt — offline, any agent</p></div>
+          <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat go reveal" href="https://abhijitbansal.github.io/portable-artifacts/">
+          <div class="head"><h3>portable-artifacts</h3><p class="desc">Dashboards and animated explainers from a prompt — offline, any agent. Now in its own repo</p></div>
           <div class="more"><span>Open guide</span><span class="ar">→</span></div></a><a class="feat ro reveal" href="mods.html">
           <div class="head"><h3>Session mods</h3><p class="desc">test-board and session-compass: test results and session status above the prompt</p></div>
           <div class="more"><span>Open guide</span><span class="ar">→</span></div></a></div>
@@ -235,7 +235,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
         <a href="second-wind.html">Second Wind</a>
         <a href="cache-clock.html">Cache Clock</a>
         <a href="prompt-craft.html">prompt-craft</a>
-        <a href="portable-artifacts.html">portable-artifacts</a>
+        <a href="https://abhijitbansal.github.io/portable-artifacts/">portable-artifacts</a>
         <a href="mods.html">Session mods</a>
         <a href="ios-dev.html">ios-dev</a>
         <a href="core-workflow.html">core-workflow</a>
@@ -257,7 +257,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>8 plugins · 92 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
+      <span>7 plugins · 87 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

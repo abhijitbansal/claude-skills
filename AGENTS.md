@@ -23,16 +23,30 @@ doesn't apply to a plugin/skill monorepo.
 
 - **Plugins** live under `plugins/<name>/` (skills, commands, hooks, agents);
   the machine bootstrap is `setup/setup.sh`, driven by `claude-setup.toml`.
+  `portable-artifacts` is not one of them any more: it lives in
+  <https://github.com/abhijitbansal/portable-artifacts>, and
+  `.claude-plugin/marketplace.json` lists it with a `git-subdir` source (an
+  object, not a path). Its skills are not counted here; any check that reads a
+  marketplace entry's `source` as a directory must skip non-string sources
+  (`scripts/validate_manifests.py` and `scripts/sweep_counts.py` do).
 - **Tests** are bats under `tests/bats/` and pytest under `tests/pytest/`.
   Run `bats tests/bats` after touching anything in `setup/` or a skill's
   shell scripts.
-- **CI** (`.github/workflows/test.yml`) runs on every PR across macOS +
-  Ubuntu: plugin-manifest validation, `shellcheck`, `bats`, `pytest`. A second
-  workflow (`claude-code-review.yml`) posts an automated review; `pages.yml`
-  deploys the site from `docs/`/`site/`.
+- **CI** (`.github/workflows/test.yml`). The `test` job runs on every PR and
+  push to `main` on macOS + Ubuntu: plugin-manifest validation
+  (`scripts/validate_manifests.py`), `shellcheck`, `bats`, `pytest`, and the
+  second-wind pytest. Ubuntu only: the `node` job (cache-clock Node tests),
+  and, on PRs, the `commit-trailers` check and the `plugin-version-guard` job
+  (`scripts/plugin_version_guard.py`; a plugin whose directory existed at the
+  merge base and is gone at HEAD counts as removed, not as a failure; an
+  unresolvable merge base fails the job). A second workflow
+  (`claude-code-review.yml`) posts an automated review; `pages.yml` deploys the
+  site from `docs/`/`site/`.
 - **Site** pages (`docs/`, `site/`) follow the per-line copy-button contract
   documented in `CLAUDE.md` — one copy button per command, comments stripped
-  from `data-copy`.
+  from `data-copy`. `docs/features/portable-artifacts.html` is a redirect stub
+  to the new repo's site (it keeps `location.hash`); sibling feature pages link
+  to <https://abhijitbansal.github.io/portable-artifacts/>.
 
 ---
 
@@ -58,48 +72,16 @@ that bite hardest in this repo:
   bands, kickers, and site index rows. Never hand-edit what the sweep covers.
   It only checks catalog Skill rows, which are still added by hand. Still a
   manual grep: the second-wind and mods feature pages and diagram nodes, the
-  portable-artifacts and mods index rows, word forms ("five"/"5"),
+  mods index row, word forms ("five"/"5"),
   `data-to`/`data-target` attributes, meta/OG descriptions, other diagram node
   lists, "each/every/deep-dive" prose, and plugin/command/agent/hook counts.
   Regenerate `site/og.png` from `site/og.html` only when a total shown there
   changed.
 
-### Lessons from the voiceover dependency fix (PRs #45, #46)
+### portable-artifacts process lives in its own repo
 
-- **Dependencies installed on demand are invisible to the skill's own `npm
-  audit`.** Until 2026-11 make-motion's voiceover (`kokoro-js`) was installed
-  with an unlocked `--no-save` install, so audit, Dependabot and CI all
-  reported clean while the user's machine got the vulnerable tree (PR #45/#46:
-  `sharp` 0.34.5, 3 high). Now make-motion's on-demand installs are `npm ci
-  --ignore-scripts --prefix <skill>/optional/<name>`, from a committed
-  lockfile in that folder, with the folder's own exact-version `overrides`, so
-  `npm audit --package-lock-only` sees them. When you add or bump one: (1)
-  audit it with `scripts/audit-on-demand-deps.sh`, which CI also runs weekly in
-  `audit-on-demand-deps.yml` because advisories land without a commit; (2) fix
-  transitive advisories with exact-version `overrides` in that folder's
-  `package.json`, not by waiting on upstream; (3) keep `--ignore-scripts` on the
-  install while any package in its lockfile has an install script
-  (`onnxruntime-node` downloads Linux x64 CUDA libraries, unhashed;
-  `bin/test/dependency-pins.test.mjs` fails without the flag). In a guarded
-  worktree (Shell rules below), run `npm --prefix <absolute dir> …` or a
-  `.scratch/` script instead of `cd … &&`.
-- **Changing an install command or pin is a cross-surface edit.** The doctor
-  fix (`shared/doctor.mjs`, synced into every skill with `node
-  bin/sync-shared.mjs`), the runtime error hint (`doctor-hint.mjs`), README,
-  USAGE, `references/schema.md` and the changelog all print it. Grep the old
-  form across the whole plugin before you push (PR #45 fixed the doctor and
-  missed the hint and schema.md; `bin/test/dependency-pins.test.mjs` now
-  guards docs and code).
-- **A pin that fixes a vulnerability must also reach existing installs.** The
-  doctor's check must go red for an install made before the pin (see
-  `staleOverrides` in `shared/doctor.mjs`), otherwise everyone who already
-  installed keeps the vulnerable version and is never told. Prove it with a
-  real pre-pin install, not a mock: install without the pin, restore it, run the
-  doctor, run `--fix`, confirm the version moved.
-- **Never assert a root cause you did not reproduce.** "npm ignores overrides
-  under `--prefix`" went into a PR body and a code comment from one
-  environment; a second environment disproved it. Say "reported" and name the
-  environment, as the CHANGELOG now does.
+The voiceover dependency lessons (PRs #45, #46) and the "Shipping a portable-artifacts change" checklist moved with the plugin to <https://github.com/abhijitbansal/portable-artifacts>.
+Changing that plugin, its gallery or its on-demand dependencies is done there, not here.
 
 ---
 
@@ -284,8 +266,8 @@ CI is green and review passes.
 - **Plugin versions.** The `plugin-version-guard` job in `test.yml` fails a PR
   that touches `plugins/<name>/**` and leaves that plugin's
   `.claude-plugin/plugin.json` `version` unchanged. Make one bump per plugin per
-  PR, and one `CHANGELOG.md` heading where the plugin keeps one (today only
-  `portable-artifacts`): one version bump per merged release, not per commit. A
+  PR, and one `CHANGELOG.md` heading where the plugin keeps one (none here
+  today): one version bump per merged release, not per commit. A
   change that ships nothing to users puts `[skip-plugin-bump]` in a commit
   message, which skips the check for the whole PR.
 - **Site/inventory changes** that touch counts or the copy-button contract
@@ -311,49 +293,10 @@ CI is green and review passes.
   `claude plugin test` runs unauthenticated on a CI runner is unconfirmed, so
   there is no CI job for it yet.
 - **Test installs in a temp dir.** Run an installer (`adapters/install.sh`,
-  `plugins/portable-artifacts/bin/install.mjs`, `npx skills add`) against a
+  the portable-artifacts repo's `bin/install.mjs`, `npx skills add`) against a
   temporary directory or a fake `HOME`, never the repo checkout: a project-scope
   install leaves `.agents/`, `.claude/skills/` and `skills-lock.json` that shadow
   the plugin's skills for every later session here.
-
----
-
-## Shipping a portable-artifacts change
-
-Before the PR for any change under `plugins/portable-artifacts/`. These are the
-steps no test already enforces; `sweep_counts.py --check`, the install-command
-guard and the copy-button lint cover the rest.
-
-- **Version and notes.** Bump `plugins/portable-artifacts/.claude-plugin/plugin.json`
-  once (`marketplace.json` carries no per-plugin version). Write the new
-  `CHANGELOG.md` heading as user-facing release notes with behaviour changes
-  first, then copy it into the `#whats-new` block of
-  `docs/features/portable-artifacts.html`, and update the plugin `README.md`
-  and `USAGE.md`.
-- **Shared code.** After editing `shared/`, run
-  `node plugins/portable-artifacts/bin/sync-shared.mjs`, then `--check`.
-- **Goldens** change only for an intended visual change, stated in the commit.
-  Never regenerate one to clear a red test.
-- **Gallery.** Rebuild each page under
-  `docs/features/showcase/portable-artifacts/gallery/` that the change affects,
-  from its source spec; set `SOURCE_DATE_EPOCH` so the stamped date is stable
-  and record the value in the PR body. Run `check.mjs` on each rebuilt page one
-  at a time (one browser at a time) and open the `--shots` PNGs. Hero images
-  and clips come from real files in the repo, never mock-ups.
-  `tests/pytest/test_portable_artifacts_page.py` checks the page. No script
-  lists gallery pages that lack a source spec; check by hand.
-- **A new skill** also needs its `test.yml` matrix row and `npm ci` loop entry,
-  its doctor requirements, and an icon in `shared/icons.mjs`; the full list is "Adding a sibling
-  skill" in `plugins/portable-artifacts/shared/README.md`.
-- **A release showcase** (feature clips, a promo, an explainer with the clips
-  embedded, a guide) follows one order: read the `CHANGELOG.md` entry for the
-  release; render one draft clip per capability, one at a time; render one
-  promo in viral mode (with voiceover only after `doctor --for voiceover` and
-  one ask); build the explainer in a folder where the relative `video` paths
-  resolve (`sections[n].video: file not found` otherwise); write the guide from
-  `USAGE.md`; copy the results into the gallery and run the page test; add the
-  site anchors; zip without `rm`; end the report with the steps only the owner
-  can do.
 
 ---
 

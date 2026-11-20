@@ -60,7 +60,6 @@ cp "${ROOT}/site/apple-touch-icon.png" "${OUT}/apple-touch-icon.png"
 cp -r "${ROOT}/site/assets" "${OUT}/assets"
 cp "${ROOT}"/docs/*.html "${OUT}/" 2>/dev/null || true
 cp "${ROOT}"/docs/features/*.html "${OUT}/features/" 2>/dev/null || true
-cp -r "${ROOT}/docs/features/img" "${OUT}/features/img" 2>/dev/null || true
 cp -r "${ROOT}/docs/features/showcase" "${OUT}/features/showcase" 2>/dev/null || true
 cp "${ROOT}/docs/second-wind/index.html" "${OUT}/second-wind/index.html" 2>/dev/null || true
 # perl -pi works the same on macOS and Linux (sed -i does not).

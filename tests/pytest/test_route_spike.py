@@ -24,10 +24,12 @@ LABELED = REPO_ROOT / "tests" / "fixtures" / "intent-router" / "labeled-prompts.
 # `python3 scripts/route_spike.py` (no model is called). A description edit that
 # drops the number below the floor fails test_description_edit_does_not_regress.
 # Re-baseline in the same commit as an intended improvement or a labeled-set change.
-BASELINE_N = 70
-# Measured 0.71179 before the CAT-106/PA-50 description edits (n=70), 0.74802 after; the floor is the after
-# number rounded down, so the edits cannot be quietly undone. No model is called.
-DESCRIPTION_TIE_FAIR_FLOOR = 0.748
+BASELINE_N = 60
+# Re-measured 2026-11-19 after portable-artifacts moved to its own repo: its make-* skills left this catalog, so
+# the 10 labeled prompts that expected them were dropped (n=70 -> 60). Measured 0.72824 at n=60 with
+# `python3 scripts/route_spike.py`; the floor is that number rounded down. (Before the move: 0.74802 at n=70.)
+# No model is called.
+DESCRIPTION_TIE_FAIR_FLOOR = 0.728
 FLOOR_EPSILON = 1e-9
 
 LOREM = "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor."
@@ -143,8 +145,7 @@ def test_labeled_set_has_one_prompt_per_gated_description():
         "commit", "structured-output-adaptive-thinking-token-bloat", "linear-pick",
         "launchd-git-automation-self-heal", "swiftdata-cloudkit-production-schema",
         "swiftdata-cloudkit-model-rules", "swiftdata-rollback-attribute-restore",
-        "make-explainer", "make-diagram", "make-dashboard", "make-motion",
-        "make-scene", "explain-branch",
+        "explain-branch",
     }
     assert not (gated - expected), f"no labeled prompt for: {sorted(gated - expected)}"
 

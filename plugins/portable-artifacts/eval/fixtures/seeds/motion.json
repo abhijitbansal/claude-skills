@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "mode": "pro",
-  "look": "desk",
-  "shots": [
-    { "id": "title", "show": "statement", "kicker": "This week", "say": "Weekly active teams." },
-    { "id": "count", "show": "number", "cut": "cut", "say": "Twelve thousand teams were active this week.", "value": 12, "suffix": "k", "label": "teams active this week" }
-  ]
-}

@@ -2,7 +2,7 @@
 
 > Visual version: [searchable catalog](catalog.html) (open in a browser)
 
-Eight plugins, one CLI, one adapter script. Install only what you need:
+Seven plugins, one CLI, one adapter script (and a companion plugin that lives in its own repo). Install only what you need:
 
 ```
 /plugin marketplace add abhijitbansal/claude-skills
@@ -163,19 +163,16 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 | `format_on_edit` | hook (PostToolUse, opt-in) | Formats edited files with the installed formatter. Enable via `PROMPT_CRAFT_FORMAT_ON_EDIT=1`. |
 | `structured-output-adaptive-thinking-token-bloat` | skill (mined) | `json_schema`-constrained Claude API calls waste ~5x tokens on adaptive thinking that doesn't improve output quality — omit the `thinking` parameter for schema-constrained calls. |
 
-## portable-artifacts (plugin)
+## portable-artifacts (companion plugin, own repo)
 
-Dashboards, diagrams, explainer pages, 3D scenes and animated videos from a prompt — built locally, offline, from open-source parts, by any coding agent. The model writes one small JSON spec; deterministic Node scripts validate it and build, preview or render. Needs Node.js ≥ 20 (`npm ci` once per skill); `make-motion` also needs Chromium and ffmpeg, and installs the voice package on demand when a voiceover is asked for. `bin/install.mjs` ports all five skills to Codex, Copilot, Gemini CLI and Claude Code.
+Dashboards, diagrams, explainer pages, 3D scenes and animated videos from a prompt, built locally and offline by any coding agent (`make-dashboard`, `make-diagram`, `make-explainer`, `make-motion`, `make-scene`). It moved to its own repo, [abhijitbansal/portable-artifacts](https://github.com/abhijitbansal/portable-artifacts), and its skills are not counted or listed here. This marketplace still lists it with a `git-subdir` source, so `portable-artifacts@claude-skills` keeps installing it.
 
-| Name | Kind | What it does |
-| --- | --- | --- |
-| `make-dashboard` | skill | Prompt + data file (CSV, Parquet, JSON, DuckDB, SQLite, Postgres, MySQL) → `dashboard.json` → one self-contained `index.html` of KPI tiles and Vega-Lite charts. Every chart shows its SQL, row count and refresh time; refresh is one command, no LLM. Invoke `/make-dashboard` (`$make-dashboard` in Codex). |
-| `make-diagram` | skill | Prompt → `diagram.json` topology (architecture, flowchart, sequence or state) → one self-contained HTML page laid out with ELK: zoom and pan, hover tracing, a story player with chapters and beats, an Explore panel, full screen and PNG/SVG export. Offline, no LLM at build time. Invoke `/make-diagram` (`$make-diagram` in Codex). |
-| `make-explainer` | skill | Prompt → `explainer.json` of typed sections (recap, diff review, concept or plan explainer, test checklist, slide deck) → one self-contained HTML page or deck. Scripts validate the spec, lint the prose and render offline; embeds `make-diagram` figures, `make-dashboard` charts, `make-scene` 3D scenes and video clips, so the installer pulls in `make-diagram` and `make-dashboard` (`npx skills add` needs all three named; `make-motion` is optional). No LLM at build time. Invoke `/make-explainer` (`$make-explainer` in Codex). |
-| `make-motion` | skill | Prompt → `film.json`, a script of shots → a local preview page with a scrubber and an MP4. One engine draws it in one of seven looks, from an editorial paper collage to a hand-drawn whiteboard, as a 16:9 `pro` explainer or a 9:16 `viral` short, from sixteen kinds of shot (statements, numbers, lists, quotes, comparisons, charts, maps, timelines, diagrams, code, screenshots, photos and clips). One command validates the film, reviews every shot in a browser, writes review sheets and renders. Audio is opt-in: narration synthesised locally, a music bed or your own file with `beats.mjs` to cut to its beats, and synthesised sound cues are added only when the prompt asks for sound. Also `--poster`, `--subtitles srt\|vtt`, `vars` with `--batch`, and `storyboard.mjs` for a film over 20 s. A change is one field in the film. Reads version 2 films only; a version 1 spec is refused with a pointer to `references/migrating.md`. Invoke `/make-motion` (`$make-motion` in Codex). |
-| `make-scene` | skill | Prompt → `scene.json` → one offline three.js page: your rows become a city, forest, galaxy or terrain, or a `make-diagram` diagram or one `make-dashboard` chart is lifted into 3D, with orbit, exact-value hover, an Explore list and a camera tour. The build recommends a world and prints the alternatives with the one-line command to switch (no model tokens). The model writes only JSON. Invoke `/make-scene` (`$make-scene` in Codex). |
+```
+/plugin marketplace add abhijitbansal/portable-artifacts
+/plugin install portable-artifacts@portable-artifacts
+```
 
-Visual guide: [portable-artifacts](features/portable-artifacts.html).
+Guide and gallery: [abhijitbansal.github.io/portable-artifacts](https://abhijitbansal.github.io/portable-artifacts/).
 
 ## test-board (plugin)
 

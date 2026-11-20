@@ -5,7 +5,7 @@
     "url": "https://github.com/abhijitbansal"
   },
   "metadata": {
-    "description": "Decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt: files that open offline, built by whatever coding agent you already use.",
+    "description": "Claude Code plugins for the dev loop: iOS builds and releases, Linear PM, workflow helpers, long-run resume, prompt craft, test results and session status. Also lists portable-artifacts, which now lives in its own repo.",
     "version": "1.0.0"
   },
   "plugins": [
@@ -36,7 +36,11 @@
     },
     {
       "name": "portable-artifacts",
-      "source": "./plugins/portable-artifacts",
+      "source": {
+        "source": "git-subdir",
+        "url": "https://github.com/abhijitbansal/portable-artifacts.git",
+        "path": "plugins/portable-artifacts"
+      },
       "description": "Host-agnostic, offline, open-source artifact skills: static SQL + Vega-Lite dashboards with per-chart provenance, ELK-laid-out diagrams, HTML explainer pages and slide decks from typed sections, interactive 3D scenes (a city, forest, galaxy or terrain from your data, or a diagram or chart lifted into 3D), and spec-driven animated videos rendered to MP4"
     },
     {
