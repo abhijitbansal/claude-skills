@@ -207,7 +207,7 @@ test("the one-line install is pinned to a tag named once, in install.sh", () => 
   for (const l of curlLines) {
     assert.ok(l.includes(`/${ref}/tools/cache-clock/install.sh`) && !l.includes("/main/tools/cache-clock/install.sh"), l);
   }
-  assert.match(readme, new RegExp(`works once the tag \`${ref}\` exists`));
+  assert.match(readme, new RegExp(`pinned to the release tag \`${ref}\``));
 });
 
 test("a piped install without sha256sum or shasum stops before downloading", () => {

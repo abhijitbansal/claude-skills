@@ -8,17 +8,21 @@
     "repository": {
       "url": "https://github.com/abhijitbansal/claude-skills",
       "provider": "github",
-      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
+      "revision": "517983a7ea9aa95aa5556f34888911b7b463716c"
     }
   },
   "lanes": [
     {
       "id": "gate",
-      "label": "Prompt guard: filters"
+      "label": "Prompt hook: filters and bookkeeping"
     },
     {
       "id": "through",
       "label": "Allowed through"
+    },
+    {
+      "id": "decide",
+      "label": "Prompt guard: the verdict"
     },
     {
       "id": "costly",
@@ -37,348 +41,587 @@
       "col": 0,
       "type": "frontend",
       "label": "Prompt submitted",
-      "sublabel": "snapshot, config, busy",
-      "width": 140,
+      "sublabel": "hook gets the text",
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 101,
-          "end_line": 106
+          "line": 324,
+          "end_line": 326
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 410
+        }
+      ]
+    },
+    {
+      "id": "pingq",
+      "lane": "gate",
+      "col": 1,
+      "type": "security",
+      "label": "Our own ping?",
+      "sublabel": "ping text, ping out",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 327,
+          "end_line": 331
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/keepwarm.mjs",
+          "line": 25,
+          "end_line": 28,
+          "label": "looksLikePingText"
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/keepwarm.mjs",
+          "line": 733,
+          "end_line": 740,
+          "label": "status: inFlight, passive"
         }
       ]
     },
     {
       "id": "cmdq",
       "lane": "gate",
-      "col": 1,
-      "type": "security",
-      "label": "/command or !",
-      "sublabel": "never guarded",
-      "width": 140,
-      "sources": [
-        {
-          "path": "tools/cache-clock/extension/lib/guard.mjs",
-          "line": 11,
-          "end_line": 17
-        }
-      ]
-    },
-    {
-      "id": "offq",
-      "lane": "gate",
       "col": 2,
       "type": "security",
-      "label": "Guard off?",
-      "sublabel": "mode = off",
-      "width": 140,
-      "sources": [
-        {
-          "path": "tools/cache-clock/extension/lib/guard.mjs",
-          "line": 18
-        },
-        {
-          "path": "tools/cache-clock/extension/lib/config.mjs",
-          "line": 8,
-          "label": "defaults"
-        }
-      ]
-    },
-    {
-      "id": "warmq",
-      "lane": "gate",
-      "col": 3,
-      "type": "security",
-      "label": "Warm or unknown?",
-      "sublabel": "clock snapshot state",
-      "width": 140,
-      "sources": [
-        {
-          "path": "tools/cache-clock/extension/lib/guard.mjs",
-          "line": 18
-        },
-        {
-          "path": "tools/cache-clock/extension/lib/clock.mjs",
-          "line": 42,
-          "end_line": 43
-        }
-      ]
-    },
-    {
-      "id": "cheapq",
-      "lane": "gate",
-      "col": 4,
-      "type": "security",
-      "label": "Extra under min?",
-      "sublabel": "cold-warm < $0.10",
-      "width": 140,
-      "sources": [
-        {
-          "path": "tools/cache-clock/extension/lib/guard.mjs",
-          "line": 19
-        },
-        {
-          "path": "tools/cache-clock/extension/lib/config.mjs",
-          "line": 8
-        }
-      ]
-    },
-    {
-      "id": "handler",
-      "lane": "through",
-      "col": 0,
-      "type": "backend",
-      "label": "/cache-clock",
-      "sublabel": "card, help, guard, min",
-      "width": 140,
+      "label": "Classify the text",
+      "sublabel": "shell, local, or prompt",
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 170,
-          "end_line": 184
+          "line": 332,
+          "end_line": 333
         },
         {
-          "path": "tools/cache-clock/extension/lib/config.mjs",
-          "line": 77,
-          "end_line": 96
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 17,
+          "end_line": 21,
+          "label": "LOCAL_COMMANDS"
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 34,
+          "end_line": 40,
+          "label": "classifyPrompt"
+        }
+      ]
+    },
+    {
+      "id": "pendq",
+      "lane": "gate",
+      "col": 3,
+      "type": "backend",
+      "label": "Mark turn pending",
+      "sublabel": "30 s, promptSinceSend",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 334,
+          "end_line": 337
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 133,
+          "end_line": 134,
+          "label": "PROMPT_PENDING_MS"
+        }
+      ]
+    },
+    {
+      "id": "dedupe",
+      "lane": "gate",
+      "col": 4,
+      "type": "backend",
+      "label": "One check at a time",
+      "sublabel": "shared pendingPrompt",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 338,
+          "end_line": 348
+        }
+      ]
+    },
+    {
+      "id": "skip",
+      "lane": "through",
+      "col": 0,
+      "type": "external",
+      "label": "Return, no guard",
+      "sublabel": "nothing marked pending",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 327,
+          "end_line": 333
+        }
+      ]
+    },
+    {
+      "id": "warn",
+      "lane": "through",
+      "col": 5,
+      "type": "frontend",
+      "label": "Warn, then send",
+      "sublabel": "no price, once",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 351,
+          "end_line": 360,
+          "label": "alreadyWarnedUnknown"
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 376
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 55
         }
       ]
     },
     {
       "id": "pass",
       "lane": "through",
-      "col": 3,
+      "col": 2,
       "type": "frontend",
       "label": "Pass silently",
       "sublabel": "model call as usual",
-      "width": 140,
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/guard.mjs",
-          "line": 17,
-          "end_line": 19
+          "line": 44
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 46
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 377
+        }
+      ]
+    },
+    {
+      "id": "handler",
+      "lane": "through",
+      "col": 3,
+      "type": "backend",
+      "label": "/cache-clock",
+      "sublabel": "card and settings",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 401,
+          "end_line": 406
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 654,
+          "end_line": 666
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 570,
+          "end_line": 591
+        }
+      ]
+    },
+    {
+      "id": "offq",
+      "lane": "decide",
+      "col": 4,
+      "type": "security",
+      "label": "Guard off?",
+      "sublabel": "mode = off, or no clock",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 44
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 10,
+          "end_line": 13,
+          "label": "defaults"
+        }
+      ]
+    },
+    {
+      "id": "unkq",
+      "lane": "decide",
+      "col": 3,
+      "type": "security",
+      "label": "Unknown selection?",
+      "sublabel": "reason set, no price",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 45
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/clock.mjs",
+          "line": 71,
+          "end_line": 81
+        }
+      ]
+    },
+    {
+      "id": "warmq",
+      "lane": "decide",
+      "col": 2,
+      "type": "security",
+      "label": "Warm or unknown?",
+      "sublabel": "clock snapshot state",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 46
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/clock.mjs",
+          "line": 82,
+          "end_line": 85
+        }
+      ]
+    },
+    {
+      "id": "unpricedq",
+      "lane": "decide",
+      "col": 1,
+      "type": "security",
+      "label": "Cold, no price?",
+      "sublabel": "once per cold episode",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 47,
+          "end_line": 48
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 351,
+          "end_line": 360
+        }
+      ]
+    },
+    {
+      "id": "cheapq",
+      "lane": "decide",
+      "col": 0,
+      "type": "security",
+      "label": "Extra under min?",
+      "sublabel": "cold-warm < $0.10",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/guard.mjs",
+          "line": 49
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 10,
+          "end_line": 13
         }
       ]
     },
     {
       "id": "busyq",
       "lane": "costly",
-      "col": 5,
+      "col": 0,
       "type": "security",
       "label": "Turn running?",
-      "sublabel": "busy flag: turn_start to idle",
-      "width": 140,
+      "sublabel": "busy: turn_start to idle",
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/guard.mjs",
-          "line": 21,
-          "end_line": 22
+          "line": 51,
+          "end_line": 52
         },
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 133,
-          "end_line": 138
+          "line": 488,
+          "end_line": 490
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 500,
+          "end_line": 504
         }
       ]
     },
     {
       "id": "modeq",
       "lane": "costly",
-      "col": 4,
+      "col": 1,
       "type": "security",
       "label": "Mode warn?",
       "sublabel": "refuse is default",
-      "width": 140,
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/guard.mjs",
-          "line": 22,
-          "end_line": 23
+          "line": 52,
+          "end_line": 53
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 10,
+          "end_line": 11
         }
       ]
     },
     {
       "id": "seenq",
       "lane": "costly",
-      "col": 3,
+      "col": 2,
       "type": "security",
       "label": "Episode refused?",
       "sublabel": "model@expiresAt",
-      "width": 140,
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/guard.mjs",
           "line": 8,
-          "end_line": 9
+          "end_line": 10
         },
         {
           "path": "tools/cache-clock/extension/lib/guard.mjs",
-          "line": 22
-        }
-      ]
-    },
-    {
-      "id": "remember",
-      "lane": "sent",
-      "col": 3,
-      "type": "database",
-      "label": "refused.json",
-      "sublabel": "saved before asking",
-      "width": 140,
-      "sources": [
-        {
-          "path": "tools/cache-clock/extension/lib/config.mjs",
-          "line": 42,
-          "end_line": 69
-        },
-        {
-          "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 112,
-          "end_line": 113
-        }
-      ]
-    },
-    {
-      "id": "note",
-      "lane": "sent",
-      "col": 4,
-      "type": "frontend",
-      "label": "Send with note",
-      "sublabel": "cold price, then model",
-      "width": 140,
-      "sources": [
-        {
-          "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 110
-        },
-        {
-          "path": "tools/cache-clock/extension/lib/format.mjs",
-          "line": 52,
-          "end_line": 54
+          "line": 52
         }
       ]
     },
     {
       "id": "canask",
       "lane": "costly",
-      "col": 2,
+      "col": 3,
       "type": "security",
       "label": "Host can ask?",
       "sublabel": "elicitation + select",
-      "width": 140,
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 73,
-          "end_line": 75
+          "line": 151
         },
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 114,
-          "end_line": 116
+          "line": 157,
+          "end_line": 158
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 383
         }
       ]
     },
     {
       "id": "ask",
       "lane": "costly",
-      "col": 1,
+      "col": 4,
       "type": "frontend",
       "label": "Ask in chat",
       "sublabel": "Send anyway / Don't send",
-      "width": 140,
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 66,
-          "end_line": 88
+          "line": 383
         },
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 114
+          "line": 130,
+          "end_line": 131
         },
         {
           "path": "tools/cache-clock/extension/lib/format.mjs",
-          "line": 43,
+          "line": 40,
           "end_line": 50
+        }
+      ]
+    },
+    {
+      "id": "note",
+      "lane": "sent",
+      "col": 0,
+      "type": "frontend",
+      "label": "Send with note",
+      "sublabel": "cold price, then model",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 376,
+          "end_line": 377
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/format.mjs",
+          "line": 52,
+          "end_line": 57
+        }
+      ]
+    },
+    {
+      "id": "remember",
+      "lane": "sent",
+      "col": 2,
+      "type": "database",
+      "label": "refusals/ file",
+      "sublabel": "0600 file, before asking",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 201,
+          "end_line": 206
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 76,
+          "end_line": 86,
+          "label": "writePrivate"
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 378,
+          "end_line": 381
         }
       ]
     },
     {
       "id": "refuse1",
       "lane": "sent",
-      "col": 2,
+      "col": 3,
       "type": "security",
       "label": "Refuse once",
       "sublabel": "price message",
-      "width": 140,
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 116
+          "line": 391,
+          "end_line": 394
         },
         {
           "path": "tools/cache-clock/extension/lib/format.mjs",
           "line": 34,
-          "end_line": 41
-        }
-      ]
-    },
-    {
-      "id": "go",
-      "lane": "sent",
-      "col": 0,
-      "type": "frontend",
-      "label": "Send anyway",
-      "sublabel": "no abort, no note",
-      "width": 140,
-      "sources": [
-        {
-          "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 115
+          "end_line": 37
         }
       ]
     },
     {
       "id": "hold",
       "lane": "sent",
-      "col": 1,
+      "col": 4,
       "type": "security",
       "label": "Hold the send",
       "sublabel": "abort(), not awaited",
-      "width": 140,
+      "width": 134,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 117,
-          "end_line": 119
+          "line": 298,
+          "end_line": 311
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 313,
+          "end_line": 322
         }
       ],
       "tag": "0 AI credits"
+    },
+    {
+      "id": "go",
+      "lane": "sent",
+      "col": 5,
+      "type": "frontend",
+      "label": "Send anyway",
+      "sublabel": "no abort, no note",
+      "width": 134,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 384,
+          "end_line": 391
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 299,
+          "end_line": 300
+        }
+      ]
     }
   ],
   "edges": [
     {
-      "id": "e-prompt-cmd",
+      "id": "e-prompt-ping",
       "from": "prompt",
-      "to": "cmdq"
+      "to": "pingq"
     },
     {
-      "id": "e-cmd-off",
+      "id": "e-ping-cmd",
+      "from": "pingq",
+      "to": "cmdq",
+      "label": "not ours"
+    },
+    {
+      "id": "e-ping-skip",
+      "from": "pingq",
+      "to": "skip",
+      "label": "our ping",
+      "variant": "dashed",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "channelY": 166
+    },
+    {
+      "id": "e-cmd-pend",
       "from": "cmdq",
-      "to": "offq",
-      "label": "plain prompt"
+      "to": "pendq",
+      "label": "prompt"
     },
     {
-      "id": "e-off-warm",
-      "from": "offq",
-      "to": "warmq",
-      "label": "on"
-    },
-    {
-      "id": "e-warm-cheap",
-      "from": "warmq",
-      "to": "cheapq",
-      "label": "cold"
+      "id": "e-cmd-skip",
+      "from": "cmdq",
+      "to": "skip",
+      "label": "shell, local command",
+      "variant": "dashed",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "right",
+      "via": [
+        [
+          613.2,
+          190
+        ],
+        [
+          330,
+          190
+        ],
+        [
+          330,
+          246
+        ]
+      ]
     },
     {
       "id": "e-cmd-handler",
@@ -389,12 +632,21 @@
       "role": "branch"
     },
     {
-      "id": "e-cmd-pass",
-      "from": "cmdq",
-      "to": "pass",
-      "label": "other /cmd, !",
-      "variant": "dashed",
-      "role": "branch"
+      "id": "e-pend-dedupe",
+      "from": "pendq",
+      "to": "dedupe"
+    },
+    {
+      "id": "e-dedupe-off",
+      "from": "dedupe",
+      "to": "offq",
+      "label": "check"
+    },
+    {
+      "id": "e-off-unk",
+      "from": "offq",
+      "to": "unkq",
+      "label": "on"
     },
     {
       "id": "e-off-pass",
@@ -405,10 +657,46 @@
       "role": "branch"
     },
     {
+      "id": "e-unk-warm",
+      "from": "unkq",
+      "to": "warmq",
+      "label": "known"
+    },
+    {
+      "id": "e-unk-warn",
+      "from": "unkq",
+      "to": "warn",
+      "label": "unknown",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-warm-unpriced",
+      "from": "warmq",
+      "to": "unpricedq",
+      "label": "cold"
+    },
+    {
       "id": "e-warm-pass",
       "from": "warmq",
       "to": "pass",
       "label": "warm, unknown",
+      "variant": "dashed",
+      "role": "branch",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "e-unpriced-cheap",
+      "from": "unpricedq",
+      "to": "cheapq",
+      "label": "priced"
+    },
+    {
+      "id": "e-unpriced-warn",
+      "from": "unpricedq",
+      "to": "warn",
+      "label": "no price",
       "variant": "dashed",
       "role": "branch"
     },
@@ -418,7 +706,9 @@
       "to": "pass",
       "label": "under min",
       "variant": "dashed",
-      "role": "branch"
+      "role": "branch",
+      "fromSide": "top",
+      "toSide": "left"
     },
     {
       "id": "e-cheap-busy",
@@ -464,6 +754,20 @@
       "role": "branch"
     },
     {
+      "id": "e-seen-canask",
+      "from": "seenq",
+      "to": "canask",
+      "label": "no"
+    },
+    {
+      "id": "e-seen-remember",
+      "from": "seenq",
+      "to": "remember",
+      "label": "save",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
       "id": "e-canask-ask",
       "from": "canask",
       "to": "ask",
@@ -495,20 +799,6 @@
       "to": "hold",
       "label": "then abort",
       "variant": "security"
-    },
-    {
-      "id": "e-seen-canask",
-      "from": "seenq",
-      "to": "canask",
-      "label": "no"
-    },
-    {
-      "id": "e-seen-remember",
-      "from": "seenq",
-      "to": "remember",
-      "label": "save",
-      "variant": "dashed",
-      "role": "branch"
     }
   ],
   "cards": [
@@ -516,10 +806,20 @@
       "dot": "rose",
       "title": "Cold-send question",
       "items": [
-        "Where the host can ask, the refusal is a question: Send anyway goes through; Don't send, dismissed or no answer in 5 minutes holds the send (0 AI credits).",
-        "Where it cannot ask (copilot -p) the old refuse-once message appears, then the abort. Resend to pay.",
+        "Where the host can ask, the refusal is a question: Send anyway goes through; Don't send, dismissed or no answer in 5 minutes holds the send (0 AI credits). If the model selection changed while the question was open, even Send anyway is held, with a note.",
+        "Where it cannot ask (such as copilot -p) the refuse-once message appears, then the abort. Resend to pay.",
         "session.abort() is not awaited: awaiting it inside the hook deadlocks. Awaiting select() there did not, measured live 12 Oct 2026 in Copilot CLI 1.0.95 and VS Code.",
-        "Asked once per cold episode (refused.json, 7 days); later sends go through with the note. A queued prompt during a running turn is only priced."
+        "Asked once per cold episode (one file per session in refusals/, kept 7 days); later sends go through with the note. A queued prompt during a running turn is only priced."
+      ]
+    },
+    {
+      "dot": "cyan",
+      "title": "What the hook checks first",
+      "items": [
+        "Our own keep-warm ping returns early, but only while a ping is out, or in a process that does not hold the session lock. Typed ping text alone proves nothing.",
+        "A ! escape and a built-in command return early: they never reach the model, so no turn is marked pending. The built-in list (LOCAL_COMMANDS) is unverified on a real host. Every other /name is guarded, including /compact and skill commands. A local command must be one line.",
+        "A prompt marks a pending turn for 30 s (PROMPT_PENDING_MS) before any check runs. A second prompt that arrives during a check waits for it and shares its result.",
+        "An unknown selection (Auto with no priced stand-in, a qualified provider or tier, a switch with no price) warns once per selection and reason. A cold send on a model with no known price warns once per cold episode: no price-based guard was possible."
       ]
     },
     {
@@ -529,7 +829,7 @@
         "Early eviction: Luna was served cold at 29 of 30 min. The guard trusts cacheExpiresAt and stays quiet; the report counts a prefix break.",
         "The price is an estimate: last input plus answer, not your new message.",
         "With auto, the next prompt may use a different model than the one priced.",
-        "copilot -p: the guard works, but slash commands go to the model as text."
+        "copilot -p: Cache Clock has no reliable -p signal (HOST_IS_INTERACTIVE is always true, unverified on a real host). A built-in command name typed there may reach the model on a cold cache with no guard."
       ]
     }
   ]
