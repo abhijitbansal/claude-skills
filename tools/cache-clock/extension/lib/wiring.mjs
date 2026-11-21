@@ -3,10 +3,11 @@
 
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { attributeUsage } from "./attribution.mjs";
 import { createClock } from "./clock.mjs";
 import { configDir, createKeepWarmStore, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
-import { NOT_A_PROMPT, decide } from "./guard.mjs";
+import { classifyPrompt, decide, episodeKey } from "./guard.mjs";
 import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, keepWarmEstimate, looksLikePingText } from "./keepwarm.mjs";
 import { NANO_AIU_PER_USD, isMainInteraction, normalizeUsage } from "./usage.mjs";
 
@@ -143,6 +144,10 @@ const EXPIRED_NOTE = "cache-clock: no answer in 5 minutes, so that send was held
 // VS Code cancels every extension question in autopilot mode; that arrives as a dismissal.
 const DISMISSED_NOTE = "cache-clock: the question was dismissed or cancelled, so that send was held (0 AI credits). Send it again to send it.";
 
+// No reliable `-p` signal is known (`canAsk` tests for question UI, not `-p`), so treat the host as
+// interactive. Unverified against a real host.
+const HOST_IS_INTERACTIVE = true;
+
 const canAsk = (session) => Boolean(session?.capabilities?.ui?.elicitation) && typeof session?.ui?.select === "function";
 
 /**
@@ -226,10 +231,11 @@ export async function attach({
     if (vsCode && canAsk(state.session)) return quietly(() => askUser(message, [OK]));
     return say(message, vsCode ? { level: "error" } : options);
   };
-  // A process that does not hold the session lock shows no heads-up either: the owner pings or says why not.
+  // A process that does not hold the session lock stays quiet only while the lock holder says it will ping;
+  // a holder that has stopped or has nothing planned leaves this process's heads-up as the only warning.
   const keepWarmWillPing = () => {
     const status = keepWarm?.status();
-    return status?.willPing === true || status?.passive === true;
+    return status?.willPing === true || (status?.passive === true && status?.holderWillPing === true);
   };
   const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, getConfig, say, keepWarmWillPing });
   // While the selection is Auto, the model Copilot last resolved it to stands in for it.
@@ -323,7 +329,8 @@ export async function attach({
     // then loosely, because the host may pass the display text or a transformed prompt. In a process
     // that does not hold the session lock the ping is the other process's, so it always counts there.
     if (looksLikePingText(text) && (kw?.inFlight || kw?.passive)) return undefined;
-    if (NOT_A_PROMPT.test(text.trimStart())) return undefined;
+    // Shell escapes and built-in commands never reach the model: no turn follows, so nothing is pending.
+    if (classifyPrompt(text, { interactive: HOST_IS_INTERACTIVE }) !== "prompt") return undefined;
     // From this moment a turn is about to start, on every host, before any timer is armed. Hook text
     // never starts or restarts a keep-warm window: only a confirmed user turn does (confirmUserTurn).
     state.promptPendingUntil = now() + PROMPT_PENDING_MS;
@@ -342,10 +349,11 @@ export async function attach({
   }
 
   // A selection with no price to guard on (Auto with no priced stand-in, an unseen model,
-  // a provider- or tier-qualified one) is warned about once per selection, not on every send.
+  // a provider- or tier-qualified one) is warned about once per selection and reason, not on every send.
+  // A cold unpriced send has no `reason`, so it is keyed on its cold episode: once per selection and episode.
   const alreadyWarnedUnknown = (snap) => {
     if (snap.extraUsd !== null) return false;
-    const key = JSON.stringify(state.selection);
+    const key = `${JSON.stringify(state.selection)}|${snap.reason ?? episodeKey(snap)}`;
     if (state.unknownWarnedFor === key) return true;
     state.unknownWarnedFor = key;
     return false;
@@ -358,7 +366,7 @@ export async function attach({
     try {
       await refreshSelection();
       snap = snapshot();
-      verdict = decide({ snap, prompt: input?.prompt, config: getConfig(), refusedKey: state.refusedKey, busy: state.busy });
+      verdict = decide({ snap, prompt: input?.prompt, config: getConfig(), refusedKey: state.refusedKey, busy: state.busy, interactive: HOST_IS_INTERACTIVE });
       if (verdict.action === "refuse") question = coldQuestion(snap);
     } catch (err) {
       // Never block the user's message on our own failure, but say that the guard did not run.
@@ -418,7 +426,7 @@ export async function attach({
   keepWarm = buildKeepWarm({
     state, snapshot, getConfig, now, timers, notify: notifyKeepWarm,
     onPlanChange: () => scheduleHeadsUp(),
-    store: keepWarmStore(dir, state.session.sessionId),
+    store: keepWarmStore(dir, state.session.sessionId, { now, timers }),
   });
   keepWarm.start();
   onHostGone(() => keepWarm.stop("shutdown"));
@@ -507,21 +515,18 @@ export async function attach({
     if (!call) return;
     // A ping in flight, or one the watchdog gave up on that may still be answered.
     const { awaitingReply: awaiting, inFlight } = keepWarm.status();
-    // A prompt typed since the last send makes a record that arrives after the ping gave up the user's.
-    // A host that reports user.message tells its own ping apart by that message, so a prompt typed while
-    // the ping is in flight proves nothing there; a host that does not report it has only the prompt.
-    const typedSince = state.promptSinceSend && state.turnSource !== "ping" && (!inFlight || !state.hostReportsUserMessage);
-    // A host that does not report user.message is told apart by the ping awaited. A message
-    // typed after the ping's own message must not take the ping's record (pingOwed).
-    if ((state.pingOwed && awaiting) || state.turnSource === "ping" || (awaiting && state.turnSource !== "user" && !typedSince)) {
+    const { owner, spendsTypedPrompt } = attributeUsage({
+      awaiting, inFlight, pingOwed: state.pingOwed, turnSource: state.turnSource,
+      promptSinceSend: state.promptSinceSend, hostReportsUserMessage: state.hostReportsUserMessage,
+    });
+    if (owner === "ping") {
       state.pingOwed = false;
       state.ownTurn = true;
       fileKeepWarmPing(call, awaiting);
       scheduleHeadsUp();
       return;
     }
-    // Booked as a real call: the typed prompt it answers is spent.
-    if (typedSince) state.promptSinceSend = false;
+    if (spendsTypedPrompt) state.promptSinceSend = false;
     clock.ingest(call);
     replan();
   });

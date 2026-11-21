@@ -63,6 +63,32 @@ test("a provider-qualified selection warns once across two prompts", async () =>
   assert.equal(unknownWarnings(h), 1);
 });
 
+const unpricedSonnet = () => usage({ model: "claude-sonnet-5.5", ttl: 300, input: 200_000, read: 0, write: 200_000, output: 0, prices: [] });
+const unpricedColdWarnings = (h) => h.logs.filter((l) => /no price-based guard was possible/.test(l.message)).length;
+
+test("two prompts in one cold unpriced episode warn once", async () => {
+  const h = host();
+  await h.start();
+  h.emit("assistant.usage", unpricedSonnet());
+  h.now += 10 * MIN;
+  assert.equal(await h.prompt("one"), undefined);
+  assert.equal(await h.prompt("two"), undefined);
+  assert.equal(h.aborts, 0);
+  assert.equal(unpricedColdWarnings(h), 1, `got: ${JSON.stringify(h.logs.map((l) => l.message))}`);
+});
+
+test("two cold unpriced episodes on one selection warn twice", async () => {
+  const h = host();
+  await h.start();
+  h.emit("assistant.usage", unpricedSonnet());
+  h.now += 10 * MIN;
+  await h.prompt("one");
+  h.emit("assistant.usage", { ...unpricedSonnet(), cacheExpiresAt: new Date(h.now + 300_000).toISOString() });
+  h.now += 10 * MIN;
+  await h.prompt("two");
+  assert.equal(unpricedColdWarnings(h), 2, `got: ${JSON.stringify(h.logs.map((l) => l.message))}`);
+});
+
 test("moving to a different unpriced selection warns again", async () => {
   const h = host();
   await warmThenSelect(h, { newModel: "never-seen-model" });

@@ -75,7 +75,9 @@ test("pings that report a cost of 0 cannot unbind the daily dollar limit", async
   assert.ok(ledger.usd >= h.sent.length * 0.02 - 1e-9, "every ping counts for at least the estimate");
 });
 
-test("on a host with no user.message, a call typed during an awaited ping is booked as a call, before the watchdog too", async () => {
+// With no user.message nothing tells the two apart while the ping is out, so its first record is the ping's;
+// the typed prompt's own record, which follows, is the call (it was only the first that was handed over).
+test("on a host with no user.message, a call typed during an awaited ping leaves the first record to the ping and books the next as a call", async () => {
   const h = fakeHost({ config: KW, emitUserMessage: false });
   h.autoReply = false;
   await h.start();
@@ -86,11 +88,55 @@ test("on a host with no user.message, a call typed during an awaited ping is boo
   assert.equal(h.sent.length, 1);
   await h.prompt("real message");
   h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+  await h.command("");
+  assert.match(lastLog(h), /session +1 model call/, "the first record, in flight, was the ping's");
+  assert.match(lastLog(h), /1 ping/);
   h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 190_000, write: 10_000, output: 400 }));
   h.emit("session.idle", {});
   await h.command("");
-  assert.match(lastLog(h), /session +2 model calls/);
+  assert.match(lastLog(h), /session +2 model calls/, "the prompt's own record is a call");
 });
+
+// Pins a known limit, not a fix: with no user.message nothing separates the two records while the ping is out,
+// so a user record that beats the ping's reply is booked as ping spend, and the ping's reply, which follows in
+// its tail, is booked as the user's call. The user's record carries a large cost ($0.50) so that it is told apart
+// from the ping estimate ($0.02): it is the cost that lands in the window and the ledger. What is observable of the
+// ping's reply is its count in the user's tally (the card shows no per-call cost, so "at the ping's cost" is pinned
+// only as: none of that cost is added to the ping spend). A cold-looking user record stops keep-warm at once; a warm
+// one spends the whole $0.50 keep-warm budget, so keep-warm stops as "budget" at the next plan.
+const USER_COST_USD = 0.5;
+for (const [label, record, stopped, stoppedAfterReply] of [
+  ["warm", { read: 190_000, write: 10_000, output: 400, nanoAiu: 5e10 }, null, "budget"],
+  ["cold", { read: 10_000, write: 190_000, output: 400, nanoAiu: 5e10 }, "cold-reply", "cold-reply"],
+]) {
+  test(`documented trade-off: without user.message, a ${label} user record that beats the ping's reply is booked as ping spend`, async () => {
+    const h = fakeHost({ config: KW, emitUserMessage: false });
+    h.autoReply = false;
+    const { keepWarm } = await h.start();
+    h.emit("assistant.turn_start", {});
+    h.emit("assistant.usage", sonnet({ at: iso(T0) }));
+    h.emit("session.idle", {});
+    await h.run(4 * MIN + 10_000);
+    assert.equal(h.sent.length, 1);
+    await h.prompt("real message");
+    h.emit("assistant.turn_start", {});
+    h.emit("assistant.usage", sonnet({ at: iso(h.now), ...record }));
+    assert.deepEqual([keepWarm.status().pings, keepWarm.status().inFlight, keepWarm.status().stopped], [1, false, stopped],
+      "the user's record answered the ping: it is the window's one ping, and the cold one stops keep-warm");
+    const bookedUsd = keepWarm.status().usd;
+    assert.ok(Math.abs(bookedUsd - USER_COST_USD) < 1e-6, `the user's cost is the window's ping spend: ${bookedUsd}`);
+    h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+    h.emit("session.idle", {});
+    await h.command("");
+    assert.match(lastLog(h), /session +2 model calls/, "the first turn and the ping's reply, booked as the user's call; the user's own record is not in the tally");
+    assert.deepEqual([keepWarm.status().pings, keepWarm.status().stopped], [1, stoppedAfterReply], "the ping's reply adds no second ping");
+    assert.equal(keepWarm.status().usd, bookedUsd, "and none of its own cost is added to the ping spend: the costs swapped");
+    const ledger = ledgerOf(h);
+    assert.equal(ledger.pings, 1);
+    assert.ok(Math.abs(ledger.usd - USER_COST_USD) < 1e-6, `the ledger holds the user's cost for the ping's send: ${ledger.usd}`);
+  });
+}
 
 test("in VS Code the daily-limit note is one card per 24 hours, however many turns follow", async () => {
   const h = fakeHost({

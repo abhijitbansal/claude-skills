@@ -52,6 +52,7 @@ export function coldQuestion(snap) {
 export function coldWarn(snap) {
   if (snap.reason && snap.extraUsd === null) return `${NAME}: ${snap.displayName}: next-send cache state and price are unknown (${selectionReason(snap)}). Sending without a price-based guard.`;
   if (snap.reason === "model-switch") return coldQuestion(snap);
+  if (snap.extraUsd === null) return `${NAME}: ${snap.displayName}: the cache went cold and no price is known for this model, so no price-based guard was possible. Sending.`;
   return `${NAME}: sending cold, rewriting about ${tokens(snap.contextTokens)} tokens for ${usd(snap.coldUsd)} (warm: ${usd(snap.warmUsd)}).`;
 }
 
@@ -180,7 +181,8 @@ export const HELP = [
   "  Cache Clock asks before sending: Send anyway, or Don't send (no model call, 0 AI credits).",
   "  It asks once per cold cache; after that your sends go through with a price note.",
   "  Where it cannot ask (copilot -p), it refuses the send once instead; send it again to pay.",
-  "  It never stops slash commands, ! shell commands, or a message typed while a turn is running.",
+  "  It never stops local commands (/model, /clear, ...), ! shell commands or a message sent mid-turn.",
+  "  Skill commands (/name ...) are guarded like any prompt.",
   "  Model switches use the selected model's observed prices and the latest conversation size.",
   "  Cache reuse after a switch is unknown; with known prices, it asks about a possible rewrite.",
   "  Auto is priced as the model it last resolved to. Unresolved or unpriced Auto warns once and sends.",

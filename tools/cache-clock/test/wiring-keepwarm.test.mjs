@@ -510,6 +510,44 @@ test("a process that does not hold the lock shows no heads-up beside the owner's
   assert.match(lastLog(h2), /keep-warm  handled by another process of this session/);
 });
 
+const windowFile = (dir, id) => join(dir, "keepwarm", `${createHash("sha256").update(id).digest("hex")}.json`);
+
+// Task 5: the lock holder says in the window file whether it will ping, and a passive process believes it.
+test("a passive process shows the heads-up when the holder will not ping", async () => {
+  const alive = new Set([1, 2]);
+  const config = { ...KW, keepWarmMaxUsd: 0.01, keepWarmPayback: false }; // one ping costs more than the budget
+  const h1 = fakeHost({ config, alive });
+  const h2 = fakeHost({ config, dir: h1.dir, pid: 2, alive });
+  await h1.start();
+  await h2.start();
+  await h1.turn();
+  await h2.turn();
+  for (let i = 0; i < 40; i += 1) {
+    await h1.run(10_000);
+    await h2.run(10_000);
+  }
+  assert.equal(h1.sent.length, 0, "the holder never pings");
+  assert.ok(h2.logs.some((l) => /goes cold in/.test(l.message)), "so the passive process warns that the cache will go cold");
+  assert.equal(JSON.parse(readFileSync(windowFile(h1.dir, "s-1"), "utf8")).willPing, false, "and the holder says so in the window file");
+});
+
+test("a passive process stays quiet when the holder will ping", async () => {
+  const alive = new Set([1, 2]);
+  const h1 = fakeHost({ config: KW, alive });
+  const h2 = fakeHost({ config: KW, dir: h1.dir, pid: 2, alive });
+  await h1.start();
+  await h2.start();
+  await h1.turn();
+  await h2.turn();
+  for (let i = 0; i < 26; i += 1) {
+    await h1.run(10_000);
+    await h2.run(10_000);
+  }
+  assert.ok(h1.sent.length > 0, "the holder pings");
+  assert.equal(JSON.parse(readFileSync(windowFile(h1.dir, "s-1"), "utf8")).willPing, true, "and says so in the window file");
+  assert.ok(!h2.logs.some((l) => /goes cold in/.test(l.message)), "the passive process adds no heads-up beside those pings");
+});
+
 test("when keep-warm has stopped, the heads-up works again", async () => {
   const h = fakeHost({ config: { ...KW, keepWarmMaxUsd: 0.04, keepWarmPayback: false } });
   await h.start();
@@ -609,6 +647,67 @@ test("a hook prompt alone never starts a window; the user's message event does",
   h.emit("user.message", { content: "from a system source", source: "system" });
   await h.command("");
   assert.match(lastLog(h), /keep-warm  on · 2h50m left/, "a message that is not the user's does not restart it");
+});
+
+// A skill command (`/name args`) reaches the model, so its turn is pending like any prompt; a local command's is not.
+test("a /skill prompt marks a turn pending before any exemption, so keep-warm waits for it", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(230_000);
+  await h.prompt("/some-skill x");
+  await h.run(20_000);
+  assert.equal(h.sent.length, 0, "no ping while the skill's turn is about to start");
+});
+
+// h.turn() always emits user.message; a host that never does confirms its first turn by a bare turn_start.
+const firstTurnWithoutUserMessage = (h) => {
+  h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", sonnet({ at: iso(h.now) }));
+  h.emit("session.idle", {});
+};
+
+// The tail of a ping's turn is still "awaited"; a skill typed inside it is the user's call, not more ping spend.
+test("a /skill turn's usage within the tail window is a user call", async () => {
+  const h = fakeHost({ config: KW, emitUserMessage: false });
+  h.replyToPing = () => {
+    h.emit("assistant.turn_start", {});
+    h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+  };
+  const { keepWarm } = await h.start();
+  firstTurnWithoutUserMessage(h);
+  await h.run(4 * MIN + 10_000);
+  assert.equal(h.sent.length, 1);
+  assert.equal(keepWarm.status().awaitingReply, true, "the ping's tail is open");
+  await h.prompt("/some-skill x");
+  h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 200_000, write: 1_000, output: 400 }));
+  await h.command("");
+  assert.match(lastLog(h), /session +2 model calls/, "the skill's call is in the tally");
+  assert.match(lastLog(h), /1 ping · \$0\.02/, "and none of its cost was filed as ping spend");
+});
+
+test("on a host with no user.message, a prompt typed while a ping is in flight leaves the first record to the ping", async () => {
+  const h = fakeHost({ config: KW, emitUserMessage: false });
+  h.autoReply = false;
+  await h.start();
+  firstTurnWithoutUserMessage(h);
+  await h.run(4 * MIN + 10_000);
+  assert.equal(h.sent.length, 1);
+  await h.prompt("typed meanwhile");
+  h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+  await h.command("");
+  assert.match(lastLog(h), /session +1 model call/, "the ping's record is not a user call");
+  assert.match(lastLog(h), /1 ping · \$0\.02/);
+});
+
+test("a local command is not a turn: keep-warm still pings on schedule", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(230_000);
+  await h.prompt("/model claude-sonnet-5.5");
+  await h.run(20_000);
+  assert.equal(h.sent.length, 1);
 });
 
 test("a host with no user.message confirms a turn by a turn_start that is not our own send", async () => {

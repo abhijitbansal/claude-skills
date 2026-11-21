@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClock } from "../extension/lib/clock.mjs";
-import { decide } from "../extension/lib/guard.mjs";
+import { LOCAL_COMMANDS, classifyPrompt, decide, episodeKey } from "../extension/lib/guard.mjs";
+import { coldWarn } from "../extension/lib/format.mjs";
 import { normalizeUsage } from "../extension/lib/usage.mjs";
 import { PING_PROMPT } from "../extension/lib/keepwarm.mjs";
 import { usage, pingUsage, T0, MIN } from "./fixtures.mjs";
@@ -139,8 +140,49 @@ const cfg = { mode: "refuse", minUsd: 0.1 };
 test("decide guards prompts that merely start with a path, but not commands or shell escapes", () => {
   assert.equal(decide({ snap: coldSnap, prompt: "/etc/hosts is broken, fix it", config: cfg }).action, "refuse");
   assert.equal(decide({ snap: coldSnap, prompt: "/model claude-sonnet-5.5", config: cfg }).action, "allow");
-  assert.equal(decide({ snap: coldSnap, prompt: "/compact", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "/compact", config: cfg }).action, "refuse");
   assert.equal(decide({ snap: coldSnap, prompt: "!git status", config: cfg }).action, "allow");
+});
+
+test("decide guards a model-backed skill command on a cold priced snapshot", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: "/some-skill do x", config: cfg }).action, "refuse");
+});
+
+test("decide guards any slash text in -p mode", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: "/help", config: cfg, interactive: false }).action, "refuse");
+});
+
+test("decide still allows local commands and shell escapes", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: "/model claude-sonnet-5.5", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "/cache-clock status", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "!ls", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "!ls", config: cfg, interactive: false }).action, "allow");
+});
+
+test("classifyPrompt names each kind of submitted text", () => {
+  assert.equal(classifyPrompt("!ls", { interactive: true }), "shell");
+  assert.equal(classifyPrompt("  /model x", { interactive: true }), "local-command");
+  assert.equal(classifyPrompt("/CACHE-CLOCK", { interactive: true }), "local-command");
+  assert.equal(classifyPrompt("/some-skill x", { interactive: true }), "prompt");
+  assert.equal(classifyPrompt("/etc/hosts is broken", { interactive: true }), "prompt");
+  assert.equal(classifyPrompt("/help", { interactive: false }), "prompt");
+  assert.equal(classifyPrompt("explain this", { interactive: true }), "prompt");
+  assert.ok(LOCAL_COMMANDS.has("model"));
+  assert.ok(!LOCAL_COMMANDS.has("compact"));
+});
+
+test("classifyPrompt knows the other built-in commands that never call the model", () => {
+  for (const name of ["mcp", "agent", "share", "feedback", "context", "list-dirs", "reset-allowed-tools", "user", "terminal-setup"]) {
+    assert.equal(classifyPrompt(`/${name}`, { interactive: true }), "local-command", name);
+  }
+  assert.equal(classifyPrompt("/mcp show", { interactive: true }), "local-command");
+});
+
+test("a local command is one line: text after a newline makes it a prompt", () => {
+  assert.equal(classifyPrompt("/clear\nsummarize this whole repo", { interactive: true }), "prompt");
+  assert.equal(classifyPrompt("/model x\nand then do this", { interactive: true }), "prompt");
+  assert.equal(classifyPrompt("/clear\n", { interactive: true }), "local-command", "a trailing newline alone is still one line");
+  assert.equal(decide({ snap: coldSnap, prompt: "/clear\nlong prompt", config: cfg }).action, "refuse");
 });
 
 test("decide only warns while a turn is running", () => {
@@ -164,9 +206,29 @@ test("decide allows slash commands, warm caches and cheap cold sends", () => {
   assert.equal(decide({ snap: { ...coldSnap, state: "warm" }, prompt: "hi", config: cfg }).action, "allow");
   assert.equal(decide({ snap: { ...coldSnap, state: "unknown" }, prompt: "hi", config: cfg }).action, "allow");
   assert.equal(decide({ snap: { ...coldSnap, extraUsd: 0.05 }, prompt: "hi", config: cfg }).action, "allow");
-  assert.equal(decide({ snap: { ...coldSnap, extraUsd: null }, prompt: "hi", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: { ...coldSnap, state: "warm", extraUsd: null }, prompt: "hi", config: cfg }).action, "allow");
   assert.equal(decide({ snap: null, prompt: "hi", config: cfg }).action, "allow");
   assert.equal(decide({ snap: coldSnap, prompt: "hi", config: { ...cfg, mode: "off" } }).action, "allow");
+});
+
+const unpricedCold = { ...coldSnap, displayName: "Mystery 1", prices: null, extraUsd: null, coldUsd: null, warmUsd: null };
+
+test("decide warns on a cold unpriced snapshot", () => {
+  const verdict = decide({ snap: unpricedCold, prompt: "hi", config: cfg });
+  assert.equal(verdict.action, "warn");
+  assert.equal(verdict.unpriced, true);
+  assert.equal(verdict.key, episodeKey(unpricedCold));
+});
+
+test("decide stays silent for a cold unpriced snapshot when the guard is off", () => {
+  assert.equal(decide({ snap: unpricedCold, prompt: "hi", config: { ...cfg, mode: "off" } }).action, "allow");
+});
+
+test("coldWarn names the missing price for a cold unpriced snapshot", () => {
+  const text = coldWarn(unpricedCold);
+  assert.match(text, /no price-based guard was possible/);
+  assert.equal(text.includes("?"), false);
+  assert.equal(text, "cache-clock: Mystery 1: the cache went cold and no price is known for this model, so no price-based guard was possible. Sending.");
 });
 
 test("decide refuses a costly cold send once, then lets the resend through with a warning", () => {

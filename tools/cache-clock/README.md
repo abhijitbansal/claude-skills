@@ -20,7 +20,7 @@ and a [17-second video](../../docs/features/showcase/cache-clock/video.mp4).
 One line, no clone and no Node needed (the extension runs inside Copilot's own runtime):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.2.0/tools/cache-clock/install.sh | sh
 ```
 
 That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` moves
@@ -29,7 +29,7 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
 The one-line install is pinned to a release tag, not to `main`, and checks a SHA-256 for
 every file it downloads against the list inside the script. A file that does not match
 stops the install and leaves nothing behind. The piped install
-works once the tag `cache-clock-v1.1.0` exists; the owner creates it on the merge commit,
+works once the tag `cache-clock-v1.2.0` exists; the owner creates it on the merge commit,
 and until then every curl line here answers 404. Install from a clone (below) meanwhile.
 After any edit under `extension/`, run `node tools/cache-clock/bin/checksums.mjs --write`;
 the tests fail on a stale list.
@@ -41,7 +41,7 @@ the tests fail on a stale list.
   `~/.copilot/extensions`. Install it into each repo you use it in, from that repo:
 
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh -s -- --project
+  curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.2.0/tools/cache-clock/install.sh | sh -s -- --project
   ```
 
   That copies it into `<git root>/.github/extensions/cache-clock`; commit it to share it
@@ -157,10 +157,12 @@ cache-clock · Claude Sonnet 5.5
   `session.abort()` without awaiting it (awaiting inside the hook deadlocks), so no model
   call happens. The episode is remembered per session in
   `~/.copilot/cache-clock/refusals/<session-hash>.json` for a week, even across processes
-  (`copilot --resume … -p`). Slash commands and `!` shell escapes are never guarded. A
+  (`copilot --resume … -p`). Local commands (`/model`, `/clear`, …) and `!` shell escapes are never guarded; skill commands are. A
   message queued while a turn is running only gets the note: stopping it then would
   cancel the running turn. After a compaction the next send is exempt, since the context
-  was rewritten anyway.
+  was rewritten anyway. A cold send on a model with no known price cannot be priced: the
+  guard warns once per cold episode ("the cache went cold and no price is known for this
+  model…") and sends.
 - **Model switches.** The destination model's previous clock cannot prove that it cached
   the current conversation. The card says unknown; with destination prices previously
   observed in this session, the guard asks about a *possible* rewrite of the latest
@@ -270,7 +272,7 @@ A live check is pending; this section changes with its result (see "Live check" 
   5-minute cache), or when their cost plus the next ping would pass `keepWarmDailyMaxUsd` (default
   $2.00; `/cache-clock keepwarm daily 2.00`, 0.10 to 20). It stops with `daily-limit` and says so once
   per 24 hours per session. Only the passage of time removes entries: a new window, off and on, a
-  reload or another process do not. A ledger file that exists but cannot be parsed stops keep-warm
+  reload or another process do not. The lock holder compacts the file when it grows past 64 KiB. A ledger file that exists but cannot be parsed stops keep-warm
   with `ledger-failed` (one note, delete the file to reset it); a half-written last line is ignored.
 - **When it holds off (it does not stop; it waits).** A turn is running, or you just submitted
   a prompt whose turn has not started (it looks again when that flag expires); a question card is open
@@ -280,7 +282,10 @@ A live check is pending; this section changes with its result (see "Live check" 
   session's lock; the cache is cold or its state unknown. The card shows the last reason in words.
 - **Heads-up.** The heads-up before expiry stays quiet only while a ping is really planned or out.
   When keep-warm is on but nothing will ping (any hold above, a stop, a question open), the heads-up
-  works as before.
+  works as before. A process that does not hold the session lock follows the same rule through the
+  holder: the holder writes `willPing` in the shared window file whenever it plans, and the other
+  process stays quiet only while that says a ping is planned or out. If the holder has stopped or
+  has nothing planned, the other process's heads-up shows.
 - **Spend.** Read from the ping's own usage event, `copilotUsage.totalNanoAiu` (nano-AIU
   ÷ 1e11 = dollars); every model call inside the ping's turn counts, and the ping itself once.
   A ping whose usage still arrives within 10 minutes of the 2-minute watchdog, or after its idle,
@@ -292,7 +297,9 @@ A live check is pending; this section changes with its result (see "Live check" 
   one keep-warm instance per session ping. It records the pid and an instance id, so two instances in
   one process cannot both own it. It is created whole (a hard link to a finished file), a crashed
   holder's lock is replaced by renaming a finished file over it, and ownership is confirmed again
-  before every ping and every write. With no stored window, keep-warm waits for your next confirmed
+  before every ping and every write. The holder touches the lock file every 10 minutes, and a lock
+  untouched for 30 minutes is taken over even when its pid is alive (a reused pid or a suspended
+  process). With no stored window, keep-warm waits for your next confirmed
   message: a missing file never grants a fresh budget.
 - **Notes.** Stop notes and the stalled-question note reach VS Code's chat as a card where the host
   can ask; where it cannot they are warnings in its log, never error boxes. The card shows the state
@@ -445,7 +452,11 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   37.2k estimated in the capture above). Pulling the other way, Copilot's shared system
   prefix (~10k tokens) often stays cached, so on a long idle a little less is rewritten.
 - **`-p` mode.** The guard works in `copilot -p` as a refuse-once, but slash commands
-  there go to the model as text, so `/cache-clock` needs the interactive CLI.
+  there go to the model as text, so `/cache-clock` needs the interactive CLI. `-p` follows
+  the same rule as the interactive CLI: local commands are exempt, other slash text is
+  guarded. Cache Clock cannot tell `-p` from the interactive CLI, so a local-command name
+  typed in `-p` (for example `/help`) may reach the model cold with no guard and no note.
+  How the host treats slash text in `-p` is unverified.
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
   When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is
   billed cold and the guard stays quiet; the report counts it as a prefix break.

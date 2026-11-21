@@ -94,13 +94,13 @@ with a per-repo install (`install.sh --project`) and `"chat.canvases.enabled": t
 VS Code settings.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh -s -- --project   # VS Code: run in each repo
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.2.0/tools/cache-clock/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.2.0/tools/cache-clock/install.sh | sh -s -- --project   # VS Code: run in each repo
 node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # what cold sends already cost you
 ```
 
 Then run `/cache-clock help` in Copilot. The install is pinned to the release tag
-`cache-clock-v1.1.0` and checks a SHA-256 for every file; the curl lines work once that tag
+`cache-clock-v1.2.0` and checks a SHA-256 for every file; the curl lines work once that tag
 exists. Optional keep-warm is off until `/cache-clock keepwarm on` and it costs money: it
 keeps the cache warm for 3 hours after your last message (up to 12) and stops at payback,
 the budget, the window end or the daily limit. The setting is global, but each open session

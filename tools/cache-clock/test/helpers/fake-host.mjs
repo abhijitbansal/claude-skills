@@ -78,7 +78,7 @@ export function fakeHost({ config = { mode: "refuse", minUsd: 0.1, headsUpMin: 5
   host.run = async (ms, step = 10_000) => { for (const end = host.now + ms; host.now < end;) { host.advance(step); await flush(); } };
   host.start = () => attach({
     joinSession: host.joinSession, now: () => host.now, timers: host.timerApi, dir, readHistory, env,
-    keepWarmStore: (d, id) => createKeepWarmStore(d, id, { pid: host.pid, isAlive: (p) => host.alive.has(p) }),
+    keepWarmStore: (d, id, injected) => createKeepWarmStore(d, id, { ...injected, pid: host.pid, isAlive: (p) => host.alive.has(p) }),
     onHostGone: (fn) => { host.hostGone = fn; },
   });
   host.dir = dir;

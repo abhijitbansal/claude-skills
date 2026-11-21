@@ -12,21 +12,22 @@ set -eu
 
 # The release tag the one-line install downloads from, so a push to main changes nothing for it.
 # The only place the tag is spelled; the README's curl lines name it too, and a test checks they agree.
-REF="cache-clock-v1.1.0"
+REF="cache-clock-v1.2.0"
 BASE_URL="${CACHE_CLOCK_BASE_URL:-https://raw.githubusercontent.com/abhijitbansal/claude-skills/$REF/tools/cache-clock/extension}"
 # Every file the extension ships; a test keeps this list in step with extension/.
 # extension.mjs comes last, so an interrupted download never looks like an extension.
-FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/keepwarm.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
+FILES="report.mjs lib/attribution.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/keepwarm.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
 # BEGIN SHA256 (generated: node tools/cache-clock/bin/checksums.mjs --write)
 SUMS='1acecfbc1bde5c37c350f7bcfa4d88bdea028c7dd06ec6fede2c9100c491fee4  report.mjs
+92e7b928928979e3bd7830ea87bf9bd536dddea1b956b689a2d5f1dccc88af5b  lib/attribution.mjs
 2911b54a5a81da269e31cde0651963d28dfd65f426e7c9e0d3c3d2b65c7bc567  lib/clock.mjs
-13ed66afd118607dfe672c468b868a087a09428e619b502d186e2c809a13ccd3  lib/config.mjs
-a8922ba08307dd846e02df2a24a344651fc096d5b3ce7ad513c4c6aa934fc7a6  lib/format.mjs
-9ef37ae0ada40d427aac12b9e24736f60ed1a1015901b3052d24bb75bd343d86  lib/guard.mjs
+46eecfb428f11b565df33bf5cbeb74e615423e46b16bf255b6d6a99d80279e8d  lib/config.mjs
+18f2d71b47120246d1649a12e7d54b74d5ca880caa7774cbb6f2fb6e87b57174  lib/format.mjs
+327d3e23e0d29a28958590b838bb78fd48838deeec5b21c150fb5d17ce11162e  lib/guard.mjs
 4a29370f5e6ef4abb3d1002a503a26729249178cffbd7e661d018b9525d2424c  lib/history.mjs
-90b6c392b2f4eff2bdbbf94f390b09425e0eac472ab6ea6f2af234ba40848f63  lib/keepwarm.mjs
+fd7acea5b2dbe548dfc875134a9b0f4d8efbccf7cf57ac62791b145cd30f0777  lib/keepwarm.mjs
 817b122f5026b3e7c7bb79284120907f92a7f051f2afe62eeaf4ebc9ad7746b2  lib/usage.mjs
-db7a6158320a368b6eab5a4e2aede0dd007b188562862f4762914378727b215a  lib/wiring.mjs
+3d5bb8c2a69dfb921abde793a10751b1b42a09b5344812066759feff4b2d57bb  lib/wiring.mjs
 f65bff6539a71bbe20054aa169ab7a8cd8c38e1883c715738676d859349153bc  extension.mjs
 '
 # END SHA256

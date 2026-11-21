@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createKeepWarmStore } from "../extension/lib/config.mjs";
+import { createKeepWarmStore, LEDGER_COMPACT_BYTES, LOCK_HEARTBEAT_MS, LOCK_STALE_MS } from "../extension/lib/config.mjs";
 
 const NOW = 1_800_000_000_000;
 const HOUR = 3_600_000;
@@ -203,7 +203,7 @@ test("the ledger remembers when the daily-limit note was last shown, and treats 
   assert.deepEqual([seen.pings, seen.usd], [1, 5], "an entry dated in the future counts as now: it is neither hidden nor dropped");
 });
 
-test("compacting the ledger, at start-up only, drops just the entries 24 hours old, atomically, and gives way to a write that races it", (t) => {
+test("compacting the ledger drops just the entries 24 hours old, atomically, and gives way to a write that races it", (t) => {
   const dir = sandbox(t);
   const s = createKeepWarmStore(dir, "s-1");
   for (let i = 0; i < 12; i += 1) s.ledgerSend(NOW + i * MINUTE, 0.01);
@@ -219,4 +219,119 @@ test("compacting the ledger, at start-up only, drops just the entries 24 hours o
   const racing = createKeepWarmStore(dir, "s-1", { beforeLedgerRename: () => s.ledgerSend(NOW + 31 * HOUR, 0.02) });
   racing.compactLedger(NOW + 31 * HOUR + MINUTE);
   assert.equal(s.ledger(NOW + 31 * HOUR + 2 * MINUTE).pings, 2, "the entry appended meanwhile is kept");
+});
+
+// Task 5: a lock goes stale on a heartbeat, not on a pid alone.
+const lockPath = (dir, id) => join(dir, "keepwarm", `${createHash("sha256").update(id).digest("hex")}.lock`);
+
+/** A clock and a timer pair the test drives: advance() fires every due timer in order, at its due time. */
+function fakeClockAndTimers(start = NOW) {
+  const clock = { t: start };
+  const pending = [];
+  const timers = {
+    setTimeout: (fn, ms) => { const h = { fn, due: clock.t + ms, cleared: false, fired: false, unref() {} }; pending.push(h); return h; },
+    clearTimeout: (h) => { if (h) h.cleared = true; },
+  };
+  const advance = (ms) => {
+    const end = clock.t + ms;
+    for (;;) {
+      const next = pending.filter((h) => !h.cleared && !h.fired && h.due <= end).sort((a, b) => a.due - b.due)[0];
+      if (!next) break;
+      next.fired = true;
+      clock.t = next.due;
+      next.fn();
+    }
+    clock.t = end;
+  };
+  return { clock, timers, advance, live: () => pending.filter((h) => !h.cleared && !h.fired).length };
+}
+
+test("a live pid holding a lock whose heartbeat is older than LOCK_STALE_MS is taken over", (t) => {
+  const dir = sandbox(t);
+  mkdirSync(join(dir, "keepwarm"), { recursive: true });
+  writeFileSync(lockPath(dir, "s-1"), JSON.stringify({ pid: process.ppid, instance: "other" }) + "\n");
+  const old = (Date.now() - LOCK_STALE_MS - MINUTE) / 1000;
+  utimesSync(lockPath(dir, "s-1"), old, old);
+  const s = createKeepWarmStore(dir, "s-1", { pid: process.pid });
+  assert.equal(s.lock(), true, "the holder's pid is alive, but its heartbeat stopped");
+  assert.equal(JSON.parse(readFileSync(lockPath(dir, "s-1"), "utf8")).pid, process.pid);
+  writeFileSync(lockPath(dir, "s-1"), JSON.stringify({ pid: process.ppid, instance: "other" }) + "\n");
+  assert.equal(createKeepWarmStore(dir, "s-1", { pid: process.pid }).lock(), false, "a live holder with a fresh heartbeat keeps its lock");
+});
+
+test("the holder's heartbeat keeps a live lock from being taken over", (t) => {
+  const dir = sandbox(t);
+  const { clock, timers, advance, live } = fakeClockAndTimers();
+  const make = (pid) => createKeepWarmStore(dir, "s-1", { pid, isAlive: () => true, now: () => clock.t, timers });
+  const [a, b] = [make(1), make(2)];
+  assert.equal(a.lock(), true);
+  advance(LOCK_STALE_MS + 15 * MINUTE);
+  assert.equal(b.lock(), false, "the holder touched the lock every LOCK_HEARTBEAT_MS, so it never went stale");
+  const touched = statSync(lockPath(dir, "s-1")).mtimeMs;
+  assert.ok(Math.abs(touched - (NOW + 4 * LOCK_HEARTBEAT_MS)) < 2, `the last beat was at +40 min, got ${touched - NOW}`);
+  a.unlock();
+  assert.equal(live(), 0, "unlock stops the heartbeat");
+  assert.equal(b.lock(), true);
+  assert.equal(live(), 1, "the new holder starts its own");
+});
+
+test("a lock holder that lost the lock stops its heartbeat instead of touching the new holder's lock", (t) => {
+  const dir = sandbox(t);
+  const { clock, timers, advance, live } = fakeClockAndTimers();
+  const make = (pid, isAlive) => createKeepWarmStore(dir, "s-1", { pid, isAlive, now: () => clock.t, timers });
+  const a = make(1, () => true);
+  const b = make(2, (pid) => pid !== 1);
+  assert.equal(a.lock(), true);
+  assert.equal(b.lock(), true, "a's pid is gone, so b takes over");
+  const before = statSync(lockPath(dir, "s-1")).mtimeMs;
+  advance(5 * MINUTE);
+  assert.equal(live(), 2, "both heartbeats are still pending");
+  advance(5 * MINUTE + 1000);
+  assert.equal(statSync(lockPath(dir, "s-1")).mtimeMs - before >= 9 * MINUTE, true, "b's beat touched it");
+  assert.equal(live(), 1, "a's beat saw the lock was not its own and did not re-arm");
+});
+
+test("a failed heartbeat touch does not make lock() throw or lose the lock", (t) => {
+  const dir = sandbox(t);
+  // A clock that is not a number makes utimesSync throw (ERR_INVALID_ARG_TYPE) after the lock is taken.
+  const s = createKeepWarmStore(dir, "s-1", { pid: process.pid, now: () => Number.NaN });
+  assert.equal(s.lock(), true, "the lock is held even though the touch failed");
+  assert.equal(JSON.parse(readFileSync(lockPath(dir, "s-1"), "utf8")).pid, process.pid);
+  assert.equal(s.lock(), true, "the next confirmation does not throw either");
+  s.unlock();
+});
+
+const oldLine = (i) =>"\n" + JSON.stringify({ t: "send", id: `old.${i}`, at: NOW + i * 1000, usd: 0.01 });
+
+test("the ledger compacts once it passes 64 KiB, and the daily summary is unchanged by compaction", (t) => {
+  const dir = sandbox(t);
+  const clock = { t: NOW + 40 * HOUR };
+  const holder = createKeepWarmStore(dir, "s-1", { pid: 1, isAlive: () => true, now: () => clock.t });
+  const other = createKeepWarmStore(dir, "s-1", { pid: 2, isAlive: () => true, now: () => clock.t });
+  assert.equal(holder.lock(), true);
+  const lines = Array.from({ length: Math.ceil(LEDGER_COMPACT_BYTES / 50) }, (_, i) => oldLine(i)).join("");
+  mkdirSync(join(dir, "keepwarm"), { recursive: true });
+  writeFileSync(ledgerFile(dir, "s-1"), lines, { mode: 0o600 });
+  other.ledgerSend(clock.t - 2 * MINUTE, 0.02);
+  assert.ok(statSync(ledgerFile(dir, "s-1")).size > LEDGER_COMPACT_BYTES, "a process that does not hold the lock never compacts");
+  const before = holder.ledger(clock.t);
+  assert.deepEqual([before.pings, before.usd.toFixed(2)], [1, "0.02"], "only the live entry counts");
+  holder.ledgerSend(clock.t - MINUTE, 0.03);
+  assert.ok(statSync(ledgerFile(dir, "s-1")).size < LEDGER_COMPACT_BYTES, "the holder's append compacted it");
+  const after = holder.ledger(clock.t);
+  assert.deepEqual([after.pings, after.usd.toFixed(2)], [2, "0.05"], "compaction dropped only entries 24 h old");
+  assert.deepEqual(readdirSync(join(dir, "keepwarm")).filter((f) => f.includes(".tmp")), [], "no temp file is left");
+  holder.compactLedger(clock.t);
+  assert.deepEqual(holder.ledger(clock.t), after, "compacting again changes no summary");
+});
+
+test("the ledger summary sees an append by this store and by another process", (t) => {
+  const dir = sandbox(t);
+  const a = createKeepWarmStore(dir, "s-1", { pid: 1 });
+  const b = createKeepWarmStore(dir, "s-1", { pid: 2 });
+  assert.equal(a.ledger(NOW).pings, 0);
+  a.ledgerSend(NOW, 0.02);
+  assert.equal(a.ledger(NOW).pings, 1, "its own append invalidates what it remembered");
+  b.ledgerSend(NOW + MINUTE, 0.02);
+  assert.equal(a.ledger(NOW + MINUTE).pings, 2, "another process's append shows too");
 });
