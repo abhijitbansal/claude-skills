@@ -9,13 +9,34 @@ export const MODES = ["refuse", "warn", "off"];
 export const episodeKey = (snap) => snap.reason === "model-switch"
   ? `${snap.model}@switch:${snap.lastCallAt}` : `${snap.model}@${snap.expiresAt}`;
 
-// A slash command (`/name`, `/name args`) or a `!` shell escape never calls the
-// model with the conversation, so it is never guarded. A pasted path like
-// `/etc/hosts is broken` is a prompt.
-export const NOT_A_PROMPT = /^(\/[A-Za-z][\w-]*(\s|$)|!)/;
+// Built-in commands the host handles itself, without a model call. This is an allowlist because
+// skill commands (`/name args`) share the slash syntax and do call the model. `/compact` is not
+// here: it summarizes with the model. The list is unverified against a real host.
+export const LOCAL_COMMANDS = new Set([
+  "help", "clear", "model", "exit", "quit", "experimental", "resume", "cwd", "add-dir",
+  "login", "logout", "usage", "session", "theme", "cache-clock",
+]);
 
-export function decide({ snap, prompt, config, refusedKey = null, busy = false }) {
-  if (NOT_A_PROMPT.test(String(prompt ?? "").trimStart())) return { action: "allow" };
+const SLASH_COMMAND = /^\/([A-Za-z][\w-]*)(\s|$)/;
+
+/**
+ * What a submitted text is, for the guard and for keep-warm's turn tracking:
+ *   "shell"         — a `!` escape; never reaches the model
+ *   "local-command" — a built-in slash command; never reaches the model
+ *   "prompt"        — anything else, including skill commands and pasted paths like `/etc/hosts is broken`
+ * With `interactive` false (`-p`) the host may send slash text to the model as plain text, so
+ * every slash text counts as a prompt; `!` escapes stay shell.
+ */
+export function classifyPrompt(text, { interactive = true } = {}) {
+  const trimmed = String(text ?? "").trimStart();
+  if (trimmed.startsWith("!")) return "shell";
+  const name = SLASH_COMMAND.exec(trimmed)?.[1];
+  if (interactive && name && LOCAL_COMMANDS.has(name.toLowerCase())) return "local-command";
+  return "prompt";
+}
+
+export function decide({ snap, prompt, config, refusedKey = null, busy = false, interactive = true }) {
+  if (classifyPrompt(prompt, { interactive }) !== "prompt") return { action: "allow" };
   if (config.mode === "off" || !snap) return { action: "allow" };
   if (snap.reason && snap.extraUsd === null) return { action: "warn" };
   if (snap.state !== "cold" && snap.reason !== "model-switch") return { action: "allow" };

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClock } from "../extension/lib/clock.mjs";
-import { decide } from "../extension/lib/guard.mjs";
+import { LOCAL_COMMANDS, classifyPrompt, decide } from "../extension/lib/guard.mjs";
 import { normalizeUsage } from "../extension/lib/usage.mjs";
 import { PING_PROMPT } from "../extension/lib/keepwarm.mjs";
 import { usage, pingUsage, T0, MIN } from "./fixtures.mjs";
@@ -139,8 +139,35 @@ const cfg = { mode: "refuse", minUsd: 0.1 };
 test("decide guards prompts that merely start with a path, but not commands or shell escapes", () => {
   assert.equal(decide({ snap: coldSnap, prompt: "/etc/hosts is broken, fix it", config: cfg }).action, "refuse");
   assert.equal(decide({ snap: coldSnap, prompt: "/model claude-sonnet-5.5", config: cfg }).action, "allow");
-  assert.equal(decide({ snap: coldSnap, prompt: "/compact", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "/compact", config: cfg }).action, "refuse");
   assert.equal(decide({ snap: coldSnap, prompt: "!git status", config: cfg }).action, "allow");
+});
+
+test("decide guards a model-backed skill command on a cold priced snapshot", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: "/some-skill do x", config: cfg }).action, "refuse");
+});
+
+test("decide guards any slash text in -p mode", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: "/help", config: cfg, interactive: false }).action, "refuse");
+});
+
+test("decide still allows local commands and shell escapes", () => {
+  assert.equal(decide({ snap: coldSnap, prompt: "/model claude-sonnet-5.5", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "/cache-clock status", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "!ls", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: coldSnap, prompt: "!ls", config: cfg, interactive: false }).action, "allow");
+});
+
+test("classifyPrompt names each kind of submitted text", () => {
+  assert.equal(classifyPrompt("!ls", { interactive: true }), "shell");
+  assert.equal(classifyPrompt("  /model x", { interactive: true }), "local-command");
+  assert.equal(classifyPrompt("/CACHE-CLOCK", { interactive: true }), "local-command");
+  assert.equal(classifyPrompt("/some-skill x", { interactive: true }), "prompt");
+  assert.equal(classifyPrompt("/etc/hosts is broken", { interactive: true }), "prompt");
+  assert.equal(classifyPrompt("/help", { interactive: false }), "prompt");
+  assert.equal(classifyPrompt("explain this", { interactive: true }), "prompt");
+  assert.ok(LOCAL_COMMANDS.has("model"));
+  assert.ok(!LOCAL_COMMANDS.has("compact"));
 });
 
 test("decide only warns while a turn is running", () => {

@@ -611,6 +611,27 @@ test("a hook prompt alone never starts a window; the user's message event does",
   assert.match(lastLog(h), /keep-warm  on · 2h50m left/, "a message that is not the user's does not restart it");
 });
 
+// A skill command (`/name args`) reaches the model, so its turn is pending like any prompt; a local command's is not.
+test("a /skill prompt marks a turn pending before any exemption, so keep-warm waits for it", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(230_000);
+  await h.prompt("/some-skill x");
+  await h.run(20_000);
+  assert.equal(h.sent.length, 0, "no ping while the skill's turn is about to start");
+});
+
+test("a local command is not a turn: keep-warm still pings on schedule", async () => {
+  const h = fakeHost({ config: KW });
+  await h.start();
+  await h.turn();
+  await h.run(230_000);
+  await h.prompt("/model claude-sonnet-5.5");
+  await h.run(20_000);
+  assert.equal(h.sent.length, 1);
+});
+
 test("a host with no user.message confirms a turn by a turn_start that is not our own send", async () => {
   const h = fakeHost({ config: KW, emitUserMessage: false });
   await h.start();

@@ -157,7 +157,7 @@ cache-clock · Claude Sonnet 5.5
   `session.abort()` without awaiting it (awaiting inside the hook deadlocks), so no model
   call happens. The episode is remembered per session in
   `~/.copilot/cache-clock/refusals/<session-hash>.json` for a week, even across processes
-  (`copilot --resume … -p`). Slash commands and `!` shell escapes are never guarded. A
+  (`copilot --resume … -p`). Local commands (`/model`, `/clear`, …) and `!` shell escapes are never guarded; skill commands are. A
   message queued while a turn is running only gets the note: stopping it then would
   cancel the running turn. After a compaction the next send is exempt, since the context
   was rewritten anyway.
@@ -445,7 +445,9 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
   37.2k estimated in the capture above). Pulling the other way, Copilot's shared system
   prefix (~10k tokens) often stays cached, so on a long idle a little less is rewritten.
 - **`-p` mode.** The guard works in `copilot -p` as a refuse-once, but slash commands
-  there go to the model as text, so `/cache-clock` needs the interactive CLI.
+  there go to the model as text, so `/cache-clock` needs the interactive CLI. `-p` follows
+  the same rule as the interactive CLI: local commands are exempt, other slash text is
+  guarded. How the host treats slash text in `-p` is unverified.
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
   When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is
   billed cold and the guard stays quiet; the report counts it as a prefix break.

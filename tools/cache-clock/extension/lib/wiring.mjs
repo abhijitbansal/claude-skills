@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createClock } from "./clock.mjs";
 import { configDir, createKeepWarmStore, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
-import { NOT_A_PROMPT, decide } from "./guard.mjs";
+import { classifyPrompt, decide } from "./guard.mjs";
 import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, keepWarmEstimate, looksLikePingText } from "./keepwarm.mjs";
 import { NANO_AIU_PER_USD, isMainInteraction, normalizeUsage } from "./usage.mjs";
 
@@ -142,6 +142,10 @@ const EXPIRED = Symbol("expired");
 const EXPIRED_NOTE = "cache-clock: no answer in 5 minutes, so that send was held. Send it again to send it.";
 // VS Code cancels every extension question in autopilot mode; that arrives as a dismissal.
 const DISMISSED_NOTE = "cache-clock: the question was dismissed or cancelled, so that send was held (0 AI credits). Send it again to send it.";
+
+// No reliable `-p` signal is known (`canAsk` tests for question UI, not `-p`), so treat the host as
+// interactive. Unverified against a real host.
+const HOST_IS_INTERACTIVE = true;
 
 const canAsk = (session) => Boolean(session?.capabilities?.ui?.elicitation) && typeof session?.ui?.select === "function";
 
@@ -323,7 +327,8 @@ export async function attach({
     // then loosely, because the host may pass the display text or a transformed prompt. In a process
     // that does not hold the session lock the ping is the other process's, so it always counts there.
     if (looksLikePingText(text) && (kw?.inFlight || kw?.passive)) return undefined;
-    if (NOT_A_PROMPT.test(text.trimStart())) return undefined;
+    // Shell escapes and built-in commands never reach the model: no turn follows, so nothing is pending.
+    if (classifyPrompt(text, { interactive: HOST_IS_INTERACTIVE }) !== "prompt") return undefined;
     // From this moment a turn is about to start, on every host, before any timer is armed. Hook text
     // never starts or restarts a keep-warm window: only a confirmed user turn does (confirmUserTurn).
     state.promptPendingUntil = now() + PROMPT_PENDING_MS;
@@ -358,7 +363,7 @@ export async function attach({
     try {
       await refreshSelection();
       snap = snapshot();
-      verdict = decide({ snap, prompt: input?.prompt, config: getConfig(), refusedKey: state.refusedKey, busy: state.busy });
+      verdict = decide({ snap, prompt: input?.prompt, config: getConfig(), refusedKey: state.refusedKey, busy: state.busy, interactive: HOST_IS_INTERACTIVE });
       if (verdict.action === "refuse") question = coldQuestion(snap);
     } catch (err) {
       // Never block the user's message on our own failure, but say that the guard did not run.
