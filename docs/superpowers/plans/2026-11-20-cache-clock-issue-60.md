@@ -66,9 +66,9 @@ The suite runs on a fake host, so 358 passing tests cannot show what Copilot pas
   - `decide guards any slash text in -p mode`: `decide({ snap: coldSnap, prompt: "/help", config: cfg, interactive: false }).action === "refuse"`.
   - `decide still allows local commands and shell escapes`: `/model claude-sonnet-5.5`, `/cache-clock status` and `!ls` each give `"allow"`.
   - Change the assertion at :142 so that `/compact` on `coldSnap` gives `"refuse"`.
-  - In `wiring.test.mjs`, add `a /skill prompt marks a turn pending before any exemption`: after `onPrompt({prompt:"/model x"})`, `state.promptPendingUntil > now` (or the observable equivalent: keep-warm does not ping before the turn starts).
+  - In `wiring.test.mjs`, add `a /skill prompt marks a turn pending before any exemption`: after `onPrompt({prompt:"/some-skill x"})`, `state.promptPendingUntil > now`. Local commands (`/model`) are not marked pending, so they never count as a user turn for keep-warm (or the observable equivalent: keep-warm does not ping before the turn starts).
 - [ ] **Step 2:** Run `node --test test/clock-guard.test.mjs test/wiring.test.mjs`. Expected: the new tests FAIL.
-- [ ] **Step 3:** Implement `classifyPrompt` and `LOCAL_COMMANDS`. Call it once in `onPrompt`, after setting `promptPendingUntil` and `promptSinceSend`, and pass `interactive` from the host's `canAsk` capability. Keep the pasted-path rule: `/etc/hosts is broken` is a prompt.
+- [ ] **Step 3:** Implement `classifyPrompt` and `LOCAL_COMMANDS`. Call it once in `onPrompt`, after setting `promptPendingUntil` and `promptSinceSend`, and pass `interactive`. Do not derive it from `canAsk` (`wiring.mjs:146`): that checks for elicitation UI, not `-p` mode, and an interactive host without elicitation would then guard `/help`. Detect `-p` mode from what Task 0 finds the host exposes; if nothing distinguishes it, guard slash text only when it is not in `LOCAL_COMMANDS`, in both modes. Keep the pasted-path rule: `/etc/hosts is broken` is a prompt.
 - [ ] **Step 4:** Update the HELP line, README:160 and the "What is never guarded" item in `docs/features/cache-clock.html` to "Local commands (`/model`, `/clear`, …) and `!` shell escapes are never guarded; skill commands are." Update README:447 to say `-p` guards slash text too.
 - [ ] **Step 5:** Run the full suite and `node bin/checksums.mjs --write`. Expected: all pass.
 - [ ] **Step 6: Commit** `fix(cache-clock): guard model-backed slash commands (#60)`.
@@ -164,7 +164,7 @@ The suite runs on a fake host, so 358 passing tests cannot show what Copilot pas
 
 ### Task 6: Release, so the fix reaches users
 
-- [ ] **Step 1:** Change `REF` in `install.sh:15` and the three README curl lines (`README.md:23,32,44`) to `cache-clock-v1.2.0` (owner decision 2). Run `node bin/checksums.mjs --write`, then the full suite, then `shellcheck tools/cache-clock/install.sh`.
+- [ ] **Step 1:** Change every pin of `cache-clock-v1.1.0` to `cache-clock-v1.2.0` (owner decision 2): `REF` in `install.sh:15`, the curl lines at `README.md:23,44` and the tag named at `README.md:32`, the curl line and its `data-copy` in `docs/features/cache-clock.html:93,95`, and the install line in `docs/features/showcase/cache-clock/how-it-works.html:499-500`. Then confirm with `grep -rn cache-clock-v1.1.0` that nothing is left. Run `node bin/checksums.mjs --write`, then the full suite, then `shellcheck tools/cache-clock/install.sh`.
 - [ ] **Step 2: Commit** `chore(cache-clock): pin install to <tag>`. Push and open the PR. The body uses the bug-fix four lines (symptom, root cause, fix, failing test), plus the Task 0 host results. It says `Fixes #60`.
 - [ ] **Step 3:** Before the first push, run a fresh-context `/code-review` on the diff. Then check CI with `gh pr checks <N>`. The owner merges (`gh pr merge <N> --squash --admin`) and creates the tag on the merge commit.
 

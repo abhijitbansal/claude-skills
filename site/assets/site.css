@@ -285,6 +285,7 @@ h3.subtitle{font-size:clamp(20px,2.6vw,26px);font-weight:600;margin:0 0 10px}
 .guide{display:grid;gap:0;margin-top:6px}
 .gitem{border-top:1px solid var(--border);padding:20px 0;position:relative}
 .gitem :is(h3,h4){font-size:19px;margin:0 0 6px;color:var(--text);font-family:var(--font-head);letter-spacing:-.01em}
+.gitem h4{font-size:16px}
 .gitem :is(h3,h4) code{font-size:16px;color:var(--accent);background:none;border:none;padding:0}
 .gitem p{font-size:15px;margin:0;color:var(--text-dim)}
 .gitem .code{margin-top:12px}

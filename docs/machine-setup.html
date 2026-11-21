@@ -116,7 +116,7 @@
       <p>On the new machine: clone, then run the installer. It is idempotent, so it is safe to re-run any time.</p>
       <div class="code cmds"><div class="cl"><span class="note"><span class="c"># clone your fork, then bootstrap</span></span></div><div class="cl"><code class="ct">git clone https://github.com/<span class="a">&lt;you&gt;</span>/claude-skills ~/projects/claude-skills</code><button class="copy" data-copy="git clone https://github.com/<you>/claude-skills ~/projects/claude-skills">copy</button></div><div class="cl"><code class="ct">bash ~/projects/claude-skills/setup/setup.sh</code><button class="copy" data-copy="bash ~/projects/claude-skills/setup/setup.sh">copy</button></div></div>
       <div class="callout"><span class="ti">Preview first</span>Run <code>setup.sh --dry-run</code> to print every action with zero mutations. Add <code>--verbose</code> to trace each shell command.</div>
-      <p style="margin-top:18px">Prerequisites the <code>preflight</code> step checks (and installs where it can): <b>Python ≥ 3.11</b>, <code>git</code>, and, via Homebrew if missing, <code>bats</code>, <code>shellcheck</code>, and <code>uv</code>. <code>gh</code> is only needed to contribute back.</p>
+      <p style="margin-top:18px">Prerequisites the <code>preflight</code> step checks (and installs where it can): <b>Python ≥ 3.11</b>, <code>git</code>, plus <code>bats</code>, <code>shellcheck</code> and <code>uv</code> (via Homebrew if missing). <code>gh</code> is only needed to contribute back.</p>
     </section>
 
     <!-- SETUP STEPS -->
