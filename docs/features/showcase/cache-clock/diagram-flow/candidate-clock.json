@@ -4,11 +4,12 @@
   "meta": {
     "title": "How Cache Clock learns: start, resume and every model call",
     "quality_profile": "showcase",
+    "viewBox": [1020, 652],
     "output": "docs/features/showcase/cache-clock/diagram-flow/cache-clock-flow-clock.html",
     "repository": {
       "url": "https://github.com/abhijitbansal/claude-skills",
       "provider": "github",
-      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
+      "revision": "517983a7ea9aa95aa5556f34888911b7b463716c"
     }
   },
   "lanes": [
@@ -19,6 +20,10 @@
     {
       "id": "clock",
       "label": "Cache clock"
+    },
+    {
+      "id": "owner",
+      "label": "Whose record is it?"
     },
     {
       "id": "calls",
@@ -37,8 +42,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 124,
-          "end_line": 131
+          "line": 408,
+          "end_line": 417
         }
       ]
     },
@@ -54,7 +59,13 @@
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
           "line": 27,
-          "end_line": 50
+          "end_line": 28,
+          "label": "MAX_HISTORY_BYTES"
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 57,
+          "end_line": 107
         }
       ]
     },
@@ -69,12 +80,12 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 22,
-          "end_line": 23
+          "line": 24,
+          "end_line": 25
         },
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 45
+          "line": 99
         }
       ]
     },
@@ -89,8 +100,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 143,
-          "end_line": 147
+          "line": 533,
+          "end_line": 537
         }
       ]
     },
@@ -106,7 +117,7 @@
         {
           "path": "tools/cache-clock/extension/lib/clock.mjs",
           "line": 6,
-          "end_line": 35
+          "end_line": 60
         }
       ]
     },
@@ -121,14 +132,63 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/clock.mjs",
-          "line": 37,
-          "end_line": 58
+          "line": 62,
+          "end_line": 103
         },
         {
           "path": "tools/cache-clock/extension/lib/usage.mjs",
-          "line": 110,
-          "end_line": 116,
+          "line": 122,
+          "end_line": 129,
           "label": "nextSendCosts"
+        }
+      ]
+    },
+    {
+      "id": "attrq",
+      "lane": "owner",
+      "col": 1,
+      "type": "security",
+      "label": "Ping or user?",
+      "sublabel": "attributeUsage",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 516,
+          "end_line": 521
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/attribution.mjs",
+          "line": 14,
+          "end_line": 29
+        }
+      ]
+    },
+    {
+      "id": "pingrec",
+      "lane": "owner",
+      "col": 2,
+      "type": "backend",
+      "label": "Ping record",
+      "sublabel": "clock only, not a call",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 522,
+          "end_line": 528
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 435,
+          "end_line": 440,
+          "label": "fileKeepWarmPing"
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/clock.mjs",
+          "line": 45,
+          "end_line": 51,
+          "label": "ingestPing"
         }
       ]
     },
@@ -143,8 +203,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 139,
-          "end_line": 142
+          "line": 513,
+          "end_line": 515
         }
       ]
     },
@@ -159,13 +219,13 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 15,
-          "end_line": 20
+          "line": 17,
+          "end_line": 22
         },
         {
           "path": "tools/cache-clock/extension/lib/usage.mjs",
-          "line": 105,
-          "end_line": 107
+          "line": 118,
+          "end_line": 120
         }
       ]
     },
@@ -180,8 +240,8 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 15,
-          "end_line": 20
+          "line": 17,
+          "end_line": 22
         }
       ]
     }
@@ -232,11 +292,33 @@
       "to": "mainq"
     },
     {
-      "id": "e-mainq-clk",
+      "id": "e-mainq-attr",
       "from": "mainq",
+      "to": "attrq",
+      "label": "yes"
+    },
+    {
+      "id": "e-attr-clk",
+      "from": "attrq",
       "to": "clk",
-      "label": "yes: ingest",
+      "label": "user: ingest",
       "variant": "emphasis"
+    },
+    {
+      "id": "e-attr-ping",
+      "from": "attrq",
+      "to": "pingrec",
+      "label": "ping",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-ping-clk",
+      "from": "pingrec",
+      "to": "clk",
+      "label": "refresh expiry",
+      "variant": "dashed",
+      "role": "branch"
     },
     {
       "id": "e-mainq-ignored",
@@ -247,5 +329,16 @@
       "role": "branch"
     }
   ],
-  "cards": []
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Whose record is it?",
+      "items": [
+        "Every main-agent usage record is either the keep-warm ping's or the user's. attributeUsage decides from the ping flags and from who started the turn.",
+        "On a host that sends no user.message, the first record during a ping flight goes to the ping, even if you typed meanwhile. Your own turn is then booked as a call once the ping is answered or given up on.",
+        "A ping's record refreshes the cache expiry but is not a model call in the tally. The report shows it as keep-warm spend.",
+        "On resume the same split runs over the log: the first main record after a ping message, before any later user message, is the ping's (createPingLedger)."
+      ]
+    }
+  ]
 }
