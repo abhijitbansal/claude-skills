@@ -12,7 +12,7 @@ set -eu
 
 # The release tag the one-line install downloads from, so a push to main changes nothing for it.
 # The only place the tag is spelled; the README's curl lines name it too, and a test checks they agree.
-REF="cache-clock-v1.1.0"
+REF="cache-clock-v1.2.0"
 BASE_URL="${CACHE_CLOCK_BASE_URL:-https://raw.githubusercontent.com/abhijitbansal/claude-skills/$REF/tools/cache-clock/extension}"
 # Every file the extension ships; a test keeps this list in step with extension/.
 # extension.mjs comes last, so an interrupted download never looks like an extension.

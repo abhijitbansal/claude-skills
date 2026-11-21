@@ -20,7 +20,7 @@ and a [17-second video](../../docs/features/showcase/cache-clock/video.mp4).
 One line, no clone and no Node needed (the extension runs inside Copilot's own runtime):
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.2.0/tools/cache-clock/install.sh | sh
 ```
 
 That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` moves
@@ -29,7 +29,7 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
 The one-line install is pinned to a release tag, not to `main`, and checks a SHA-256 for
 every file it downloads against the list inside the script. A file that does not match
 stops the install and leaves nothing behind. The piped install
-works once the tag `cache-clock-v1.1.0` exists; the owner creates it on the merge commit,
+works once the tag `cache-clock-v1.2.0` exists; the owner creates it on the merge commit,
 and until then every curl line here answers 404. Install from a clone (below) meanwhile.
 After any edit under `extension/`, run `node tools/cache-clock/bin/checksums.mjs --write`;
 the tests fail on a stale list.
@@ -41,7 +41,7 @@ the tests fail on a stale list.
   `~/.copilot/extensions`. Install it into each repo you use it in, from that repo:
 
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh -s -- --project
+  curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.2.0/tools/cache-clock/install.sh | sh -s -- --project
   ```
 
   That copies it into `<git root>/.github/extensions/cache-clock`; commit it to share it
