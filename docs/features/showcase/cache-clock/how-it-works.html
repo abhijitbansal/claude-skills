@@ -292,13 +292,14 @@ svg text{font-family:var(--mono)}
     <figcaption><span class="fig">Fig. 4</span>The TTL, the expiry and the prices all come from Copilot. Sub-agent and background calls are ignored: they keep their own caches.</figcaption>
   </figure>
 
-  <span class="cap">/cache-clock — the card, from a real resumed session</span>
+  <span class="cap">/cache-clock: the card, sample numbers in the shape format.mjs prints</span>
   <pre><code>cache-clock · Claude Sonnet 5.5
   cache      warm, 1m17s left (ttl 5m00s)
   context    37.2k tokens
   next send  warm $0.003 · cold $0.08 (25× per token)
-  session    5 model calls · 0 cold after idle · 0 prefix breaks · $0 extra paid
-  guard      refuse once above $0.10 · heads-up 5m before expiry</code></pre>
+  session    5 model calls · 0 cold after idle · 0 prefix breaks · 0 switch rewrites · $0 estimated extra
+  guard      ask before a cold send above $0.10 · heads-up 5m before expiry
+  keep-warm  off (/cache-clock keepwarm on)</code></pre>
   <p>Prices come from the payload: nano-AI-credits per batch of tokens, and 1 credit is $0.01. Prices already include discounts. Through <code>auto</code>, Sonnet’s write was $2.25/M (list $2.50).</p>
 </section>
 
@@ -316,8 +317,8 @@ svg text{font-family:var(--mono)}
           <div class="out"></div>
         </li>
         <li class="fstep">
-          <div class="node q"><b>Starts with <code>/name</code> or <code>!</code>?</b><small>Slash commands and shell escapes never call the model with your conversation.</small><span class="no">no ↓</span></div>
-          <div class="out"><span class="arrow">yes →</span><span class="chip ok">● ALLOW · skipped</span><p>Never guarded.</p></div>
+          <div class="node q"><b>A <code>!</code> escape, or a built-in local command on one line?</b><small><code>!</code> escapes and the built-ins on an allowlist (<code>LOCAL_COMMANDS</code>: <code>/help</code>, <code>/clear</code>, <code>/model</code>, <code>/cache-clock</code> and more) never call the model. Every other <code>/name</code>, including <code>/compact</code> and skill commands, is guarded like a prompt.</small><span class="no">no ↓</span></div>
+          <div class="out"><span class="arrow">yes →</span><span class="chip ok">● ALLOW · skipped</span><p>Never guarded. The allowlist is unverified on a real host.</p></div>
         </li>
         <li class="fstep">
           <div class="node q"><b>Guard off, or cache not cold?</b><small>Warm, or unknown (no data yet, or right after a compaction).</small><span class="no">cold ↓</span></div>
@@ -325,10 +326,10 @@ svg text{font-family:var(--mono)}
         </li>
         <li class="fstep">
           <div class="node q"><b>Extra cost ≥ threshold?</b><small>Default $0.10 (<code>/cache-clock min</code>). Extra = context × (write − read).</small><span class="no">yes ↓</span></div>
-          <div class="out"><span class="arrow">no →</span><span class="chip ok">● ALLOW · silent</span><p>Small rewrites pass quietly. At the default, the $0.08 capture would pass.</p></div>
+          <div class="out"><span class="arrow">no →</span><span class="chip ok">● ALLOW · silent</span><p>Small rewrites pass quietly. At the default, the $0.08 capture would pass. One exception: a cold send on a model with no known price cannot be checked, so it sends with a one-time warning per cold episode: “the cache went cold and no price is known for this model, so no price-based guard was possible. Sending.”</p></div>
         </li>
         <li class="fstep">
-          <div class="node q"><b>Mode is warn, a turn is running, or this cold episode was already asked about?</b><small>Episode = one model’s cache that expired at one instant. Refusals are remembered per session in <code>refused.json</code> for a week, across processes.</small><span class="no">none ↓</span></div>
+          <div class="node q"><b>Mode is warn, a turn is running, or this cold episode was already asked about?</b><small>Episode = one model’s cache that expired at one instant. Refusals are remembered per session in <code>refusals/&lt;session-hash&gt;.json</code> for a week, across processes.</small><span class="no">none ↓</span></div>
           <div class="out"><span class="arrow">yes →</span><span class="chip warn">▲ SEND with a price note</span><p>While a turn runs, aborting would cancel that turn, so you only get the note. Your resend lands here.</p></div>
         </li>
         <li class="fstep">
@@ -351,6 +352,7 @@ about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
   <span class="cap">The resend’s note — template, one line</span>
   <pre><code>cache-clock: sending cold, rewriting about &lt;tokens&gt; tokens for &lt;cold $&gt; (warm: &lt;warm $&gt;).</code></pre>
   <p>Switch modes with <code>/cache-clock guard refuse</code> (default: ask, or refuse once), <code>warn</code> (send and print the price) or <code>off</code>. <code>/cache-clock help</code> explains it all in the chat.</p>
+  <p>Settings, refusals and keep-warm state live in <code>~/.copilot/cache-clock/</code> (<code>CACHE_CLOCK_HOME</code> moves it). Each file is written owner-only (mode 0600) into a directory set to 0700, through a temp file and a rename. An older default directory left at 0755, and its <code>refusals</code> and <code>keepwarm</code> subdirectories, are tightened. The directory <code>CACHE_CLOCK_HOME</code> names is never changed, though the files in it are still private.</p>
 </section>
 
 <!-- 4 HEADS-UP -->
@@ -377,13 +379,14 @@ about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
     <figcaption><span class="fig">Fig. 6</span>Each bar is one full TTL. The amber end is the heads-up window: min(5 min, TTL ÷ 5) = 1&nbsp;min for Claude, 5&nbsp;min for Luna.</figcaption>
   </figure>
   <p>Change it with <code>/cache-clock headsup 5</code>, or <code>headsup off</code>. It keeps running under <code>guard off</code> until you turn it off.</p>
+  <p>With keep-warm on, the heads-up stays quiet only while a ping is planned or out, since it would fire next to every ping. If another process of the same session holds the keep-warm lock, that holder records <code>willPing</code> in the shared window file. This process shows its heads-up unless that says a ping is coming.</p>
 </section>
 
 <!-- 5 RESUME -->
 <section id="resume" class="s">
   <span class="step-no">5 · Resume</span>
   <h2>A resumed session reads its clock from the log</h2>
-  <p><code>assistant.usage</code> is not replayed when you resume, and <code>getEvents()</code> omits usage records. So the extension reads the session’s own log, which keeps every record with its prices.</p>
+  <p><code>assistant.usage</code> is not replayed when you resume, and <code>getEvents()</code> omits usage records. So the extension reads the session’s own log, which keeps every record with its prices. It reads at most the last 8&nbsp;MiB of the log (<code>MAX_HISTORY_BYTES</code>); on a bigger log it says so once, and older calls are not in the tally.</p>
 
   <figure>
     <div class="frame">
@@ -395,7 +398,7 @@ about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
         <div class="card"><span class="chip info">◆ guard</span><h3>Works on call one</h3><p>Even in <code>copilot --resume … -p</code>.</p></div>
       </div>
     </div>
-    <figcaption><span class="fig">Fig. 7</span>The log is the source of truth after a restart. The refusal memory lives next to it in <code>refused.json</code>.</figcaption>
+    <figcaption><span class="fig">Fig. 7</span>The log is the source of truth after a restart. The refusal memory is kept apart from it, in <code>~/.copilot/cache-clock/refusals/</code>.</figcaption>
   </figure>
 </section>
 
@@ -489,21 +492,21 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
   <div class="grid2">
     <div class="card"><span class="chip warn">▲ early eviction</span><p>The guard trusts <code>cacheExpiresAt</code>. When a provider serves the cache cold sooner (Luna at 29 of 30 min, once), the send is billed cold and the guard stays quiet. The report counts it as a prefix break.</p></div>
     <div class="card"><span class="chip warn">▲ approximate price</span><p>The estimate is the last call’s input plus its answer. The real resend adds your message and attachments (44.4k actual vs 37.2k estimated). Copilot’s shared system prefix (~10k tokens) often stays cached, which pulls the other way.</p></div>
-    <div class="card"><span class="chip warn">▲ keep-warm is optional and untested live</span><p>Off until <code>/cache-clock keepwarm on</code>, and it costs money: a tiny ping before expiry keeps the cache warm for 3 hours after your last message (up to 12), and stops at payback, the budget, the window end or the daily limit. Each ping may show as a short turn in your conversation. Limits, exactly: the setting is global, but each open session has its own window, budget and 24-hour ceiling. Per session, at most 362 pings in any 24 hours (at a 5-minute cache) and at most the daily dollar limit (default $2.00), counting each ping as its measured or estimated cost, whichever is higher. Deleting the ledger file resets the ceiling. Tested against a fake Copilot host only. Do not enable it before the owner&rsquo;s live check confirms that Copilot labels the ping&rsquo;s message as ours.</p></div>
-    <div class="card"><span class="chip info">◆ other limits</span><p>With <code>auto</code>, the next prompt may route to another model; the guard prices the last model used. In <code>-p</code> mode, <code>/cache-clock</code> needs the interactive CLI. Claude was measured through <code>auto</code> only; each boundary result is a single run.</p></div>
+    <div class="card"><span class="chip warn">▲ keep-warm is optional and untested live</span><p>Off until <code>/cache-clock keepwarm on</code>, and it costs money: a tiny ping before expiry keeps the cache warm for 3 hours after your last message (up to 12), and stops at payback, the budget, the window end or the daily limit. Each ping may show as a short turn in your conversation. Limits, exactly: the setting is global, but each open session has its own window, budget and 24-hour ceiling. Per session, at most 362 pings in any 24 hours (at a 5-minute cache) and at most the daily dollar limit (default $2.00), counting each ping as its measured or estimated cost, whichever is higher. Deleting the ledger file resets the ceiling. The lock holder compacts the ledger when it passes 64&nbsp;KiB. Only one process per session pings: it holds a lock file, refreshes it every 10 minutes, and a lock untouched for 30 minutes is taken over even if its process is alive. On a host that sends no <code>user.message</code>, the first usage record while a ping is out is booked to the ping, even if you typed meanwhile; your own turn is booked once the ping is answered or given up on (unverified on a real host). Tested against a fake Copilot host only. Do not enable it before the owner&rsquo;s live check confirms that Copilot labels the ping&rsquo;s message as ours.</p></div>
+    <div class="card"><span class="chip info">◆ other limits</span><p>With <code>auto</code>, the next prompt may route to another model; the guard prices the last model used. In <code>-p</code> mode, <code>/cache-clock</code> needs the interactive CLI. Cache Clock cannot tell <code>-p</code> from the interactive CLI, so the local-command rule applies there too: a local-command name typed in <code>-p</code> may reach the model cold and unguarded, and how the host treats slash text in <code>-p</code> is unverified. The local-command list itself is unverified on a real host; a built-in missing from it is guarded like a prompt, which is safe but can use up a cold episode&rsquo;s one question. Claude was measured through <code>auto</code> only; each boundary result is a single run.</p></div>
   </div>
 </section>
 
 <footer>
   <h3 style="margin-top:0">Install</h3>
   <pre><code>curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.2.0/tools/cache-clock/install.sh | sh</code></pre>
-  <p>The install is pinned to the release tag <code>cache-clock-v1.2.0</code> and checks a SHA-256 for every file; the command works once that tag exists.</p>
+  <p>The install is pinned to the release tag <code>cache-clock-v1.2.0</code> and checks a SHA-256 for every file.</p>
   <p>Copilot CLI: start a new <code>copilot</code> session, say yes when Copilot asks to “register hooks”, then run <code>/cache-clock help</code>. VS Code Copilot chat: from each repo, run the same line with <code>| sh -s -- --project</code> (a copy in <code>.github/extensions</code>), add <code>"chat.canvases.enabled": true</code> to VS Code settings, reload, and start a new chat.</p>
   <h3>Sources</h3>
   <ul class="plain sources">
     <li><code>tools/cache-clock/README.md</code> — captures, tables, report sample</li>
     <li><code>docs/cache-clock-plan.md</code> — what the probe settled</li>
-    <li><code>tools/cache-clock/extension/lib/{wiring,clock,guard,usage,format}.mjs</code> — flow, thresholds, message text</li>
+    <li><code>tools/cache-clock/extension/lib/{wiring,clock,guard,usage,format,config,keepwarm,attribution}.mjs</code> — flow, thresholds, message text, settings files, keep-warm</li>
   </ul>
   <h3>More</h3>
   <ul class="plain sources">

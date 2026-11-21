@@ -26,13 +26,11 @@ curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-c
 That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` moves
 `~/.copilot`). Install once per machine; every Copilot session loads it.
 
-The one-line install is pinned to a release tag, not to `main`, and checks a SHA-256 for
-every file it downloads against the list inside the script. A file that does not match
-stops the install and leaves nothing behind. The piped install
-works once the tag `cache-clock-v1.2.0` exists; the owner creates it on the merge commit,
-and until then every curl line here answers 404. Install from a clone (below) meanwhile.
-After any edit under `extension/`, run `node tools/cache-clock/bin/checksums.mjs --write`;
-the tests fail on a stale list.
+The one-line install is pinned to the release tag `cache-clock-v1.2.0`, not to `main`, and
+checks a SHA-256 for every file it downloads against the list inside the script. A file that
+does not match stops the install and leaves nothing behind. The tag exists on the remote
+(checked with `git ls-remote --tags origin`). After any edit under `extension/`, run
+`node tools/cache-clock/bin/checksums.mjs --write`; the tests fail on a stale list.
 
 - **Copilot CLI:** start a new `copilot` session. Copilot asks once whether the extension
   may "register hooks": allow it (option 2 remembers it for that repo). Then run
@@ -119,6 +117,27 @@ overwrites a `config.json` it cannot read as settings (bad JSON, or not an objec
 says so and saves nothing. Keys it does not know are kept as they are, and a bad value is
 reported once and replaced by its default while the file stays untouched.
 
+**Files on disk.** All under that directory (`writePrivate()` and `createKeepWarmStore()`
+in `lib/config.mjs`):
+
+- `config.json`: the settings.
+- `refusals/<sha256 of the session id>.json`: the refusal memory (see Limits). A pre-1.2.0
+  `refused.json` is still read, only when a session has no file of its own.
+- `keepwarm/<sha256 of the session id>.json`, `.lock` and `.ledger`: the keep-warm window,
+  the lock and the ping ledger (see Keep-warm).
+
+Every file is written owner-only (0600) in directories of 0700. `writePrivate()` writes a
+fresh temp file (`wx`, 0600) and renames it into place, so a reader never sees half a file
+and an old 0644 file is replaced by a 0600 one. The ledger is appended to, so it gets its
+0600 mode when it is created. `tightenOwnDir()` also fixes an older 0755 directory, but only
+cache-clock's own: the default `<copilot home>/cache-clock` and its `refusals` and
+`keepwarm` subdirectories. It never changes the directory `CACHE_CLOCK_HOME` names (that
+may be your home), though the files cache-clock writes there are still private. It opens
+with `O_NOFOLLOW` and changes the mode through that open handle (`fchmod`), so it leaves a
+symlink, a directory someone else owns, and a failed `chmod` alone. Where the OS has no
+`O_NOFOLLOW` (Windows), it does nothing. Whether any of this holds on a host that does not
+honour Unix modes is unverified.
+
 Sample card from `format.mjs` with sample numbers, not a live capture:
 
 ```
@@ -129,6 +148,7 @@ cache-clock · Claude Sonnet 5.5
   session    5 model calls · 0 cold after idle · 0 prefix breaks · 0 switch rewrites · $0 estimated extra
   guard      ask before a cold send above $0.10 · heads-up 5m before expiry
   keep-warm  on · 2h44m left · 2 pings · $0.007
+             the setting is global: every open session runs its own window and budget
 ```
 
 ## How it works
@@ -156,13 +176,22 @@ cache-clock · Claude Sonnet 5.5
   hook asks with `session.ui.select` and waits for the answer. To stop the send it calls
   `session.abort()` without awaiting it (awaiting inside the hook deadlocks), so no model
   call happens. The episode is remembered per session in
-  `~/.copilot/cache-clock/refusals/<session-hash>.json` for a week, even across processes
-  (`copilot --resume … -p`). Local commands (`/model`, `/clear`, …) and `!` shell escapes are never guarded; skill commands are. A
-  message queued while a turn is running only gets the note: stopping it then would
-  cancel the running turn. After a compaction the next send is exempt, since the context
-  was rewritten anyway. A cold send on a model with no known price cannot be priced: the
-  guard warns once per cold episode ("the cache went cold and no price is known for this
-  model…") and sends.
+  `~/.copilot/cache-clock/refusals/<sha256 of the session id>.json` for a week, even across
+  processes (`copilot --resume … -p`). A message queued while a turn is running only gets the
+  note: stopping it then would cancel the running turn. After a compaction the next send is
+  exempt, since the context was rewritten anyway. A cold send on a model with no known price
+  cannot be priced: the guard warns once per cold episode ("the cache went cold and no price
+  is known for this model, so no price-based guard was possible. Sending.") and sends. Before
+  1.2.0 that case sent silently.
+- **What counts as a prompt.** `classifyPrompt(text, {interactive})` in `lib/guard.mjs` sorts
+  every submitted text into `shell` (a `!` escape), `local-command` or `prompt`. Shell escapes
+  and local commands are never guarded. Every other `/name` is a prompt and is guarded,
+  including `/compact` (it summarizes with the model) and skill commands. A local command is
+  a name on the `LOCAL_COMMANDS` allowlist (`/help`, `/clear`, `/model`, `/exit`, …) plus its
+  arguments, **on one line**: text after a newline is a prompt the host may send to the model.
+  The allowlist comes from memory of Copilot CLI's built-ins, not from a probe on a real host,
+  so it is unverified. A built-in missing from it is guarded like a prompt: that fails safe,
+  but it can use up a cold episode's single question.
 - **Model switches.** The destination model's previous clock cannot prove that it cached
   the current conversation. The card says unknown; with destination prices previously
   observed in this session, the guard asks about a *possible* rewrite of the latest
@@ -173,7 +202,8 @@ cache-clock · Claude Sonnet 5.5
 - **The heads-up.** One ephemeral line before expiry, only when a cold send's extra cost
   is at least the threshold and no turn is running. The lead is the smaller of your
   setting and a fifth of the TTL, so a 5-minute Claude cache warns 1 minute ahead, not
-  right after every call.
+  right after every call. It also stays quiet while keep-warm will really ping (see
+  Keep-warm, "Heads-up").
 - **Resume.** `assistant.usage` is not replayed when you resume, so the extension seeds
   the clock from the session's own `~/.copilot/session-state/<id>/events.jsonl`.
   An unfinished root turn (`assistant.turn_start` with no later `assistant.turn_end`
@@ -272,7 +302,12 @@ A live check is pending; this section changes with its result (see "Live check" 
   5-minute cache), or when their cost plus the next ping would pass `keepWarmDailyMaxUsd` (default
   $2.00; `/cache-clock keepwarm daily 2.00`, 0.10 to 20). It stops with `daily-limit` and says so once
   per 24 hours per session. Only the passage of time removes entries: a new window, off and on, a
-  reload or another process do not. The lock holder compacts the file when it grows past 64 KiB. A ledger file that exists but cannot be parsed stops keep-warm
+  reload or another process do not. The file is `keepwarm/<sha256 of the session id>.ledger`.
+  Only the lock holder compacts it, when it takes the lock and whenever an append leaves it larger than
+  64 KiB (`LEDGER_COMPACT_BYTES`), by writing the 24-hour entries to a temp file and renaming it
+  over the ledger; it leaves the file alone if another write raced it. The parsed ledger is
+  cached while the file is the same one (inode, size and modification time), so a plan does not
+  re-read it every time. A ledger file that exists but cannot be parsed stops keep-warm
   with `ledger-failed` (one note, delete the file to reset it); a half-written last line is ignored.
 - **When it holds off (it does not stop; it waits).** A turn is running, or you just submitted
   a prompt whose turn has not started (it looks again when that flag expires); a question card is open
@@ -291,15 +326,23 @@ A live check is pending; this section changes with its result (see "Live check" 
   A ping whose usage still arrives within 10 minutes of the 2-minute watchdog, or after its idle,
   has its cost added to the total. A ping whose cost is not reported stops keep-warm. A usage record
   that arrives after a prompt was typed since the last send is booked as a call, not a late ping.
+- **Whose usage record it is.** `attributeUsage()` in `lib/attribution.mjs` decides, for each
+  main-agent `assistant.usage` record, whether it is the ping's or yours. A host that reports
+  `user.message` tells its own ping apart by that message, so a prompt typed while a ping is in
+  flight proves nothing there. On a host that sends no `user.message`, nothing can tell the two
+  apart, so the first record during a ping's flight goes to the ping, even if you typed. Your own
+  turn, whose record may come later, is booked as a call once the ping is answered or given up
+  on. Whether a real host behaves either way is unverified (see the live check below).
 - **Reloads and two processes.** The window, its spend, the time of the last send and any stop
   are stored in `~/.copilot/cache-clock/keepwarm/<sha256 of the session id>.json`, so a reloaded
   extension resumes them instead of starting a fresh budget. A `.lock` file beside it lets only
   one keep-warm instance per session ping. It records the pid and an instance id, so two instances in
   one process cannot both own it. It is created whole (a hard link to a finished file), a crashed
   holder's lock is replaced by renaming a finished file over it, and ownership is confirmed again
-  before every ping and every write. The holder touches the lock file every 10 minutes, and a lock
-  untouched for 30 minutes is taken over even when its pid is alive (a reused pid or a suspended
-  process). With no stored window, keep-warm waits for your next confirmed
+  before every ping and every write. The lock file's modification time is a heartbeat: the holder
+  touches it every 10 minutes (`LOCK_HEARTBEAT_MS`) and at each confirmation of ownership, and a
+  lock untouched for 30 minutes (`LOCK_STALE_MS`) is taken over even when its pid is alive (a
+  reused pid or a suspended process). With no stored window, keep-warm waits for your next confirmed
   message: a missing file never grants a fresh budget.
 - **Notes.** Stop notes and the stalled-question note reach VS Code's chat as a card where the host
   can ask; where it cannot they are warnings in its log, never error boxes. The card shows the state
@@ -454,7 +497,8 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **`-p` mode.** The guard works in `copilot -p` as a refuse-once, but slash commands
   there go to the model as text, so `/cache-clock` needs the interactive CLI. `-p` follows
   the same rule as the interactive CLI: local commands are exempt, other slash text is
-  guarded. Cache Clock cannot tell `-p` from the interactive CLI, so a local-command name
+  guarded. Cache Clock has no reliable `-p` signal (`HOST_IS_INTERACTIVE` is fixed to `true` in
+  `lib/wiring.mjs`; `canAsk` tests for question UI, not `-p`), so a local-command name
   typed in `-p` (for example `/help`) may reach the model cold with no guard and no note.
   How the host treats slash text in `-p` is unverified.
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
@@ -493,7 +537,10 @@ That is the command CI runs, from the repository root. The shared fake Copilot h
 in `test/helpers/fake-host.mjs`; the wiring tests are split by topic across
 `wiring*.test.mjs`. Keep-warm has its own planner and scheduler tests (`keepwarm.test.mjs`),
 a store and lock test (`keepwarm-store.test.mjs`), and wiring tests against the fake host
-(`wiring-keepwarm.test.mjs`); none of them sends a billed request.
+(`wiring-keepwarm.test.mjs`, with the ledger and daily limit in `wiring-keepwarm-limits.test.mjs`);
+`attribution.test.mjs` covers `attributeUsage()`, and `clock-guard.test.mjs` covers
+`classifyPrompt()` and the unpriced cold-send warning. The store test also covers the lock
+heartbeat and the ledger compaction at 64 KiB. None of them sends a billed request.
 
 The tests drive the extension through a fake Copilot session and a fake clock: the
 cold-send question and every answer (send, don't send, dismissed, timed out, host

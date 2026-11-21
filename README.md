@@ -100,12 +100,17 @@ node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # what cold sends
 ```
 
 Then run `/cache-clock help` in Copilot. The install is pinned to the release tag
-`cache-clock-v1.2.0` and checks a SHA-256 for every file; the curl lines work once that tag
-exists. Optional keep-warm is off until `/cache-clock keepwarm on` and it costs money: it
+`cache-clock-v1.2.0` and checks a SHA-256 for every file; the tag exists on the remote
+(checked with `git ls-remote --tags origin`). The guard never stops local commands such as
+`/model`, or `!` shell escapes; every other `/name`, including `/compact` and skill commands,
+is guarded. A cold send on a model with no known price only warns once, then sends. Its files
+are owner-only (0600 in 0700 folders). Optional keep-warm is off until `/cache-clock keepwarm on` and it costs money: it
 keeps the cache warm for 3 hours after your last message (up to 12) and stops at payback,
 the budget, the window end or the daily limit. The setting is global, but each open session
 has its own window, budget and 24-hour ceiling: per session, at most 362 pings in 24 hours and
-the daily dollar limit (default $2.00); deleting the ledger file resets it. It is tested against
+the daily dollar limit (default $2.00, set between $0.10 and $20); deleting the ledger file
+resets it. Only one process per session pings: its lock is taken over after 30 minutes without
+a refresh. It is tested against
 a fake Copilot host only; do not enable it before the owner's live check confirms that Copilot
 labels the ping's message as ours.
 
