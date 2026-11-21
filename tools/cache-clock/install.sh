@@ -16,9 +16,10 @@ REF="cache-clock-v1.1.0"
 BASE_URL="${CACHE_CLOCK_BASE_URL:-https://raw.githubusercontent.com/abhijitbansal/claude-skills/$REF/tools/cache-clock/extension}"
 # Every file the extension ships; a test keeps this list in step with extension/.
 # extension.mjs comes last, so an interrupted download never looks like an extension.
-FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/keepwarm.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
+FILES="report.mjs lib/attribution.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/history.mjs lib/keepwarm.mjs lib/usage.mjs lib/wiring.mjs extension.mjs"
 # BEGIN SHA256 (generated: node tools/cache-clock/bin/checksums.mjs --write)
 SUMS='1acecfbc1bde5c37c350f7bcfa4d88bdea028c7dd06ec6fede2c9100c491fee4  report.mjs
+5876acd19ce8c75ee73b890faddcae8711864fa4bd3681bb4b86d3233b63f751  lib/attribution.mjs
 2911b54a5a81da269e31cde0651963d28dfd65f426e7c9e0d3c3d2b65c7bc567  lib/clock.mjs
 0b2893cfe46fa88c69a2ced4bea0347646941d79b49d9c8896e352f3ff7f2b8f  lib/config.mjs
 7ac9f1fe0d34ac0b0efa39bae76e38297b27afa7c34de580833e89d58430871c  lib/format.mjs
@@ -26,7 +27,7 @@ d49c8e8589b3ea47aeae7f8acfe7e705582dc4ef2529de7aff919d20bcce1ac1  lib/guard.mjs
 4a29370f5e6ef4abb3d1002a503a26729249178cffbd7e661d018b9525d2424c  lib/history.mjs
 90b6c392b2f4eff2bdbbf94f390b09425e0eac472ab6ea6f2af234ba40848f63  lib/keepwarm.mjs
 817b122f5026b3e7c7bb79284120907f92a7f051f2afe62eeaf4ebc9ad7746b2  lib/usage.mjs
-405626ddb37b6efef59ac9fd6000fe853b2cc467ebcae9475566419f31e47a8b  lib/wiring.mjs
+411de8a8994475bbf4e1dbc45381f28bbea7327efd8a10371a87389f299ab563  lib/wiring.mjs
 f65bff6539a71bbe20054aa169ab7a8cd8c38e1883c715738676d859349153bc  extension.mjs
 '
 # END SHA256

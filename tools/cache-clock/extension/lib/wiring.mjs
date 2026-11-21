@@ -3,6 +3,7 @@
 
 import { closeSync, openSync, readFileSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { attributeUsage } from "./attribution.mjs";
 import { createClock } from "./clock.mjs";
 import { configDir, createKeepWarmStore, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
@@ -513,21 +514,18 @@ export async function attach({
     if (!call) return;
     // A ping in flight, or one the watchdog gave up on that may still be answered.
     const { awaitingReply: awaiting, inFlight } = keepWarm.status();
-    // A prompt typed since the last send makes a record that arrives after the ping gave up the user's.
-    // A host that reports user.message tells its own ping apart by that message, so a prompt typed while
-    // the ping is in flight proves nothing there; a host that does not report it has only the prompt.
-    const typedSince = state.promptSinceSend && state.turnSource !== "ping" && (!inFlight || !state.hostReportsUserMessage);
-    // A host that does not report user.message is told apart by the ping awaited. A message
-    // typed after the ping's own message must not take the ping's record (pingOwed).
-    if ((state.pingOwed && awaiting) || state.turnSource === "ping" || (awaiting && state.turnSource !== "user" && !typedSince)) {
+    const { owner, spendsTypedPrompt } = attributeUsage({
+      awaiting, inFlight, pingOwed: state.pingOwed, turnSource: state.turnSource,
+      promptSinceSend: state.promptSinceSend, hostReportsUserMessage: state.hostReportsUserMessage,
+    });
+    if (owner === "ping") {
       state.pingOwed = false;
       state.ownTurn = true;
       fileKeepWarmPing(call, awaiting);
       scheduleHeadsUp();
       return;
     }
-    // Booked as a real call: the typed prompt it answers is spent.
-    if (typedSince) state.promptSinceSend = false;
+    if (spendsTypedPrompt) state.promptSinceSend = false;
     clock.ingest(call);
     replan();
   });
