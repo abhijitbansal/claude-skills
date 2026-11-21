@@ -40,6 +40,8 @@ export function decide({ snap, prompt, config, refusedKey = null, busy = false, 
   if (config.mode === "off" || !snap) return { action: "allow" };
   if (snap.reason && snap.extraUsd === null) return { action: "warn" };
   if (snap.state !== "cold" && snap.reason !== "model-switch") return { action: "allow" };
+  // A cold send with no known price cannot be guarded, so say so instead of staying silent.
+  if (snap.state === "cold" && !snap.reason && snap.extraUsd === null) return { action: "warn", key: episodeKey(snap), unpriced: true };
   if (snap.extraUsd === null || snap.extraUsd < config.minUsd) return { action: "allow" };
   const key = episodeKey(snap);
   // A prompt queued while a turn runs must not abort that turn: warn only.

@@ -52,6 +52,7 @@ export function coldQuestion(snap) {
 export function coldWarn(snap) {
   if (snap.reason && snap.extraUsd === null) return `${NAME}: ${snap.displayName}: next-send cache state and price are unknown (${selectionReason(snap)}). Sending without a price-based guard.`;
   if (snap.reason === "model-switch") return coldQuestion(snap);
+  if (snap.extraUsd === null) return `${NAME}: ${snap.displayName}: the cache went cold and no price is known for this model, so no price-based guard was possible. Sending.`;
   return `${NAME}: sending cold, rewriting about ${tokens(snap.contextTokens)} tokens for ${usd(snap.coldUsd)} (warm: ${usd(snap.warmUsd)}).`;
 }
 

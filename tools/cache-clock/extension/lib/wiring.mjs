@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { createClock } from "./clock.mjs";
 import { configDir, createKeepWarmStore, loadConfigResult, loadRefusal, parseCommand, saveConfig, saveRefusal } from "./config.mjs";
 import { HELP, card, coldQuestion, coldWarn, headsUp, keepWarmQuote, keepWarmSaved, refusal, usd } from "./format.mjs";
-import { classifyPrompt, decide } from "./guard.mjs";
+import { classifyPrompt, decide, episodeKey } from "./guard.mjs";
 import { PING_DISPLAY, PING_PROMPT, createKeepWarm, createPingLedger, isPingMessage, keepWarmEstimate, looksLikePingText } from "./keepwarm.mjs";
 import { NANO_AIU_PER_USD, isMainInteraction, normalizeUsage } from "./usage.mjs";
 
@@ -348,9 +348,10 @@ export async function attach({
 
   // A selection with no price to guard on (Auto with no priced stand-in, an unseen model,
   // a provider- or tier-qualified one) is warned about once per selection, not on every send.
+  // A cold unpriced send has no `reason`, so it is keyed on its cold episode: once per episode.
   const alreadyWarnedUnknown = (snap) => {
     if (snap.extraUsd !== null) return false;
-    const key = JSON.stringify(state.selection);
+    const key = `${JSON.stringify(state.selection)}|${snap.reason ?? episodeKey(snap)}`;
     if (state.unknownWarnedFor === key) return true;
     state.unknownWarnedFor = key;
     return false;

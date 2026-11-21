@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createClock } from "../extension/lib/clock.mjs";
-import { LOCAL_COMMANDS, classifyPrompt, decide } from "../extension/lib/guard.mjs";
+import { LOCAL_COMMANDS, classifyPrompt, decide, episodeKey } from "../extension/lib/guard.mjs";
+import { coldWarn } from "../extension/lib/format.mjs";
 import { normalizeUsage } from "../extension/lib/usage.mjs";
 import { PING_PROMPT } from "../extension/lib/keepwarm.mjs";
 import { usage, pingUsage, T0, MIN } from "./fixtures.mjs";
@@ -191,9 +192,29 @@ test("decide allows slash commands, warm caches and cheap cold sends", () => {
   assert.equal(decide({ snap: { ...coldSnap, state: "warm" }, prompt: "hi", config: cfg }).action, "allow");
   assert.equal(decide({ snap: { ...coldSnap, state: "unknown" }, prompt: "hi", config: cfg }).action, "allow");
   assert.equal(decide({ snap: { ...coldSnap, extraUsd: 0.05 }, prompt: "hi", config: cfg }).action, "allow");
-  assert.equal(decide({ snap: { ...coldSnap, extraUsd: null }, prompt: "hi", config: cfg }).action, "allow");
+  assert.equal(decide({ snap: { ...coldSnap, state: "warm", extraUsd: null }, prompt: "hi", config: cfg }).action, "allow");
   assert.equal(decide({ snap: null, prompt: "hi", config: cfg }).action, "allow");
   assert.equal(decide({ snap: coldSnap, prompt: "hi", config: { ...cfg, mode: "off" } }).action, "allow");
+});
+
+const unpricedCold = { ...coldSnap, displayName: "Mystery 1", prices: null, extraUsd: null, coldUsd: null, warmUsd: null };
+
+test("decide warns on a cold unpriced snapshot", () => {
+  const verdict = decide({ snap: unpricedCold, prompt: "hi", config: cfg });
+  assert.equal(verdict.action, "warn");
+  assert.equal(verdict.unpriced, true);
+  assert.equal(verdict.key, episodeKey(unpricedCold));
+});
+
+test("decide stays silent for a cold unpriced snapshot when the guard is off", () => {
+  assert.equal(decide({ snap: unpricedCold, prompt: "hi", config: { ...cfg, mode: "off" } }).action, "allow");
+});
+
+test("coldWarn names the missing price for a cold unpriced snapshot", () => {
+  const text = coldWarn(unpricedCold);
+  assert.match(text, /no price-based guard was possible/);
+  assert.equal(text.includes("?"), false);
+  assert.equal(text, "cache-clock: Mystery 1: the cache went cold and no price is known for this model, so no price-based guard was possible. Sending.");
 });
 
 test("decide refuses a costly cold send once, then lets the resend through with a warning", () => {
