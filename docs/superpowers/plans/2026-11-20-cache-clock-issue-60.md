@@ -69,7 +69,7 @@ The suite runs on a fake host, so 358 passing tests cannot show what Copilot pas
   - In `wiring.test.mjs`, add `a /skill prompt marks a turn pending before any exemption`: after `onPrompt({prompt:"/model x"})`, `state.promptPendingUntil > now` (or the observable equivalent: keep-warm does not ping before the turn starts).
 - [ ] **Step 2:** Run `node --test test/clock-guard.test.mjs test/wiring.test.mjs`. Expected: the new tests FAIL.
 - [ ] **Step 3:** Implement `classifyPrompt` and `LOCAL_COMMANDS`. Call it once in `onPrompt`, after setting `promptPendingUntil` and `promptSinceSend`, and pass `interactive` from the host's `canAsk` capability. Keep the pasted-path rule: `/etc/hosts is broken` is a prompt.
-- [ ] **Step 4:** Update the HELP line and README:160 to "Local commands (`/model`, `/clear`, …) and `!` shell escapes are never guarded; skill commands are." Update README:447 to say `-p` guards slash text too.
+- [ ] **Step 4:** Update the HELP line, README:160 and the "What is never guarded" item in `docs/features/cache-clock.html` to "Local commands (`/model`, `/clear`, …) and `!` shell escapes are never guarded; skill commands are." Update README:447 to say `-p` guards slash text too.
 - [ ] **Step 5:** Run the full suite and `node bin/checksums.mjs --write`. Expected: all pass.
 - [ ] **Step 6: Commit** `fix(cache-clock): guard model-backed slash commands (#60)`.
 
