@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HELP, usd, perM, duration, tokens, card, refusal, coldWarn, headsUp, keepWarmStopped, keepWarmSaved, keepWarmQuote, pings } from "../extension/lib/format.mjs";
-import { DEFAULTS, configDir, loadConfig, loadConfigResult, saveConfig, parseCommand } from "../extension/lib/config.mjs";
+import { DEFAULTS, configDir, loadConfig, loadConfigResult, saveConfig, saveRefusal, createKeepWarmStore, parseCommand } from "../extension/lib/config.mjs";
 import { T0, MIN } from "./fixtures.mjs";
 
 test("usd picks precision by size", () => {
@@ -145,6 +145,81 @@ test("saveConfig round-trips through loadConfig and creates the directory", () =
   saveConfig(dir, cfg);
   assert.deepEqual(loadConfig(dir), { ...DEFAULTS, ...cfg });
   assert.deepEqual(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")), { ...DEFAULTS, ...cfg });
+});
+
+// Owner-only files (issue #60). POSIX modes only; Windows has no such bits.
+const posix = { skip: process.platform === "win32" };
+const modeOf = (path) => statSync(path).mode & 0o777;
+
+/** Runs `body` with COPILOT_HOME at a fresh temp dir and CACHE_CLOCK_HOME unset, then restores both. */
+function withCopilotHome(body) {
+  const saved = { home: process.env.COPILOT_HOME, ccHome: process.env.CACHE_CLOCK_HOME };
+  const copilotHome = mkdtempSync(join(tmpdir(), "cc-home-"));
+  process.env.COPILOT_HOME = copilotHome;
+  delete process.env.CACHE_CLOCK_HOME;
+  try {
+    body(copilotHome);
+  } finally {
+    for (const [name, value] of [["COPILOT_HOME", saved.home], ["CACHE_CLOCK_HOME", saved.ccHome]]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  }
+}
+
+test("saveConfig writes config.json 0600 in a 0700 dir", posix, () => {
+  const dir = join(mkdtempSync(join(tmpdir(), "cc-")), "nested");
+  saveConfig(dir, { mode: "warn" });
+  assert.equal(modeOf(join(dir, "config.json")), 0o600);
+  assert.equal(modeOf(dir), 0o700);
+  assert.deepEqual(readdirSync(dir), ["config.json"], "no temp file is left behind");
+});
+
+test("saveConfig tightens an existing 0755 default dir", posix, () => {
+  withCopilotHome((copilotHome) => {
+    const dir = join(copilotHome, "cache-clock");
+    mkdirSync(dir, { mode: 0o755 });
+    chmodSync(dir, 0o755);
+    writeFileSync(join(dir, "config.json"), "{}\n", { mode: 0o644 });
+    saveConfig(dir, { mode: "warn" });
+    assert.equal(modeOf(dir), 0o700);
+    assert.equal(modeOf(join(dir, "config.json")), 0o600);
+  });
+});
+
+test("saveConfig never chmods an explicit CACHE_CLOCK_HOME", posix, () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  chmodSync(dir, 0o755);
+  saveConfig(dir, { mode: "warn" });
+  assert.equal(modeOf(dir), 0o755);
+  assert.equal(modeOf(join(dir, "config.json")), 0o600);
+});
+
+test("saveRefusal tightens an existing 0755 refusals dir, writes 0600, and leaves the explicit parent alone", posix, () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  chmodSync(dir, 0o755);
+  mkdirSync(join(dir, "refusals"), { mode: 0o755 });
+  chmodSync(join(dir, "refusals"), 0o755);
+  saveRefusal(dir, "session-1", "key-1", Date.now());
+  assert.equal(modeOf(join(dir, "refusals")), 0o700);
+  assert.equal(modeOf(dir), 0o755);
+  const [file, ...rest] = readdirSync(join(dir, "refusals"));
+  assert.equal(rest.length, 0);
+  assert.equal(modeOf(join(dir, "refusals", file)), 0o600);
+});
+
+test("the keep-warm store tightens an existing 0755 dir and writes its window, lock and ledger 0600", posix, () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  mkdirSync(join(dir, "keepwarm"), { mode: 0o755 });
+  chmodSync(join(dir, "keepwarm"), 0o755);
+  const store = createKeepWarmStore(dir, "session-1");
+  store.save({ startedAt: 1, endsAt: 2, usd: 0, pings: 0, stopped: null });
+  assert.equal(store.lock(), true);
+  store.ledgerSend(Date.now(), 0.01);
+  assert.equal(modeOf(join(dir, "keepwarm")), 0o700);
+  const files = readdirSync(join(dir, "keepwarm"));
+  assert.equal(files.length, 3, `window, lock and ledger only: ${files}`);
+  for (const file of files) assert.equal(modeOf(join(dir, "keepwarm", file)), 0o600, file);
 });
 
 test("parseCommand understands status, guard, min, headsup and help", () => {

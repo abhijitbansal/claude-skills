@@ -1,10 +1,10 @@
 // Settings shared by every session: guard mode, cost threshold, heads-up lead time,
 // and the keep-warm window, budget and payback stop.
 
-import { appendFileSync, linkSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, linkSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { MODES } from "./guard.mjs";
 
 export const DEFAULTS = Object.freeze({
@@ -25,6 +25,49 @@ const FILE = "config.json";
 export function configDir(env = process.env) {
   if (env.CACHE_CLOCK_HOME) return env.CACHE_CLOCK_HOME;
   return join(env.COPILOT_HOME || join(homedir(), ".copilot"), "cache-clock");
+}
+
+const OWN_SUBDIRS = ["refusals", "keepwarm"];
+
+/**
+ * Sets an existing directory of cache-clock's own to 0700: the default `<copilot home>/cache-clock`
+ * and its `refusals` and `keepwarm` subdirectories, which an earlier version may have left at 0755.
+ * A directory the user chose with CACHE_CLOCK_HOME (it may be $HOME) is never touched; its files
+ * are still private. A symlink, a directory someone else owns, or a chmod that fails is left alone.
+ */
+export function tightenOwnDir(dir) {
+  const defaultDir = join(process.env.COPILOT_HOME || join(homedir(), ".copilot"), "cache-clock");
+  if (resolve(dir) !== resolve(defaultDir) && !OWN_SUBDIRS.includes(basename(dir))) return;
+  try {
+    const info = lstatSync(dir);
+    if (!info.isDirectory() || info.uid !== process.getuid?.()) return;
+    if ((info.mode & 0o777) !== 0o700) chmodSync(dir, 0o700);
+  } catch {
+    // Not ours to change (EPERM) or already gone; the write that follows decides what is an error.
+  }
+}
+
+/** Creates `dir` (0700) and tightens it and its parent where they are cache-clock's own. */
+function ensurePrivateDir(dir) {
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  tightenOwnDir(dir);
+  if (OWN_SUBDIRS.includes(basename(dir))) tightenOwnDir(dirname(dir));
+}
+
+/**
+ * Writes `<dir>/<name>` owner-only (0600) and atomically: a fresh temp file, created exclusively,
+ * is renamed into place, so a reader never sees half a file and an old 0644 file is replaced by a 0600 one.
+ */
+export function writePrivate(dir, name, text) {
+  ensurePrivateDir(dir);
+  const file = join(dir, name);
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    writeFileSync(tmp, text, { flag: "wx", mode: 0o600 });
+    renameSync(tmp, file);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
 }
 
 const isAmount = (v) => typeof v === "number" && Number.isFinite(v) && v >= 0;
@@ -103,14 +146,7 @@ export function saveConfig(dir, config) {
   if (error) throw new Error(`${error}; not overwritten`);
   const known = Object.fromEntries(KEYS.map((key) => [key, config?.[key] === undefined ? DEFAULTS[key] : config[key]]));
   const unknown = Object.fromEntries(Object.entries(raw ?? {}).filter(([key]) => !KEYS.includes(key)));
-  mkdirSync(dir, { recursive: true });
-  const tmp = join(dir, `${FILE}.${process.pid}.tmp`);
-  try {
-    writeFileSync(tmp, JSON.stringify({ ...known, ...unknown }, null, 2) + "\n");
-    renameSync(tmp, join(dir, FILE));
-  } finally {
-    rmSync(tmp, { force: true });
-  }
+  writePrivate(dir, FILE, JSON.stringify({ ...known, ...unknown }, null, 2) + "\n");
 }
 
 // The last refused cold episode per session, so a resend from a new process
@@ -149,17 +185,9 @@ export function loadRefusal(dir, sessionId, now = Date.now()) {
 
 export function saveRefusal(dir, sessionId, key, at) {
   if (!validSessionId(sessionId) || !refusalKey({ key, at }, at)) return;
-  mkdirSync(join(dir, "refusals"), { recursive: true, mode: 0o700 });
-  const file = refusalFile(dir, sessionId);
-  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
   // Different sessions never share a read/modify/write operation. Same-session
   // writers are last-rename-wins; this is advisory memory, not a locking protocol.
-  try {
-    writeFileSync(tmp, JSON.stringify({ key, at }) + "\n", { flag: "wx", mode: 0o600 });
-    renameSync(tmp, file);
-  } finally {
-    rmSync(tmp, { force: true });
-  }
+  writePrivate(join(dir, "refusals"), basename(refusalFile(dir, sessionId)), JSON.stringify({ key, at }) + "\n");
 }
 
 // The keep-warm window and a one-process-per-session lock, so a reloaded extension resumes
@@ -242,15 +270,7 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, instanc
 
   function save(window) {
     if (!valid) return;
-    mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
-    const file = keepWarmFile(dir, sessionId, "json");
-    const tmp = `${file}.${pid}.${randomUUID()}.tmp`;
-    try {
-      writeFileSync(tmp, JSON.stringify(window) + "\n", { flag: "wx", mode: 0o600 });
-      renameSync(tmp, file);
-    } finally {
-      rmSync(tmp, { force: true });
-    }
+    writePrivate(join(dir, KEEPWARM_DIR), basename(keepWarmFile(dir, sessionId, "json")), JSON.stringify(window) + "\n");
   }
 
   /**
@@ -262,7 +282,7 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, instanc
    */
   function lock() {
     if (!valid) return false;
-    mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
+    ensurePrivateDir(join(dir, KEEPWARM_DIR));
     const file = keepWarmFile(dir, sessionId, "lock");
     const mine = `${file}.${pid}.${randomUUID()}.tmp`;
     writeFileSync(mine, JSON.stringify({ pid, instance }) + "\n", { flag: "wx", mode: 0o600 });
@@ -295,7 +315,8 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, instanc
   const ledgerFile = () => keepWarmFile(dir, sessionId, "ledger");
   let ledgerSeq = 0;
   const ledgerAppend = (entry) => {
-    mkdirSync(join(dir, KEEPWARM_DIR), { recursive: true, mode: 0o700 });
+    ensurePrivateDir(join(dir, KEEPWARM_DIR));
+    // An append cannot be an atomic rename, so the ledger gets its mode when it is created.
     appendFileSync(ledgerFile(), "\n" + JSON.stringify(entry), { mode: 0o600 });
   };
   const ledgerUnreadable = (why) => new Error(`the ping ledger ${ledgerFile()} cannot be read as a ledger (${why}); delete it to reset it`);

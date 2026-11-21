@@ -20,7 +20,7 @@ FILES="report.mjs lib/clock.mjs lib/config.mjs lib/format.mjs lib/guard.mjs lib/
 # BEGIN SHA256 (generated: node tools/cache-clock/bin/checksums.mjs --write)
 SUMS='1acecfbc1bde5c37c350f7bcfa4d88bdea028c7dd06ec6fede2c9100c491fee4  report.mjs
 2911b54a5a81da269e31cde0651963d28dfd65f426e7c9e0d3c3d2b65c7bc567  lib/clock.mjs
-13ed66afd118607dfe672c468b868a087a09428e619b502d186e2c809a13ccd3  lib/config.mjs
+52e267540317fa14c8c146865419d55cf9b878c392b83c5a8983919408e78190  lib/config.mjs
 7ac9f1fe0d34ac0b0efa39bae76e38297b27afa7c34de580833e89d58430871c  lib/format.mjs
 d49c8e8589b3ea47aeae7f8acfe7e705582dc4ef2529de7aff919d20bcce1ac1  lib/guard.mjs
 4a29370f5e6ef4abb3d1002a503a26729249178cffbd7e661d018b9525d2424c  lib/history.mjs
