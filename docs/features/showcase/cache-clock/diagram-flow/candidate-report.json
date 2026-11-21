@@ -8,10 +8,14 @@
     "repository": {
       "url": "https://github.com/abhijitbansal/claude-skills",
       "provider": "github",
-      "revision": "c2c7e5d8410ec563693ead55a473cdac86d90404"
+      "revision": "517983a7ea9aa95aa5556f34888911b7b463716c"
     }
   },
   "lanes": [
+    {
+      "id": "holder",
+      "label": "Keep-warm lock holder (may be another process)"
+    },
     {
       "id": "headsup",
       "label": "Heads-up timer"
@@ -38,15 +42,47 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 152,
-          "end_line": 158
+          "line": 240
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 590,
+          "end_line": 599
+        }
+      ]
+    },
+    {
+      "id": "willq",
+      "lane": "headsup",
+      "col": 1,
+      "type": "security",
+      "label": "Ping coming?",
+      "sublabel": "own willPing, or holder's",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 234,
+          "end_line": 239
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 593,
+          "end_line": 594
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/keepwarm.mjs",
+          "line": 739,
+          "end_line": 744,
+          "label": "status: passive, holderWillPing, willPing"
         }
       ]
     },
     {
       "id": "timer",
       "lane": "headsup",
-      "col": 1,
+      "col": 2,
+      "yOffset": 34,
       "type": "messagebus",
       "label": "Timer",
       "sublabel": "expiry - lead",
@@ -54,36 +90,36 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 12,
-          "end_line": 13
+          "line": 14,
+          "end_line": 15
         },
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 159,
-          "end_line": 167
+          "line": 600,
+          "end_line": 611
         }
       ]
     },
     {
       "id": "fireq",
       "lane": "headsup",
-      "col": 2,
+      "col": 3,
       "type": "security",
       "label": "Still worth it?",
-      "sublabel": "idle, warm, >= min",
+      "sublabel": "idle, warm, no ping, >= min",
       "width": 140,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 162,
-          "end_line": 165
+          "line": 604,
+          "end_line": 607
         }
       ]
     },
     {
       "id": "say",
       "lane": "headsup",
-      "col": 3,
+      "col": 4,
       "type": "frontend",
       "label": "Heads-up line",
       "sublabel": "ephemeral, goes cold in",
@@ -91,32 +127,82 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 165
+          "line": 608,
+          "end_line": 609
         },
         {
           "path": "tools/cache-clock/extension/lib/format.mjs",
-          "line": 56,
-          "end_line": 61
+          "line": 59,
+          "end_line": 64
         }
       ]
     },
     {
       "id": "quiet",
       "lane": "headsup",
-      "col": 4,
+      "col": 2,
+      "yOffset": -34,
       "type": "external",
       "label": "Stay silent",
-      "sublabel": "headsup off: no timer",
-      "width": 140,
+      "sublabel": "headsup off, or a ping is coming",
+      "width": 164,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 157
+          "line": 594
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/wiring.mjs",
+          "line": 597
         },
         {
           "path": "tools/cache-clock/extension/lib/config.mjs",
-          "line": 91,
-          "end_line": 94
+          "line": 586,
+          "end_line": 589
+        }
+      ]
+    },
+    {
+      "id": "holdplan",
+      "lane": "holder",
+      "col": 0,
+      "type": "backend",
+      "label": "Holder: ping planned?",
+      "sublabel": "ping timer set, or out",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/keepwarm.mjs",
+          "line": 312,
+          "end_line": 314,
+          "label": "willPingNow"
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/keepwarm.mjs",
+          "line": 437
+        }
+      ]
+    },
+    {
+      "id": "holdwin",
+      "lane": "holder",
+      "col": 1,
+      "type": "database",
+      "label": "Shared window file",
+      "sublabel": "holder saves willPing",
+      "width": 140,
+      "sources": [
+        {
+          "path": "tools/cache-clock/extension/lib/keepwarm.mjs",
+          "line": 318,
+          "end_line": 327,
+          "label": "persist"
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/config.mjs",
+          "line": 380,
+          "end_line": 388,
+          "label": "holderWillPing"
         }
       ]
     },
@@ -132,7 +218,7 @@
         {
           "path": "tools/cache-clock/extension/report.mjs",
           "line": 37,
-          "end_line": 51
+          "end_line": 52
         }
       ]
     },
@@ -142,13 +228,13 @@
       "col": 1,
       "type": "backend",
       "label": "Parse per call",
-      "sublabel": "epochs split at compact",
+      "sublabel": "epochs split, pings marked",
       "width": 140,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/history.mjs",
           "line": 11,
-          "end_line": 41
+          "end_line": 48
         }
       ]
     },
@@ -163,13 +249,13 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/usage.mjs",
-          "line": 79,
-          "end_line": 85
+          "line": 91,
+          "end_line": 98
         },
         {
           "path": "tools/cache-clock/extension/lib/usage.mjs",
-          "line": 97,
-          "end_line": 103,
+          "line": 106,
+          "end_line": 116,
           "label": "extraUsd"
         }
       ]
@@ -185,8 +271,14 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/history.mjs",
-          "line": 122,
-          "end_line": 141
+          "line": 142,
+          "end_line": 163
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/history.mjs",
+          "line": 92,
+          "end_line": 98,
+          "label": "pings are spend, not calls"
         }
       ]
     },
@@ -201,12 +293,18 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 61,
-          "end_line": 64
+          "line": 125,
+          "end_line": 128
         },
         {
           "path": "tools/cache-clock/install.sh",
-          "line": 70
+          "line": 67,
+          "end_line": 71
+        },
+        {
+          "path": "tools/cache-clock/install.sh",
+          "line": 149,
+          "end_line": 151
         }
       ]
     },
@@ -221,13 +319,13 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 94,
-          "end_line": 98
+          "line": 228,
+          "end_line": 233
         },
         {
           "path": "tools/cache-clock/extension/lib/format.mjs",
-          "line": 117,
-          "end_line": 118
+          "line": 217,
+          "end_line": 220
         }
       ]
     },
@@ -236,18 +334,18 @@
       "lane": "vscode",
       "col": 2,
       "type": "external",
-      "label": "Heads-up, notes",
-      "sublabel": "reach VS Code's log only",
+      "label": "Heads-up line",
+      "sublabel": "reaches VS Code's log only",
       "width": 140,
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 61,
-          "end_line": 64
+          "line": 125,
+          "end_line": 128
         },
         {
           "path": "tools/cache-clock/extension/lib/wiring.mjs",
-          "line": 165
+          "line": 609
         }
       ]
     },
@@ -262,17 +360,49 @@
       "sources": [
         {
           "path": "tools/cache-clock/extension/lib/history.mjs",
-          "line": 33
+          "line": 36
+        },
+        {
+          "path": "tools/cache-clock/extension/lib/history.mjs",
+          "line": 71,
+          "end_line": 76
         }
       ]
     }
   ],
   "edges": [
     {
-      "id": "e-sched-timer",
+      "id": "e-sched-will",
       "from": "sched",
-      "to": "timer",
+      "to": "willq",
       "label": "warm only"
+    },
+    {
+      "id": "e-will-timer",
+      "from": "willq",
+      "to": "timer",
+      "label": "no ping coming"
+    },
+    {
+      "id": "e-will-quiet",
+      "from": "willq",
+      "to": "quiet",
+      "label": "ping coming",
+      "variant": "dashed",
+      "role": "branch"
+    },
+    {
+      "id": "e-plan-win",
+      "from": "holdplan",
+      "to": "holdwin",
+      "label": "saves"
+    },
+    {
+      "id": "e-win-will",
+      "from": "holdwin",
+      "to": "willq",
+      "label": "passive: reads holder",
+      "variant": "dashed"
     },
     {
       "id": "e-timer-fire",
@@ -342,11 +472,20 @@
   "cards": [
     {
       "dot": "cyan",
+      "title": "Heads-up and keep-warm",
+      "items": [
+        "The heads-up stays silent while a ping will keep the cache warm: this process's own ping is planned or out (willPing), or, in a process that does not hold the session lock, the lock holder's window file says willPing is true.",
+        "A passive session warns unless the holder will ping. If the holder has stopped, or has nothing planned, this process's heads-up is the only warning.",
+        "The holder writes willPing into the shared window file whenever its plan changes. The check runs when the heads-up is scheduled and again when its timer fires."
+      ]
+    },
+    {
+      "dot": "cyan",
       "title": "VS Code, measured 11-12 Oct 2026",
       "items": [
         "The extension loads in VS Code's Copilot chat only with the setting \"chat.canvases.enabled\": true, from a project install (.github/extensions).",
         "Typed in full, /cache-clock works but is not listed in the / menu. Its card, help and settings appear as a question with an OK button, because plain session messages show there only as error boxes.",
-        "The heads-up and the sending-cold note reach only VS Code's log. Sessions keep usage checkpoints only, so the report counts them as totals."
+        "The heads-up reaches only VS Code's log. Cold-send warnings are sent at error level there (the chat shows only error-level messages, as a failure box). Sessions keep usage checkpoints only, so the report counts them as totals."
       ]
     }
   ]
