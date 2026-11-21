@@ -75,7 +75,9 @@ test("pings that report a cost of 0 cannot unbind the daily dollar limit", async
   assert.ok(ledger.usd >= h.sent.length * 0.02 - 1e-9, "every ping counts for at least the estimate");
 });
 
-test("on a host with no user.message, a call typed during an awaited ping is booked as a call, before the watchdog too", async () => {
+// With no user.message nothing tells the two apart while the ping is out, so its first record is the ping's;
+// the typed prompt's own record, which follows, is the call (it was only the first that was handed over).
+test("on a host with no user.message, a call typed during an awaited ping leaves the first record to the ping and books the next as a call", async () => {
   const h = fakeHost({ config: KW, emitUserMessage: false });
   h.autoReply = false;
   await h.start();
@@ -86,10 +88,14 @@ test("on a host with no user.message, a call typed during an awaited ping is boo
   assert.equal(h.sent.length, 1);
   await h.prompt("real message");
   h.emit("assistant.turn_start", {});
+  h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+  await h.command("");
+  assert.match(lastLog(h), /session +1 model call/, "the first record, in flight, was the ping's");
+  assert.match(lastLog(h), /1 ping/);
   h.emit("assistant.usage", sonnet({ at: iso(h.now), read: 190_000, write: 10_000, output: 400 }));
   h.emit("session.idle", {});
   await h.command("");
-  assert.match(lastLog(h), /session +2 model calls/);
+  assert.match(lastLog(h), /session +2 model calls/, "the prompt's own record is a call");
 });
 
 test("in VS Code the daily-limit note is one card per 24 hours, however many turns follow", async () => {

@@ -367,6 +367,10 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     window = null;
     flight = null;
     sendId += 1;
+    // A process that lost the lock expects no ping's record: its late and tail claims go with it.
+    lateQueue = [];
+    lastPing = null;
+    tailUntil = 0;
   }
 
   function startWindow(at) {
@@ -612,12 +616,16 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
    * that reports 0 cannot unbind the daily limit.
    */
   function bookPing(phase, usd, ping) {
-    const base = window ?? { startedAt: now(), endsAt: now(), usd: 0, pings: 0, stopped: null };
+    // No window (never made, or let go with the lock): nothing is booked and no window is made up for it.
+    if (!window) return null;
+    const base = window;
     const tail = phase === "tail";
     if (tail) lastPing = { ...lastPing, usd: lastPing.usd + usd };
     else if (phase === "flight") lastPing = { ledgerId: ping.ledgerId, warm: ping.warm, at: ping.sentAt, usd };
     const pingUsd = tail ? lastPing.usd : usd;
     ledgerCost(ping.ledgerId, Math.max(ping.warm, pingUsd));
+    // Writing the ledger checks the lock live: finding it gone let go of the window.
+    if (!window) return null;
     return { ...base, usd: base.usd + usd, pings: base.pings + (tail ? 0 : 1), lastPingUsd: pingUsd };
   }
 

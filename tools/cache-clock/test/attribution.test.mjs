@@ -23,8 +23,8 @@ const ROWS = [
   ["a typed prompt and nothing awaited: the user's, and it spends the prompt", { promptSinceSend: true }, USER_SPENDS],
   ["a late reply awaited after a prompt was typed: the user's, spending the prompt", { awaiting: true, promptSinceSend: true }, USER_SPENDS],
   ["in flight on a host that reports user.message: a typed prompt proves nothing, the ping's", { awaiting: true, inFlight: true, hostReportsUserMessage: true, promptSinceSend: true }, PING],
-  // Today's behavior, changed by the fix below.
-  ["in flight on a host without user.message and a typed prompt: the user's (today)", { awaiting: true, inFlight: true, promptSinceSend: true }, USER_SPENDS],
+  ["while a ping is in flight on a host without user.message, the first record goes to the ping even if the user typed", { awaiting: true, inFlight: true, promptSinceSend: true }, PING],
+  ["in flight on a host without user.message and nothing typed: the ping's", { awaiting: true, inFlight: true }, PING],
 ];
 
 for (const [name, facts, expected] of ROWS) {

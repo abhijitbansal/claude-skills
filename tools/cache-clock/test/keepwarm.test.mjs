@@ -741,3 +741,43 @@ test("with no stored window keep-warm waits for a confirmed user turn: no window
   await r.run(10 * MIN);
   assert.equal(r.sent, 0);
 });
+
+// A store whose lock another process can take away mid-run; `saves` counts the windows written.
+const lockableStore = () => {
+  const inner = memoryStore();
+  const store = { ...inner, held: true, saves: 0 };
+  store.lock = () => store.held;
+  store.save = (w) => { store.saves += 1; inner.save(w); };
+  return store;
+};
+
+for (const kind of ["late", "tail"]) {
+  test(`releaseOwnership clears late and tail attribution (${kind})`, async () => {
+    const store = lockableStore();
+    const r = rig({ store, send: kind === "late"
+      ? async () => { r.sent += 1; }
+      : async () => { r.sent += 1; queueMicrotask(() => pingReply(r, { usageOnly: true })); } });
+    r.turn();
+    await r.run(kind === "late" ? 6 * MIN + 10_000 : 4 * MIN + 10_000);
+    assert.equal(r.kw.status().awaitingReply, true, `a ${kind} reply is still expected`);
+    store.held = false;
+    r.kw.configChanged(); // saving the window finds the lock gone and lets go of everything
+    assert.equal(r.kw.status().state, "elsewhere");
+    assert.equal(r.kw.status().awaitingReply, false, "a process that lost the lock expects no ping's record");
+  });
+}
+
+test("bookPing with no window books nothing and persists nothing", async () => {
+  const store = lockableStore();
+  const r = rig({ store, send: async () => { r.sent += 1; } }); r.turn();
+  await r.run(6 * MIN + 10_000);
+  assert.equal(r.kw.status().awaitingReply, true);
+  const saves = store.saves;
+  const ledger = ledgerOf(store, r.now);
+  store.held = false; // lost, and not yet noticed: the late reply finds the window gone while booking
+  r.kw.onPingUsage({ usd: 0.02, warm: true });
+  const s = r.kw.status();
+  assert.deepEqual([s.usd, s.pings], [0, 0], "no window was made up to hold the cost");
+  assert.equal(store.saves, saves, "nothing was written");
+  assert.deepEqual(ledgerOf(store, r.now), ledger, "and the ledger is untouched by a process without the lock");
+});
