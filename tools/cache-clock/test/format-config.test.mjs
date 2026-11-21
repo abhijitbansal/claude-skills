@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { HELP, usd, perM, duration, tokens, card, refusal, coldWarn, headsUp, keepWarmStopped, keepWarmSaved, keepWarmQuote, pings } from "../extension/lib/format.mjs";
@@ -167,6 +167,18 @@ function withCopilotHome(body) {
   }
 }
 
+/** Runs `body` with CACHE_CLOCK_HOME set to `dir`, then restores it. */
+function withCacheClockHome(dir, body) {
+  const saved = process.env.CACHE_CLOCK_HOME;
+  process.env.CACHE_CLOCK_HOME = dir;
+  try {
+    body();
+  } finally {
+    if (saved === undefined) delete process.env.CACHE_CLOCK_HOME;
+    else process.env.CACHE_CLOCK_HOME = saved;
+  }
+}
+
 test("saveConfig writes config.json 0600 in a 0700 dir", posix, () => {
   const dir = join(mkdtempSync(join(tmpdir(), "cc-")), "nested");
   saveConfig(dir, { mode: "warn" });
@@ -195,12 +207,46 @@ test("saveConfig never chmods an explicit CACHE_CLOCK_HOME", posix, () => {
   assert.equal(modeOf(join(dir, "config.json")), 0o600);
 });
 
+test("with CACHE_CLOCK_HOME set, config and refusals leave it 0755 and keep its refusals dir 0700", posix, () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-"));
+  chmodSync(dir, 0o755);
+  mkdirSync(join(dir, "refusals"), { mode: 0o755 });
+  chmodSync(join(dir, "refusals"), 0o755);
+  withCacheClockHome(dir, () => {
+    saveConfig(dir, { mode: "warn" });
+    saveRefusal(dir, "session-1", "key-1", Date.now());
+  });
+  assert.equal(modeOf(dir), 0o755);
+  assert.equal(modeOf(join(dir, "refusals")), 0o700);
+});
+
+test("a dir named keepwarm or refusals outside the config dir is never chmodded", posix, () => {
+  for (const name of ["keepwarm", "refusals"]) {
+    const dir = join(mkdtempSync(join(tmpdir(), "cc-")), name);
+    mkdirSync(dir, { mode: 0o755 });
+    chmodSync(dir, 0o755);
+    saveConfig(dir, { mode: "warn" });
+    assert.equal(modeOf(dir), 0o755, name);
+    assert.equal(modeOf(join(dir, "config.json")), 0o600, name);
+  }
+});
+
+test("a symlink where the default dir should be does not get its target chmodded", posix, () => {
+  withCopilotHome((copilotHome) => {
+    const target = mkdtempSync(join(tmpdir(), "cc-target-"));
+    chmodSync(target, 0o755);
+    symlinkSync(target, join(copilotHome, "cache-clock"));
+    saveConfig(join(copilotHome, "cache-clock"), { mode: "warn" });
+    assert.equal(modeOf(target), 0o755);
+  });
+});
+
 test("saveRefusal tightens an existing 0755 refusals dir, writes 0600, and leaves the explicit parent alone", posix, () => {
   const dir = mkdtempSync(join(tmpdir(), "cc-"));
   chmodSync(dir, 0o755);
   mkdirSync(join(dir, "refusals"), { mode: 0o755 });
   chmodSync(join(dir, "refusals"), 0o755);
-  saveRefusal(dir, "session-1", "key-1", Date.now());
+  withCacheClockHome(dir, () => saveRefusal(dir, "session-1", "key-1", Date.now()));
   assert.equal(modeOf(join(dir, "refusals")), 0o700);
   assert.equal(modeOf(dir), 0o755);
   const [file, ...rest] = readdirSync(join(dir, "refusals"));
@@ -212,10 +258,12 @@ test("the keep-warm store tightens an existing 0755 dir and writes its window, l
   const dir = mkdtempSync(join(tmpdir(), "cc-"));
   mkdirSync(join(dir, "keepwarm"), { mode: 0o755 });
   chmodSync(join(dir, "keepwarm"), 0o755);
-  const store = createKeepWarmStore(dir, "session-1");
-  store.save({ startedAt: 1, endsAt: 2, usd: 0, pings: 0, stopped: null });
-  assert.equal(store.lock(), true);
-  store.ledgerSend(Date.now(), 0.01);
+  withCacheClockHome(dir, () => {
+    const store = createKeepWarmStore(dir, "session-1");
+    store.save({ startedAt: 1, endsAt: 2, usd: 0, pings: 0, stopped: null });
+    assert.equal(store.lock(), true);
+    store.ledgerSend(Date.now(), 0.01);
+  });
   assert.equal(modeOf(join(dir, "keepwarm")), 0o700);
   const files = readdirSync(join(dir, "keepwarm"));
   assert.equal(files.length, 3, `window, lock and ledger only: ${files}`);

@@ -1,7 +1,7 @@
 // Settings shared by every session: guard mode, cost threshold, heads-up lead time,
 // and the keep-warm window, budget and payback stop.
 
-import { appendFileSync, chmodSync, linkSync, lstatSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, fchmodSync, fstatSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -32,18 +32,27 @@ const OWN_SUBDIRS = ["refusals", "keepwarm"];
 /**
  * Sets an existing directory of cache-clock's own to 0700: the default `<copilot home>/cache-clock`
  * and its `refusals` and `keepwarm` subdirectories, which an earlier version may have left at 0755.
- * A directory the user chose with CACHE_CLOCK_HOME (it may be $HOME) is never touched; its files
- * are still private. A symlink, a directory someone else owns, or a chmod that fails is left alone.
+ * A subdirectory counts only directly under the config dir, which may be a CACHE_CLOCK_HOME. The
+ * directory CACHE_CLOCK_HOME names (it may be $HOME) is never touched; its files are still private.
+ * A symlink, a directory someone else owns, or a chmod that fails is left alone.
  */
-export function tightenOwnDir(dir) {
-  const defaultDir = join(process.env.COPILOT_HOME || join(homedir(), ".copilot"), "cache-clock");
-  if (resolve(dir) !== resolve(defaultDir) && !OWN_SUBDIRS.includes(basename(dir))) return;
+export function tightenOwnDir(dir, env = process.env) {
+  const { O_RDONLY, O_DIRECTORY, O_NOFOLLOW } = constants;
+  if (!O_DIRECTORY || !O_NOFOLLOW) return; // no way to open without following a symlink (win32)
+  const defaultDir = join(env.COPILOT_HOME || join(homedir(), ".copilot"), "cache-clock");
+  const isRoot = !env.CACHE_CLOCK_HOME && resolve(dir) === resolve(defaultDir);
+  const isSubdir = OWN_SUBDIRS.includes(basename(dir)) && resolve(dirname(dir)) === resolve(configDir(env));
+  if (!isRoot && !isSubdir) return;
+  let fd;
   try {
-    const info = lstatSync(dir);
-    if (!info.isDirectory() || info.uid !== process.getuid?.()) return;
-    if ((info.mode & 0o777) !== 0o700) chmodSync(dir, 0o700);
+    // chmod follows symlinks, so check and change the same open directory, never the path twice.
+    fd = openSync(dir, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    const info = fstatSync(fd);
+    if (info.isDirectory() && info.uid === process.getuid?.() && (info.mode & 0o777) !== 0o700) fchmodSync(fd, 0o700);
   } catch {
-    // Not ours to change (EPERM) or already gone; the write that follows decides what is an error.
+    // A symlink, not ours (EPERM) or already gone; the write that follows decides what is an error.
+  } finally {
+    if (fd !== undefined) closeSync(fd);
   }
 }
 
