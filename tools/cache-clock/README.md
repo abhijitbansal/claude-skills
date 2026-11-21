@@ -28,8 +28,7 @@ That downloads a copy into `~/.copilot/extensions/cache-clock` (`COPILOT_HOME` m
 
 The one-line install is pinned to the release tag `cache-clock-v1.2.0`, not to `main`, and
 checks a SHA-256 for every file it downloads against the list inside the script. A file that
-does not match stops the install and leaves nothing behind. The tag exists on the remote
-(checked with `git ls-remote --tags origin`). After any edit under `extension/`, run
+does not match stops the install and leaves nothing behind. After any edit under `extension/`, run
 `node tools/cache-clock/bin/checksums.mjs --write`; the tests fail on a stale list.
 
 - **Copilot CLI:** start a new `copilot` session. Copilot asks once whether the extension

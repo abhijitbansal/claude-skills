@@ -100,8 +100,7 @@ node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # what cold sends
 ```
 
 Then run `/cache-clock help` in Copilot. The install is pinned to the release tag
-`cache-clock-v1.2.0` and checks a SHA-256 for every file; the tag exists on the remote
-(checked with `git ls-remote --tags origin`). The guard never stops local commands such as
+`cache-clock-v1.2.0` and checks a SHA-256 for every file. The guard never stops local commands such as
 `/model`, or `!` shell escapes; every other `/name`, including `/compact` and skill commands,
 is guarded. A cold send on a model with no known price only warns once, then sends. Its files
 are owner-only (0600 in 0700 folders). Optional keep-warm is off until `/cache-clock keepwarm on` and it costs money: it
