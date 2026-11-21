@@ -642,7 +642,16 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     const refreshed = phase !== "flight" || expiryMoved();
     window = bookPing(phase, usd, ping);
     persist();
-    if (!window) return; // the lock was lost: another process keeps this window now
+    if (!window) {
+      // Nothing was booked (no window, or the lock was lost: another process keeps it now). The ping was
+      // still answered, so its flight ends and the watchdog must not report "no reply" for it.
+      if (phase === "flight") {
+        clearTimer(watchdog);
+        watchdog = null;
+        flight = null;
+      }
+      return;
+    }
     if (phase === "flight") {
       // A host that sends usage but no idle: the ping ends with its usage.
       clearTimer(watchdog);

@@ -767,6 +767,20 @@ for (const kind of ["late", "tail"]) {
   });
 }
 
+// Guard, not a RED: the lock-lost path already clears the flight (releaseOwnership); the unconditional clear in
+// onPingUsage covers "owner with no window", which no public sequence reaches (a flight needs a window).
+test("a ping answered after the lock was lost leaves no flight, and the watchdog does not call it unanswered", async () => {
+  const store = lockableStore();
+  const r = rig({ store, send: async () => { r.sent += 1; } }); r.turn();
+  await r.run(4 * MIN + 10_000);
+  assert.equal(r.kw.status().inFlight, true);
+  store.held = false;
+  r.kw.onPingUsage({ usd: 0.02, warm: true });
+  assert.equal(r.kw.status().inFlight, false);
+  await r.run(3 * MIN);
+  assert.ok(!r.logs.some((l) => /ping failed/.test(l.text)), "no 'no reply' report for an answered ping");
+});
+
 test("bookPing with no window books nothing and persists nothing", async () => {
   const store = lockableStore();
   const r = rig({ store, send: async () => { r.sent += 1; } }); r.turn();

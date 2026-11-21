@@ -98,6 +98,36 @@ test("on a host with no user.message, a call typed during an awaited ping leaves
   assert.match(lastLog(h), /session +2 model calls/, "the prompt's own record is a call");
 });
 
+// Pins a known limit, not a fix: with no user.message nothing separates the two records while the ping is out,
+// so a user record that beats the ping's reply is booked as ping spend, and the ping's reply, which follows in
+// its tail, is booked as the user's call. The two costs swap; a cold-looking user record stops keep-warm.
+for (const [label, record, stopped] of [
+  ["warm", { read: 190_000, write: 10_000, output: 400 }, null],
+  ["cold", { read: 10_000, write: 190_000, output: 400 }, "cold-reply"],
+]) {
+  test(`documented trade-off: without user.message, a ${label} user record that beats the ping's reply is booked as ping spend`, async () => {
+    const h = fakeHost({ config: KW, emitUserMessage: false });
+    h.autoReply = false;
+    const { keepWarm } = await h.start();
+    h.emit("assistant.turn_start", {});
+    h.emit("assistant.usage", sonnet({ at: iso(T0) }));
+    h.emit("session.idle", {});
+    await h.run(4 * MIN + 10_000);
+    assert.equal(h.sent.length, 1);
+    await h.prompt("real message");
+    h.emit("assistant.turn_start", {});
+    h.emit("assistant.usage", sonnet({ at: iso(h.now), ...record }));
+    assert.deepEqual([keepWarm.status().pings, keepWarm.status().inFlight, keepWarm.status().stopped], [1, false, stopped],
+      "the user's record answered the ping: it is the window's one ping, and the cold one stops keep-warm");
+    h.emit("assistant.usage", pingUsage({ at: iso(h.now) }));
+    h.emit("session.idle", {});
+    await h.command("");
+    assert.match(lastLog(h), /session +2 model calls/, "the first turn and the ping's reply, booked as the user's call; the user's own record is not in the tally");
+    assert.deepEqual([keepWarm.status().pings, keepWarm.status().stopped], [1, stopped], "the ping's reply adds no second ping");
+    assert.deepEqual(ledgerOf(h), { pings: 1, usd: 0.02, noteAt: null }, "the ledger holds the one send at the warm estimate");
+  });
+}
+
 test("in VS Code the daily-limit note is one card per 24 hours, however many turns follow", async () => {
   const h = fakeHost({
     env: { VSCODE_CANVAS_DATA_DIR: "/x" }, answer: "OK",
