@@ -52,7 +52,13 @@ export function tightenOwnDir(dir, env = process.env) {
   } catch {
     // A symlink, not ours (EPERM) or already gone; the write that follows decides what is an error.
   } finally {
-    if (fd !== undefined) closeSync(fd);
+    if (fd !== undefined) {
+      try {
+        closeSync(fd);
+      } catch {
+        // Nothing to undo: the directory was only inspected, and a failed close must not fail the write.
+      }
+    }
   }
 }
 
@@ -337,8 +343,12 @@ export function createKeepWarmStore(dir, sessionId, {
 
   /** Ownership is confirmed: refresh the heartbeat now and keep it fresh while the lock is held. */
   function confirmed(file) {
-    const seconds = now() / 1000;
-    utimesSync(file, seconds, seconds);
+    try {
+      const seconds = now() / 1000;
+      utimesSync(file, seconds, seconds);
+    } catch {
+      // Best effort: the lock is ours already, and a failed touch must not make lock() throw and lock this process out.
+    }
     if (heartbeat === null) armHeartbeat();
     return true;
   }

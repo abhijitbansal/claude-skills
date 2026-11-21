@@ -171,6 +171,20 @@ test("classifyPrompt names each kind of submitted text", () => {
   assert.ok(!LOCAL_COMMANDS.has("compact"));
 });
 
+test("classifyPrompt knows the other built-in commands that never call the model", () => {
+  for (const name of ["mcp", "agent", "share", "feedback", "context", "list-dirs", "reset-allowed-tools", "user", "terminal-setup"]) {
+    assert.equal(classifyPrompt(`/${name}`, { interactive: true }), "local-command", name);
+  }
+  assert.equal(classifyPrompt("/mcp show", { interactive: true }), "local-command");
+});
+
+test("a local command is one line: text after a newline makes it a prompt", () => {
+  assert.equal(classifyPrompt("/clear\nsummarize this whole repo", { interactive: true }), "prompt");
+  assert.equal(classifyPrompt("/model x\nand then do this", { interactive: true }), "prompt");
+  assert.equal(classifyPrompt("/clear\n", { interactive: true }), "local-command", "a trailing newline alone is still one line");
+  assert.equal(decide({ snap: coldSnap, prompt: "/clear\nlong prompt", config: cfg }).action, "refuse");
+});
+
 test("decide only warns while a turn is running", () => {
   assert.equal(decide({ snap: coldSnap, prompt: "queued follow-up", config: cfg, busy: true }).action, "warn");
 });

@@ -291,7 +291,17 @@ test("a lock holder that lost the lock stops its heartbeat instead of touching t
   assert.equal(live(), 1, "a's beat saw the lock was not its own and did not re-arm");
 });
 
-const oldLine = (i) => "\n" + JSON.stringify({ t: "send", id: `old.${i}`, at: NOW + i * 1000, usd: 0.01 });
+test("a failed heartbeat touch does not make lock() throw or lose the lock", (t) => {
+  const dir = sandbox(t);
+  // A clock that is not a number makes utimesSync throw (ERR_INVALID_ARG_TYPE) after the lock is taken.
+  const s = createKeepWarmStore(dir, "s-1", { pid: process.pid, now: () => Number.NaN });
+  assert.equal(s.lock(), true, "the lock is held even though the touch failed");
+  assert.equal(JSON.parse(readFileSync(lockPath(dir, "s-1"), "utf8")).pid, process.pid);
+  assert.equal(s.lock(), true, "the next confirmation does not throw either");
+  s.unlock();
+});
+
+const oldLine = (i) =>"\n" + JSON.stringify({ t: "send", id: `old.${i}`, at: NOW + i * 1000, usd: 0.01 });
 
 test("the ledger compacts once it passes 64 KiB, and the daily summary is unchanged by compaction", (t) => {
   const dir = sandbox(t);

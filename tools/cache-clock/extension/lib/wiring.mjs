@@ -349,8 +349,8 @@ export async function attach({
   }
 
   // A selection with no price to guard on (Auto with no priced stand-in, an unseen model,
-  // a provider- or tier-qualified one) is warned about once per selection, not on every send.
-  // A cold unpriced send has no `reason`, so it is keyed on its cold episode: once per episode.
+  // a provider- or tier-qualified one) is warned about once per selection and reason, not on every send.
+  // A cold unpriced send has no `reason`, so it is keyed on its cold episode: once per selection and episode.
   const alreadyWarnedUnknown = (snap) => {
     if (snap.extraUsd !== null) return false;
     const key = `${JSON.stringify(state.selection)}|${snap.reason ?? episodeKey(snap)}`;

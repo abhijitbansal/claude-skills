@@ -160,7 +160,9 @@ cache-clock · Claude Sonnet 5.5
   (`copilot --resume … -p`). Local commands (`/model`, `/clear`, …) and `!` shell escapes are never guarded; skill commands are. A
   message queued while a turn is running only gets the note: stopping it then would
   cancel the running turn. After a compaction the next send is exempt, since the context
-  was rewritten anyway.
+  was rewritten anyway. A cold send on a model with no known price cannot be priced: the
+  guard warns once per cold episode ("the cache went cold and no price is known for this
+  model…") and sends.
 - **Model switches.** The destination model's previous clock cannot prove that it cached
   the current conversation. The card says unknown; with destination prices previously
   observed in this session, the guard asks about a *possible* rewrite of the latest
@@ -452,7 +454,9 @@ Measured on 11–12 October 2026 with VS Code's Copilot agent host (bundled runt
 - **`-p` mode.** The guard works in `copilot -p` as a refuse-once, but slash commands
   there go to the model as text, so `/cache-clock` needs the interactive CLI. `-p` follows
   the same rule as the interactive CLI: local commands are exempt, other slash text is
-  guarded. How the host treats slash text in `-p` is unverified.
+  guarded. Cache Clock cannot tell `-p` from the interactive CLI, so a local-command name
+  typed in `-p` (for example `/help`) may reach the model cold with no guard and no note.
+  How the host treats slash text in `-p` is unverified.
 - **Early eviction is invisible to the guard.** It trusts Copilot's `cacheExpiresAt`.
   When a provider serves a cache cold sooner (Luna at 29 of 30 minutes, once), the send is
   billed cold and the guard stays quiet; the report counts it as a prefix break.
