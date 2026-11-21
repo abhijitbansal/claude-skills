@@ -23,10 +23,38 @@ import json, os
 root = '${REPO_ROOT}'
 d = json.load(open(os.path.join(root, '.claude-plugin/marketplace.json')))
 for p in d['plugins']:
+    if not isinstance(p['source'], str):
+        continue  # hosted in another repo (git-subdir): no directory here
     pj_path = os.path.join(root, p['source'], '.claude-plugin', 'plugin.json')
     pj = json.load(open(pj_path))
     assert pj['name'] == p['name'], f\"{pj_path}: {pj['name']} != {p['name']}\"
     assert pj['description'], pj_path
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "portable-artifacts is listed as a git-subdir source in its own repo" {
+  run python3 -c "
+import json, os
+d = json.load(open(os.path.join('${REPO_ROOT}', '.claude-plugin/marketplace.json')))
+entry = next(p for p in d['plugins'] if p['name'] == 'portable-artifacts')
+assert entry['source'] == {
+    'source': 'git-subdir',
+    'url': 'https://github.com/abhijitbansal/portable-artifacts.git',
+    'path': 'plugins/portable-artifacts',
+}, entry['source']
+"
+  [ "$status" -eq 0 ]
+}
+
+@test "core-workflow description is identical in marketplace.json and plugin.json" {
+  run python3 -c "
+import json, os
+root = '${REPO_ROOT}'
+m = json.load(open(os.path.join(root, '.claude-plugin/marketplace.json')))
+entry = next(p for p in m['plugins'] if p['name'] == 'core-workflow')
+pj = json.load(open(os.path.join(root, 'plugins/core-workflow/.claude-plugin/plugin.json')))
+assert entry['description'] == pj['description'], (entry['description'], pj['description'])
 "
   [ "$status" -eq 0 ]
 }

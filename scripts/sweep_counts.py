@@ -6,8 +6,12 @@ catalog badge). AGENTS.md treats them as cross-file invariants: change them with
 this one scripted sweep, never by hand.
 
 Live count = directories under plugins/<plugin>/skills/ that contain SKILL.md
-(excluding `_lib`). Scopes are `total` plus one per plugin that has a skills dir.
-Skills only; command, agent and hook counts are not modeled.
+(excluding `_lib`). Scopes are `total` plus one per plugin that has a skills dir,
+and `plugins` (entries in .claude-plugin/marketplace.json whose `source` is a path
+in this repo; a git-subdir entry such as portable-artifacts is not counted). Command, agent and hook
+counts, taglines and word forms ("five") are not modeled and stay manual. (A
+`make-motion-blocks` scope counted version 1's block registry; it went with that
+registry at cut-over.)
 
 Each SITES entry is (relative file, scope, regex template). The template has one
 capture group for the number. A template may reuse the number with a `(?P<n>\\d+)`
@@ -22,6 +26,7 @@ Run: `python3 scripts/sweep_counts.py [--check | --write]`
 """
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
@@ -30,6 +35,9 @@ EXCLUDED_SKILL_DIRS = {"_lib"}
 CATALOG_FILE = "docs/catalog.html"
 CATALOG_ROW_RE = re.compile(r'<div class="crow" data-type="Skill"')
 TOTAL_SCOPE = "total"
+PLUGINS_SCOPE = "plugins"
+MARKETPLACE_FILE = ".claude-plugin/marketplace.json"
+OG_SCOPES = {TOTAL_SCOPE, PLUGINS_SCOPE}
 OG_REGEN_NOTE = "total changed: regenerate site/og.png from site/og.html"
 
 _FOOTER_FILES = [
@@ -37,11 +45,11 @@ _FOOTER_FILES = [
     "docs/catalog.html",
     "docs/machine-setup.html",
     "docs/second-wind/index.html",
+    "docs/features/cache-clock.html",
     "docs/features/core-workflow.html",
     "docs/features/ios-dev.html",
     "docs/features/linear-pm.html",
     "docs/features/mods.html",
-    "docs/features/portable-artifacts.html",
     "docs/features/prompt-craft.html",
     "docs/features/second-wind.html",
     "site/index.html",
@@ -64,27 +72,27 @@ SITES = (
         ("site/index.html", TOTAL_SCOPE, r"\d+ plugins, (\d+) skills,"),
         ("site/index.html", TOTAL_SCOPE, r'<span class="meta">(\d+) skills · \d+ commands · agents'),
         ("docs/catalog.html", TOTAL_SCOPE, r'<h3>Skills <span class="badge">(\d+)</span>'),
+        # plugin counts in the same footers and headline strings
+        *[(f, PLUGINS_SCOPE, r"(\d+) plugins · \d+ skills") for f in _FOOTER_FILES],
+        ("site/og.html", PLUGINS_SCOPE, r"(\d+) plugins · \d+ skills"),
+        ("site/index.html", PLUGINS_SCOPE, r"(\d+) plugins, \d+ skills,"),
         # mermaid labels (architecture.html uses <br/><small>, architecture.md a dash)
         ("docs/architecture.html", "ios-dev", r"ios-dev<br/><small>(\d+) skills? ·"),
         ("docs/architecture.html", "linear-pm", r"linear-pm<br/><small>(\d+) skills? ·"),
         ("docs/architecture.html", "core-workflow", r"core-workflow<br/><small>(\d+) skills? ·"),
         ("docs/architecture.html", "prompt-craft", r"prompt-craft<br/><small>(\d+) skills? ·"),
-        ("docs/architecture.html", "portable-artifacts", r"portable-artifacts<br/><small>(\d+) skills? ·"),
         ("docs/architecture.md", "ios-dev", r"ios-dev — (\d+) skills? ·"),
         ("docs/architecture.md", "linear-pm", r"linear-pm — (\d+) skills? ·"),
         ("docs/architecture.md", "core-workflow", r"core-workflow — (\d+) skills? ·"),
         ("docs/architecture.md", "prompt-craft", r"prompt-craft — (\d+) skills? ·"),
-        ("docs/architecture.md", "portable-artifacts", r"portable-artifacts — (\d+) skills? ·"),
         # feature-page stat bands
         ("docs/features/ios-dev.html", "ios-dev", _stat_band()),
         ("docs/features/core-workflow.html", "core-workflow", _stat_band()),
         ("docs/features/prompt-craft.html", "prompt-craft", _stat_band()),
-        ("docs/features/portable-artifacts.html", "portable-artifacts", _stat_band()),
         ("docs/features/linear-pm.html", "linear-pm", _stat_band()),
         # feature-page kickers
         ("docs/features/ios-dev.html", "ios-dev", r"plugin · (\d+) skills?"),
         ("docs/features/prompt-craft.html", "prompt-craft", r"plugin · (\d+) skills?"),
-        ("docs/features/portable-artifacts.html", "portable-artifacts", r"plugin · (\d+) skills?"),
         # site index plugin rows
         ("site/index.html", "ios-dev", _index_meta("ios-dev")),
         ("site/index.html", "core-workflow", _index_meta("core-workflow")),
@@ -96,7 +104,8 @@ SITES = (
 
 
 def live_counts(root) -> dict:
-    """Skills per plugin plus `total`, from the plugins/ tree."""
+    """Skills per plugin plus `total`, from the plugins/ tree; `plugins` when
+    the marketplace file exists."""
     counts = {}
     for skills_dir in sorted(Path(root).glob("plugins/*/skills")):
         if not skills_dir.is_dir():
@@ -105,7 +114,14 @@ def live_counts(root) -> dict:
             1 for d in skills_dir.iterdir()
             if d.is_dir() and d.name not in EXCLUDED_SKILL_DIRS and (d / "SKILL.md").is_file()
         )
-    return {TOTAL_SCOPE: sum(counts.values()), **counts}
+    live = {TOTAL_SCOPE: sum(counts.values()), **counts}
+    marketplace = Path(root) / MARKETPLACE_FILE
+    if marketplace.is_file():
+        # Only plugins whose code lives here: an entry whose source is an object
+        # (git-subdir) is hosted in another repo and is not counted.
+        entries = json.loads(_read(marketplace)).get("plugins", [])
+        live[PLUGINS_SCOPE] = sum(1 for p in entries if isinstance(p.get("source"), str))
+    return live
 
 
 def _read(path: Path) -> str:
@@ -231,7 +247,7 @@ def run(root, sites, mode: str) -> int:
         for r in broken(results):
             print(f"ERROR {r['file']} [{r['scope']}] {r['error']}: {r['template']}")
         return 1
-    total_stale = any(r["scope"] == TOTAL_SCOPE for r in stale(results))
+    total_stale = any(r["scope"] in OG_SCOPES for r in stale(results))
     changed = rewrite(root, results)
     for r in changed:
         print(f"updated {r['file']} [{r['scope']}] {r['found']} -> {r['expected']}")

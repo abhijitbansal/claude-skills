@@ -1,18 +1,19 @@
 # claude-skills usage guide
 
-Single-source dev environment seed. Cloned on every machine, referenced by every app repo. This doc is the operator's manual.
+Single-source dev environment seed. Cloned on every machine, referenced by every app repo. This doc is the operator's manual for the machine seed and for contributing back; for what each plugin does, read the [skills catalog](docs/skills-catalog.md).
 
 ## What this repo is
 
-- **`claude-setup.toml`** — declarative manifest: marketplaces, plugins, npx-skills, dotfile mappings, custom-skill symlink targets. Hand-edit or let `capture.sh` rewrite it.
-- **`setup/setup.sh`** — idempotent installer. Reads the TOML, brings any machine to the manifest's state.
-- **`setup/capture.sh`** — snapshots the current machine into the TOML + `templates/`.
-- **`setup/contribute.sh`** — runnable from any repo (installed as `~/.local/bin/claude-skills-contribute`); branches off this repo, captures or scaffolds, commits, pushes, opens a PR.
-- **`skills/`** — custom skills. Six today: `commit`, `linear-pm`, `release`, `ios-build`, `app-preview`, `contribute`. Symlinked into `~/.claude/skills/` by `setup.sh`.
-- **`agents/`, `commands/`, `hooks/`, `scripts/`** — non-skill assets. Same symlink fan-out pattern (where applicable).
-- **`templates/`** — `home-CLAUDE.md`, `user-settings.json`, `app.yml.example`, `skill.md.example`. Sources for `setup.sh` dotfile copy and `contribute.sh` skill scaffolding.
-- **`tests/bats/`, `tests/pytest/`** — mocked test suite. `bats tests/bats/ && python3 -m pytest tests/pytest/`.
-- **`docs/superpowers/`** — design spec + implementation plan from the seed work.
+- **`plugins/<name>/`** — the seven plugins (`ios-dev`, `linear-pm`, `core-workflow`, `second-wind`, `prompt-craft`, `test-board`, `session-compass`). Each holds its own `skills/`, `commands/`, `agents/` and `hooks/` and installs through the marketplace in `.claude-plugin/marketplace.json`; nothing is symlinked out of this repo any more.
+- **`claude-setup.toml`** — declarative manifest: marketplaces, plugins, npx-skills, dotfile mappings. Hand-edit it or let `capture.sh` rewrite it.
+- **`setup/setup.sh`** — idempotent installer. Reads the TOML, brings a machine to the manifest's state.
+- **`setup/capture.sh`** — snapshots the current machine into the TOML and `templates/`, after a secret scan.
+- **`setup/contribute.sh`** — runnable from any repo (installed as `~/.local/bin/claude-skills-contribute`); branches off this repo, then captures or scaffolds a skill. Capture mode stops after the diff unless you pass `--commit` or `--push`.
+- **`tools/`** — `second-wind` (the `wind` CLI) and `cache-clock` (a Copilot CLI extension).
+- **`adapters/install.sh`** — links plugin skills into Codex, Copilot CLI and `AGENTS.md`-aware tools.
+- **`templates/`** — `home-CLAUDE.md`, `user-settings.json`, `app.yml.example`, `skill.md.example`: sources for the `setup.sh` dotfile copy and for `contribute.sh` scaffolding.
+- **`tests/bats/`, `tests/pytest/`** — the suites CI runs on macOS and Ubuntu.
+- **`docs/`** — architecture and catalog pages, design specs, plans. `site/` is the public landing page.
 
 ## Bootstrap a fresh machine
 
@@ -24,21 +25,24 @@ git clone <repo-url> ~/projects/claude-skills
 bash ~/projects/claude-skills/setup/setup.sh
 ```
 
-That's it. The preflight step auto-installs missing dev dependencies (`bats-core`, `shellcheck` via brew; `uv` via the official Astral installer). Python dependencies (`tomlkit`) are resolved on demand by `uv run` from PEP 723 inline metadata — no `pip install` step, no `requirements.txt`, no virtualenv to remember.
+The preflight step installs missing dev dependencies (`bats-core`, `shellcheck` via brew; `uv` via the official Astral installer). Python dependencies (`tomlkit`) are resolved on demand by `uv run` from PEP 723 inline metadata — no `pip install` step, no `requirements.txt`, no virtualenv to remember.
 
 ```bash
-# 3. Confirm symlinks landed
-ls -l ~/.claude/skills/ | grep claude-skills
+# 3. Confirm the shims landed
 which claude-skills-contribute   # → ~/.local/bin/claude-skills-contribute
+which wind                       # → ~/.local/bin/wind
+claude plugin list               # the plugins from the manifest and from this repo
 ```
 
-End state: marketplaces registered, user-scope plugins installed, npx-skills installed, `~/CLAUDE.md` + `~/.claude/settings.json` synced from `templates/`, custom skills symlinked into `~/.claude/skills/`, `claude-skills-contribute` shim on PATH.
+End state: Claude Code installed and updated, the manifest's marketplaces registered, its plugins installed at user scope, this repo's own marketplace added from the checkout with the seven plugins plus portable-artifacts (from its own repo) installed, npx-skills installed, `~/CLAUDE.md` and `~/.claude/settings.json` copied from `templates/` (a different existing file is backed up as `<name>.bak.<timestamp>` first; `--dry-run` only reports "would back up"), the shared behavioral guidelines merged into `~/CLAUDE.md`, and the `claude-skills-contribute` and `wind` shims on PATH. The `symlinks` step also removes links in `~/.claude/{skills,agents,commands}` that point into this repo, left over from the pre-plugin layout.
+
+Which `CLAUDE.md` the setup writes, which plugins it enables, whether the self marketplace is a folder or a GitHub source, and the site wording are open owner decisions: see [`docs/decisions-pending.md`](docs/decisions-pending.md).
 
 ### Flags
 
 | Flag | Effect |
 |---|---|
-| `--dry-run` | Print what would change. No mutations. |
+| `--dry-run` | Print what would change. No mutations and no backups. |
 | `--verbose` | `set -x` — every shell command logged. |
 | `--only <step>` | Run just one step. Steps: `preflight claude marketplaces plugins skills dotfiles guidelines local_plugins symlinks summary`. |
 | `--skip-<step>` | Skip a single step. Repeatable. |
@@ -50,126 +54,83 @@ End state: marketplaces registered, user-scope plugins installed, npx-skills ins
 - `1` — a `fail`-level error occurred (e.g. installer crashed, gh not authed).
 - `2` — `warn`-level issues only (e.g. one plugin update failed, the rest succeeded).
 
-## Onboard a new app repo
+## Onboard a new iOS app repo
 
-Custom templated skills (`release`, `ios-build`, `app-preview`) need a per-app config. The app declares its identity in `.claude/app.yml`.
+The `ios-dev` skills and commands (`/preview`, `/fix`, build, release) read a per-app config, `.claude/app.yml`, schema v2. Generate it from inside the app repo:
+
+```text
+/ios-init
+```
+
+It detects the name, bundle id, team, extension targets and deployment target from an XcodeGen `project.yml` (or `xcodebuild -list`), leaves anything it cannot find as `TODO`, and walks you through the rest. It refuses to overwrite an existing file unless you pass `--force`; `--migrate` upgrades a v1 file in place. Commit the result:
 
 ```bash
-# In the app repo root
-mkdir -p .claude
-cp ~/projects/claude-skills/templates/app.yml.example .claude/app.yml
-$EDITOR .claude/app.yml   # fill in name, bundle_id, scheme, team_id, url_scheme, linear team_key
 git add .claude/app.yml
-git commit -m "chore: add claude-skills app config"
+git commit -m "chore: add ios-dev app config"
 ```
 
-Schema:
-
-```yaml
-schema_version: 1
-app:
-  name: MyApp                       # required — drives APP_NAME, preview folder, archive name
-  bundle_id: com.example.myapp      # required — drives APP_BUNDLE_ID
-  scheme: MyApp                     # required — xcodebuild scheme
-  team_id: TEAMID123                # required — signing team
-  url_scheme: myapp                 # required — deep-link scheme (no `://`)
-  build_script: build.sh            # optional, default build.sh
-  preview_root: ~/MyAppPreviews     # optional, default ~/<name>Previews
-linear:
-  team_key: MYA                     # used by /linear-* commands
-  agent_user_id:                    # optional — for /linear-pick assignment
-```
-
-After landing `.claude/app.yml`, the templated skills work from inside that repo automatically — they walk up the directory tree to find the config.
+The skills find the config by walking up from `$PWD`; `plugins/ios-dev/skills/_lib/load_app_config.sh` reads it and exports `APP_*`, `TARGETS_*`, `RELEASE_*` and `SITE_*` variables (including `APP_NAME`, `APP_BUNDLE_ID`, `APP_SCHEME`, `APP_TEAM_ID`, `APP_URL_SCHEME`, `APP_PREVIEW_ROOT` and `LINEAR_TEAM_KEY`). `templates/app.yml.example` is a schema v1 sample kept for reference. See the [ios-dev guide](https://abhijitbansal.github.io/claude-skills/features/ios-dev.html).
 
 ## Common operations
 
 ### Sync a machine after installing/removing something via Claude UI
 
 ```bash
-cd ~/projects/claude-skills
-bash setup/capture.sh
-git diff               # review what changed
-git add -A && git commit -m "chore: sync from <machine>" && git push
+claude-skills-contribute --message "chore: sync from <machine>"
 ```
 
-Capture only upserts — it never deletes entries. To remove a plugin, hand-edit `claude-setup.toml` and commit.
-
-### Add a new custom skill from any repo
+This runs `capture.sh` on a fresh `contrib/*` branch, shows the diff and stops. Read it for secrets and private names. To keep it, pass `--commit` (commit only) or `--push` (commit, push and open a PR); nothing is staged except the three files capture writes. Capture only upserts — it never deletes entries. To remove a plugin, hand-edit `claude-setup.toml` and commit.
 
 ```bash
-claude-skills-contribute --skill <skill-name> --message "add <skill-name> skill"
+bash setup/capture.sh && git diff    # the same capture, in the current checkout
 ```
 
-This: branches off `main`, scaffolds `skills/<skill-name>/SKILL.md` from the template, runs tests, commits, pushes, opens a PR via `gh`. Refuses on dirty working tree or unauthenticated `gh`.
-
-### Contribute live machine state back
+### Add a new skill from any repo
 
 ```bash
-claude-skills-contribute --message "<what changed>"
+claude-skills-contribute --skill <skill-name> --plugin <plugin> --message "add <skill-name> skill"
 ```
 
-Same as above but instead of scaffolding, runs `capture.sh` to absorb live state.
+This branches off `main`, scaffolds `plugins/<plugin>/skills/<skill-name>/SKILL.md` from the template (`--plugin` defaults to `core-workflow`), runs the tests, commits, pushes and opens a PR via `gh`. It needs `bats` and `uv` and fails before branching when either is missing. It refuses on a dirty working tree or an unauthenticated `gh`. A new skill also needs the count sweep and a catalog row in the same commit: `python3 scripts/sweep_counts.py --write`.
 
 ### Useful flags
 
 | Flag | Effect |
 |---|---|
-| `--no-pr` | Push branch, skip `gh pr create`. |
-| `--auto-merge` | Squash-merge once CI passes (use sparingly). |
+| `--commit` | Capture mode only: commit on the new branch and stop. |
+| `--push` | Capture mode only: commit, push and open a PR. |
+| `--no-pr` | Push the branch, skip `gh pr create`. |
+| `--auto-merge` | Queue a squash-merge once required checks pass (`gh pr merge --auto`); branch protection can still hold it. |
 
-## What each skill does
+An unknown flag exits 2 and lists the accepted ones.
 
-| Skill | Trigger | What it does |
-|---|---|---|
-| `commit` | "commit", "save this", "checkpoint" | Lint changed `.sh` with shellcheck, stage by name, write conventional commit, no `--amend` ever. |
-| `linear-pm` | Any `/linear-*` invocation | Linear label vocabulary + status taxonomy + the six `/linear-*` slash commands. Per-repo policy in `.claude/linear.yml`. |
-| `release` | "release", "ship a TestFlight build", `/release` | iOS release pipeline: archive → export → validate → upload via altool → tag. Reads `app.yml`. Refuses on dirty tree unless `--force`. |
-| `ios-build` | "build", "build for sim", "build on device" | Delegates to app's own `build.sh` if present, falls back to bare `xcodebuild`. Reads `app.yml`. |
-| `app-preview` | "screenshot", "show me", "preview the app", `/preview`, `/fix` | Build → launch on booted sim → deep-link → snap → deliver to phone via iMessage ping + iCloud Drive. Reads `app.yml`. |
-| `contribute` | "contribute back to claude-skills", `/contribute-skill` | Thin wrapper around `claude-skills-contribute`. |
-| `make-dashboard` | "build a dashboard from data/sales.csv", `/make-dashboard` | Writes a `dashboard.json` spec (sources, SQL, KPIs, Vega-Lite charts), validates it, builds one offline `index.html` where every chart shows its SQL and refresh time. See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
-| `make-diagram` | "draw the checkout request path", `/make-diagram` | Writes a `diagram.json` topology (architecture, flow, sequence or state), validates it with a layout and geometry lint, builds one offline HTML diagram with zoom, hover tracing and a `P` presentation mode. See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
-| `make-explainer` | "recap this branch with a test checklist", "explain our cache as a deck", `/make-explainer` | Gathers git facts, scaffolds an `explainer.json` of typed sections (recap, checklist, concept, slides or a plan the reviewer answers), fills it in, validates it with a prose lint and builds one offline HTML page or deck; embeds make-diagram figures, make-dashboard charts and video. Needs make-diagram and make-dashboard beside it. See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
-| `make-motion` | "make an 8s explainer video …", `/make-motion` | Writes a `motion.json` scene spec, self-checks via contact-sheet PNGs, previews locally, renders a deterministic MP4 (Playwright + ffmpeg). |
-| `make-scene` | "show commits per week per folder as a 3D city", "lift this diagram into 3D", `/make-scene` | Writes a `scene.json` spec (rows for a city, forest, galaxy or terrain, or a diagram or dashboard chart to lift, plus a camera tour), validates it, builds one offline three.js page, then shows the alternatives table (the other worlds, with the one-line command to switch at no model cost). See [portable-artifacts USAGE](plugins/portable-artifacts/USAGE.md). |
+## What the plugins do
+
+Each plugin's skills, commands, agents and hooks are listed in the [skills catalog](docs/skills-catalog.md) ([searchable version](https://abhijitbansal.github.io/claude-skills/catalog.html)). In short:
+
+| Plugin | What it gives you |
+|---|---|
+| `ios-dev` | Simulator build, screenshot and delivery to your phone (`/preview`, `/fix`), device builds, gated TestFlight and App Store releases (`/release`), repo scaffolding (`/ios-scaffold`), the app config (`/ios-init`), the marketing-site kit (`/site`) and a catalog of lesson skills. |
+| `linear-pm` | Linear label and status conventions and six `/linear-*` commands, including `/linear-pick`. Per-repo policy in `.claude/linear.yml`. |
+| `core-workflow` | `commit`, `contribute`, `/team`, `/explain-branch`, `/cleanup-branches`, the `/learn` lesson capture, the image-parser and web-researcher agents, a shellcheck-on-edit hook and a hook that suggests a lesson skill from an exact error string. |
+| `second-wind` | The `wind` CLI and a skill that resume tmux sessions after the usage limit resets. |
+| `prompt-craft` | `/improve-prompt`, `/plan`, debug, refactor and review lenses, and opt-in guardrails. |
+| `test-board`, `session-compass` | Two session mods: a test-results band and a session compass above the prompt. |
 
 ## Files Claude reads automatically
 
-Once `setup.sh` runs:
-
-- `~/.claude/skills/<name>` → `claude-skills/skills/<name>` (each custom skill).
-- `~/.claude/agents/<name>.md` → `claude-skills/agents/<name>.md`.
-- `~/.claude/commands/<name>.md` → `claude-skills/commands/<name>.md`.
-
-Edit the file in this repo, change goes live immediately — no re-deploy.
-
-## Hooks (not auto-installed; reference from per-project settings)
-
-`hooks/shellcheck-on-edit.sh` is not symlinked anywhere by default. Reference it from a project's `.claude/settings.json` if you want it active in that project:
-
-```json
-{
-  "hooks": {
-    "PostToolUse": {
-      "Edit|Write": [
-        { "command": "bash", "args": ["~/projects/claude-skills/hooks/shellcheck-on-edit.sh"] }
-      ]
-    }
-  }
-}
-```
+Installing a plugin registers everything it ships: its skills, slash commands, agents and hooks (for example `core-workflow`'s `hooks/hooks.json` wires `shellcheck-on-edit.sh` and `skill-hint.sh`). Nothing in `~/.claude/skills`, `~/.claude/agents` or `~/.claude/commands` needs to point into this repo. Edit a file under `plugins/` and update the plugin (`claude plugin update <name>@claude-skills`) to load the change; the plugin cache is a copy, so edit in the repo, never in the cache.
 
 ## Testing
 
 ```bash
 cd ~/projects/claude-skills
-bats tests/bats/                          # 27 tests — bash + integration
-uv tool run pytest tests/pytest/ -q       # 7 tests — TOML parse/write
-shellcheck setup/*.sh skills/_lib/*.sh    # clean
+bats tests/bats/                          # bash + integration
+uv tool run pytest tests/pytest/ -q       # TOML round-trip, counts, frontmatter, copy buttons
+shellcheck setup/*.sh adapters/*.sh
 ```
 
-CI runs all three on `push` to `main` and on every PR — `.github/workflows/test.yml`. macOS + Ubuntu matrix.
+`python3 scripts/sweep_counts.py --check` finds stale counts in the docs and site; `--write` fixes them. CI runs the suites, the sweep, manifest validation, `shellcheck`, the commit-trailer check and the plugin-version guard on every PR — `.github/workflows/test.yml`, macOS and Ubuntu. The two mods' TypeScript tests are not in CI; their local gate is in [`AGENTS.md`](AGENTS.md).
 
 ## Architecture
 
@@ -184,26 +145,25 @@ CI runs all three on `push` to `main` and on every PR — `.github/workflows/tes
   setup.sh (apply)                          capture.sh (snapshot)
         │                                            │
         ▼                                            ▼
-  ~/.claude/                                  Live machine state
-  ├── skills/<name> ─ symlink ──┐             (settings.json,
-  ├── agents/<name>.md          │              installed_plugins.json,
-  ├── commands/<name>.md        │              skill-lock.json, …)
-  ├── settings.json (copy)      │
-  └── ...                       │
-                                ▼
-                       claude-skills/
-                       ├── skills/<name>/
-                       ├── agents/, commands/
-                       └── templates/
+  claude plugin install ...                   Live machine state
+  ~/CLAUDE.md, ~/.claude/settings.json        (settings.json,
+  ~/.local/bin shims                           installed_plugins.json, …)
+        │
+        ▼
+  claude-skills/
+  ├── .claude-plugin/marketplace.json  → the seven plugins plus portable-artifacts (from its own repo)
+  ├── plugins/<name>/{skills,commands,agents,hooks}
+  └── templates/
 
   ~/.local/bin/
-  └── claude-skills-contribute ─→ claude-skills/setup/contribute.sh
-                                       │
-                                       ▼
-                          branches + commits + PR back here
+  ├── claude-skills-contribute ─→ claude-skills/setup/contribute.sh
+  │                                    │
+  │                                    ▼
+  │                       branch, capture or scaffold, optional commit, push, PR
+  └── wind ─→ claude-skills/tools/second-wind/wind.py
 ```
 
-Templated skills (`release`, `ios-build`, `app-preview`) source `skills/_lib/load_app_config.sh` at invocation. That walks up from `$PWD` looking for `.claude/app.yml` and exports `APP_NAME`, `APP_BUNDLE_ID`, `APP_SCHEME`, `APP_TEAM_ID`, `APP_URL_SCHEME`, `APP_BUILD_SCRIPT`, `APP_PREVIEW_ROOT`, `LINEAR_TEAM_KEY`.
+The templated `ios-dev` skills (`release`, `ios-build`, `app-preview`) source `plugins/ios-dev/skills/_lib/load_app_config.sh` at invocation. It walks up from `$PWD` looking for `.claude/app.yml` and exports the variables named above.
 
 ## Tips & limitations
 
@@ -227,10 +187,11 @@ Templated skills (`release`, `ios-build`, `app-preview`) source `skills/_lib/loa
 | Symptom | Fix |
 |---|---|
 | `setup.sh` says "python3 too old" | macOS Sequoia ships 3.13. Older machines: `brew install python@3.11`. |
-| `setup.sh` says symlink target is "foreign" | Existing symlink at `~/.claude/skills/<name>` points elsewhere (e.g. an npx-skills install). Setup refuses to clobber. Delete or rename the existing one, re-run setup. |
+| `setup.sh` says symlink target is "foreign" | Existing symlink at `~/.local/bin/<name>` points elsewhere. Setup refuses to clobber. Delete or rename the existing one, re-run setup. |
 | `claude-skills-contribute` says "gh not authenticated" | `gh auth login`. |
 | `claude-skills-contribute` says "working tree dirty" | Commit or stash other in-progress work in `claude-skills` first — contribute won't bundle unrelated changes. |
-| `release.sh` says "no .claude/app.yml found" | You're not in an app repo, or `.claude/app.yml` is missing. See "Onboard a new app repo". |
+| `claude-skills-contribute` stops after printing a diff | Capture mode keeps nothing until you ask. Re-run with `--commit` or `--push`. |
+| `release.sh` says "no .claude/app.yml found" | You're not in an app repo, or `.claude/app.yml` is missing. Run `/ios-init`. |
 | `bats` "command not found" | Re-run `setup.sh` — preflight installs it via brew. Manual: `brew install bats-core`. |
 | `pytest` "command not found" | Use `uv tool run pytest tests/pytest/` — pytest is invoked through `uv`, never installed system-wide. |
 | `uv` "command not found" | Re-run `setup.sh` — preflight installs it. Manual: `curl -LsSf https://astral.sh/uv/install.sh \| sh`. |
@@ -239,25 +200,29 @@ Templated skills (`release`, `ios-build`, `app-preview`) source `skills/_lib/loa
 
 - `docs/superpowers/specs/2026-05-25-claude-skills-seed-design.md` — full design rationale, the 4 advisor-flagged blockers, the 9-section migration plan.
 - `docs/superpowers/plans/2026-05-25-claude-skills-seed.md` — the 23-task TDD implementation plan that built this repo.
+- `docs/skill-improvement-plan-2026-11.md` — the 2026-11 skill improvement plan, with its status and the register behind it.
+- `docs/decisions-pending.md` — owner calls an agent parked.
 
 ## Open follow-ups
 
-- **Legacy app cutover** — an older app repo may still have its own `scripts/claude-setup/` and `.claude/skills/{commit,linear-pm,<app>-preview,release,ios-build}/`. Once the symlinked skills here are battle-tested on one of its release cycles, delete the local copies and add `<app>/.claude/app.yml`.
-- **Mac mini validation** — clone fresh, run `setup.sh`, run a real `release` cycle. Original failure mode never reproduced; defensive measures in place.
-- **Phase 2: marketplace publication** — register the repo as a Claude marketplace + push skills to skills.sh so friends can `claude plugin marketplace add <yours>`. Out of scope for v1.
-- **Caveman skills under `~/.claude/skills/`** — symlinks to `~/.agents/skills/caveman*` exist but aren't in any lockfile. Provenance unknown — investigate before next capture.
+The dated seed spec lists its follow-ups as of May 2026; this is the live list.
+
+- **Legacy app cutover** — an older app repo may still have its own `scripts/claude-setup/` and `.claude/skills/`. Once the plugin skills here are battle-tested on one of its release cycles, delete the local copies and add `.claude/app.yml` with `/ios-init`.
+- **Mac mini validation** — clone fresh, run `setup.sh`, run a real `release` cycle. The original failure was never reproduced; defensive measures are in place.
+- **Machine-setup decisions** — see [`docs/decisions-pending.md`](docs/decisions-pending.md).
+- Done since the seed: marketplace publication (`/plugin marketplace add abhijitbansal/claude-skills`, plus `npx skills add`).
 
 ## Using these skills from other AI tools
 
 SKILL.md is tool-agnostic. To wire the skills into other agents:
 
 ```bash
-adapters/install.sh codex      # symlink into ~/.codex/skills (CODEX_SKILLS_DIR to override)
+adapters/install.sh codex      # symlink into ~/.agents/skills (CODEX_SKILLS_DIR to override)
 adapters/install.sh copilot    # symlink into ~/.copilot/skills (COPILOT_SKILLS_DIR to override)
 adapters/install.sh agents-md [path/to/AGENTS.md]   # managed skill-index block for AGENTS.md-aware tools (Hermes, etc.)
 adapters/install.sh all
 ```
 
-Re-run after adding skills; the script is idempotent and prunes links it created for removed skills.
+Re-run after adding skills; the script is idempotent and prunes links it created for removed skills. The `codex` adapter links into `~/.agents/skills`, the folder Codex reads; links an older run left in `~/.codex/skills` are not removed, so delete them by hand.
 
-`make-dashboard` / `make-diagram` / `make-explainer` / `make-motion` / `make-scene` additionally need `npm ci` in their skill folders; `node plugins/portable-artifacts/bin/install.mjs <host>` handles that (plus Gemini and project-scoped installs).
+The adapters link skill folders only. The `portable-artifacts` skills (`make-dashboard` / `make-diagram` / `make-explainer` / `make-motion` / `make-scene`) live in their own repo, <https://github.com/abhijitbansal/portable-artifacts>, and need `npm ci --ignore-scripts` in their skill folders plus sibling skills beside them; its installer handles that (plus Gemini and project-scoped installs): `git clone https://github.com/abhijitbansal/portable-artifacts`, then `node portable-artifacts/plugins/portable-artifacts/bin/install.mjs <host>`. In Claude Code: `/plugin marketplace add abhijitbansal/portable-artifacts` then `/plugin install portable-artifacts@portable-artifacts`. Run any installer against a temporary directory when testing, not this checkout.

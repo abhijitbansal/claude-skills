@@ -39,7 +39,7 @@
 
 <header class="page-head wrap narrow">
   <div class="crumbs"><a href="../site/index.html">Home</a><span class="sep">/</span>Catalog</div>
-  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>115 assets · 8 plugins</span>
+  <span class="kicker" style="margin-top:14px"><span class="pulse"></span>124 assets · 7 plugins</span>
   <h1>Skills &amp; tools <span class="grad">catalog</span></h1>
   <p class="lead">Every skill, command, agent, hook, CLI tool and Copilot extension in the repo — searchable and filterable.
      Each links back to the plugin it ships in.</p>
@@ -50,9 +50,13 @@
     <input id="search" type="search" placeholder="Search skills, commands, hooks…" aria-label="Search the catalog" autocomplete="off">
     <div class="filters"><button class="fchip active" data-filter="all">All</button><button class="fchip" data-filter="Plugin">Plugins</button><button class="fchip" data-filter="Skill">Skills</button><button class="fchip" data-filter="Command">Commands</button><button class="fchip" data-filter="CLI">CLI</button><button class="fchip" data-filter="Agent">Agents</button><button class="fchip" data-filter="Hook">Hooks</button></div>
   </div>
-  <p class="cat-count">123 results</p>
+  <p class="cat-count">124 results</p>
   <div class="cat-group">
-      <h3>Plugins <span class="badge">8</span></h3>
+      <h3>Plugins <span class="badge">7</span></h3>
+      <div class="arch-note" id="companion-portable-artifacts" style="margin:0 0 14px">
+        <p style="margin:0 0 8px">Companion plugin, not counted here: <a href="https://github.com/abhijitbansal/portable-artifacts">portable-artifacts</a> (dashboards, diagrams, explainer pages, 3D scenes and videos) lives in its own repo with its own <a href="https://abhijitbansal.github.io/portable-artifacts/">site and gallery</a>. <code>portable-artifacts@claude-skills</code> still installs it.</p>
+        <div class="code cmds"><div class="cl"><code class="ct"><span class="k">/plugin</span> marketplace add abhijitbansal/portable-artifacts</code><button class="copy" data-copy="/plugin marketplace add abhijitbansal/portable-artifacts">copy</button></div><div class="cl"><code class="ct"><span class="k">/plugin</span> install portable-artifacts@portable-artifacts</code><button class="copy" data-copy="/plugin install portable-artifacts@portable-artifacts">copy</button></div></div>
+      </div>
       <div class="cat-grid"><div class="crow" data-type="Plugin" data-search="core-workflow general dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook core-workflow plugin">
         <div class="top"><span class="nm">core-workflow</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">General dev workflow helpers: commit flow, skill contribution, team orchestration, image-parser and web-researcher agents, shellcheck-on-edit hook</div>
@@ -62,10 +66,7 @@
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Plugin" data-search="linear-pm linear project management conventions and slash commands: issue templates, status taxonomy, agent-ready workflow, autonomous issue pickup linear-pm plugin">
         <div class="top"><span class="nm">linear-pm</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Linear project management conventions and slash commands: issue templates, status taxonomy, agent-ready workflow, autonomous issue pickup</div>
-        <div class="pl">in <a href="features/linear-pm.html">linear-pm</a></div></div><div class="crow" data-type="Plugin" data-search="portable-artifacts story player explore full screen presentation host-agnostic offline open-source artifact skills make-dashboard make-diagram make-explainer make-motion make-scene dashboards diagrams explainers 3d scenes slides checklists animated mp4 audio voiceover kokoro duckdb vega-lite installer codex copilot gemini cheaper model haiku artifact-builder agent npx skills plan mode portable-artifacts plugin">
-        <div class="top"><span class="nm">portable-artifacts</span><span class="ty t-plugin">Plugin</span></div>
-        <div class="dc">Host-agnostic, offline, open-source artifact skills: make-dashboard (prompt → SQL + 11 chart kinds → static HTML with per-chart SQL provenance, 9 themes, export and live reload), make-diagram (prompt → JSON topology → ELK-laid-out HTML diagram with zoom, hover tracing, a story player, an Explore panel and full screen), make-explainer (prompt → typed sections → one HTML page or slide deck: branch recap, concept explainer, saved-progress test checklist, slides, a plan the reviewer answers on the page), make-motion (prompt → scene spec → local preview + MP4, audio only when asked: music from your file or a local Kokoro voiceover) and make-scene (prompt → JSON spec → offline three.js page: a city, forest, galaxy or terrain from your data, or a diagram or chart lifted into 3D, with a camera tour). Cross-host installer for Claude Code, Codex, Copilot and Gemini.</div>
-        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Plugin" data-search="prompt-craft turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting stop hook, and opt-in secret/format guardrails. zero config; guardrails off by default. prompt-craft plugin">
+        <div class="pl">in <a href="features/linear-pm.html">linear-pm</a></div></div><div class="crow" data-type="Plugin" data-search="prompt-craft turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting stop hook, and opt-in secret/format guardrails. zero config; guardrails off by default. prompt-craft plugin">
         <div class="top"><span class="nm">prompt-craft</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Turn rough prompts into deterministic specs and surface the right next step: /improve-prompt, /plan, debug/refactor/review lenses, a follow-up-suggesting Stop hook, and opt-in secret/format guardrails. Zero config; guardrails off by default.</div>
         <div class="pl">in <a href="features/prompt-craft.html">prompt-craft</a></div></div><div class="crow" data-type="Plugin" data-search="second-wind set-and-forget orchestrator for long claude code runs across multiple repos. detects 5-hour usage limit, waits for reset, resumes every tmux session second-wind plugin">
@@ -78,7 +79,7 @@
         <div class="top"><span class="nm">session-compass</span><span class="ty t-plugin">Plugin</span></div>
         <div class="dc">Session compass: what each session is building, where it stands and what it produced, as a compass band, a /compass pane and a compass_status tool</div>
         <div class="pl">in <a href="features/mods.html#session-compass">session-compass</a></div></div></div></div><div class="cat-group">
-      <h3>Skills <span class="badge">92</span></h3>
+      <h3>Skills <span class="badge">87</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Skill" data-search="commit stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message core-workflow skill">
         <div class="top"><span class="nm">commit</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Stage current changes, lint shell scripts with shellcheck, and create a git commit with conventional message</div>
@@ -205,22 +206,7 @@
         <div class="pl">in <a href="features/ios-dev.html">ios-dev</a></div></div><div class="crow" data-type="Skill" data-search="linear-pm linear project management conventions and slash commands: label vocabulary, status taxonomy, branch/pr naming, issue template, .claude/linear.yml policy linear-pm skill">
         <div class="top"><span class="nm">linear-pm</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Linear project management conventions and slash commands: label vocabulary, status taxonomy, branch/PR naming, issue template, .claude/linear.yml policy</div>
-        <div class="pl">in <a href="features/linear-pm.html">linear-pm</a></div></div><div class="crow" data-type="Skill" data-search="make-dashboard build self-contained static html dashboard kpi tiles vega-lite charts from csv parquet json duckdb sqlite postgres mysql; every chart shows its sql, row count and refresh time portable-artifacts skill">
-        <div class="top"><span class="nm">make-dashboard</span><span class="ty t-skill">Skill</span></div>
-        <div class="dc">Build a self-contained static HTML dashboard (KPI tiles + Vega-Lite charts) from CSV, Parquet, JSON, DuckDB, SQLite, Postgres or MySQL. Every chart shows its SQL, row count and refresh time. Offline; one-command refresh</div>
-        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Skill" data-search="make-diagram build architecture diagram flowchart sequence state diagram self-contained html elk layout zoom hover tracing story player explore full screen png svg export offline portable-artifacts skill">
-        <div class="top"><span class="nm">make-diagram</span><span class="ty t-skill">Skill</span></div>
-        <div class="dc">Build an architecture diagram, flowchart, sequence diagram or state diagram as one self-contained HTML page from a small JSON topology, laid out with ELK. Zoom and pan, hover tracing, a story player with chapters and beats, an Explore panel, full screen and PNG/SVG export. Offline; no LLM at build time</div>
-        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Skill" data-search="make-explainer build branch recap diff review concept plan explainer interactive test checklist slide deck self-contained html from typed json sections prose lint embeds diagrams charts offline plan mode decisions approvals reviewer answers plan-answers.json save as html answered page mono brief themes one-line numbers nowrap portable-artifacts skill">
-        <div class="top"><span class="nm">make-explainer</span><span class="ty t-skill">Skill</span></div>
-        <div class="dc">Build a branch recap, diff review, concept or plan explainer, interactive test checklist or slide deck as one self-contained HTML page from a small JSON document of typed sections. Scripts validate it, lint the prose and render it; embeds make-diagram figures, make-dashboard charts and video clips. Offline; no LLM at build time</div>
-        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Skill" data-search="make-motion build short animated explainer video titles counters shapes charts from json scene spec live preview scrubber deterministic 1080p mp4 audio music voiceover narration kokoro tts sound cues loudness crossfade vignette grain typing portable-artifacts skill">
-        <div class="top"><span class="nm">make-motion</span><span class="ty t-skill">Skill</span></div>
-        <div class="dc">Build a short animated explainer (titles, counters, shapes, charts, images) from a JSON scene spec: live preview with scrubber plus a deterministic 1080p MP4. Silent unless asked for sound: music from your file, synthesised sound cues, or narration synthesised locally by Kokoro. Theme colour tokens, crossfades, opt-in vignette and grain, typed text. Offline; targeted edits change one field</div>
-        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Skill" data-search="make-scene build explorable 3d world city forest galaxy terrain or lift an existing diagram or dashboard chart into 3d self-contained html three.js camera tour from json spec offline portable-artifacts skill">
-        <div class="top"><span class="nm">make-scene</span><span class="ty t-skill">Skill</span></div>
-        <div class="dc">Build an explorable 3D world (a city of towers, a forest, a galaxy or a terrain) from your data, or lift an existing make-diagram diagram or make-dashboard chart into 3D, as one self-contained HTML page with a camera tour. Drawn with a bundled three.js from a small JSON spec. Offline; no LLM at build time</div>
-        <div class="pl">in <a href="features/portable-artifacts.html">portable-artifacts</a></div></div><div class="crow" data-type="Skill" data-search="debug apply disciplined debugging lens: reproduce first, isolate, form hypothesis, prove with failing test prompt-craft skill">
+        <div class="pl">in <a href="features/linear-pm.html">linear-pm</a></div></div><div class="crow" data-type="Skill" data-search="debug apply disciplined debugging lens: reproduce first, isolate, form hypothesis, prove with failing test prompt-craft skill">
         <div class="top"><span class="nm">debug</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">Apply disciplined debugging lens: reproduce first, isolate, form hypothesis, prove with failing test</div>
         <div class="pl">in <a href="features/prompt-craft.html">prompt-craft</a></div></div><div class="crow" data-type="Skill" data-search="improve-prompt turn rough/vague request into deterministic spec: restated goal, acceptance criteria, assumptions, recommended commands prompt-craft skill">
@@ -356,7 +342,7 @@
         <div class="top"><span class="nm">structured-output-adaptive-thinking-token-bloat</span><span class="ty t-skill">Skill</span></div>
         <div class="dc">json_schema-constrained Claude API calls waste ~5x tokens on adaptive thinking that doesn't improve output quality — omit the thinking parameter for schema-constrained calls</div>
         <div class="pl">in <a href="features/prompt-craft.html">prompt-craft</a></div></div></div></div><div class="cat-group">
-      <h3>Commands <span class="badge">17</span></h3>
+      <h3>Commands <span class="badge">18</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Command" data-search="contribute-skill contribute a change or new skill back to claude-skills (creates branch + pr) core-workflow command">
         <div class="top"><span class="nm">contribute-skill</span><span class="ty t-command">Command</span></div>
         <div class="dc">Contribute a change or new skill back to claude-skills (creates branch + PR)</div>
@@ -369,6 +355,9 @@
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="explain-branch generate a self-contained html visual explainer for the current branch, diffed against a base branch; writes to .scratch and delivers it core-workflow command">
         <div class="top"><span class="nm">explain-branch</span><span class="ty t-command">Command</span></div>
         <div class="dc">Generate a self-contained HTML visual explainer for the current branch, diffed against a base branch (default main); writes to .scratch/branch-explainer/ and delivers it</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="cleanup-branches inventory merged, stale and worktree-held branches, print one table with merge proof, and hand over one delete line per branch; never deletes on its own core-workflow command">
+        <div class="top"><span class="nm">cleanup-branches</span><span class="ty t-command">Command</span></div>
+        <div class="dc">Inventory merged, stale and worktree-held branches, print one table with merge proof, and hand over one delete line per branch; never deletes on its own</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Command" data-search="fix apply ui fix to ios app (reads .claude/app.yml), then build + screenshot to prove it worked ios-dev command">
         <div class="top"><span class="nm">fix</span><span class="ty t-command">Command</span></div>
         <div class="dc">Apply UI fix to iOS app (reads .claude/app.yml), then build + screenshot to prove it worked</div>
@@ -425,10 +414,13 @@
         <div class="top"><span class="nm">web-researcher</span><span class="ty t-agent">Agent</span></div>
         <div class="dc">Focused research subagent: web research and library-documentation lookups via Context7 and WebFetch</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div></div></div><div class="cat-group">
-      <h3>Hooks <span class="badge">7</span></h3>
+      <h3>Hooks <span class="badge">8</span></h3>
       <div class="cat-grid"><div class="crow" data-type="Hook" data-search="shellcheck-on-edit posttooluse hook: lint .sh files with shellcheck after edit/write, non-blocking informational output core-workflow hook">
         <div class="top"><span class="nm">shellcheck-on-edit</span><span class="ty t-hook">Hook</span></div>
         <div class="dc">PostToolUse hook: lint .sh files with shellcheck after Edit/Write, non-blocking informational output</div>
+        <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Hook" data-search="skill-hint posttooluse and posttoolusefailure hook: points the model at a lesson skill when that skill's literal error text shows up in a bash result; three exact-string rows core-workflow hook">
+        <div class="top"><span class="nm">skill-hint</span><span class="ty t-hook">Hook</span></div>
+        <div class="dc">PostToolUse and PostToolUseFailure hook: points the model at a lesson skill when that skill's literal error text shows up in a Bash result (three exact-string rows)</div>
         <div class="pl">in <a href="features/core-workflow.html">core-workflow</a></div></div><div class="crow" data-type="Hook" data-search="block_secrets pretooluse hook: blocks read/edit/write of secret-looking files when prompt_craft_block_secrets=1 prompt-craft hook">
         <div class="top"><span class="nm">block_secrets</span><span class="ty t-hook">Hook</span></div>
         <div class="dc">PreToolUse hook: blocks Read/Edit/Write of secret-looking files when PROMPT_CRAFT_BLOCK_SECRETS=1</div>
@@ -458,7 +450,7 @@
       <a href="features/second-wind.html">Second Wind</a>
       <a href="features/cache-clock.html">Cache Clock</a>
       <a href="features/prompt-craft.html">prompt-craft</a>
-      <a href="features/portable-artifacts.html">portable-artifacts</a>
+      <a href="https://abhijitbansal.github.io/portable-artifacts/">portable-artifacts</a>
       <a href="features/mods.html">Session mods</a>
       <a href="features/ios-dev.html">ios-dev</a>
       <a href="features/linear-pm.html">linear-pm</a>
@@ -474,7 +466,7 @@
       <a href="https://github.com/abhijitbansal/claude-skills/blob/main/SECURITY.md">Security policy</a></div>
   </div>
   <div class="foot-meta"><span class="lic">MIT licensed</span>
-    <span>8 plugins · 92 skills · 17 commands · 2 agents · 7 hooks · 1 CLI · 1 Copilot extension</span>
+    <span>7 plugins · 87 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
     <span>Tested on macOS &amp; Ubuntu</span></div>
 </div></footer>
 <script src="../site/assets/site.js"></script>

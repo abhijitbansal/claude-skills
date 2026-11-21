@@ -2,7 +2,7 @@
 
 > Visual version: [searchable catalog](catalog.html) (open in a browser)
 
-Eight plugins, one CLI, one adapter script. Install only what you need:
+Seven plugins, one CLI, one adapter script (and a companion plugin that lives in its own repo). Install only what you need:
 
 ```
 /plugin marketplace add abhijitbansal/claude-skills
@@ -106,11 +106,13 @@ The everyday glue, useful in any repo.
 | `github-repo-go-public-preflight-scan` | skill | Scan working tree AND full git history for secrets before flipping a GitHub repo private → public. |
 | `github-solo-branch-protection-codeowners` | skill | Branch protection on a solo-owner repo: others' PRs need approval, owner can still self-merge. |
 | `/explain-branch` | command | Invoke the branch explainer, diffing against a given base (default `main`); writes to `.scratch/branch-explainer/` and delivers it. |
+| `/cleanup-branches` | command | Inventory merged, stale and worktree-held branches with the merge proof for each, and hand over one delete line per branch. Never deletes on its own. |
 | `/team` | command | Multi-agent team orchestration helper. |
 | `/contribute-skill` | command | Scaffold a new skill into a plugin and open the PR (`--plugin` picks the destination). |
 | `image-parser` | agent | Vision subagent: OCR, screenshot comparison, "is the title cut off?" checks. |
 | `web-researcher` | agent | Docs/API lookup subagent: tight synthesis with sources, not raw page dumps. |
 | `shellcheck-on-edit` | hook | PostToolUse hook — lints any `.sh` file the agent edits. |
+| `skill-hint` | hook | PostToolUse and PostToolUseFailure hook — points the model at a lesson skill when its literal error text appears in a Bash result (three exact-string rows). |
 | `hook-merge-base-diff-command-regex-anchoring` | skill (mined) | Two-dot git diff against a moving ref leaks unrelated commits into a hook check; anchor command-matching regexes to statement position; fail-open sentinel writes. |
 | `claude-transcript-purge-accreting-stats-archive` | skill (mined) | Claude Code purges session transcripts after ~30 days — an "all-time" stats pipeline needs a committed, per-field-max-merged accreting archive, not live re-mining. |
 | `launchd-git-automation-self-heal` | skill (mined) | launchd git jobs die silently on a dirty tree, a missing clone, or a stale retry branch — bootstrap outside the script, hard-reset before pull, `checkout -B` for retries. |
@@ -161,19 +163,16 @@ Sharpen the ask before the work, surface the right next step after it. Zero conf
 | `format_on_edit` | hook (PostToolUse, opt-in) | Formats edited files with the installed formatter. Enable via `PROMPT_CRAFT_FORMAT_ON_EDIT=1`. |
 | `structured-output-adaptive-thinking-token-bloat` | skill (mined) | `json_schema`-constrained Claude API calls waste ~5x tokens on adaptive thinking that doesn't improve output quality — omit the `thinking` parameter for schema-constrained calls. |
 
-## portable-artifacts (plugin)
+## portable-artifacts (companion plugin, own repo)
 
-Dashboards, diagrams, explainer pages, 3D scenes and animated videos from a prompt — built locally, offline, from open-source parts, by any coding agent. The model writes one small JSON spec; deterministic Node scripts validate it and build, preview or render. Needs Node.js ≥ 20 (`npm ci` once per skill); `make-motion` also needs Chromium and ffmpeg, and installs kokoro-js on demand when a voiceover is asked for. `bin/install.mjs` ports all five skills to Codex, Copilot, Gemini CLI and Claude Code.
+Dashboards, diagrams, explainer pages, 3D scenes and animated videos from a prompt, built locally and offline by any coding agent (`make-dashboard`, `make-diagram`, `make-explainer`, `make-motion`, `make-scene`). It moved to its own repo, [abhijitbansal/portable-artifacts](https://github.com/abhijitbansal/portable-artifacts), and its skills are not counted or listed here. This marketplace still lists it with a `git-subdir` source, so `portable-artifacts@claude-skills` keeps installing it.
 
-| Name | Kind | What it does |
-| --- | --- | --- |
-| `make-dashboard` | skill | Prompt + data file (CSV, Parquet, JSON, DuckDB, SQLite, Postgres, MySQL) → `dashboard.json` → one self-contained `index.html` of KPI tiles and Vega-Lite charts. Every chart shows its SQL, row count and refresh time; refresh is one command, no LLM. Invoke `/make-dashboard` (`$make-dashboard` in Codex). |
-| `make-diagram` | skill | Prompt → `diagram.json` topology (architecture, flowchart, sequence or state) → one self-contained HTML page laid out with ELK: zoom and pan, hover tracing, a story player with chapters and beats, an Explore panel, full screen and PNG/SVG export. Offline, no LLM at build time. Invoke `/make-diagram` (`$make-diagram` in Codex). |
-| `make-explainer` | skill | Prompt → `explainer.json` of typed sections (recap, diff review, concept or plan explainer, test checklist, slide deck) → one self-contained HTML page or deck. Scripts validate the spec, lint the prose and render offline; embeds `make-diagram` figures, `make-dashboard` charts, `make-scene` 3D scenes and video clips, so the installer pulls in `make-diagram` and `make-dashboard` (`npx skills add` needs all three named; `make-motion` is optional). No LLM at build time. Invoke `/make-explainer` (`$make-explainer` in Codex). |
-| `make-motion` | skill | Prompt → `motion.json` scene spec → live preview with a scrubber and a deterministic 1080p MP4. Audio is opt-in: `audio` tracks (music, voiceover, SFX) and procedural `cues` (pop, click, whoosh, chime, impact) are added only when the prompt asks for sound, mixed in by ffmpeg (tracks play in sync in the preview) with a loudness line printed after the render; narration is synthesised locally with Kokoro. Theme colour tokens, elevated cards, arrows, polished chart defaults, scene crossfade, opt-in vignette and film grain, and typed-out text. A change is one field in the spec. Invoke `/make-motion` (`$make-motion` in Codex). |
-| `make-scene` | skill | Prompt → `scene.json` → one offline three.js page: your rows become a city, forest, galaxy or terrain, or a `make-diagram` diagram or one `make-dashboard` chart is lifted into 3D, with orbit, exact-value hover, an Explore list and a camera tour. The build recommends a world and prints the alternatives with the one-line command to switch (no model tokens). The model writes only JSON. Invoke `/make-scene` (`$make-scene` in Codex). |
+```
+/plugin marketplace add abhijitbansal/portable-artifacts
+/plugin install portable-artifacts@portable-artifacts
+```
 
-Visual guide: [portable-artifacts](features/portable-artifacts.html).
+Guide and gallery: [abhijitbansal.github.io/portable-artifacts](https://abhijitbansal.github.io/portable-artifacts/).
 
 ## test-board (plugin)
 
@@ -193,7 +192,7 @@ SKILL.md is tool-agnostic — one script wires the same skills everywhere.
 
 | Mode | Target | What it does |
 | --- | --- | --- |
-| `codex` | `~/.codex/skills` | Symlinks every plugin skill. Skips cleanly if Codex isn't installed; `CODEX_SKILLS_DIR` overrides. |
+| `codex` | `~/.agents/skills` | Symlinks every plugin skill into the folder Codex reads (the same one `portable-artifacts/bin/install.mjs` uses). Skips cleanly if `~/.codex` is missing; `CODEX_SKILLS_DIR` overrides. Links an older run left in `~/.codex/skills` are not pruned. |
 | `copilot` | `~/.copilot/skills` | Same for Copilot CLI; `COPILOT_SKILLS_DIR` overrides. |
 | `agents-md` | any `AGENTS.md` | Maintains a marker-delimited index block — every skill's name, description, and path — for Hermes and anything AGENTS.md-aware. Idempotent. |
 | `all` | everything above | All three modes; prunes links it created for removed skills. |

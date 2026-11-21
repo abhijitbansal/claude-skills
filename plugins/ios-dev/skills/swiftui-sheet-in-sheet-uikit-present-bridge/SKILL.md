@@ -29,6 +29,14 @@ interact with it.
 
 ## Fix
 
+**Native modifier first.** Before bridging to UIKit, try the SwiftUI-native
+modifier for the flow: `ShareLink`, `.fileExporter` / `.fileImporter`,
+`.photosPicker`, `.quickLookPreview`. SwiftUI presents those itself, with no
+`UIViewControllerRepresentable` and no hand-rolled presenter. Whether each of them
+is free of the nested-sheet race was not re-tested here, so verify from a nested
+sheet; reach for the imperative bridge below when no native modifier exists or one
+still misbehaves from a nested context.
+
 Replace the `.sheet(item:)`-driven share flow with an **imperative present**:
 walk `UIApplication.shared.connectedScenes` → key window → follow
 `.presentedViewController` to the actual top-most UIKit view controller, and

@@ -43,9 +43,53 @@ def test_mode_statusline_is_single_next_segment(tmp_path):
     assert "\n" not in r.stdout.strip()
 
 
+def test_prompt_file_with_apostrophe_reaches_the_advisor(tmp_path):
+    """CAT-85: a goal containing ' must work; the old inline-JSON snippet broke
+    on it and read as 'no commands'."""
+    home, repo = tmp_path / "home", tmp_path / "repo"
+    _seed(home, repo)
+    goal = tmp_path / "goal.txt"
+    goal.write_text("Review the diff for bugs - don't touch what's out of scope")
+    r = subprocess.run(
+        ["python3", str(ADVISOR), "--mode", "prompt", "--home", str(home),
+         "--prompt-file", str(goal)],
+        input=json.dumps({"git_state": {}}), capture_output=True, text=True,
+    )
+    assert r.returncode == 0
+    assert "/ecc:review" in r.stdout
+
+
+def test_prompt_file_works_with_empty_stdin(tmp_path):
+    home, repo = tmp_path / "home", tmp_path / "repo"
+    _seed(home, repo)
+    goal = tmp_path / "goal.txt"
+    goal.write_text("review this diff")
+    r = subprocess.run(
+        ["python3", str(ADVISOR), "--mode", "prompt", "--home", str(home),
+         "--prompt-file", str(goal)],
+        input="", capture_output=True, text=True,
+    )
+    assert r.returncode == 0 and "/ecc:review" in r.stdout
+
+
+def test_unreadable_prompt_file_reports_an_error(tmp_path):
+    r = subprocess.run(
+        ["python3", str(ADVISOR), "--mode", "prompt", "--home", str(tmp_path),
+         "--prompt-file", str(tmp_path / "missing.txt")],
+        input="{}", capture_output=True, text=True,
+    )
+    assert r.returncode == 2
+    assert "--prompt-file" in r.stderr
+
+
 def test_mode_stop_banner_on_dirty(tmp_path):
     home, repo = tmp_path / "home", tmp_path / "repo"
     _seed(home, repo)
+    # /commit must be installed to be recommended (CAT-85): add a user command.
+    commit = home / ".claude" / "commands" / "commit.md"
+    commit.parent.mkdir(parents=True, exist_ok=True)
+    commit.write_text("---\nname: commit\ndescription: Commit the work.\n---\n")
+    br.build_registry(repo, home, None)
     r = _run("stop", {"prompt": None, "git_state": {"dirty": True}, "cwd": str(repo)}, home)
     assert r.returncode == 0 and "/commit" in r.stdout
 

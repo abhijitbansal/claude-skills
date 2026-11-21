@@ -1,8 +1,16 @@
 #!/usr/bin/env bash
 #
 # app-preview: deliver a screenshot to the user's iPhone via a
-# two-channel hybrid:
+# two-channel hybrid. This is the LAST-RESORT delivery path. The order a
+# caller should try (see commands/preview.md and fix.md):
+#   1. the host's file-send tool (SendUserFile), when the host has one;
+#   2. the imessage plugin's reply tool with the PNG attached (to verify:
+#      it may go through the same Messages path rejected below);
+#   3. this script (iCloud Drive copy + iMessage text ping).
+# On a desktop session the user is looking at the screen, so none of it is
+# needed.
 #
+# The hybrid:
 #   1. iMessage TEXT to self — push notification so the user knows a
 #      new snapshot is ready, with the filename for disambiguation.
 #   2. iCloud Drive copy into $(basename "${APP_PREVIEW_ROOT}")/<branch>/ — the actual
@@ -20,8 +28,9 @@
 # exactly which screenshots belong to which line of work.
 #
 # Destination resolution for iMessage:
-#   1. $IMESSAGE_TO env var
-#   2. <skill-dir>/.imessage-to (first non-blank line — gitignored per repo)
+#   1. $IMESSAGE_TO env var (export it in the shell profile Claude Code inherits)
+#   2. <skill-dir>/.imessage-to (first non-blank line; inside the plugin cache
+#      for a marketplace install, so an update wipes it)
 #
 # Flags:
 #   --no-ping    Skip the iMessage text. Useful when the user already knows
@@ -33,8 +42,26 @@
 # Usage:
 #   deliver.sh <path-to-file>
 #   deliver.sh --no-ping <path-to-file>
+# Exactly one file; any unknown --flag or a second file exits 2.
 
 set -euo pipefail
+
+ACCEPTED="--no-ping, --no-icloud, -h|--help, <path-to-file>"
+DO_PING=true
+DO_ICLOUD=true
+FILE=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-ping)   DO_PING=false; shift ;;
+    --no-icloud) DO_ICLOUD=false; shift ;;
+    -h|--help)   sed -n '2,45p' "$0"; exit 0 ;;
+    -*)          echo "[deliver] unknown flag '$1' (accepted: ${ACCEPTED})" >&2; exit 2 ;;
+    *)
+      [[ -z "$FILE" ]] || { echo "[deliver] one file only, got a second: '$1' (accepted: ${ACCEPTED})" >&2; exit 2; }
+      FILE="$1"; shift ;;
+  esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=../../_lib/load_app_config.sh
@@ -44,27 +71,13 @@ APP_NAME_LC="$(echo "${APP_NAME}" | tr '[:upper:]' '[:lower:]')"
 # shellcheck source=branch-dir.sh
 source "$SCRIPT_DIR/branch-dir.sh"
 
-# CONFIG sits next to the skill so it travels with it (gitignored — see
-# .gitignore). ICLOUD_DIR is $HOME-relative so it works on any Mac with
-# iCloud Drive enabled.
+# CONFIG sits next to the skill (legacy fallback; prefer $IMESSAGE_TO).
+# ICLOUD_DIR is $HOME-relative so it works on any Mac with iCloud Drive enabled.
 CONFIG="$SCRIPT_DIR/../.imessage-to"
 BRANCH_SLUG="$(app_branch_slug)"
 PREVIEW_FOLDER="$(basename "${APP_PREVIEW_ROOT}")"
 ICLOUD_ROOT="${HOME}/Library/Mobile Documents/com~apple~CloudDocs/${PREVIEW_FOLDER}"
 ICLOUD_DIR="$ICLOUD_ROOT/$BRANCH_SLUG"
-
-DO_PING=true
-DO_ICLOUD=true
-FILE=""
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --no-ping)   DO_PING=false; shift ;;
-    --no-icloud) DO_ICLOUD=false; shift ;;
-    -h|--help)   sed -n '2,38p' "$0"; exit 0 ;;
-    *)           FILE="$1"; shift ;;
-  esac
-done
 
 if [[ -z "$FILE" ]]; then
   echo "[deliver] Usage: $0 [--no-ping] [--no-icloud] <path-to-file>" >&2
@@ -102,7 +115,7 @@ if $DO_PING; then
     TO="$(grep -v '^[[:space:]]*\(#\|$\)' "$CONFIG" 2>/dev/null | head -1 | tr -d '[:space:]')"
   fi
   if [[ -z "$TO" ]]; then
-    echo "[deliver] iMessage ping skipped: no destination set (echo 'you@apple-id.com' > $CONFIG)" >&2
+    echo "[deliver] iMessage ping skipped: no destination set (export IMESSAGE_TO='you@apple-id.com' in the shell profile Claude Code inherits)" >&2
   else
     if $ICLOUD_OK; then
       MESSAGE="${APP_NAME} preview: $BASENAME — Files → iCloud Drive → ${PREVIEW_FOLDER} → $BRANCH_SLUG"

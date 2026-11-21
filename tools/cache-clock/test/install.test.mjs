@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -135,6 +135,94 @@ test("a piped install ignores an extension folder in the current directory", () 
   assert.equal(r.status, 0, r.stderr);
   assert.ok(!lstatSync(p.dest).isSymbolicLink(), "it downloads instead of linking the decoy");
   assert.notEqual(readFileSync(join(p.dest, "extension.mjs"), "utf8"), "// not cache-clock\n");
+});
+
+const checksums = (...args) => spawnSync(process.execPath, [join(ROOT, "bin", "checksums.mjs"), ...args], { encoding: "utf8" });
+
+test("install.sh checksums match the extension files", () => {
+  const r = checksums("--check");
+  assert.equal(r.status, 0, r.stderr);
+});
+
+test("checksums.mjs rejects unknown arguments and lists the accepted ones", () => {
+  for (const args of [["--force"], [], ["--write", "--check"]]) {
+    const r = checksums(...args);
+    assert.equal(r.status, 2, args.join(" "));
+    assert.match(r.stderr, /--write \| --check/);
+  }
+});
+
+test("checksums.mjs --check fails on a stale block and --write fixes it", () => {
+  const dir = mkdtempSync(join(tmpdir(), "cc-sums-"));
+  mkdirSync(join(dir, "bin"));
+  cpSync(join(ROOT, "bin", "checksums.mjs"), join(dir, "bin", "checksums.mjs"));
+  cpSync(join(ROOT, "install.sh"), join(dir, "install.sh"));
+  cpSync(join(ROOT, "extension"), join(dir, "extension"), { recursive: true });
+  const run = (arg) => spawnSync(process.execPath, [join(dir, "bin", "checksums.mjs"), arg], { encoding: "utf8" });
+  assert.equal(run("--check").status, 0);
+  appendFileSync(join(dir, "extension", "lib", "clock.mjs"), "// edited\n");
+  const stale = run("--check");
+  assert.equal(stale.status, 1);
+  assert.match(stale.stderr, /install\.sh checksums are stale; run node tools\/cache-clock\/bin\/checksums\.mjs --write/);
+  assert.equal(run("--write").status, 0);
+  assert.equal(run("--check").status, 0);
+  const script = readFileSync(join(dir, "install.sh"), "utf8");
+  const listed = script.match(/^FILES="([^"]+)"/m)[1].split(/\s+/).filter(Boolean);
+  const sums = script.match(/^SUMS='([^']*)'$/m)[1].split("\n").filter(Boolean);
+  assert.deepEqual(sums.map((l) => l.split(/\s+/)[1]), listed, "one line per file, in FILES order");
+  assert.ok(sums.every((l) => /^[0-9a-f]{64} {2}\S+$/.test(l)));
+});
+
+test("a piped install refuses a file whose checksum does not match", () => {
+  const tampered = join(mkdtempSync(join(tmpdir(), "cc-tamper-")), "extension");
+  cpSync(join(ROOT, "extension"), tampered, { recursive: true });
+  appendFileSync(join(tampered, "lib", "clock.mjs"), "// x\n");
+  const p = piped(pathToFileURL(tampered).href);
+  const r = p.run();
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /checksum mismatch: lib\/clock\.mjs/);
+  assert.ok(!existsSync(p.dest));
+  assert.deepEqual(readdirSync(join(p.home, "extensions")).filter((f) => f.startsWith(".cache-clock")), []);
+});
+
+test("a piped install refuses a file the checksum list does not name", () => {
+  const unlisted = join(mkdtempSync(join(tmpdir(), "cc-unlisted-")), "extension");
+  cpSync(join(ROOT, "extension"), unlisted, { recursive: true });
+  const script = readFileSync(join(ROOT, "install.sh"), "utf8").replace(/^SUMS='[^']*'$/m, "SUMS='abc  extension.mjs'");
+  const r = spawnSync("sh", ["-s"], { input: script, cwd: tmpdir(), encoding: "utf8", env: { ...process.env, COPILOT_HOME: mkdtempSync(join(tmpdir(), "cc-home-")), CACHE_CLOCK_BASE_URL: pathToFileURL(unlisted).href } });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /no checksum listed for report\.mjs/);
+});
+
+test("the one-line install is pinned to a tag named once, in install.sh", () => {
+  const script = readFileSync(join(ROOT, "install.sh"), "utf8");
+  const ref = script.match(/^REF="([^"]+)"$/m)?.[1];
+  assert.match(ref, /^cache-clock-v\d+\.\d+\.\d+$/);
+  const baseLine = script.split("\n").find((l) => l.startsWith("BASE_URL="));
+  assert.ok(baseLine.includes("$REF") && !baseLine.includes("/main/"), baseLine);
+  assert.equal(script.split("\n").filter((l) => l.includes(ref)).length, 1, "the tag is spelled in one place");
+  const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+  const curlLines = readme.split("\n").filter((l) => l.includes("curl -fsSL") && l.includes("install.sh"));
+  assert.ok(curlLines.length >= 2);
+  for (const l of curlLines) {
+    assert.ok(l.includes(`/${ref}/tools/cache-clock/install.sh`) && !l.includes("/main/tools/cache-clock/install.sh"), l);
+  }
+  assert.match(readme, new RegExp(`works once the tag \`${ref}\` exists`));
+});
+
+test("a piped install without sha256sum or shasum stops before downloading", () => {
+  const empty = mkdtempSync(join(tmpdir(), "cc-nopath-"));
+  const home = mkdtempSync(join(tmpdir(), "cc-home-"));
+  // PATH keeps only what the installer needs before the check: sh builtins, plus curl and mktemp stubs.
+  for (const tool of ["curl", "mktemp", "dirname", "mkdir", "rm", "awk", "cat"]) {
+    writeFileSync(join(empty, tool), tool === "curl" ? "#!/bin/sh\nexit 99\n" : "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  }
+  const r = spawnSync("/bin/sh", ["-s"], {
+    input: readFileSync(join(ROOT, "install.sh"), "utf8"), cwd: tmpdir(), encoding: "utf8",
+    env: { PATH: empty, HOME: home, COPILOT_HOME: home, CACHE_CLOCK_BASE_URL: pathToFileURL(join(ROOT, "extension")).href },
+  });
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /the one-line install needs sha256sum or shasum/);
 });
 
 // --project puts the extension in <git root>/.github/extensions, where VS Code's Copilot chat loads it.

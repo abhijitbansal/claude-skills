@@ -67,13 +67,53 @@ prompt, and generation buffer inside the ~4K window:
 
 ```swift
 static let maxModelInputChars = 4000
+static let truncationMarker = "\n\n[… document truncated to fit the on-device model's context window]"
 
 static func clipForModel(_ text: String) -> String {
     guard text.count > maxModelInputChars else { return text }
-    return String(text.prefix(maxModelInputChars))
-        + "\n\n[… document truncated to fit the on-device model's context window]"
+    return String(text.prefix(maxModelInputChars)) + truncationMarker
 }
 ```
+
+The SDK can budget by tokens instead of characters: `SystemLanguageModel.contextSize`
+(iOS 26.0) and `tokenCount(for:)` (iOS 26.4, `async throws`). When available,
+budget by token count and keep the character clip as the fallback below 26.4 or
+when `tokenCount` throws (checked against the iOS 27.2 SDK swiftinterface,
+2026-11; the snippet typechecks at 26.0 and 26.4 deployment targets). Give it a
+distinct name and keep the sync `clipForModel` alongside it: an `async` overload
+with the same name wins overload resolution, and un-awaited sync call sites
+(such as the loader in `vision-layout-ocr-grounding`) then stop compiling with
+"expression is 'async' but is not marked with 'await'":
+
+```swift
+// Uses `truncationMarker` and `maxModelInputChars` from the clip above.
+static func clipForModelByTokens(_ text: String) async -> String {
+    if #available(iOS 26.4, *) {
+        let model = SystemLanguageModel.default
+        let budget = model.contextSize / 2        // headroom: instructions, prompt, output
+        if let count = try? await model.tokenCount(for: text) {   // on failure: char clip
+            guard count > budget else { return text }
+            let keep = max(1, text.count * budget / count)
+            return String(text.prefix(keep)) + truncationMarker
+        }
+    }
+    return clipForModel(text)   // character clip fallback
+}
+```
+
+The 26.0 `contextSize` also works below 26.4 (back-deployed), but without
+`tokenCount` there is nothing to measure against, so the character clip stays.
+
+**Errors become outcomes, not spinners.** Map generation failures to a visible
+outcome state (see `async-enrichment-silent-loss-outcome-states`):
+`GenerationError.exceededContextWindowSize` on iOS 26 (deprecated at iOS 27.0),
+and `LanguageModelError.contextSizeExceeded` / `.guardrailViolation` / `.refusal`
+on the iOS 27 SDK each get their own state; a context overflow is retryable with
+a shorter clip, a guardrail or refusal is not.
+
+The flat-schema rule above (step 1) was observed on iOS 26 from one build; it is
+scoped to iOS 26. Re-test a nested `@Generable` array before relying on the
+ban on a later OS.
 
 Apply the clip **on read** (cache hit or fresh OCR alike) so tuning the
 constant never requires a cache bump; the cache file keeps the full text.

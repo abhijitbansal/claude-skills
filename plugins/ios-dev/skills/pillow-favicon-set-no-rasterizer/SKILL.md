@@ -76,6 +76,15 @@ img.save("favicon.ico", sizes=[(16, 16), (32, 32), (48, 48)])
 touch = Image.new("RGB", (512, 512), (180, 84, 46))
 touch.paste(img, (0, 0), img)  # composite over opaque background, drop alpha
 touch.resize((180, 180)).save("apple-touch-icon.png")
+
+# 4. og-card.png: exactly 1200x630 (the size og:image:width/height declare).
+#    Mark on the left over the brand colour; add title text with d.text(...)
+#    as above. For a headline-only card, scripts/og-card.py in
+#    site-pages-deploy-kit does the same with one command.
+card = Image.new("RGB", (1200, 630), (180, 84, 46))
+mark = img.resize((360, 360))
+card.paste(mark, (96, 135), mark)
+card.save("og-card.png")
 ```
 
 Then wire the full set into the page head (root vs nested pages need the

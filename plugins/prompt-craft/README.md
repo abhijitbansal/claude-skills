@@ -2,23 +2,26 @@
 
 Turn rough prompts into deterministic specs and surface the right next step.
 Zero config — install it and the skills are available; the guardrail hooks are
-**off by default**.
+**off by default**. The advisor hooks (prompt banner, Stop suggester, session
+registry rebuild) are on by default; `export PROMPT_CRAFT_ADVISOR=0` turns them
+all off (see [Turning the advisor off](#turning-the-advisor-off)).
 
 ## What's in it
 
 | Piece | Kind | What it does |
 | --- | --- | --- |
 | `/prompt-craft:improve-prompt` | skill | Rough ask → deterministic spec: restated goal, acceptance criteria, assumptions to confirm, recommended commands. High effort/model. |
-| `/prompt-craft:plan` | skill | Decompose a task → goals + per-step acceptance criteria → a TodoWrite plan. |
+| `/prompt-craft:plan` | skill | Decompose a task → goals + per-step acceptance criteria → a task-list plan. |
 | `/prompt-craft:debug` | skill (lens) | Reproduce → isolate → one hypothesis → failing test → fix. Auto-invokes on bug reports. |
 | `/prompt-craft:refactor` | skill (lens) | Behavior-preserving restructure, guarded by tests green before and after. |
 | `/prompt-craft:review` | skill (lens) | Diff/branch review: correctness + security first, then quality, by severity. |
 | `/prompt-craft:refresh` | skill | Re-scan skills and rebuild `~/.claude/prompt-craft/registry.json` + `profile.json` on demand. |
+| `/prompt-craft:structured-output-adaptive-thinking-token-bloat` | skill | Lesson for API callers: a `json_schema` structured-output call with adaptive thinking can spend most of its output budget on thinking; how to measure it and what to change. Model-invoked on that symptom. |
 | `suggest_next.sh` | Stop hook | After a turn, suggests follow-up commands from git state (dirty → `/commit`/`/prompt-craft:review`; unpushed → `/pr`). Routed through the advisor. Silent when nothing applies. |
 | `prompt_hint.sh` | UserPromptSubmit hook | Before each prompt, surfaces the most relevant command suggestion as a user-only `systemMessage` banner. Never feeds the model. |
 | `registry_freshness.sh` | SessionStart hook | On session start, rebuilds the registry when stale (repo change, scan-signature change, or Claude version change). |
-| `statusline_hint.sh` | statusLine command | Provides a statusline segment (`💡 next: /x`) appended to your existing statusline. Chains to the recorded base command; capped at 140 chars. |
-| `block_secrets.sh` | PreToolUse hook | **Opt-in.** Blocks Read/Edit/Write of secret-looking files (`.env`, `*.pem`, `id_rsa`, …). |
+| `statusline_hint.sh` | statusLine command | Provides a statusline segment (`💡 next: /x`) appended to your existing statusline. Chains to the recorded base command; the hint is added only when the whole line fits in 140 columns, and your own line is never truncated. |
+| `block_secrets.sh` | PreToolUse hook | **Opt-in.** Blocks Read/Edit/Write of secret-looking files (`.env`, `*.pem`, `id_rsa`, …); templates such as `.env.example` stay readable. File tools only (see below). |
 | `format_on_edit.sh` | PostToolUse hook | **Opt-in.** Formats the edited file with whatever formatter is installed (black/prettier/gofmt/rustfmt/shfmt). |
 
 ## Command advisor
@@ -110,11 +113,29 @@ export PROMPT_CRAFT_BLOCK_SECRETS=1    # block reads/edits of secret-looking fil
 export PROMPT_CRAFT_FORMAT_ON_EDIT=1   # auto-format edited files
 ```
 
-The Stop-hook suggester (`suggest_next.sh`) is always on and always silent unless
-there's a concrete next step; it never blocks.
+`block_secrets.sh` covers the **file tools only** (Read, Edit, Write). It is an
+accident guard, not a sandbox: `cat .env` through Bash or a Grep over the file is
+not intercepted. Templates (`*.example`, `*.sample`, `*.template`, `*.dist`) are
+exempt. The formatter hook rewrites the edited file with whatever formatter is
+installed, Markdown included, so leave it off if you do not want reflowed docs.
+
+### Turning the advisor off
+
+The Stop-hook suggester (`suggest_next.sh`) is on by default and silent unless
+there's a concrete next step; it never blocks. The two other advisor hooks are on
+by default too: `prompt_hint.sh` (UserPromptSubmit) runs `python3` and `git` before
+every prompt, and `registry_freshness.sh` (SessionStart) rebuilds the registry when
+stale. To silence all of them, and the statusline hint, set:
+
+```sh
+export PROMPT_CRAFT_ADVISOR=0
+```
+
+Every hook in `hooks/hooks.json` carries a timeout (5-30 s), so a stuck `python3`
+or formatter cannot stall a session.
 
 ## Status
 
-Phase 1 of the intent-router epic
+Part of the intent-router epic
 ([RFC](../../docs/superpowers/specs/2026-06-28-intent-router-design.md)). The
 catalog-based router is a **separate, evidence-gated** plugin — see the spec.

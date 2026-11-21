@@ -13,7 +13,7 @@ terminal, run it from the repo root using the installed copy at
 `CLAUDE_PLUGIN_ROOT` is set only inside plugin execution contexts, so it is
 not available in a plain terminal.
 
-It checks `git`, `gh` (installed + authenticated), this being a git repo, and `.claude/linear.yml` having the required keys. For each missing piece it prints the exact command to fix it. Idempotent — run it whenever you suspect setup drift. **It does not install anything for you** (so it can never accidentally `brew install` something on the wrong machine) — it just diagnoses.
+It checks `git`, `python3` (the config loader needs it), `gh` (installed + authenticated), this being a git repo, and `.claude/linear.yml` having the required keys with real values (not the `REPLACE_*` template placeholders). Unknown flags exit 2 with the accepted list. For each missing piece it prints the exact command to fix it. Idempotent — run it whenever you suspect setup drift. **It does not install anything for you** (so it can never accidentally `brew install` something on the wrong machine) — it just diagnoses.
 
 What it can't check:
 - **Linear MCP server connection.** This is configured inside Claude Code, not via shell. If `/linear-new` errors with "Linear MCP not available," add the connector in Claude Code's MCP settings (search for "Linear" in the Claude Code MCP picker, sign in with your Linear account).
@@ -50,7 +50,7 @@ After you've reviewed the plan from Flow 1 and want execution.
 
 1. **Edit `.claude/linear.yml`:** change `autonomy: review-only` → `autonomy: allowed`. Commit this (it's a deliberate policy change for the repo).
 
-2. **Re-label and re-pick:** in Linear, ensure `agent-ready` is still on the issue, then in Claude Code:
+2. **Re-label and re-pick:** in `review-only` mode `/linear-pick` removes `agent-ready` after posting the plan, so add `agent-ready` back in Linear (a human re-adds it once the plan is accepted), then in Claude Code:
    ```
    /linear-pick TEAM-123
    ```
@@ -164,7 +164,7 @@ When `/linear-pick` self-blocked (verify failed, diff too large, ambiguous spec,
 
 3. **Decide:** retry from the existing branch or start fresh?
    - **Retry:** keep the branch, push fixes, run `/linear-sync` to update Linear.
-   - **Start fresh:** delete the branch (`git branch -D agent/TEAM-123-...` + `git push origin --delete agent/TEAM-123-...`), remove `agent-blocked` in Linear, re-add `agent-ready`, re-run `/linear-pick TEAM-123`.
+   - **Start fresh:** delete the branch (`git branch -D agent/TEAM-123-...` + `git push origin --delete agent/TEAM-123-...`), remove `agent-blocked` in Linear, re-add `agent-ready`, re-run `/linear-pick TEAM-123`. A block-and-exit moves the issue back to Todo when no PR was opened, so the pick gate accepts it; if the issue is still In Progress (a PR is open, or the block came from an older version), set it to Todo by hand first, because `/linear-pick` refuses anything past Todo and `--force` does not override that.
 
 ---
 

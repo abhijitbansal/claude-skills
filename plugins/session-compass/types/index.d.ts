@@ -25,6 +25,8 @@ declare module 'claude-code' {
     'session-compass': {
       record: SessionRecord | null
       tab: 'this' | 'all'
+      expanded: boolean
+      hidden: string | null
     }
   }
 }

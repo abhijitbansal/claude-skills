@@ -6,6 +6,7 @@ sites. `test_live_tree_counts_in_sync` is the CI guard against stale counts.
 """
 
 import importlib.util
+import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -103,6 +104,61 @@ def test_catalog_row_count_must_equal_live_total(tmp_path, capsys):
     sites = [("site.html", "total", r"\d+ plugins · (\d+) skills")]
     assert sc.main(["--check"], root=tmp_path, sites=sites) == 1
     assert "docs/catalog.html [rows] found 2 Skill rows expected 3" in capsys.readouterr().out
+
+
+def _add_marketplace(root: Path, names) -> None:
+    (root / ".claude-plugin").mkdir()
+    plugins = ",".join(f'{{"name": "{n}", "source": "./plugins/{n}"}}' for n in names)
+    (root / ".claude-plugin" / "marketplace.json").write_text(f'{{"plugins": [{plugins}]}}')
+
+
+def test_live_counts_reads_plugins_from_marketplace(tmp_path):
+    sc = _load_module()
+    _build_tree(tmp_path)
+    _add_marketplace(tmp_path, ["alpha", "beta"])
+    live = sc.live_counts(tmp_path)
+    assert live["plugins"] == 2
+    assert "make-motion-blocks" not in live, "version 1's block registry is gone: no block scope"
+
+
+def test_plugin_count_skips_git_subdir_entries_hosted_elsewhere(tmp_path):
+    sc = _load_module()
+    _build_tree(tmp_path)
+    _add_marketplace(tmp_path, ["alpha", "beta"])
+    path = tmp_path / ".claude-plugin" / "marketplace.json"
+    data = json.loads(path.read_text())
+    data["plugins"].append({"name": "elsewhere", "source": {
+        "source": "git-subdir", "url": "https://example.com/x.git", "path": "plugins/elsewhere"}})
+    path.write_text(json.dumps(data))
+    assert sc.live_counts(tmp_path)["plugins"] == 2
+
+
+def test_stale_plugin_footer_fails_check_and_write_fixes_it(tmp_path, capsys):
+    sc = _load_module()
+    _build_tree(tmp_path, total_text="7 plugins · 3 skills")
+    _add_marketplace(tmp_path, ["alpha", "beta"])
+    sites = [("site.html", "plugins", r"(\d+) plugins · \d+ skills")]
+    assert sc.main(["--check"], root=tmp_path, sites=sites) == 1
+    assert "STALE site.html [plugins] found 7 expected 2" in capsys.readouterr().out
+    assert sc.main(["--write"], root=tmp_path, sites=sites) == 0
+    assert "2 plugins · 3 skills" in (tmp_path / "site.html").read_text()
+
+
+def test_a_site_naming_a_scope_with_no_live_count_is_an_error(tmp_path, capsys):
+    sc = _load_module()
+    _build_tree(tmp_path)
+    (tmp_path / "page.html").write_text("<p>(28 blocks in all)</p>\n")
+    sites = [("page.html", "make-motion-blocks", r"\((\d+) blocks in all\)")]
+    assert sc.main(["--check"], root=tmp_path, sites=sites) == 1
+    assert "ERROR page.html [make-motion-blocks] unknown scope 'make-motion-blocks'" in capsys.readouterr().out
+
+
+def test_live_sites_cover_plugin_footers():
+    sc = _load_module()
+    scopes = {(rel, scope) for rel, scope, _ in sc.SITES}
+    assert ("site/og.html", "plugins") in scopes
+    assert ("docs/catalog.html", "plugins") in scopes
+    assert not any(scope == "make-motion-blocks" for _, scope in scopes)
 
 
 def test_live_tree_counts_in_sync(capsys):

@@ -13,11 +13,18 @@ the public repo is a derivative, never edited directly.
 ## Commands
 
 ```bash
-# deploy (local): guards uncommitted site changes, redacts tokened remotes
+# deploy (local): guards uncommitted site changes, redacts tokened remotes.
+# Only --dry-run and -h/--help are accepted; anything else exits 2 (no push).
 bash "${CLAUDE_PLUGIN_ROOT}/skills/site-pages-deploy-kit/scripts/deploy-site.sh" [--dry-run]
 
-# verify: og:image absolute + true pixel dims, CSP meta, self-hosted assets, favicon set
+# verify: og:image absolute + real file + true pixel dims, CSP meta, self-hosted
+# assets (no external <link>/<script>), favicon set, same <nav> on every page,
+# undistorted <img> aspect, CNAME when site.domain is set, no unrendered {{tokens}}
 bash "${CLAUDE_PLUGIN_ROOT}/skills/site-pages-deploy-kit/scripts/verify-site.sh" [site-dir]
+
+# generate the 1200x630 og-card.png (idempotent; --no-text needs no Pillow)
+python3 "${CLAUDE_PLUGIN_ROOT}/skills/site-pages-deploy-kit/scripts/og-card.py" \
+  --out "${SITE_DIR}/og-card.png" --title "<App name>" --subtitle "<tagline>"
 ```
 
 Remote precedence: `SITE_REMOTE` env > `.site-remote` file > app.yml
@@ -25,14 +32,20 @@ Remote precedence: `SITE_REMOTE` env > `.site-remote` file > app.yml
 
 ## Create (new site)
 
-1. Copy `templates/site-skeleton/` into `${SITE_DIR}`, rendering
-   `{{APP_NAME}}`, `{{SITE_DOMAIN}}`, `{{APP_TEAM_ID}}`, `{{APP_BUNDLE_ID}}`
-   tokens (sed). Generate `og-card.png` (1200×630), `favicon.ico`,
-   `apple-touch-icon.png` — see the originating app's `build-og-card.sh` pattern for an
-   idempotent generator.
+1. Copy `templates/site-skeleton/` into `${SITE_DIR}` (include the dotfiles:
+   `.nojekyll`, `.well-known/`), rendering `{{APP_NAME}}`, `{{SITE_DOMAIN}}`,
+   `{{APP_TEAM_ID}}`, `{{APP_BUNDLE_ID}}` tokens (sed) — this includes the
+   `CNAME` file, which must stay committed or a deploy drops the custom
+   domain. Edit the app-site-association `components` to the app's real
+   deep-link paths (it ships with `/privacy*` and `/support*` excluded and a
+   placeholder `/open/*`; never a catch-all). Generate `og-card.png`
+   (1200×630) with `scripts/og-card.py`, plus `favicon.ico` and
+   `apple-touch-icon.png` (skill `pillow-favicon-set-no-rasterizer`).
 2. Install the CI deploy path: render `templates/deploy-site.sh` into
    `scripts/deploy-site.sh` (standalone — CI has no plugin) and
-   `templates/deploy-site.yml` into `.github/workflows/deploy-site.yml`.
+   `templates/deploy-site.yml` into `.github/workflows/deploy-site.yml`,
+   substituting `{{SITE_REPO}}` (app.yml `site.repo`) and `{{SITE_DIR}}`
+   (app.yml `site.dir`, default `site`) in both.
 3. Follow `templates/RUNBOOK.md` for the one-time public repo + deploy key +
    Pages + DNS setup.
 4. `verify-site.sh` must pass before the first deploy.

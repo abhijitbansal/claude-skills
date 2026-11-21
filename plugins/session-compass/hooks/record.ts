@@ -1,4 +1,5 @@
 import type { Artifact, SessionRecord } from '../types'
+import { clusters } from './cells'
 
 export const LIMITS = {
   goal: 80,
@@ -16,9 +17,20 @@ export type Where = { repo: string; worktree: string; branch: string }
 
 const STATUS_FIELDS = ['goal', 'step', 'next'] as const
 
+// Control characters (C0, DEL, C1): an ESC or BEL in stored text must never reach the terminal.
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g
+
+// Flattens whitespace to single spaces, drops control characters, then cuts to `max` UTF-16 units
+// including the ellipsis, between clusters: never half an emoji.
 export function truncate(text: string, max: number): string {
-  const flat = text.replace(/\s+/g, ' ').trim()
-  return flat.length <= max ? flat : `${flat.slice(0, max - 1)}…`
+  const flat = text.replace(/\s+/g, ' ').replace(CONTROL, '').trim()
+  if (flat.length <= max) return flat
+  let kept = ''
+  for (const cluster of clusters(flat)) {
+    if (kept.length + cluster.length > max - 1) break
+    kept += cluster
+  }
+  return `${kept}…`
 }
 
 export function basename(path: string): string {
@@ -35,13 +47,18 @@ export function applyStatus(
   input: StatusInput,
   now: number,
 ): SessionRecord | { error: string } {
-  const given = STATUS_FIELDS.filter(k => (input[k] ?? '').trim() !== '')
+  const given = STATUS_FIELDS.filter(k => input[k] !== undefined)
   if (given.length === 0) {
-    return { error: 'compass_status needs at least one non-empty field of: goal, step, next' }
+    return { error: 'compass_status needs at least one field of: goal, step, next (an empty string clears one)' }
   }
-  const patch: StatusInput = {}
-  for (const k of given) patch[k] = truncate(input[k] ?? '', LIMITS[k])
-  return { ...rec, ...patch, statusAt: now, lastActive: now }
+  // A field left out keeps its value; an empty (or blank) string clears it.
+  const next: SessionRecord = { ...rec, statusAt: now, lastActive: now }
+  for (const k of given) {
+    const value = (input[k] ?? '').trim()
+    if (value === '') delete next[k]
+    else next[k] = truncate(value, LIMITS[k])
+  }
+  return next
 }
 
 export function artifactKey(a: Artifact): string {
@@ -51,7 +68,8 @@ export function artifactKey(a: Artifact): string {
     case 'doc': return `doc:${a.path}`
     case 'commit': return `commit:${a.sha}`
     case 'push': return `push:${a.remote}:${a.branch}`
-    case 'pr': return `pr:${a.number}`
+    // A PR number repeats across repos; its URL does not. Older records may lack the URL.
+    case 'pr': return a.url !== '' ? `pr:${a.url}` : `pr:${a.number}`
   }
 }
 

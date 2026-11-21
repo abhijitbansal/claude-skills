@@ -120,6 +120,21 @@ if [[ "${LINEAR_PM_CONFIG_HELPERS_ONLY:-}" == "1" ]]; then
   return 0 2>/dev/null || exit 0
 fi
 
+# Flags (a sourced script sees its own arguments here). Each Bash tool call is a
+# fresh shell, so exports from an earlier call are gone: `--print` also writes
+# every value as KEY=value, letting a command read them in the same call:
+#   source load-config.sh --print      (or: bash load-config.sh --print)
+# Reject unknown flags rather than ignoring a typo.
+_LINEAR_PM_PRINT=0
+case "${1:-}" in
+  --print) _LINEAR_PM_PRINT=1 ;;
+  -*)
+    echo "linear-pm: unknown option '${1}' (accepted: --print)" >&2
+    # shellcheck disable=SC2317  # return/exit pair is intentional: works whether sourced or exec'd
+    return 2 2>/dev/null || exit 2
+    ;;
+esac
+
 # shellcheck disable=SC2317  # return/exit pair is intentional: works whether sourced or exec'd
 REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" \
   || { echo "linear-pm: not inside a git repo" >&2; return 1 2>/dev/null || exit 1; }
@@ -159,3 +174,26 @@ LINEAR_PM_POLL_ENABLED="${LINEAR_PM_POLL_ENABLED:-false}"; export LINEAR_PM_POLL
 
 LINEAR_PM_POLL_INTERVAL_MINUTES="$(_linear_yaml_get_nested "${LINEAR_YML}" poll.interval_minutes 2>/dev/null || true)"
 LINEAR_PM_POLL_INTERVAL_MINUTES="${LINEAR_PM_POLL_INTERVAL_MINUTES:-15}"; export LINEAR_PM_POLL_INTERVAL_MINUTES
+
+if [[ "${_LINEAR_PM_PRINT}" == "1" ]]; then
+  # Scalars as KEY=value. List keys repeat once per item (KEY= when empty).
+  # No ${!var} indirection: this file may be sourced from zsh as well as bash.
+  printf 'LINEAR_PM_TEAM=%s\n' "${LINEAR_PM_TEAM}"
+  printf 'LINEAR_PM_PROJECT=%s\n' "${LINEAR_PM_PROJECT}"
+  printf 'LINEAR_PM_BRANCH_PREFIX=%s\n' "${LINEAR_PM_BRANCH_PREFIX}"
+  printf 'LINEAR_PM_PR_TITLE_FORMAT=%s\n' "${LINEAR_PM_PR_TITLE_FORMAT}"
+  printf 'LINEAR_PM_AUTONOMY=%s\n' "${LINEAR_PM_AUTONOMY}"
+  printf 'LINEAR_PM_MAX_PR_LINES=%s\n' "${LINEAR_PM_MAX_PR_LINES}"
+  printf 'LINEAR_PM_POLL_ENABLED=%s\n' "${LINEAR_PM_POLL_ENABLED}"
+  printf 'LINEAR_PM_POLL_INTERVAL_MINUTES=%s\n' "${LINEAR_PM_POLL_INTERVAL_MINUTES}"
+  if [[ -z "${LINEAR_PM_VERIFY}" ]]; then
+    echo 'LINEAR_PM_VERIFY='
+  else
+    while IFS= read -r _item; do printf 'LINEAR_PM_VERIFY=%s\n' "${_item}"; done <<< "${LINEAR_PM_VERIFY}"
+  fi
+  if [[ -z "${LINEAR_PM_DEFAULT_LABELS}" ]]; then
+    echo 'LINEAR_PM_DEFAULT_LABELS='
+  else
+    while IFS= read -r _item; do printf 'LINEAR_PM_DEFAULT_LABELS=%s\n' "${_item}"; done <<< "${LINEAR_PM_DEFAULT_LABELS}"
+  fi
+fi

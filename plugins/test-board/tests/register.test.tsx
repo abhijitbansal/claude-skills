@@ -694,3 +694,100 @@ describe('band', () => {
     expect(await ui.find({ text: /first run/ })).toBeDefined()
   })
 })
+
+// A world whose collector answers a full snapshot, so runs earn a source check.
+const SNAPSHOT = {
+  version: 1, scope: 'git-tracked+untracked-nonignored', status: 'available', root: ROOT,
+  head: 'a'.repeat(40), branch: 'refs/heads/main', digest: 'b'.repeat(64), files: 1, bytes: 8,
+}
+type Call = { argv: readonly string[]; init?: { cwd?: string } }
+function sourced(on: On, isRepo: () => boolean = () => true) {
+  store(on)
+  const seen = watchState(on)
+  const clock = mock.clock(on, { now: 1_000_000 })
+  const calls: Call[] = []
+  on('session.cwd', () => ({ value: ROOT }))
+  on('process.run', (_$, e) => {
+    calls.push(e)
+    if (e.argv[0] !== 'git') return { value: proc(`${JSON.stringify(SNAPSHOT)}\n`) }
+    return isRepo()
+      ? { value: proc(`${e.init?.cwd ?? ROOT}\n`) }
+      : { value: { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository\n', isStdoutTruncated: false, isStderrTruncated: false } }
+  })
+  return { seen, clock, calls }
+}
+const timers = globalThis as unknown as { setTimeout: (run: () => void, ms: number) => unknown }
+const wait = (ms = 0) => new Promise<void>(resolve => { timers.setTimeout(resolve, ms) })
+async function settle(clock: MockClock): Promise<void> {
+  await clock.advance(5_000)
+  await wait(10)
+}
+const collectorRuns = (calls: Call[]) => calls.filter(c => c.argv[0] === 'python3').length
+
+describe('runtime fixes', () => {
+  test('no source check runs while the head run is dismissed', async ($, on) => {
+    const { clock, calls } = sourced(on); bash(on, PYTEST_RAW); emptyBand(on)
+    on('tool.call', { tool: 'Edit' }, () => ({ result: {}, text: 'edited' }) as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    await settle(clock)
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(120) })
+    await ui.press({ key: 'close' })
+    const before = collectorRuns(calls)
+    await $.tool.call({ tool: 'Edit', file_path: `${ROOT}/a.txt` } as never)
+    await settle(clock)
+    expect(collectorRuns(calls)).toBe(before)
+  })
+
+  for (const tool of ['mcp__session-compass__compass_status', 'TaskList', 'TaskUpdate']) {
+    test(`${tool} cannot change source, so it keeps the check`, async ($, on) => {
+      const { seen, clock } = sourced(on); bash(on, PYTEST_RAW)
+      on('tool.call', { tool: tool as never }, () => ({ result: 'ok', text: 'ok' }) as never)
+      await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+      await settle(clock)
+      expect(latest(seen)[0]?.sourceCheck).toBeDefined()
+      await $.tool.call({ tool } as never)
+      expect(latest(seen)[0]?.sourceCheck).toBeDefined()
+    })
+  }
+
+  test('a folder that was not a repo is asked again once the negative answer expires', async ($, on) => {
+    let isRepo = false
+    const { clock, calls } = sourced(on, () => isRepo); bash(on, PYTEST_RAW)
+    const gitCalls = () => calls.filter(c => c.argv[0] === 'git').length
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    const first = gitCalls()
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    expect(gitCalls()).toBe(first)
+    isRepo = true
+    await clock.advance(61_000)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q' })
+    expect(gitCalls()).toBeGreaterThan(first)
+  })
+
+  test('a cd into ~ keys on the home directory', async ($, on) => {
+    const { seen } = world(on); bash(on, PYTEST_RAW)
+    on('env.get', () => ({ value: '/Users/me' }) as never)
+    await $.tool.call({ tool: 'Bash', command: 'cd ~/proj && pytest -q' })
+    expect(latest(seen)[0]?.key).toBe('/Users/me/proj::pytest -q')
+  })
+
+  test('a dropped prompt does not start a new turn', async ($, on) => {
+    const { seen } = world(on); bash(on, PYTEST_RAW)
+    on('prompt.submit', (_$, e) => (e.text === 'dropped' ? { drop: 'hook said no' } : { text: e.text }))
+    await $.prompt.submit({ text: 'go' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q a.py' })
+    await $.prompt.submit({ text: 'dropped' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q b.py' })
+    expect(latest(seen).map(r => r.suite).sort()).toEqual(['pytest -q a.py', 'pytest -q b.py'])
+  })
+
+  test('every band row carries a key', async ($, on) => {
+    world(on); bash(on, PYTEST_RAW); emptyBand(on); turns(on)
+    await $.prompt.submit({ text: 'go' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q a.py' })
+    await $.tool.call({ tool: 'Bash', command: 'pytest -q b.py' })
+    const ui = await $.ui.mount({ plugin: 'test-board', surface: 'terminal', component: 'AbovePrompt', props: bandProps(160) })
+    const keys = (await ui.findAll({ type: 'Box' })).map(b => b.key).filter(k => typeof k === 'string' && k.startsWith('row-'))
+    expect(keys).toEqual([`row-${ROOT}::pytest -q b.py`, `row-${ROOT}::pytest -q a.py`])
+  })
+})

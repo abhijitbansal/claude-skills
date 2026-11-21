@@ -4,7 +4,7 @@
 // is nano-AIU per `batchSize` tokens, and 1 AI credit (1 AIU) = $0.01, so
 // dollars = nano-AIU / 1e11. Nothing here ships a price table.
 
-const NANO_AIU_PER_USD = 1e11;
+export const NANO_AIU_PER_USD = 1e11;
 
 // A call is "cold" when it read back less than this share of the previous
 // call's context. Real calls are bimodal: a warm call reads ~100% of it, a cold
@@ -13,6 +13,9 @@ export const COLD_READ_SHARE = 0.9;
 
 // A reported expiry further than this from its call is not believed.
 const MAX_TTL_MS = 24 * 60 * 60 * 1000;
+
+// A request longer than this is a unit or clock error: count from the event time instead.
+const MAX_DURATION_MS = 30 * 60 * 1000;
 
 const TYPE_KEYS = { input: "input", cache_read: "read", cache_write: "write", output: "output" };
 
@@ -42,9 +45,9 @@ function toMs(value) {
   return Number.isFinite(ms) ? ms : null;
 }
 
-/** An expiry outside [at, at + 24h] is a unit or clock error: fall back to the ttl. */
-function plausibleExpiry(expiresAt, at) {
-  return expiresAt !== null && expiresAt >= at && expiresAt - at <= MAX_TTL_MS ? expiresAt : null;
+/** An expiry outside [start, start + 24h] is a unit or clock error: fall back to the ttl. */
+function plausibleExpiry(expiresAt, start) {
+  return expiresAt !== null && expiresAt >= start && expiresAt - start <= MAX_TTL_MS ? expiresAt : null;
 }
 
 /** Flattens one usage payload; `timestamp` is the event's time (ISO or ms). */
@@ -52,27 +55,36 @@ export function normalizeUsage(data, timestamp) {
   if (!data || typeof data.model !== "string" || !data.model) return null;
   const ttl = Number.isFinite(data.cacheTtlSeconds) && data.cacheTtlSeconds > 0 ? data.cacheTtlSeconds : null;
   const at = toMs(timestamp) ?? Date.now();
+  // The event is stamped when the reply ends; the cache clock starts when the request began.
+  const reported = num(data.duration);
+  const durationMs = reported <= MAX_DURATION_MS ? reported : 0;
+  const startAt = at - durationMs;
+  const nanoAiu = data.copilotUsage?.totalNanoAiu;
   return {
     model: data.model,
     displayName: data.modelDisplayName || data.model,
     at,
+    durationMs,
+    startAt,
     inputTokens: num(data.inputTokens),
     readTokens: num(data.cacheReadTokens),
     writeTokens: num(data.cacheWriteTokens),
     outputTokens: num(data.outputTokens),
-    expiresAt: plausibleExpiry(toMs(data.cacheExpiresAt), at),
+    expiresAt: plausibleExpiry(toMs(data.cacheExpiresAt), startAt),
     ttlSec: ttl,
     prices: pricesFrom(data.copilotUsage?.tokenDetails),
+    nanoAiu: Number.isFinite(nanoAiu) && nanoAiu >= 0 ? nanoAiu : null,
+    maxPromptTokens: num(data.maxPromptTokens) || null,
     initiator: data.initiator ?? null,
     interactionType: data.interactionType ?? null,
   };
 }
 
-/** When the cache from `call` expires: reported expiry, else call time + ttl, else null. */
+/** When the cache from `call` expires: reported expiry, else request start + ttl, else null. */
 export function expiryOf(call) {
   if (!call) return null;
   if (call.expiresAt !== null) return call.expiresAt;
-  if (call.ttlSec !== null) return call.at + call.ttlSec * 1000;
+  if (call.ttlSec !== null) return call.startAt + call.ttlSec * 1000;
   return null;
 }
 
@@ -82,7 +94,7 @@ export function classifyCall(prev, cur) {
   if (cur.readTokens >= COLD_READ_SHARE * prev.inputTokens) return "warm";
   if (prev.model !== cur.model) return "cold-switch";
   const exp = expiryOf(prev);
-  return exp !== null && cur.at > exp ? "cold-idle" : "cold-break";
+  return exp !== null && cur.startAt > exp ? "cold-idle" : "cold-break";
 }
 
 /** Tokens of the previous context that had to be written again instead of read. */

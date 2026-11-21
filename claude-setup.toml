@@ -15,10 +15,6 @@ name = "caveman"
 repo = "JuliusBrussee/caveman"
 
 [[marketplaces]]
-name = "visual-explainer-marketplace"
-repo = "nicobailon/visual-explainer"
-
-[[marketplaces]]
 name = "cartoon"
 repo = "abhijitbansal/cartoon"
 
@@ -90,10 +86,6 @@ marketplace = "claude-plugins-official"
 [[plugins]]
 name = "caveman"
 marketplace = "caveman"
-
-[[plugins]]
-name = "visual-explainer"
-marketplace = "visual-explainer-marketplace"
 
 [[plugins]]
 name = "cartoon"

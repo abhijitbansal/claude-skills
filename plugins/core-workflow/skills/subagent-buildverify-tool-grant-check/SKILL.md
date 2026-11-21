@@ -79,14 +79,23 @@ looking at what actually rendered.
 - If a previously-dispatched subagent has been running far longer than its
   task should plausibly take with near-zero CPU/token movement and zero file
   changes, suspect this before assuming it's "just thinking hard" — check its
-  tool grant and consider stopping it.
+  tool grant and consider stopping it (`TaskStop` with its name or agent ID; a
+  stopped agent can be resumed later by name with `SendMessage`).
+
+## Evidence
+
+Mined from a session digest in which two dispatches, at two different model
+tiers (see Symptom), both stalled this way on a build-gated task; the session id
+and date were not recorded in the digest. The claim that a no-shell subagent has
+"no clean way to say it cannot do this" is untested: one no-Bash dispatch with a
+build-gated task would confirm or refute it.
 
 ## Related skills
-- `parallel-ios-agent-fixes-single-sim` — a different failure mode in the same
+- `ios-dev:parallel-ios-agent-fixes-single-sim` — a different failure mode in the same
   neighborhood: subagents that **do** have Bash but contend over the same
   simulator device. This skill is about subagents that have **no** shell at
   all; that one is about isolating shell-capable subagents from each other.
-- `realityview-fullscreencover-black-defer-mount` — the diagnostic/fix cycle
+- `ios-dev:realityview-fullscreencover-black-defer-mount` — the diagnostic/fix cycle
   this check most concretely applies to: "screenshot and verify a 3D render"
   is exactly the kind of acceptance test a no-Bash subagent silently stalls
   on.

@@ -14,7 +14,12 @@ File a new Linear issue.
 
 ## Procedure
 
-1. Source `${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/load-config.sh` (or `.claude/skills/linear-pm/scripts/load-config.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset — project-local copy instead of plugin install). Stop on error.
+1. **Load config.** Each Bash call is a fresh shell, so exports from an earlier call are gone. Source the loader with `--print` and read the values (`LINEAR_PM_TEAM`, `LINEAR_PM_PROJECT`, `LINEAR_PM_DEFAULT_LABELS`, …) from the printed `KEY=value` lines; re-source in any later Bash call that needs them:
+   ```bash
+   source "${CLAUDE_PLUGIN_ROOT}/skills/linear-pm/scripts/load-config.sh" --print
+   ```
+   (use `.claude/skills/linear-pm/scripts/load-config.sh` if `${CLAUDE_PLUGIN_ROOT}` is unset — project-local copy instead of plugin install). Stop on error.
+   Confirm the Linear MCP tools are available first (see *Linear MCP tools* in the `linear-pm` skill).
 
 2. **Title:** if not given as argument, ask the user. Trim whitespace; reject empty.
 
@@ -37,11 +42,11 @@ File a new Linear issue.
    ```
 
 5. **Create the issue.** Call `mcp__claude_ai_Linear__save_issue` with:
-   - `team: $LINEAR_PM_TEAM`
-   - `project: $LINEAR_PM_PROJECT`
+   - `team:` the printed `LINEAR_PM_TEAM`
+   - `project:` the printed `LINEAR_PM_PROJECT`
    - `title: <user title>`
    - `description: <filled template>`
-   - `labels`: array containing the chosen type label PLUS each item in `$LINEAR_PM_DEFAULT_LABELS` (the loader exports this as a newline-separated string — split on newlines, skip empties, then concatenate with the type label into a single array passed to `save_issue`).
+   - `labels`: array containing the chosen type label PLUS each item of `default_labels` (`--print` writes one `LINEAR_PM_DEFAULT_LABELS=<label>` line per item, or a single empty `LINEAR_PM_DEFAULT_LABELS=` when there are none — skip empties, then concatenate with the type label into a single array passed to `save_issue`).
 
 6. **Print the result:**
    > Created `<key>: <title>` — `<url>`

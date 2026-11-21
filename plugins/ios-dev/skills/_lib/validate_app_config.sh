@@ -92,6 +92,27 @@ if [[ -n "${inapp_changelog}" ]]; then
   [[ -f "${root}/${inapp_changelog}" ]] || warn "release.inapp_changelog_file '${inapp_changelog}' not found relative to repo root"
 fi
 
+# build script: ios-build, app-preview and launch.sh run ./<app.build_script>
+# (default build.sh); /ios-scaffold generates one. Only checked for a real
+# <repo>/.claude/app.yml, since a file passed from elsewhere has no repo root.
+# A missing DEFAULT script is a WARN (existing apps build another way); a
+# custom app.build_script that points nowhere is an ERROR.
+if [[ "$(basename "$(dirname "${FILE}")")" == ".claude" ]]; then
+  root="$(dirname "$(dirname "${FILE}")")"
+  build_script="$(get app.build_script)"
+  build_script="${build_script:-build.sh}"
+  case "/${build_script}/" in
+    //*|*/../*)
+      err "app.build_script must be a relative path inside the repo (got '${build_script}')" ;;
+    *)
+      if [[ "${build_script}" != "build.sh" ]]; then
+        [[ -f "${root}/${build_script}" ]] || err "app.build_script '${build_script}' not found relative to repo root (create it or run /ios-scaffold)"
+      elif [[ ! -f "${root}/build.sh" ]]; then
+        warn "build script 'build.sh' not found at the repo root — ios-build, app-preview and launch.sh need it; run /ios-scaffold to generate one"
+      fi ;;
+  esac
+fi
+
 if [[ ${errors} -gt 0 ]]; then
   echo "invalid: ${errors} error(s) in ${FILE}"
   exit 1

@@ -1,6 +1,6 @@
 ---
 name: swiftdata-cloudkit-model-rules
-description: SwiftData + CloudKit failures that compile clean and fail at runtime — ModelContainer crashes at init ("CloudKit integration requires that all attributes be optional or have a default value set", @Relationship(inverse:) declared on both sides), launch bricks behind a try!/fatalError when iCloud is signed out or unprovisioned, a local-only/in-memory/preview store silently starts syncing to iCloud (cloudKitDatabase defaults to .automatic the moment the entitlement exists; .automatic + isStoredInMemoryOnly is invalid), or records silently stop syncing (NSManagedObject-reserved names like isDeleted). Use when enabling CloudKit sync on a SwiftData app, writing @Model types that must mirror to CloudKit, configuring ModelConfiguration for local-only/preview/test stores, or bridging @Attribute(.externalStorage) blobs to CKAsset. Or CKShare sharing concurrent with SwiftData sync risks corruption (two mirroring engines, one store, unvalidated by Apple) — exactly one engine mirrors at a time.
+description: "SwiftData + CloudKit failures that compile clean and fail at runtime: ModelContainer crashes at init (\"CloudKit integration requires that all attributes be optional or have a default value set\", @Relationship(inverse:) declared on both sides), launch bricked by a try! or fatalError when container init throws, a local-only, in-memory or preview store that silently starts syncing (cloudKitDatabase defaults to .automatic), and records that silently stop syncing (reserved names like isDeleted). Use when enabling CloudKit sync on a SwiftData app, writing @Model types that mirror to CloudKit, configuring ModelConfiguration for local-only, preview or test stores, bridging @Attribute(.externalStorage) to CKAsset, or running CKShare beside SwiftData sync (one mirroring engine at a time)."
 ---
 
 # SwiftData + CloudKit: Model & Container Rules That Only Fail at Runtime
@@ -8,10 +8,17 @@ description: SwiftData + CloudKit failures that compile clean and fail at runtim
 ## Symptom
 
 - `ModelContainer` **crashes at init** the moment CloudKit mirroring is
-  enabled — non-optional/non-defaulted attributes, or `@Relationship(inverse:)`
-  declared on both sides of a relationship.
-- App **bricks at launch** when iCloud is signed out or unprovisioned, because
-  the container build was wrapped in `try!` / `fatalError`.
+  enabled — non-optional/non-defaulted attributes, `@Relationship(inverse:)`
+  declared on both sides of a relationship, or a relationship that is not
+  optional (`NSCocoaErrorDomain` 134060, "all relationships be optional"; a
+  to-many `= []` default does not satisfy it). `localizedDescription` hides the
+  code: unwrap `NSUnderlyingError`, or capture the device console as in
+  `devicectl-crashlog-oslog-cli-diagnostics`.
+- App **bricks at launch** when container init throws (a schema that breaks a
+  CloudKit rule, or an unprovisioned container) and the build was wrapped in
+  `try!` / `fatalError`. A signed-out iCloud account on its own should load the
+  store locally and simply not sync; not yet confirmed by a signed-out
+  simulator run.
 - A store meant to be **local-only / in-memory / preview silently syncs to
   iCloud** — no error, data just appears in CloudKit — defeating opt-in privacy.
 - Records **silently stop syncing** with no error (reserved property name).
@@ -48,11 +55,12 @@ let synced = ModelConfiguration(
 )
 ```
 
-Never `try!` the container build — it fails whenever iCloud is signed out or
-unprovisioned. Build it through one throwing factory keyed off a
-`Sendable` + `Equatable` `CloudSyncMode` enum, with a composition-root catch
-that falls back to local-only, logs via OSLog, and surfaces a Settings
-warning. Full idiom (including the relaunch prompt — the backing store is
+Never `try!` the container build — init throws on a schema that breaks a
+CloudKit rule and on an unprovisioned container. Build it through one throwing
+factory keyed off a `nonisolated` `Sendable` + `Equatable` `CloudSyncMode`
+enum, with a composition-root catch that falls back to local-only, logs via
+OSLog, and surfaces a Settings warning (drive the signed-out warning from
+`CKContainer.accountStatus()`). Full idiom (including the relaunch prompt — the backing store is
 fixed at launch): [references/container-factory.md](references/container-factory.md).
 
 ### 2. @Model rules for a valid CloudKit mirror
@@ -65,7 +73,13 @@ fixed at launch): [references/container-factory.md](references/container-factory
   common one) — pick an alternate name (e.g. `isTrashed`); a reserved name
   silently breaks sync with no error.
 - Declare `@Relationship(inverse:)` on exactly ONE side of a relationship —
-  declaring it on both sides crashes the container at init.
+  declaring it on both sides crashes the container at init. Every
+  relationship needs an inverse.
+- Every relationship must be optional, to-one and to-many alike
+  (`var photos: [Photo]? = []`): a non-optional `[Photo] = []` default does not
+  satisfy CloudKit and fails at init with 134060.
+- No unique constraints (`@Attribute(.unique)`, `#Unique`) and no `.deny`
+  delete rule; CloudKit cannot mirror either.
 - @Model suppresses the synthesized init — always declare one explicitly.
 
 **Read `references/model-rules-example.md` before implementing** — a full

@@ -1,6 +1,6 @@
 ---
 name: swiftdata-cloudkit-production-schema
-description: "A SwiftData+CloudKit app is preparing or debugging its CloudKit SCHEMA lifecycle — deploying to Production, a record type or field missing from the Console, a mystery CD_-prefixed field nobody defined (CD_moveReceipt, CD_entityName), a \"clean\" Dev/Prod diff that still loses data on TestFlight, renaming a synced @Model property, or a SwiftDataError/CKError that only reproduces on device. Use whenever the work touches CloudKit Console schema state, initializeCloudKitSchema, a release that includes @Model changes, or a rename/migration on a store already shipped to users. Prerequisite: read ios-dev:swiftdata-cloudkit-model-rules first — it owns the modeling basics (explicit cloudKitDatabase with .none for tests/previews, optional/defaulted properties, externalStorage photo bridge, shared schema type, single-mirror CKShare rule); this skill adds only the schema-lifecycle sharp edges it lacks."
+description: "A SwiftData+CloudKit app is preparing or debugging its CloudKit schema lifecycle: deploying to Production, a record type or field missing from the Console, a mystery CD_-prefixed field nobody defined (CD_moveReceipt, CD_entityName), a clean Dev/Prod diff that still loses data on TestFlight, renaming a synced @Model property, or a SwiftDataError or CKError that only reproduces on device. Use when work touches CloudKit Console schema state, initializeCloudKitSchema, a release with @Model changes, or a rename or migration on a store already shipped. Read swiftdata-cloudkit-model-rules first for the modeling basics."
 promotion_target: Fold into ios-dev:swiftdata-cloudkit-model-rules as new rule groups (schema lifecycle + rename safety + framework-injected fields) — this file carries only the delta.
 ---
 
@@ -85,7 +85,10 @@ Production") that gets silently forgotten (it shipped broken twice in Cubby befo
 automation; a hand-maintained "fields to deploy" checklist item drifted 8→10→11 across
 sessions). Wire a preflight gate into the release pipeline:
 
-- A verify script implementing both checks from rule 3 (via `cktool`).
+- A verify script implementing both checks from rule 3 (via `cktool`). The
+  commands to export both environments and compare them, with the management
+  token setup, are in `references/cktool-verify.md`: runnable without a
+  project-specific script.
 - The release hook runs it **only when** the diff since the last `v*` tag touches
   model files / the schema type — non-model releases skip automatically.
 - An explicit `SKIP_…=1` env escape hatch for machines without the CloudKit

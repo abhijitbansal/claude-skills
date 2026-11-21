@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 jobs:
   test:
     strategy:
@@ -14,25 +15,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: validate plugin manifests
-        run: |
-          python3 - <<'PY'
-          import json, os
-          mp = json.load(open(".claude-plugin/marketplace.json"))
-          assert mp["name"] and mp["owner"]["name"], "marketplace metadata"
-          names = set()
-          for p in mp["plugins"]:
-              assert p["name"] not in names, f"duplicate plugin {p['name']}"
-              names.add(p["name"])
-              pj = json.load(open(os.path.join(p["source"], ".claude-plugin", "plugin.json")))
-              assert pj["name"] == p["name"], f"name mismatch in {p['source']}"
-              skills = os.path.join(p["source"], "skills")
-              if os.path.isdir(skills):
-                  for s in os.listdir(skills):
-                      if s == "_lib": continue
-                      md = os.path.join(skills, s, "SKILL.md")
-                      assert os.path.isfile(md), f"missing {md}"
-          print(f"OK: {len(names)} plugins valid")
-          PY
+        run: python3 scripts/validate_manifests.py .
 
       - name: install bats + shellcheck (macOS)
         if: runner.os == 'macOS'
@@ -53,7 +36,7 @@ jobs:
         run: uv tool install pytest
 
       - name: shellcheck
-        run: shellcheck setup/*.sh plugins/ios-dev/skills/_lib/*.sh adapters/*.sh plugins/prompt-craft/hooks/*.sh tools/cache-clock/install.sh scripts/audit-on-demand-deps.sh
+        run: shellcheck setup/*.sh plugins/ios-dev/skills/_lib/*.sh adapters/*.sh plugins/prompt-craft/hooks/*.sh plugins/core-workflow/hooks/*.sh tools/cache-clock/install.sh scripts/check_trailers.sh scripts/site-preview.sh
 
       - name: bats
         run: bats tests/bats/
@@ -64,8 +47,8 @@ jobs:
       - name: pytest (second-wind)
         run: uv tool run pytest tools/second-wind/tests/ -q
 
-  # portable-artifacts skills are self-contained Node packages (own lockfile).
-  # Render tests skip themselves when no browser/ffmpeg is present.
+  # cache-clock's Copilot CLI extension is a plain Node package with no dependencies.
+  # (portable-artifacts moved to its own repo, which runs its own Node jobs.)
   node:
     runs-on: ubuntu-latest
     steps:
@@ -73,66 +56,24 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
-      - name: shared/ copies are in sync
-        run: node plugins/portable-artifacts/bin/sync-shared.mjs --check
-      - name: shared/ (themes, contrast, errors)
-        run: node --test "plugins/portable-artifacts/shared/test/*.test.mjs"
-      - name: cross-host installer
-        working-directory: plugins/portable-artifacts/bin
-        run: node --test "test/*.test.mjs"
       - name: cache-clock (Copilot CLI extension, fake session)
         working-directory: tools/cache-clock
         run: node --test "test/*.test.mjs"
 
-  # One runner per skill (the two slowest split in two), instead of one runner
-  # running them back to back. Every job installs every skill's node_modules:
-  # make-scene's lift tests use make-diagram's and make-dashboard's, make-explainer
-  # uses make-scene's, and the eval harness copies and runs all of them. Those
-  # tests skip, not fail, when a sibling is missing, so a narrower install would
-  # pass with less coverage. All five pin the same Playwright, so one browser
-  # install covers them.
-  node-skills:
-    name: node (${{ matrix.name }})
+  # AGENTS.md trailer rule: no Claude-Session line and no model-named
+  # Co-Authored-By in the PR's commits (the harness reminder asks for both).
+  commit-trailers:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { name: make-dashboard, dir: skills/make-dashboard }
-          - { name: make-motion, dir: skills/make-motion }
-          - { name: make-diagram, dir: skills/make-diagram }
-          - { name: make-scene 1/2, dir: skills/make-scene, shard: 1/2 }
-          - { name: make-scene 2/2, dir: skills/make-scene, shard: 2/2 }
-          - { name: make-explainer 1/2, dir: skills/make-explainer, shard: 1/2 }
-          - { name: make-explainer 2/2, dir: skills/make-explainer, shard: 2/2 }
-          - { name: 'eval harness (fake host, no LLM)', dir: eval }
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: plugins/portable-artifacts/skills/*/package-lock.json
-      - name: install every skill's node_modules
-        working-directory: plugins/portable-artifacts/skills
-        run: for s in make-dashboard make-motion make-diagram make-scene make-explainer; do (cd "$s" && npm ci); done
-      - name: install chromium
-        working-directory: plugins/portable-artifacts/skills/make-dashboard
-        run: npx playwright install --with-deps chromium
-      # Same glob as each package.json "test" script. A shard flag passed through
-      # `npm test --` is silently ignored, so sharded runs call node directly.
-      - name: package.json test script is still the glob run below
-        working-directory: plugins/portable-artifacts/${{ matrix.dir }}
-        run: |
-          [ -f package.json ] || exit 0
-          want='node --test "test/**/*.test.mjs"'
-          got=$(node -p 'require("./package.json").scripts.test')
-          [ "$got" = "$want" ] || { echo "::error::scripts.test is '$got', CI runs '$want'; update test.yml"; exit 1; }
-      - name: test
-        working-directory: plugins/portable-artifacts/${{ matrix.dir }}
+          fetch-depth: 0
+      - name: forbid harness trailers in the PR's commits
         env:
-          SHARD: ${{ matrix.shard }}
-        run: node --test ${SHARD:+--test-shard=$SHARD} "test/**/*.test.mjs"
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/check_trailers.sh "$(git merge-base "$BASE_SHA" "$HEAD_SHA")..$HEAD_SHA"
 
   # A plugin's plugin.json `version` is the ONLY update trigger — Claude Code
   # skips a plugin whose version string is unchanged, even when its code moved.
@@ -150,60 +91,4 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          python3 - <<'PY'
-          import json, os, subprocess, sys
-
-          base, head = os.environ["BASE_SHA"], os.environ["HEAD_SHA"]
-          # Compare against the merge base, not the base tip, so commits landed
-          # on main after this branch forked don't count as "changed here".
-          mb = subprocess.run(["git", "merge-base", base, head],
-                              capture_output=True, text=True, check=True).stdout.strip()
-
-          def git(*args):
-              return subprocess.run(["git", *args], capture_output=True, text=True)
-
-          msgs = git("log", "--format=%B", f"{mb}..{head}").stdout
-          if "[skip-plugin-bump]" in msgs:
-              print("skip: [skip-plugin-bump] found in commit range")
-              sys.exit(0)
-
-          changed = [l for l in git("diff", "--name-only", f"{mb}..{head}").stdout.splitlines() if l]
-          touched = sorted({
-              p.split("/")[1] for p in changed
-              if p.startswith("plugins/") and len(p.split("/")) > 2
-          })
-
-          def version_at(rev, plugin):
-              r = git("show", f"{rev}:plugins/{plugin}/.claude-plugin/plugin.json")
-              if r.returncode != 0:
-                  return None
-              try:
-                  return json.loads(r.stdout).get("version")
-              except json.JSONDecodeError:
-                  return "INVALID"
-
-          failures = []
-          for plugin in touched:
-              base_v = version_at(mb, plugin)
-              if base_v is None:                       # newly added plugin
-                  continue
-              head_v = version_at(head, plugin)
-              if head_v in (None, "INVALID"):
-                  failures.append(f"{plugin}: plugin.json missing or invalid at HEAD")
-              elif base_v == head_v:
-                  failures.append(
-                      f"{plugin}: content changed but version still {head_v} — "
-                      f"bump plugins/{plugin}/.claude-plugin/plugin.json"
-                  )
-
-          if failures:
-              print("Plugin version guard FAILED:")
-              for f in failures:
-                  print("  - " + f)
-              print("\nBump the plugin's version (patch/minor/major), or add "
-                    "[skip-plugin-bump] to a commit message if this ships nothing to users.")
-              sys.exit(1)
-
-          print(f"OK: version bump present for changed plugins ({', '.join(touched) or 'none'})")
-          PY
+        run: python3 scripts/plugin_version_guard.py "$BASE_SHA" "$HEAD_SHA"

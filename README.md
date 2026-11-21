@@ -4,72 +4,45 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-**Run AI coding agents longer, cheaper, and across every tool you use.**
+**Plugins and tools for the daily dev loop on Claude Code: iOS builds and releases, Linear project management, workflow helpers, overnight resume after usage limits, prompt craft, test results and session status.**
 
-Skills, plugins, and tools for AI agents — one repo, usable from **Claude Code**,
-**Codex**, **Copilot CLI**, and any **AGENTS.md-aware** agent. Highlights: a remote
-**iOS build-and-screenshot loop** delivered to your phone, a **usage-limit
-auto-resume** orchestrator that keeps overnight runs alive (`second-wind`),
-**token-optimized CLI output** (`cartoon`), and Linear PM automation.
+## Plugins
 
-<p align="center">
-  <a href="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery"><img src="docs/features/img/portable-artifacts/launch-announcement.gif" width="640" alt="A launch announcement clip: the title Lumen 2.0 scales in over the tagline Search that keeps up, a counter runs from 1 to 3 with the suffix x faster under the caption Median query time vs 1.0, three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another, and the end card reads Available today."></a>
-</p>
-
-Made by an agent from this prompt with `/make-motion`: JSON in, MP4 out, offline.
-
-```text
-Make a 10-second launch announcement, 1920x1080: scene 1 the product name "Lumen 2.0" scales in with the tagline "Search that keeps up"; scene 2 a counter from 1 to 3 with the suffix "x faster" and the caption "Median query time vs 1.0"; scene 3 three feature labels (Offline index, Typo-tolerant, Private by default) appear one after another; end on "Available today".
-```
-
-Install it in Claude Code: after `/plugin marketplace add abhijitbansal/claude-skills`, run `/plugin install portable-artifacts@claude-skills`. These three came from the same plugin, each linked to its page:
-
-<table>
-  <tr>
-    <td align="center" valign="top" colspan="2">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/delivery-diagram/dusk/index.html"><img src="docs/features/img/portable-artifacts/diagram-story.gif" width="700" height="450" alt="A food delivery diagram playing its story: steps 1 to 3 each light one edge, the third a curve to Orders service, with the caption, step chips, and a ring by Next that fills while a step holds."></a><br>
-      <sub><code>/make-diagram</code>: a diagram that plays its own story</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" valign="top" width="50%">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/growth-dashboard.html"><img src="docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="A Growth overview dashboard: three KPI tiles (total revenue, units sold, signup conversion rate) above bar charts of revenue by region and signup conversion rate by channel, a line chart of monthly revenue and a line chart of daily sessions by channel." width="400" height="533"></a><br>
-      <sub><code>/make-dashboard</code>: two CSV files in, one offline dashboard out</sub>
-    </td>
-    <td align="center" valign="top" width="50%">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/explainer-deck/index.html"><img src="docs/features/showcase/portable-artifacts/gallery/explainer-deck/thumb.jpg" alt="The title slide of the Portable Artifacts Deck: the title and a short subtitle in a card over a warm sunset landscape, with date, branch and repo tags." width="400" height="225"></a><br>
-      <sub><code>/make-explainer</code>: a slide deck as one HTML file</sub>
-    </td>
-  </tr>
-</table>
-
-The dashboard came from this prompt:
-
-```text
-Build a "Growth overview" dashboard from data/sales.csv and data/web_traffic.csv: KPI tiles for total revenue, units sold and overall signup conversion rate; revenue by region; the monthly revenue trend; daily sessions by channel; and signup conversion rate by channel.
-```
+Skills, plugins and tools for AI agents, usable from **Claude Code**, **Codex**, **Copilot CLI** and any **AGENTS.md-aware** agent. Everything below is a separate plugin; install only what you need.
 
 | Plugin | What you get |
 | --- | --- |
-| `ios-dev` | iOS feedback loop: simulator build + screenshot delivered to your phone, device builds, TestFlight/App Store release automation |
-| `linear-pm` | Linear PM conventions + 6 `/linear-*` commands, including `/linear-pick` autonomous issue pickup |
-| `core-workflow` | commit flow, skill contribution, image-parser + web-researcher agents, shellcheck-on-edit hook |
-| `second-wind` | usage-limit-aware overnight orchestrator (`wind` CLI + skill wrapper) |
-| `portable-artifacts` | `/make-dashboard` (data file → offline HTML dashboard, per-chart SQL), `/make-diagram` (prompt → offline HTML diagram with zoom and a presentation mode), `/make-explainer` (branch recap, concept page, plan the reviewer answers on the page, test checklist or slide deck as one offline HTML file), `/make-motion` (prompt → preview + MP4, silent unless you ask for sound, then music from your file or a locally synthesised voiceover) and `/make-scene` (your data as an explorable 3D city, forest, galaxy or terrain, or a diagram or chart lifted into 3D, with a camera tour); cross-host installer for Codex, Copilot, Gemini |
-| `prompt-craft` | rough ask → deterministic spec (`/improve-prompt`, `/plan`), debug/refactor/review lenses, git-aware Stop hook + opt-in secret/format guardrails |
-| `test-board` | band above the prompt: passed/failed/skipped after every test run, next to the previous run of the same suite in the same worktree |
-| `session-compass` | what each session is building, where it stands and what it produced: compass band, `/compass` pane, `compass_status` tool |
+| `ios-dev` | The iOS feedback loop: a simulator build and screenshot delivered to your phone, device builds, TestFlight and App Store release automation. |
+| `linear-pm` | Linear project-management conventions and six `/linear-*` commands, including `/linear-pick` for autonomous issue pickup. |
+| `core-workflow` | Commit flow, skill contribution, a branch-cleanup command, the image-parser and web-researcher agents, and a shellcheck-on-edit hook. |
+| `second-wind` | A usage-limit-aware overnight orchestrator (the `wind` CLI plus a skill wrapper). |
+| `prompt-craft` | Turns a rough ask into a deterministic spec (`/improve-prompt`, `/plan`), with debug, refactor and review lenses and opt-in secret and format guardrails. |
+| `test-board` | A band above the prompt with passed, failed and skipped counts after every test run, next to the previous run of the same suite. |
+| `session-compass` | What each session is building, where it stands and what it produced: a compass band, a `/compass` pane and a `compass_status` tool. |
 
-**Feature guides:** [Second Wind](docs/features/second-wind.html) ·
-[prompt-craft](docs/features/prompt-craft.html) ·
-[portable-artifacts](docs/features/portable-artifacts.html) ·
-[session mods](docs/features/mods.html) ·
-[ios-dev](docs/features/ios-dev.html) ·
-[linear-pm](docs/features/linear-pm.html) ·
-[core-workflow](docs/features/core-workflow.html)
+Beyond the plugins: a standalone `wind` CLI (`tools/second-wind`), a Copilot CLI cache guard (`tools/cache-clock`), and the companion `cartoon` project for token-lean CLI output.
 
-**Docs:** [Architecture](docs/architecture.md) ([visual](docs/architecture.html)) ·
-[Skills & Tools Catalog](docs/skills-catalog.md) ([visual](docs/catalog.html)) ·
+### Companion plugin: portable-artifacts
+
+`portable-artifacts` turns one prompt into decks, diagrams, dashboards, 3D scenes and MP4 films: files that open offline, built by whatever coding agent you already use. It used to live in this repo and now has its own: [abhijitbansal/portable-artifacts](https://github.com/abhijitbansal/portable-artifacts), with a [site and gallery](https://abhijitbansal.github.io/portable-artifacts/).
+
+```text
+/plugin marketplace add abhijitbansal/portable-artifacts
+/plugin install portable-artifacts@portable-artifacts
+```
+
+Other agents: `npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene` (`npx skills` does not install sibling skills for you: `make-explainer` needs `make-diagram` and `make-dashboard` beside it, and `make-scene` needs them to lift a diagram or a chart, so name all five as shown), or clone the repo and run `node portable-artifacts/plugins/portable-artifacts/bin/install.mjs codex` (also `copilot`, `gemini`, `agents`). If you already added this marketplace, `portable-artifacts@claude-skills` still works: it resolves to the new repo. [Changelog](https://github.com/abhijitbansal/portable-artifacts/blob/main/plugins/portable-artifacts/CHANGELOG.md).
+
+**Feature guides:** [portable-artifacts](https://abhijitbansal.github.io/portable-artifacts/) (own site) ·
+[Second Wind](https://abhijitbansal.github.io/claude-skills/features/second-wind.html) ·
+[prompt-craft](https://abhijitbansal.github.io/claude-skills/features/prompt-craft.html) ·
+[session mods](https://abhijitbansal.github.io/claude-skills/features/mods.html) ·
+[ios-dev](https://abhijitbansal.github.io/claude-skills/features/ios-dev.html) ·
+[linear-pm](https://abhijitbansal.github.io/claude-skills/features/linear-pm.html) ·
+[core-workflow](https://abhijitbansal.github.io/claude-skills/features/core-workflow.html)
+
+**Docs:** [Architecture](docs/architecture.md) ([visual](https://abhijitbansal.github.io/claude-skills/architecture.html)) ·
+[Skills & Tools Catalog](docs/skills-catalog.md) ([visual](https://abhijitbansal.github.io/claude-skills/catalog.html)) ·
 [Usage guide](USAGE.md)
 
 ## Installation
@@ -85,7 +58,6 @@ Inside any Claude Code session:
 /plugin install second-wind@claude-skills
 /plugin install core-workflow@claude-skills
 /plugin install prompt-craft@claude-skills
-/plugin install portable-artifacts@claude-skills
 /plugin install test-board@claude-skills
 /plugin install session-compass@claude-skills
 ```
@@ -122,18 +94,26 @@ with a per-repo install (`install.sh --project`) and `"chat.canvases.enabled": t
 VS Code settings.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh
-curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/cache-clock/install.sh | sh -s -- --project   # VS Code: run in each repo
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/cache-clock-v1.1.0/tools/cache-clock/install.sh | sh -s -- --project   # VS Code: run in each repo
 node ~/.copilot/extensions/cache-clock/report.mjs --since 7d   # what cold sends already cost you
 ```
 
-Then run `/cache-clock help` in Copilot.
+Then run `/cache-clock help` in Copilot. The install is pinned to the release tag
+`cache-clock-v1.1.0` and checks a SHA-256 for every file; the curl lines work once that tag
+exists. Optional keep-warm is off until `/cache-clock keepwarm on` and it costs money: it
+keeps the cache warm for 3 hours after your last message (up to 12) and stops at payback,
+the budget, the window end or the daily limit. The setting is global, but each open session
+has its own window, budget and 24-hour ceiling: per session, at most 362 pings in 24 hours and
+the daily dollar limit (default $2.00); deleting the ledger file resets it. It is tested against
+a fake Copilot host only; do not enable it before the owner's live check confirms that Copilot
+labels the ping's message as ours.
 
 Full reference: [tools/cache-clock/README.md](tools/cache-clock/README.md) ·
 [guide](docs/features/cache-clock.html) ·
 [visual explainer](docs/features/showcase/cache-clock/how-it-works.html) ·
 [architecture diagram](docs/features/showcase/cache-clock/diagram/cache-clock-architecture.html) ·
-[17-second video](docs/features/showcase/cache-clock/video.mp4)
+[17-second video](docs/features/showcase/cache-clock/video.mp4) (made with make-motion 1.x)
 
 ### Other AI tools (Codex, Copilot CLI, Hermes, …)
 
@@ -142,20 +122,17 @@ The skills are plain SKILL.md directories — tool-agnostic. Clone, then run the
 ```bash
 git clone https://github.com/abhijitbansal/claude-skills
 cd claude-skills
-adapters/install.sh codex      # symlink into ~/.codex/skills    (CODEX_SKILLS_DIR overrides)
+adapters/install.sh codex      # symlink into ~/.agents/skills   (CODEX_SKILLS_DIR overrides)
 adapters/install.sh copilot    # symlink into ~/.copilot/skills  (COPILOT_SKILLS_DIR overrides)
 adapters/install.sh agents-md [path/to/AGENTS.md]   # managed skills-index block for AGENTS.md-aware tools
 adapters/install.sh all
 ```
 
-Idempotent — re-run after pulling updates; it prunes links for removed skills.
-
-The `portable-artifacts` skills (`make-dashboard`, `make-diagram`, `make-explainer`, `make-motion`, `make-scene`) are Node packages: they also
-need `npm ci` in each skill folder. Their own installer does that and covers Gemini CLI and
-project-scoped installs too:
-`node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`
-— see [plugins/portable-artifacts/USAGE.md](plugins/portable-artifacts/USAGE.md).
-With [`npx skills`](https://github.com/vercel-labs/skills): `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene`. That does not resolve dependencies: `make-explainer` needs `make-diagram` and `make-dashboard` installed beside it (and `make-scene` for a `scene` section), and `make-scene` needs them to lift a diagram or a chart, so name them as shown.
+Idempotent — re-run after pulling updates; it prunes links for removed skills. The adapter
+only links skill folders: it runs no `npm ci --ignore-scripts`, installs no agent file and does not add sibling
+skills. The `portable-artifacts` skills now live in their [own repo](https://github.com/abhijitbansal/portable-artifacts)
+and are Node packages with their own installer (`node portable-artifacts/plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`),
+described in [its README](https://github.com/abhijitbansal/portable-artifacts#readme).
 
 ### Cartoon (token-optimized CLI output)
 
@@ -213,7 +190,7 @@ users can ignore them entirely; plugins never touch them.
 | Path | What |
 | --- | --- |
 | `.claude-plugin/` | marketplace manifest |
-| `plugins/` | the eight plugins (skills, commands, agents, hooks) |
+| `plugins/` | the seven plugins (skills, commands, agents, hooks); portable-artifacts lives in [its own repo](https://github.com/abhijitbansal/portable-artifacts) |
 | `tools/` | standalone CLIs (second-wind) and the Copilot CLI extension (cache-clock) |
 | `adapters/` | wire skills into non-Claude tools |
 | `setup/`, `templates/`, `claude-setup.toml` | personal machine seed |
@@ -238,8 +215,8 @@ Design history lives in [docs/superpowers/specs/](docs/superpowers/specs/).
 PRs welcome. From any repo on a seeded machine:
 
 ```bash
-claude-skills-contribute --message "fix: ..."                      # capture current machine state
-claude-skills-contribute --skill my-skill --plugin core-workflow   # scaffold a new skill
+claude-skills-contribute --message "fix: ..."                      # capture machine state, show the diff, stop (add --commit or --push to keep it)
+claude-skills-contribute --skill my-skill --plugin core-workflow   # scaffold a new skill, then commit, push and open a PR
 ```
 
 Or the ordinary way: fork, branch, `bats tests/bats/`, PR.

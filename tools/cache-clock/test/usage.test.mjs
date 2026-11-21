@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeUsage, pricesFrom, classifyCall, lostTokens, extraUsd, nextSendCosts } from "../extension/lib/usage.mjs";
+import { normalizeUsage, pricesFrom, classifyCall, lostTokens, extraUsd, nextSendCosts, expiryOf } from "../extension/lib/usage.mjs";
 import { usage, LUNA_PRICES, T0 } from "./fixtures.mjs";
 
 const close = (a, b, eps = 1e-12) => assert.ok(Math.abs(a - b) < eps, `${a} != ${b}`);
@@ -129,4 +129,41 @@ test("nextSendCosts estimates a cold rewrite and a warm read of the context", ()
 test("nextSendCosts counts the last answer as part of the next context", () => {
   const last = call({ at: "2026-10-10T08:00:00.000Z", input: 1000, output: 500 });
   assert.equal(nextSendCosts(last).contextTokens, 1500);
+});
+
+test("normalizeUsage keeps request start, duration, spend and the prompt limit", () => {
+  const n = normalizeUsage(usage({ duration: 4000, nanoAiu: 2e9, maxPromptTokens: 128_000 }), T0);
+  assert.deepEqual([n.durationMs, n.startAt, n.nanoAiu, n.maxPromptTokens], [4000, T0 - 4000, 2e9, 128_000]);
+  const bare = normalizeUsage({ model: "m" }, T0);
+  assert.deepEqual([bare.durationMs, bare.startAt, bare.nanoAiu, bare.maxPromptTokens], [0, T0, null, null]);
+});
+
+test("expiry without a reported time counts from the request start", () => {
+  assert.equal(expiryOf(normalizeUsage({ ...usage({ expiresAt: null, ttl: 300 }), duration: 4000 }, T0)), T0 - 4000 + 300_000);
+});
+
+test("a reported expiry is kept when the request ran longer than the ttl", () => {
+  const exp = T0 - 400_000 + 300_000;
+  assert.equal(normalizeUsage({ ...usage({ ttl: 300, expiresAt: new Date(exp).toISOString() }), duration: 400_000 }, T0).expiresAt, exp);
+});
+
+test("a call that started before the old expiry is a break, not idle", () => {
+  const prev = normalizeUsage(usage({ ttl: 300, input: 100_000 }), T0);
+  const cur = normalizeUsage({ ...usage({ input: 100_000, read: 0, write: 100_000 }), duration: 4000 }, T0 + 302_000);
+  assert.equal(classifyCall(prev, cur), "cold-break");
+});
+
+test("a duration beyond 30 minutes is not believed: the clock counts from the event time", () => {
+  const edge = normalizeUsage({ ...usage(), duration: 30 * 60_000 }, T0);
+  assert.deepEqual([edge.durationMs, edge.startAt], [30 * 60_000, T0 - 30 * 60_000]);
+  const absurd = normalizeUsage({ ...usage(), duration: 30 * 60_000 + 1 }, T0);
+  assert.deepEqual([absurd.durationMs, absurd.startAt], [0, T0]);
+  assert.equal(normalizeUsage({ ...usage(), duration: -5000 }, T0).startAt, T0);
+  assert.equal(normalizeUsage({ ...usage(), duration: "4000" }, T0).startAt, T0);
+});
+
+test("a negative or non-numeric spend is not a measurement", () => {
+  assert.equal(normalizeUsage(usage({ nanoAiu: -1 }), T0).nanoAiu, null);
+  assert.equal(normalizeUsage(usage({ nanoAiu: Number.NaN }), T0).nanoAiu, null);
+  assert.equal(normalizeUsage(usage({ nanoAiu: 0 }), T0).nanoAiu, 0);
 });

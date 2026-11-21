@@ -7,6 +7,9 @@ setup() {
   export HOME="${TMP}/home"
   mkdir -p "${HOME}/.local/bin"
   export CLAUDE_SKILLS_HOME="${BATS_TEST_DIRNAME}/../.."
+  # Per-test call log: the shared one in BATS_TMPDIR races with other bats runs.
+  export MOCK_CALL_LOG="${TMP}/mock-calls.log"
+  : > "${MOCK_CALL_LOG}"
 }
 
 teardown() { rm -rf "${TMP}"; }
@@ -85,6 +88,53 @@ EOF
   grep -q "claude plugin install ios-dev@claude-skills" "${MOCK_CALL_LOG}"
   grep -q "claude plugin install linear-pm@claude-skills" "${MOCK_CALL_LOG}"
   grep -q "claude plugin install core-workflow@claude-skills" "${MOCK_CALL_LOG}"
+}
+
+# Inline claude stub whose `plugin marketplace list` prints $1 (a listing).
+stub_claude_listing() {
+  mkdir -p "${TMP}/bin"
+  printf '%s\n' "$1" > "${TMP}/listing.txt"
+  cat > "${TMP}/bin/claude" <<EOF
+#!/usr/bin/env bash
+echo "claude \$*" >> "${MOCK_CALL_LOG}"
+if [[ "\$1 \$2 \$3" == "plugin marketplace list" ]]; then cat "${TMP}/listing.txt"; fi
+exit 0
+EOF
+  chmod +x "${TMP}/bin/claude"
+}
+
+@test "local_plugins adds the self marketplace when only a foreign Source line mentions claude-skills" {
+  stub_claude_listing "Configured marketplaces:
+
+  ❯ claude-code-skills
+    Source: GitHub (someone/claude-skills)"
+  PATH="${TMP}/bin:${PATH}" run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only local_plugins
+  [ "$status" -eq 0 ]
+  grep -q "^claude plugin marketplace add " "${MOCK_CALL_LOG}"
+  ! grep -q "^claude plugin marketplace update claude-skills" "${MOCK_CALL_LOG}" || false
+}
+
+@test "local_plugins updates the self marketplace when it is listed by exact name" {
+  stub_claude_listing "Configured marketplaces:
+
+  ❯ claude-skills
+    Source: Directory (/somewhere/claude-skills)"
+  PATH="${TMP}/bin:${PATH}" run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --only local_plugins
+  [ "$status" -eq 0 ]
+  grep -q "^claude plugin marketplace update claude-skills" "${MOCK_CALL_LOG}"
+  ! grep -q "^claude plugin marketplace add " "${MOCK_CALL_LOG}" || false
+}
+
+@test "setup.sh --dry-run dotfiles writes no .bak and leaves existing files alone" {
+  echo "old" > "${HOME}/CLAUDE.md"
+  mkdir -p "${HOME}/.claude"
+  echo "{\"old\":true}" > "${HOME}/.claude/settings.json"
+  CLAUDE_SETUP_TOML="${CLAUDE_SKILLS_HOME}/claude-setup.toml" \
+    run bash "${CLAUDE_SKILLS_HOME}/setup/setup.sh" --dry-run --only dotfiles
+  [ "$status" -eq 0 ]
+  [ -z "$(ls "${HOME}" "${HOME}/.claude" | grep '\.bak\.' || true)" ]
+  [ "$(cat "${HOME}/CLAUDE.md")" = "old" ]
+  [ "$(cat "${HOME}/.claude/settings.json")" = '{"old":true}' ]
 }
 
 @test "setup.sh symlinks step installs wind onto PATH" {

@@ -5,7 +5,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_hint.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt_hint.sh\"",
+            "timeout": 10
           }
         ]
       }
@@ -15,7 +16,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/registry_freshness.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/registry_freshness.sh\"",
+            "timeout": 30
           }
         ]
       }
@@ -25,7 +27,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/suggest_next.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/suggest_next.sh\"",
+            "timeout": 10
           }
         ]
       }
@@ -36,7 +39,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/block_secrets.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/block_secrets.sh\"",
+            "timeout": 5
           }
         ]
       }
@@ -47,7 +51,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/format_on_edit.sh\""
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/format_on_edit.sh\"",
+            "timeout": 30
           }
         ]
       }

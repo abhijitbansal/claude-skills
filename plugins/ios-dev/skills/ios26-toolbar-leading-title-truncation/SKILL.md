@@ -31,6 +31,19 @@ will do this.
 
 ## Fix
 
+Before moving the title, try the system's own options first. They exist in the
+iOS 27.2 SDK (checked against its SwiftUI swiftinterface and typechecked with an
+iOS 26.0 deployment target, 2026-11-06; whether
+they cure the single-glyph clipping was **not** run on a simulator, so verify
+before relying on them):
+
+- `.sharedBackgroundVisibility(.hidden)` on the `ToolbarItem` removes the shared
+  glass capsule behind it, so the item is no longer wrapped like a button.
+- `.toolbarTitleDisplayMode(.inlineLarge)` is a system title mode that keeps the
+  title in `.navigationTitle` (which the system lays out and scales).
+
+If neither gives a full-width title, fall back to the in-content header below.
+
 Don't put a screen title in a toolbar item at all. Render it as an in-content
 header row at the top of the scrollable content instead, and keep
 `.navigationBarTitleDisplayMode(.inline)` with an empty system title so the

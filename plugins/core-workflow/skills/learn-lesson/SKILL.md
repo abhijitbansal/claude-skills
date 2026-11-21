@@ -32,8 +32,8 @@ ever sees.
 3. **Draft.** For a new skill, write `SKILL.md` with this shape:
    ```markdown
    ---
-   name: <kebab-case, symptom-oriented>
-   description: <one physical line — symptom first (what the user SEES, e.g. error text, crash thread, wrong behavior), then "use when …". This is the trigger surface.>
+   name: <kebab-case, symptom-oriented; carry the literal error string or API token — on heavy installs the name is the primary trigger, because skills are listed by name only and the description is elided>
+   description: <one physical line — symptom first (what the user SEES, e.g. error text, crash thread, wrong behavior), then "use when …". The secondary trigger; it still decides routing where descriptions are shown.>
    ---
 
    # <Title>
@@ -62,11 +62,14 @@ ever sees.
      1. Overwrite the scaffold with the drafted `SKILL.md` (and any
         `references/*.md`).
      2. Run `python3 scripts/sweep_counts.py --write`.
-     3. Add the three hand rows: the `.crow` entry in `docs/catalog.html`, the
-        row in `docs/skills-catalog.md`, and the inventory row in
-        `docs/features/<plugin>.html`.
+     3. Add the hand rows listed in the `contribute` skill's step 3 (it owns
+        that list; do not copy it here).
      4. Run `bats tests/bats` and `pytest tests/pytest -q`.
-     5. Commit, push, and `gh pr create`.
+     5. Commit, push, and `gh pr create`. The PR bumps the plugin once: one
+        `plugin.json` version bump plus one CHANGELOG heading per PR that
+        touches `plugins/<name>/**`, or `[skip-plugin-bump]` in a commit
+        message for a change that ships nothing to users. CI's `plugin-version-guard` fails
+        without it. AGENTS.md has the full rule.
      If the skill dir already exists, the script fails after switching to a
      new `contrib/…` branch; switch back and delete that branch.
    - **Extension to an existing skill:** do not use `--skill`, and do not use a
@@ -90,6 +93,11 @@ ever sees.
   wrapped continuation lines (the registry parser truncates them). Quote the
   value as a JSON string if it contains ": " or " #" (the strict frontmatter
   test rejects those in a plain value).
+- Anonymise before you write. The catalog is public: name no private app,
+  repo, person or customer in a skill, reference file or example. Write "a
+  private iOS app" (or "a private web project") instead. Cubby is the only
+  public exception, because the repo's AGENTS.md publishes it on purpose.
+  Verbatim error strings stay; the project name around them goes.
 - One lesson per skill. Two root causes = two skills.
 - vs `ecc:learn`: this skill publishes to the shared catalog via PR;
   `ecc:learn` saves local patterns under `~/.claude/skills`.

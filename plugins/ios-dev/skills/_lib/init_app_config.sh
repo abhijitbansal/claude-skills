@@ -10,7 +10,11 @@
 # Never clobbers an existing .claude/app.yml unless --force is passed.
 #
 # Usage:
-#   init_app_config.sh [--force] [--dir <repo-root>]
+#   init_app_config.sh [--force] [--migrate] [--dir <repo-root>]
+#     --force    overwrite an existing .claude/app.yml
+#     --migrate  upgrade an existing v1 app.yml to schema v2 in place
+#                (keeps every value, appends the missing sections)
+#     --dir      repo root (default: git toplevel, else the current directory)
 #
 # Output: prints the path written and a short summary of detected vs TODO
 # fields on the last lines of stdout.
@@ -26,8 +30,8 @@ while [[ $# -gt 0 ]]; do
     --force)   FORCE=true; shift ;;
     --migrate) MIGRATE=true; shift ;;
     --dir)     ROOT="$2"; shift 2 ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
-    *) echo "[ios-init] Unknown arg: $1" >&2; exit 2 ;;
+    -h|--help) sed -n '2,22p' "$0"; exit 0 ;;
+    *) echo "[ios-init] Unknown arg: $1 (accepted: --force, --migrate, --dir <repo-root>, -h|--help)" >&2; exit 2 ;;
   esac
 done
 
