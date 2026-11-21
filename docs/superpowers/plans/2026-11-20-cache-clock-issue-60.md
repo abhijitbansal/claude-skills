@@ -57,7 +57,7 @@ The suite runs on a fake host, so 358 passing tests cannot show what Copilot pas
 
 **Interfaces:**
 - Produces: `export function classifyPrompt(text: string, { interactive: boolean }): "shell" | "local-command" | "prompt"` in `guard.mjs`.
-- Produces: `export const LOCAL_COMMANDS: ReadonlySet<string>`, the command names without the slash. Start from the Task 0 results. The default if unprobed is `help, clear, model, exit, quit, experimental, resume, cwd, add-dir, login, logout, usage, session, theme, cache-clock`. `compact` goes in only if the owner decides to keep it exempt (see the decisions below).
+- Produces: `export const LOCAL_COMMANDS: ReadonlySet<string>`, the command names without the slash. Start from the Task 0 results. The default if unprobed is `help, clear, model, exit, quit, experimental, resume, cwd, add-dir, login, logout, usage, session, theme, cache-clock`. `compact` is never in it (owner decision 1).
 - `decide({ snap, prompt, config, refusedKey, busy, interactive = true })` gains `interactive`. It returns `allow` only for `classifyPrompt(...) !== "prompt"`.
 - Removes: `NOT_A_PROMPT` (both call sites).
 
@@ -65,7 +65,7 @@ The suite runs on a fake host, so 358 passing tests cannot show what Copilot pas
   - `decide guards a model-backed skill command on a cold priced snapshot`: `decide({ snap: coldSnap, prompt: "/some-skill do x", config: cfg }).action === "refuse"`.
   - `decide guards any slash text in -p mode`: `decide({ snap: coldSnap, prompt: "/help", config: cfg, interactive: false }).action === "refuse"`.
   - `decide still allows local commands and shell escapes`: `/model claude-sonnet-5.5`, `/cache-clock status` and `!ls` each give `"allow"`.
-  - Replace the assertion at :142 (`/compact` gives allow) with the owner's decision.
+  - Change the assertion at :142 so that `/compact` on `coldSnap` gives `"refuse"`.
   - In `wiring.test.mjs`, add `a /skill prompt marks a turn pending before any exemption`: after `onPrompt({prompt:"/model x"})`, `state.promptPendingUntil > now` (or the observable equivalent: keep-warm does not ping before the turn starts).
 - [ ] **Step 2:** Run `node --test test/clock-guard.test.mjs test/wiring.test.mjs`. Expected: the new tests FAIL.
 - [ ] **Step 3:** Implement `classifyPrompt` and `LOCAL_COMMANDS`. Call it once in `onPrompt`, after setting `promptPendingUntil` and `promptSinceSend`, and pass `interactive` from the host's `canAsk` capability. Keep the pasted-path rule: `/etc/hosts is broken` is a prompt.
@@ -116,9 +116,55 @@ The suite runs on a fake host, so 358 passing tests cannot show what Copilot pas
 - [ ] **Step 4:** Run the full suite and checksums `--write`. Expected: all pass.
 - [ ] **Step 5: Commit** `fix(cache-clock): write settings owner-only and tighten old dirs (#60)`.
 
-### Task 4: Release, so the fix reaches users
+### Task 4: Pure usage attribution, then fix ping/user misattribution
 
-- [ ] **Step 1:** Change `REF` in `install.sh:15` and the three README curl lines to the release tag the owner picks (decision below). Run `node bin/checksums.mjs --write`, then the full suite, then `shellcheck tools/cache-clock/install.sh`.
+**Files:**
+- Create: `tools/cache-clock/extension/lib/attribution.mjs`
+- Modify: `tools/cache-clock/extension/lib/wiring.mjs:505-525` (the `assistant.usage` handler)
+- Modify: `tools/cache-clock/extension/lib/keepwarm.mjs` around `releaseOwnership` (`:363`) and `bookPing`/`persist` (`:615`, `:636`)
+- Test: create `tools/cache-clock/test/attribution.test.mjs`; extend `test/wiring-keepwarm.test.mjs`
+
+**Interfaces:**
+- Produces: `export function attributeUsage({ awaiting, inFlight, pingOwed, turnSource, promptSinceSend, hostReportsUserMessage }): { owner: "ping" | "user", spendsTypedPrompt: boolean }`. It is pure. `wiring.mjs` calls it and keeps the side effects: `fileKeepWarmPing`, `clock.ingest`, and the flag resets.
+
+- [ ] **Step 1: Write the table test first, matching today's behavior.** Add one row per branch of the current condition at `wiring.mjs:513-516`. Run it with the function extracted and no behavior changed. Expected: PASS. This is the refactor's safety net.
+- [ ] **Step 2: Commit** `refactor(cache-clock): extract usage attribution into a pure function`.
+- [ ] **Step 3: Write failing tests:**
+  - attribution row: `while a ping is in flight on a host without user.message, the first record goes to the ping even if the user typed`. `{awaiting:true, inFlight:true, promptSinceSend:true, hostReportsUserMessage:false, turnSource:null}` gives `owner: "ping"`.
+  - wiring: `a /skill turn's usage within the tail window is a user call`. This builds on Task 1's pending flag: after `onPrompt({prompt:"/some-skill"})`, a usage event during `awaitingReply` is ingested into the tally, not filed as ping spend.
+  - keepwarm: `releaseOwnership clears late and tail attribution`. After release, `status().awaitingReply === false`.
+  - keepwarm: `bookPing with no window books nothing and persists nothing`.
+- [ ] **Step 4:** Run those files. Expected: the new tests FAIL.
+- [ ] **Step 5:** Implement. In `attributeUsage`, `inFlight` without `hostReportsUserMessage` takes the ping branch first. `releaseOwnership` resets `lateQueue`, `lastPing` and `tailUntil`. `bookPing` returns early when there is no window.
+- [ ] **Step 6:** Run the full suite and checksums `--write`. Expected: all pass. **Commit** `fix(cache-clock): attribute ping and user usage correctly`.
+
+### Task 5: Keep-warm lock staleness, heads-up, ledger growth
+
+**Files:**
+- Modify: `tools/cache-clock/extension/lib/config.mjs:170-180` (`pidAlive`) and `:255-285` (`lock()`; orchestrator-confirmed that a lock is stale only when its pid is gone, so a reused pid never lets it go)
+- Modify: `tools/cache-clock/extension/lib/wiring.mjs:229-232` (`keepWarmWillPing`; orchestrator-confirmed that `passive === true` silences the heads-up whether or not the holder pings)
+- Modify: `tools/cache-clock/extension/lib/keepwarm.mjs:253` (`dailySummary`) and `config.mjs:296-300, 356-375` (ledger append and compaction)
+- Test: `test/keepwarm-store.test.mjs`, `test/wiring-keepwarm.test.mjs`, `test/keepwarm.test.mjs`
+
+**Interfaces:**
+- Constants in `config.mjs`: `LOCK_HEARTBEAT_MS = 10 * 60 * 1000`, `LOCK_STALE_MS = 30 * 60 * 1000`, `LEDGER_COMPACT_BYTES = 64 * 1024`.
+- `lock()` refreshes the lock file's mtime (`utimesSync`) whenever it confirms ownership. It treats a holder whose mtime is older than `LOCK_STALE_MS` as stale, even when its pid is alive. The keep-warm store refreshes the lock every `LOCK_HEARTBEAT_MS` while it holds it, through the injected `timers` (no real timers in tests).
+- The holder records `willPing: boolean` in the shared window file whenever it plans. `status()` in a passive process exposes `holderWillPing` read from that file. `keepWarmWillPing()` returns `status.willPing === true || (status.passive === true && status.holderWillPing === true)`.
+- Ledger: after an append, compact under the lock when the file is larger than `LEDGER_COMPACT_BYTES`. `dailySummary` is cached in memory and invalidated on every append. Compaction writes a `wx` tmp with a UUID and renames it (no size-check-then-rename TOCTOU).
+
+- [ ] **Step 1: Write failing tests:**
+  - `a live pid holding a lock whose heartbeat is older than LOCK_STALE_MS is taken over`. Write a lock with `process.pid` of another live process (for example `process.ppid`) and set its mtime back 31 min. Expected: `lock() === true`.
+  - `the holder's heartbeat keeps a live lock from being taken over`. Advance the fake clock 25 min with heartbeats firing. Expected: another store's `lock() === false`.
+  - `a passive process shows the heads-up when the holder will not ping`. The holder's window has `willPing:false`. Expected: the heads-up is said.
+  - `a passive process stays quiet when the holder will ping`.
+  - `the ledger compacts once it passes 64 KiB, and the daily summary is unchanged by compaction`.
+- [ ] **Step 2:** Run those files. Expected: the new tests FAIL.
+- [ ] **Step 3:** Implement against the interfaces above. Update README:281-283 to describe the heads-up rule.
+- [ ] **Step 4:** Run the full suite and checksums `--write`. Expected: all pass. **Commit** `fix(cache-clock): stale-lock heartbeat, holder-aware heads-up, bounded ledger`.
+
+### Task 6: Release, so the fix reaches users
+
+- [ ] **Step 1:** Change `REF` in `install.sh:15` and the three README curl lines (`README.md:23,32,44`) to `cache-clock-v1.2.0` (owner decision 2). Run `node bin/checksums.mjs --write`, then the full suite, then `shellcheck tools/cache-clock/install.sh`.
 - [ ] **Step 2: Commit** `chore(cache-clock): pin install to <tag>`. Push and open the PR. The body uses the bug-fix four lines (symptom, root cause, fix, failing test), plus the Task 0 host results. It says `Fixes #60`.
 - [ ] **Step 3:** Before the first push, run a fresh-context `/code-review` on the diff. Then check CI with `gh pr checks <N>`. The owner merges (`gh pr merge <N> --squash --admin`) and creates the tag on the merge commit.
 
@@ -140,14 +186,7 @@ Ranked by risk, then code surface. Each item starts with a failing test or a rep
 - **Partly confirmed** `plugins/ios-dev/skills/_lib/load_app_config.sh:51`: the PyYAML branch runs `print(val)`, which prints `True`, while `validate_app_config.sh:68` accepts only `true`/`false`. When PyYAML is installed, the `encryption_exempt: true` that `/ios-init` writes fails preflight. Not yet run end to end.
 - Reviewer-reported: `bump_version.sh:43` rewrites `1.2` as `1.2.0`. The `deploy-site.sh` template force-pushes without the CNAME guard (`site-pages-deploy-kit/templates/deploy-site.sh:39`). `release.sh:204` uses paths relative to the current directory.
 
-### PR 5 `fix/cache-clock-keepwarm` — medium surface (keepwarm.mjs and wiring.mjs)
-- Reviewer-reported:
-  - The heads-up is silenced whenever another process holds the lock, even with no ping planned (`wiring.mjs:232` vs README:281-283).
-  - pid reuse makes a stale lock permanent (`config.mjs:172`): add a start-time or heartbeat check.
-  - `releaseOwnership` keeps the late/tail attribution state (`keepwarm.mjs:363`).
-  - The ledger grows without bound (`keepwarm.mjs:253`).
-  - A prompt typed during an in-flight ping steals its usage (`wiring.mjs:513`).
-- Structural: extract usage attribution (`wiring.mjs:509-519`) into a pure, table-tested function first, then fix the items above against that table.
+### PR 5 — moved into PR 1 as Tasks 4 and 5 (owner decision 3)
 
 ### PR 6 `fix/second-wind` and PR 7 `fix/mods-robustness`
 - second-wind (reviewer-reported):
@@ -162,8 +201,9 @@ Ranked by risk, then code surface. Each item starts with a failing test or a rep
   - session-compass `compass_status` can answer "busy" while its write still lands (`register.tsx:378`).
 - prompt-craft (reviewer-reported): the advisor fills slots alphabetically (`scripts/advisor.py:135`). Profile names do not match the registry's namespaced names (`learn_history.py:61`). A single global registry is shared across repos (`build_registry.py:237`).
 
-## Owner decisions (asked up front)
+## Owner decisions (answered 2026-11-20)
 
-1. **`/compact` on a cold cache:** guard it (it is a model call over the whole context) or keep it exempt as documented today.
-2. **Release tag:** `cache-clock-v1.1.0` was never created. Either create it with this fix, or bump to `cache-clock-v1.2.0`.
-3. **PR scope:** #60 alone in PR 1 (planned), or fold PR 5's keep-warm items into it.
+1. **`/compact` on a cold cache:** guard it. It is not in `LOCAL_COMMANDS`, and the test at `clock-guard.test.mjs:142` flips to `refuse`.
+2. **Release tag:** bump to `cache-clock-v1.2.0`.
+3. **PR scope:** fold the keep-warm fixes into PR 1 (Tasks 4 and 5 in Part A; Part B's PR 5 is moved there).
+4. **Execution:** subagent-driven. Sonnet implementer at `effort: high` per task, Opus reviewer at medium per task, a whole-branch review before push.
