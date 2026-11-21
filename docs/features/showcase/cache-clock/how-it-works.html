@@ -145,7 +145,7 @@ ol.flow{list-style:none;margin:0;padding:0;counter-reset:n}
 /* two-col helpers */
 .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,16rem),1fr));gap:var(--s-4)}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r-2);padding:var(--s-4);min-width:0}
-.card h4{margin:var(--s-3) 0 var(--s-2);font:600 var(--t-body)/1.3 var(--sans)}
+.card h4,.card h3{margin:var(--s-3) 0 var(--s-2);font:600 var(--t-body)/1.3 var(--sans)}
 .card p{font-size:var(--t-small);margin-top:var(--s-2)}
 ul.plain{margin:var(--s-3) 0 0;padding-left:1.1rem;max-width:65ch}
 ul.plain li{margin:var(--s-2) 0}
@@ -268,7 +268,7 @@ svg text{font-family:var(--mono)}
       <div class="flowrow">
         <div class="card">
           <span class="chip info">◆ event</span>
-          <h4><code>assistant.usage</code></h4>
+          <h3><code>assistant.usage</code></h3>
           <ul class="fields" aria-label="Fields Cache Clock reads">
             <li class="hot">cacheReadTokens</li><li class="hot">cacheWriteTokens</li>
             <li class="hot">cacheExpiresAt</li><li class="hot">cacheTtlSeconds</li>
@@ -278,13 +278,13 @@ svg text{font-family:var(--mono)}
         <div class="ar">keeps last<br>call per<br>model →</div>
         <div class="card" style="border:2px solid var(--accent)">
           <span class="chip info">◆ clock</span>
-          <h4>One entry per model</h4>
+          <h3>One entry per model</h3>
           <p>expiry · TTL · context size · read &amp; write price. Answers: warm, cold, or unknown?</p>
         </div>
         <div class="ar">prices<br>the next<br>send →</div>
         <div class="card">
           <span class="chip info">◆ output</span>
-          <h4>Cold vs warm cost</h4>
+          <h3>Cold vs warm cost</h3>
           <p>context × write price against context × read price. The difference is the “extra”.</p>
         </div>
       </div>
@@ -388,11 +388,11 @@ about 37.2k tokens at $2.25/M = $0.08 (a warm send would read them for $0.003).
   <figure>
     <div class="frame">
       <div class="flowrow">
-        <div class="card"><span class="chip info">◆ file</span><h4><code>events.jsonl</code></h4><p><code>~/.copilot/session-state/&lt;id&gt;/</code><br>one line per event</p></div>
+        <div class="card"><span class="chip info">◆ file</span><h3><code>events.jsonl</code></h3><p><code>~/.copilot/session-state/&lt;id&gt;/</code><br>one line per event</p></div>
         <div class="ar">replays<br><code>session.usage_record</code><br>→</div>
-        <div class="card" style="border:2px solid var(--accent)"><span class="chip info">◆ clock</span><h4>Seeded at start</h4><p>Main-agent calls only. A <code>session.compaction_complete</code> line marks the clock unknown.</p></div>
+        <div class="card" style="border:2px solid var(--accent)"><span class="chip info">◆ clock</span><h3>Seeded at start</h3><p>Main-agent calls only. A <code>session.compaction_complete</code> line marks the clock unknown.</p></div>
         <div class="ar">then live<br>events<br>→</div>
-        <div class="card"><span class="chip info">◆ guard</span><h4>Works on call one</h4><p>Even in <code>copilot --resume … -p</code>.</p></div>
+        <div class="card"><span class="chip info">◆ guard</span><h3>Works on call one</h3><p>Even in <code>copilot --resume … -p</code>.</p></div>
       </div>
     </div>
     <figcaption><span class="fig">Fig. 7</span>The log is the source of truth after a restart. The refusal memory lives next to it in <code>refused.json</code>.</figcaption>
@@ -420,7 +420,7 @@ extra paid for cold rewrites: $0.08 of $0.29 spent · about $0.46 per week at th
     <div class="frame">
       <div class="bars" role="img" aria-label="Extra paid for cold rewrites: $0.08 of $0.29 spent">
         <div class="brow"><div class="lab"><b>Total spent</b>both models</div>
-          <div class="track-wrap"><div class="track"><div class="fill" style="width:100%;background:var(--border-bright)"></div><span class="val" style="left:auto;right:.5rem;color:var(--bg)">$0.29</span></div></div></div>
+          <div class="track-wrap"><div class="track"><div class="fill" style="width:100%;background:var(--text-dim)"></div><span class="val" style="left:auto;right:.5rem;color:var(--bg)">$0.29</span></div></div></div>
         <div class="brow"><div class="lab"><b>Extra paid</b>cold rewrites</div>
           <div class="track-wrap"><div class="track"><div class="fill write" style="width:27.6%"></div><span class="val" style="color:var(--risk)">$0.08</span></div></div></div>
       </div>

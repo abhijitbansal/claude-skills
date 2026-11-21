@@ -26,7 +26,7 @@
 <style>
   /* page-specific: wide tables, step badges, source numbers, placeholder tint — all on shared tokens */
   .code .a{color:var(--gold)}
-  .idem{font-family:var(--font-mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  .idem{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;
     color:var(--accent);background:var(--accent-dim);border-radius:4px;padding:2px 7px;font-weight:500;vertical-align:middle}
   .idem.write{color:var(--gold);background:var(--gold-dim)}
   .srcnum{font-family:var(--font-mono);color:var(--gold);font-weight:600;margin-right:4px}
@@ -62,7 +62,7 @@
   <span class="kicker" style="margin-top:14px"><span class="pulse"></span>Runbook · owner &amp; forkers</span>
   <h1>Copy your setup <span style="color:var(--text-faint)">·</span> machine → machine</h1>
   <p class="lead">One command rebuilds a full Claude Code environment on a fresh box: every marketplace,
-    plugin, npx skill, dotfile, and behavioral guideline — from a single <b>versioned TOML</b>. This is the
+    plugin, npx skill, dotfile, and behavioral guideline, from a single <b>versioned TOML</b>. This is the
     operator's guide to that round trip: <b>capture</b> a machine, <b>restore</b> it elsewhere, and
     <b>contribute</b> changes back. Commands are real; paths use <code>$HOME</code> and placeholders so you
     can run it on your own fork.</p>
@@ -112,43 +112,43 @@
 
     <!-- QUICK START -->
     <section id="quickstart" class="doc-section">
-      <h2><span class="ix">01</span> Quick start — restore a machine</h2>
-      <p>On the new machine: clone, then run the installer. It is idempotent — safe to re-run any time.</p>
+      <h2><span class="ix">01</span> Quick start: restore a machine</h2>
+      <p>On the new machine: clone, then run the installer. It is idempotent, so it is safe to re-run any time.</p>
       <div class="code cmds"><div class="cl"><span class="note"><span class="c"># clone your fork, then bootstrap</span></span></div><div class="cl"><code class="ct">git clone https://github.com/<span class="a">&lt;you&gt;</span>/claude-skills ~/projects/claude-skills</code><button class="copy" data-copy="git clone https://github.com/<you>/claude-skills ~/projects/claude-skills">copy</button></div><div class="cl"><code class="ct">bash ~/projects/claude-skills/setup/setup.sh</code><button class="copy" data-copy="bash ~/projects/claude-skills/setup/setup.sh">copy</button></div></div>
       <div class="callout"><span class="ti">Preview first</span>Run <code>setup.sh --dry-run</code> to print every action with zero mutations. Add <code>--verbose</code> to trace each shell command.</div>
-      <p style="margin-top:18px">Prerequisites the <code>preflight</code> step checks (and installs where it can): <b>Python ≥ 3.11</b>, <code>git</code>, and — via Homebrew if missing — <code>bats</code>, <code>shellcheck</code>, and <code>uv</code>. <code>gh</code> is only needed to contribute back.</p>
+      <p style="margin-top:18px">Prerequisites the <code>preflight</code> step checks (and installs where it can): <b>Python ≥ 3.11</b>, <code>git</code>, and, via Homebrew if missing, <code>bats</code>, <code>shellcheck</code>, and <code>uv</code>. <code>gh</code> is only needed to contribute back.</p>
     </section>
 
     <!-- SETUP STEPS -->
     <section id="steps" class="doc-section">
-      <h2><span class="ix">02</span> What <code>setup.sh</code> does — 9 steps</h2>
+      <h2><span class="ix">02</span> What <code>setup.sh</code> does: 9 steps</h2>
       <p>Each step is reached in order; any one can be isolated with <code>--only &lt;step&gt;</code> or excluded with <code>--skip-&lt;step&gt;</code>.</p>
       <div class="steps reveal">
-        <div class="gitem"><h4><code>preflight</code> <span class="idem">re-checks</span></h4><p>Ensure <code>$HOME/.local/bin</code> is on PATH, verify Python ≥ 3.11, install <code>bats</code>/<code>shellcheck</code>/<code>uv</code> via brew if absent.</p></div>
-        <div class="gitem"><h4><code>claude</code> <span class="idem">re-checks</span></h4><p>Install the Claude Code CLI from the official installer if not present, then run <code>claude update</code>.</p></div>
-        <div class="gitem"><h4><code>marketplaces</code> <span class="idem">idempotent</span></h4><p>Read <code>[[marketplaces]]</code> from the TOML; for each, <em>add</em> if new or <em>update</em> if already registered (checked against <code>claude plugin marketplace list</code>).</p></div>
-        <div class="gitem"><h4><code>plugins</code> <span class="idem">idempotent</span></h4><p>Read <code>[[plugins]]</code>; install or update each <code>name@marketplace</code>. Version pins are surfaced as warnings — <code>claude plugin install</code> has no version flag.</p></div>
-        <div class="gitem"><h4><code>skills</code> <span class="idem">idempotent</span></h4><p>Run <code>npx -y skills add &lt;source&gt;@&lt;name&gt; -g -y</code> for each <code>[[skills]]</code> entry, then a global update pass.</p></div>
-        <div class="gitem"><h4><code>dotfiles</code> <span class="idem write">writes + backup</span></h4><p>Copy <code>templates/home-CLAUDE.md → $HOME/CLAUDE.md</code> and <code>templates/user-settings.json → $HOME/.claude/settings.json</code>. Existing files are backed up to <code>*.bak.&lt;timestamp&gt;</code> first.</p></div>
-        <div class="gitem"><h4><code>guidelines</code> <span class="idem">additive merge</span></h4><p>Run <code>merge_guidelines.py</code>: extract the region between the <code>claude-skills:guidelines</code> markers in <code>CLAUDE.md</code>, and append only the <code>##</code> sections not already present (heading match is case- and number-insensitive). Targets <code>$HOME/CLAUDE.md</code>, the current repo, and any <code>--merge-claude-md &lt;path&gt;</code>.</p></div>
-        <div class="gitem"><h4><code>local_plugins</code> <span class="idem">idempotent</span></h4><p>Register this repo itself as a marketplace (<code>.claude-plugin/marketplace.json</code>) and install/update its own seven plugins (plus portable-artifacts, listed from its own repo).</p></div>
-        <div class="gitem"><h4><code>symlinks</code> <span class="idem">safe</span></h4><p>Remove stale links into the repo from the pre-plugin layout, then link <code>$HOME/.local/bin/claude-skills-contribute</code> and <code>$HOME/.local/bin/wind</code>. Never clobbers a foreign symlink or real file.</p></div>
+        <div class="gitem"><h3><code>preflight</code> <span class="idem">re-checks</span></h3><p>Ensure <code>$HOME/.local/bin</code> is on PATH, verify Python ≥ 3.11, install <code>bats</code>/<code>shellcheck</code>/<code>uv</code> via brew if absent.</p></div>
+        <div class="gitem"><h3><code>claude</code> <span class="idem">re-checks</span></h3><p>Install the Claude Code CLI from the official installer if not present, then run <code>claude update</code>.</p></div>
+        <div class="gitem"><h3><code>marketplaces</code> <span class="idem">idempotent</span></h3><p>Read <code>[[marketplaces]]</code> from the TOML; for each, <em>add</em> if new or <em>update</em> if already registered (checked against <code>claude plugin marketplace list</code>).</p></div>
+        <div class="gitem"><h3><code>plugins</code> <span class="idem">idempotent</span></h3><p>Read <code>[[plugins]]</code>; install or update each <code>name@marketplace</code>. Version pins are surfaced as warnings, because <code>claude plugin install</code> has no version flag.</p></div>
+        <div class="gitem"><h3><code>skills</code> <span class="idem">idempotent</span></h3><p>Run <code>npx -y skills add &lt;source&gt;@&lt;name&gt; -g -y</code> for each <code>[[skills]]</code> entry, then a global update pass.</p></div>
+        <div class="gitem"><h3><code>dotfiles</code> <span class="idem write">writes + backup</span></h3><p>Copy <code>templates/home-CLAUDE.md → $HOME/CLAUDE.md</code> and <code>templates/user-settings.json → $HOME/.claude/settings.json</code>. Existing files are backed up to <code>*.bak.&lt;timestamp&gt;</code> first.</p></div>
+        <div class="gitem"><h3><code>guidelines</code> <span class="idem">additive merge</span></h3><p>Run <code>merge_guidelines.py</code>: extract the region between the <code>claude-skills:guidelines</code> markers in <code>CLAUDE.md</code>, and append only the <code>##</code> sections not already present (heading match is case- and number-insensitive). Targets <code>$HOME/CLAUDE.md</code>, the current repo, and any <code>--merge-claude-md &lt;path&gt;</code>.</p></div>
+        <div class="gitem"><h3><code>local_plugins</code> <span class="idem">idempotent</span></h3><p>Register this repo itself as a marketplace (<code>.claude-plugin/marketplace.json</code>) and install/update its own seven plugins (plus portable-artifacts, listed from its own repo).</p></div>
+        <div class="gitem"><h3><code>symlinks</code> <span class="idem">safe</span></h3><p>Remove stale links into the repo from the pre-plugin layout, then link <code>$HOME/.local/bin/claude-skills-contribute</code> and <code>$HOME/.local/bin/wind</code>. Never clobbers a foreign symlink or real file.</p></div>
       </div>
-      <div class="callout"><span class="ti">Exit codes</span><code>0</code> clean · <code>1</code> a step failed · <code>2</code> warnings only (e.g. an unsupported version pin). The loop never aborts early — failures are tallied and reported by the <code>summary</code> step.</div>
+      <div class="callout"><span class="ti">Exit codes</span><code>0</code> clean · <code>1</code> a step failed · <code>2</code> warnings only (e.g. an unsupported version pin). The loop never aborts early: failures are tallied and reported by the <code>summary</code> step.</div>
     </section>
 
     <!-- TOML ANATOMY -->
     <section id="manifest" class="doc-section">
-      <h2><span class="ix">03</span> The manifest — <code>claude-setup.toml</code></h2>
+      <h2><span class="ix">03</span> The manifest: <code>claude-setup.toml</code></h2>
       <p>One declarative file is the source of truth. <code>parse_toml.py</code> reads it for <code>setup.sh</code>; <code>write_toml.py</code> rewrites it (preserving comments) for <code>capture.sh</code>.</p>
       <div class="inv reveal">
-        <div class="row"><span class="nm">[[marketplaces]]</span><span class="dc"><b>×5</b> — git sources to register (official + community)</span></div>
-        <div class="row"><span class="nm">[[plugins]]</span><span class="dc"><b>×19</b> — user-scope plugin installs, each <code>name</code> + <code>marketplace</code></span></div>
-        <div class="row"><span class="nm">[[skills]]</span><span class="dc"><b>×7</b> — npx-installed skills, each <code>source</code> + <code>name</code></span></div>
-        <div class="row"><span class="nm">[dotfiles]</span><span class="dc"><b>table</b> — <code>home_claude_md</code>, <code>user_settings</code> → template paths</span></div>
-        <div class="row"><span class="nm">[meta]</span><span class="dc"><b>v1</b> — <code>schema_version</code> — rejected if unknown, future-proofs the format</span></div>
+        <div class="row"><span class="nm">[[marketplaces]]</span><span class="dc"><b>×5</b>: git sources to register (official + community)</span></div>
+        <div class="row"><span class="nm">[[plugins]]</span><span class="dc"><b>×19</b>: user-scope plugin installs, each <code>name</code> + <code>marketplace</code></span></div>
+        <div class="row"><span class="nm">[[skills]]</span><span class="dc"><b>×7</b>: npx-installed skills, each <code>source</code> + <code>name</code></span></div>
+        <div class="row"><span class="nm">[dotfiles]</span><span class="dc"><b>table</b>: <code>home_claude_md</code>, <code>user_settings</code> → template paths</span></div>
+        <div class="row"><span class="nm">[meta]</span><span class="dc"><b>v1</b>: <code>schema_version</code>, rejected if unknown, which leaves room to change the format later</span></div>
       </div>
-      <div class="callout"><span class="ti">Make it yours</span>To diverge from the author's stack, edit these arrays — add/remove a plugin row, swap a marketplace — and re-run <code>setup.sh</code>. The installer reconciles the machine to whatever the TOML says.</div>
+      <div class="callout"><span class="ti">Make it yours</span>To diverge from the author's stack, edit these arrays (add or remove a plugin row, swap a marketplace) and re-run <code>setup.sh</code>. The installer reconciles the machine to whatever the TOML says.</div>
     </section>
 
     <!-- FLAGS -->
@@ -157,7 +157,7 @@
       <table class="tbl reveal">
         <tr><th>Flag</th><th>Effect</th></tr>
         <tr><td class="k">--dry-run</td><td>Print every action, mutate nothing. Always your first run on a new box.</td></tr>
-        <tr><td class="k">--verbose</td><td><code>set -x</code> — echo each shell command as it runs.</td></tr>
+        <tr><td class="k">--verbose</td><td><code>set -x</code>: echo each shell command as it runs.</td></tr>
         <tr><td class="k">--only &lt;step&gt;</td><td>Run a single step in isolation (e.g. <code>--only guidelines</code>).</td></tr>
         <tr><td class="k">--skip-&lt;step&gt;</td><td>Exclude one step; stackable (e.g. <code>--skip-skills --skip-symlinks</code>).</td></tr>
         <tr><td class="k">--merge-claude-md &lt;path&gt;</td><td>In the <code>guidelines</code> step, also merge the behavioral guidelines into any other <code>CLAUDE.md</code>.</td></tr>
@@ -166,7 +166,7 @@
 
     <!-- CAPTURE -->
     <section id="capture" class="doc-section">
-      <h2><span class="ix">05</span> Snapshot a machine — <code>capture.sh</code></h2>
+      <h2><span class="ix">05</span> Snapshot a machine: <code>capture.sh</code></h2>
       <p>The reverse direction. Run it on a well-configured machine to fold its live state back into the TOML and templates, then commit.</p>
       <div class="grid cols-2">
         <div class="card reveal"><h3>Four sources it reads</h3><ul>
@@ -177,7 +177,7 @@
         </ul></div>
         <div class="card reveal"><h3>How it writes</h3><ul>
           <li>Each source is piped as JSON into <code>write_toml.py</code></li>
-          <li><code>tomlkit</code> preserves comments &amp; formatting — no destructive rewrite</li>
+          <li><code>tomlkit</code> preserves comments &amp; formatting, with no destructive rewrite</li>
           <li>Only the named section is replaced; the rest of the file is untouched</li>
           <li>Result: a clean diff you can review before committing</li>
         </ul></div>
@@ -186,7 +186,7 @@
 
     <!-- CONTRIBUTE -->
     <section id="contribute" class="doc-section">
-      <h2><span class="ix">06</span> Round-trip a change — <code>contribute.sh</code></h2>
+      <h2><span class="ix">06</span> Round-trip a change: <code>contribute.sh</code></h2>
       <p>Available anywhere as <code>claude-skills-contribute</code> after setup. It branches, validates, commits, and opens a PR so a change made on one machine reaches the others.</p>
       <div class="code cmds"><div class="cl"><span class="note"><span class="c"># snapshot live state + open a PR</span></span></div><div class="cl"><code class="ct">claude-skills-contribute --message <span class="s">'capture: new plugin + guidelines'</span></code><button class="copy" data-copy="claude-skills-contribute --message 'capture: new plugin + guidelines'">copy</button></div><div class="cl"><span class="note"><span class="c"># or scaffold a brand-new skill:</span></span></div><div class="cl"><code class="ct">claude-skills-contribute --skill <span class="a">my-skill</span> --message <span class="s">'add my-skill'</span></code><button class="copy" data-copy="claude-skills-contribute --skill my-skill --message 'add my-skill'">copy</button></div></div>
       <p style="margin-top:6px">Under the hood: <code>gh</code> auth check → switch to <code>main</code> and pull → new <code>contrib/&lt;slug&gt;</code> branch → capture state or scaffold a skill → run <b>bats + pytest + shellcheck</b> → commit → push → <code>gh pr create</code>. If validation fails, the branch is left for you to fix.</p>
@@ -194,7 +194,7 @@
 
     <!-- SECOND WIND -->
     <section id="secondwind" class="doc-section">
-      <h2><span class="ix">07</span> Long runs survive the move — Second Wind</h2>
+      <h2><span class="ix">07</span> Long runs survive the move: Second Wind</h2>
       <p><code>setup.sh</code> links <code>wind</code> onto your PATH. It orchestrates long Claude Code runs across the 5-hour usage limit so a relocated workflow keeps going.</p>
       <div class="code cmds"><div class="cl"><code class="ct">bash tools/second-wind/install.sh</code><button class="copy" data-copy="bash tools/second-wind/install.sh">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> init      <span class="c"># pick repos, set permissions</span></code><button class="copy" data-copy="wind init">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> up        <span class="c"># start a tmux session per repo</span></code><button class="copy" data-copy="wind up">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> watch     <span class="c"># auto-resume when the limit resets</span></code><button class="copy" data-copy="wind watch">copy</button></div><div class="cl"><code class="ct"><span class="k">wind</span> dash      <span class="c"># live dashboard on 127.0.0.1:8787</span></code><button class="copy" data-copy="wind dash">copy</button></div></div>
       <p style="margin-top:6px">Config search order: <code>./second-wind.json</code> → <code>~/.wind/config.json</code>. State (paused sessions, reset time) lives in <code>~/.wind/state.json</code>. The dashboard is localhost-only and gates writes behind a per-run token.</p>
@@ -207,10 +207,10 @@
       <table class="tbl reveal">
         <tr><th>Symptom</th><th>Fix</th></tr>
         <tr><td><code>python3 too old</code></td><td>Need ≥ 3.11. On macOS: <code>brew install python@3.11</code>, then re-run.</td></tr>
-        <tr><td>symlink target is <b>"foreign"</b></td><td>A link at <code>$HOME/.local/bin/*</code> or <code>~/.claude/*</code> points elsewhere. Setup refuses to clobber it — remove/rename it, re-run.</td></tr>
+        <tr><td>symlink target is <b>"foreign"</b></td><td>A link at <code>$HOME/.local/bin/*</code> or <code>~/.claude/*</code> points elsewhere. Setup refuses to clobber it: remove/rename it, re-run.</td></tr>
         <tr><td><code>bats: command not found</code></td><td>Re-run <code>setup.sh</code> (preflight installs it) or <code>brew install bats-core</code> manually.</td></tr>
         <tr><td><code>uv: command not found</code></td><td>Re-run setup, or <code>curl -LsSf https://astral.sh/uv/install.sh | sh</code>.</td></tr>
-        <tr><td>a plugin "version pin" warning</td><td>Expected — <code>claude plugin install</code> can't pin versions, so latest is installed and the pin is surfaced as a warning.</td></tr>
+        <tr><td>a plugin "version pin" warning</td><td>Expected: <code>claude plugin install</code> can't pin versions, so latest is installed and the pin is surfaced as a warning.</td></tr>
       </table>
     </section>
 

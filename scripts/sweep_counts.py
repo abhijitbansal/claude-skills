@@ -71,7 +71,7 @@ SITES = (
         ("site/og.html", TOTAL_SCOPE, r"\d+ plugins · (\d+) skills"),
         ("site/index.html", TOTAL_SCOPE, r"\d+ plugins, (\d+) skills,"),
         ("site/index.html", TOTAL_SCOPE, r'<span class="meta">(\d+) skills · \d+ commands · agents'),
-        ("docs/catalog.html", TOTAL_SCOPE, r'<h3>Skills <span class="badge">(\d+)</span>'),
+        ("docs/catalog.html", TOTAL_SCOPE, r'<h2>Skills <span class="badge">(\d+)</span>'),
         # plugin counts in the same footers and headline strings
         *[(f, PLUGINS_SCOPE, r"(\d+) plugins · \d+ skills") for f in _FOOTER_FILES],
         ("site/og.html", PLUGINS_SCOPE, r"(\d+) plugins · \d+ skills"),

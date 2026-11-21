@@ -1,0 +1,53 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "oversized-h1",
+        "value": "*",
+        "files": [
+          "site/og.html"
+        ],
+        "createdAt": "2026-11-21T02:39:14.428Z",
+        "reason": "Claude decided: og.html is the 1200x630 social-card source, a poster, not a page viewport; headline already cut 92px to 76px"
+      },
+      {
+        "rule": "em-dash-overuse",
+        "value": "*",
+        "files": [
+          "docs/machine-setup.html"
+        ],
+        "createdAt": "2026-11-21T02:39:14.443Z",
+        "reason": "Claude decided: 0 em dashes left in body text; the rule's -- matches are CLI flags (--dry-run, --only) inside code"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "docs/features/showcase/cache-clock/how-it-works.html"
+        ],
+        "createdAt": "2026-11-21T02:39:14.458Z",
+        "reason": "Claude decided: .track holds a bar fill that sits flush by design; .table-scroll wraps a table whose cells carry their own padding"
+      },
+      {
+        "rule": "low-contrast",
+        "value": "*",
+        "files": [
+          "docs/features/showcase/cache-clock/how-it-works.html"
+        ],
+        "createdAt": "2026-11-21T02:39:14.474Z",
+        "reason": "Claude decided: the flagged $0.29 label sits on a full-width fill (now var(--text-dim)), measured 6.28:1 light and 7.15:1 dark; the detector reads the empty track behind the fill"
+      },
+      {
+        "rule": "cramped-padding",
+        "value": "*",
+        "files": [
+          "site/index.html"
+        ],
+        "createdAt": "2026-11-21T02:39:14.489Z",
+        "reason": "Claude decided: #spotlight is a full-bleed band (box-shadow plus clip-path); its content keeps the .wrap 24px gutter, checked at 390px and 1440px"
+      }
+    ]
+  }
+}

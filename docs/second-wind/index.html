@@ -35,14 +35,14 @@
   .swdown{text-align:center;color:var(--text-faint);font-family:var(--font-mono);font-size:12px;line-height:1}
   .swarch-mid{display:flex;flex-direction:column;justify-content:center;gap:22px;flex:0 1 160px;min-width:140px}
   .swarrow{display:flex;flex-direction:column;align-items:center;gap:5px}
-  .swarrow .lbl{font-family:var(--font-mono);font-size:10.5px;color:var(--text-dim);text-align:center;line-height:1.4}
+  .swarrow .lbl{font-family:var(--font-mono);font-size:12px;color:var(--text-dim);text-align:center;line-height:1.4}
   .swarrow .lbl.resume{color:var(--gold)}
   .swserver{flex:1 1 230px;min-width:210px;align-self:center;border:1px solid var(--border-bright);border-radius:12px;padding:16px;background:var(--surface2)}
   .swserver .slbl{font-family:var(--font-mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-faint);margin-bottom:12px}
   .swsess{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--green);border-radius:9px;padding:10px 13px;margin-bottom:10px}
   .swsess:last-child{margin-bottom:0}
   .swsess .nm{font-family:var(--font-mono);font-weight:600;font-size:13px;color:var(--text)}
-  .swsess .role{font-family:var(--font-mono);font-size:10.5px;color:var(--gold);background:var(--gold-dim);border:1px solid var(--border);border-radius:4px;padding:1px 7px;white-space:nowrap}
+  .swsess .role{font-family:var(--font-mono);font-size:11.5px;color:var(--gold);background:var(--gold-dim);border:1px solid var(--border);border-radius:4px;padding:1px 7px;white-space:nowrap}
 
   /* TOC sub-links + subsection anchors */
   .toc a.sub{padding-left:26px;font-size:12.5px}
@@ -77,9 +77,9 @@
     <a class="btn btn-ghost" href="https://github.com/abhijitbansal/claude-skills/blob/main/tools/second-wind/wind.py">View source ↗</a>
   </div>
   <div class="swstats reveal">
-    <div class="card swstat"><div class="v">1 file, 0 deps</div><div class="d">stdlib-only Python — all it needs is tmux and the Claude Code CLI</div></div>
+    <div class="card swstat"><div class="v">1 file, 0 deps</div><div class="d">stdlib-only Python, all it needs is tmux and the Claude Code CLI</div></div>
     <div class="card swstat"><div class="v">N repos, 1 watcher</div><div class="d">one account-level reset clock, one resume sweep for all sessions</div></div>
-    <div class="card swstat"><div class="v">0 babysitting</div><div class="d">limit hits at 2am, work resumes at 3am — review in the morning</div></div>
+    <div class="card swstat"><div class="v">0 babysitting</div><div class="d">limit hits at 2am, work resumes at 3am, review in the morning</div></div>
   </div>
 </header>
 
@@ -102,20 +102,20 @@
     <section id="how-to-use" class="doc-section">
       <p class="eyebrow">getting started</p>
       <h2><span class="ix">01</span> How to use</h2>
-      <p>One command installs everything into <code>~/.wind</code> — no clone required.</p>
+      <p>One command installs everything into <code>~/.wind</code>, no clone required.</p>
       <div class="code cmds" style="margin:14px 0 6px"><div class="cl"><span class="note"><span class="c"># install</span></span></div><div class="cl"><code class="ct">curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh</code><button class="copy" data-copy="curl -fsSL https://raw.githubusercontent.com/abhijitbansal/claude-skills/main/tools/second-wind/install.sh | sh">copy</button></div></div>
 
       <div class="steps">
-        <div class="gitem reveal"><p><strong><code>wind init</code></strong> — an interactive wizard scans for your git repos (the scanned roots are saved as <code>scan_roots</code> so you can add more later), lets you pick which ones wind should manage, and choose a global permission preset. Then it offers one choice: configure each repo individually, or <strong>apply the global preset + defaults to every selected repo</strong> with no per-repo click-through. The presets include <code>auto</code> (<code>--permission-mode bypassPermissions</code>) — accept everything, no prompts — which as of v2.1 is the <strong>shipped default for a fresh config</strong> (same risk class as <code>--dangerously-skip-permissions</code>; pick <code>acceptEdits</code>/<code>plan</code>/<code>default</code> to reduce autonomy). Use <code>--defaults</code> for the old non-interactive starter file.</p></div>
-        <div class="gitem reveal"><p><strong><code>wind prompt &lt;repo&gt;</code></strong> — optional: author or edit a repo's first prompt in <code>$EDITOR</code>. Prompt files live at <code>~/.wind/prompts/&lt;repo&gt;.md</code> by convention; wind seeds the file and wires <code>prompt_file</code> into your config. (One-liners can instead live inline as a repo's <code>prompt</code> string.)</p></div>
-        <div class="gitem reveal"><p><strong><code>wind add &lt;path&gt;</code></strong> — bring a new git repo under management without re-running <code>init</code>: it appends a <code>{name, path}</code> entry that inherits the global permission preset, launches that repo's tmux session immediately, and refreshes the watcher so the new session is auto-resumed. It writes <code>{name, path}</code> only (no <code>claude_args</code>/<code>agent</code>/<code>prompt</code> from the CLI).</p></div>
-        <div class="gitem reveal"><p><strong><code>wind up</code></strong> — starts one tmux session per repo, launches the agent in each, sends each repo's initial prompt, <em>and</em> auto-spawns the watcher in its own detached <code>&lt;prefix&gt;-watcher</code> tmux session so it survives closed terminals (one watcher per machine; on macOS it self-caffeinates to keep the machine awake). Pass <code>--no-watch</code> to skip it; run <code>wind watch</code> yourself in the foreground, or <code>wind watch --detach</code> to spawn the detached session by hand. <code>wind down</code> reaps the watcher with the rest.</p></div>
-        <div class="gitem reveal"><p><strong>Check in whenever you like</strong> — <code>wind status</code> shows per-session state and the next reset time; <code>tmux attach -t wind-&lt;repo&gt;</code> watches a session live (detach with <code>Ctrl-b d</code>).</p></div>
-        <div class="gitem reveal"><p><strong><code>wind down</code></strong> — kills all wind sessions when you're finished.</p></div>
+        <div class="gitem reveal"><p><strong><code>wind init</code></strong>: an interactive wizard scans for your git repos (the scanned roots are saved as <code>scan_roots</code> so you can add more later), lets you pick which ones wind should manage, and choose a global permission preset. Then it offers one choice: configure each repo individually, or <strong>apply the global preset + defaults to every selected repo</strong> with no per-repo click-through. The presets include <code>auto</code> (<code>--permission-mode bypassPermissions</code>): accept everything, no prompts, which as of v2.1 is the <strong>shipped default for a fresh config</strong> (same risk class as <code>--dangerously-skip-permissions</code>; pick <code>acceptEdits</code>/<code>plan</code>/<code>default</code> to reduce autonomy). Use <code>--defaults</code> for the old non-interactive starter file.</p></div>
+        <div class="gitem reveal"><p><strong><code>wind prompt &lt;repo&gt;</code></strong>: optional: author or edit a repo's first prompt in <code>$EDITOR</code>. Prompt files live at <code>~/.wind/prompts/&lt;repo&gt;.md</code> by convention; wind seeds the file and wires <code>prompt_file</code> into your config. (One-liners can instead live inline as a repo's <code>prompt</code> string.)</p></div>
+        <div class="gitem reveal"><p><strong><code>wind add &lt;path&gt;</code></strong>: bring a new git repo under management without re-running <code>init</code>: it appends a <code>{name, path}</code> entry that inherits the global permission preset, launches that repo's tmux session immediately, and refreshes the watcher so the new session is auto-resumed. It writes <code>{name, path}</code> only (no <code>claude_args</code>/<code>agent</code>/<code>prompt</code> from the CLI).</p></div>
+        <div class="gitem reveal"><p><strong><code>wind up</code></strong>: starts one tmux session per repo, launches the agent in each, sends each repo's initial prompt, <em>and</em> auto-spawns the watcher in its own detached <code>&lt;prefix&gt;-watcher</code> tmux session so it survives closed terminals (one watcher per machine; on macOS it self-caffeinates to keep the machine awake). Pass <code>--no-watch</code> to skip it; run <code>wind watch</code> yourself in the foreground, or <code>wind watch --detach</code> to spawn the detached session by hand. <code>wind down</code> reaps the watcher with the rest.</p></div>
+        <div class="gitem reveal"><p><strong>Check in whenever you like</strong>: <code>wind status</code> shows per-session state and the next reset time; <code>tmux attach -t wind-&lt;repo&gt;</code> watches a session live (detach with <code>Ctrl-b d</code>).</p></div>
+        <div class="gitem reveal"><p><strong><code>wind down</code></strong>: kills all wind sessions when you're finished.</p></div>
       </div>
 
       <h3 class="subtitle" id="dashboard">Watch it live</h3>
-      <p><code>wind dash</code> opens a live dashboard in your browser at <code>http://127.0.0.1:8787</code>. One card per session: state pill, reset countdown, last 30 lines of the pane, all in full color. Click a card to <strong>expand it into a full-height modal</strong> with a large colorized scrollback and a roomy send box — handy on a small screen for reading a session or answering a question. Actions: resume all, send a message to any session, kill a session, or hit <strong>＋ add repo</strong> to pull in a scanned-but-unmanaged repo (found under your persisted <code>scan_roots</code>) and launch it live. Localhost-only; every action — and the modal's larger scrollback fetch — requires a per-run token so other sites can't reach it. Use <code>--port</code> to change the port, <code>--no-browser</code> to skip auto-open.</p>
+      <p><code>wind dash</code> opens a live dashboard in your browser at <code>http://127.0.0.1:8787</code>. One card per session: state pill, reset countdown, last 30 lines of the pane, all in full color. Click a card to <strong>expand it into a full-height modal</strong> with a large colorized scrollback and a roomy send box, handy on a small screen for reading a session or answering a question. Actions: resume all, send a message to any session, kill a session, or hit <strong>＋ add repo</strong> to pull in a scanned-but-unmanaged repo (found under your persisted <code>scan_roots</code>) and launch it live. Localhost-only; every action, and the modal's larger scrollback fetch, requires a per-run token so other sites can't reach it. Use <code>--port</code> to change the port, <code>--no-browser</code> to skip auto-open.</p>
     </section>
 
     <section id="how-it-works" class="doc-section">
@@ -127,11 +127,11 @@
       <div class="arch reveal">
         <div class="swarch">
           <div class="swarch-col">
-            <div class="node seed"><div class="nt">account-level reset clock</div><div class="ns">one clock for all sessions — latest reset time seen wins</div></div>
+            <div class="node seed"><div class="nt">account-level reset clock</div><div class="ns">one clock for all sessions: latest reset time seen wins</div></div>
             <div class="swdown">↓</div>
-            <div class="node cli"><div class="nt">wind watch</div><div class="ns">the watcher — polls panes, parses reset times, schedules the sweep</div></div>
+            <div class="node cli"><div class="nt">wind watch</div><div class="ns">the watcher: polls panes, parses reset times, schedules the sweep</div></div>
             <div class="swdown">↓ optional</div>
-            <div class="node"><div class="nt">ntfy.sh notification</div><div class="ns">optional — pinged when the limit hits and when sessions resume</div></div>
+            <div class="node"><div class="nt">ntfy.sh notification</div><div class="ns">optional: pinged when the limit hits and when sessions resume</div></div>
           </div>
           <div class="swarch-mid">
             <div class="swarrow">
@@ -167,25 +167,25 @@
       <div class="card pad-lg reveal">
         <p>The watcher scans the tail of each pane against a list of regexes. Built-in patterns cover the formats Claude Code emits:</p>
         <ul>
-          <li><code>Claude AI usage limit reached|&lt;epoch&gt;</code> — headless / print mode</li>
-          <li><code>5-hour limit reached ∙ resets 3am</code> — interactive UI</li>
-          <li><code>resets at 8pm</code> / <code>try again at 6:15pm</code> — message variants</li>
+          <li><code>Claude AI usage limit reached|&lt;epoch&gt;</code>: headless / print mode</li>
+          <li><code>5-hour limit reached ∙ resets 3am</code>: interactive UI</li>
+          <li><code>resets at 8pm</code> / <code>try again at 6:15pm</code>: message variants</li>
         </ul>
-        <p style="margin-top:14px">Clock times like <code>3am</code> are read as the <strong>next local occurrence</strong>. Regexes you add to <code>limit_patterns</code> in the config <strong>take precedence</strong> over the built-ins — handy when the message format changes between Claude Code versions. If a pattern matches but the time can't be parsed, the watcher falls back to a <strong>conservative 1-hour retry</strong> rather than stalling forever.</p>
+        <p style="margin-top:14px">Clock times like <code>3am</code> are read as the <strong>next local occurrence</strong>. Regexes you add to <code>limit_patterns</code> in the config <strong>take precedence</strong> over the built-ins. Handy when the message format changes between Claude Code versions. If a pattern matches but the time can't be parsed, the watcher falls back to a <strong>conservative 1-hour retry</strong> rather than stalling forever.</p>
       </div>
 
       <h3 class="subtitle" id="agents">Agents &amp; GitHub Copilot</h3>
       <div class="card pad-lg reveal">
-        <p>The <code>agent</code> key (top-level default, overridable per repo) picks a preset. <code>claude</code> is the default and behaves exactly as before — watched, with limit detection and auto-resume. <code>copilot</code> launches the GitHub Copilot CLI and <strong>shows it in the dashboard, but the watcher skips it</strong>: a Copilot session is never scanned for limits and never auto-resumed, so handle its rate limits yourself. You can still send it prompts from <code>wind up</code> and the dashboard, and a manual <code>wind resume</code> nudges it with its own message.</p>
+        <p>The <code>agent</code> key (top-level default, overridable per repo) picks a preset. <code>claude</code> is the default and behaves exactly as before: watched, with limit detection and auto-resume. <code>copilot</code> launches the GitHub Copilot CLI and <strong>shows it in the dashboard, but the watcher skips it</strong>: a Copilot session is never scanned for limits and never auto-resumed, so handle its rate limits yourself. You can still send it prompts from <code>wind up</code> and the dashboard, and a manual <code>wind resume</code> nudges it with its own message.</p>
       </div>
 
       <h3 class="subtitle" id="config">Config reference</h3>
       <p><code>wind</code> reads <code>./second-wind.json</code>, then <code>~/.wind/config.json</code>, then <code>~/.config/second-wind/config.json</code> (legacy).</p>
       <div class="inv">
         <div class="row"><span class="nm">session_prefix</span><span class="dc">tmux sessions are named <code>&lt;prefix&gt;-&lt;repo name&gt;</code></span></div>
-        <div class="row"><span class="nm">agent</span><span class="dc">default agent — <code>claude</code> (watched + auto-resumed) or <code>copilot</code> (launched + shown, never auto-resumed); overridable per repo</span></div>
+        <div class="row"><span class="nm">agent</span><span class="dc">default agent: <code>claude</code> (watched + auto-resumed) or <code>copilot</code> (launched + shown, never auto-resumed); overridable per repo</span></div>
         <div class="row"><span class="nm">claude_cmd</span><span class="dc">command used to launch the agent; can be overridden per repo</span></div>
-        <div class="row"><span class="nm">claude_args</span><span class="dc">the global permission preset passed to that command; can be overridden per repo. The <code>auto</code> preset (<code>--permission-mode bypassPermissions</code>, accepts everything) is the shipped default for a fresh config — same risk class as <code>--dangerously-skip-permissions</code></span></div>
+        <div class="row"><span class="nm">claude_args</span><span class="dc">the global permission preset passed to that command; can be overridden per repo. The <code>auto</code> preset (<code>--permission-mode bypassPermissions</code>, accepts everything) is the shipped default for a fresh config. Same risk class as <code>--dangerously-skip-permissions</code></span></div>
         <div class="row"><span class="nm">resume_message</span><span class="dc">text typed into each paused session after the limit resets</span></div>
         <div class="row"><span class="nm">resume_buffer_seconds</span><span class="dc">extra wait after the parsed reset time before resuming</span></div>
         <div class="row"><span class="nm">poll_interval_seconds</span><span class="dc">how often the watcher captures panes</span></div>
@@ -203,8 +203,8 @@
 
       <div class="callout warn reveal" id="security" style="margin-top:34px">
         <span class="ti">security &amp; trust</span>
-        <p style="margin:0">The config file is <b>trusted input</b>: <code>claude_cmd</code>, <code>claude_args</code>, <code>limit_patterns</code>, and prompt files are executed, compiled, or typed exactly as written — never point <code>wind</code> at a config you didn't write yourself. As of v2.1 the <b>shipped default is full-auto</b> (<code>--permission-mode bypassPermissions</code>, the <code>auto</code> preset): an unattended run accepts <em>everything</em>, not just edits — the same risk class as <code>--dangerously-skip-permissions</code>, so only point <code>wind</code> at repos you trust to run agent actions without prompts (pick <code>acceptEdits</code>/<code>plan</code>/<code>default</code> in <code>wind init</code> to dial it back). And resuming <b>blindly types <code>resume_message</code> into panes</b>; if a session was actually waiting on a permission prompt or a question, "continue" is still a reasonable nudge — but <b>review your sessions in the morning</b>.</p>
-        <p style="margin:12px 0 0">The dashboard binds <code>127.0.0.1</code> only. <code>/api/status</code> and <code>/api/scan</code> (the ＋ add repo candidate list) serve tokenless, but the modal's full-scrollback endpoint <code>/api/pane</code> — which can carry secrets — and every write action (<code>send</code>/<code>kill</code>/<code>resume</code>/<code>add</code>) require the per-run token. <code>wind add</code> and <code>/api/add</code> write <code>{name, path}</code> only (inheriting the global preset, never accepting <code>claude_args</code>/<code>agent</code>/<code>prompt</code> from the caller), and <code>/api/add</code> only accepts a path already under a persisted <code>scan_root</code> — so a localhost request can't add an arbitrary filesystem path. Pane text reaches the page via <code>textContent</code> with an allowlisted ANSI renderer, never <code>innerHTML</code>. <code>wind prompt</code> never invokes a shell — <code>$EDITOR</code> is split with <code>shlex</code> and exec'd as a list, and the repo→filename mapping is validated as a single path component. Config and state writes are <b>atomic</b> (<code>os.replace</code>), so a crash or a concurrent watcher/dashboard read never sees a truncated file.</p>
+        <p style="margin:0">The config file is <b>trusted input</b>: <code>claude_cmd</code>, <code>claude_args</code>, <code>limit_patterns</code>, and prompt files are executed, compiled, or typed exactly as written, so never point <code>wind</code> at a config you didn't write yourself. As of v2.1 the <b>shipped default is full-auto</b> (<code>--permission-mode bypassPermissions</code>, the <code>auto</code> preset): an unattended run accepts <em>everything</em>, not just edits. This is the same risk class as <code>--dangerously-skip-permissions</code>, so only point <code>wind</code> at repos you trust to run agent actions without prompts (pick <code>acceptEdits</code>/<code>plan</code>/<code>default</code> in <code>wind init</code> to dial it back). And resuming <b>blindly types <code>resume_message</code> into panes</b>; if a session was actually waiting on a permission prompt or a question, "continue" is still a reasonable nudge, but <b>review your sessions in the morning</b>.</p>
+        <p style="margin:12px 0 0">The dashboard binds <code>127.0.0.1</code> only. <code>/api/status</code> and <code>/api/scan</code> (the ＋ add repo candidate list) serve tokenless, but the modal's full-scrollback endpoint <code>/api/pane</code> (which can carry secrets) and every write action (<code>send</code>/<code>kill</code>/<code>resume</code>/<code>add</code>) require the per-run token. <code>wind add</code> and <code>/api/add</code> write <code>{name, path}</code> only (inheriting the global preset, never accepting <code>claude_args</code>/<code>agent</code>/<code>prompt</code> from the caller), and <code>/api/add</code> only accepts a path already under a persisted <code>scan_root</code>, so a localhost request can't add an arbitrary filesystem path. Pane text reaches the page via <code>textContent</code> with an allowlisted ANSI renderer, never <code>innerHTML</code>. <code>wind prompt</code> never invokes a shell: <code>$EDITOR</code> is split with <code>shlex</code> and exec'd as a list, and the repo→filename mapping is validated as a single path component. Config and state writes are <b>atomic</b> (<code>os.replace</code>), so a crash or a concurrent watcher/dashboard read never sees a truncated file.</p>
       </div>
     </section>
 
