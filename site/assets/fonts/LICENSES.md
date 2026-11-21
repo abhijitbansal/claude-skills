@@ -7,5 +7,5 @@ distributed under the SIL Open Font License 1.1
 | File | Family | Copyright |
 | --- | --- | --- |
 | `bricolage-grotesque-latin-variable.woff2` | Bricolage Grotesque | © 2022 The Bricolage Grotesque Project Authors (https://github.com/ateliertriay/bricolage) |
-| `instrument-sans-latin-variable.woff2` | Instrument Sans | © 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans) |
+| `atkinson-hyperlegible-next-latin-variable.woff2` | Atkinson Hyperlegible Next | © 2020-2024 The Atkinson Hyperlegible Next Project Authors (https://github.com/googlefonts/atkinson-hyperlegible-next) |
 | `jetbrains-mono-latin-variable.woff2` | JetBrains Mono | © 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) |
