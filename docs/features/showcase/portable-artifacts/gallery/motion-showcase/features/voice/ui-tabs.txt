@@ -1,1 +1,0 @@
-A tab switch changes the panel text.

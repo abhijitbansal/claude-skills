@@ -1,1 +1,0 @@
-A map lights up five countries, picked by name.

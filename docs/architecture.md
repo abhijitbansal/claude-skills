@@ -4,7 +4,7 @@
 
 `claude-skills` is three things in one repo:
 
-1. A **Claude Code plugin marketplace** hosting eight focused plugins.
+1. A **Claude Code plugin marketplace** hosting seven focused plugins, and listing one more from its own repo.
 2. A home for **standalone tools**: the Second Wind CLI and the Cache Clock extension for Copilot CLI.
 3. **Adapters** that wire the same skills into Codex, Copilot CLI, and any AGENTS.md-aware agent.
 
@@ -20,7 +20,7 @@ flowchart TD
   CW["core-workflow — 19 skills · 5 cmds · 2 agents · 2 hooks"]
   SW["second-wind — skill wrapper"]
   PC["prompt-craft — 7 skills · 6 hooks"]
-  PA["portable-artifacts — 5 skills · installer"]
+  PA["portable-artifacts — own repo · git-subdir"]
   TB["test-board — test-run band"]
   SC["session-compass — compass band · /compass pane"]
   WIND[("tools/second-wind/wind.py")]
@@ -30,17 +30,18 @@ flowchart TD
   CC(("Claude Code"))
   OTHER(("Codex / Copilot / AGENTS.md agents"))
 
-  MP --> IOS & LIN & CW & SW & PC & PA & TB & SC
+  MP --> IOS & LIN & CW & SW & PC & TB & SC
+  MP -.->|git-subdir| PA
   SW -.->|wraps| WIND
   CC -->|"/plugin marketplace add"| MP
   SEED -->|local_plugins step| CC
   SEED -->|"wind → ~/.local/bin"| WIND
   AD -->|symlink skills| OTHER
   CCLK -->|"install.sh → ~/.copilot/extensions"| OTHER
-  IOS & LIN & CW & SW & PC & PA -->|skills/| AD
+  IOS & LIN & CW & SW & PC -->|skills/| AD
 ```
 
-## The eight plugins
+## The seven plugins
 
 | Plugin | One-liner | Contents |
 | --- | --- | --- |
@@ -49,9 +50,14 @@ flowchart TD
 | `core-workflow` | everyday glue | commit, contribute, learn-lesson, branch-explainer, github-repo-go-public-preflight-scan, github-solo-branch-protection-codeowners skills; `/team`, `/contribute-skill`, `/learn`, `/explain-branch`; image-parser + web-researcher agents; shellcheck-on-edit hook |
 | `second-wind` | outlast the 5-hour usage limit | SKILL.md wrapper for the `wind` CLI (self-installs when missing) |
 | `prompt-craft` | rough ask → deterministic spec | `/improve-prompt`, `/plan`; debug/refactor/review lens skills; `/refresh`; a command advisor (relevance + history + git state) powering user-only `suggest_next` (Stop), `prompt_hint` (UserPromptSubmit) + `statusline_hint`; `registry_freshness` (SessionStart); opt-in `block_secrets` + `format_on_edit` hooks |
-| `portable-artifacts` | dashboards + diagrams + explainer pages + 3D scenes + animated videos from a prompt, offline | `/make-dashboard`, `/make-diagram`, `/make-explainer` (branch recap, concept page, plan, test checklist or slides as one HTML file), `/make-motion` (audio only when asked: music from a file, or a local Kokoro voiceover), `/make-scene` (your data as a 3D city, forest, galaxy or terrain, or a diagram or chart lifted into 3D); `bin/install.mjs` cross-host installer (Claude Code, Codex, Copilot, Gemini) |
 | `test-board` | pass/fail band after every test run | `register.tsx` band + test-run hooks; compares with the previous run of the same suite in the same worktree |
 | `session-compass` | what each session is building and where it stands | compass band, `/compass` pane, `compass_status` tool; capture + register hooks |
+
+### Companion plugin
+
+| Plugin | One-liner | Contents |
+| --- | --- | --- |
+| `portable-artifacts` | companion plugin in its own repo, [abhijitbansal/portable-artifacts](https://github.com/abhijitbansal/portable-artifacts): dashboards, diagrams, explainer pages, 3D scenes and animated videos from a prompt, offline | listed here with a `git-subdir` source, so `portable-artifacts@claude-skills` still installs it; see its [site](https://abhijitbansal.github.io/portable-artifacts/) |
 
 Full per-item descriptions: [skills-catalog.md](skills-catalog.md).
 

@@ -12,3 +12,8 @@ file you actually read.
 
 The builder writes under `<repo>/.scratch/` and prints a `file://` line; deliver
 that file to the user.
+
+If `portable-artifacts` is not installed, tell the user to run
+`/plugin marketplace add abhijitbansal/portable-artifacts` and
+`/plugin install portable-artifacts@portable-artifacts`. It lives in its own repo,
+<https://github.com/abhijitbansal/portable-artifacts>, which also covers other hosts.

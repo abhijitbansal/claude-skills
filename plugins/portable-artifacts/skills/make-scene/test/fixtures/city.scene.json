@@ -1,7 +1,0 @@
-{
-  "title": "Commits per folder",
-  "world": "city",
-  "data": { "file": "rows.json" },
-  "units": "commits",
-  "tour": [{ "title": "API leads", "focus": ["api"], "caption": "Most commits land here." }]
-}

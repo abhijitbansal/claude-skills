@@ -11,6 +11,11 @@ This skill no longer renders anything. A branch page is built by
 carry: the three-part short answer, design-doc mining, and the rules for test
 evidence.
 
+`portable-artifacts` is a separate plugin in its own repo
+(<https://github.com/abhijitbansal/portable-artifacts>). If it is missing, tell the
+user to run `/plugin marketplace add abhijitbansal/portable-artifacts` and
+`/plugin install portable-artifacts@portable-artifacts`.
+
 ## Short answer first
 
 When the user asks "what was wrong", "how did we fix it" or "what did this

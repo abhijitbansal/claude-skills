@@ -4,59 +4,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](#contributing)
 
-**Decks, diagrams, dashboards, 3D scenes and MP4 films from one prompt: files that open offline, built by whatever coding agent you already use.**
+**Plugins and tools for the daily dev loop on Claude Code: iOS builds and releases, Linear project management, workflow helpers, overnight resume after usage limits, prompt craft, test results and session status.**
 
-<p align="center">
-  <a href="https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery"><img src="docs/features/img/portable-artifacts/showreel-pro.gif" width="640" alt="The first 12 seconds of the make-motion showreel on a paper-collage desk: a browser window holding a dashboard asks where a number came from, the camera closes in on the revenue tile and a red hand-drawn line underlines it, then a pinned printout of sales.json types itself out with its query line highlighted."></a>
-</p>
-
-The first 12 seconds of the showreel, a 46.8 s film made with `/make-motion` 2 from one JSON file ([`showreel-pro.json`](plugins/portable-artifacts/skills/make-motion/references/examples/v2/showreel-pro.json)): JSON in, MP4 out. The full film, with a locally made voiceover, a synthesised music bed and sound cues, is on the [gallery page](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#films). The voice needs a one-time model download (about 93 MB); everything else runs offline.
-
-Install the five artifact skills (`portable-artifacts`):
-
-```text
-/plugin marketplace add abhijitbansal/claude-skills
-/plugin install portable-artifacts@claude-skills
-npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene
-node plugins/portable-artifacts/bin/install.mjs codex
-```
-
-The first two lines are Claude Code. The `npx skills` line works in any agent, and the last runs from a clone for `codex`, `copilot`, `gemini` or `agents`. `npx skills` does not install sibling skills for you: `make-explainer` needs `make-diagram` and `make-dashboard` beside it, and `make-scene` needs them to lift a diagram or a chart, so name them as shown.
-
-**What you need:** Node 20 or newer. Opening a built page needs no network, but installing a skill's npm packages does (about 3 MB for `make-explainer` up to about 150 MB for `make-dashboard`, measured in a dev checkout; the installer asks first). `make-motion` also needs ffmpeg and a Chromium (about 150 MB) for frame capture, and an optional voiceover is an on-demand install of about 227 MB plus a 93 MB model. Details: [`plugins/portable-artifacts/README.md`](plugins/portable-artifacts/README.md).
-
-**[Open the live gallery (no install)](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html#gallery)**
-
-Tested live on Claude Code and GitHub Copilot CLI 1.0.98; on Copilot, a cheap-model agent built motion (make-motion 1) 10/10 valid and 9/9 across dashboard, diagram, explainer and scene, all on `claude-haiku-5.5`. Also run on Codex CLI 0.145.0 (dashboard 10/10, motion (make-motion 1) 5/10 under today's scorer, four more prompts stopped by a usage limit); `make-scene` built 10/10 valid pages on Claude Haiku in Claude Code. Gemini CLI: install paths checked against its documentation only, never run live. Every figure predates 1.2.0; the runs and what each covers are listed in [`eval/results/INDEX.md`](plugins/portable-artifacts/eval/results/INDEX.md).
-
-These three came from the same plugin, each linked to its page:
-
-<table>
-  <tr>
-    <td align="center" valign="top" colspan="2">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/delivery-diagram/dusk/index.html"><img src="docs/features/img/portable-artifacts/diagram-story.gif" width="700" height="450" alt="A food delivery diagram playing its story: steps 1 to 3 each light one edge, the third a curve to Orders service, with the caption, step chips, and a ring by Next that fills while a step holds."></a><br>
-      <sub><code>/make-diagram</code>: a diagram that plays its own story</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" valign="top" width="50%">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/growth-dashboard.html"><img src="docs/features/img/portable-artifacts/growth-dashboard.jpg" alt="A Growth overview dashboard: three KPI tiles (total revenue, units sold, signup conversion rate) above bar charts of revenue by region and signup conversion rate by channel, a line chart of monthly revenue and a line chart of daily sessions by channel." width="400" height="558"></a><br>
-      <sub><code>/make-dashboard</code>: two CSV files in, one offline dashboard out</sub>
-    </td>
-    <td align="center" valign="top" width="50%">
-      <a href="https://abhijitbansal.github.io/claude-skills/features/showcase/portable-artifacts/gallery/explainer-deck/index.html"><img src="docs/features/showcase/portable-artifacts/gallery/explainer-deck/thumb.jpg" alt="The title slide of the Portable Artifacts Deck: the title and a short subtitle in a card over a warm sunset landscape, with date, branch and repo tags." width="400" height="225"></a><br>
-      <sub><code>/make-explainer</code>: a slide deck as one HTML file</sub>
-    </td>
-  </tr>
-</table>
-
-The dashboard came from this prompt:
-
-```text
-Build a "Growth overview" dashboard from data/sales.csv and data/web_traffic.csv: KPI tiles for total revenue, units sold and overall signup conversion rate; revenue by region; the monthly revenue trend; daily sessions by channel; and signup conversion rate by channel.
-```
-
-## Also in this repo
+## Plugins
 
 Skills, plugins and tools for AI agents, usable from **Claude Code**, **Codex**, **Copilot CLI** and any **AGENTS.md-aware** agent. Everything below is a separate plugin; install only what you need.
 
@@ -72,7 +22,18 @@ Skills, plugins and tools for AI agents, usable from **Claude Code**, **Codex**,
 
 Beyond the plugins: a standalone `wind` CLI (`tools/second-wind`), a Copilot CLI cache guard (`tools/cache-clock`), and the companion `cartoon` project for token-lean CLI output.
 
-**Feature guides:** [portable-artifacts](https://abhijitbansal.github.io/claude-skills/features/portable-artifacts.html) ·
+### Companion plugin: portable-artifacts
+
+`portable-artifacts` turns one prompt into decks, diagrams, dashboards, 3D scenes and MP4 films: files that open offline, built by whatever coding agent you already use. It used to live in this repo and now has its own: [abhijitbansal/portable-artifacts](https://github.com/abhijitbansal/portable-artifacts), with a [site and gallery](https://abhijitbansal.github.io/portable-artifacts/).
+
+```text
+/plugin marketplace add abhijitbansal/portable-artifacts
+/plugin install portable-artifacts@portable-artifacts
+```
+
+Other agents: `npx skills add abhijitbansal/portable-artifacts --skill make-dashboard make-diagram make-explainer make-motion make-scene` (`npx skills` does not install sibling skills for you: `make-explainer` needs `make-diagram` and `make-dashboard` beside it, and `make-scene` needs them to lift a diagram or a chart, so name all five as shown), or clone the repo and run `node portable-artifacts/plugins/portable-artifacts/bin/install.mjs codex` (also `copilot`, `gemini`, `agents`). If you already added this marketplace, `portable-artifacts@claude-skills` still works: it resolves to the new repo. [Changelog](https://github.com/abhijitbansal/portable-artifacts/blob/main/plugins/portable-artifacts/CHANGELOG.md).
+
+**Feature guides:** [portable-artifacts](https://abhijitbansal.github.io/portable-artifacts/) (own site) ·
 [Second Wind](https://abhijitbansal.github.io/claude-skills/features/second-wind.html) ·
 [prompt-craft](https://abhijitbansal.github.io/claude-skills/features/prompt-craft.html) ·
 [session mods](https://abhijitbansal.github.io/claude-skills/features/mods.html) ·
@@ -97,7 +58,6 @@ Inside any Claude Code session:
 /plugin install second-wind@claude-skills
 /plugin install core-workflow@claude-skills
 /plugin install prompt-craft@claude-skills
-/plugin install portable-artifacts@claude-skills
 /plugin install test-board@claude-skills
 /plugin install session-compass@claude-skills
 ```
@@ -170,14 +130,9 @@ adapters/install.sh all
 
 Idempotent — re-run after pulling updates; it prunes links for removed skills. The adapter
 only links skill folders: it runs no `npm ci --ignore-scripts`, installs no agent file and does not add sibling
-skills, so for `portable-artifacts` use that plugin's own installer, below.
-
-The `portable-artifacts` skills (`make-dashboard`, `make-diagram`, `make-explainer`, `make-motion`, `make-scene`) are Node packages: they also
-need `npm ci --ignore-scripts` in each skill folder. Their own installer does that and covers Gemini CLI and
-project-scoped installs too:
-`node plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`
-— see [plugins/portable-artifacts/USAGE.md](plugins/portable-artifacts/USAGE.md).
-With [`npx skills`](https://github.com/vercel-labs/skills): `npx skills add abhijitbansal/claude-skills --skill make-dashboard make-diagram make-explainer make-motion make-scene`. That does not resolve dependencies: `make-explainer` needs `make-diagram` and `make-dashboard` installed beside it (and `make-scene` for a `scene` section), and `make-scene` needs them to lift a diagram or a chart, so name them as shown.
+skills. The `portable-artifacts` skills now live in their [own repo](https://github.com/abhijitbansal/portable-artifacts)
+and are Node packages with their own installer (`node portable-artifacts/plugins/portable-artifacts/bin/install.mjs <claude|codex|copilot|gemini|agents> [--project .]`),
+described in [its README](https://github.com/abhijitbansal/portable-artifacts#readme).
 
 ### Cartoon (token-optimized CLI output)
 
@@ -235,7 +190,7 @@ users can ignore them entirely; plugins never touch them.
 | Path | What |
 | --- | --- |
 | `.claude-plugin/` | marketplace manifest |
-| `plugins/` | the eight plugins (skills, commands, agents, hooks) |
+| `plugins/` | the seven plugins (skills, commands, agents, hooks); portable-artifacts lives in [its own repo](https://github.com/abhijitbansal/portable-artifacts) |
 | `tools/` | standalone CLIs (second-wind) and the Copilot CLI extension (cache-clock) |
 | `adapters/` | wire skills into non-Claude tools |
 | `setup/`, `templates/`, `claude-setup.toml` | personal machine seed |

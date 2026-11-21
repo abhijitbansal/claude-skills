@@ -1,9 +1,0 @@
-{
-  "version": 2,
-  "look": "desk",
-  "format": "16:9",
-  "shots": [
-    { "id": "title", "show": "statement", "kicker": "make-motion", "say": "One JSON file, *one video*." },
-    { "id": "count", "show": "number", "cut": "cut", "say": "Eighteen section types. One renderer each.", "value": 18, "label": "section types, one renderer each" }
-  ]
-}

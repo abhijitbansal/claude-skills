@@ -1,3 +1,0 @@
-[
-  { "id": "aws-image-pipeline", "prompt": "Draw an architecture diagram of a serverless image pipeline on AWS: a user uploads a picture to an S3 bucket, which triggers a Lambda function, which writes the result to DynamoDB and publishes a message to SNS. Use the AWS service icons for the cloud services.", "expect": ["icon^=cloud:"] }
-]

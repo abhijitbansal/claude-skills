@@ -6,6 +6,7 @@ sites. `test_live_tree_counts_in_sync` is the CI guard against stale counts.
 """
 
 import importlib.util
+import json
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -118,6 +119,18 @@ def test_live_counts_reads_plugins_from_marketplace(tmp_path):
     live = sc.live_counts(tmp_path)
     assert live["plugins"] == 2
     assert "make-motion-blocks" not in live, "version 1's block registry is gone: no block scope"
+
+
+def test_plugin_count_skips_git_subdir_entries_hosted_elsewhere(tmp_path):
+    sc = _load_module()
+    _build_tree(tmp_path)
+    _add_marketplace(tmp_path, ["alpha", "beta"])
+    path = tmp_path / ".claude-plugin" / "marketplace.json"
+    data = json.loads(path.read_text())
+    data["plugins"].append({"name": "elsewhere", "source": {
+        "source": "git-subdir", "url": "https://example.com/x.git", "path": "plugins/elsewhere"}})
+    path.write_text(json.dumps(data))
+    assert sc.live_counts(tmp_path)["plugins"] == 2
 
 
 def test_stale_plugin_footer_fails_check_and_write_fixes_it(tmp_path, capsys):

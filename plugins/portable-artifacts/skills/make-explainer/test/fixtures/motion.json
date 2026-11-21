@@ -1,6 +1,0 @@
-{
-  "version": 2,
-  "look": "desk",
-  "format": "16:9",
-  "shots": [{ "id": "hello", "show": "statement", "kicker": "Hello", "say": "A short film." }]
-}
