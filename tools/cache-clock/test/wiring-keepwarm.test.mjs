@@ -510,6 +510,44 @@ test("a process that does not hold the lock shows no heads-up beside the owner's
   assert.match(lastLog(h2), /keep-warm  handled by another process of this session/);
 });
 
+const windowFile = (dir, id) => join(dir, "keepwarm", `${createHash("sha256").update(id).digest("hex")}.json`);
+
+// Task 5: the lock holder says in the window file whether it will ping, and a passive process believes it.
+test("a passive process shows the heads-up when the holder will not ping", async () => {
+  const alive = new Set([1, 2]);
+  const config = { ...KW, keepWarmMaxUsd: 0.01, keepWarmPayback: false }; // one ping costs more than the budget
+  const h1 = fakeHost({ config, alive });
+  const h2 = fakeHost({ config, dir: h1.dir, pid: 2, alive });
+  await h1.start();
+  await h2.start();
+  await h1.turn();
+  await h2.turn();
+  for (let i = 0; i < 40; i += 1) {
+    await h1.run(10_000);
+    await h2.run(10_000);
+  }
+  assert.equal(h1.sent.length, 0, "the holder never pings");
+  assert.ok(h2.logs.some((l) => /goes cold in/.test(l.message)), "so the passive process warns that the cache will go cold");
+  assert.equal(JSON.parse(readFileSync(windowFile(h1.dir, "s-1"), "utf8")).willPing, false, "and the holder says so in the window file");
+});
+
+test("a passive process stays quiet when the holder will ping", async () => {
+  const alive = new Set([1, 2]);
+  const h1 = fakeHost({ config: KW, alive });
+  const h2 = fakeHost({ config: KW, dir: h1.dir, pid: 2, alive });
+  await h1.start();
+  await h2.start();
+  await h1.turn();
+  await h2.turn();
+  for (let i = 0; i < 26; i += 1) {
+    await h1.run(10_000);
+    await h2.run(10_000);
+  }
+  assert.ok(h1.sent.length > 0, "the holder pings");
+  assert.equal(JSON.parse(readFileSync(windowFile(h1.dir, "s-1"), "utf8")).willPing, true, "and says so in the window file");
+  assert.ok(!h2.logs.some((l) => /goes cold in/.test(l.message)), "the passive process adds no heads-up beside those pings");
+});
+
 test("when keep-warm has stopped, the heads-up works again", async () => {
   const h = fakeHost({ config: { ...KW, keepWarmMaxUsd: 0.04, keepWarmPayback: false } });
   await h.start();

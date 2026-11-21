@@ -309,11 +309,18 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     watchdog = null;
   };
 
+  // Whether a ping is planned or out right now. The window file carries it so a process that does not
+  // hold the lock knows whether its heads-up would be redundant.
+  const willPingNow = () => flight !== null || timerKind === "ping";
+  let savedWillPing = null;
+
   /** Writes the window (the owner only); a failing store is reported once and keep-warm carries on from memory. */
   function persist() {
     if (!owner || !window || window.placeholder || !hoursOn() || !stillOwner()) return;
     try {
-      store.save(window);
+      const willPing = willPingNow();
+      store.save({ ...window, willPing });
+      savedWillPing = willPing;
     } catch (err) {
       warnOnce("save", `cache-clock: could not save the keep-warm window (${err.message}); a reload may restart its budget.`);
     }
@@ -347,6 +354,7 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     owner = true;
     holdsLock = true;
     window = null;
+    savedWillPing = null; // what the previous holder wrote says nothing about this process
     try {
       window = store.load();
     } catch (err) {
@@ -365,6 +373,7 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
     owner = false;
     holdsLock = false;
     window = null;
+    savedWillPing = null;
     flight = null;
     sendId += 1;
     // A process that lost the lock expects no ping's record: its late and tail claims go with it.
@@ -425,6 +434,7 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
       // Only a submitted prompt that has not started holds it: look again when that flag expires.
       setPlanTimer(fresh.session.pendingUntil, "pending");
     }
+    if (window && willPingNow() !== savedWillPing) persist(); // the plan changed what the lock holder promises
     changed();
   }
 
@@ -728,6 +738,8 @@ export function createKeepWarm({ send, read, store, now, setTimer, clearTimer, l
       waitingOnQuestion: stalled,
       // Another process of this session holds the lock and keeps the window.
       passive: state === "elsewhere",
+      // What that holder wrote in the shared window file: whether it has a ping planned or out.
+      holderWillPing: state === "elsewhere" && store.holderWillPing?.() === true,
       // Whether the heads-up should stay quiet: keep-warm is on and a ping is really planned or out.
       willPing: state === "on" && (flight !== null || timerKind === "ping"),
     };

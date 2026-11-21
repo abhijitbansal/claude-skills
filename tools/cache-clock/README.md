@@ -270,7 +270,7 @@ A live check is pending; this section changes with its result (see "Live check" 
   5-minute cache), or when their cost plus the next ping would pass `keepWarmDailyMaxUsd` (default
   $2.00; `/cache-clock keepwarm daily 2.00`, 0.10 to 20). It stops with `daily-limit` and says so once
   per 24 hours per session. Only the passage of time removes entries: a new window, off and on, a
-  reload or another process do not. A ledger file that exists but cannot be parsed stops keep-warm
+  reload or another process do not. The lock holder compacts the file when it grows past 64 KiB. A ledger file that exists but cannot be parsed stops keep-warm
   with `ledger-failed` (one note, delete the file to reset it); a half-written last line is ignored.
 - **When it holds off (it does not stop; it waits).** A turn is running, or you just submitted
   a prompt whose turn has not started (it looks again when that flag expires); a question card is open
@@ -280,7 +280,10 @@ A live check is pending; this section changes with its result (see "Live check" 
   session's lock; the cache is cold or its state unknown. The card shows the last reason in words.
 - **Heads-up.** The heads-up before expiry stays quiet only while a ping is really planned or out.
   When keep-warm is on but nothing will ping (any hold above, a stop, a question open), the heads-up
-  works as before.
+  works as before. A process that does not hold the session lock follows the same rule through the
+  holder: the holder writes `willPing` in the shared window file whenever it plans, and the other
+  process stays quiet only while that says a ping is planned or out. If the holder has stopped or
+  has nothing planned, the other process's heads-up shows.
 - **Spend.** Read from the ping's own usage event, `copilotUsage.totalNanoAiu` (nano-AIU
   ÷ 1e11 = dollars); every model call inside the ping's turn counts, and the ping itself once.
   A ping whose usage still arrives within 10 minutes of the 2-minute watchdog, or after its idle,
@@ -292,7 +295,9 @@ A live check is pending; this section changes with its result (see "Live check" 
   one keep-warm instance per session ping. It records the pid and an instance id, so two instances in
   one process cannot both own it. It is created whole (a hard link to a finished file), a crashed
   holder's lock is replaced by renaming a finished file over it, and ownership is confirmed again
-  before every ping and every write. With no stored window, keep-warm waits for your next confirmed
+  before every ping and every write. The holder touches the lock file every 10 minutes, and a lock
+  untouched for 30 minutes is taken over even when its pid is alive (a reused pid or a suspended
+  process). With no stored window, keep-warm waits for your next confirmed
   message: a missing file never grants a fresh budget.
 - **Notes.** Stop notes and the stalled-question note reach VS Code's chat as a card where the host
   can ask; where it cannot they are warnings in its log, never error boxes. The card shows the state

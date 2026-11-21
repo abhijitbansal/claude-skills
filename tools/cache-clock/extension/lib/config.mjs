@@ -1,7 +1,7 @@
 // Settings shared by every session: guard mode, cost threshold, heads-up lead time,
 // and the keep-warm window, budget and payback stop.
 
-import { appendFileSync, closeSync, constants, fchmodSync, fstatSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, constants, fchmodSync, fstatSync, linkSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { createHash, randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -215,6 +215,12 @@ export function pidAlive(pid) {
   }
 }
 
+/** The lock holder touches the lock file this often; a holder silent for LOCK_STALE_MS is taken over even if its pid lives. */
+export const LOCK_HEARTBEAT_MS = 10 * 60 * 1000;
+export const LOCK_STALE_MS = 30 * 60 * 1000;
+/** The holder compacts the ping ledger when an append leaves it larger than this. */
+export const LEDGER_COMPACT_BYTES = 64 * 1024;
+
 const isCount = (v) => Number.isInteger(v) && v >= 0;
 const LEDGER_KEEP_MS = 24 * 60 * 60 * 1000;
 
@@ -264,9 +270,12 @@ function lockHolder(file) {
  * Per-session keep-warm state under `<dir>/keepwarm/<sha256(sessionId)>.{json,lock}`.
  * `save` and `lock` can throw on a filesystem error; the scheduler decides what that means.
  */
-export function createKeepWarmStore(dir, sessionId, { pid = process.pid, instance = randomUUID(), isAlive = pidAlive, beforeLedgerRename = null } = {}) {
+export function createKeepWarmStore(dir, sessionId, {
+  pid = process.pid, instance = randomUUID(), isAlive = pidAlive, beforeLedgerRename = null, now = Date.now, timers = globalThis,
+} = {}) {
   const valid = validSessionId(sessionId);
   const isMine = (holder) => holder !== null && holder.pid === pid && holder.instance === instance;
+  let heartbeat = null;
 
   function load() {
     if (!valid) return null;
@@ -288,6 +297,10 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, instanc
    * renaming a finished temp file over it, then re-reading it to confirm the pid is ours. Callers
    * confirm again with `lock()` before every ping, so of two processes that raced for a stale lock
    * only the last writer keeps pinging.
+   *
+   * A pid alone cannot tell a holder from a reused pid or a suspended process, so the lock file's
+   * mtime is a heartbeat: every confirmation of ownership touches it, and a timer touches it every
+   * LOCK_HEARTBEAT_MS while the lock is held. A holder silent for LOCK_STALE_MS is stale whatever its pid.
    */
   function lock() {
     if (!valid) return false;
@@ -298,40 +311,126 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, instanc
     try {
       try {
         linkSync(mine, file);
-        return true;
+        return confirmed(file);
       } catch (err) {
         if (err.code !== "EEXIST") throw err;
       }
       const holder = lockHolder(file);
-      if (isMine(holder)) return true;
+      if (isMine(holder)) return confirmed(file);
       // Another instance in this very process counts as a live holder too: it is not us.
-      if (holder !== null && isAlive(holder.pid)) return false;
+      if (holder !== null && isAlive(holder.pid) && !lockStale(file)) return false;
       renameSync(mine, file);
-      return isMine(lockHolder(file));
+      return isMine(lockHolder(file)) && confirmed(file);
     } finally {
       rmSync(mine, { force: true });
     }
   }
 
+  /** True when the lock file has gone unrefreshed for LOCK_STALE_MS; a file that cannot be stat'd is not called stale. */
+  function lockStale(file) {
+    try {
+      return now() - statSync(file).mtimeMs > LOCK_STALE_MS;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Ownership is confirmed: refresh the heartbeat now and keep it fresh while the lock is held. */
+  function confirmed(file) {
+    const seconds = now() / 1000;
+    utimesSync(file, seconds, seconds);
+    if (heartbeat === null) armHeartbeat();
+    return true;
+  }
+
+  function armHeartbeat() {
+    heartbeat = timers.setTimeout(beat, LOCK_HEARTBEAT_MS);
+    heartbeat?.unref?.();
+  }
+
+  function beat() {
+    heartbeat = null;
+    const file = keepWarmFile(dir, sessionId, "lock");
+    try {
+      if (!isMine(lockHolder(file))) return; // lost or released: nothing of ours to refresh, and no timer to keep
+      const seconds = now() / 1000;
+      utimesSync(file, seconds, seconds);
+      armHeartbeat();
+    } catch {
+      // The lock file is gone or unwritable. The next lock() call decides what that means; beating on would only touch a stranger's lock.
+    }
+  }
+
   function unlock() {
+    timers.clearTimeout(heartbeat);
+    heartbeat = null;
     if (valid && isMine(lockHolder(keepWarmFile(dir, sessionId, "lock")))) rmSync(keepWarmFile(dir, sessionId, "lock"), { force: true });
+  }
+
+  /** True when the lock holder's window file says it plans a ping. Read by a process that does not hold the lock. */
+  function holderWillPing() {
+    if (!valid) return false;
+    try {
+      return JSON.parse(readFileSync(keepWarmFile(dir, sessionId, "json"), "utf8"))?.willPing === true;
+    } catch {
+      return false; // no window, or an unreadable one: no ping is promised
+    }
   }
 
   // The ping ledger: one JSON line per send ("send": id, at, estimate), per measured cost ("cost": id,
   // usd) and per daily-limit note ("note": at). Every append starts with a newline, so a write cut
   // short ends at the next one instead of swallowing it. Only time removes entries: a new window, off
-  // and on, a reload or another process leave it alone; compaction runs only at start-up, under the lock.
+  // and on, a reload or another process leave it alone; compaction runs only under the lock, at start-up
+  // and whenever an append leaves the file larger than LEDGER_COMPACT_BYTES.
   const ledgerFile = () => keepWarmFile(dir, sessionId, "ledger");
   let ledgerSeq = 0;
+  let ledgerCache = null; // { key, value }: the parsed ledger, good while the file is the one it was read from
+  let compactAbove = LEDGER_COMPACT_BYTES; // raised after a compaction that could not shrink the file, so it is not retried on every append
   const ledgerAppend = (entry) => {
     ensurePrivateDir(join(dir, KEEPWARM_DIR));
     // An append cannot be an atomic rename, so the ledger gets its mode when it is created.
     appendFileSync(ledgerFile(), "\n" + JSON.stringify(entry), { mode: 0o600 });
+    ledgerCache = null;
+    compactWhenLarge();
   };
+
+  /**
+   * Compacts after an append when the file is over the limit and this instance holds the lock: only the
+   * lock holder appends, so only it compacts. A failure leaves the file as it is (the ledger still reads
+   * the same) and waits for the file to grow by half a limit before trying again.
+   */
+  function compactWhenLarge() {
+    let size;
+    try {
+      size = statSync(ledgerFile()).size;
+      if (size <= compactAbove || !isMine(lockHolder(keepWarmFile(dir, sessionId, "lock")))) return;
+      compactLedger(now());
+      compactAbove = Math.max(LEDGER_COMPACT_BYTES, Math.floor(statSync(ledgerFile()).size * 1.5));
+    } catch {
+      compactAbove = Math.max(LEDGER_COMPACT_BYTES, (size ?? 0) + LEDGER_COMPACT_BYTES / 2);
+    }
+  }
   const ledgerUnreadable = (why) => new Error(`the ping ledger ${ledgerFile()} cannot be read as a ledger (${why}); delete it to reset it`);
 
   /** The ledger's sends (id to { at, usd }, costs applied) and the last note time. A file with no valid line fails closed. */
   function readLedger() {
+    // The parse is remembered while the file is the same one (inode, size, mtime): this store's appends and
+    // compactions drop it, and another process's append or compaction changes the key.
+    let key = null;
+    try {
+      const { ino, size, mtimeMs } = statSync(ledgerFile());
+      key = `${ino}:${size}:${mtimeMs}`;
+    } catch (err) {
+      if (err.code === "ENOENT") return { sends: new Map(), noteAt: null };
+      throw ledgerUnreadable(err.message);
+    }
+    if (ledgerCache?.key === key) return ledgerCache.value;
+    const value = parseLedger();
+    ledgerCache = { key, value };
+    return value;
+  }
+
+  function parseLedger() {
     let text = "";
     try {
       text = readFileSync(ledgerFile(), "utf8");
@@ -402,12 +501,13 @@ export function createKeepWarmStore(dir, sessionId, { pid = process.pid, instanc
       beforeLedgerRename?.();
       if (statSync(ledgerFile()).size !== size) return;
       renameSync(tmp, ledgerFile());
+      ledgerCache = null;
     } finally {
       rmSync(tmp, { force: true });
     }
   }
 
-  return { load, save, lock, unlock, ledger, ledgerSend, ledgerCost, ledgerNote, compactLedger };
+  return { load, save, lock, unlock, holderWillPing, ledger, ledgerSend, ledgerCost, ledgerNote, compactLedger };
 }
 
 // Plain decimals only: Number() would also take 0x2, 1e-1 and Infinity.

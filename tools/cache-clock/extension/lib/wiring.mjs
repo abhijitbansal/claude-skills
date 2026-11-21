@@ -231,10 +231,11 @@ export async function attach({
     if (vsCode && canAsk(state.session)) return quietly(() => askUser(message, [OK]));
     return say(message, vsCode ? { level: "error" } : options);
   };
-  // A process that does not hold the session lock shows no heads-up either: the owner pings or says why not.
+  // A process that does not hold the session lock stays quiet only while the lock holder says it will ping;
+  // a holder that has stopped or has nothing planned leaves this process's heads-up as the only warning.
   const keepWarmWillPing = () => {
     const status = keepWarm?.status();
-    return status?.willPing === true || status?.passive === true;
+    return status?.willPing === true || (status?.passive === true && status?.holderWillPing === true);
   };
   const scheduleHeadsUp = () => headsUpScheduler({ state, selection: effectiveSelection, clock, now, timers, getConfig, say, keepWarmWillPing });
   // While the selection is Auto, the model Copilot last resolved it to stands in for it.
@@ -425,7 +426,7 @@ export async function attach({
   keepWarm = buildKeepWarm({
     state, snapshot, getConfig, now, timers, notify: notifyKeepWarm,
     onPlanChange: () => scheduleHeadsUp(),
-    store: keepWarmStore(dir, state.session.sessionId),
+    store: keepWarmStore(dir, state.session.sessionId, { now, timers }),
   });
   keepWarm.start();
   onHostGone(() => keepWarm.stop("shutdown"));
