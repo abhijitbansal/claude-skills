@@ -269,3 +269,14 @@ claude plugin validate plugins/test-board
 claude plugin test plugins/test-board
 python3 -B -m unittest discover -s tests/pytest -p 'test_source_*.py' -v
 ```
+
+## Cartoon CLI compatibility
+
+Test Board accepts Cartoon's nested `runner` / `summary` report and its legacy inline summary. Counts remain separate
+from the enclosing command's exit or tool error and from the source observation. Malformed, duplicate, or conflicting
+reports never become a passing summary by falling back to raw counts.
+
+The opt-in [producer and replay qualification](https://github.com/abhijitbansal/claude-skills/blob/main/tests/compat/README.md) runs a reviewed local Cartoon binary on
+fixed synthetic scenarios, then replays its output through Test Board's hooks, history, and display. It also checks
+source matching, changed, and unknown observations independently of the counts and command status. This does not
+qualify native MCP or live host delivery.
