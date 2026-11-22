@@ -76,10 +76,10 @@ Full per-item descriptions: [skills-catalog.md](skills-catalog.md).
 adapters/install.sh codex      # or copilot, agents-md, all
 ```
 
-**Owner, fresh machine** — `setup/setup.sh` runs eight idempotent steps:
+**Owner, fresh machine** — `setup/setup.sh` runs ten idempotent steps:
 
 ```
-preflight → claude → marketplaces → plugins → skills → dotfiles → local_plugins → symlinks
+preflight → claude → marketplaces → plugins → skills → skills_schedule → dotfiles → guidelines → local_plugins → symlinks
 ```
 
 The `local_plugins` step adds this repo as a local marketplace and installs every plugin listed in

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Stub launchctl: logs argv. Never touches real launchd.
+#   print      exits 0 only when MOCK_LAUNCHCTL_LOADED=1 (an already-loaded agent).
+# With MOCK_LAUNCHCTL_STATE=<dir> it is also stateful:
+#   bootout    marks the agent gone; `print` keeps succeeding MOCK_LAUNCHCTL_LINGER
+#              more times first (default 0), like a slow teardown.
+#              MOCK_LAUNCHCTL_BOOTOUT_FAILS=1 makes bootout fail (exit 5) and change nothing.
+#   bootstrap  fails (exit 5) the first MOCK_LAUNCHCTL_BOOTSTRAP_FAILS times.
+echo "launchctl $*" >> "${MOCK_CALL_LOG:-/dev/null}"
+state="${MOCK_LAUNCHCTL_STATE:-}"
+case "$1" in
+  print)
+    if [[ -n "${state}" && -f "${state}/booted-out" ]]; then
+      left="$(cat "${state}/linger" 2>/dev/null || echo 0)"
+      if [[ "${left}" -gt 0 ]]; then
+        echo $((left - 1)) > "${state}/linger"
+        exit 0
+      fi
+      exit 113
+    fi
+    [[ "${MOCK_LAUNCHCTL_LOADED:-0}" == "1" ]] || exit 113
+    ;;
+  bootout)
+    if [[ -n "${MOCK_LAUNCHCTL_BOOTOUT_FAILS:-}" ]]; then
+      echo "Boot-out failed: 5: Input/output error" >&2
+      exit 5
+    fi
+    if [[ -n "${state}" ]]; then
+      : > "${state}/booted-out"
+      echo "${MOCK_LAUNCHCTL_LINGER:-0}" > "${state}/linger"
+    fi
+    ;;
+  bootstrap)
+    if [[ -n "${state}" && -n "${MOCK_LAUNCHCTL_BOOTSTRAP_FAILS:-}" ]]; then
+      done_fails="$(cat "${state}/bootstrap-fails" 2>/dev/null || echo 0)"
+      if [[ "${done_fails}" -lt "${MOCK_LAUNCHCTL_BOOTSTRAP_FAILS}" ]]; then
+        echo $((done_fails + 1)) > "${state}/bootstrap-fails"
+        echo "Bootstrap failed: 5: Input/output error" >&2
+        exit 5
+      fi
+    fi
+    ;;
+esac
+exit 0

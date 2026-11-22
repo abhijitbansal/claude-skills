@@ -172,7 +172,7 @@ bash ~/projects/claude-skills/setup/setup.sh
 ```
 
 Useful flags: `--dry-run`, `--only <step>`, `--skip-<step>`, `--merge-claude-md <path>`.
-Steps: `preflight claude marketplaces plugins skills dotfiles guidelines local_plugins symlinks`.
+Steps: `preflight claude marketplaces plugins skills skills_schedule dotfiles guidelines local_plugins symlinks`.
 
 The `guidelines` step evaluates the `CLAUDE.md` on the machine (`~/CLAUDE.md`) and on the
 repo you run setup from, then additively merges in any missing behavioral-guideline section

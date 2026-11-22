@@ -120,6 +120,12 @@ name = "xcodegen-cli"
 source = "abhijitbansal/cartoon"
 name = "cartoon"
 
+# Weekly launchd job (Sunday 10:00) that runs `npx skills update -g -y`.
+# macOS only. Set false (or remove this table) and the next setup run unloads
+# the agent and deletes its plist.
+[schedule]
+skills_weekly_update = true
+
 [dotfiles]
 home_claude_md = "templates/home-CLAUDE.md"
 user_settings = "templates/user-settings.json"

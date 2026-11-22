@@ -242,14 +242,16 @@ flowchart TD
     </div>
     <div class="flow reveal">
       <h3>Owner — fresh machine seed</h3>
-      <p class="who">setup.sh, eight idempotent steps</p>
+      <p class="who">setup.sh, ten idempotent steps</p>
       <div class="pipe">
         <span class="pstep">preflight</span><span class="psep">→</span>
         <span class="pstep">claude</span><span class="psep">→</span>
         <span class="pstep">marketplaces</span><span class="psep">→</span>
         <span class="pstep">plugins</span><span class="psep">→</span>
         <span class="pstep">skills</span><span class="psep">→</span>
+        <span class="pstep">skills_schedule</span><span class="psep">→</span>
         <span class="pstep">dotfiles</span><span class="psep">→</span>
+        <span class="pstep">guidelines</span><span class="psep">→</span>
         <span class="pstep hot">local_plugins</span><span class="psep">→</span>
         <span class="pstep">symlinks</span>
       </div>
