@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Rendered by setup.sh (step skills_schedule); @TOKENS@ are filled at install time. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>@LABEL@</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>@SCRIPT@</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>SKILLS_NPX</key>
+    <string>@NPX@</string>
+  </dict>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>10</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>StandardOutPath</key>
+  <string>@LOG_DIR@/launchd.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@LOG_DIR@/launchd.err.log</string>
+</dict>
+</plist>

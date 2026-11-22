@@ -121,7 +121,7 @@
 
     <!-- SETUP STEPS -->
     <section id="steps" class="doc-section">
-      <h2><span class="ix">02</span> What <code>setup.sh</code> does: 9 steps</h2>
+      <h2><span class="ix">02</span> What <code>setup.sh</code> does: 10 steps</h2>
       <p>Each step is reached in order; any one can be isolated with <code>--only &lt;step&gt;</code> or excluded with <code>--skip-&lt;step&gt;</code>.</p>
       <div class="steps reveal">
         <div class="gitem"><h3><code>preflight</code> <span class="idem">re-checks</span></h3><p>Ensure <code>$HOME/.local/bin</code> is on PATH, verify Python ≥ 3.11, install <code>bats</code>/<code>shellcheck</code>/<code>uv</code> via brew if absent.</p></div>
@@ -129,6 +129,7 @@
         <div class="gitem"><h3><code>marketplaces</code> <span class="idem">idempotent</span></h3><p>Read <code>[[marketplaces]]</code> from the TOML; for each, <em>add</em> if new or <em>update</em> if already registered (checked against <code>claude plugin marketplace list</code>).</p></div>
         <div class="gitem"><h3><code>plugins</code> <span class="idem">idempotent</span></h3><p>Read <code>[[plugins]]</code>; install or update each <code>name@marketplace</code>. Version pins are surfaced as warnings, because <code>claude plugin install</code> has no version flag.</p></div>
         <div class="gitem"><h3><code>skills</code> <span class="idem">idempotent</span></h3><p>Run <code>npx -y skills add &lt;source&gt;@&lt;name&gt; -g -y</code> for each <code>[[skills]]</code> entry, then a global update pass.</p></div>
+        <div class="gitem"><h3><code>skills_schedule</code> <span class="idem">idempotent · macOS</span></h3><p>When <code>[schedule] skills_weekly_update</code> is true, render a launchd agent (<code>com.claude-skills.skills-update</code>, Sundays 10:00) into <code>$HOME/Library/LaunchAgents</code> and load it with <code>launchctl bootstrap</code>. The job runs <code>setup/skills-update.sh</code>, which updates the global npx skills and logs the <code>~/.agents/.skill-lock.json</code> changes to <code>~/Library/Logs/claude-skills/skills-update.log</code>. An unchanged, already-loaded agent is left alone; a changed one is booted out, waited for, then bootstrapped again. Setting the flag to false (or removing <code>[schedule]</code>) unloads the agent and deletes its plist. Skipped on non-macOS; <code>--dry-run</code> writes nothing.</p></div>
         <div class="gitem"><h3><code>dotfiles</code> <span class="idem write">writes + backup</span></h3><p>Copy <code>templates/home-CLAUDE.md → $HOME/CLAUDE.md</code> and <code>templates/user-settings.json → $HOME/.claude/settings.json</code>. Existing files are backed up to <code>*.bak.&lt;timestamp&gt;</code> first.</p></div>
         <div class="gitem"><h3><code>guidelines</code> <span class="idem">additive merge</span></h3><p>Run <code>merge_guidelines.py</code>: extract the region between the <code>claude-skills:guidelines</code> markers in <code>CLAUDE.md</code>, and append only the <code>##</code> sections not already present (heading match is case- and number-insensitive). Targets <code>$HOME/CLAUDE.md</code>, the current repo, and any <code>--merge-claude-md &lt;path&gt;</code>.</p></div>
         <div class="gitem"><h3><code>local_plugins</code> <span class="idem">idempotent</span></h3><p>Register this repo itself as a marketplace (<code>.claude-plugin/marketplace.json</code>) and install/update its own seven plugins (plus portable-artifacts, listed from its own repo).</p></div>
@@ -145,6 +146,7 @@
         <div class="row"><span class="nm">[[marketplaces]]</span><span class="dc"><b>×5</b>: git sources to register (official + community)</span></div>
         <div class="row"><span class="nm">[[plugins]]</span><span class="dc"><b>×19</b>: user-scope plugin installs, each <code>name</code> + <code>marketplace</code></span></div>
         <div class="row"><span class="nm">[[skills]]</span><span class="dc"><b>×7</b>: npx-installed skills, each <code>source</code> + <code>name</code></span></div>
+        <div class="row"><span class="nm">[schedule]</span><span class="dc"><b>table</b>: <code>skills_weekly_update</code> (bool), installs the weekly launchd skills update on macOS</span></div>
         <div class="row"><span class="nm">[dotfiles]</span><span class="dc"><b>table</b>: <code>home_claude_md</code>, <code>user_settings</code> → template paths</span></div>
         <div class="row"><span class="nm">[meta]</span><span class="dc"><b>v1</b>: <code>schema_version</code>, rejected if unknown, which leaves room to change the format later</span></div>
       </div>
@@ -249,7 +251,7 @@
     </div>
     <div class="foot-meta">
       <span class="lic">MIT licensed</span>
-      <span>7 plugins · 87 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
+      <span>7 plugins · 88 skills · 18 commands · 2 agents · 8 hooks · 1 CLI · 1 Copilot extension</span>
       <span>Tested on macOS &amp; Ubuntu</span>
     </div>
   </div>

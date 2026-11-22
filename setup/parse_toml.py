@@ -2,7 +2,7 @@
 """Read claude-setup.toml and emit a JSON-encoded list for one section.
 
 Usage: parse_toml.py <toml-path> <section>
-  section ∈ {marketplaces, plugins, skills, dotfiles, custom_skills}
+  section ∈ {marketplaces, plugins, skills, dotfiles, custom_skills, schedule}
 
 Reads from <toml-path> (use "/dev/stdin" to pipe).  Always emits JSON to stdout.
 Schema validation: rejects unknown meta.schema_version.
@@ -48,7 +48,7 @@ def main() -> int:
         print(json.dumps(items))
         return 0
 
-    if section in ("dotfiles", "custom_skills"):
+    if section in ("dotfiles", "custom_skills", "schedule"):
         print(json.dumps(data.get(section, {})))
         return 0
 
