@@ -105,6 +105,7 @@ The everyday glue, useful in any repo.
 | `branch-explainer` | skill | Generate a self-contained HTML explainer for the current branch/PR: what's implemented, an architecture diagram, key files, test evidence, next steps — scoped to one branch rather than the whole repo. |
 | `github-repo-go-public-preflight-scan` | skill | Scan working tree AND full git history for secrets before flipping a GitHub repo private → public. |
 | `github-solo-branch-protection-codeowners` | skill | Branch protection on a solo-owner repo: others' PRs need approval, owner can still self-merge. |
+| `repo-bootstrap` | skill | Set up a new or newly-opened GitHub repo in one idempotent pass: preflight, branch protection and CODEOWNERS (delegated), Claude PR review check, README skeleton, AGENTS.md and CLAUDE.md, go-public scan. Every outward action (remote settings, push, PR) is listed and confirmed in one question. |
 | `/explain-branch` | command | Invoke the branch explainer, diffing against a given base (default `main`); writes to `.scratch/branch-explainer/` and delivers it. |
 | `/cleanup-branches` | command | Inventory merged, stale and worktree-held branches with the merge proof for each, and hand over one delete line per branch. Never deletes on its own. |
 | `/team` | command | Multi-agent team orchestration helper. |
