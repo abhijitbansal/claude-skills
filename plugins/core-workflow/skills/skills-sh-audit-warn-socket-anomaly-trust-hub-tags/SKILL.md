@@ -71,11 +71,12 @@ run. Every line marked HYPOTHESIS is a guess until a rescan shows it.
      not cap inside JSON you parse. Keep page data exact;
    - (c) the same rule in any small-model agent file that has Bash access.
 5. **Scripts that read untrusted git repos:** follow
-   `references/git-untrusted-repo.md` whole; do not copy a subset. Its two rules:
-   read commits, not the work tree; and check the repo's own config and fail
-   closed instead of relying on flags. The first two review rounds each found a
-   bypass and the third approved; two later reviews of this lesson found more
-   routes. Give every fix pass a fresh reviewer.
+   `references/git-untrusted-repo.md` whole; do not copy a subset. Its three
+   rules: read commits, not the work tree; check the repo's own config and fail
+   closed instead of relying on flags; and use a sandbox for a repo you expect to
+   be hostile, because the list is not a proof. The first two review rounds each
+   found a bypass and the third approved, yet later reviews of this lesson found
+   more routes. Give every fix pass a fresh reviewer.
 6. **"Contains Shell Commands" badge.** The page says it marks shell command
    directives. Reword prose that looks like one (an exclamation mark followed by
    a backticked command). HYPOTHESIS until a rescan: that this prose is what
