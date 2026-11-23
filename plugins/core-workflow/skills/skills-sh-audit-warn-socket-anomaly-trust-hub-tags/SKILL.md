@@ -12,7 +12,7 @@ run. Every line marked HYPOTHESIS is a guess until a rescan shows it.
 
 - A skill page on `https://www.skills.sh/<owner>/<repo>/<skill>` shows audit
   badges: Gen Agent Trust Hub (Pass / Risk SAFE plus tags and a written analysis),
-  Socket (Pass or WARN, with Anomaly alerts that carry confidence and severity
+  Socket (Pass or Warn, with Anomaly alerts that carry confidence and severity
   percentages), Snyk (Risk LOW, "No issues detected").
 - Detail pages: `.../<skill>/security/agent-trust-hub`, `.../security/socket`,
   `.../security/snyk`.
