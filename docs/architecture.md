@@ -17,7 +17,7 @@ flowchart TD
   MP["marketplace.json (.claude-plugin/)"]
   IOS["ios-dev — 59 skills · 6 cmds"]
   LIN["linear-pm — 1 skill · 6 cmds"]
-  CW["core-workflow — 20 skills · 5 cmds · 2 agents · 2 hooks"]
+  CW["core-workflow — 21 skills · 5 cmds · 2 agents · 2 hooks"]
   SW["second-wind — skill wrapper"]
   PC["prompt-craft — 7 skills · 6 hooks"]
   PA["portable-artifacts — own repo · git-subdir"]
