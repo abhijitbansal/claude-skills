@@ -1,6 +1,6 @@
 ---
 name: skills-sh-audit-warn-socket-anomaly-trust-hub-tags
-description: A skills.sh skill page shows Socket Warn with Anomaly alerts, Gen Agent Trust Hub tags (OBFUSCATION, INDIRECT_PROMPT_INJECTION, EXTERNAL_DOWNLOADS, COMMAND_EXECUTION, DATA_EXFILTRATION) or a "Contains Shell Commands" badge, or the page says "isn't available in this repository". Use when publishing or updating a skill repo listed on skills.sh, when a skills.sh audit shows Warn or tags, when hardening a skill against indirect prompt injection, or when a skill's scripts read untrusted git repos.
+description: A skills.sh skill page shows Socket Warn with Anomaly alerts, Gen Agent Trust Hub tags (OBFUSCATION, INDIRECT_PROMPT_INJECTION, EXTERNAL_DOWNLOADS, COMMAND_EXECUTION, DATA_EXFILTRATION) or a "Contains Shell Commands" badge you want gone, or the page says "isn't available in this repository". Use when publishing or updating a skill repo listed on skills.sh, when a skills.sh audit shows Warn or tags, when hardening a skill against indirect prompt injection, or when a skill's scripts run git in untrusted repos (core.fsmonitor, filter driver clean commands, gpg.program, lazy fetch uploadpack).
 ---
 
 # skills.sh audits: Warn, tags and what to fix in the repo
@@ -25,7 +25,9 @@ written. Every row marked HYPOTHESIS is a guess until a rescan shows it.
 ## Root cause
 
 - **Listing.** skills.sh lists a skill through `npx skills add <owner/repo>`
-  install telemetry (skills.sh/docs/faq). The docs name no rescan trigger. A
+  install telemetry (https://skills.sh/docs/faq, read 2026-11-23: "Skills appear
+  on the leaderboard automatically through anonymous telemetry when users run
+  npx skills add"). The FAQ names no rescan trigger. A
   moved repo is not listed until someone installs from the new name (HYPOTHESIS:
   that install is what creates the page and queues an audit).
 - **Scanners read source and prose, not intent.** Three provider families, three
@@ -36,7 +38,9 @@ written. Every row marked HYPOTHESIS is a guess until a rescan shows it.
   shows up in the written analysis.
 - **Some flags are real.** A find-then-verify audit of one plugin returned 60
   findings: 12 real, 35 likely scanner noise, 8 duplicates, 5 refuted. Fix the
-  12, do not chase the 35.
+  12 first; the 35 judged likely noise stay open until a rescan says otherwise.
+  The security review of the fixes then found more real holes (next sections),
+  so review the fix diff too.
 
 ## Fix
 
@@ -81,17 +85,24 @@ written. Every row marked HYPOTHESIS is a guess until a rescan shows it.
      exact: escaping in the data layer broke emoji in titles;
    - (c) the same rule in any small-model agent file that has Bash access.
 5. **Scripts that read untrusted git repos:** see
-   `references/git-untrusted-repo.md`. `core.fsmonitor`, textconv, ext-diff and
-   `GIT_CONFIG_*` env are closed by flags. A repo-local `filter.<name>.clean`
-   was measured to still run after those; list the drivers from config and pass
-   an empty command for each (details and the tests there).
+   `references/git-untrusted-repo.md`. Flags close `core.fsmonitor`,
+   `gpg.program` (via `log.showSignature=false`), textconv, ext-diff and the
+   pager; the child env drops `GIT_CONFIG_*` and `GIT_CONFIG`; partial clones
+   are refused from config before any object read (`GIT_NO_LAZY_FETCH=1` only
+   works on git 2.44+); every spawn has a timeout. It took three review rounds:
+   each fix was bypassed by the next adversarial reviewer, so re-review every
+   fix pass with a fresh reviewer. Filter drivers still ran after flags: blanking
+   them with `-c` was bypassed four ways, so fail closed instead (skip the
+   content check when the repo's own config defines a driver, and
+   `--ignore-submodules=all`).
 6. **"Contains Shell Commands" badge.** HYPOTHESIS: SKILL.md prose such as
    "suggest prefixing it with `!`" resembles the `!` plus backtick dynamic-context
    syntax. It was reworded. Unconfirmed until a rescan, and the badge may stay
    regardless because the skills legitimately run commands.
 7. **Check before changing:** CSP strings pinned in goldens and gallery pages
    (a change forces a gallery rebuild), and SKILL.md byte budgets enforced by
-   tests. Run only non-browser test files locally, one browser at a time.
+   tests. Run non-browser test files locally; if a browser suite is needed, run
+   one at a time.
 8. **Split the fixes** across writers with disjoint files and one owner for
    shared code.
 9. **After merge (untested):** the only documented route onto the list is install
@@ -109,7 +120,11 @@ written. Every row marked HYPOTHESIS is a guess until a rescan shows it.
   from a closed set"; "fix: escape and cap untrusted text the dashboard and scene
   CLIs print to the agent"; "fix: make-explainer gather escapes repo text for the
   agent and stops repo config running commands"; "fix: make-explainer gather
-  neutralises repo-local git filter drivers".
+  neutralises repo-local git filter drivers" (bypassed in review); "fix: gather
+  skips the dirty check when the repo's own config defines a filter driver";
+  "fix: gather and history rows refuse partial clones, skip repo-defined lfs
+  extensions, and time out". Three adversarial security reviews; the last
+  approved with low findings only.
 - Provider pages: the three `security/` URLs above for each skill.
 - Audit result: 60 findings, 12 real, 35 likely scanner noise, 8 duplicates,
   5 refuted (measured by the verifier's per-finding verdicts, not rescanned).
