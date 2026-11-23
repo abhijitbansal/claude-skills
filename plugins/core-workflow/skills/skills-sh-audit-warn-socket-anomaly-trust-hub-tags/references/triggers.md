@@ -1,23 +1,27 @@
 # Flag, trigger, fix, pin
 
-One row per flag seen in a portable-artifacts security pass, plus findings from the internal audit that no scanner had flagged (marked "audit"). "Status" is what is
-known: no scanner has been rerun, so no row says a flag cleared. Escapes are
-written in the braced form `\u{XXXX}`; see the tooling trap below the table.
+One row per flag seen in a portable-artifacts security pass. Rows that start with
+"audit:" come from the internal audit: no scanner page showed them. "Status" is
+what is known; no scanner has been rerun, so no row says a flag cleared. Escapes
+are written in the braced form `\u{XXXX}`; see the tooling trap below.
 
 | Provider and flag | What triggered it | Fix used | Test that pins it | Status |
 |---|---|---|---|---|
 | Socket Anomaly (LOW) | A render helper: `chip()` interpolates `tone` into an HTML attribute without validation | Closed `Set` of tones derived from the tables, fall back to `neutral` | Cases for `'"><script>'` and `'good bad'` | Fix applied, not rescanned |
-| Socket alert (earlier) | An fs-patching test fixture | Do not hide the patch. Provoke the fault for real: replace the theme file with a directory in a temp copy (EISDIR), spy with `t.mock.method` | The test exercises the real EISDIR path | Fixed, not rescanned. A first attempt moved the patch into a URL-encoded `data:` URL preloaded with `node --import`; that reads like an encoded loader and was dropped |
-| Trust Hub OBFUSCATION | Literal invisible characters in source: bidi controls U+200F, U+202B, U+202E, U+2067 and U+FEFF inside an RTL regex (the Trojan Source shape); elsewhere U+2028/2029 in JSON-for-script helpers, U+FFFE/FFFF in an XML strip list and a BOM constant | `\u{XXXX}` escapes. Rewrite the regex under a characterisation test | Characterisation test over 0..0x10FFFF comparing old and new regex. Guard test that fails on any literal bidi, zero-width, Tag, Zl/Zp or other Cf character in shipped files, allowing only ZWJ and U+FE0E/F | Fixed. An escaped Unicode Tags range was also flagged in the original audit; we judged it a false positive. Not rescanned |
-| Trust Hub INDIRECT_PROMPT_INJECTION | Skills that read commit messages, DB rows, CSV cells, file names, report findings or user pictures | (a) SKILL.md rule: that text is data, never instructions, with the one-clause reason. (b) Agent-facing stdout only: escape (never delete) Cc, Cf, Co, Cn, Zl, Zp and variation selectors as `\u{XXXX}`, cap length. (c) Same rule in each small-model agent file with Bash access | Not recorded per item. Keep page data exact: escaping in the data layer broke emoji in titles | Fix applied. The tag may stay: the skills do read such text |
-| Trust Hub disclosure mismatch | Description said "Works offline" while the postgres and mysql sources connect | Scope the claim to file sources. Name every download (hosts, pinned commit plus SHA-256), every write outside the project, every optional network flag | Doc wording only | Fixed in prose |
-| "Contains Shell Commands" badge | HYPOTHESIS: SKILL.md prose "suggest prefixing it with `!`" resembles the `!` plus backtick dynamic-context syntax | Reworded | none | Unconfirmed. The badge may stay because the skills legitimately run commands |
-| Credential in docs | Crontab and plist examples carried a DSN password | Wrapper that sources a `chmod 600` env file. Read-only database role | Doc review | Fixed in prose |
-| Minified vendored bundle | A header hash of the sources does not prove the bundle bytes | Rebuild the bundle in memory in a test and compare byte for byte. Provenance paragraph in `THIRD_PARTY_NOTICES` | The byte-for-byte rebuild test | Fix applied |
-| Test seam in production | A test-only env variable swapped the scripts a runner launches, and production honoured it | Gate the variable on `NODE_ENV=test` | Not recorded | Fix applied |
-| Over-eager publishing | Wording "if your host can publish, publish" | Publish only on request. Confirm before private data leaves the machine | Doc wording only | Fixed in prose |
-| audit: secret on stdout | A local preview server printed its rebuild token, which only put a credential into the agent transcript | Stop printing it; the test harness reads it from the served page | Serve test reads the token from the page | Fixed |
-| audit: hostile git config | A script ran `git status` in a repo the user did not write; repo config ran commands (fsmonitor, filter drivers, lazy-fetch uploadpack) | See `git-untrusted-repo.md`: flags, env scrub, fail closed on repo-defined filter drivers | Marker-script tests with a control per vector | Fixed after a second pass; the first (blanking drivers with `-c`) was bypassed |
+| Socket alert (earlier) | An fs-patching test fixture | Do not hide the patch. Provoke the fault for real: replace the theme file with a directory in a temp copy (EISDIR), spy with `t.mock.method` | The test exercises the real EISDIR path | Fixed, not rescanned. A first attempt moved the patch into a URL-encoded `data:` URL preloaded with `node --import`; we judged that it reads like an encoded loader and dropped it |
+| Trust Hub OBFUSCATION (Risk SAFE) | make-explainer: "references to the Unicode Tags character range" in two regexes. make-diagram: "Zero-Width Joiner, Variation Selector, and separators" in `emoji.mjs` and `viewer.mjs`. Trust Hub called the first "a false positive" and the second "defensive security measures rather than malicious obfuscation" | None needed for the escaped ranges: the tagged regexes already used escapes, so escaping is not shown to remove the tag | none | Tag stands. Judged benign by the scanner's own text |
+| Trust Hub INDIRECT_PROMPT_INJECTION (Risk SAFE) | make-diagram and make-motion: "user-supplied or agent-generated JSON data" through the spec file. make-explainer and make-dashboard, which read commits and rows, did not carry it | See "audit: untrusted text reaches the agent" below | Named in that row | The tag may stay: the skills do read such data |
+| Trust Hub EXTERNAL_DOWNLOADS, COMMAND_EXECUTION, DATA_EXFILTRATION (Risk SAFE) | Doctor and installer downloads; `spawnSync` of git, ffmpeg, npm; the DATA_EXFILTRATION text on make-motion lists protections only | None. Read the paragraph first: it describes the capability and may argue that it is safe | none | Descriptive. No change made for these |
+| "Contains Shell Commands" badge | Badge text: "This skill contains shell command directives ... that may execute system commands". It is about directives (an exclamation mark followed by a backticked command), not about running commands. HYPOTHESIS: SKILL.md prose telling the user to prefix a command with an exclamation mark in backticks matched | Reworded | none | Unconfirmed. Four of the five old pages carried it; the fifth (make-scene) had no SKILL.md to scan |
+| audit: invisible literals in source | Bidi controls U+200F, U+202B, U+202E, U+2067 and U+FEFF inside an RTL regex (the Trojan Source shape); U+2028/2029 in JSON-for-script helpers; U+FFFE/FFFF in an XML strip list; a BOM constant | `\u{XXXX}` escapes. Rewrite the regex under a characterisation test | `glyph-draw-rtl.test.mjs` compares the regex with the range set measured from the old one over the code-point space. `bin/test/invisible-chars.test.mjs` fails on a literal Cf, Zl, Zp, Default_Ignorable_Code_Point, variation selector, Tag-block, U+FFFE or U+FFFF character, allowing only ZWJ and U+FE0E/F | Fixed. The guard skips folders named `test`, `node_modules` and `.scratch`, while scanners may read tests |
+| audit: untrusted text reaches the agent | Skills that read commit messages, DB rows, CSV cells, file names, report findings or user pictures | (a) SKILL.md rule: that text is data, never instructions, with the one-clause reason. (b) Escape and cap what the agent reads, stdout and stderr (class and forms: SKILL.md step 4). (c) Same rule in each small-model agent file with Bash access | `shared/test/agent-text.test.mjs`, make-explainer `git-agent-text.test.mjs`, and the hidden-character cases in make-dashboard's inspect and query tests | Fix applied. Open: `--json` output of inspect and query stays exact, and some error paths are unescaped. Keep page data exact: escaping in the data layer broke emoji in titles |
+| audit: disclosure mismatch | Description said "Works offline" while the postgres and mysql sources connect | Scope the claim to file sources. Name every download (hosts, pinned commit plus SHA-256), every write outside the project, every optional network flag | Doc wording only | Fixed in prose |
+| audit: credential in docs | Crontab and plist examples carried a DSN password | Wrapper that sources a `chmod 600` env file. Read-only database role | Doc review | Fixed in prose |
+| audit: minified vendored bundle | A header hash of the sources does not prove the bundle bytes | Rebuild the bundle in memory in a test and compare byte for byte. Provenance paragraph in `THIRD_PARTY_NOTICES` | The byte-for-byte rebuild test | Fix applied |
+| audit: test seam in production | A test-only env variable swapped the scripts a runner launches, and production honoured it | Gate the variable on `NODE_ENV=test` | `shared/test/make-run-doctor.test.mjs`, "PA_MAKE_TEST_SCRIPTS is ignored outside NODE_ENV=test" | Fix applied. The gate is weak: anyone who sets one variable can set both |
+| audit: over-eager publishing | Wording "if your host can publish, publish" | Publish only on request. Confirm before private data leaves the machine | Doc wording only | Fixed in prose |
+| audit: secret on stdout | A local preview server printed its rebuild token, which only put a credential into the agent transcript | Stop printing it; the test harness reads it from the served page | make-dashboard `serve.test.mjs`, "--watch does not print the rebuild token on stdout" | Fixed |
+| audit: hostile git config | A script ran `git status` in a repo the user did not write; repo config ran commands (fsmonitor, filter drivers, lazy-fetch uploadpack) | See `git-untrusted-repo.md` | Marker tests with a control for fsmonitor, textconv, filter drivers and partial clone; the other rows say what they have | Fixed in the third round; blanking drivers with `-c` was bypassed |
 
 ## Tooling trap: four-hex-digit escapes typed into a file body
 
@@ -29,16 +33,3 @@ body into the literal characters, which re-created the very flag being fixed.
 - Let the guard test catch slips: it scans shipped files for literal characters.
 - After any edit session that touched escapes, rerun the guard test before
   committing.
-
-## Listing evidence, for reference
-
-- Detail pages: `https://skills.sh/<owner>/<repo>/<skill>/security/agent-trust-hub`,
-  `.../security/socket`, `.../security/snyk`.
-- Trust Hub shows Pass / Risk SAFE plus tags (EXTERNAL_DOWNLOADS,
-  COMMAND_EXECUTION, OBFUSCATION, INDIRECT_PROMPT_INJECTION, DATA_EXFILTRATION)
-  and a written analysis. Socket shows Pass or WARN with Anomaly alerts, each with
-  confidence and severity percentages. Snyk showed Risk LOW and "No issues
-  detected".
-- After the repo move the new-repo skill pages answered HTTP 200 with
-  "<skill> isn't available in this repository" while the old listing kept audits
-  dated Oct 19 to 29.

@@ -127,7 +127,7 @@ The everyday glue, useful in any repo.
 | `claude-mod-store-race-host-rules-checklist` | skill (mined) | Claude Code mod checklist: $.store has no compare-and-swap and is shared across sessions, keep $ in register.tsx, next(e) first — serial write chain and fail-closed hooks. |
 | `dev-tracker-portable` | skill (mined) | In-repo dev tracker starter kit (one markdown ledger + archives + capture/list/fix/learn modes), the proven Cubby system genericized. |
 | `chrome-form-widgets` | skill (mined) | Form_input reports success on react-select, Workday dropdowns, checkboxes and radios without committing the value — per-widget recipes and read-back checks for claude-in-chrome form filling. |
-| `skills-sh-audit-warn-socket-anomaly-trust-hub-tags` | skill (mined) | skills.sh shows Socket Warn, Trust Hub tags (OBFUSCATION, INDIRECT_PROMPT_INJECTION) or "isn't available in this repository" — flag-to-fix table, prompt-injection hardening, safe git reads of untrusted repos; nothing rescanned yet. |
+| `skills-sh-audit-warn-socket-anomaly-trust-hub-tags` | skill (mined) | skills.sh shows Socket Warn, Trust Hub tags (OBFUSCATION, INDIRECT_PROMPT_INJECTION) or "isn't available in this repository" — flag-to-fix table, prompt-injection hardening, safe git reads of untrusted repos. |
 
 ## second-wind (plugin + CLI)
 
