@@ -21,8 +21,9 @@ found another route. For a repo you expect to be hostile, use a sandbox or a
 container with no network as well.
 
 Measured on git 2.54.0 (Apple Git-157), 2026-11-23, unless a row says otherwise.
-"Shipped" means make-explainer's `git.mjs` in portable-artifacts 2.4.0 (2.4.1 closes
-several "not shipped" rows; see its changelog); make-scene's
+"Shipped" means make-explainer's `git.mjs` in portable-artifacts 2.4.0. "#12" is
+abhijitbansal/portable-artifacts#12 (planned as 2.4.1, open on 2026-11-24), which
+closes several "not shipped" rows; check its state before you rely on it. make-scene's
 `history-rows.mjs` shares the env scrub, the partial-clone check and the timeout,
 and runs only `config`, `rev-parse --show-prefix` and `log`. The "Pin" column is the test in make-explainer's
 `git-hardening.test.mjs`: "marker" is a plant with a control proving plain git
@@ -51,9 +52,9 @@ runs it. "Not shipped" rows have no test in that repo.
 | `refs/replace/*` or `.git/info/grafts` makes git show forged history | Env `GIT_NO_REPLACE_OBJECTS=1` and `GIT_GRAFT_FILE` set to the null device | Not shipped. Integrity, not execution |
 | The dirty flag is the repo's own claim: skip-worktree bits, `.git/info/exclude` and submodule edits can hide changes | None | Integrity, not execution |
 | Repo settings that change the output: `status.showUntrackedFiles`, `i18n.logOutputEncoding`, `diff.relative`, `diff.renames` | The explicit options in jobs 5, 6 and 8 | Not shipped, except `-M` and `--no-color`. Integrity, not execution |
-| Another git call in the same workflow. The gathering step was hardened, and the next step, a page builder, asked `git check-ignore` with the repo's config in force, which ran `core.fsmonitor` | Grep every script for spawns of git and send them all through one hardened runner. For this question: `check-ignore --no-index` | Not in 2.4.0; 2.4.1 fixes it, marker. |
-| A `git` found inside the repo: a relative or empty `PATH` entry, or an absolute one such as `<repo>/node_modules/.bin` (what `npm run` adds, from memory) | Resolve git to one absolute path outside the repo, once, or drop such entries | Not in 2.4.0. Measured in review. 2.4.1 drops them up to the nearest `.git`; outer repos, linked worktrees and superprojects stay open. Other programs looked up by name (ffmpeg) have the same problem |
-| The user's own global filter loads code from the working folder, for example `python -m <module>` with that module planted in the repo | Skip job 8, or use a sandbox | Open in 2.4.1. Measured in review: control and `status` both ran the plant |
+| Another git call in the same workflow. The gathering step was hardened, and the next step, a page builder, asked `git check-ignore` with the repo's config in force, which ran `core.fsmonitor` | Grep every script for spawns of git and send them all through one hardened runner. For this question: `check-ignore --no-index` | Not in 2.4.0; #12 fixes it, marker |
+| A `git` found inside the repo: a relative or empty `PATH` entry, or an absolute one such as `<repo>/node_modules/.bin` (what `npm run` adds, from memory) | Resolve git to one absolute path outside the repo, once, or drop such entries | Not in 2.4.0. Measured in review. #12 drops them up to the nearest `.git`; outer repos, linked worktrees and superprojects stay open. Other programs looked up by name (ffmpeg) have the same problem |
+| The user's own global filter loads code from the working folder, for example `python -m <module>` with that module planted in the repo | Skip job 8, or use a sandbox | Not fixed by #12. Measured in review: control and `status` both ran the plant |
 | A bare repository embedded in the tree, entered as the working folder | `-c safe.bareRepository=explicit` | Not shipped. Control ran the plant; the flag refused with exit 128 |
 
 ## Environment
@@ -66,7 +67,7 @@ Pass a scrubbed environment to every spawn.
 | `GIT_CONFIG_PARAMETERS`, `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_n`, `GIT_CONFIG_VALUE_n`, legacy `GIT_CONFIG` | Drop | The first four inject config. `GIT_CONFIG` pointed the config read at another file and made the check fail open |
 | `GIT_EXTERNAL_DIFF`, `GIT_ATTR_SOURCE`, `GIT_TRACE*`, `GIT_SSH_COMMAND`, `GIT_ASKPASS`, `GIT_ICASE_PATHSPECS` and the other `GIT_*_PATHSPECS` (not shipped) | Drop | Not needed for these jobs; they come from the parent, which is trusted |
 | `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM` | Keep (within the next-to-last row's rule), as make-explainer does; make-scene, which never runs `status`, sets both to the null device | `safe.directory` counts only from system, global or command-line config. Keeping them trusts whoever set the parent env, which is already trusted |
-| `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, `GIT_EXEC_PATH` (not in 2.4.0) | Drop unless absolute and outside the repo | A value inside the repo makes git read a repo file as `global`, which the gate trusts; a planted filter ran (measured in review; `GIT_EXEC_PATH` only as a relative value). 2.4.1 drops relative values only |
+| `HOME`, `XDG_CONFIG_HOME`, `GIT_CONFIG_GLOBAL`, `GIT_CONFIG_SYSTEM`, `GIT_EXEC_PATH` (not in 2.4.0) | Drop unless absolute and outside the repo | A value inside the repo makes git read a repo file as `global`, which the gate trusts; a planted filter ran (measured in review; `GIT_EXEC_PATH` only as a relative value). #12 drops relative values only |
 | `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, `GIT_NO_LAZY_FETCH=1` (shipped); `LC_ALL=C`, `GIT_NO_REPLACE_OBJECTS=1`, `GIT_GRAFT_FILE` = null device (not shipped) | Set | Index hooks on `status`, prompts, lazy fetch, stable output, forged history. An inherited `GIT_NO_LAZY_FETCH=0` must not win |
 
 ## The recipe
